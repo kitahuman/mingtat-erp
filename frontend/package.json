@@ -1,0 +1,31 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@types/js-cookie": "^3.0.6",
+    "@types/node": "^25.5.0",
+    "@types/react": "^18.3.28",
+    "autoprefixer": "^10.4.27",
+    "axios": "^1.14.0",
+    "js-cookie": "^3.0.5",
+    "next": "^14.2.35",
+    "postcss": "^8.5.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.19"
+  },
+  "devDependencies": {
+    "typescript": "~5.5.4"
+  }
+}
