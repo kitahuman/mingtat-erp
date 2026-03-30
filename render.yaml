@@ -27,7 +27,7 @@ services:
     region: singapore
     plan: free
     rootDir: frontend
-    buildCommand: pnpm install && pnpm run build
+    buildCommand: pnpm install && pnpm run build && cp -r .next/static .next/standalone/.next/static && mkdir -p .next/standalone/public
     startCommand: node .next/standalone/server.js
     envVars:
       - key: NODE_ENV
@@ -36,3 +36,5 @@ services:
         sync: false
       - key: PORT
         value: 10000
+      - key: HOSTNAME
+        value: 0.0.0.0
