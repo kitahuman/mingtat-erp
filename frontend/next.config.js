@@ -2,7 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = process.env.BACKEND_URL || 'https://mingtat-erp-api.onrender.com';
     return [
       {
         source: '/api/:path*',

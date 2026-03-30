@@ -5,9 +5,14 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  const defaultOrigins = [
+    'https://mingtat-erp-web.onrender.com',
+    'http://localhost:3000',
+  ];
+  
   const allowedOrigins = process.env.CORS_ORIGIN 
     ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-    : true;
+    : defaultOrigins;
   
   app.enableCors({ 
     origin: allowedOrigins, 
