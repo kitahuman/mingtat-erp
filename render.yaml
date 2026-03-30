@@ -1,0 +1,38 @@
+services:
+  # Backend NestJS API
+  - type: web
+    name: mingtat-erp-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pnpm install && pnpm run build
+    startCommand: node dist/main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: PORT
+        value: 10000
+
+  # Frontend Next.js
+  - type: web
+    name: mingtat-erp-web
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: frontend
+    buildCommand: pnpm install && pnpm run build
+    startCommand: node .next/standalone/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        sync: false
+      - key: PORT
+        value: 10000
