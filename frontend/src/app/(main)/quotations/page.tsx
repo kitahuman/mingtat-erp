@@ -177,7 +177,7 @@ export default function QuotationsPage() {
     ), filterRender: (v: any) => typeLabels[v] || v },
     { key: 'company', label: '開立公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'contract_name', label: '合約名稱', render: (v: any) => <span className="max-w-[150px] truncate block">{v || '-'}</span> },
+    { key: 'contract_name', label: '合約', render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
     { key: 'quotation_date', label: '日期', sortable: true },
     { key: 'project_name', label: '工程/服務名稱', render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
     { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
@@ -268,8 +268,8 @@ export default function QuotationsPage() {
               <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約名稱</label>
-              <input value={form.contract_name} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field" placeholder="例如 2025年度運輸服務合約" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約</label>
+              <input value={form.contract_name} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field font-mono" placeholder="例如 T23W021" />
             </div>
             {form.quotation_type === 'project' && (
               <div className="md:col-span-2">

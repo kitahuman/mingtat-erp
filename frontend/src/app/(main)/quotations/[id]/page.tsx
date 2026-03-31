@@ -211,7 +211,7 @@ export default function QuotationDetailPage() {
         <div><span class="label">報價單號：</span><span style="font-family:monospace">${quotation.quotation_no}</span></div>
         <div><span class="label">日期：</span>${quotation.quotation_date}</div>
         <div><span class="label">致：</span>${quotation.client?.name || '-'}</div>
-        ${quotation.contract_name ? `<div><span class="label">合約名稱：</span>${quotation.contract_name}</div>` : ''}
+        ${quotation.contract_name ? `<div><span class="label">合約：</span><span style="font-family:monospace">${quotation.contract_name}</span></div>` : ''}
         ${quotation.quotation_type === 'project' ? `<div><span class="label">工程名稱：</span>${quotation.project_name || '-'}</div>` : `<div><span class="label">服務說明：</span>${quotation.project_name || '-'}</div>`}
       </div>
       <table>
@@ -327,8 +327,8 @@ export default function QuotationDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">日期</label>
                 <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" />
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">合約名稱</label>
-                <input value={form.contract_name || ''} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field" placeholder="例如 2025年度運輸服務合約" />
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">合約</label>
+                <input value={form.contract_name || ''} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field font-mono" placeholder="例如 T23W021" />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">{form.quotation_type === 'project' ? '工程名稱' : '服務說明'}</label>
                 <input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" />
@@ -341,7 +341,7 @@ export default function QuotationDetailPage() {
               <div><p className="text-sm text-gray-500">開立公司</p><p className="font-medium">{quotation?.company?.internal_prefix} - {quotation?.company?.name}</p></div>
               <div><p className="text-sm text-gray-500">客戶</p><p className="font-medium">{quotation?.client?.name || '-'}</p></div>
               <div><p className="text-sm text-gray-500">日期</p><p>{quotation?.quotation_date}</p></div>
-              {quotation?.contract_name && <div><p className="text-sm text-gray-500">合約名稱</p><p className="font-medium">{quotation.contract_name}</p></div>}
+              {quotation?.contract_name && <div><p className="text-sm text-gray-500">合約</p><p className="font-medium font-mono">{quotation.contract_name}</p></div>}
               <div><p className="text-sm text-gray-500">{quotation?.quotation_type === 'project' ? '工程名稱' : '服務說明'}</p><p>{quotation?.project_name || '-'}</p></div>
               {quotation?.project && (
                 <div><p className="text-sm text-gray-500">關聯工程項目</p><p><Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no} - {quotation.project.project_name}</Link></p></div>
