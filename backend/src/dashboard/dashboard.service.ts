@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, LessThanOrEqual } from 'typeorm';
 import { Company } from '../companies/company.entity';
 import { Employee } from '../employees/employee.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
@@ -23,48 +23,87 @@ export class DashboardService {
       this.machineryRepo.count({ where: { status: 'active' } }),
     ]);
 
-    const today = new Date().toISOString().split('T')[0];
-    const sevenDaysLater = new Date();
-    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-    const sevenStr = sevenDaysLater.toISOString().split('T')[0];
     const sixtyDaysLater = new Date();
     sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
     const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
 
-    // Detailed expiry items for employees
-    const expiringEmployeeItems = await this.employeeRepo.createQueryBuilder('e')
-      .leftJoinAndSelect('e.company', 'c')
-      .where('e.status = :s', { s: 'active' })
-      .andWhere('(e.green_card_expiry <= :d OR e.construction_card_expiry <= :d OR e.driving_license_expiry <= :d)', { d: sixtyStr })
-      .orderBy('LEAST(COALESCE(e.green_card_expiry, \'2099-12-31\'), COALESCE(e.construction_card_expiry, \'2099-12-31\'), COALESCE(e.driving_license_expiry, \'2099-12-31\'))', 'ASC')
-      .take(50)
-      .getMany();
+    // Employee expiry alerts - use raw query to avoid TypeORM alias issues
+    const employeeAlerts: any[] = [];
+    const activeEmployees = await this.employeeRepo.find({
+      where: { status: 'active' as any },
+      relations: ['company'],
+    });
+    for (const e of activeEmployees) {
+      const checks = [
+        { type: '平安卡', date: e.green_card_expiry },
+        { type: '建造業工人註冊證', date: e.construction_card_expiry },
+        { type: '駕駛執照', date: e.driving_license_expiry },
+      ];
+      for (const c of checks) {
+        if (c.date && c.date <= sixtyStr) {
+          employeeAlerts.push({
+            id: e.id,
+            name: e.name_zh,
+            type: c.type,
+            expiry_date: c.date,
+            company_name: e.company?.name || '',
+          });
+        }
+      }
+    }
+    employeeAlerts.sort((a, b) => (a.expiry_date || '').localeCompare(b.expiry_date || ''));
 
-    // Detailed expiry items for vehicles
-    const expiringVehicleItems = await this.vehicleRepo.createQueryBuilder('v')
-      .leftJoinAndSelect('v.owner_company', 'c')
-      .where('v.status = :s', { s: 'active' })
-      .andWhere('(v.insurance_expiry <= :d OR v.permit_fee_expiry <= :d OR v.inspection_date <= :d OR v.license_expiry <= :d)', { d: sixtyStr })
-      .orderBy('LEAST(COALESCE(v.insurance_expiry, \'2099-12-31\'), COALESCE(v.permit_fee_expiry, \'2099-12-31\'), COALESCE(v.inspection_date, \'2099-12-31\'), COALESCE(v.license_expiry, \'2099-12-31\'))', 'ASC')
-      .take(50)
-      .getMany();
+    // Vehicle expiry alerts
+    const vehicleAlerts: any[] = [];
+    const activeVehicles = await this.vehicleRepo.find({
+      where: { status: 'active' as any },
+      relations: ['owner_company'],
+    });
+    for (const v of activeVehicles) {
+      const checks = [
+        { type: '保險', date: v.insurance_expiry },
+        { type: '牌費', date: v.permit_fee_expiry },
+        { type: '驗車', date: v.inspection_date },
+        { type: '行車證', date: v.license_expiry },
+      ];
+      for (const c of checks) {
+        if (c.date && c.date <= sixtyStr) {
+          vehicleAlerts.push({
+            id: v.id,
+            name: v.plate_number,
+            type: c.type,
+            expiry_date: c.date,
+            company_name: v.owner_company?.name || '',
+          });
+        }
+      }
+    }
+    vehicleAlerts.sort((a, b) => (a.expiry_date || '').localeCompare(b.expiry_date || ''));
 
-    // Detailed expiry items for machinery
-    const expiringMachineryItems = await this.machineryRepo.createQueryBuilder('m')
-      .leftJoinAndSelect('m.owner_company', 'c')
-      .where('m.status = :s', { s: 'active' })
-      .andWhere('(m.inspection_cert_expiry <= :d OR m.insurance_expiry <= :d)', { d: sixtyStr })
-      .orderBy('LEAST(COALESCE(m.inspection_cert_expiry, \'2099-12-31\'), COALESCE(m.insurance_expiry, \'2099-12-31\'))', 'ASC')
-      .take(50)
-      .getMany();
-
-    // Company breakdown
-    const companyBreakdown = await this.companyRepo.createQueryBuilder('c')
-      .select('c.company_type', 'type')
-      .addSelect('COUNT(*)', 'count')
-      .where('c.status = :s', { s: 'active' })
-      .groupBy('c.company_type')
-      .getRawMany();
+    // Machinery expiry alerts
+    const machineryAlerts: any[] = [];
+    const activeMachinery = await this.machineryRepo.find({
+      where: { status: 'active' as any },
+      relations: ['owner_company'],
+    });
+    for (const m of activeMachinery) {
+      const checks = [
+        { type: '驗機紙', date: m.inspection_cert_expiry },
+        { type: '保險', date: m.insurance_expiry },
+      ];
+      for (const c of checks) {
+        if (c.date && c.date <= sixtyStr) {
+          machineryAlerts.push({
+            id: m.id,
+            name: m.machine_code,
+            type: c.type,
+            expiry_date: c.date,
+            company_name: m.owner_company?.name || '',
+          });
+        }
+      }
+    }
+    machineryAlerts.sort((a, b) => (a.expiry_date || '').localeCompare(b.expiry_date || ''));
 
     // Employee role breakdown
     const roleBreakdown = await this.employeeRepo.createQueryBuilder('e')
@@ -79,10 +118,11 @@ export class DashboardService {
       employees,
       vehicles,
       machinery,
-      expiringEmployeeItems,
-      expiringVehicleItems,
-      expiringMachineryItems,
-      companyBreakdown,
+      expiryAlerts: {
+        employees: employeeAlerts,
+        vehicles: vehicleAlerts,
+        machinery: machineryAlerts,
+      },
       roleBreakdown,
     };
   }
