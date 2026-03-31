@@ -5,6 +5,7 @@ import {
 import { Company } from '../companies/company.entity';
 import { Partner } from '../partners/partner.entity';
 import { QuotationItem } from './quotation-item.entity';
+import { Project } from '../projects/project.entity';
 
 @Entity('quotations')
 export class Quotation {
@@ -13,6 +14,9 @@ export class Quotation {
 
   @Column({ unique: true })
   quotation_no: string; // 自動生成的報價單編號
+
+  @Column({ default: 'project' })
+  quotation_type: string; // project（工程報價單）, rental（租賃/運輸報價單）
 
   @Column({ type: 'int' })
   company_id: number; // 開立公司
@@ -32,10 +36,14 @@ export class Quotation {
   quotation_date: string;
 
   @Column({ nullable: true })
-  project_name: string; // 工程名稱
+  project_name: string; // 工程名稱（工程類報價單使用）
 
-  @Column({ nullable: true })
-  project_no: string; // 工程編號
+  @Column({ nullable: true, type: 'int' })
+  project_id: number; // 關聯工程項目（工程類報價單接受後建立）
+
+  @ManyToOne(() => Project, { nullable: true })
+  @JoinColumn({ name: 'project_id' })
+  project: Project;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   total_amount: number; // 總金額

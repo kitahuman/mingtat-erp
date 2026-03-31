@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
 import Link from 'next/link';
 
-const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務'];
+const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
@@ -17,6 +17,7 @@ export default function RateCardDetailPage() {
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = () => {
@@ -31,15 +32,19 @@ export default function RateCardDetailPage() {
     loadData();
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
+    projectsApi.simple().then(res => setProjects(res.data)).catch(() => {});
   }, [params.id]);
 
   const handleSave = async () => {
     try {
-      const { company, client, created_at, updated_at, ...updateData } = form;
+      const { company, client, source_quotation, project, created_at, updated_at, ...updateData } = form;
       updateData.day_rate = Number(updateData.day_rate) || 0;
       updateData.night_rate = Number(updateData.night_rate) || 0;
       updateData.mid_shift_rate = Number(updateData.mid_shift_rate) || 0;
       updateData.ot_rate = Number(updateData.ot_rate) || 0;
+      updateData.project_id = updateData.project_id || null;
+      updateData.effective_date = updateData.effective_date || null;
+      updateData.expiry_date = updateData.expiry_date || null;
       if (updateData.ot_rates) {
         updateData.ot_rates = updateData.ot_rates.map((ot: any) => ({
           ...ot, rate: Number(ot.rate) || 0, id: undefined,
@@ -135,6 +140,38 @@ export default function RateCardDetailPage() {
         )}
       </div>
 
+      {/* Effective Date, Expiry, Source Quotation, Project */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">有效期及關聯</h2>
+        {editing ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">生效日期</label><input type="date" value={form.effective_date || ''} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">到期日期</label><input type="date" value={form.expiry_date || ''} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯工程項目</label>
+              <select value={form.project_id || ''} onChange={e => setForm({...form, project_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
+                <option value="">無</option>
+                {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>)}
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div><p className="text-sm text-gray-500">生效日期</p><p>{record?.effective_date || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">到期日期</p><p>{record?.expiry_date || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">來源報價單</p>
+              {record?.source_quotation ? (
+                <Link href={`/quotations/${record.source_quotation.id}`} className="text-primary-600 hover:underline font-mono">{record.source_quotation.quotation_no}</Link>
+              ) : <p>-</p>}
+            </div>
+            <div><p className="text-sm text-gray-500">關聯工程項目</p>
+              {record?.project ? (
+                <Link href={`/projects/${record.project.id}`} className="text-primary-600 hover:underline font-mono">{record.project.project_no}</Link>
+              ) : <p>-</p>}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">費率</h2>
         {editing ? (
@@ -193,7 +230,7 @@ export default function RateCardDetailPage() {
                       </select></td>
                       <td className="px-3 py-1"><input type="number" value={ot.rate} onChange={e => { const ots = [...form.ot_rates]; ots[idx] = {...ots[idx], rate: e.target.value}; setForm({...form, ot_rates: ots}); }} className="input-field text-sm text-right" /></td>
                       <td className="px-3 py-1"><select value={ot.unit || '小時'} onChange={e => { const ots = [...form.ot_rates]; ots[idx] = {...ots[idx], unit: e.target.value}; setForm({...form, ot_rates: ots}); }} className="input-field text-sm">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select></td>
-                      <td className="px-3 py-1"><button type="button" onClick={() => removeOtRate(idx)} className="text-red-500">×</button></td>
+                      <td className="px-3 py-1"><button type="button" onClick={() => removeOtRate(idx)} className="text-red-500">&times;</button></td>
                     </>
                   ) : (
                     <>

@@ -5,6 +5,8 @@ import {
 import { Company } from '../companies/company.entity';
 import { Partner } from '../partners/partner.entity';
 import { RateCardOtRate } from './rate-card-ot-rate.entity';
+import { Quotation } from '../quotations/quotation.entity';
+import { Project } from '../projects/project.entity';
 
 @Entity('rate_cards')
 export class RateCard {
@@ -76,6 +78,30 @@ export class RateCard {
 
   @Column({ nullable: true })
   ot_unit: string;
+
+  // 生效日期
+  @Column({ nullable: true, type: 'date' })
+  effective_date: string;
+
+  // 到期日期（可選）
+  @Column({ nullable: true, type: 'date' })
+  expiry_date: string;
+
+  // 來源報價單
+  @Column({ nullable: true, type: 'int' })
+  source_quotation_id: number;
+
+  @ManyToOne(() => Quotation, { nullable: true })
+  @JoinColumn({ name: 'source_quotation_id' })
+  source_quotation: Quotation;
+
+  // 關聯工程項目（工程類價目）
+  @Column({ nullable: true, type: 'int' })
+  project_id: number;
+
+  @ManyToOne(() => Project, { nullable: true })
+  @JoinColumn({ name: 'project_id' })
+  project: Project;
 
   @Column({ nullable: true, type: 'text' })
   remarks: string; // 備註（包油/不包油、包司機等）

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Quotation } from './quotation.entity';
@@ -6,6 +6,9 @@ import { QuotationItem } from './quotation-item.entity';
 import { QuotationSequence } from './quotation-sequence.entity';
 import { Company } from '../companies/company.entity';
 import { Partner } from '../partners/partner.entity';
+import { Project } from '../projects/project.entity';
+import { ProjectSequence } from '../projects/project-sequence.entity';
+import { RateCard } from '../rate-cards/rate-card.entity';
 
 @Injectable()
 export class QuotationsService {
@@ -15,6 +18,9 @@ export class QuotationsService {
     @InjectRepository(QuotationSequence) private seqRepo: Repository<QuotationSequence>,
     @InjectRepository(Company) private companyRepo: Repository<Company>,
     @InjectRepository(Partner) private partnerRepo: Repository<Partner>,
+    @InjectRepository(Project) private projectRepo: Repository<Project>,
+    @InjectRepository(ProjectSequence) private projectSeqRepo: Repository<ProjectSequence>,
+    @InjectRepository(RateCard) private rateCardRepo: Repository<RateCard>,
     private dataSource: DataSource,
   ) {}
 
@@ -73,26 +79,58 @@ export class QuotationsService {
     });
   }
 
+  /**
+   * Generate project number: {公司代碼}-{年份}-P{序號}
+   */
+  private async generateProjectNo(companyId: number): Promise<string> {
+    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    if (!company || !company.internal_prefix) {
+      throw new NotFoundException('公司不存在或未設定前綴');
+    }
+
+    const prefix = company.internal_prefix;
+    const year = String(new Date().getFullYear());
+
+    return await this.dataSource.transaction(async (manager) => {
+      let seq = await manager.findOne(ProjectSequence, {
+        where: { prefix, year },
+      });
+
+      if (!seq) {
+        seq = manager.create(ProjectSequence, { prefix, year, last_seq: 0 });
+      }
+
+      seq.last_seq += 1;
+      await manager.save(seq);
+
+      const seqStr = String(seq.last_seq).padStart(2, '0');
+      return `${prefix}-${year}-P${seqStr}`;
+    });
+  }
+
   async findAll(query: {
     page?: number; limit?: number; search?: string;
     company_id?: number; client_id?: number; status?: string;
+    quotation_type?: string;
     sortBy?: string; sortOrder?: string;
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const qb = this.repo.createQueryBuilder('q')
       .leftJoinAndSelect('q.company', 'company')
-      .leftJoinAndSelect('q.client', 'client');
+      .leftJoinAndSelect('q.client', 'client')
+      .leftJoinAndSelect('q.project', 'project');
 
     if (query.search) {
       qb.andWhere(
-        '(q.quotation_no ILIKE :s OR q.project_name ILIKE :s OR q.project_no ILIKE :s OR client.name ILIKE :s)',
+        '(q.quotation_no ILIKE :s OR q.project_name ILIKE :s OR client.name ILIKE :s)',
         { s: `%${query.search}%` },
       );
     }
     if (query.company_id) qb.andWhere('q.company_id = :cid', { cid: query.company_id });
     if (query.client_id) qb.andWhere('q.client_id = :clid', { clid: query.client_id });
     if (query.status) qb.andWhere('q.status = :st', { st: query.status });
+    if (query.quotation_type) qb.andWhere('q.quotation_type = :qt', { qt: query.quotation_type });
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
@@ -109,7 +147,7 @@ export class QuotationsService {
   async findOne(id: number) {
     const quotation = await this.repo.findOne({
       where: { id },
-      relations: ['company', 'client', 'items'],
+      relations: ['company', 'client', 'items', 'project'],
     });
     if (!quotation) throw new NotFoundException('報價單不存在');
     // Sort items by sort_order
@@ -165,7 +203,7 @@ export class QuotationsService {
     const existing = await this.repo.findOne({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
-    const { items, company, client, created_at, updated_at, id: _id, ...updateData } = dto;
+    const { items, company, client, project, created_at, updated_at, id: _id, ...updateData } = dto;
 
     // Recalculate total
     if (items && items.length > 0) {
@@ -203,5 +241,81 @@ export class QuotationsService {
     if (!existing) throw new NotFoundException('報價單不存在');
     await this.repo.update(id, { status });
     return this.findOne(id);
+  }
+
+  /**
+   * Accept a quotation and generate related records:
+   * - For project type: create a Project + generate rate card records
+   * - For rental type: generate rate card records only
+   */
+  async acceptQuotation(id: number, options?: {
+    project_name?: string;
+    effective_date?: string;
+    expiry_date?: string;
+  }) {
+    const quotation = await this.repo.findOne({
+      where: { id },
+      relations: ['company', 'client', 'items'],
+    });
+    if (!quotation) throw new NotFoundException('報價單不存在');
+    if (quotation.status === 'accepted') {
+      throw new BadRequestException('報價單已經被接受');
+    }
+
+    // Update status to accepted
+    await this.repo.update(id, { status: 'accepted' });
+
+    let project: Project | null = null;
+
+    // For project type: create a project
+    if (quotation.quotation_type === 'project') {
+      const project_no = await this.generateProjectNo(quotation.company_id);
+      const projectEntity = this.projectRepo.create({
+        project_no,
+        project_name: options?.project_name || quotation.project_name || quotation.quotation_no,
+        company_id: quotation.company_id,
+        client_id: quotation.client_id,
+        status: 'in_progress',
+      });
+      project = await (this.projectRepo.save(projectEntity) as any) as Project;
+
+      // Link quotation to project
+      await this.repo.update(id, { project_id: project.id });
+    }
+
+    // Generate rate card records from quotation items
+    if (quotation.items && quotation.items.length > 0) {
+      for (const item of quotation.items) {
+        const rateCardData: Partial<RateCard> = {
+          company_id: quotation.company_id,
+          client_id: quotation.client_id,
+          name: item.description,
+          service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
+          day_rate: Number(item.unit_price) || 0,
+          day_unit: item.unit,
+          effective_date: options?.effective_date || quotation.quotation_date,
+          expiry_date: options?.expiry_date || undefined,
+          source_quotation_id: quotation.id,
+          project_id: project?.id || undefined,
+          remarks: item.remarks || undefined,
+          status: 'active',
+        };
+        const rateCard = this.rateCardRepo.create(rateCardData as any);
+        await this.rateCardRepo.save(rateCard);
+      }
+    }
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Get quotations linked to a specific project
+   */
+  async findByProject(projectId: number) {
+    return this.repo.find({
+      where: { project_id: projectId },
+      relations: ['company', 'client'],
+      order: { created_at: 'DESC' },
+    });
   }
 }

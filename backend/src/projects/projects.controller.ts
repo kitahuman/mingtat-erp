@@ -1,20 +1,20 @@
 import { Controller, Get, Post, Put, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { QuotationsService } from './quotations.service';
+import { ProjectsService } from './projects.service';
 
-@Controller('quotations')
+@Controller('projects')
 @UseGuards(AuthGuard('jwt'))
-export class QuotationsController {
-  constructor(private readonly service: QuotationsService) {}
+export class ProjectsController {
+  constructor(private readonly service: ProjectsService) {}
 
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
   }
 
-  @Get('by-project/:projectId')
-  findByProject(@Param('projectId') projectId: number) {
-    return this.service.findByProject(Number(projectId));
+  @Get('simple')
+  findSimple() {
+    return this.service.findSimple();
   }
 
   @Get(':id')
@@ -35,10 +35,5 @@ export class QuotationsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: number, @Body('status') status: string) {
     return this.service.updateStatus(Number(id), status);
-  }
-
-  @Post(':id/accept')
-  acceptQuotation(@Param('id') id: number, @Body() options: any) {
-    return this.service.acceptQuotation(Number(id), options);
   }
 }

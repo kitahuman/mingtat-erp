@@ -1,14 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
-const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務'];
+const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
-const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
 
 export default function RateCardsPage() {
   const router = useRouter();
@@ -24,6 +23,7 @@ export default function RateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', contract_no: '', service_type: '運輸',
@@ -31,6 +31,7 @@ export default function RateCardsPage() {
     origin: '', destination: '',
     day_rate: 0, day_unit: '天', night_rate: 0, night_unit: '晚',
     mid_shift_rate: 0, mid_shift_unit: '天', ot_rate: 0, ot_unit: '小時',
+    effective_date: '', expiry_date: '', project_id: '',
     remarks: '', status: 'active',
     ot_rates: [],
   });
@@ -50,6 +51,7 @@ export default function RateCardsPage() {
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
+    projectsApi.simple().then(res => setProjects(res.data)).catch(() => {});
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -59,10 +61,13 @@ export default function RateCardsPage() {
         ...form,
         company_id: Number(form.company_id),
         client_id: Number(form.client_id),
+        project_id: form.project_id ? Number(form.project_id) : null,
         day_rate: Number(form.day_rate) || 0,
         night_rate: Number(form.night_rate) || 0,
         mid_shift_rate: Number(form.mid_shift_rate) || 0,
         ot_rate: Number(form.ot_rate) || 0,
+        effective_date: form.effective_date || null,
+        expiry_date: form.expiry_date || null,
       };
       await rateCardsApi.create(payload);
       setShowModal(false);
@@ -80,6 +85,14 @@ export default function RateCardsPage() {
     { key: 'destination', label: '終點', render: (v: any) => v || '-' },
     { key: 'day_rate', label: '日間', sortable: true, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
     { key: 'night_rate', label: '夜間', className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, render: (v: any) => v || '-' },
+    { key: 'expiry_date', label: '到期日期', render: (v: any) => v || '-' },
+    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
+    ) : '-' },
+    { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
+      <span className="font-mono text-xs text-primary-600">{row.project.project_no}</span>
+    ) : '-' },
     { key: 'status', label: '狀態', render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
   ];
 
@@ -126,7 +139,7 @@ export default function RateCardsPage() {
 
       {/* Create Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增客戶價目" size="xl">
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={handleCreate} className="space-y-4 max-h-[75vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">開票公司 *</label>
@@ -170,6 +183,28 @@ export default function RateCardsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">終點</label>
               <input value={form.destination} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" />
+            </div>
+          </div>
+
+          {/* Dates and Project */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-bold text-gray-700 mb-3">有效期及關聯</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">生效日期</label>
+                <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
+                <input type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">關聯工程項目</label>
+                <select value={form.project_id} onChange={e => setForm({...form, project_id: e.target.value})} className="input-field">
+                  <option value="">無</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 

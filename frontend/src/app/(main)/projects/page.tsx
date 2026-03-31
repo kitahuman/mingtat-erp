@@ -1,0 +1,168 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { projectsApi, companiesApi, partnersApi } from '@/lib/api';
+import DataTable from '@/components/DataTable';
+import Modal from '@/components/Modal';
+
+const statusLabels: Record<string, string> = {
+  quoting: '報價中', in_progress: '進行中', completed: '已完成', cancelled: '已取消',
+};
+const statusColors: Record<string, string> = {
+  quoting: 'badge-blue', in_progress: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
+};
+
+export default function ProjectsPage() {
+  const router = useRouter();
+  const [data, setData] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState('DESC');
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+
+  const [form, setForm] = useState<any>({
+    company_id: '', client_id: '', project_name: '', description: '',
+    address: '', start_date: '', end_date: '', status: 'quoting', remarks: '',
+  });
+
+  const load = () => {
+    setLoading(true);
+    projectsApi.list({ page, limit: 20, search, status: statusFilter || undefined, sortBy, sortOrder })
+      .then(res => { setData(res.data.data); setTotal(res.data.total); })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [page, search, statusFilter, sortBy, sortOrder]);
+  useEffect(() => {
+    companiesApi.simple().then(res => setCompanies(res.data));
+    partnersApi.simple().then(res => setPartners(res.data));
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await projectsApi.create({
+        ...form,
+        company_id: Number(form.company_id),
+        client_id: form.client_id ? Number(form.client_id) : null,
+      });
+      setShowModal(false);
+      setForm({ company_id: '', client_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'quoting', remarks: '' });
+      load();
+    } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
+  };
+
+  const columns = [
+    { key: 'project_no', label: '工程編號', sortable: true, render: (v: any) => <span className="font-mono font-bold text-primary-600">{v}</span> },
+    { key: 'project_name', label: '工程名稱', sortable: true, render: (v: any) => <span className="max-w-[250px] truncate block">{v || '-'}</span> },
+    { key: 'company', label: '公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'start_date', label: '開始日期', sortable: true, render: (v: any) => v || '-' },
+    { key: 'end_date', label: '結束日期', sortable: true, render: (v: any) => v || '-' },
+    { key: 'status', label: '狀態', render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">工程項目</h1>
+          <p className="text-gray-500 text-sm mt-1">管理工程項目，追蹤工程進度</p>
+        </div>
+        <button onClick={() => setShowModal(true)} className="btn-primary">新增工程項目</button>
+      </div>
+
+      <div className="card">
+        <DataTable
+          columns={columns}
+          data={data}
+          total={total}
+          page={page}
+          limit={20}
+          onPageChange={setPage}
+          onSearch={setSearch}
+          searchPlaceholder="搜尋工程編號、工程名稱、客戶..."
+          onRowClick={(row) => router.push(`/projects/${row.id}`)}
+          loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          filters={
+            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+              <option value="">全部狀態</option>
+              <option value="quoting">報價中</option>
+              <option value="in_progress">進行中</option>
+              <option value="completed">已完成</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          }
+        />
+      </div>
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增工程項目" size="lg">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+            工程編號將自動生成（格式：公司代碼-年份-P序號）
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">開立公司 *</label>
+              <select value={form.company_id} onChange={e => setForm({...form, company_id: e.target.value})} className="input-field" required>
+                <option value="">請選擇</option>
+                {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
+              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field">
+                <option value="">請選擇（可選）</option>
+                {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">工程名稱 *</label>
+              <input value={form.project_name} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" required placeholder="例如 機場東面機場路Site6鋪人造草皮工程" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">工程地址</label>
+              <input value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="input-field" placeholder="工程地點" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">預計開始日期</label>
+              <input type="date" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">預計結束日期</label>
+              <input type="date" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field">
+                <option value="quoting">報價中</option>
+                <option value="in_progress">進行中</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">說明</label>
+              <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="input-field" rows={2} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+              <textarea value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={2} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button>
+            <button type="submit" className="btn-primary">新增工程項目</button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}

@@ -33,12 +33,13 @@ const navEntries: NavEntry[] = [
   { href: '/vehicles', label: '車輛管理', icon: '🚛', minRole: 'clerk' },
   { href: '/machinery', label: '機械管理', icon: '⚙️', minRole: 'clerk' },
   { href: '/partners', label: '合作單位', icon: '🤝', minRole: 'clerk' },
+  { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
   {
     label: '報價及價目',
     icon: '💰',
     minRole: 'clerk',
     items: [
-      { href: '/quotations', label: '工程報價單', icon: '📋', minRole: 'clerk' },
+      { href: '/quotations', label: '報價單', icon: '📋', minRole: 'clerk' },
       { href: '/rate-cards', label: '客戶價目表', icon: '📊', minRole: 'clerk' },
       { href: '/fleet-rate-cards', label: '車隊價目表', icon: '🚚', minRole: 'clerk' },
       { href: '/subcon-rate-cards', label: '街車價目表', icon: '🚛', minRole: 'clerk' },

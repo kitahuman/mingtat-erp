@@ -12,6 +12,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { PartnersModule } from './partners/partners.module';
 import { CompanyProfilesModule } from './company-profiles/company-profiles.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { ProjectsModule } from './projects/projects.module';
 import { QuotationsModule } from './quotations/quotations.module';
 import { RateCardsModule } from './rate-cards/rate-cards.module';
 import { FleetRateCardsModule } from './fleet-rate-cards/fleet-rate-cards.module';
@@ -59,6 +60,7 @@ import { EnumsModule } from './common/enums.module';
     PartnersModule,
     CompanyProfilesModule,
     CustomFieldsModule,
+    ProjectsModule,
     QuotationsModule,
     RateCardsModule,
     FleetRateCardsModule,

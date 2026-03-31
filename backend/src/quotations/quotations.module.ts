@@ -5,12 +5,20 @@ import { QuotationItem } from './quotation-item.entity';
 import { QuotationSequence } from './quotation-sequence.entity';
 import { Company } from '../companies/company.entity';
 import { Partner } from '../partners/partner.entity';
+import { Project } from '../projects/project.entity';
+import { ProjectSequence } from '../projects/project-sequence.entity';
+import { RateCard } from '../rate-cards/rate-card.entity';
 import { QuotationsService } from './quotations.service';
 import { QuotationsController } from './quotations.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Quotation, QuotationItem, QuotationSequence, Company, Partner]),
+    TypeOrmModule.forFeature([
+      Quotation, QuotationItem, QuotationSequence,
+      Company, Partner,
+      Project, ProjectSequence,
+      RateCard,
+    ]),
   ],
   providers: [QuotationsService],
   controllers: [QuotationsController],

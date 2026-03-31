@@ -3,9 +3,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import Link from 'next/link';
+import Modal from '@/components/Modal';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red' };
+const typeLabels: Record<string, string> = { project: '工程報價', rental: '租賃/運輸報價' };
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 
 export default function QuotationDetailPage() {
@@ -17,6 +19,13 @@ export default function QuotationDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [acceptForm, setAcceptForm] = useState<any>({
+    project_name: '',
+    effective_date: new Date().toISOString().slice(0, 10),
+    expiry_date: '',
+  });
+  const [accepting, setAccepting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const loadData = () => {
@@ -38,7 +47,7 @@ export default function QuotationDetailPage() {
 
   const handleSave = async () => {
     try {
-      const { company, client, created_at, updated_at, ...updateData } = form;
+      const { company, client, project, created_at, updated_at, ...updateData } = form;
       updateData.items = updateData.items.map((item: any, idx: number) => ({
         ...item,
         quantity: Number(item.quantity) || 0,
@@ -60,6 +69,34 @@ export default function QuotationDetailPage() {
     } catch (err: any) { alert(err.response?.data?.message || '狀態更新失敗'); }
   };
 
+  const handleAccept = async () => {
+    setAccepting(true);
+    try {
+      const res = await quotationsApi.accept(quotation.id, {
+        project_name: acceptForm.project_name || quotation.project_name,
+        effective_date: acceptForm.effective_date,
+        expiry_date: acceptForm.expiry_date || undefined,
+      });
+      setQuotation(res.data);
+      setForm({ ...res.data, items: res.data.items || [] });
+      setShowAcceptModal(false);
+      alert('報價單已接受！' + (quotation.quotation_type === 'project' ? ' 工程項目已建立。' : ' 價目記錄已生成。'));
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const openAcceptModal = () => {
+    setAcceptForm({
+      project_name: quotation.project_name || '',
+      effective_date: quotation.quotation_date || new Date().toISOString().slice(0, 10),
+      expiry_date: '',
+    });
+    setShowAcceptModal(true);
+  };
+
   const addItem = () => {
     setForm({ ...form, items: [...form.items, { description: '', quantity: 0, unit: 'JOB', unit_price: 0, remarks: '' }] });
   };
@@ -79,6 +116,7 @@ export default function QuotationDetailPage() {
     if (!printContent) return;
     const w = window.open('', '_blank');
     if (!w) return;
+    const typeText = quotation.quotation_type === 'rental' ? '報 價 單 QUOTATION (Rate Card)' : '報 價 單 QUOTATION';
     w.document.write(`
       <html><head><title>報價單 ${quotation.quotation_no}</title>
       <style>
@@ -103,13 +141,12 @@ export default function QuotationDetailPage() {
         <p>${quotation.company?.address || ''}</p>
         <p>電話: ${quotation.company?.phone || ''}</p>
       </div>
-      <h2 style="text-align:center; margin-bottom: 20px;">報 價 單 QUOTATION</h2>
+      <h2 style="text-align:center; margin-bottom: 20px;">${typeText}</h2>
       <div class="info-grid">
         <div><span class="label">報價單號：</span><span class="quotation-no">${quotation.quotation_no}</span></div>
         <div><span class="label">日期：</span>${quotation.quotation_date}</div>
         <div><span class="label">致：</span>${quotation.client?.name || '-'}</div>
-        <div><span class="label">工程編號：</span>${quotation.project_no || '-'}</div>
-        <div colspan="2"><span class="label">工程名稱：</span>${quotation.project_name || '-'}</div>
+        ${quotation.quotation_type === 'project' ? `<div><span class="label">工程名稱：</span>${quotation.project_name || '-'}</div>` : `<div><span class="label">服務說明：</span>${quotation.project_name || '-'}</div>`}
       </div>
       <table>
         <thead><tr><th style="width:40px">編號</th><th>項目</th><th style="width:70px" class="text-right">數量</th><th style="width:60px">單位</th><th style="width:90px" class="text-right">單價</th><th style="width:100px" class="text-right">金額</th></tr></thead>
@@ -156,13 +193,23 @@ export default function QuotationDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/quotations" className="hover:text-primary-600">工程報價單</Link><span>/</span><span className="text-gray-900">{quotation?.quotation_no}</span>
+        <Link href="/quotations" className="hover:text-primary-600">報價單</Link><span>/</span><span className="text-gray-900">{quotation?.quotation_no}</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 font-mono">{quotation?.quotation_no}</h1>
-          <p className="text-gray-500">{quotation?.project_name} | <span className={statusColors[quotation?.status]}>{statusLabels[quotation?.status]}</span></p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 font-mono">{quotation?.quotation_no}</h1>
+            <span className={quotation?.quotation_type === 'project' ? 'badge-blue' : 'badge-purple'}>
+              {typeLabels[quotation?.quotation_type] || quotation?.quotation_type}
+            </span>
+          </div>
+          <p className="text-gray-500 mt-1">
+            {quotation?.project_name || '-'} | <span className={statusColors[quotation?.status]}>{statusLabels[quotation?.status]}</span>
+            {quotation?.project && (
+              <> | 工程項目：<Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no}</Link></>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           <button onClick={handlePrint} className="btn-secondary">列印 / PDF</button>
@@ -171,7 +218,7 @@ export default function QuotationDetailPage() {
           )}
           {quotation?.status === 'sent' && (
             <>
-              <button onClick={() => handleStatusChange('accepted')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">已接受</button>
+              <button onClick={openAcceptModal} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">接受報價</button>
               <button onClick={() => handleStatusChange('rejected')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">已拒絕</button>
             </>
           )}
@@ -192,6 +239,12 @@ export default function QuotationDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {editing ? (
             <>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">報價類型</label>
+                <select value={form.quotation_type} onChange={e => setForm({...form, quotation_type: e.target.value})} className="input-field">
+                  <option value="project">工程報價</option>
+                  <option value="rental">租賃/運輸報價</option>
+                </select>
+              </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">開立公司</label>
                 <select value={form.company_id} onChange={e => setForm({...form, company_id: Number(e.target.value)})} className="input-field">
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
@@ -204,17 +257,19 @@ export default function QuotationDetailPage() {
                 </select>
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">日期</label><input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">工程編號</label><input value={form.project_no || ''} onChange={e => setForm({...form, project_no: e.target.value})} className="input-field" /></div>
-              <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
+              <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">{form.quotation_type === 'project' ? '工程名稱' : '服務說明'}</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
             </>
           ) : (
             <>
               <div><p className="text-sm text-gray-500">報價單號</p><p className="font-mono font-bold">{quotation?.quotation_no}</p></div>
+              <div><p className="text-sm text-gray-500">報價類型</p><p><span className={quotation?.quotation_type === 'project' ? 'badge-blue' : 'badge-purple'}>{typeLabels[quotation?.quotation_type]}</span></p></div>
               <div><p className="text-sm text-gray-500">開立公司</p><p className="font-medium">{quotation?.company?.internal_prefix} - {quotation?.company?.name}</p></div>
               <div><p className="text-sm text-gray-500">客戶</p><p className="font-medium">{quotation?.client?.name || '-'}</p></div>
               <div><p className="text-sm text-gray-500">日期</p><p>{quotation?.quotation_date}</p></div>
-              <div><p className="text-sm text-gray-500">工程編號</p><p>{quotation?.project_no || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">工程名稱</p><p>{quotation?.project_name || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">{quotation?.quotation_type === 'project' ? '工程名稱' : '服務說明'}</p><p>{quotation?.project_name || '-'}</p></div>
+              {quotation?.project && (
+                <div><p className="text-sm text-gray-500">關聯工程項目</p><p><Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no} - {quotation.project.project_name}</Link></p></div>
+              )}
             </>
           )}
         </div>
@@ -223,7 +278,7 @@ export default function QuotationDetailPage() {
       {/* Items */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">報價明細</h2>
+          <h2 className="text-lg font-bold text-gray-900">{quotation?.quotation_type === 'project' ? '報價明細' : '費率明細'}</h2>
           {editing && <button type="button" onClick={addItem} className="text-sm text-primary-600 hover:underline">+ 新增項目</button>}
         </div>
         <div className="overflow-x-auto">
@@ -231,7 +286,7 @@ export default function QuotationDetailPage() {
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="px-3 py-2 text-left w-12">#</th>
-                <th className="px-3 py-2 text-left">項目描述</th>
+                <th className="px-3 py-2 text-left">{quotation?.quotation_type === 'project' ? '項目描述' : '服務/路線描述'}</th>
                 <th className="px-3 py-2 text-right w-24">數量</th>
                 <th className="px-3 py-2 text-left w-20">單位</th>
                 <th className="px-3 py-2 text-right w-28">單價</th>
@@ -250,7 +305,7 @@ export default function QuotationDetailPage() {
                       <td className="px-3 py-1"><select value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} className="input-field text-sm">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select></td>
                       <td className="px-3 py-1"><input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} className="input-field text-sm text-right" /></td>
                       <td className="px-3 py-2 text-right font-mono">${((Number(item.quantity) || 0) * (Number(item.unit_price) || 0)).toLocaleString()}</td>
-                      <td className="px-3 py-2">{form.items.length > 1 && <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">×</button>}</td>
+                      <td className="px-3 py-2">{form.items.length > 1 && <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">&times;</button>}</td>
                     </>
                   ) : (
                     <>
@@ -299,6 +354,46 @@ export default function QuotationDetailPage() {
       </div>
 
       <div ref={printRef} className="hidden"></div>
+
+      {/* Accept Quotation Modal */}
+      <Modal isOpen={showAcceptModal} onClose={() => setShowAcceptModal(false)} title="接受報價單" size="md">
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+            {quotation?.quotation_type === 'project' ? (
+              <p>接受此工程報價單後，系統將自動建立<strong>工程項目</strong>並生成對應的<strong>價目記錄</strong>。</p>
+            ) : (
+              <p>接受此租賃/運輸報價單後，系統將自動生成對應的<strong>客戶價目記錄</strong>。</p>
+            )}
+          </div>
+
+          {quotation?.quotation_type === 'project' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">工程名稱</label>
+              <input value={acceptForm.project_name} onChange={e => setAcceptForm({...acceptForm, project_name: e.target.value})} className="input-field" placeholder="工程項目名稱" />
+              <p className="text-xs text-gray-400 mt-1">工程編號將自動生成</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label>
+              <input type="date" value={acceptForm.effective_date} onChange={e => setAcceptForm({...acceptForm, effective_date: e.target.value})} className="input-field" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
+              <input type="date" value={acceptForm.expiry_date} onChange={e => setAcceptForm({...acceptForm, expiry_date: e.target.value})} className="input-field" />
+              <p className="text-xs text-gray-400 mt-1">可選，如有合約期限</p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setShowAcceptModal(false)} className="btn-secondary">取消</button>
+            <button onClick={handleAccept} disabled={accepting} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm disabled:opacity-50">
+              {accepting ? '處理中...' : '確認接受'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

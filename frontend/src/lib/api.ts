@@ -138,13 +138,25 @@ export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
 };
 
-// Quotations (工程報價單)
+// Projects (工程項目)
+export const projectsApi = {
+  list: (params?: any) => api.get('/projects', { params }),
+  simple: () => api.get('/projects/simple'),
+  get: (id: number) => api.get(`/projects/${id}`),
+  create: (data: any) => api.post('/projects', data),
+  update: (id: number, data: any) => api.put(`/projects/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/projects/${id}/status`, { status }),
+};
+
+// Quotations (報價單)
 export const quotationsApi = {
   list: (params?: any) => api.get('/quotations', { params }),
   get: (id: number) => api.get(`/quotations/${id}`),
   create: (data: any) => api.post('/quotations', data),
   update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
   updateStatus: (id: number, status: string) => api.patch(`/quotations/${id}/status`, { status }),
+  accept: (id: number, options?: any) => api.post(`/quotations/${id}/accept`, options || {}),
+  byProject: (projectId: number) => api.get(`/quotations/by-project/${projectId}`),
 };
 
 // Rate Cards (客戶價目表)
