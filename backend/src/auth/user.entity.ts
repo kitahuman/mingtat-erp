@@ -1,4 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+export enum UserRole {
+  ADMIN = 'admin',
+  MANAGER = 'manager',
+  CLERK = 'clerk',
+  WORKER = 'worker',
+}
+
+export enum Department {
+  ENGINEERING = '工程部',
+  STREET_VEHICLE = '街車',
+  TRANSPORT = '運輸部',
+  OFFICE = '辦公室',
+}
 
 @Entity('users')
 export class User {
@@ -11,18 +31,36 @@ export class User {
   @Column()
   password: string;
 
-  @Column({ default: '管理員' })
-  display_name: string;
+  @Column({ name: 'display_name', default: '' })
+  displayName: string;
 
-  @Column({ default: 'admin' })
-  role: string;
+  @Column({
+    type: 'varchar',
+    default: UserRole.WORKER,
+  })
+  role: UserRole;
 
-  @Column({ default: true })
-  is_active: boolean;
+  @Column({ nullable: true })
+  email: string | null;
 
-  @CreateDateColumn()
-  created_at: Date;
+  @Column({ nullable: true })
+  phone: string | null;
 
-  @UpdateDateColumn()
-  updated_at: Date;
+  @Column({ nullable: true })
+  department: string | null;
+
+  @Column({ name: 'is_active', default: true })
+  isActive: boolean;
+
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt: Date | null;
+
+  @Column({ name: 'created_by', nullable: true })
+  createdBy: number | null;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 }

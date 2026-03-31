@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
 import { EmployeesModule } from './employees/employees.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
@@ -42,6 +43,7 @@ import { CustomFieldsModule } from './custom-fields/custom-fields.module';
       },
     }),
     AuthModule,
+    UsersModule,
     CompaniesModule,
     EmployeesModule,
     VehiclesModule,

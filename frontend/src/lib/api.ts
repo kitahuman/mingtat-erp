@@ -38,6 +38,23 @@ export const authApi = {
   profile: () => api.get('/auth/profile'),
 };
 
+// Users (Admin only)
+export const usersApi = {
+  list: (params?: any) => api.get('/users', { params }),
+  get: (id: number) => api.get(`/users/${id}`),
+  create: (data: any) => api.post('/users', data),
+  update: (id: number, data: any) => api.put(`/users/${id}`, data),
+  toggleActive: (id: number) => api.patch(`/users/${id}/toggle-active`),
+};
+
+// Profile (current user)
+export const profileApi = {
+  get: () => api.get('/profile'),
+  update: (data: any) => api.put('/profile', data),
+  changePassword: (data: { oldPassword: string; newPassword: string }) =>
+    api.post('/profile/change-password', data),
+};
+
 // Companies
 export const companiesApi = {
   list: (params?: any) => api.get('/companies', { params }),

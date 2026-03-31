@@ -1,25 +1,46 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
+import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
 import { useState } from 'react';
 
-const navItems = [
-  { href: '/dashboard', label: '儀表板', icon: '📊' },
-  { href: '/company-profiles', label: '公司資料', icon: '🏛️' },
-  { href: '/companies', label: '公司管理', icon: '🏢' },
-  { href: '/employees', label: '員工管理', icon: '👷' },
-  { href: '/vehicles', label: '車輛管理', icon: '🚛' },
-  { href: '/machinery', label: '機械管理', icon: '⚙️' },
-  { href: '/partners', label: '合作單位', icon: '🤝' },
-  { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧' },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: string;
+  minRole?: UserRole;
+  roles?: UserRole[];
+}
+
+const navItems: NavItem[] = [
+  { href: '/dashboard', label: '儀表板', icon: '📊', minRole: 'clerk' },
+  { href: '/company-profiles', label: '公司資料', icon: '🏛️', minRole: 'clerk' },
+  { href: '/companies', label: '公司管理', icon: '🏢', minRole: 'clerk' },
+  { href: '/employees', label: '員工管理', icon: '👷', minRole: 'clerk' },
+  { href: '/vehicles', label: '車輛管理', icon: '🚛', minRole: 'clerk' },
+  { href: '/machinery', label: '機械管理', icon: '⚙️', minRole: 'clerk' },
+  { href: '/partners', label: '合作單位', icon: '🤝', minRole: 'clerk' },
+  { href: '/settings/users', label: '用戶管理', icon: '👥', roles: ['admin'] },
+  { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole, hasMinRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const filteredNavItems = navItems.filter((item) => {
+    if (item.roles) {
+      return hasRole(...item.roles);
+    }
+    if (item.minRole) {
+      return hasMinRole(item.minRole);
+    }
+    return true;
+  });
+
+  const roleLabel = user?.role ? ROLE_LABELS[user.role] || '使用者' : '使用者';
 
   return (
     <>
@@ -64,7 +85,7 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             return (
               <Link
@@ -88,8 +109,10 @@ export default function Sidebar() {
         <div className={`p-4 border-t border-gray-700 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && (
             <div className="mb-2">
-              <p className="text-sm font-medium">{user?.display_name}</p>
-              <p className="text-xs text-gray-400">{user?.role === 'admin' ? '管理員' : '使用者'}</p>
+              <Link href="/settings/profile" className="hover:text-primary-400 transition-colors">
+                <p className="text-sm font-medium">{user?.displayName || user?.username}</p>
+                <p className="text-xs text-gray-400">{roleLabel}{user?.department ? ` - ${user.department}` : ''}</p>
+              </Link>
             </div>
           )}
           <button

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { customFieldsApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 
 interface CustomFieldsBlockProps {
@@ -9,11 +10,15 @@ interface CustomFieldsBlockProps {
 }
 
 export default function CustomFieldsBlock({ module, entityId }: CustomFieldsBlockProps) {
+  const { hasRole, hasMinRole } = useAuth();
   const [fields, setFields] = useState<any[]>([]);
   const [values, setValues] = useState<Record<number, string>>({});
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const canEdit = hasMinRole('clerk');
+  const canManageFields = hasRole('admin');
 
   const load = useCallback(async () => {
     if (!entityId) return;
@@ -109,9 +114,11 @@ export default function CustomFieldsBlock({ module, entityId }: CustomFieldsBloc
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-gray-900">自定義欄位</h2>
-          <Link href="/settings/custom-fields" className="text-xs text-primary-600 hover:underline">管理欄位</Link>
+          {canManageFields && (
+            <Link href="/settings/custom-fields" className="text-xs text-primary-600 hover:underline">管理欄位</Link>
+          )}
         </div>
-        {fields.length > 0 && (
+        {fields.length > 0 && canEdit && (
           <div className="flex gap-2">
             {editing ? (
               <>
@@ -126,7 +133,10 @@ export default function CustomFieldsBlock({ module, entityId }: CustomFieldsBloc
       </div>
 
       {fields.length === 0 ? (
-        <p className="text-center py-4 text-gray-400 text-sm">暫無自定義欄位。<Link href="/settings/custom-fields" className="text-primary-600 hover:underline">前往管理</Link></p>
+        <p className="text-center py-4 text-gray-400 text-sm">
+          暫無自定義欄位。
+          {canManageFields && <Link href="/settings/custom-fields" className="text-primary-600 hover:underline">前往管理</Link>}
+        </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {fields.map(field => (

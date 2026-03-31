@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { customFieldsApi } from '@/lib/api';
+import RoleGuard from '@/components/RoleGuard';
 
 const MODULES = [
   { value: 'company', label: '公司資料' },
@@ -30,7 +31,7 @@ const emptyForm = {
   is_active: true,
 };
 
-export default function CustomFieldsPage() {
+function CustomFieldsPageContent() {
   const [fields, setFields] = useState<any[]>([]);
   const [selectedModule, setSelectedModule] = useState('company');
   const [loading, setLoading] = useState(true);
@@ -220,5 +221,13 @@ export default function CustomFieldsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomFieldsPage() {
+  return (
+    <RoleGuard roles={['admin']}>
+      <CustomFieldsPageContent />
+    </RoleGuard>
   );
 }
