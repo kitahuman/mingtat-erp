@@ -13,10 +13,13 @@ export class EmployeesService {
     @InjectRepository(EmployeeTransfer) private transferRepo: Repository<EmployeeTransfer>,
   ) {}
 
-  async findAll(query: { page?: number; limit?: number; search?: string; role?: string; company_id?: number; status?: string }) {
+  async findAll(query: {
+    page?: number; limit?: number; search?: string;
+    role?: string; company_id?: number; status?: string;
+    sortBy?: string; sortOrder?: string;
+  }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-
     const qb = this.repo.createQueryBuilder('e')
       .leftJoinAndSelect('e.company', 'c');
 
@@ -27,8 +30,12 @@ export class EmployeesService {
     if (query.company_id) qb.andWhere('e.company_id = :cid', { cid: query.company_id });
     if (query.status) qb.andWhere('e.status = :st', { st: query.status });
 
+    const allowedSortFields = ['emp_code', 'name_zh', 'role', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
+    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
+    qb.orderBy(`e.${sortBy}`, sortOrder);
+
     const [data, total] = await qb
-      .orderBy('e.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -62,7 +69,6 @@ export class EmployeesService {
     return this.findOne(id);
   }
 
-  // Salary settings
   async addSalarySetting(employeeId: number, dto: Partial<EmployeeSalarySetting>) {
     const entity = this.salaryRepo.create({ ...dto, employee_id: employeeId });
     return this.salaryRepo.save(entity);
@@ -75,7 +81,6 @@ export class EmployeesService {
     });
   }
 
-  // Transfers
   async transferEmployee(employeeId: number, dto: { from_company_id: number; to_company_id: number; transfer_date: string; notes?: string }) {
     const transfer = this.transferRepo.create({ ...dto, employee_id: employeeId });
     await this.transferRepo.save(transfer);

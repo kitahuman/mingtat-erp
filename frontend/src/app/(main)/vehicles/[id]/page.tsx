@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { vehiclesApi, companiesApi } from '@/lib/api';
+import DocumentUpload from '@/components/DocumentUpload';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -133,8 +134,9 @@ export default function VehicleDetailPage() {
           <h2 className="text-lg font-bold text-gray-900 mb-4">日期追蹤</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><p className="text-sm text-gray-500">保險到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.insurance_expiry)}</p></div>
-            <div><p className="text-sm text-gray-500">檢查日期</p><p className="mt-1">{dateStatusBadge(vehicle?.inspection_date)}</p></div>
-            <div><p className="text-sm text-gray-500">牌照到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.license_expiry)}</p></div>
+            <div><p className="text-sm text-gray-500">牌費到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.permit_fee_expiry)}</p></div>
+            <div><p className="text-sm text-gray-500">驗車到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.inspection_date)}</p></div>
+            <div><p className="text-sm text-gray-500">行車證到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.license_expiry)}</p></div>
           </div>
         </div>
       )}
@@ -163,6 +165,11 @@ export default function VehicleDetailPage() {
             </table>
           </div>
         ) : <p className="text-gray-500 text-sm">暫無變更紀錄</p>}
+      </div>
+
+      {/* Documents */}
+      <div className="card mb-6">
+        <DocumentUpload entityType="vehicle" entityId={vehicle?.id} docTypes={['牌簿', '行車證', '保險單', '貸款文件', '買賣合約', '其他']} />
       </div>
 
       {/* Transfer History */}

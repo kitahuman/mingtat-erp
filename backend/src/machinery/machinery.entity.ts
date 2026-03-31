@@ -8,10 +8,10 @@ export class Machinery {
   id: number;
 
   @Column()
-  machine_code: string; // DC02-DC22
+  machine_code: string;
 
   @Column({ nullable: true })
-  machine_type: string; // 挖掘機, 裝載機, 自卸卡車
+  machine_type: string;
 
   @Column({ nullable: true })
   brand: string;
@@ -35,8 +35,11 @@ export class Machinery {
   @Column({ nullable: true, type: 'date' })
   inspection_cert_expiry: string; // 驗機紙到期日
 
+  @Column({ nullable: true, type: 'date' })
+  insurance_expiry: string; // 保險到期日
+
   @Column({ default: 'active' })
-  status: string; // active, inactive, maintenance
+  status: string;
 
   @Column({ nullable: true, type: 'text' })
   notes: string;

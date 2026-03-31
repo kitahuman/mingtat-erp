@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { vehiclesApi, companiesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import ExpiryBadge from '@/components/ExpiryBadge';
 
 const vehicleTypes = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
@@ -19,19 +20,29 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState<any>({ plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: '' });
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState('ASC');
+  const [form, setForm] = useState<any>({
+    plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '',
+    brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
+  });
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await vehiclesApi.list({ page, limit: 20, search, vehicle_type: typeFilter || undefined, owner_company_id: companyFilter || undefined });
+      const res = await vehiclesApi.list({
+        page, limit: 20, search,
+        vehicle_type: typeFilter || undefined,
+        owner_company_id: companyFilter || undefined,
+        sortBy, sortOrder
+      });
       setData(res.data.data);
       setTotal(res.data.total);
     } catch {}
     setLoading(false);
-  }, [page, search, typeFilter, companyFilter]);
+  }, [page, search, typeFilter, companyFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -40,34 +51,32 @@ export default function VehiclesPage() {
     try {
       await vehiclesApi.create({ ...form, owner_company_id: Number(form.owner_company_id), tonnage: form.tonnage ? Number(form.tonnage) : null });
       setShowModal(false);
-      setForm({ plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: '' });
+      setForm({ plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
 
-  function isExpiringSoon(date: string | null) {
-    if (!date) return false;
-    const diff = (new Date(date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-    return diff <= 30 && diff >= 0;
-  }
-  function isExpired(date: string | null) {
-    if (!date) return false;
-    return new Date(date) < new Date();
-  }
+  const handleSort = (field: string, order: string) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPage(1);
+  };
+
+  const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
 
   const columns = [
-    { key: 'plate_number', label: '車牌', className: 'font-mono font-bold' },
-    { key: 'vehicle_type', label: '車型', render: (v: string) => v || '-' },
-    { key: 'tonnage', label: '噸數', render: (v: number) => v ? `${v}T` : '-' },
+    { key: 'plate_number', label: '車牌', sortable: true, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
+    { key: 'vehicle_type', label: '車型', sortable: true },
     { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'insurance_expiry', label: '保險到期', className: 'hidden lg:table-cell', render: (v: string) => {
-      if (!v) return <span className="text-gray-400">-</span>;
-      if (isExpired(v)) return <span className="text-red-600 font-medium">{v}</span>;
-      if (isExpiringSoon(v)) return <span className="text-yellow-600 font-medium">{v}</span>;
-      return v;
-    }},
-    { key: 'status', label: '狀態', render: (v: string) => (
-      <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}</span>
+    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-' },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry },
+    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, render: renderExpiry },
+    { key: 'inspection_date', label: '驗車到期', sortable: true, render: renderExpiry },
+    { key: 'license_expiry', label: '行車證到期', sortable: true, render: renderExpiry },
+    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
+      <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
+        {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
+      </span>
     )},
   ];
 
@@ -93,6 +102,9 @@ export default function VehiclesPage() {
           searchPlaceholder="搜尋車牌、品牌或型號..."
           onRowClick={(row) => router.push(`/vehicles/${row.id}`)}
           loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -127,8 +139,9 @@ export default function VehiclesPage() {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">品牌</label><input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">型號</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">檢查日期</label><input type="date" value={form.inspection_date} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌照到期日</label><input type="date" value={form.license_expiry} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><input type="date" value={form.permit_fee_expiry} onChange={e => setForm({...form, permit_fee_expiry: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><input type="date" value={form.inspection_date} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><input type="date" value={form.license_expiry} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

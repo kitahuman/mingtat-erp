@@ -23,25 +23,40 @@ export class DashboardService {
       this.machineryRepo.count({ where: { status: 'active' } }),
     ]);
 
-    // Expiring licenses in 30 days
-    const thirtyDaysLater = new Date();
-    thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
-    const dateStr = thirtyDaysLater.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysLater = new Date();
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+    const sevenStr = sevenDaysLater.toISOString().split('T')[0];
+    const sixtyDaysLater = new Date();
+    sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
+    const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
 
-    const expiringEmployees = await this.employeeRepo.createQueryBuilder('e')
+    // Detailed expiry items for employees
+    const expiringEmployeeItems = await this.employeeRepo.createQueryBuilder('e')
+      .leftJoinAndSelect('e.company', 'c')
       .where('e.status = :s', { s: 'active' })
-      .andWhere('(e.green_card_expiry <= :d OR e.construction_card_expiry <= :d OR e.driving_license_expiry <= :d)', { d: dateStr })
-      .getCount();
+      .andWhere('(e.green_card_expiry <= :d OR e.construction_card_expiry <= :d OR e.driving_license_expiry <= :d)', { d: sixtyStr })
+      .orderBy('LEAST(COALESCE(e.green_card_expiry, \'2099-12-31\'), COALESCE(e.construction_card_expiry, \'2099-12-31\'), COALESCE(e.driving_license_expiry, \'2099-12-31\'))', 'ASC')
+      .take(50)
+      .getMany();
 
-    const expiringVehicles = await this.vehicleRepo.createQueryBuilder('v')
+    // Detailed expiry items for vehicles
+    const expiringVehicleItems = await this.vehicleRepo.createQueryBuilder('v')
+      .leftJoinAndSelect('v.owner_company', 'c')
       .where('v.status = :s', { s: 'active' })
-      .andWhere('(v.insurance_expiry <= :d OR v.inspection_date <= :d OR v.license_expiry <= :d)', { d: dateStr })
-      .getCount();
+      .andWhere('(v.insurance_expiry <= :d OR v.permit_fee_expiry <= :d OR v.inspection_date <= :d OR v.license_expiry <= :d)', { d: sixtyStr })
+      .orderBy('LEAST(COALESCE(v.insurance_expiry, \'2099-12-31\'), COALESCE(v.permit_fee_expiry, \'2099-12-31\'), COALESCE(v.inspection_date, \'2099-12-31\'), COALESCE(v.license_expiry, \'2099-12-31\'))', 'ASC')
+      .take(50)
+      .getMany();
 
-    const expiringMachinery = await this.machineryRepo.createQueryBuilder('m')
+    // Detailed expiry items for machinery
+    const expiringMachineryItems = await this.machineryRepo.createQueryBuilder('m')
+      .leftJoinAndSelect('m.owner_company', 'c')
       .where('m.status = :s', { s: 'active' })
-      .andWhere('m.inspection_cert_expiry <= :d', { d: dateStr })
-      .getCount();
+      .andWhere('(m.inspection_cert_expiry <= :d OR m.insurance_expiry <= :d)', { d: sixtyStr })
+      .orderBy('LEAST(COALESCE(m.inspection_cert_expiry, \'2099-12-31\'), COALESCE(m.insurance_expiry, \'2099-12-31\'))', 'ASC')
+      .take(50)
+      .getMany();
 
     // Company breakdown
     const companyBreakdown = await this.companyRepo.createQueryBuilder('c')
@@ -64,9 +79,9 @@ export class DashboardService {
       employees,
       vehicles,
       machinery,
-      expiringEmployees,
-      expiringVehicles,
-      expiringMachinery,
+      expiringEmployeeItems,
+      expiringVehicleItems,
+      expiringMachineryItems,
       companyBreakdown,
       roleBreakdown,
     };

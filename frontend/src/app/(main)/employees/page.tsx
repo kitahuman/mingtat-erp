@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import ExpiryBadge from '@/components/ExpiryBadge';
 
 const roleLabels: Record<string, string> = { admin: '管理', driver: '司機', operator: '機手', worker: '雜工' };
 const roleOptions = [
@@ -25,6 +26,8 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
@@ -32,12 +35,17 @@ export default function EmployeesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await employeesApi.list({ page, limit: 20, search, role: roleFilter || undefined, company_id: companyFilter || undefined });
+      const res = await employeesApi.list({
+        page, limit: 20, search,
+        role: roleFilter || undefined,
+        company_id: companyFilter || undefined,
+        sortBy, sortOrder
+      });
       setData(res.data.data);
       setTotal(res.data.total);
     } catch {}
     setLoading(false);
-  }, [page, search, roleFilter, companyFilter]);
+  }, [page, search, roleFilter, companyFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -48,24 +56,32 @@ export default function EmployeesPage() {
       setShowModal(false);
       setForm({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
       load();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '建立失敗');
-    }
+    } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
 
+  const handleSort = (field: string, order: string) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPage(1);
+  };
+
+  const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
+
   const columns = [
-    { key: 'emp_code', label: '編號', className: 'w-20 font-mono', render: (v: string) => v || '-' },
-    { key: 'name_zh', label: '姓名', render: (_: any, row: any) => (
+    { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', render: (v: string) => v || '-' },
+    { key: 'name_zh', label: '姓名', sortable: true, render: (_: any, row: any) => (
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
     )},
-    { key: 'role', label: '職位', render: (v: string) => (
+    { key: 'role', label: '職位', sortable: true, render: (v: string) => (
       <span className={v === 'admin' ? 'badge-blue' : v === 'driver' ? 'badge-green' : v === 'operator' ? 'badge-yellow' : 'badge-gray'}>
         {roleLabels[v] || v}
       </span>
     )},
-    { key: 'company', label: '所屬公司', className: 'hidden md:table-cell', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
-    { key: 'phone', label: '電話', className: 'hidden lg:table-cell', render: (v: string) => v || '-' },
-    { key: 'status', label: '狀態', render: (v: string) => (
+    { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'green_card_expiry', label: '平安卡到期', sortable: true, render: renderExpiry },
+    { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, render: renderExpiry },
+    { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, render: renderExpiry },
+    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : 'badge-red'}>{v === 'active' ? '在職' : '離職'}</span>
     )},
   ];
@@ -92,6 +108,9 @@ export default function EmployeesPage() {
           searchPlaceholder="搜尋姓名、編號或電話..."
           onRowClick={(row) => router.push(`/employees/${row.id}`)}
           loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
           filters={
             <div className="flex gap-2">
               <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="input-field w-auto">

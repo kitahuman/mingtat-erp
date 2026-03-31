@@ -11,10 +11,13 @@ export class MachineryService {
     @InjectRepository(MachineryTransfer) private transferRepo: Repository<MachineryTransfer>,
   ) {}
 
-  async findAll(query: { page?: number; limit?: number; search?: string; machine_type?: string; owner_company_id?: number; status?: string }) {
+  async findAll(query: {
+    page?: number; limit?: number; search?: string;
+    machine_type?: string; owner_company_id?: number; status?: string;
+    sortBy?: string; sortOrder?: string;
+  }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-
     const qb = this.repo.createQueryBuilder('m')
       .leftJoinAndSelect('m.owner_company', 'c');
 
@@ -25,8 +28,12 @@ export class MachineryService {
     if (query.owner_company_id) qb.andWhere('m.owner_company_id = :cid', { cid: query.owner_company_id });
     if (query.status) qb.andWhere('m.status = :st', { st: query.status });
 
+    const allowedSortFields = ['machine_code', 'machine_type', 'brand', 'model', 'tonnage', 'inspection_cert_expiry', 'insurance_expiry', 'status', 'id'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'machine_code';
+    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
+    qb.orderBy(`m.${sortBy}`, sortOrder);
+
     const [data, total] = await qb
-      .orderBy('m.machine_code', 'ASC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();

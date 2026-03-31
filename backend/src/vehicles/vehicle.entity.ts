@@ -12,7 +12,7 @@ export class Vehicle {
   plate_number: string;
 
   @Column({ nullable: true })
-  vehicle_type: string; // 泥頭車, 夾車, 勾斗車, 吊車, 拖架, 拖頭, 輕型貨車, 領航車
+  vehicle_type: string;
 
   @Column({ type: 'decimal', precision: 5, scale: 1, nullable: true })
   tonnage: number;
@@ -25,13 +25,16 @@ export class Vehicle {
   owner_company: Company;
 
   @Column({ nullable: true, type: 'date' })
-  insurance_expiry: string;
+  insurance_expiry: string; // 保險到期日
 
   @Column({ nullable: true, type: 'date' })
-  inspection_date: string;
+  permit_fee_expiry: string; // 牌費到期日
 
   @Column({ nullable: true, type: 'date' })
-  license_expiry: string;
+  inspection_date: string; // 驗車到期日
+
+  @Column({ nullable: true, type: 'date' })
+  license_expiry: string; // 行車證到期日
 
   @Column({ nullable: true })
   brand: string;
@@ -40,7 +43,7 @@ export class Vehicle {
   model: string;
 
   @Column({ default: 'active' })
-  status: string; // active, inactive, maintenance
+  status: string;
 
   @Column({ nullable: true, type: 'text' })
   notes: string;

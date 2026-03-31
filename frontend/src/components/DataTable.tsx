@@ -6,6 +6,7 @@ interface Column {
   label: string;
   render?: (value: any, row: any) => React.ReactNode;
   className?: string;
+  sortable?: boolean;
 }
 
 interface DataTableProps {
@@ -21,17 +22,30 @@ interface DataTableProps {
   filters?: React.ReactNode;
   actions?: React.ReactNode;
   loading?: boolean;
+  sortBy?: string;
+  sortOrder?: string;
+  onSort?: (field: string, order: string) => void;
 }
 
 export default function DataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
-  searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading
+  searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading,
+  sortBy, sortOrder, onSort
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const totalPages = Math.ceil(total / limit);
 
   const handleSearch = () => {
     onSearch?.(searchTerm);
+  };
+
+  const handleSort = (key: string) => {
+    if (!onSort) return;
+    if (sortBy === key) {
+      onSort(key, sortOrder === 'ASC' ? 'DESC' : 'ASC');
+    } else {
+      onSort(key, 'ASC');
+    }
   };
 
   return (
@@ -61,15 +75,28 @@ export default function DataTable({
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {columns.map((col) => (
-                <th key={col.key} className={`px-4 py-3 text-left font-semibold text-gray-600 ${col.className || ''}`}>
-                  {col.label}
+                <th
+                  key={col.key}
+                  className={`px-4 py-3 text-left font-semibold text-gray-600 ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                  onClick={() => col.sortable && handleSort(col.key)}
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{col.label}</span>
+                    {col.sortable && onSort && (
+                      <span className="text-xs text-gray-400">
+                        {sortBy === col.key ? (sortOrder === 'ASC' ? '\u25B2' : '\u25BC') : '\u25B4\u25BE'}
+                      </span>
+                    )}
+                  </div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">載入中...</td></tr>
+              <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">
+                <div className="flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
+              </td></tr>
             ) : data.length === 0 ? (
               <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">暫無資料</td></tr>
             ) : (
@@ -92,11 +119,11 @@ export default function DataTable({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-gray-600">
-            共 {total} 筆，第 {page} / {totalPages} 頁
-          </p>
+      <div className="flex items-center justify-between mt-4">
+        <p className="text-sm text-gray-600">
+          共 {total} 筆{totalPages > 1 ? `，第 ${page} / ${totalPages} 頁` : ''}
+        </p>
+        {totalPages > 1 && (
           <div className="flex gap-1">
             <button
               onClick={() => onPageChange(page - 1)}
@@ -130,8 +157,8 @@ export default function DataTable({
               下一頁
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

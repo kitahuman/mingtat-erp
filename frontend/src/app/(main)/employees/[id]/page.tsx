@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { employeesApi, companiesApi } from '@/lib/api';
+import DocumentUpload from '@/components/DocumentUpload';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -181,6 +182,11 @@ export default function EmployeeDetailPage() {
             </table>
           </div>
         ) : <p className="text-gray-500 text-sm">暫無薪資紀錄</p>}
+      </div>
+
+      {/* Documents */}
+      <div className="card mb-6">
+        <DocumentUpload entityType="employee" entityId={emp?.id} docTypes={['身份證', '建造業工人註冊證', '平安卡', '駕駛執照', '技術證書', '合約', '其他']} />
       </div>
 
       {/* Transfer History */}

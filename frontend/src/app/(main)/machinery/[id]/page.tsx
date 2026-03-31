@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { machineryApi, companiesApi } from '@/lib/api';
+import DocumentUpload from '@/components/DocumentUpload';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -96,6 +97,7 @@ export default function MachineryDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage || ''} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">序號</label><input value={form.serial_number || ''} onChange={e => setForm({...form, serial_number: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">驗機紙到期日</label><input type="date" value={form.inspection_cert_expiry || ''} onChange={e => setForm({...form, inspection_cert_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry || ''} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">使用中</option><option value="maintenance">維修中</option><option value="inactive">停用</option></select></div>
               <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">備註</label><textarea value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} className="input-field" rows={2} /></div>
             </>
@@ -109,11 +111,17 @@ export default function MachineryDetailPage() {
               <div><p className="text-sm text-gray-500">序號</p><p>{machine?.serial_number || '-'}</p></div>
               <div><p className="text-sm text-gray-500">所屬公司</p><p className="font-medium">{machine?.owner_company?.internal_prefix} - {machine?.owner_company?.name}</p></div>
               <div><p className="text-sm text-gray-500">驗機紙到期日</p><p className="mt-1">{dateStatusBadge(machine?.inspection_cert_expiry)}</p></div>
+              <div><p className="text-sm text-gray-500">保險到期日</p><p className="mt-1">{dateStatusBadge(machine?.insurance_expiry)}</p></div>
               <div><p className="text-sm text-gray-500">狀態</p><p><span className={machine?.status === 'active' ? 'badge-green' : machine?.status === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{machine?.status === 'active' ? '使用中' : machine?.status === 'maintenance' ? '維修中' : '停用'}</span></p></div>
               {machine?.notes && <div className="md:col-span-3"><p className="text-sm text-gray-500">備註</p><p>{machine.notes}</p></div>}
             </>
           )}
         </div>
+      </div>
+
+      {/* Documents */}
+      <div className="card mb-6">
+        <DocumentUpload entityType="machinery" entityId={machine?.id} docTypes={['驗機紙', '保險單', '買賣合約', '其他']} />
       </div>
 
       {/* Transfer History */}

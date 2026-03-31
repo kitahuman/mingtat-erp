@@ -22,11 +22,43 @@ export default function DashboardPage() {
     { label: '機械', value: stats?.machinery || 0, icon: '⚙️', href: '/machinery', color: 'bg-purple-500' },
   ];
 
-  const alerts = [
-    { label: '員工證照即將到期', value: stats?.expiringEmployees || 0, href: '/employees', color: 'text-red-600' },
-    { label: '車輛保險/檢查即將到期', value: stats?.expiringVehicles || 0, href: '/vehicles', color: 'text-orange-600' },
-    { label: '機械驗機紙即將到期', value: stats?.expiringMachinery || 0, href: '/machinery', color: 'text-yellow-600' },
-  ];
+  const getDaysUntil = (date: string) => {
+    const d = new Date(date);
+    const now = new Date();
+    return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const getAlertStyle = (days: number) => {
+    if (days <= 7) return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-800', icon: '🔴' };
+    if (days <= 30) return { bg: 'bg-orange-50 border-orange-200', text: 'text-orange-700', badge: 'bg-orange-100 text-orange-800', icon: '🟠' };
+    return { bg: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-700', badge: 'bg-yellow-100 text-yellow-800', icon: '🟡' };
+  };
+
+  const formatDays = (days: number) => {
+    if (days < 0) return `已過期 ${Math.abs(days)} 天`;
+    if (days === 0) return '今天到期';
+    return `${days} 天後到期`;
+  };
+
+  // Collect all expiry alerts from the new API format
+  const employeeAlerts = stats?.expiryAlerts?.employees || [];
+  const vehicleAlerts = stats?.expiryAlerts?.vehicles || [];
+  const machineryAlerts = stats?.expiryAlerts?.machinery || [];
+
+  const criticalCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+    const days = getDaysUntil(a.expiry_date || a.date);
+    return days <= 7;
+  }).length;
+
+  const warningCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+    const days = getDaysUntil(a.expiry_date || a.date);
+    return days > 7 && days <= 30;
+  }).length;
+
+  const cautionCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+    const days = getDaysUntil(a.expiry_date || a.date);
+    return days > 30 && days <= 60;
+  }).length;
 
   return (
     <div>
@@ -52,20 +84,125 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Alerts */}
-        <div className="card">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">到期提醒（30天內）</h2>
-          <div className="space-y-3">
-            {alerts.map((alert) => (
-              <Link key={alert.label} href={alert.href} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                <span className="text-sm text-gray-700">{alert.label}</span>
-                <span className={`text-lg font-bold ${alert.value > 0 ? alert.color : 'text-green-600'}`}>
-                  {alert.value > 0 ? alert.value : '✓'}
-                </span>
-              </Link>
-            ))}
+      {/* Alert Summary */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="card border-l-4 border-red-500">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm text-gray-500">緊急（7天內/已過期）</p><p className="text-2xl font-bold text-red-600 mt-1">{criticalCount}</p></div>
+            <span className="text-3xl">🔴</span>
           </div>
+        </div>
+        <div className="card border-l-4 border-orange-500">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm text-gray-500">警告（8-30天）</p><p className="text-2xl font-bold text-orange-600 mt-1">{warningCount}</p></div>
+            <span className="text-3xl">🟠</span>
+          </div>
+        </div>
+        <div className="card border-l-4 border-yellow-500">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm text-gray-500">注意（31-60天）</p><p className="text-2xl font-bold text-yellow-600 mt-1">{cautionCount}</p></div>
+            <span className="text-3xl">🟡</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Employee Expiry Alerts */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">👷 員工證照到期提醒</h2>
+            <Link href="/employees" className="text-sm text-primary-600 hover:underline">查看全部</Link>
+          </div>
+          {employeeAlerts.length > 0 ? (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {employeeAlerts.map((alert: any, i: number) => {
+                const days = getDaysUntil(alert.expiry_date || alert.date);
+                const style = getAlertStyle(days);
+                return (
+                  <Link key={i} href={`/employees/${alert.id || alert.employee_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span>{style.icon}</span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium ${style.text} truncate`}>{alert.name || alert.employee_name}</p>
+                        <p className="text-xs text-gray-500">{alert.type || alert.cert_type}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
+                      {formatDays(days)}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
+          )}
+        </div>
+
+        {/* Vehicle Expiry Alerts */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">🚛 車輛到期提醒</h2>
+            <Link href="/vehicles" className="text-sm text-primary-600 hover:underline">查看全部</Link>
+          </div>
+          {vehicleAlerts.length > 0 ? (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {vehicleAlerts.map((alert: any, i: number) => {
+                const days = getDaysUntil(alert.expiry_date || alert.date);
+                const style = getAlertStyle(days);
+                return (
+                  <Link key={i} href={`/vehicles/${alert.id || alert.vehicle_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span>{style.icon}</span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium font-mono ${style.text} truncate`}>{alert.name || alert.plate_number}</p>
+                        <p className="text-xs text-gray-500">{alert.type || alert.expiry_type}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
+                      {formatDays(days)}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Machinery Expiry Alerts */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">⚙️ 機械到期提醒</h2>
+            <Link href="/machinery" className="text-sm text-primary-600 hover:underline">查看全部</Link>
+          </div>
+          {machineryAlerts.length > 0 ? (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {machineryAlerts.map((alert: any, i: number) => {
+                const days = getDaysUntil(alert.expiry_date || alert.date);
+                const style = getAlertStyle(days);
+                return (
+                  <Link key={i} href={`/machinery/${alert.id || alert.machinery_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span>{style.icon}</span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium font-mono ${style.text} truncate`}>{alert.name || alert.machine_code}</p>
+                        <p className="text-xs text-gray-500">{alert.type || alert.expiry_type}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
+                      {formatDays(days)}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
+          )}
         </div>
 
         {/* Employee Breakdown */}

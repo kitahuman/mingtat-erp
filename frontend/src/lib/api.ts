@@ -77,7 +77,54 @@ export const machineryApi = {
   transfer: (id: number, data: any) => api.post(`/machinery/${id}/transfer`, data),
 };
 
+// Documents
+export const documentsApi = {
+  list: (entityType: string, entityId: number) => api.get('/documents', { params: { entity_type: entityType, entity_id: entityId } }),
+  upload: (formData: FormData) => api.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  download: (id: number) => `${API_BASE_URL}/documents/${id}/download`,
+  update: (id: number, data: any) => api.put(`/documents/${id}`, data),
+  remove: (id: number) => api.delete(`/documents/${id}`),
+};
+
+// Partners
+export const partnersApi = {
+  list: (params?: any) => api.get('/partners', { params }),
+  simple: () => api.get('/partners/simple'),
+  get: (id: number) => api.get(`/partners/${id}`),
+  create: (data: any) => api.post('/partners', data),
+  update: (id: number, data: any) => api.put(`/partners/${id}`, data),
+};
+
 // Dashboard
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
 };
+
+// Utility: Expiry date helpers
+export function getExpiryStatus(date: string | null): 'expired' | 'critical' | 'warning' | 'ok' | 'none' {
+  if (!date) return 'none';
+  const diff = (new Date(date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
+  if (diff < 0) return 'expired';
+  if (diff <= 7) return 'critical';
+  if (diff <= 60) return 'warning';
+  return 'ok';
+}
+
+export function getExpiryColor(status: string): string {
+  switch (status) {
+    case 'expired': return 'bg-red-100 text-red-800 border-red-200';
+    case 'critical': return 'bg-red-100 text-red-800 border-red-200';
+    case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    case 'ok': return 'bg-green-100 text-green-800 border-green-200';
+    default: return 'text-gray-400';
+  }
+}
+
+export function getExpiryLabel(status: string): string {
+  switch (status) {
+    case 'expired': return '已過期';
+    case 'critical': return '即將到期';
+    case 'warning': return '注意';
+    default: return '';
+  }
+}

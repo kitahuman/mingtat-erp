@@ -10,6 +10,7 @@ const navItems = [
   { href: '/employees', label: '員工管理', icon: '👷' },
   { href: '/vehicles', label: '車輛管理', icon: '🚛' },
   { href: '/machinery', label: '機械管理', icon: '⚙️' },
+  { href: '/partners', label: '合作單位', icon: '🤝' },
 ];
 
 export default function Sidebar() {

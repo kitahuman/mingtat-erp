@@ -13,10 +13,13 @@ export class VehiclesService {
     @InjectRepository(VehicleTransfer) private transferRepo: Repository<VehicleTransfer>,
   ) {}
 
-  async findAll(query: { page?: number; limit?: number; search?: string; vehicle_type?: string; owner_company_id?: number; status?: string }) {
+  async findAll(query: {
+    page?: number; limit?: number; search?: string;
+    vehicle_type?: string; owner_company_id?: number; status?: string;
+    sortBy?: string; sortOrder?: string;
+  }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-
     const qb = this.repo.createQueryBuilder('v')
       .leftJoinAndSelect('v.owner_company', 'c');
 
@@ -27,8 +30,12 @@ export class VehiclesService {
     if (query.owner_company_id) qb.andWhere('v.owner_company_id = :cid', { cid: query.owner_company_id });
     if (query.status) qb.andWhere('v.status = :st', { st: query.status });
 
+    const allowedSortFields = ['plate_number', 'vehicle_type', 'tonnage', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
+    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
+    qb.orderBy(`v.${sortBy}`, sortOrder);
+
     const [data, total] = await qb
-      .orderBy('v.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
