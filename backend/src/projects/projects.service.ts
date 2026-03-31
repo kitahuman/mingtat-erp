@@ -92,7 +92,7 @@ export class ProjectsService {
 
   async findSimple() {
     return this.repo.find({
-      where: { status: 'in_progress' },
+      where: { status: 'active' },
       select: ['id', 'project_no', 'project_name', 'company_id', 'client_id'],
       order: { project_no: 'DESC' },
     });

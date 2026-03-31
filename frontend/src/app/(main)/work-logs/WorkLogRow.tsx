@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import SearchableSelect from './SearchableSelect';
+import Combobox from './Combobox';
 import LocationAutocomplete from './LocationAutocomplete';
 import {
   STATUS_OPTIONS, SERVICE_TYPE_OPTIONS, TONNAGE_OPTIONS,
@@ -28,11 +29,12 @@ interface Props {
   quotations: Option[];
   employees: Option[];
   users: Option[];
+  fieldOptions?: Record<string, Option[]>;
 }
 
 export default function WorkLogRow({
   row, isEditing, isNew, isSelected, onSelect, onEdit, onSave, onCancel, onDuplicate, onDelete,
-  companyProfiles, clients, quotations, employees, users,
+  companyProfiles, clients, quotations, employees, users, fieldOptions = {},
 }: Props) {
   const [form, setForm] = useState<any>({});
   const [equipmentOptions, setEquipmentOptions] = useState<Option[]>([]);
@@ -231,10 +233,10 @@ export default function WorkLogRow({
       </td>
       {/* 服務類型 */}
       <td className={`${cellCls} w-24`}>
-        <SearchableSelect
+        <Combobox
           value={form.service_type}
-          onChange={v => set('service_type', v)}
-          options={SERVICE_TYPE_OPTIONS.map(s => ({ value: s, label: s }))}
+          onChange={v => set('service_type', v ? String(v) : null)}
+          options={fieldOptions['service_type']?.length ? fieldOptions['service_type'] : SERVICE_TYPE_OPTIONS.map(s => ({ value: s, label: s }))}
           placeholder="服務類型"
         />
       </td>
@@ -276,10 +278,10 @@ export default function WorkLogRow({
       </td>
       {/* 機種 */}
       <td className={`${cellCls} w-20`}>
-        <SearchableSelect
+        <Combobox
           value={form.machine_type}
-          onChange={v => set('machine_type', v)}
-          options={MACHINE_TYPE_OPTIONS.map(m => ({ value: m, label: m }))}
+          onChange={v => set('machine_type', v ? String(v) : null)}
+          options={fieldOptions['machine_type']?.length ? fieldOptions['machine_type'] : MACHINE_TYPE_OPTIONS.map(m => ({ value: m, label: m }))}
           placeholder="機種"
         />
       </td>
@@ -293,21 +295,21 @@ export default function WorkLogRow({
           disabled={!form.machine_type}
         />
       </td>
-      {/* 噸數 */}
+      {/* 吨數 */}
       <td className={`${cellCls} w-16`}>
-        <SearchableSelect
+        <Combobox
           value={form.tonnage}
-          onChange={v => set('tonnage', v)}
-          options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
-          placeholder="噸數"
+          onChange={v => set('tonnage', v ? String(v) : null)}
+          options={fieldOptions['tonnage']?.length ? fieldOptions['tonnage'] : TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+          placeholder="吨數"
         />
       </td>
       {/* 日夜班 */}
       <td className={`${cellCls} w-14`}>
-        <SearchableSelect
+        <Combobox
           value={form.day_night}
-          onChange={v => set('day_night', v)}
-          options={DAY_NIGHT_OPTIONS.map(d => ({ value: d, label: d }))}
+          onChange={v => set('day_night', v ? String(v) : null)}
+          options={fieldOptions['day_night']?.length ? fieldOptions['day_night'] : DAY_NIGHT_OPTIONS.map(d => ({ value: d, label: d }))}
           placeholder="班別"
         />
       </td>
@@ -333,7 +335,7 @@ export default function WorkLogRow({
       </td>
       {/* 工資單位 */}
       <td className={`${cellCls} w-16`}>
-        <SearchableSelect value={form.unit} onChange={v => set('unit', v)} options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="單位" />
+        <Combobox value={form.unit} onChange={v => set('unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="單位" />
       </td>
       {/* OT 數量 */}
       <td className={`${cellCls} w-16`}>
@@ -341,7 +343,7 @@ export default function WorkLogRow({
       </td>
       {/* OT 單位 */}
       <td className={`${cellCls} w-16`}>
-        <SearchableSelect value={form.ot_unit} onChange={v => set('ot_unit', v)} options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="OT單位" />
+        <Combobox value={form.ot_unit} onChange={v => set('ot_unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="OT單位" />
       </td>
       {/* 商品數量 */}
       <td className={`${cellCls} w-16`}>

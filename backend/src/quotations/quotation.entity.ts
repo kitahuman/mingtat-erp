@@ -36,6 +36,9 @@ export class Quotation {
   quotation_date: string;
 
   @Column({ nullable: true })
+  contract_name: string; // 合約名稱
+
+  @Column({ nullable: true })
   project_name: string; // 工程名稱（工程類報價單使用）
 
   @Column({ nullable: true, type: 'int' })
@@ -61,7 +64,10 @@ export class Quotation {
   exclusions: string; // 除外責任
 
   @Column({ nullable: true, type: 'text' })
-  remarks: string; // 其他備註
+  external_remark: string; // 外部備註 — 顯示在報價單 PDF 上
+
+  @Column({ nullable: true, type: 'text' })
+  internal_remark: string; // 內部備註 — 只在系統內部看到
 
   @CreateDateColumn()
   created_at: Date;

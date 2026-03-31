@@ -63,6 +63,7 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/settings/users', label: '用戶管理', icon: '👥', roles: ['admin'] },
       { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
+      { href: '/settings/field-options', label: '選項管理', icon: '📋', roles: ['admin'] },
     ],
   },
 ];

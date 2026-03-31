@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   workLogsApi, companyProfilesApi, partnersApi,
-  quotationsApi, employeesApi, usersApi,
+  quotationsApi, employeesApi, usersApi, fieldOptionsApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import WorkLogRow from './WorkLogRow';
@@ -52,6 +52,7 @@ export default function WorkLogsPage() {
   const [contracts, setContracts]             = useState<Option[]>([]);
   const [employees, setEmployees]             = useState<Option[]>([]);
   const [users, setUsers]                     = useState<Option[]>([]);
+  const [fieldOptions, setFieldOptions]       = useState<Record<string, Option[]>>({});
 
   // ── List state ──────────────────────────────────────────────
   const [rows, setRows]   = useState<any[]>([]);
@@ -88,12 +89,19 @@ export default function WorkLogsPage() {
       quotationsApi.list({ limit: 500 }),
       employeesApi.list({ limit: 500, status: 'active' }),
       usersApi.list({ limit: 200 }),
-    ]).then(([cp, pt, qt, em, us]) => {
+      fieldOptionsApi.getAll(),
+    ]).then(([cp, pt, qt, em, us, fo]) => {
       setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
       setContracts(((qt.data?.data) || []).map((q: any) => ({ value: q.id, label: q.quotation_no, _raw: q })));
       setEmployees((em.data?.data || []).map((e: any) => ({ value: e.id, label: e.name_zh })));
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
+      // Map field options to Option[] format
+      const grouped: Record<string, Option[]> = {};
+      for (const [cat, opts] of Object.entries(fo.data || {})) {
+        grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
+      }
+      setFieldOptions(grouped);
     }).catch(console.error);
   }, []);
 
@@ -214,6 +222,7 @@ export default function WorkLogsPage() {
     quotations: contracts,   // prop name stays "quotations" in WorkLogRow; label is "合約" in UI
     employees,
     users,
+    fieldOptions,
   };
 
   return (

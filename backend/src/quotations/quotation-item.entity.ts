@@ -18,8 +18,11 @@ export class QuotationItem {
   @Column({ type: 'int', default: 1 })
   sort_order: number; // 編號/排序
 
-  @Column({ type: 'text' })
-  description: string; // 項目描述
+  @Column({ nullable: true })
+  item_name: string; // 項目名稱（短文字）
+
+  @Column({ nullable: true, type: 'text' })
+  item_description: string; // 項目描述（長文字）
 
   @Column({ type: 'decimal', precision: 12, scale: 4, default: 0 })
   quantity: number; // 數量

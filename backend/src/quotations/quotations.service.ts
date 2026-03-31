@@ -275,7 +275,7 @@ export class QuotationsService {
         project_name: options?.project_name || quotation.project_name || quotation.quotation_no,
         company_id: quotation.company_id,
         client_id: quotation.client_id,
-        status: 'in_progress',
+        status: 'active',
       });
       project = await (this.projectRepo.save(projectEntity) as any) as Project;
 
@@ -289,7 +289,7 @@ export class QuotationsService {
         const rateCardData: Partial<RateCard> = {
           company_id: quotation.company_id,
           client_id: quotation.client_id,
-          name: item.description,
+          name: (item as any).item_name || (item as any).description || '',
           service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
           rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
           day_rate: Number(item.unit_price) || 0,
@@ -307,6 +307,84 @@ export class QuotationsService {
     }
 
     return this.findOne(id);
+  }
+
+  /**
+   * Sync quotation items to rate cards (price list)
+   * Works for both project and rental quotation types
+   */
+  async syncToRateCards(id: number, options?: {
+    effective_date?: string;
+    expiry_date?: string;
+    overwrite?: boolean;
+  }) {
+    const quotation = await this.repo.findOne({
+      where: { id },
+      relations: ['company', 'client', 'items'],
+    });
+    if (!quotation) throw new NotFoundException('報價單不存在');
+
+    const results: { created: number; overwritten: number; skipped: number; conflicts: any[] } = {
+      created: 0,
+      overwritten: 0,
+      skipped: 0,
+      conflicts: [],
+    };
+
+    if (!quotation.items || quotation.items.length === 0) {
+      return results;
+    }
+
+    for (const item of quotation.items) {
+      const itemName = (item as any).item_name || (item as any).description || '';
+      const rateCardType = quotation.quotation_type === 'project' ? 'project' : 'rental';
+
+      // Check for existing duplicate (same client + same name)
+      const existing = await this.rateCardRepo.findOne({
+        where: {
+          client_id: quotation.client_id,
+          name: itemName,
+          rate_card_type: rateCardType,
+        },
+      });
+
+      if (existing && !options?.overwrite) {
+        results.conflicts.push({
+          item_name: itemName,
+          existing_id: existing.id,
+        });
+        results.skipped++;
+        continue;
+      }
+
+      const rateCardData: Partial<RateCard> = {
+        company_id: quotation.company_id,
+        client_id: quotation.client_id,
+        contract_no: (quotation as any).contract_name || undefined,
+        name: itemName,
+        description: (item as any).item_description || undefined,
+        service_type: quotation.quotation_type === 'project' ? '工程' : '租貼/運輸',
+        rate_card_type: rateCardType,
+        day_rate: Number(item.unit_price) || 0,
+        day_unit: item.unit,
+        effective_date: options?.effective_date || quotation.quotation_date,
+        expiry_date: options?.expiry_date || undefined,
+        source_quotation_id: quotation.id,
+        remarks: item.remarks || undefined,
+        status: 'active',
+      };
+
+      if (existing && options?.overwrite) {
+        await this.rateCardRepo.update(existing.id, rateCardData);
+        results.overwritten++;
+      } else {
+        const rateCard = this.rateCardRepo.create(rateCardData as any);
+        await this.rateCardRepo.save(rateCard);
+        results.created++;
+      }
+    }
+
+    return results;
   }
 
   /**

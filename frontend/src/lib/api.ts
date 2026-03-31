@@ -157,6 +157,17 @@ export const quotationsApi = {
   updateStatus: (id: number, status: string) => api.patch(`/quotations/${id}/status`, { status }),
   accept: (id: number, options?: any) => api.post(`/quotations/${id}/accept`, options || {}),
   byProject: (projectId: number) => api.get(`/quotations/by-project/${projectId}`),
+  syncToRateCards: (id: number, options?: any) => api.post(`/quotations/${id}/sync-to-rate-cards`, options || {}),
+};
+
+// Field Options (選項管理)
+export const fieldOptionsApi = {
+  getAll: () => api.get('/field-options'),
+  getByCategory: (category: string) => api.get(`/field-options/category/${category}`),
+  create: (data: { category: string; label: string; sort_order?: number }) => api.post('/field-options', data),
+  update: (id: number, data: { label?: string; sort_order?: number; is_active?: boolean }) => api.put(`/field-options/${id}`, data),
+  remove: (id: number) => api.delete(`/field-options/${id}`),
+  reorder: (category: string, orderedIds: number[]) => api.post('/field-options/reorder', { category, orderedIds }),
 };
 
 // Rate Cards (客戶價目表)

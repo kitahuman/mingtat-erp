@@ -6,10 +6,10 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
 const statusLabels: Record<string, string> = {
-  quoting: '報價中', in_progress: '進行中', completed: '已完成', cancelled: '已取消',
+  pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
 };
 const statusColors: Record<string, string> = {
-  quoting: 'badge-blue', in_progress: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
+  pending: 'badge-yellow', active: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
 };
 
 export default function ProjectsPage() {
@@ -28,7 +28,7 @@ export default function ProjectsPage() {
 
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', project_name: '', description: '',
-    address: '', start_date: '', end_date: '', status: 'quoting', remarks: '',
+    address: '', start_date: '', end_date: '', status: 'pending', remarks: ''
   });
 
   const load = () => {
@@ -53,7 +53,7 @@ export default function ProjectsPage() {
         client_id: form.client_id ? Number(form.client_id) : null,
       });
       setShowModal(false);
-      setForm({ company_id: '', client_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'quoting', remarks: '' });
+      setForm({ company_id: '', client_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'pending', remarks: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
@@ -96,8 +96,8 @@ export default function ProjectsPage() {
           filters={
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部狀態</option>
-              <option value="quoting">報價中</option>
-              <option value="in_progress">進行中</option>
+              <option value="pending">等待</option>
+              <option value="active">進行中</option>
               <option value="completed">已完成</option>
               <option value="cancelled">已取消</option>
             </select>
@@ -144,8 +144,10 @@ export default function ProjectsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
               <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field">
-                <option value="quoting">報價中</option>
-                <option value="in_progress">進行中</option>
+                <option value="pending">等待</option>
+                <option value="active">進行中</option>
+                <option value="completed">已完成</option>
+                <option value="cancelled">已取消</option>
               </select>
             </div>
             <div className="md:col-span-2">

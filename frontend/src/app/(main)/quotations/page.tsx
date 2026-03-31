@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
@@ -18,6 +18,60 @@ const typeLabels: Record<string, string> = {
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
+
+// Searchable client dropdown component
+function ClientSearchSelect({ value, onChange, partners }: { value: string; onChange: (v: string) => void; partners: any[] }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const clientPartners = partners.filter((p: any) => p.partner_type === 'client');
+  const filtered = clientPartners.filter((p: any) =>
+    !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.code?.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = clientPartners.find((p: any) => String(p.id) === String(value));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className={`input-field text-left flex items-center justify-between w-full ${open ? 'border-primary-500 ring-1 ring-primary-300' : ''}`}>
+        <span className={selected ? '' : 'text-gray-400'}>{selected ? (selected.code ? `${selected.code} - ${selected.name}` : selected.name) : '請選擇（可選）'}</span>
+        <span className="text-gray-400 ml-2">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="p-2 border-b">
+            <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="搜尋客戶名稱或代碼..." className="input-field text-sm" />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            <button type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${!value ? 'bg-primary-50 text-primary-700' : ''}`}
+              onMouseDown={() => { onChange(''); setOpen(false); setSearch(''); }}>
+              <span className="text-gray-400">— 不選擇 —</span>
+            </button>
+            {filtered.map((p: any) => (
+              <button key={p.id} type="button"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${String(p.id) === String(value) ? 'bg-primary-50 text-primary-700 font-medium' : ''}`}
+                onMouseDown={() => { onChange(String(p.id)); setOpen(false); setSearch(''); }}>
+                {p.code ? `${p.code} - ${p.name}` : p.name}
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="px-3 py-2 text-sm text-gray-400">無結果</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function QuotationsPage() {
   const router = useRouter();
@@ -38,9 +92,11 @@ export default function QuotationsPage() {
   const defaultForm = {
     quotation_type: 'project',
     company_id: '', client_id: '', quotation_date: new Date().toISOString().slice(0, 10),
-    project_name: '', validity_period: '本報價有效期為30天',
-    payment_terms: '上單後30天內付款', exclusions: '', remarks: '',
-    items: [{ description: '', quantity: 0, unit: 'JOB', unit_price: 0, remarks: '' }],
+    contract_name: '', project_name: '',
+    validity_period: '本報價有效期為30天',
+    payment_terms: '上單後30天內付款', exclusions: '',
+    external_remark: '', internal_remark: '',
+    items: [{ item_name: '', item_description: '', quantity: 0, unit: 'JOB', unit_price: 0, remarks: '' }],
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
 
@@ -65,7 +121,7 @@ export default function QuotationsPage() {
 
   const addItem = () => {
     const defaultUnit = form.quotation_type === 'rental' ? '天' : 'JOB';
-    setForm({ ...form, items: [...form.items, { description: '', quantity: 0, unit: defaultUnit, unit_price: 0, remarks: '' }] });
+    setForm({ ...form, items: [...form.items, { item_name: '', item_description: '', quantity: 0, unit: defaultUnit, unit_price: 0, remarks: '' }] });
   };
   const removeItem = (idx: number) => {
     setForm({ ...form, items: form.items.filter((_: any, i: number) => i !== idx) });
@@ -76,7 +132,10 @@ export default function QuotationsPage() {
     setForm({ ...form, items });
   };
 
-  const totalAmount = form.items.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
+  // Rate Only: quantity is 0 or empty
+  const isRateOnly = (item: any) => !item.quantity || Number(item.quantity) === 0;
+  const itemAmount = (item: any) => isRateOnly(item) ? 0 : (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+  const totalAmount = form.items.reduce((sum: number, item: any) => sum + itemAmount(item), 0);
 
   const handleTypeChange = (newType: string) => {
     const defaultUnit = newType === 'rental' ? '天' : 'JOB';
@@ -118,6 +177,7 @@ export default function QuotationsPage() {
     ), filterRender: (v: any) => typeLabels[v] || v },
     { key: 'company', label: '開立公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'contract_name', label: '合約名稱', render: (v: any) => <span className="max-w-[150px] truncate block">{v || '-'}</span> },
     { key: 'quotation_date', label: '日期', sortable: true },
     { key: 'project_name', label: '工程/服務名稱', render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
     { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
@@ -201,23 +261,24 @@ export default function QuotationsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field">
-                <option value="">請選擇（可選）</option>
-                {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
-              </select>
+              <ClientSearchSelect value={form.client_id} onChange={v => setForm({...form, client_id: v})} partners={partners} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
               <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" required />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約名稱</label>
+              <input value={form.contract_name} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field" placeholder="例如 2025年度運輸服務合約" />
+            </div>
             {form.quotation_type === 'project' && (
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">工程名稱 *</label>
                 <input value={form.project_name} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" required placeholder="例如 機場東面機場路Site6鋪人造草皮工程" />
               </div>
             )}
             {form.quotation_type === 'rental' && (
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">服務說明</label>
                 <input value={form.project_name} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" placeholder="例如 運輸服務報價" />
               </div>
@@ -237,12 +298,8 @@ export default function QuotationsPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b">
                     <th className="px-2 py-2 text-left w-8">#</th>
-                    <th className="px-2 py-2 text-left min-w-[200px]">
-                      {form.quotation_type === 'project' ? '項目描述' : '服務/路線描述'}
-                    </th>
-                    <th className="px-2 py-2 text-right w-24">
-                      {form.quotation_type === 'project' ? '數量' : '數量'}
-                    </th>
+                    <th className="px-2 py-2 text-left min-w-[220px]">項目名稱 / 描述</th>
+                    <th className="px-2 py-2 text-right w-24">數量</th>
                     <th className="px-2 py-2 text-left w-24">單位</th>
                     <th className="px-2 py-2 text-right w-28">單價</th>
                     <th className="px-2 py-2 text-right w-28">金額</th>
@@ -252,17 +309,22 @@ export default function QuotationsPage() {
                 <tbody>
                   {form.items.map((item: any, idx: number) => (
                     <tr key={idx} className="border-b">
-                      <td className="px-2 py-1 text-gray-500">{idx + 1}</td>
-                      <td className="px-2 py-1"><input value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} className="input-field text-sm" placeholder={form.quotation_type === 'project' ? '項目描述' : '例如 13噸泥頭車 石崗→將軍澳'} /></td>
-                      <td className="px-2 py-1"><input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="input-field text-sm text-right" /></td>
+                      <td className="px-2 py-1 text-gray-500 align-top pt-2">{idx + 1}</td>
                       <td className="px-2 py-1">
+                        <input value={item.item_name || ''} onChange={e => updateItem(idx, 'item_name', e.target.value)} className="input-field text-sm mb-1" placeholder="項目名稱（短）" />
+                        <textarea value={item.item_description || ''} onChange={e => updateItem(idx, 'item_description', e.target.value)} className="input-field text-sm text-xs" rows={2} placeholder="項目描述（可多行）" />
+                      </td>
+                      <td className="px-2 py-1 align-top pt-2"><input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="input-field text-sm text-right" /></td>
+                      <td className="px-2 py-1 align-top pt-2">
                         <select value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} className="input-field text-sm">
                           {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                       </td>
-                      <td className="px-2 py-1"><input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} className="input-field text-sm text-right" /></td>
-                      <td className="px-2 py-1 text-right font-mono">${((Number(item.quantity) || 0) * (Number(item.unit_price) || 0)).toLocaleString()}</td>
-                      <td className="px-2 py-1">
+                      <td className="px-2 py-1 align-top pt-2"><input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} className="input-field text-sm text-right" /></td>
+                      <td className="px-2 py-1 text-right font-mono align-top pt-2">
+                        {isRateOnly(item) ? <span className="text-orange-600 text-xs font-semibold">Rate Only</span> : `$${itemAmount(item).toLocaleString()}`}
+                      </td>
+                      <td className="px-2 py-1 align-top pt-2">
                         {form.items.length > 1 && (
                           <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 text-lg">&times;</button>
                         )}
@@ -296,8 +358,12 @@ export default function QuotationsPage() {
               <textarea value={form.exclusions} onChange={e => setForm({...form, exclusions: e.target.value})} className="input-field" rows={2} placeholder="例如：不包括處理費及入帳" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">其他備註</label>
-              <textarea value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={2} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">報價單備註（對外）</label>
+              <textarea value={form.external_remark} onChange={e => setForm({...form, external_remark: e.target.value})} className="input-field" rows={2} placeholder="顯示在報價單 PDF 上，給客戶看" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">內部備註 <span className="text-xs text-gray-400 font-normal">（不顯示在 PDF）</span></label>
+              <textarea value={form.internal_remark} onChange={e => setForm({...form, internal_remark: e.target.value})} className="input-field" rows={2} placeholder="僅系統內部可見" />
             </div>
           </div>
 

@@ -5,10 +5,10 @@ import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi } f
 import Link from 'next/link';
 
 const statusLabels: Record<string, string> = {
-  quoting: '報價中', in_progress: '進行中', completed: '已完成', cancelled: '已取消',
+  pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
 };
 const statusColors: Record<string, string> = {
-  quoting: 'badge-blue', in_progress: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
+  pending: 'badge-yellow', active: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
 };
 const qStatusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕' };
 const qStatusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red' };
@@ -80,10 +80,10 @@ export default function ProjectDetailPage() {
           <p className="text-gray-500 mt-1">{project?.project_name}</p>
         </div>
         <div className="flex gap-2">
-          {project?.status === 'quoting' && (
-            <button onClick={() => handleStatusChange('in_progress')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">開始進行</button>
+          {project?.status === 'pending' && (
+            <button onClick={() => handleStatusChange('active')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">開始進行</button>
           )}
-          {project?.status === 'in_progress' && (
+          {project?.status === 'active' && (
             <>
               <button onClick={() => handleStatusChange('completed')} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">標記完成</button>
               <button onClick={() => handleStatusChange('cancelled')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">取消</button>

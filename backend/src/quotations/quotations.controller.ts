@@ -41,4 +41,9 @@ export class QuotationsController {
   acceptQuotation(@Param('id') id: number, @Body() options: any) {
     return this.service.acceptQuotation(Number(id), options);
   }
+
+  @Post(':id/sync-to-rate-cards')
+  syncToRateCards(@Param('id') id: number, @Body() options: any) {
+    return this.service.syncToRateCards(Number(id), options);
+  }
 }
