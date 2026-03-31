@@ -47,6 +47,15 @@ export const companiesApi = {
   update: (id: number, data: any) => api.put(`/companies/${id}`, data),
 };
 
+// Company Profiles
+export const companyProfilesApi = {
+  list: (params?: any) => api.get('/company-profiles', { params }),
+  simple: () => api.get('/company-profiles/simple'),
+  get: (id: number) => api.get(`/company-profiles/${id}`),
+  create: (data: any) => api.post('/company-profiles', data),
+  update: (id: number, data: any) => api.put(`/company-profiles/${id}`, data),
+};
+
 // Employees
 export const employeesApi = {
   list: (params?: any) => api.get('/employees', { params }),
@@ -93,6 +102,18 @@ export const partnersApi = {
   get: (id: number) => api.get(`/partners/${id}`),
   create: (data: any) => api.post('/partners', data),
   update: (id: number, data: any) => api.put(`/partners/${id}`, data),
+};
+
+// Custom Fields
+export const customFieldsApi = {
+  list: (params?: any) => api.get('/custom-fields', { params }),
+  get: (id: number) => api.get(`/custom-fields/${id}`),
+  create: (data: any) => api.post('/custom-fields', data),
+  update: (id: number, data: any) => api.put(`/custom-fields/${id}`, data),
+  delete: (id: number) => api.delete(`/custom-fields/${id}`),
+  // Values
+  listValues: (params?: any) => api.get('/custom-fields/values/list', { params }),
+  batchUpdateValues: (data: any) => api.put('/custom-fields/values/batch', data),
 };
 
 // Dashboard

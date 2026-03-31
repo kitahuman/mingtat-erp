@@ -5,7 +5,7 @@ import ExpiryBadge from '@/components/ExpiryBadge';
 import Cookies from 'js-cookie';
 
 interface DocumentUploadProps {
-  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner';
+  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile';
   entityId: number;
   docTypes: string[];
 }

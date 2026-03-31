@@ -9,6 +9,8 @@ import { MachineryModule } from './machinery/machinery.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocumentsModule } from './documents/documents.module';
 import { PartnersModule } from './partners/partners.module';
+import { CompanyProfilesModule } from './company-profiles/company-profiles.module';
+import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { PartnersModule } from './partners/partners.module';
     DashboardModule,
     DocumentsModule,
     PartnersModule,
+    CompanyProfilesModule,
+    CustomFieldsModule,
   ],
 })
 export class AppModule {}

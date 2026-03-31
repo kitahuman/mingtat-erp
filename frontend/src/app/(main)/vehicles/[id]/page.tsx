@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { vehiclesApi, companiesApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
+import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -169,6 +170,10 @@ export default function VehicleDetailPage() {
 
       {/* Documents */}
       <div className="card mb-6">
+        <CustomFieldsBlock module="vehicle" entityId={vehicle?.id} />
+      </div>
+
+      <div className="card">
         <DocumentUpload entityType="vehicle" entityId={vehicle?.id} docTypes={['牌簿', '行車證', '保險單', '貸款文件', '買賣合約', '其他']} />
       </div>
 

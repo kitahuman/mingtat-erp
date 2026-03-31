@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { employeesApi, companiesApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
+import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -182,6 +183,11 @@ export default function EmployeeDetailPage() {
             </table>
           </div>
         ) : <p className="text-gray-500 text-sm">暫無薪資紀錄</p>}
+      </div>
+
+      {/* Custom Fields */}
+      <div className="card mb-6">
+        <CustomFieldsBlock module="employee" entityId={emp?.id} />
       </div>
 
       {/* Documents */}

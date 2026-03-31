@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { partnersApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
+import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 
 const partnerTypes = [
@@ -248,6 +249,11 @@ export default function PartnerDetailPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Custom Fields */}
+      <div className="card mb-6">
+        <CustomFieldsBlock module="partner" entityId={partner?.id} />
       </div>
 
       {/* Documents */}

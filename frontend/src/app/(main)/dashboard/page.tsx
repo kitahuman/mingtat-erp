@@ -5,6 +5,15 @@ import Link from 'next/link';
 
 const roleLabels: Record<string, string> = { admin: '管理', driver: '司機', operator: '機手', worker: '雜工' };
 
+const moduleLinks: Record<string, string> = {
+  company: '/company-profiles',
+  'company-profile': '/company-profiles',
+  partner: '/partners',
+  vehicle: '/vehicles',
+  machinery: '/machinery',
+  employee: '/employees',
+};
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -16,6 +25,7 @@ export default function DashboardPage() {
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
   const cards = [
+    { label: '公司資料', value: stats?.companyProfiles || 0, icon: '🏛️', href: '/company-profiles', color: 'bg-indigo-500' },
     { label: '公司', value: stats?.companies || 0, icon: '🏢', href: '/companies', color: 'bg-blue-500' },
     { label: '員工', value: stats?.employees || 0, icon: '👷', href: '/employees', color: 'bg-green-500' },
     { label: '車輛', value: stats?.vehicles || 0, icon: '🚛', href: '/vehicles', color: 'bg-orange-500' },
@@ -40,25 +50,63 @@ export default function DashboardPage() {
     return `${days} 天後到期`;
   };
 
-  // Collect all expiry alerts from the new API format
+  // Collect all expiry alerts
   const employeeAlerts = stats?.expiryAlerts?.employees || [];
   const vehicleAlerts = stats?.expiryAlerts?.vehicles || [];
   const machineryAlerts = stats?.expiryAlerts?.machinery || [];
+  const companyProfileAlerts = stats?.expiryAlerts?.companyProfiles || [];
+  const customFieldAlerts = stats?.expiryAlerts?.customFields || [];
 
-  const criticalCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+  const allAlerts = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts, ...companyProfileAlerts, ...customFieldAlerts];
+
+  const criticalCount = allAlerts.filter((a: any) => {
     const days = getDaysUntil(a.expiry_date || a.date);
     return days <= 7;
   }).length;
 
-  const warningCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+  const warningCount = allAlerts.filter((a: any) => {
     const days = getDaysUntil(a.expiry_date || a.date);
     return days > 7 && days <= 30;
   }).length;
 
-  const cautionCount = [...employeeAlerts, ...vehicleAlerts, ...machineryAlerts].filter((a: any) => {
+  const cautionCount = allAlerts.filter((a: any) => {
     const days = getDaysUntil(a.expiry_date || a.date);
     return days > 30 && days <= 60;
   }).length;
+
+  const renderAlertPanel = (title: string, icon: string, alerts: any[], linkBase: string, linkLabel: string) => (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-900">{icon} {title}</h2>
+        <Link href={linkBase} className="text-sm text-primary-600 hover:underline">{linkLabel}</Link>
+      </div>
+      {alerts.length > 0 ? (
+        <div className="space-y-2 max-h-80 overflow-y-auto">
+          {alerts.map((alert: any, i: number) => {
+            const days = getDaysUntil(alert.expiry_date || alert.date);
+            const style = getAlertStyle(days);
+            const href = alert.module ? `${moduleLinks[alert.module] || '/'}/${alert.id}` : `${linkBase}/${alert.id}`;
+            return (
+              <Link key={i} href={href} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span>{style.icon}</span>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-medium ${style.text} truncate`}>{alert.name || alert.employee_name}</p>
+                    <p className="text-xs text-gray-500">{alert.type || alert.cert_type}</p>
+                  </div>
+                </div>
+                <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
+                  {formatDays(days)}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -68,7 +116,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {cards.map((card) => (
           <Link key={card.label} href={card.href} className="card hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
@@ -106,91 +154,39 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Company Profile Alerts */}
+      {companyProfileAlerts.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 mb-6">
+          {renderAlertPanel('公司資料到期提醒', '🏛️', companyProfileAlerts, '/company-profiles', '查看全部')}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Employee Expiry Alerts */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">👷 員工證照到期提醒</h2>
-            <Link href="/employees" className="text-sm text-primary-600 hover:underline">查看全部</Link>
-          </div>
-          {employeeAlerts.length > 0 ? (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {employeeAlerts.map((alert: any, i: number) => {
-                const days = getDaysUntil(alert.expiry_date || alert.date);
-                const style = getAlertStyle(days);
-                return (
-                  <Link key={i} href={`/employees/${alert.id || alert.employee_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span>{style.icon}</span>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-medium ${style.text} truncate`}>{alert.name || alert.employee_name}</p>
-                        <p className="text-xs text-gray-500">{alert.type || alert.cert_type}</p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
-                      {formatDays(days)}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
-          )}
-        </div>
-
-        {/* Vehicle Expiry Alerts */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">🚛 車輛到期提醒</h2>
-            <Link href="/vehicles" className="text-sm text-primary-600 hover:underline">查看全部</Link>
-          </div>
-          {vehicleAlerts.length > 0 ? (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {vehicleAlerts.map((alert: any, i: number) => {
-                const days = getDaysUntil(alert.expiry_date || alert.date);
-                const style = getAlertStyle(days);
-                return (
-                  <Link key={i} href={`/vehicles/${alert.id || alert.vehicle_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span>{style.icon}</span>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-medium font-mono ${style.text} truncate`}>{alert.name || alert.plate_number}</p>
-                        <p className="text-xs text-gray-500">{alert.type || alert.expiry_type}</p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
-                      {formatDays(days)}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
-          )}
-        </div>
+        {renderAlertPanel('員工證照到期提醒', '👷', employeeAlerts, '/employees', '查看全部')}
+        {renderAlertPanel('車輛到期提醒', '🚛', vehicleAlerts, '/vehicles', '查看全部')}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Machinery Expiry Alerts */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">⚙️ 機械到期提醒</h2>
-            <Link href="/machinery" className="text-sm text-primary-600 hover:underline">查看全部</Link>
-          </div>
-          {machineryAlerts.length > 0 ? (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {renderAlertPanel('機械到期提醒', '⚙️', machineryAlerts, '/machinery', '查看全部')}
+
+        {/* Custom Field Alerts */}
+        {customFieldAlerts.length > 0 ? (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">🔧 自定義欄位到期提醒</h2>
+            </div>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {machineryAlerts.map((alert: any, i: number) => {
-                const days = getDaysUntil(alert.expiry_date || alert.date);
+              {customFieldAlerts.map((alert: any, i: number) => {
+                const days = getDaysUntil(alert.expiry_date);
                 const style = getAlertStyle(days);
+                const href = alert.module ? `${moduleLinks[alert.module] || '/'}/${alert.id}` : '#';
                 return (
-                  <Link key={i} href={`/machinery/${alert.id || alert.machinery_id}`} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
+                  <Link key={i} href={href} className={`flex items-center justify-between p-3 rounded-lg border ${style.bg} hover:opacity-80 transition-opacity`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span>{style.icon}</span>
                       <div className="min-w-0">
-                        <p className={`text-sm font-medium font-mono ${style.text} truncate`}>{alert.name || alert.machine_code}</p>
-                        <p className="text-xs text-gray-500">{alert.type || alert.expiry_type}</p>
+                        <p className={`text-sm font-medium ${style.text} truncate`}>{alert.name}</p>
+                        <p className="text-xs text-gray-500">{alert.type}</p>
                       </div>
                     </div>
                     <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${style.badge}`}>
@@ -200,32 +196,55 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-          ) : (
-            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">✓ 暫無到期提醒</p>
-          )}
-        </div>
-
-        {/* Employee Breakdown */}
-        <div className="card">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">員工職位分佈</h2>
-          <div className="space-y-3">
-            {stats?.roleBreakdown?.map((item: any) => (
-              <div key={item.role} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-                <span className="text-sm text-gray-700">{roleLabels[item.role] || item.role}</span>
-                <div className="flex items-center gap-3">
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-primary-500 rounded-full h-2"
-                      style={{ width: `${(parseInt(item.count) / (stats?.employees || 1)) * 100}%` }}
-                    />
+          </div>
+        ) : (
+          /* Employee Breakdown */
+          <div className="card">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">員工職位分佈</h2>
+            <div className="space-y-3">
+              {stats?.roleBreakdown?.map((item: any) => (
+                <div key={item.role} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+                  <span className="text-sm text-gray-700">{roleLabels[item.role] || item.role}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-primary-500 rounded-full h-2"
+                        style={{ width: `${(parseInt(item.count) / (stats?.employees || 1)) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-bold text-gray-900 w-8 text-right">{item.count}</span>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 w-8 text-right">{item.count}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Employee Breakdown - show below if custom field alerts exist */}
+      {customFieldAlerts.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">員工職位分佈</h2>
+            <div className="space-y-3">
+              {stats?.roleBreakdown?.map((item: any) => (
+                <div key={item.role} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+                  <span className="text-sm text-gray-700">{roleLabels[item.role] || item.role}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-primary-500 rounded-full h-2"
+                        style={{ width: `${(parseInt(item.count) / (stats?.employees || 1)) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-bold text-gray-900 w-8 text-right">{item.count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

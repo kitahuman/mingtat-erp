@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { machineryApi, companiesApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
+import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -117,6 +118,11 @@ export default function MachineryDetailPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Custom Fields */}
+      <div className="card mb-6">
+        <CustomFieldsBlock module="machinery" entityId={machine?.id} />
       </div>
 
       {/* Documents */}

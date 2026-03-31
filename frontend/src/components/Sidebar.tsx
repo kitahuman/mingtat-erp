@@ -6,11 +6,13 @@ import { useState } from 'react';
 
 const navItems = [
   { href: '/dashboard', label: '儀表板', icon: '📊' },
+  { href: '/company-profiles', label: '公司資料', icon: '🏛️' },
   { href: '/companies', label: '公司管理', icon: '🏢' },
   { href: '/employees', label: '員工管理', icon: '👷' },
   { href: '/vehicles', label: '車輛管理', icon: '🚛' },
   { href: '/machinery', label: '機械管理', icon: '⚙️' },
   { href: '/partners', label: '合作單位', icon: '🤝' },
+  { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧' },
 ];
 
 export default function Sidebar() {

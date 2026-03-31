@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Company } from '../companies/company.entity';
 import { Employee } from '../employees/employee.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
 import { Machinery } from '../machinery/machinery.entity';
+import { CompanyProfile } from '../company-profiles/company-profile.entity';
+import { CompanyProfilesService } from '../company-profiles/company-profiles.service';
+import { CustomFieldsService } from '../custom-fields/custom-fields.service';
 
 @Injectable()
 export class DashboardService {
@@ -13,21 +16,25 @@ export class DashboardService {
     @InjectRepository(Employee) private employeeRepo: Repository<Employee>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Machinery) private machineryRepo: Repository<Machinery>,
+    @InjectRepository(CompanyProfile) private companyProfileRepo: Repository<CompanyProfile>,
+    private companyProfilesService: CompanyProfilesService,
+    private customFieldsService: CustomFieldsService,
   ) {}
 
   async getStats() {
-    const [companies, employees, vehicles, machinery] = await Promise.all([
+    const [companies, employees, vehicles, machinery, companyProfiles] = await Promise.all([
       this.companyRepo.count({ where: { status: 'active' } }),
       this.employeeRepo.count({ where: { status: 'active' } }),
       this.vehicleRepo.count({ where: { status: 'active' } }),
       this.machineryRepo.count({ where: { status: 'active' } }),
+      this.companyProfileRepo.count({ where: { status: 'active' } }),
     ]);
 
     const sixtyDaysLater = new Date();
     sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
     const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
 
-    // Employee expiry alerts - use raw query to avoid TypeORM alias issues
+    // Employee expiry alerts
     const employeeAlerts: any[] = [];
     const activeEmployees = await this.employeeRepo.find({
       where: { status: 'active' as any },
@@ -105,6 +112,12 @@ export class DashboardService {
     }
     machineryAlerts.sort((a, b) => (a.expiry_date || '').localeCompare(b.expiry_date || ''));
 
+    // Company profile expiry alerts
+    const companyProfileAlerts = await this.companyProfilesService.getExpiryAlerts();
+
+    // Custom field expiry alerts
+    const customFieldAlerts = await this.customFieldsService.getExpiryAlerts();
+
     // Employee role breakdown
     const roleBreakdown = await this.employeeRepo.createQueryBuilder('e')
       .select('e.role', 'role')
@@ -118,10 +131,13 @@ export class DashboardService {
       employees,
       vehicles,
       machinery,
+      companyProfiles,
       expiryAlerts: {
         employees: employeeAlerts,
         vehicles: vehicleAlerts,
         machinery: machineryAlerts,
+        companyProfiles: companyProfileAlerts,
+        customFields: customFieldAlerts,
       },
       roleBreakdown,
     };
