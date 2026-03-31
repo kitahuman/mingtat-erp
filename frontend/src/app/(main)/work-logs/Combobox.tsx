@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface Option {
-  value: string;
+  value: string | number;
   label: string;
 }
 
@@ -75,9 +75,10 @@ export default function Combobox({
     }
   };
 
-  const handleSelect = (optValue: string) => {
-    onChange(optValue);
-    setInputVal(optValue);
+  const handleSelect = (optValue: string | number) => {
+    const strVal = String(optValue);
+    onChange(strVal);
+    setInputVal(strVal);
     setOpen(false);
     setFocused(false);
   };
@@ -133,8 +134,8 @@ export default function Combobox({
                 <button
                   key={o.value}
                   type="button"
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${o.value === (value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
-                  onMouseDown={() => handleSelect(o.value)}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${String(o.value) === (value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
+                  onMouseDown={() => handleSelect(String(o.value))}
                 >
                   {o.label}
                 </button>
