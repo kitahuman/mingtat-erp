@@ -291,6 +291,7 @@ export class QuotationsService {
           client_id: quotation.client_id,
           name: item.description,
           service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
+          rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
           day_rate: Number(item.unit_price) || 0,
           day_unit: item.unit,
           effective_date: options?.effective_date || quotation.quotation_date,

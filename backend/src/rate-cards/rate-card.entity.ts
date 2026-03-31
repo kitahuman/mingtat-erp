@@ -106,6 +106,10 @@ export class RateCard {
   @Column({ nullable: true, type: 'text' })
   remarks: string; // 備註（包油/不包油、包司機等）
 
+  // 價目類型：project (工程) / rental (租賃)
+  @Column({ default: 'rental' })
+  rate_card_type: string;
+
   @Column({ default: 'active' })
   status: string; // active, inactive
 

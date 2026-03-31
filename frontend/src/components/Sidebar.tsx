@@ -40,7 +40,8 @@ const navEntries: NavEntry[] = [
     minRole: 'clerk',
     items: [
       { href: '/quotations', label: '報價單', icon: '📋', minRole: 'clerk' },
-      { href: '/rate-cards', label: '客戶價目表', icon: '📊', minRole: 'clerk' },
+      { href: '/project-rate-cards', label: '工程價目表', icon: '🏗️', minRole: 'clerk' },
+      { href: '/rental-rate-cards', label: '租賃價目表', icon: '📊', minRole: 'clerk' },
       { href: '/fleet-rate-cards', label: '車隊價目表', icon: '🚚', minRole: 'clerk' },
       { href: '/subcon-rate-cards', label: '街車價目表', icon: '🚛', minRole: 'clerk' },
       { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },

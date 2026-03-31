@@ -21,6 +21,7 @@ export class RateCardsService {
     page?: number; limit?: number; search?: string;
     company_id?: number; client_id?: number; service_type?: string;
     vehicle_tonnage?: string; vehicle_type?: string; status?: string;
+    rate_card_type?: string;
     project_id?: number; source_quotation_id?: number;
     sortBy?: string; sortOrder?: string;
   }) {
@@ -44,6 +45,7 @@ export class RateCardsService {
     if (query.vehicle_tonnage) qb.andWhere('rc.vehicle_tonnage = :vt', { vt: query.vehicle_tonnage });
     if (query.vehicle_type) qb.andWhere('rc.vehicle_type = :vtp', { vtp: query.vehicle_type });
     if (query.status) qb.andWhere('rc.status = :status', { status: query.status });
+    if (query.rate_card_type) qb.andWhere('rc.rate_card_type = :rct', { rct: query.rate_card_type });
     if (query.project_id) qb.andWhere('rc.project_id = :pid', { pid: query.project_id });
     if (query.source_quotation_id) qb.andWhere('rc.source_quotation_id = :sqid', { sqid: query.source_quotation_id });
 
