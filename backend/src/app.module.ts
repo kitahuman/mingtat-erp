@@ -19,6 +19,7 @@ import { FleetRateCardsModule } from './fleet-rate-cards/fleet-rate-cards.module
 import { SubconRateCardsModule } from './subcon-rate-cards/subcon-rate-cards.module';
 import { SalaryConfigModule } from './salary-config/salary-config.module';
 import { EnumsModule } from './common/enums.module';
+import { WorkLogsModule } from './work-logs/work-logs.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { EnumsModule } from './common/enums.module';
     SubconRateCardsModule,
     SalaryConfigModule,
     EnumsModule,
+    WorkLogsModule,
   ],
 })
 export class AppModule {}

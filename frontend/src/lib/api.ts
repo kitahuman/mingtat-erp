@@ -198,6 +198,22 @@ export const enumsApi = {
   getAll: () => api.get('/enums'),
 };
 
+// Work Logs (工作記錄)
+export const workLogsApi = {
+  list: (params?: any) => api.get('/work-logs', { params }),
+  get: (id: number) => api.get(`/work-logs/${id}`),
+  create: (data: any) => api.post('/work-logs', data),
+  update: (id: number, data: any) => api.put(`/work-logs/${id}`, data),
+  remove: (id: number) => api.delete(`/work-logs/${id}`),
+  duplicate: (id: number) => api.post(`/work-logs/${id}/duplicate`),
+  bulkDelete: (ids: number[]) => api.post('/work-logs/bulk/delete', { ids }),
+  bulkConfirm: (ids: number[]) => api.post('/work-logs/bulk/confirm', { ids }),
+  equipmentOptions: (machineType: string, tonnage?: string) =>
+    api.get('/work-logs/equipment-options', { params: { machine_type: machineType, tonnage } }),
+  locationSuggestions: (type: 'start' | 'end', q: string) =>
+    api.get('/work-logs/location-suggestions', { params: { type, q } }),
+};
+
 // Utility: Expiry date helpers
 export function getExpiryStatus(date: string | null): 'expired' | 'critical' | 'warning' | 'ok' | 'none' {
   if (!date) return 'none';

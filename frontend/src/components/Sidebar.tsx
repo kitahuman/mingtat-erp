@@ -27,6 +27,7 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 
 const navEntries: NavEntry[] = [
   { href: '/dashboard', label: '儀表板', icon: '📊', minRole: 'clerk' },
+  { href: '/work-logs', label: '工作記錄', icon: '📝', minRole: 'clerk' },
   { href: '/company-profiles', label: '公司資料', icon: '🏛️', minRole: 'clerk' },
   { href: '/companies', label: '公司管理', icon: '🏢', minRole: 'clerk' },
   { href: '/employees', label: '員工管理', icon: '👷', minRole: 'clerk' },
