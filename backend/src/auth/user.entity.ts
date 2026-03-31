@@ -25,37 +25,34 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   username: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   password: string;
 
-  @Column({ name: 'display_name', default: '' })
+  @Column({ type: 'varchar', name: 'display_name', default: '' })
   displayName: string;
 
-  @Column({
-    type: 'varchar',
-    default: UserRole.WORKER,
-  })
+  @Column({ type: 'varchar', default: UserRole.WORKER })
   role: UserRole;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   email: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   phone: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   department: string | null;
 
-  @Column({ name: 'is_active', default: true })
+  @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive: boolean;
 
-  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  @Column({ type: 'timestamptz', name: 'last_login_at', nullable: true })
   lastLoginAt: Date | null;
 
-  @Column({ name: 'created_by', nullable: true })
+  @Column({ type: 'int', name: 'created_by', nullable: true })
   createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
