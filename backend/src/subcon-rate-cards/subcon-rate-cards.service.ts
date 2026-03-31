@@ -24,7 +24,8 @@ export class SubconRateCardsService {
     const limit = query.limit || 20;
     const qb = this.repo.createQueryBuilder('src')
       .leftJoinAndSelect('src.subcontractor', 'subcontractor')
-      .leftJoinAndSelect('src.client', 'client');
+      .leftJoinAndSelect('src.client', 'client')
+      .leftJoinAndSelect('src.source_quotation', 'source_quotation');
 
     if (query.search) {
       qb.andWhere(
@@ -53,7 +54,7 @@ export class SubconRateCardsService {
   async findOne(id: number) {
     const src = await this.repo.findOne({
       where: { id },
-      relations: ['subcontractor', 'client'],
+      relations: ['subcontractor', 'client', 'source_quotation'],
     });
     if (!src) throw new NotFoundException('街車價目表不存在');
     return src;

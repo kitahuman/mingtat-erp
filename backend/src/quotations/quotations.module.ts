@@ -8,6 +8,8 @@ import { Partner } from '../partners/partner.entity';
 import { Project } from '../projects/project.entity';
 import { ProjectSequence } from '../projects/project-sequence.entity';
 import { RateCard } from '../rate-cards/rate-card.entity';
+import { FleetRateCard } from '../fleet-rate-cards/fleet-rate-card.entity';
+import { SubconRateCard } from '../subcon-rate-cards/subcon-rate-card.entity';
 import { QuotationsService } from './quotations.service';
 import { QuotationsController } from './quotations.controller';
 
@@ -17,7 +19,7 @@ import { QuotationsController } from './quotations.controller';
       Quotation, QuotationItem, QuotationSequence,
       Company, Partner,
       Project, ProjectSequence,
-      RateCard,
+      RateCard, FleetRateCard, SubconRateCard,
     ]),
   ],
   providers: [QuotationsService],

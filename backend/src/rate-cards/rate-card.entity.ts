@@ -111,7 +111,7 @@ export class RateCard {
   rate_card_type: string;
 
   @Column({ default: 'active' })
-  status: string; // active, inactive
+  status: string; // active（生效中）, cancelled（取消）, deleted（已刪除）, inactive（停用）
 
   @CreateDateColumn()
   created_at: Date;

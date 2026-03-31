@@ -22,7 +22,8 @@ export class FleetRateCardsService {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const qb = this.repo.createQueryBuilder('frc')
-      .leftJoinAndSelect('frc.client', 'client');
+      .leftJoinAndSelect('frc.client', 'client')
+      .leftJoinAndSelect('frc.source_quotation', 'source_quotation');
 
     if (query.search) {
       qb.andWhere(
@@ -50,7 +51,7 @@ export class FleetRateCardsService {
   async findOne(id: number) {
     const frc = await this.repo.findOne({
       where: { id },
-      relations: ['client'],
+      relations: ['client', 'source_quotation'],
     });
     if (!frc) throw new NotFoundException('車隊價目表不存在');
     return frc;

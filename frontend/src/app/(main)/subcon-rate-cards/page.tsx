@@ -68,7 +68,19 @@ export default function SubconRateCardsPage() {
     { key: 'destination', label: '終點', render: (v: any) => v || '-' },
     { key: 'unit_price', label: '單價', sortable: true, className: 'text-right', render: (v: any, row: any) => <span className="font-mono">${Number(v).toLocaleString()}/{row.unit || '天'}</span> },
     { key: 'exclude_fuel', label: '包油', render: (v: any) => v ? <span className="badge-red">不包油</span> : <span className="badge-green">包油</span>, filterRender: (v: any) => v ? '不包油' : '包油' },
-    { key: 'status', label: '狀態', render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
+    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
+    ) : '-' },
+    { key: 'status', label: '狀態', render: (v: any) => {
+      const map: Record<string, { label: string; cls: string }> = {
+        active: { label: '生效中', cls: 'badge-green' },
+        cancelled: { label: '取消', cls: 'badge-red' },
+        deleted: { label: '已刪除', cls: 'badge-gray' },
+        inactive: { label: '停用', cls: 'badge-gray' },
+      };
+      const s = map[v] || { label: v, cls: 'badge-gray' };
+      return <span className={s.cls}>{s.label}</span>;
+    }, filterRender: (v: any) => ({ active: '生效中', cancelled: '取消', deleted: '已刪除', inactive: '停用' }[v] || v) },
   ];
 
   return (
@@ -105,7 +117,9 @@ export default function SubconRateCardsPage() {
               </select>
               <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部狀態</option>
-                <option value="active">啟用</option>
+                <option value="active">生效中</option>
+                <option value="cancelled">取消</option>
+                <option value="deleted">已刪除</option>
                 <option value="inactive">停用</option>
               </select>
             </div>

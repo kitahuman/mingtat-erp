@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { QuotationsService } from './quotations.service';
 
@@ -45,5 +45,10 @@ export class QuotationsController {
   @Post(':id/sync-to-rate-cards')
   syncToRateCards(@Param('id') id: number, @Body() options: any) {
     return this.service.syncToRateCards(Number(id), options);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: number) {
+    return this.service.remove(Number(id));
   }
 }

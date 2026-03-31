@@ -3,6 +3,7 @@ import {
   ManyToOne, JoinColumn,
 } from 'typeorm';
 import { Partner } from '../partners/partner.entity';
+import { Quotation } from '../quotations/quotation.entity';
 
 @Entity('subcon_rate_cards')
 export class SubconRateCard {
@@ -53,8 +54,16 @@ export class SubconRateCard {
   @Column({ nullable: true, type: 'text' })
   remarks: string;
 
+  // 來源報價單（同步時建立）
+  @Column({ nullable: true, type: 'int' })
+  source_quotation_id: number;
+
+  @ManyToOne(() => Quotation, { nullable: true })
+  @JoinColumn({ name: 'source_quotation_id' })
+  source_quotation: Quotation;
+
   @Column({ default: 'active' })
-  status: string; // active, inactive
+  status: string; // active（生效中）, cancelled（取消）, deleted（已刪除）
 
   @CreateDateColumn()
   created_at: Date;

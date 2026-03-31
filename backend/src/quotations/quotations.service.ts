@@ -9,6 +9,8 @@ import { Partner } from '../partners/partner.entity';
 import { Project } from '../projects/project.entity';
 import { ProjectSequence } from '../projects/project-sequence.entity';
 import { RateCard } from '../rate-cards/rate-card.entity';
+import { FleetRateCard } from '../fleet-rate-cards/fleet-rate-card.entity';
+import { SubconRateCard } from '../subcon-rate-cards/subcon-rate-card.entity';
 
 @Injectable()
 export class QuotationsService {
@@ -21,6 +23,8 @@ export class QuotationsService {
     @InjectRepository(Project) private projectRepo: Repository<Project>,
     @InjectRepository(ProjectSequence) private projectSeqRepo: Repository<ProjectSequence>,
     @InjectRepository(RateCard) private rateCardRepo: Repository<RateCard>,
+    @InjectRepository(FleetRateCard) private fleetRateCardRepo: Repository<FleetRateCard>,
+    @InjectRepository(SubconRateCard) private subconRateCardRepo: Repository<SubconRateCard>,
     private dataSource: DataSource,
   ) {}
 
@@ -240,7 +244,46 @@ export class QuotationsService {
     const existing = await this.repo.findOne({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
     await this.repo.update(id, { status });
+
+    // Cascade status to all three rate card tables when cancelled or deleted
+    if (status === 'cancelled' || status === 'rejected') {
+      await this.rateCardRepo.update(
+        { source_quotation_id: id },
+        { status: 'cancelled' },
+      );
+      await this.fleetRateCardRepo.update(
+        { source_quotation_id: id },
+        { status: 'cancelled' },
+      );
+      await this.subconRateCardRepo.update(
+        { source_quotation_id: id },
+        { status: 'cancelled' },
+      );
+    }
+
     return this.findOne(id);
+  }
+
+  async remove(id: number) {
+    const existing = await this.repo.findOne({ where: { id } });
+    if (!existing) throw new NotFoundException('報價單不存在');
+
+    // Cascade deleted status to all three rate card tables before removing
+    await this.rateCardRepo.update(
+      { source_quotation_id: id },
+      { status: 'deleted' },
+    );
+    await this.fleetRateCardRepo.update(
+      { source_quotation_id: id },
+      { status: 'deleted' },
+    );
+    await this.subconRateCardRepo.update(
+      { source_quotation_id: id },
+      { status: 'deleted' },
+    );
+
+    await this.repo.delete(id);
+    return { success: true };
   }
 
   /**
@@ -283,19 +326,27 @@ export class QuotationsService {
       await this.repo.update(id, { project_id: project.id });
     }
 
-    // Generate rate card records from quotation items
+    // Generate rate card records from quotation items (all 3 tables)
     if (quotation.items && quotation.items.length > 0) {
       for (const item of quotation.items) {
+        const itemName = (item as any).item_name || (item as any).description || '';
+        const contractNo = (quotation as any).contract_name || undefined;
+        const effectiveDate = options?.effective_date || quotation.quotation_date;
+        const expiryDate = options?.expiry_date || undefined;
+
+        // 1. 租賃價目表（有價錢，從報價單帶過來）
         const rateCardData: Partial<RateCard> = {
           company_id: quotation.company_id,
           client_id: quotation.client_id,
-          name: (item as any).item_name || (item as any).description || '',
+          contract_no: contractNo,
+          name: itemName,
+          description: (item as any).item_description || undefined,
           service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
           rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
           day_rate: Number(item.unit_price) || 0,
           day_unit: item.unit,
-          effective_date: options?.effective_date || quotation.quotation_date,
-          expiry_date: options?.expiry_date || undefined,
+          effective_date: effectiveDate,
+          expiry_date: expiryDate,
           source_quotation_id: quotation.id,
           project_id: project?.id || undefined,
           remarks: item.remarks || undefined,
@@ -303,6 +354,42 @@ export class QuotationsService {
         };
         const rateCard = this.rateCardRepo.create(rateCardData as any);
         await this.rateCardRepo.save(rateCard);
+
+        // 2. 車隊價目表（相同欄位，價錢留空）
+        const fleetData: Partial<FleetRateCard> = {
+          client_id: quotation.client_id,
+          contract_no: contractNo,
+          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
+          vehicle_type: (item as any).vehicle_type || undefined,
+          origin: (item as any).origin || undefined,
+          destination: (item as any).destination || undefined,
+          day_rate: 0,
+          night_rate: 0,
+          mid_shift_rate: 0,
+          ot_rate: 0,
+          unit: item.unit,
+          remarks: item.remarks || undefined,
+          source_quotation_id: quotation.id,
+          status: 'active',
+        };
+        const fleetCard = this.fleetRateCardRepo.create(fleetData as any);
+        await this.fleetRateCardRepo.save(fleetCard);
+
+        // 3. 街車價目表（相同欄位，價錢留空）
+        const subconData: Partial<SubconRateCard> = {
+          client_id: quotation.client_id,
+          contract_no: contractNo,
+          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
+          origin: (item as any).origin || undefined,
+          destination: (item as any).destination || undefined,
+          unit_price: 0,
+          unit: item.unit,
+          remarks: item.remarks || undefined,
+          source_quotation_id: quotation.id,
+          status: 'active',
+        };
+        const subconCard = this.subconRateCardRepo.create(subconData as any);
+        await this.subconRateCardRepo.save(subconCard);
       }
     }
 
@@ -338,8 +425,11 @@ export class QuotationsService {
     for (const item of quotation.items) {
       const itemName = (item as any).item_name || (item as any).description || '';
       const rateCardType = quotation.quotation_type === 'project' ? 'project' : 'rental';
+      const contractNo = (quotation as any).contract_name || undefined;
+      const effectiveDate = options?.effective_date || quotation.quotation_date;
+      const expiryDate = options?.expiry_date || undefined;
 
-      // Check for existing duplicate (same client + same name)
+      // Check for existing duplicate in rental rate cards (same client + same name)
       const existing = await this.rateCardRepo.findOne({
         where: {
           client_id: quotation.client_id,
@@ -357,18 +447,19 @@ export class QuotationsService {
         continue;
       }
 
+      // 1. 租賃價目表（有價錢，從報價單帶過來）
       const rateCardData: Partial<RateCard> = {
         company_id: quotation.company_id,
         client_id: quotation.client_id,
-        contract_no: (quotation as any).contract_name || undefined,
+        contract_no: contractNo,
         name: itemName,
         description: (item as any).item_description || undefined,
-        service_type: quotation.quotation_type === 'project' ? '工程' : '租貼/運輸',
+        service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
         rate_card_type: rateCardType,
         day_rate: Number(item.unit_price) || 0,
         day_unit: item.unit,
-        effective_date: options?.effective_date || quotation.quotation_date,
-        expiry_date: options?.expiry_date || undefined,
+        effective_date: effectiveDate,
+        expiry_date: expiryDate,
         source_quotation_id: quotation.id,
         remarks: item.remarks || undefined,
         status: 'active',
@@ -381,6 +472,60 @@ export class QuotationsService {
         const rateCard = this.rateCardRepo.create(rateCardData as any);
         await this.rateCardRepo.save(rateCard);
         results.created++;
+      }
+
+      // 2. 車隊價目表（相同欄位，價錢留空）
+      const existingFleet = await this.fleetRateCardRepo.findOne({
+        where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
+      });
+      if (!existingFleet || options?.overwrite) {
+        const fleetData: Partial<FleetRateCard> = {
+          client_id: quotation.client_id,
+          contract_no: contractNo,
+          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
+          vehicle_type: (item as any).vehicle_type || undefined,
+          origin: (item as any).origin || undefined,
+          destination: (item as any).destination || undefined,
+          day_rate: 0,
+          night_rate: 0,
+          mid_shift_rate: 0,
+          ot_rate: 0,
+          unit: item.unit,
+          remarks: item.remarks || undefined,
+          source_quotation_id: quotation.id,
+          status: 'active',
+        };
+        if (existingFleet && options?.overwrite) {
+          await this.fleetRateCardRepo.update(existingFleet.id, fleetData);
+        } else {
+          const fleetCard = this.fleetRateCardRepo.create(fleetData as any);
+          await this.fleetRateCardRepo.save(fleetCard);
+        }
+      }
+
+      // 3. 街車價目表（相同欄位，價錢留空）
+      const existingSubcon = await this.subconRateCardRepo.findOne({
+        where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
+      });
+      if (!existingSubcon || options?.overwrite) {
+        const subconData: Partial<SubconRateCard> = {
+          client_id: quotation.client_id,
+          contract_no: contractNo,
+          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
+          origin: (item as any).origin || undefined,
+          destination: (item as any).destination || undefined,
+          unit_price: 0,
+          unit: item.unit,
+          remarks: item.remarks || undefined,
+          source_quotation_id: quotation.id,
+          status: 'active',
+        };
+        if (existingSubcon && options?.overwrite) {
+          await this.subconRateCardRepo.update(existingSubcon.id, subconData);
+        } else {
+          const subconCard = this.subconRateCardRepo.create(subconData as any);
+          await this.subconRateCardRepo.save(subconCard);
+        }
       }
     }
 
