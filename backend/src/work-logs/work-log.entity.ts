@@ -35,7 +35,7 @@ export class WorkLog {
   scheduled_date: string; // 約定日期
 
   @Column({ type: 'int', nullable: true })
-  company_profile_id: number; // 明達旗下公司
+  company_profile_id: number; // 明達旗下公司 (CompanyProfile)
 
   @ManyToOne(() => CompanyProfile, { nullable: true })
   @JoinColumn({ name: 'company_profile_id' })
@@ -49,7 +49,7 @@ export class WorkLog {
   client: Partner;
 
   @Column({ type: 'int', nullable: true })
-  quotation_id: number; // 報價單
+  quotation_id: number; // 合約（來源報價單）
 
   @ManyToOne(() => Quotation, { nullable: true })
   @JoinColumn({ name: 'quotation_id' })
@@ -110,6 +110,26 @@ export class WorkLog {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   goods_quantity: number; // 商品數量
+
+  // ── 自動匹配價格（後台計算，前端列表不顯示）────────────────
+  @Column({ type: 'int', nullable: true })
+  matched_rate_card_id: number; // 匹配到的 RateCard ID
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  matched_rate: number; // 匹配到的費率
+
+  @Column({ nullable: true })
+  matched_unit: string; // 匹配到的計費單位
+
+  @Column({ nullable: true })
+  matched_ot_rate: number; // 匹配到的 OT 費率
+
+  @Column({ nullable: true })
+  price_match_status: string;
+  // 'matched' 已匹配 | 'unmatched' 未匹配 | 'pending' 待匹配
+
+  @Column({ nullable: true, type: 'text' })
+  price_match_note: string; // 匹配備註（如：未找到對應價目表）
 
   // ── 記錄資訊 ────────────────────────────────────────────────
   @Column({ nullable: true })

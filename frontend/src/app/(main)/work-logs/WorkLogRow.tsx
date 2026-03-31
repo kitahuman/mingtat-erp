@@ -136,7 +136,7 @@ export default function WorkLogRow({
         <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.company_profile?.code || '—'}</td>
         {/* 客戶公司 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-32 max-w-[128px] truncate">{row.client?.name || '—'}</td>
-        {/* 報價單 */}
+        {/* 合約 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.quotation?.quotation_no || '—'}</td>
         {/* 員工 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.employee?.name_zh || '—'}</td>
@@ -256,13 +256,13 @@ export default function WorkLogRow({
           placeholder="客戶公司"
         />
       </td>
-      {/* 報價單 */}
+      {/* 合約 */}
       <td className={`${cellCls} w-28`}>
         <SearchableSelect
           value={form.quotation_id}
           onChange={v => set('quotation_id', v)}
           options={filteredQuotations}
-          placeholder="報價單"
+          placeholder="選擇合約"
         />
       </td>
       {/* 員工 */}
