@@ -26,8 +26,26 @@ export class PayrollController {
     return this.payrollService.findOne(+id);
   }
 
+  // 預覽計糧（不儲存，返回工作記錄明細和計算結果）
+  @Post('preview')
+  preview(@Body() body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_profile_id?: number;
+  }) {
+    return this.payrollService.preview(body);
+  }
+
+  // 生成糧單（單一員工 + 日期範圍）
   @Post('generate')
-  generate(@Body() body: { period: string; company_profile_id?: number }) {
+  generate(@Body() body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_profile_id?: number;
+    period?: string;
+  }) {
     return this.payrollService.generate(body);
   }
 

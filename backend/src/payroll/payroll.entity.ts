@@ -12,9 +12,16 @@ export class Payroll {
   @PrimaryGeneratedColumn()
   id: number;
 
-  // 計糧月份 (YYYY-MM)
+  // 計糧月份 (YYYY-MM) - kept for backward compat
   @Column()
   period: string;
+
+  // 計糧日期範圍
+  @Column({ nullable: true, type: 'date' })
+  date_from: string;
+
+  @Column({ nullable: true, type: 'date' })
+  date_to: string;
 
   @Column({ type: 'int' })
   employee_id: number;

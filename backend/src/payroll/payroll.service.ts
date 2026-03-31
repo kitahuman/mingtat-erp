@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Payroll } from './payroll.entity';
 import { PayrollItem } from './payroll-item.entity';
 import { Employee } from '../employees/employee.entity';
@@ -75,135 +75,180 @@ export class PayrollService {
       relations: ['employee', 'employee.company', 'company_profile', 'items'],
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    // Sort items by sort_order
     if (payroll.items) {
       payroll.items.sort((a, b) => a.sort_order - b.sort_order);
     }
     return payroll;
   }
 
-  // ── 生成計糧 ──────────────────────────────────────────────────
-  async generate(body: { period: string; company_profile_id?: number }) {
-    const { period, company_profile_id } = body;
-    if (!period || !/^\d{4}-\d{2}$/.test(period)) {
-      throw new BadRequestException('Invalid period format, expected YYYY-MM');
-    }
+  // ── 預覽計糧（不儲存，返回計算結果和工作記錄明細）────────────
+  async preview(body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_profile_id?: number;
+  }) {
+    const { employee_id, date_from, date_to, company_profile_id } = body;
 
-    const [yearStr, monthStr] = period.split('-');
-    const year = Number(yearStr);
-    const month = Number(monthStr);
-    const startDate = `${period}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${period}-${String(lastDay).padStart(2, '0')}`;
+    if (!employee_id) throw new BadRequestException('請選擇員工');
+    if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
+    if (date_from > date_to) throw new BadRequestException('開始日期不能晚於結束日期');
 
-    // Find employees
-    const empQb = this.employeeRepo.createQueryBuilder('e')
-      .where('e.status = :status', { status: 'active' });
-    
-    // If company_profile_id is specified, find employees that have work logs for this company profile
-    let employeeIds: number[] = [];
-    
-    if (company_profile_id) {
-      // Get employee IDs from work logs for this period and company profile
-      const workLogs = await this.workLogRepo.createQueryBuilder('wl')
-        .select('DISTINCT wl.employee_id', 'employee_id')
-        .where('wl.scheduled_date >= :start', { start: startDate })
-        .andWhere('wl.scheduled_date <= :end', { end: endDate })
-        .andWhere('wl.company_profile_id = :cpId', { cpId: Number(company_profile_id) })
-        .andWhere('wl.employee_id IS NOT NULL')
-        .getRawMany();
-      
-      employeeIds = workLogs.map(wl => wl.employee_id).filter(Boolean);
-      if (employeeIds.length === 0) {
-        return { generated: 0, skipped: 0, message: '此月份無符合條件的員工工作記錄' };
-      }
-    } else {
-      // Get all employees with work logs in this period
-      const workLogs = await this.workLogRepo.createQueryBuilder('wl')
-        .select('DISTINCT wl.employee_id', 'employee_id')
-        .where('wl.scheduled_date >= :start', { start: startDate })
-        .andWhere('wl.scheduled_date <= :end', { end: endDate })
-        .andWhere('wl.employee_id IS NOT NULL')
-        .getRawMany();
-      
-      employeeIds = workLogs.map(wl => wl.employee_id).filter(Boolean);
-      if (employeeIds.length === 0) {
-        return { generated: 0, skipped: 0, message: '此月份無員工工作記錄' };
-      }
-    }
-
-    const employees = await this.employeeRepo.find({
-      where: { id: In(employeeIds), status: 'active' },
+    const emp = await this.employeeRepo.findOne({
+      where: { id: employee_id },
       relations: ['company'],
     });
+    if (!emp) throw new NotFoundException('Employee not found');
 
-    let generated = 0;
-    let skipped = 0;
-
-    for (const emp of employees) {
-      // Check if payroll already exists
-      const existingQb = this.payrollRepo.createQueryBuilder('p')
-        .where('p.period = :period', { period })
-        .andWhere('p.employee_id = :empId', { empId: emp.id });
-      
-      if (company_profile_id) {
-        existingQb.andWhere('p.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
-      }
-
-      const existing = await existingQb.getOne();
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      try {
-        await this.generateForEmployee(emp, period, startDate, endDate, company_profile_id ? Number(company_profile_id) : null);
-        generated++;
-      } catch (err) {
-        console.error(`Failed to generate payroll for employee ${emp.id}:`, err);
-        skipped++;
-      }
-    }
-
-    return { generated, skipped, message: `已生成 ${generated} 筆糧單，跳過 ${skipped} 筆` };
-  }
-
-  // ── 為單一員工生成計糧 ────────────────────────────────────────
-  private async generateForEmployee(
-    emp: Employee,
-    period: string,
-    startDate: string,
-    endDate: string,
-    companyProfileId: number | null,
-  ) {
-    // Get salary setting (latest effective before or during this period)
+    // Get salary setting
     const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
       .where('ss.employee_id = :empId', { empId: emp.id })
-      .andWhere('ss.effective_date <= :end', { end: endDate })
+      .andWhere('ss.effective_date <= :end', { end: date_to })
       .orderBy('ss.effective_date', 'DESC')
       .getOne();
 
-    if (!salarySetting) return; // No salary config, skip
-
-    // Get work logs for this period
+    // Get work logs
     const wlQb = this.workLogRepo.createQueryBuilder('wl')
+      .leftJoinAndSelect('wl.company_profile', 'company_profile')
+      .leftJoinAndSelect('wl.client', 'client')
       .where('wl.employee_id = :empId', { empId: emp.id })
-      .andWhere('wl.scheduled_date >= :start', { start: startDate })
-      .andWhere('wl.scheduled_date <= :end', { end: endDate })
-      .andWhere("wl.service_type != '請假/休息'");
+      .andWhere('wl.scheduled_date >= :start', { start: date_from })
+      .andWhere('wl.scheduled_date <= :end', { end: date_to })
+      .andWhere("wl.service_type != '請假/休息'")
+      .orderBy('wl.scheduled_date', 'ASC');
 
-    if (companyProfileId) {
-      wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: companyProfileId });
+    if (company_profile_id) {
+      wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
     }
 
     const workLogs = await wlQb.getMany();
 
-    // Determine company_profile_id from work logs if not specified
-    let actualCompanyProfileId = companyProfileId;
-    if (!actualCompanyProfileId && workLogs.length > 0) {
-      actualCompanyProfileId = workLogs[0].company_profile_id;
+    // Calculate preview
+    const calculation = salarySetting
+      ? await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null)
+      : null;
+
+    return {
+      employee: emp,
+      salary_setting: salarySetting,
+      work_logs: workLogs,
+      calculation,
+      date_from,
+      date_to,
+    };
+  }
+
+  // ── 生成計糧（單一員工，日期範圍）────────────────────────────
+  async generate(body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_profile_id?: number;
+    period?: string; // optional override, defaults to YYYY-MM of date_from
+  }) {
+    const { employee_id, date_from, date_to, company_profile_id } = body;
+
+    if (!employee_id) throw new BadRequestException('請選擇員工');
+    if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
+    if (date_from > date_to) throw new BadRequestException('開始日期不能晚於結束日期');
+
+    // Derive period from date_from (YYYY-MM)
+    const period = body.period || date_from.substring(0, 7);
+
+    const emp = await this.employeeRepo.findOne({
+      where: { id: employee_id },
+      relations: ['company'],
+    });
+    if (!emp) throw new NotFoundException('Employee not found');
+
+    // Check for existing payroll with same employee, period, and company_profile
+    const existingQb = this.payrollRepo.createQueryBuilder('p')
+      .where('p.employee_id = :empId', { empId: emp.id })
+      .andWhere('p.date_from = :dateFrom', { dateFrom: date_from })
+      .andWhere('p.date_to = :dateTo', { dateTo: date_to });
+
+    if (company_profile_id) {
+      existingQb.andWhere('p.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
     }
 
+    const existing = await existingQb.getOne();
+    if (existing) {
+      throw new BadRequestException(`此員工在 ${date_from} 至 ${date_to} 的糧單已存在（ID: ${existing.id}）`);
+    }
+
+    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
+      .where('ss.employee_id = :empId', { empId: emp.id })
+      .andWhere('ss.effective_date <= :end', { end: date_to })
+      .orderBy('ss.effective_date', 'DESC')
+      .getOne();
+
+    if (!salarySetting) {
+      throw new BadRequestException('此員工沒有薪酬配置，無法生成糧單');
+    }
+
+    const wlQb = this.workLogRepo.createQueryBuilder('wl')
+      .where('wl.employee_id = :empId', { empId: emp.id })
+      .andWhere('wl.scheduled_date >= :start', { start: date_from })
+      .andWhere('wl.scheduled_date <= :end', { end: date_to })
+      .andWhere("wl.service_type != '請假/休息'");
+
+    if (company_profile_id) {
+      wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
+    }
+
+    const workLogs = await wlQb.getMany();
+
+    const calc = await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null);
+
+    // Determine actual company_profile_id
+    let actualCpId = company_profile_id ?? null;
+    if (!actualCpId && workLogs.length > 0) {
+      actualCpId = workLogs[0].company_profile_id;
+    }
+
+    // Create payroll record
+    const payroll = this.payrollRepo.create({
+      period,
+      date_from,
+      date_to,
+      employee_id: emp.id,
+      company_profile_id: actualCpId ?? undefined,
+      salary_type: calc.salary_type,
+      base_rate: calc.base_rate,
+      work_days: calc.work_days,
+      base_amount: calc.base_amount,
+      allowance_total: calc.allowance_total,
+      ot_total: calc.ot_total,
+      commission_total: calc.commission_total,
+      mpf_deduction: calc.mpf_deduction,
+      mpf_plan: calc.mpf_plan,
+      mpf_employer: calc.mpf_employer,
+      net_amount: calc.net_amount,
+      status: 'draft',
+    });
+
+    const saved = await this.payrollRepo.save(payroll) as Payroll;
+
+    for (const item of calc.items) {
+      const payrollItem = this.payrollItemRepo.create({
+        ...item,
+        payroll_id: saved.id,
+      });
+      await this.payrollItemRepo.save(payrollItem);
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  // ── 核心計算邏輯（可被 preview 和 generate 共用）────────────
+  private async calculatePayroll(
+    emp: Employee,
+    salarySetting: EmployeeSalarySetting,
+    workLogs: WorkLog[],
+    dateFrom: string,
+    dateTo: string,
+    companyProfileId: number | null,
+  ) {
     const items: Partial<PayrollItem>[] = [];
     let sortOrder = 1;
 
@@ -215,7 +260,6 @@ export class PayrollService {
     let workDays = 0;
 
     if (salaryType === 'daily') {
-      // Count distinct work dates
       const workDates = new Set(workLogs.map(wl => wl.scheduled_date));
       workDays = workDates.size;
       baseAmount = baseSalary * workDays;
@@ -229,7 +273,6 @@ export class PayrollService {
         sort_order: sortOrder++,
       });
     } else {
-      // Monthly salary
       workDays = 1;
       baseAmount = baseSalary;
 
@@ -246,7 +289,6 @@ export class PayrollService {
     // ── (2) 津貼計算 ──
     let allowanceTotal = 0;
 
-    // Define allowance fields and their labels
     const allowanceFields: { field: string; label: string; condition?: (wl: WorkLog) => boolean }[] = [
       { field: 'allowance_night', label: '夜班津貼', condition: (wl) => wl.day_night === '夜' },
       { field: 'allowance_rent', label: '租車津貼' },
@@ -266,11 +308,9 @@ export class PayrollService {
 
       let days = 0;
       if (af.condition) {
-        // Count days matching condition
         const matchDates = new Set(workLogs.filter(af.condition).map(wl => wl.scheduled_date));
         days = matchDates.size;
       } else {
-        // Apply to all work days
         const workDates = new Set(workLogs.map(wl => wl.scheduled_date));
         days = workDates.size;
       }
@@ -316,7 +356,6 @@ export class PayrollService {
     let otTotal = 0;
     const otRate = Number(salarySetting.ot_rate_standard) || 0;
 
-    // Sum OT hours from work logs
     let totalOtHours = 0;
     for (const wl of workLogs) {
       if (wl.ot_quantity && Number(wl.ot_quantity) > 0) {
@@ -336,7 +375,6 @@ export class PayrollService {
       });
     }
 
-    // OT time-slot allowances
     const otSlots: { field: string; label: string }[] = [
       { field: 'ot_1800_1900', label: 'OT 18:00-19:00' },
       { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
@@ -348,7 +386,6 @@ export class PayrollService {
       const rate = Number((salarySetting as any)[os.field]) || 0;
       if (rate === 0) continue;
 
-      // These are per-day OT slot allowances, count OT days
       const otDays = new Set(
         workLogs.filter(wl => wl.ot_quantity && Number(wl.ot_quantity) > 0).map(wl => wl.scheduled_date)
       ).size;
@@ -368,17 +405,15 @@ export class PayrollService {
       });
     }
 
-    // ── (4) 分傭計算 (按件計酬) ──
+    // ── (4) 分傭計算 ──
     let commissionTotal = 0;
 
     if (salarySetting.is_piece_rate && salarySetting.fleet_rate_card_id) {
-      // Get the fleet rate card
       const fleetRateCard = await this.fleetRateCardRepo.findOne({
         where: { id: salarySetting.fleet_rate_card_id },
       });
 
       if (fleetRateCard) {
-        // Calculate commission based on work logs
         for (const wl of workLogs) {
           let rate = 0;
           if (wl.day_night === '夜') {
@@ -415,7 +450,6 @@ export class PayrollService {
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
 
     if (mpfPlan === 'industry') {
-      // 行業計劃（建造業）：僱員每日扣 $50，僱主每日供 $50
       const workDatesForMpf = new Set(workLogs.map(wl => wl.scheduled_date));
       const mpfDays = workDatesForMpf.size;
       mpfDeduction = 50 * mpfDays;
@@ -430,11 +464,8 @@ export class PayrollService {
         sort_order: sortOrder++,
       });
     } else {
-      // 一般計劃 (Manulife / AIA)：月入 5%，上限 $1500
       mpfDeduction = Math.min(grossIncome * 0.05, 1500);
       mpfEmployer = Math.min(grossIncome * 0.05, 1500);
-
-      // Round to 2 decimal places
       mpfDeduction = Math.round(mpfDeduction * 100) / 100;
       mpfEmployer = Math.round(mpfEmployer * 100) / 100;
 
@@ -451,14 +482,9 @@ export class PayrollService {
       });
     }
 
-    // ── 淨額 ──
     const netAmount = grossIncome - mpfDeduction;
 
-    // Create payroll record
-    const payroll = this.payrollRepo.create({
-      period,
-      employee_id: emp.id,
-      company_profile_id: actualCompanyProfileId ?? undefined,
+    return {
       salary_type: salaryType,
       base_rate: baseSalary,
       work_days: workDays,
@@ -469,22 +495,10 @@ export class PayrollService {
       mpf_deduction: mpfDeduction,
       mpf_plan: mpfPlan,
       mpf_employer: mpfEmployer,
+      gross_income: grossIncome,
       net_amount: netAmount,
-      status: 'draft',
-    });
-
-    const saved = await this.payrollRepo.save(payroll) as Payroll;
-
-    // Save items
-    for (const item of items) {
-      const payrollItem = this.payrollItemRepo.create({
-        ...item,
-        payroll_id: saved.id,
-      });
-      await this.payrollItemRepo.save(payrollItem);
-    }
-
-    return saved;
+      items,
+    };
   }
 
   // ── 更新糧單 ──────────────────────────────────────────────────
@@ -492,7 +506,6 @@ export class PayrollService {
     const payroll = await this.payrollRepo.findOne({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
-    // Allow updating payment info and notes
     if (body.payment_date !== undefined) payroll.payment_date = body.payment_date;
     if (body.cheque_number !== undefined) payroll.cheque_number = body.cheque_number;
     if (body.notes !== undefined) payroll.notes = body.notes;
@@ -531,7 +544,6 @@ export class PayrollService {
       throw new BadRequestException('只能刪除草稿狀態的糧單');
     }
 
-    // Delete items first
     await this.payrollItemRepo.delete({ payroll_id: id });
     await this.payrollRepo.remove(payroll);
     return { deleted: true };
@@ -548,30 +560,30 @@ export class PayrollService {
       throw new BadRequestException('只能重新計算草稿狀態的糧單');
     }
 
-    // Delete existing items
     await this.payrollItemRepo.delete({ payroll_id: id });
 
-    // Remove old payroll
     const empId = payroll.employee_id;
-    const period = payroll.period;
+    const dateFrom = payroll.date_from || `${payroll.period}-01`;
+    const dateTo = payroll.date_to || (() => {
+      const [y, m] = payroll.period.split('-');
+      const lastDay = new Date(Number(y), Number(m), 0).getDate();
+      return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
+    })();
     const cpId = payroll.company_profile_id;
     await this.payrollRepo.remove(payroll);
 
-    // Regenerate
     const emp = await this.employeeRepo.findOne({
       where: { id: empId },
       relations: ['company'],
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
-    const [yearStr, monthStr] = period.split('-');
-    const year = Number(yearStr);
-    const month = Number(monthStr);
-    const startDate = `${period}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${period}-${String(lastDay).padStart(2, '0')}`;
-
-    const newPayroll = await this.generateForEmployee(emp, period, startDate, endDate, cpId) as Payroll;
+    const newPayroll = await this.generate({
+      employee_id: empId,
+      date_from: dateFrom,
+      date_to: dateTo,
+      company_profile_id: cpId ?? undefined,
+    }) as Payroll;
     return this.findOne(newPayroll!.id);
   }
 

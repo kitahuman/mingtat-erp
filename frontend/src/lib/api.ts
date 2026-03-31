@@ -208,7 +208,12 @@ export const salaryConfigApi = {
 export const payrollApi = {
   list: (params?: any) => api.get('/payroll', { params }),
   get: (id: number) => api.get(`/payroll/${id}`),
-  generate: (data: { period: string; company_profile_id?: number }) => api.post('/payroll/generate', data),
+  // 預覽計糧（不儲存）
+  preview: (data: { employee_id: number; date_from: string; date_to: string; company_profile_id?: number }) =>
+    api.post('/payroll/preview', data),
+  // 生成糧單（單一員工 + 日期範圍）
+  generate: (data: { employee_id: number; date_from: string; date_to: string; company_profile_id?: number; period?: string }) =>
+    api.post('/payroll/generate', data),
   update: (id: number, data: any) => api.put(`/payroll/${id}`, data),
   bulkConfirm: (ids: number[]) => api.post('/payroll/bulk/confirm', { ids }),
   bulkMarkPaid: (ids: number[], paymentDate?: string, chequeNumber?: string) =>
