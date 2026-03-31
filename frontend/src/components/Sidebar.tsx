@@ -12,7 +12,20 @@ interface NavItem {
   roles?: UserRole[];
 }
 
-const navItems: NavItem[] = [
+interface NavGroup {
+  label: string;
+  icon: string;
+  minRole?: UserRole;
+  items: NavItem[];
+}
+
+type NavEntry = NavItem | NavGroup;
+
+function isGroup(entry: NavEntry): entry is NavGroup {
+  return 'items' in entry;
+}
+
+const navEntries: NavEntry[] = [
   { href: '/dashboard', label: '儀表板', icon: '📊', minRole: 'clerk' },
   { href: '/company-profiles', label: '公司資料', icon: '🏛️', minRole: 'clerk' },
   { href: '/companies', label: '公司管理', icon: '🏢', minRole: 'clerk' },
@@ -20,6 +33,18 @@ const navItems: NavItem[] = [
   { href: '/vehicles', label: '車輛管理', icon: '🚛', minRole: 'clerk' },
   { href: '/machinery', label: '機械管理', icon: '⚙️', minRole: 'clerk' },
   { href: '/partners', label: '合作單位', icon: '🤝', minRole: 'clerk' },
+  {
+    label: '報價及價目',
+    icon: '💰',
+    minRole: 'clerk',
+    items: [
+      { href: '/quotations', label: '工程報價單', icon: '📋', minRole: 'clerk' },
+      { href: '/rate-cards', label: '客戶價目表', icon: '📊', minRole: 'clerk' },
+      { href: '/fleet-rate-cards', label: '車隊價目表', icon: '🚚', minRole: 'clerk' },
+      { href: '/subcon-rate-cards', label: '街車價目表', icon: '🚛', minRole: 'clerk' },
+      { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },
+    ],
+  },
   { href: '/settings/users', label: '用戶管理', icon: '👥', roles: ['admin'] },
   { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
 ];
@@ -29,18 +54,41 @@ export default function Sidebar() {
   const { user, logout, hasRole, hasMinRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const filteredNavItems = navItems.filter((item) => {
-    if (item.roles) {
-      return hasRole(...item.roles);
-    }
-    if (item.minRole) {
-      return hasMinRole(item.minRole);
-    }
-    return true;
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    '報價及價目': true,
   });
 
+  const canAccess = (item: { minRole?: UserRole; roles?: UserRole[] }) => {
+    if (item.roles) return hasRole(...item.roles);
+    if (item.minRole) return hasMinRole(item.minRole);
+    return true;
+  };
+
+  const toggleGroup = (label: string) => {
+    setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || '使用者' : '使用者';
+
+  const renderNavItem = (item: NavItem, nested = false) => {
+    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        className={`
+          flex items-center px-4 py-2.5 mx-2 rounded-lg transition-colors mb-0.5
+          ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
+          ${collapsed ? 'justify-center' : ''}
+          ${nested && !collapsed ? 'pl-10' : ''}
+        `}
+      >
+        <span className="text-lg">{item.icon}</span>
+        {!collapsed && <span className="ml-3 text-sm font-medium">{item.label}</span>}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -85,23 +133,52 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {filteredNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={`
-                  flex items-center px-4 py-3 mx-2 rounded-lg transition-colors mb-1
-                  ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
-                  ${collapsed ? 'justify-center' : ''}
-                `}
-              >
-                <span className="text-xl">{item.icon}</span>
-                {!collapsed && <span className="ml-3 text-sm font-medium">{item.label}</span>}
-              </Link>
-            );
+          {navEntries.map((entry) => {
+            if (isGroup(entry)) {
+              if (!canAccess(entry)) return null;
+              const filteredItems = entry.items.filter(canAccess);
+              if (filteredItems.length === 0) return null;
+              const isExpanded = expandedGroups[entry.label];
+              const isGroupActive = filteredItems.some(
+                item => pathname === item.href || pathname.startsWith(item.href + '/')
+              );
+
+              if (collapsed) {
+                // In collapsed mode, show first item icon
+                return filteredItems.map(item => renderNavItem(item));
+              }
+
+              return (
+                <div key={entry.label} className="mb-1">
+                  <button
+                    onClick={() => toggleGroup(entry.label)}
+                    className={`
+                      flex items-center justify-between w-full px-4 py-2.5 mx-0 rounded-none transition-colors
+                      ${isGroupActive ? 'text-white' : 'text-gray-400 hover:text-white'}
+                    `}
+                  >
+                    <div className="flex items-center">
+                      <span className="text-lg">{entry.icon}</span>
+                      <span className="ml-3 text-sm font-medium">{entry.label}</span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-0.5">
+                      {filteredItems.map(item => renderNavItem(item, true))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (!canAccess(entry)) return null;
+            return renderNavItem(entry);
           })}
         </nav>
 

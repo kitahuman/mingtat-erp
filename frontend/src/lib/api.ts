@@ -138,6 +138,54 @@ export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
 };
 
+// Quotations (工程報價單)
+export const quotationsApi = {
+  list: (params?: any) => api.get('/quotations', { params }),
+  get: (id: number) => api.get(`/quotations/${id}`),
+  create: (data: any) => api.post('/quotations', data),
+  update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/quotations/${id}/status`, { status }),
+};
+
+// Rate Cards (客戶價目表)
+export const rateCardsApi = {
+  list: (params?: any) => api.get('/rate-cards', { params }),
+  get: (id: number) => api.get(`/rate-cards/${id}`),
+  create: (data: any) => api.post('/rate-cards', data),
+  update: (id: number, data: any) => api.put(`/rate-cards/${id}`, data),
+};
+
+// Fleet Rate Cards (車隊價目表)
+export const fleetRateCardsApi = {
+  list: (params?: any) => api.get('/fleet-rate-cards', { params }),
+  get: (id: number) => api.get(`/fleet-rate-cards/${id}`),
+  create: (data: any) => api.post('/fleet-rate-cards', data),
+  update: (id: number, data: any) => api.put(`/fleet-rate-cards/${id}`, data),
+};
+
+// Subcontractor Vehicle Rate Cards (街車價目表)
+export const subconRateCardsApi = {
+  list: (params?: any) => api.get('/subcon-rate-cards', { params }),
+  get: (id: number) => api.get(`/subcon-rate-cards/${id}`),
+  create: (data: any) => api.post('/subcon-rate-cards', data),
+  update: (id: number, data: any) => api.put(`/subcon-rate-cards/${id}`, data),
+};
+
+// Salary Config (員工薪酬配置)
+export const salaryConfigApi = {
+  list: (params?: any) => api.get('/salary-config', { params }),
+  get: (id: number) => api.get(`/salary-config/${id}`),
+  getByEmployee: (employeeId: number) => api.get(`/salary-config/employee/${employeeId}`),
+  create: (data: any) => api.post('/salary-config', data),
+  update: (id: number, data: any) => api.put(`/salary-config/${id}`, data),
+  delete: (id: number) => api.delete(`/salary-config/${id}`),
+};
+
+// Enums (系統枚舉)
+export const enumsApi = {
+  getAll: () => api.get('/enums'),
+};
+
 // Utility: Expiry date helpers
 export function getExpiryStatus(date: string | null): 'expired' | 'critical' | 'warning' | 'ok' | 'none' {
   if (!date) return 'none';

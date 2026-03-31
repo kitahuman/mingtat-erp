@@ -12,6 +12,12 @@ import { DocumentsModule } from './documents/documents.module';
 import { PartnersModule } from './partners/partners.module';
 import { CompanyProfilesModule } from './company-profiles/company-profiles.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { QuotationsModule } from './quotations/quotations.module';
+import { RateCardsModule } from './rate-cards/rate-cards.module';
+import { FleetRateCardsModule } from './fleet-rate-cards/fleet-rate-cards.module';
+import { SubconRateCardsModule } from './subcon-rate-cards/subcon-rate-cards.module';
+import { SalaryConfigModule } from './salary-config/salary-config.module';
+import { EnumsModule } from './common/enums.module';
 
 @Module({
   imports: [
@@ -53,6 +59,12 @@ import { CustomFieldsModule } from './custom-fields/custom-fields.module';
     PartnersModule,
     CompanyProfilesModule,
     CustomFieldsModule,
+    QuotationsModule,
+    RateCardsModule,
+    FleetRateCardsModule,
+    SubconRateCardsModule,
+    SalaryConfigModule,
+    EnumsModule,
   ],
 })
 export class AppModule {}
