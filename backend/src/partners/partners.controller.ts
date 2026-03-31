@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Param, Query, Body, UseGuards } from '@nest
 import { AuthGuard } from '@nestjs/passport';
 import { PartnersService } from './partners.service';
 
-@Controller('api/partners')
+@Controller('partners')
 @UseGuards(AuthGuard('jwt'))
 export class PartnersController {
   constructor(private readonly service: PartnersService) {}

@@ -16,7 +16,7 @@ function getUploadDir() {
   return dir;
 }
 
-@Controller('api/documents')
+@Controller('documents')
 @UseGuards(AuthGuard('jwt'))
 export class DocumentsController {
   constructor(private readonly service: DocumentsService) {}
