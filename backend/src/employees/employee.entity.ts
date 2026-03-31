@@ -32,6 +32,16 @@ export class Employee {
   @Column({ nullable: true })
   bank_account: string;
 
+  @Column({ nullable: true })
+  id_number: string; // 身份證號碼
+
+  @Column({ nullable: true, type: 'text' })
+  address: string; // 地址
+
+  // 強積金計劃
+  @Column({ nullable: true })
+  mpf_plan: string; // manulife | aia | industry (東亞行業計劃)
+
   // 證照
   @Column({ nullable: true })
   green_card_no: string; // 平安卡號碼

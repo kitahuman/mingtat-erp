@@ -116,6 +116,9 @@ export default function EmployeeDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">入職日期</label><input type="date" value={form.join_date || ''} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">銀行帳號</label><input value={form.bank_account || ''} onChange={e => setForm({...form, bank_account: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">在職</option><option value="inactive">離職</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">身份證號碼</label><input value={form.id_number || ''} onChange={e => setForm({...form, id_number: e.target.value})} className="input-field" placeholder="例：R838479(6)" /></div>
+              <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">強積金計劃</label><select value={form.mpf_plan || ''} onChange={e => setForm({...form, mpf_plan: e.target.value})} className="input-field"><option value="">請選擇</option><option value="manulife">Manulife</option><option value="aia">AIA</option><option value="industry">東亞（行業計劃）</option></select></div>
             </>
           ) : (
             <>
@@ -127,6 +130,9 @@ export default function EmployeeDetailPage() {
               <div><p className="text-sm text-gray-500">緊急聯絡人</p><p>{emp?.emergency_contact || '-'}</p></div>
               <div><p className="text-sm text-gray-500">入職日期</p><p>{emp?.join_date || '-'}</p></div>
               <div><p className="text-sm text-gray-500">銀行帳號</p><p>{emp?.bank_account || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">身份證號碼</p><p>{emp?.id_number || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">地址</p><p>{emp?.address || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">強積金計劃</p><p>{emp?.mpf_plan === 'manulife' ? 'Manulife' : emp?.mpf_plan === 'aia' ? 'AIA' : emp?.mpf_plan === 'industry' ? '東亞（行業計劃）' : '未設定'}</p></div>
             </>
           )}
         </div>

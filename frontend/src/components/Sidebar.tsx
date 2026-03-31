@@ -44,6 +44,15 @@ const navEntries: NavEntry[] = [
   },
   { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
   {
+    label: '計糧',
+    icon: '💵',
+    minRole: 'clerk',
+    items: [
+      { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
+      { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
+    ],
+  },
+  {
     label: '報價及價目',
     icon: '💰',
     minRole: 'clerk',
@@ -144,6 +153,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '公司內部資料': false,
     '報價及價目': true,
+    '計糧': false,
     '系統設定': false,
   });
 

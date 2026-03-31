@@ -204,6 +204,20 @@ export const salaryConfigApi = {
   delete: (id: number) => api.delete(`/salary-config/${id}`),
 };
 
+// Payroll (計糧)
+export const payrollApi = {
+  list: (params?: any) => api.get('/payroll', { params }),
+  get: (id: number) => api.get(`/payroll/${id}`),
+  generate: (data: { period: string; company_profile_id?: number }) => api.post('/payroll/generate', data),
+  update: (id: number, data: any) => api.put(`/payroll/${id}`, data),
+  bulkConfirm: (ids: number[]) => api.post('/payroll/bulk/confirm', { ids }),
+  bulkMarkPaid: (ids: number[], paymentDate?: string, chequeNumber?: string) =>
+    api.post('/payroll/bulk/mark-paid', { ids, payment_date: paymentDate, cheque_number: chequeNumber }),
+  recalculate: (id: number) => api.post(`/payroll/${id}/recalculate`),
+  remove: (id: number) => api.delete(`/payroll/${id}`),
+  summary: (params?: any) => api.get('/payroll/summary', { params }),
+};
+
 // Enums (系統枚舉)
 export const enumsApi = {
   getAll: () => api.get('/enums'),

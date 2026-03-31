@@ -21,6 +21,7 @@ import { SalaryConfigModule } from './salary-config/salary-config.module';
 import { EnumsModule } from './common/enums.module';
 import { WorkLogsModule } from './work-logs/work-logs.module';
 import { FieldOptionsModule } from './field-options/field-options.module';
+import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { FieldOptionsModule } from './field-options/field-options.module';
     EnumsModule,
     WorkLogsModule,
     FieldOptionsModule,
+    PayrollModule,
   ],
 })
 export class AppModule {}
