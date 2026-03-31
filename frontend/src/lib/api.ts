@@ -221,6 +221,22 @@ export const payrollApi = {
   recalculate: (id: number) => api.post(`/payroll/${id}/recalculate`),
   remove: (id: number) => api.delete(`/payroll/${id}`),
   summary: (params?: any) => api.get('/payroll/summary', { params }),
+
+  // ── 糧單工作記錄管理 ──
+  updateWorkLog: (payrollId: number, pwlId: number, data: any) =>
+    api.put(`/payroll/${payrollId}/work-logs/${pwlId}`, data),
+  updateOriginalWorkLog: (payrollId: number, pwlId: number, data: any) =>
+    api.put(`/payroll/${payrollId}/work-logs/${pwlId}/original`, data),
+  excludeWorkLog: (payrollId: number, pwlId: number) =>
+    api.post(`/payroll/${payrollId}/work-logs/${pwlId}/exclude`),
+  restoreWorkLog: (payrollId: number, pwlId: number) =>
+    api.post(`/payroll/${payrollId}/work-logs/${pwlId}/restore`),
+
+  // ── 自定義調整項管理 ──
+  addAdjustment: (payrollId: number, data: { item_name: string; amount: number; remarks?: string }) =>
+    api.post(`/payroll/${payrollId}/adjustments`, data),
+  removeAdjustment: (payrollId: number, adjId: number) =>
+    api.delete(`/payroll/${payrollId}/adjustments/${adjId}`),
 };
 
 // Enums (系統枚舉)

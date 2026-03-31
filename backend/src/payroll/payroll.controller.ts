@@ -73,4 +73,64 @@ export class PayrollController {
   remove(@Param('id') id: string) {
     return this.payrollService.remove(+id);
   }
+
+  // ── 糧單工作記錄管理 ──────────────────────────────────────
+
+  // 編輯糧單工作記錄（只改糧單記錄）
+  @Put(':id/work-logs/:pwlId')
+  updatePayrollWorkLog(
+    @Param('id') id: string,
+    @Param('pwlId') pwlId: string,
+    @Body() body: any,
+  ) {
+    return this.payrollService.updatePayrollWorkLog(+id, +pwlId, body);
+  }
+
+  // 編輯原始工作記錄（編輯大數據）
+  @Put(':id/work-logs/:pwlId/original')
+  updateOriginalWorkLog(
+    @Param('id') id: string,
+    @Param('pwlId') pwlId: string,
+    @Body() body: any,
+  ) {
+    return this.payrollService.updateOriginalWorkLog(+id, +pwlId, body);
+  }
+
+  // 從糧單移除工作記錄
+  @Post(':id/work-logs/:pwlId/exclude')
+  excludePayrollWorkLog(
+    @Param('id') id: string,
+    @Param('pwlId') pwlId: string,
+  ) {
+    return this.payrollService.excludePayrollWorkLog(+id, +pwlId);
+  }
+
+  // 恢復已移除的工作記錄
+  @Post(':id/work-logs/:pwlId/restore')
+  restorePayrollWorkLog(
+    @Param('id') id: string,
+    @Param('pwlId') pwlId: string,
+  ) {
+    return this.payrollService.restorePayrollWorkLog(+id, +pwlId);
+  }
+
+  // ── 自定義調整項管理 ──────────────────────────────────────
+
+  // 新增自定義調整項
+  @Post(':id/adjustments')
+  addAdjustment(
+    @Param('id') id: string,
+    @Body() body: { item_name: string; amount: number; remarks?: string },
+  ) {
+    return this.payrollService.addAdjustment(+id, body);
+  }
+
+  // 刪除自定義調整項
+  @Delete(':id/adjustments/:adjId')
+  removeAdjustment(
+    @Param('id') id: string,
+    @Param('adjId') adjId: string,
+  ) {
+    return this.payrollService.removeAdjustment(+id, +adjId);
+  }
 }

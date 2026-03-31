@@ -34,6 +34,68 @@ function StepBar({ current }: { current: number }) {
   );
 }
 
+// ─── Grouped Settlement View Component ───────────────────────
+function GroupedSettlementView({ groups }: { groups: any[] }) {
+  if (!groups || groups.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
+  }
+
+  const totalAmount = groups.reduce((sum: number, g: any) => sum + (Number(g.total_amount) || 0), 0);
+
+  return (
+    <div className="overflow-x-auto border rounded-lg">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">合約</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">日/夜</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">數量</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">小計</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g: any, idx: number) => {
+            const route = [g.start_location, g.end_location].filter(Boolean).join(' → ');
+            const hasPrice = g.price_match_status === 'matched' && g.matched_rate;
+            return (
+              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <td className="px-3 py-2 font-medium">{g.client_name || '-'}</td>
+                <td className="px-3 py-2 text-gray-600">{g.contract_no || '-'}</td>
+                <td className="px-3 py-2">
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    g.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                    g.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>{g.day_night || '日'}</span>
+                </td>
+                <td className="px-3 py-2 text-gray-600 text-xs">{route || '-'}</td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {hasPrice ? `$${Number(g.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">{g.count}車</td>
+                <td className="px-3 py-2 text-right font-mono font-bold">
+                  {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="border-t-2 border-gray-900">
+          <tr className="bg-gray-50">
+            <td colSpan={6} className="px-3 py-2 font-bold text-right">歸組結算合計</td>
+            <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">
+              ${totalAmount.toLocaleString()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function PayrollPage() {
   const router = useRouter();
@@ -56,6 +118,7 @@ export default function PayrollPage() {
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [previewError, setPreviewError] = useState('');
+  const [viewMode, setViewMode] = useState<'detail' | 'grouped'>('detail');
 
   // Step 4: Generate
   const [generating, setGenerating] = useState(false);
@@ -73,7 +136,6 @@ export default function PayrollPage() {
     employeesApi.list({ limit: 500, status: 'active', company_profile_id: selectedCompany.id }).then(res => {
       setEmployees(res.data.data || []);
     }).catch(() => {
-      // fallback: load all active employees
       employeesApi.list({ limit: 500, status: 'active' }).then(res => setEmployees(res.data.data || []));
     });
   }, [selectedCompany]);
@@ -138,6 +200,7 @@ export default function PayrollPage() {
     setGenerated(null);
     setGenerateError('');
     setEmpSearch('');
+    setViewMode('detail');
   };
 
   const filteredEmployees = employees.filter(emp =>
@@ -237,7 +300,6 @@ export default function PayrollPage() {
               <h2 className="text-lg font-bold text-gray-800">選擇日期範圍</h2>
             </div>
 
-            {/* Selected info */}
             <div className="flex gap-3 mb-6 p-4 bg-gray-50 rounded-xl">
               <div>
                 <p className="text-xs text-gray-500">公司</p>
@@ -274,7 +336,6 @@ export default function PayrollPage() {
               </div>
             </div>
 
-            {/* Quick presets */}
             <div className="flex gap-2 mt-3 flex-wrap">
               {[
                 { label: '本月', fn: () => {
@@ -348,52 +409,106 @@ export default function PayrollPage() {
 
             {!preview.salary_setting && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-                ⚠️ 此員工沒有薪酬配置，無法計算薪金。請先在「薪酬配置」中設定。
+                此員工沒有薪酬配置，無法計算薪金。請先在「薪酬配置」中設定。
               </div>
             )}
 
-            {/* Work logs table */}
-            {preview.work_logs?.length > 0 ? (
-              <div className="mb-5">
-                <h3 className="text-sm font-bold text-gray-700 mb-2">工作記錄明細</h3>
-                <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日期</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">服務類型</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日/夜班</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">地點</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">數量</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">OT 時數</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">備註</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.work_logs.map((wl: any, idx: number) => (
-                        <tr key={wl.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-3 py-2 font-mono whitespace-nowrap">{wl.scheduled_date}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{wl.service_type || '-'}</td>
-                          <td className="px-3 py-2">
-                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                              wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
-                              wl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
-                              'bg-yellow-100 text-yellow-700'
-                            }`}>{wl.day_night || '日'}</span>
-                          </td>
-                          <td className="px-3 py-2 text-gray-600 text-xs">{wl.start_location || '-'}</td>
-                          <td className="px-3 py-2 text-right font-mono">{wl.quantity || '-'}</td>
-                          <td className="px-3 py-2 text-right font-mono">
-                            {wl.ot_quantity ? <span className="text-orange-600 font-medium">{wl.ot_quantity}h</span> : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-gray-500 text-xs max-w-32 truncate">{wl.remarks || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* View mode toggle */}
+            {preview.work_logs?.length > 0 && (
+              <div className="mb-4">
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={() => setViewMode('detail')}
+                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                      viewMode === 'detail'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    逐筆明細
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grouped')}
+                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                      viewMode === 'grouped'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    歸組結算
+                  </button>
                 </div>
+
+                {/* Detail view */}
+                {viewMode === 'detail' && (
+                  <div className="mb-5">
+                    <h3 className="text-sm font-bold text-gray-700 mb-2">工作記錄明細</h3>
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日期</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">服務類型</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日/夜班</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">地點</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">數量</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">OT</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">單價</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-600 whitespace-nowrap">金額</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 whitespace-nowrap">備註</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {preview.work_logs.map((wl: any, idx: number) => {
+                            const rate = wl._matched_rate ?? wl.matched_rate;
+                            const lineAmt = wl._line_amount ?? 0;
+                            const status = wl._price_match_status ?? wl.price_match_status;
+                            const hasPrice = status === 'matched' && rate;
+                            return (
+                              <tr key={wl.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                <td className="px-3 py-2 font-mono whitespace-nowrap">{wl.scheduled_date}</td>
+                                <td className="px-3 py-2 whitespace-nowrap">{wl.service_type || '-'}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                                    wl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>{wl.day_night || '日'}</span>
+                                </td>
+                                <td className="px-3 py-2 text-gray-600 text-xs">
+                                  {[wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono">{wl.quantity || '-'}</td>
+                                <td className="px-3 py-2 text-right font-mono">
+                                  {wl.ot_quantity ? <span className="text-orange-600 font-medium">{wl.ot_quantity}h</span> : '-'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono">
+                                  {hasPrice ? `$${Number(rate).toLocaleString()}` : <span className="text-orange-500 text-xs">未設定</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono font-bold">
+                                  {hasPrice ? `$${Number(lineAmt).toLocaleString()}` : <span className="text-orange-500 text-xs">未設定</span>}
+                                </td>
+                                <td className="px-3 py-2 text-gray-500 text-xs max-w-32 truncate">{wl.remarks || '-'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Grouped view */}
+                {viewMode === 'grouped' && (
+                  <div className="mb-5">
+                    <h3 className="text-sm font-bold text-gray-700 mb-2">歸組結算</h3>
+                    <GroupedSettlementView groups={preview.grouped_settlement} />
+                  </div>
+                )}
               </div>
-            ) : (
+            )}
+
+            {preview.work_logs?.length === 0 && (
               <div className="mb-5 p-4 bg-gray-50 rounded-lg text-sm text-gray-500 text-center">
                 此日期範圍內沒有工作記錄
               </div>

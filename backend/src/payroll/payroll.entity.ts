@@ -6,6 +6,8 @@ import {
 import { Employee } from '../employees/employee.entity';
 import { CompanyProfile } from '../company-profiles/company-profile.entity';
 import { PayrollItem } from './payroll-item.entity';
+import { PayrollWorkLog } from './payroll-work-log.entity';
+import { PayrollAdjustment } from './payroll-adjustment.entity';
 
 @Entity('payrolls')
 export class Payroll {
@@ -77,6 +79,10 @@ export class Payroll {
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   mpf_employer: number;
 
+  // 自定義調整總額
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  adjustment_total: number;
+
   // 淨額
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   net_amount: number;
@@ -103,4 +109,10 @@ export class Payroll {
 
   @OneToMany(() => PayrollItem, (item) => item.payroll, { cascade: true })
   items: PayrollItem[];
+
+  @OneToMany(() => PayrollWorkLog, (pwl) => pwl.payroll, { cascade: true })
+  payroll_work_logs: PayrollWorkLog[];
+
+  @OneToMany(() => PayrollAdjustment, (adj) => adj.payroll, { cascade: true })
+  adjustments: PayrollAdjustment[];
 }
