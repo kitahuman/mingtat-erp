@@ -27,6 +27,11 @@ export class PartnersController {
     return this.service.create(dto);
   }
 
+  @Post('bulk')
+  bulkCreate(@Body() dtos: any[]) {
+    return this.service.bulkCreate(dtos);
+  }
+
   @Put(':id')
   update(@Param('id') id: number, @Body() dto: any) {
     return this.service.update(Number(id), dto);
