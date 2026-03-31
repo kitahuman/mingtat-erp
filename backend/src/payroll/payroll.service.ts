@@ -939,9 +939,36 @@ export class PayrollService {
   // ══════════════════════════════════════════════════════════════
 
   /**
-   * 為工作記錄添加價格資訊（從 rate card 取價）
+   * 為工作記錄添加價格資訊（從 rate card 取價）- 批量優化版本
    */
   private async enrichWorkLogsWithPrice(workLogs: WorkLog[]): Promise<any[]> {
+    if (workLogs.length === 0) return [];
+
+    // 批量加載所有相關客戶的 rate cards（只查一次）
+    const clientIds = [...new Set(workLogs.filter(wl => wl.client_id).map(wl => wl.client_id!))];
+    const companyProfileIds = [...new Set(workLogs.filter(wl => wl.company_profile_id).map(wl => wl.company_profile_id!))];
+
+    // 批量加載 company profiles
+    const companyProfileMap = new Map<number, number>(); // cpId -> companyId
+    if (companyProfileIds.length > 0) {
+      const cps = await this.companyProfileRepo.findBy({ id: In(companyProfileIds) });
+      for (const cp of cps) {
+        if ((cp as any).company_id) {
+          companyProfileMap.set(cp.id, (cp as any).company_id);
+        }
+      }
+    }
+
+    // 批量加載所有相關 rate cards
+    let allRateCards: RateCard[] = [];
+    if (clientIds.length > 0) {
+      allRateCards = await this.rateCardRepo.createQueryBuilder('rc')
+        .where('rc.status = :status', { status: 'active' })
+        .andWhere('rc.client_id IN (:...clientIds)', { clientIds })
+        .orderBy('rc.effective_date', 'DESC')
+        .getMany();
+    }
+
     const result: any[] = [];
 
     for (const wl of workLogs) {
@@ -959,18 +986,31 @@ export class PayrollService {
         enriched._price_match_note = wl.price_match_note;
         enriched._line_amount = rate * qty;
         enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
-      } else {
-        // Try to match from rate card
-        const matchResult = await this.matchRateCardForWorkLog(wl);
-        if (matchResult) {
-          const rate = matchResult.rate;
+      } else if (wl.client_id) {
+        // Match in memory from pre-loaded rate cards
+        const companyId = wl.company_profile_id ? (companyProfileMap.get(wl.company_profile_id) ?? null) : null;
+        const tonnageNum = wl.tonnage ? wl.tonnage.replace('噸', '') : null;
+        const clientCards = allRateCards.filter(rc => rc.client_id === wl.client_id);
+
+        const card = this.tryMatchRateCardInMemory(
+          clientCards,
+          companyId,
+          wl.quotation_id,
+          wl.machine_type,
+          tonnageNum,
+          wl.start_location,
+          wl.end_location,
+        );
+
+        if (card) {
+          const { rate, unit } = this.resolveRate(card, wl.day_night);
           const qty = Number(wl.quantity) || 1;
-          enriched._matched_rate_card_id = matchResult.card.id;
+          enriched._matched_rate_card_id = card.id;
           enriched._matched_rate = rate;
-          enriched._matched_unit = matchResult.unit;
-          enriched._matched_ot_rate = matchResult.card.ot_rate;
+          enriched._matched_unit = unit;
+          enriched._matched_ot_rate = card.ot_rate;
           enriched._price_match_status = 'matched';
-          enriched._price_match_note = `匹配到：${matchResult.card.name || matchResult.card.contract_no || `RateCard#${matchResult.card.id}`}`;
+          enriched._price_match_note = `匹配到：${(card as any).name || card.contract_no || `RateCard#${card.id}`}`;
           enriched._line_amount = rate * qty;
         } else {
           enriched._matched_rate_card_id = null;
@@ -982,6 +1022,15 @@ export class PayrollService {
           enriched._line_amount = 0;
         }
         enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
+      } else {
+        enriched._matched_rate_card_id = null;
+        enriched._matched_rate = null;
+        enriched._matched_unit = null;
+        enriched._matched_ot_rate = null;
+        enriched._price_match_status = 'unmatched';
+        enriched._price_match_note = '未設定（無客戶）';
+        enriched._line_amount = 0;
+        enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
       }
 
       result.push(enriched);
@@ -991,7 +1040,56 @@ export class PayrollService {
   }
 
   /**
-   * 為單個工作記錄匹配 rate card
+   * 在內存中匹配 rate card（批量優化，避免 N+1 查詢）
+   */
+  private tryMatchRateCardInMemory(
+    clientCards: RateCard[],
+    companyId: number | null,
+    quotationId: number | null,
+    vehicleType: string | null,
+    tonnage: string | null,
+    origin: string | null,
+    destination: string | null,
+  ): RateCard | null {
+    const attempts = [
+      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
+      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
+      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: false, useRoute: false },
+      { useCompany: true, useQuotation: true, useVehicle: false, useTonnage: false, useRoute: false },
+      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: true, useRoute: true },
+      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: false, useRoute: false },
+      { useCompany: false, useQuotation: false, useVehicle: false, useTonnage: false, useRoute: false },
+    ];
+
+    for (const attempt of attempts) {
+      const matched = clientCards.filter(rc => {
+        if (attempt.useCompany && companyId && (rc as any).company_id !== companyId) return false;
+        if (attempt.useQuotation && quotationId && (rc as any).source_quotation_id !== quotationId) return false;
+        if (attempt.useVehicle && vehicleType && rc.vehicle_type !== vehicleType) return false;
+        if (attempt.useTonnage && tonnage && rc.vehicle_tonnage !== tonnage) return false;
+        if (attempt.useRoute) {
+          if (origin && rc.origin && !rc.origin.toLowerCase().includes(origin.toLowerCase())) return false;
+          if (destination && rc.destination && !rc.destination.toLowerCase().includes(destination.toLowerCase())) return false;
+        }
+        return true;
+      });
+
+      // Sort by effective_date DESC and take first
+      if (matched.length > 0) {
+        matched.sort((a, b) => {
+          const da = (a as any).effective_date || '';
+          const db = (b as any).effective_date || '';
+          return db.localeCompare(da);
+        });
+        return matched[0];
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 為單個工作記錄匹配 rate card（保留供其他地方使用）
    */
   private async matchRateCardForWorkLog(wl: WorkLog): Promise<{ card: RateCard; rate: number; unit: string } | null> {
     if (!wl.client_id) return null;
@@ -1023,7 +1121,7 @@ export class PayrollService {
   }
 
   /**
-   * 多層次模糊匹配 rate card
+   * 多層次模糊匹配 rate card（保留供 matchRateCardForWorkLog 使用）
    */
   private async tryMatchRateCard(
     clientId: number,
