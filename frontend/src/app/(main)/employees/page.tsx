@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
@@ -17,6 +18,7 @@ const roleOptions = [
 export default function EmployeesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { hasMinRole } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -66,6 +68,10 @@ export default function EmployeesPage() {
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
+  const filterExpiry = (v: string) => {
+    if (!v) return '-';
+    return new Date(v).toLocaleDateString('zh-HK');
+  };
 
   const columns = [
     { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', render: (v: string) => v || '-' },
@@ -76,14 +82,14 @@ export default function EmployeesPage() {
       <span className={v === 'admin' ? 'badge-blue' : v === 'driver' ? 'badge-green' : v === 'operator' ? 'badge-yellow' : 'badge-gray'}>
         {roleLabels[v] || v}
       </span>
-    )},
-    { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
-    { key: 'green_card_expiry', label: '平安卡到期', sortable: true, render: renderExpiry },
-    { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, render: renderExpiry },
-    { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, render: renderExpiry },
+    ), filterRender: (v: string) => roleLabels[v] || v },
+    { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'green_card_expiry', label: '平安卡到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : 'badge-red'}>{v === 'active' ? '在職' : '離職'}</span>
-    )},
+    ), filterRender: (v: string) => v === 'active' ? '在職' : '離職' },
   ];
 
   return (
@@ -93,7 +99,9 @@ export default function EmployeesPage() {
           <h1 className="text-2xl font-bold text-gray-900">員工管理</h1>
           <p className="text-gray-500 mt-1">管理所有員工資料、薪資設定及調動紀錄</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
+        {hasMinRole('clerk') && (
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
+        )}
       </div>
 
       <div className="card">

@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import ColumnFilter from './ColumnFilter';
 
 interface Column {
   key: string;
@@ -7,6 +8,8 @@ interface Column {
   render?: (value: any, row: any) => React.ReactNode;
   className?: string;
   sortable?: boolean;
+  filterable?: boolean;
+  filterRender?: (value: any, row: any) => string;
 }
 
 interface DataTableProps {
@@ -33,7 +36,7 @@ export default function DataTable({
   sortBy, sortOrder, onSort
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const totalPages = Math.ceil(total / limit);
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   const handleSearch = () => {
     onSearch?.(searchTerm);
@@ -47,6 +50,46 @@ export default function DataTable({
       onSort(key, 'ASC');
     }
   };
+
+  const handleFilterChange = (columnKey: string, selectedValues: Set<string> | null) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      if (selectedValues === null) {
+        delete next[columnKey];
+      } else {
+        next[columnKey] = selectedValues;
+      }
+      return next;
+    });
+  };
+
+  // Apply client-side column filters
+  const filteredData = useMemo(() => {
+    const activeFilterKeys = Object.keys(columnFilters);
+    if (activeFilterKeys.length === 0) return data;
+
+    return data.filter(row => {
+      return activeFilterKeys.every(key => {
+        const allowed = columnFilters[key];
+        const col = columns.find(c => c.key === key);
+        const raw = row[key];
+        const display = col?.filterRender
+          ? col.filterRender(raw, row)
+          : (raw != null ? String(raw) : '-');
+        return allowed.has(display);
+      });
+    });
+  }, [data, columnFilters, columns]);
+
+  const filteredTotal = Object.keys(columnFilters).length > 0 ? filteredData.length : total;
+  const totalPages = Math.ceil(filteredTotal / limit);
+
+  // Calculate display range
+  const startRow = filteredTotal === 0 ? 0 : (page - 1) * limit + 1;
+  const endRow = Math.min(page * limit, filteredTotal);
+
+  // Check if any column filter is active
+  const hasActiveFilters = Object.keys(columnFilters).length > 0;
 
   return (
     <div>
@@ -69,6 +112,19 @@ export default function DataTable({
         {actions}
       </div>
 
+      {/* Active filter indicator */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 mb-3 text-xs text-gray-500">
+          <span>已篩選 {filteredData.length} / {total} 筆</span>
+          <button
+            onClick={() => setColumnFilters({})}
+            className="text-primary-600 hover:text-primary-800 font-medium"
+          >
+            清除所有篩選
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full text-sm">
@@ -87,6 +143,15 @@ export default function DataTable({
                         {sortBy === col.key ? (sortOrder === 'ASC' ? '\u25B2' : '\u25BC') : '\u25B4\u25BE'}
                       </span>
                     )}
+                    {col.filterable !== false && (
+                      <ColumnFilter
+                        columnKey={col.key}
+                        data={data}
+                        activeFilters={columnFilters}
+                        onFilterChange={handleFilterChange}
+                        renderValue={col.filterRender}
+                      />
+                    )}
                   </div>
                 </th>
               ))}
@@ -97,10 +162,10 @@ export default function DataTable({
               <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">
                 <div className="flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
               </td></tr>
-            ) : data.length === 0 ? (
+            ) : filteredData.length === 0 ? (
               <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">暫無資料</td></tr>
             ) : (
-              data.map((row, i) => (
+              filteredData.map((row, i) => (
                 <tr
                   key={row.id || i}
                   onClick={() => onRowClick?.(row)}
@@ -121,7 +186,15 @@ export default function DataTable({
       {/* Pagination */}
       <div className="flex items-center justify-between mt-4">
         <p className="text-sm text-gray-600">
-          共 {total} 筆{totalPages > 1 ? `，第 ${page} / ${totalPages} 頁` : ''}
+          {filteredTotal > 0 ? (
+            <>
+              顯示 {startRow}-{endRow} 筆，共 {filteredTotal} 筆
+              {hasActiveFilters && <span className="text-gray-400">（原始 {total} 筆）</span>}
+              {totalPages > 1 ? `，第 ${page} / ${totalPages} 頁` : ''}
+            </>
+          ) : (
+            '共 0 筆'
+          )}
         </p>
         {totalPages > 1 && (
           <div className="flex gap-1">

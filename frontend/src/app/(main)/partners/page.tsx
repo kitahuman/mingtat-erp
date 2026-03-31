@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { partnersApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
@@ -32,6 +33,7 @@ const emptyForm = {
 
 export default function PartnersPage() {
   const router = useRouter();
+  const { hasMinRole } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -94,7 +96,7 @@ export default function PartnersPage() {
         insurance: 'badge-purple', repair_shop: 'badge-gray', other: 'badge-gray'
       };
       return <span className={colors[v] || 'badge-gray'}>{typeLabels[v] || v}</span>;
-    }},
+    }, filterRender: (v: string) => typeLabels[v] || v },
     { key: 'subsidiaries', label: '旗下公司', render: (v: string[] | string) => {
       if (!v) return '-';
       const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
@@ -106,6 +108,10 @@ export default function PartnersPage() {
           ))}
         </div>
       );
+    }, filterRender: (v: string[] | string) => {
+      if (!v) return '-';
+      const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
+      return arr.length > 0 ? arr.join(', ') : '-';
     }},
     { key: 'contact_person', label: '聯絡人', render: (v: string) => v || '-' },
     { key: 'phone', label: '電話', render: (v: string) => v || '-' },
@@ -118,7 +124,9 @@ export default function PartnersPage() {
           <h1 className="text-2xl font-bold text-gray-900">合作單位管理</h1>
           <p className="text-gray-500 mt-1">管理客戶、供應商、判頭及其他合作夥伴</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增合作單位</button>
+        {hasMinRole('clerk') && (
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增合作單位</button>
+        )}
       </div>
 
       <div className="card">

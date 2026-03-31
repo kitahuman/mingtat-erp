@@ -33,13 +33,18 @@ export default function CompanyProfilesPage() {
     setPage(1);
   };
 
+  const filterExpiry = (v: string) => {
+    if (!v) return '-';
+    return new Date(v).toLocaleDateString('zh-HK');
+  };
+
   const columns = [
     { key: 'code', label: '代碼', sortable: true, render: (v: string) => <span className="font-mono font-bold text-primary-600">{v}</span> },
     { key: 'chinese_name', label: '公司中文名', sortable: true, render: (v: string) => <span className="font-medium">{v}</span> },
     { key: 'english_name', label: '公司英文名', sortable: true, render: (v: string) => <span className="text-sm text-gray-600">{v || '-'}</span> },
     { key: 'br_number', label: '商業登記證號碼', render: (v: string) => v || '-' },
-    { key: 'br_expiry_date', label: '商業登記屆滿日', sortable: true, render: (v: string) => <ExpiryBadge date={v} /> },
-    { key: 'subcontractor_reg_expiry', label: '分包商註冊到期', sortable: true, render: (v: string) => v ? <ExpiryBadge date={v} /> : <span className="text-gray-400">-</span> },
+    { key: 'br_expiry_date', label: '商業登記屆滿日', sortable: true, render: (v: string) => <ExpiryBadge date={v} />, filterRender: filterExpiry },
+    { key: 'subcontractor_reg_expiry', label: '分包商註冊到期', sortable: true, render: (v: string) => v ? <ExpiryBadge date={v} /> : <span className="text-gray-400">-</span>, filterRender: filterExpiry },
   ];
 
   return (

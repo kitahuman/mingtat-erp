@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { machineryApi, companiesApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
@@ -11,6 +12,7 @@ const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶
 export default function MachineryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { hasMinRole } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -63,21 +65,25 @@ export default function MachineryPage() {
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
+  const filterExpiry = (v: string) => {
+    if (!v) return '-';
+    return new Date(v).toLocaleDateString('zh-HK');
+  };
 
   const columns = [
     { key: 'machine_code', label: '編號', sortable: true, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'machine_type', label: '類型', sortable: true },
     { key: 'brand', label: '品牌', sortable: true, render: (v: string) => v || '-' },
     { key: 'model', label: '型號', sortable: true, render: (v: string) => v || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-' },
-    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, render: renderExpiry },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry },
+    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
+    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
+    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
       </span>
-    )},
+    ), filterRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
   ];
 
   return (
@@ -87,7 +93,9 @@ export default function MachineryPage() {
           <h1 className="text-2xl font-bold text-gray-900">機械管理</h1>
           <p className="text-gray-500 mt-1">管理所有機械設備資料及過戶紀錄</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
+        {hasMinRole('clerk') && (
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
+        )}
       </div>
 
       <div className="card">

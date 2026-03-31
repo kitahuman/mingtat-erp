@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { companiesApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
@@ -9,6 +10,7 @@ const typeLabels: Record<string, string> = { internal: '內部公司', client: '
 
 export default function CompaniesPage() {
   const router = useRouter();
+  const { hasMinRole } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -54,11 +56,11 @@ export default function CompaniesPage() {
       <span className={v === 'internal' ? 'badge-blue' : v === 'client' ? 'badge-green' : 'badge-yellow'}>
         {typeLabels[v] || v}
       </span>
-    )},
+    ), filterRender: (v: string) => typeLabels[v] || v },
     { key: 'description', label: '說明', className: 'hidden md:table-cell' },
     { key: 'status', label: '狀態', render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : 'badge-red'}>{v === 'active' ? '啟用' : '停用'}</span>
-    )},
+    ), filterRender: (v: string) => v === 'active' ? '啟用' : '停用' },
   ];
 
   return (
@@ -68,7 +70,9 @@ export default function CompaniesPage() {
           <h1 className="text-2xl font-bold text-gray-900">公司管理</h1>
           <p className="text-gray-500 mt-1">管理集團內部公司、客戶及外判商</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增公司</button>
+        {hasMinRole('clerk') && (
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增公司</button>
+        )}
       </div>
 
       <div className="card">
