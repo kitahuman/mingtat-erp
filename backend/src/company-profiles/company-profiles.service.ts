@@ -1,13 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CompanyProfile } from './company-profile.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class CompanyProfilesService {
-  constructor(
-    @InjectRepository(CompanyProfile) private repo: Repository<CompanyProfile>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'code', 'chinese_name', 'english_name', 'br_expiry_date',
@@ -20,58 +16,59 @@ export class CompanyProfilesService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('cp');
+    const where: any = {};
 
     if (query.search) {
-      qb.andWhere(
-        '(cp.code ILIKE :s OR cp.chinese_name ILIKE :s OR cp.english_name ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.OR = [
+        { code: { contains: query.search, mode: 'insensitive' } },
+        { chinese_name: { contains: query.search, mode: 'insensitive' } },
+        { english_name: { contains: query.search, mode: 'insensitive' } },
+      ];
     }
 
-    const sortBy = this.allowedSortFields.includes(query.sortBy || '')
-      ? query.sortBy!
-      : 'code';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
-    qb.orderBy(`cp.${sortBy}`, sortOrder);
+    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'code';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.companyProfile.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.companyProfile.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const profile = await this.repo.findOne({ where: { id } });
+    const profile = await this.prisma.companyProfile.findUnique({ where: { id } });
     if (!profile) throw new NotFoundException('公司資料不存在');
     return profile;
   }
 
   async findByCode(code: string) {
-    return this.repo.findOne({ where: { code } });
+    return this.prisma.companyProfile.findUnique({ where: { code } });
   }
 
   async simple() {
-    return this.repo.find({
+    return this.prisma.companyProfile.findMany({
       where: { status: 'active' },
-      select: ['id', 'code', 'chinese_name', 'english_name'],
-      order: { code: 'ASC' },
+      select: { id: true, code: true, chinese_name: true, english_name: true },
+      orderBy: { code: 'asc' },
     });
   }
 
-  async create(dto: Partial<CompanyProfile>) {
-    const entity = this.repo.create(dto);
-    return this.repo.save(entity);
+  async create(dto: any) {
+    return this.prisma.companyProfile.create({ data: dto });
   }
 
-  async update(id: number, dto: Partial<CompanyProfile>) {
-    const profile = await this.repo.findOne({ where: { id } });
+  async update(id: number, dto: any) {
+    const profile = await this.prisma.companyProfile.findUnique({ where: { id } });
     if (!profile) throw new NotFoundException('公司資料不存在');
-    const { created_at, updated_at, id: _id, ...updateData } = dto as any;
-    await this.repo.update(id, updateData);
-    return this.repo.findOne({ where: { id } });
+    const { created_at, updated_at, id: _id, ...updateData } = dto;
+    return this.prisma.companyProfile.update({ where: { id }, data: updateData });
   }
 
   async getExpiryAlerts() {
@@ -79,7 +76,9 @@ export class CompanyProfilesService {
     sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
     const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
 
-    const profiles = await this.repo.find({ where: { status: 'active' as any } });
+    const profiles = await this.prisma.companyProfile.findMany({
+      where: { status: 'active' },
+    });
     const alerts: any[] = [];
 
     for (const p of profiles) {

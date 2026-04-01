@@ -1,13 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Employee } from './employee.entity';
-import { EmployeeSalarySetting } from './employee-salary-setting.entity';
-import { EmployeeTransfer } from './employee-transfer.entity';
+import { PrismaModule } from '../prisma/prisma.module';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Employee, EmployeeSalarySetting, EmployeeTransfer])],
+  imports: [PrismaModule],
   providers: [EmployeesService],
   controllers: [EmployeesController],
   exports: [EmployeesService],

@@ -9,19 +9,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { User } from '../auth/user.entity';
+import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('profile')
 @UseGuards(AuthGuard('jwt'))
 export class ProfileController {
-  constructor(
-    @InjectRepository(User) private userRepo: Repository<User>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   /**
    * GET /api/profile
@@ -29,7 +25,7 @@ export class ProfileController {
    */
   @Get()
   async getProfile(@Request() req: any) {
-    const user = await this.userRepo.findOne({ where: { id: req.user.sub } });
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user) throw new UnauthorizedException();
     const { password, ...result } = user;
     return result;
@@ -41,14 +37,15 @@ export class ProfileController {
    */
   @Put()
   async updateProfile(@Request() req: any, @Body() dto: UpdateProfileDto) {
-    const user = await this.userRepo.findOne({ where: { id: req.user.sub } });
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user) throw new UnauthorizedException();
 
-    if (dto.displayName !== undefined) user.displayName = dto.displayName;
-    if (dto.email !== undefined) user.email = dto.email ?? null;
-    if (dto.phone !== undefined) user.phone = dto.phone ?? null;
+    const data: any = {};
+    if (dto.displayName !== undefined) data.displayName = dto.displayName;
+    if (dto.email !== undefined) data.email = dto.email ?? null;
+    if (dto.phone !== undefined) data.phone = dto.phone ?? null;
 
-    const saved = await this.userRepo.save(user);
+    const saved = await this.prisma.user.update({ where: { id: req.user.sub }, data });
     const { password, ...result } = saved;
     return result;
   }
@@ -59,7 +56,7 @@ export class ProfileController {
    */
   @Post('change-password')
   async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
-    const user = await this.userRepo.findOne({ where: { id: req.user.sub } });
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user) throw new UnauthorizedException();
 
     const valid = await bcrypt.compare(dto.oldPassword, user.password);
@@ -67,8 +64,10 @@ export class ProfileController {
       throw new UnauthorizedException('舊密碼不正確');
     }
 
-    user.password = await bcrypt.hash(dto.newPassword, 10);
-    await this.userRepo.save(user);
+    await this.prisma.user.update({
+      where: { id: req.user.sub },
+      data: { password: await bcrypt.hash(dto.newPassword, 10) },
+    });
 
     return { message: '密碼已成功修改' };
   }

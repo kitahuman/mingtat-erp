@@ -1,39 +1,12 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { PayrollController } from './payroll.controller';
+import { PrismaModule } from '../prisma/prisma.module';
 import { PayrollService } from './payroll.service';
-import { Payroll } from './payroll.entity';
-import { PayrollItem } from './payroll-item.entity';
-import { PayrollWorkLog } from './payroll-work-log.entity';
-import { PayrollAdjustment } from './payroll-adjustment.entity';
-import { PayrollDailyAllowance } from './payroll-daily-allowance.entity';
-import { Employee } from '../employees/employee.entity';
-import { EmployeeSalarySetting } from '../employees/employee-salary-setting.entity';
-import { WorkLog } from '../work-logs/work-log.entity';
-import { FleetRateCard } from '../fleet-rate-cards/fleet-rate-card.entity';
-import { CompanyProfile } from '../company-profiles/company-profile.entity';
-import { RateCard } from '../rate-cards/rate-card.entity';
-import { Partner } from '../partners/partner.entity';
+import { PayrollController } from './payroll.controller';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      Payroll,
-      PayrollItem,
-      PayrollWorkLog,
-      PayrollAdjustment,
-      PayrollDailyAllowance,
-      Employee,
-      EmployeeSalarySetting,
-      WorkLog,
-      FleetRateCard,
-      CompanyProfile,
-      RateCard,
-      Partner,
-    ]),
-  ],
-  controllers: [PayrollController],
+  imports: [PrismaModule],
   providers: [PayrollService],
+  controllers: [PayrollController],
   exports: [PayrollService],
 })
 export class PayrollModule {}

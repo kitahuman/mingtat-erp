@@ -1,13 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Vehicle } from './vehicle.entity';
-import { VehiclePlateHistory } from './vehicle-plate-history.entity';
-import { VehicleTransfer } from './vehicle-transfer.entity';
+import { PrismaModule } from '../prisma/prisma.module';
 import { VehiclesService } from './vehicles.service';
 import { VehiclesController } from './vehicles.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vehicle, VehiclePlateHistory, VehicleTransfer])],
+  imports: [PrismaModule],
   providers: [VehiclesService],
   controllers: [VehiclesController],
   exports: [VehiclesService],

@@ -1,12 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AuthService } from './auth/auth.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Company } from './companies/company.entity';
-import { Employee } from './employees/employee.entity';
-import { Vehicle } from './vehicles/vehicle.entity';
-import { Machinery } from './machinery/machinery.entity';
-import { EmployeeSalarySetting } from './employees/employee-salary-setting.entity';
+import { PrismaService } from './prisma/prisma.service';
 
 async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);
@@ -15,14 +10,10 @@ async function seed() {
   const authService = app.get(AuthService);
   await authService.seedAdmin();
 
-  const companyRepo = app.get(getRepositoryToken(Company));
-  const employeeRepo = app.get(getRepositoryToken(Employee));
-  const vehicleRepo = app.get(getRepositoryToken(Vehicle));
-  const machineryRepo = app.get(getRepositoryToken(Machinery));
-  const salaryRepo = app.get(getRepositoryToken(EmployeeSalarySetting));
+  const prisma = app.get(PrismaService);
 
   // Check if already seeded
-  const existingCompanies = await companyRepo.count();
+  const existingCompanies = await prisma.company.count();
   if (existingCompanies > 0) {
     console.log('Data already seeded, skipping...');
     await app.close();
@@ -30,19 +21,25 @@ async function seed() {
   }
 
   // Seed companies
-  const companies = await companyRepo.save([
+  const companyData = [
     { name: '明達運輸公司', name_en: 'DTC Transport Co.', company_type: 'internal', internal_prefix: 'DTC', description: '對外承接工程', status: 'active' },
     { name: '明達建築有限公司', name_en: 'DCL Construction Ltd.', company_type: 'internal', internal_prefix: 'DCL', description: '承包工程、持有機械', status: 'active' },
     { name: '卓嵐發展有限公司', name_en: 'CNL Development Ltd.', company_type: 'internal', internal_prefix: 'CNL', description: '聘請員工', status: 'active' },
     { name: '明創運輸有限公司', name_en: 'MCL Transport Ltd.', company_type: 'internal', internal_prefix: 'MCL', description: '持有車輛', status: 'active' },
     { name: '明達運輸有限公司', name_en: 'DTL Transport Ltd.', company_type: 'internal', internal_prefix: 'DTL', description: '持有車輛', status: 'active' },
-  ]);
+  ];
+
+  const companies: any[] = [];
+  for (const c of companyData) {
+    const saved = await prisma.company.create({ data: c });
+    companies.push(saved);
+  }
   console.log(`Seeded ${companies.length} companies`);
 
-  const cnl = companies.find(c => c.internal_prefix === 'CNL')!;
-  const mcl = companies.find(c => c.internal_prefix === 'MCL')!;
-  const dtl = companies.find(c => c.internal_prefix === 'DTL')!;
-  const dcl = companies.find(c => c.internal_prefix === 'DCL')!;
+  const cnl = companies.find((c: any) => c.internal_prefix === 'CNL')!;
+  const mcl = companies.find((c: any) => c.internal_prefix === 'MCL')!;
+  const dtl = companies.find((c: any) => c.internal_prefix === 'DTL')!;
+  const dcl = companies.find((c: any) => c.internal_prefix === 'DCL')!;
 
   // Seed employees (under CNL)
   const employeeData = [
@@ -80,24 +77,31 @@ async function seed() {
     { name_zh: '李敏區', role: 'worker', emp_code: 'E032' },
   ];
 
-  const employees = await employeeRepo.save(
-    employeeData.map(e => ({ ...e, company_id: cnl.id, status: 'active', join_date: '2024-01-01' }))
-  );
+  const employees: any[] = [];
+  for (const e of employeeData) {
+    const saved = await prisma.employee.create({
+      data: { ...e, company_id: cnl.id, status: 'active', join_date: '2024-01-01' },
+    });
+    employees.push(saved);
+  }
   console.log(`Seeded ${employees.length} employees`);
 
   // Seed salary settings for all employees
-  const salarySettings = employees.map(e => ({
-    employee_id: e.id,
-    effective_date: '2024-01-01',
-    base_salary: e.role === 'admin' ? 25000 : e.role === 'driver' ? 18000 : e.role === 'operator' ? 16000 : 14000,
-    salary_type: 'monthly',
-    allowance_night: 200,
-    allowance_rent: e.role === 'driver' ? 500 : 0,
-    allowance_3runway: 0,
-    ot_rate_standard: e.role === 'admin' ? 150 : e.role === 'driver' ? 120 : 100,
-  }));
-  await salaryRepo.save(salarySettings);
-  console.log(`Seeded ${salarySettings.length} salary settings`);
+  for (const e of employees) {
+    await prisma.employeeSalarySetting.create({
+      data: {
+        employee_id: e.id,
+        effective_date: '2024-01-01',
+        base_salary: e.role === 'admin' ? 25000 : e.role === 'driver' ? 18000 : e.role === 'operator' ? 16000 : 14000,
+        salary_type: 'monthly',
+        allowance_night: 200,
+        allowance_rent: e.role === 'driver' ? 500 : 0,
+        allowance_3runway: 0,
+        ot_rate_standard: e.role === 'admin' ? 150 : e.role === 'driver' ? 120 : 100,
+      },
+    });
+  }
+  console.log(`Seeded ${employees.length} salary settings`);
 
   // Seed MCL vehicles
   const mclVehicles = [
@@ -119,7 +123,6 @@ async function seed() {
     { plate_number: 'XB6673', vehicle_type: '輕型貨車' },
   ];
 
-  // Seed DTL vehicles
   const dtlVehicles = [
     { plate_number: 'EM987', vehicle_type: '泥頭車', tonnage: 30 },
     { plate_number: 'JR981', vehicle_type: '泥頭車', tonnage: 30 },
@@ -134,12 +137,17 @@ async function seed() {
     { plate_number: 'TN8808', vehicle_type: '領航車' },
   ];
 
-  const allVehicles = [
+  const allVehicleData = [
     ...mclVehicles.map(v => ({ ...v, owner_company_id: mcl.id, status: 'active' })),
     ...dtlVehicles.map(v => ({ ...v, owner_company_id: dtl.id, status: 'active' })),
   ];
-  const vehicles = await vehicleRepo.save(allVehicles);
-  console.log(`Seeded ${vehicles.length} vehicles`);
+
+  let vehicleCount = 0;
+  for (const v of allVehicleData) {
+    await prisma.vehicle.create({ data: v as any });
+    vehicleCount++;
+  }
+  console.log(`Seeded ${vehicleCount} vehicles`);
 
   // Seed machinery (under DCL)
   const machineryData = [
@@ -167,10 +175,14 @@ async function seed() {
     { machine_code: 'DC22', machine_type: '履帶式裝載機', brand: 'Canycom', model: 'S160', tonnage: 0.6 },
   ];
 
-  const machineries = await machineryRepo.save(
-    machineryData.map(m => ({ ...m, owner_company_id: dcl.id, status: 'active' }))
-  );
-  console.log(`Seeded ${machineries.length} machinery`);
+  let machineryCount = 0;
+  for (const m of machineryData) {
+    await prisma.machinery.create({
+      data: { ...m, owner_company_id: dcl.id, status: 'active' } as any,
+    });
+    machineryCount++;
+  }
+  console.log(`Seeded ${machineryCount} machinery`);
 
   console.log('Seed completed!');
   await app.close();

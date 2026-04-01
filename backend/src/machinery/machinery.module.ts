@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Machinery } from './machinery.entity';
-import { MachineryTransfer } from './machinery-transfer.entity';
+import { PrismaModule } from '../prisma/prisma.module';
 import { MachineryService } from './machinery.service';
 import { MachineryController } from './machinery.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Machinery, MachineryTransfer])],
+  imports: [PrismaModule],
   providers: [MachineryService],
   controllers: [MachineryController],
   exports: [MachineryService],

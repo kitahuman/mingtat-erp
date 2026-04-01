@@ -1,71 +1,61 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CustomField } from './custom-field.entity';
-import { CustomFieldValue } from './custom-field-value.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class CustomFieldsService {
-  constructor(
-    @InjectRepository(CustomField) private fieldRepo: Repository<CustomField>,
-    @InjectRepository(CustomFieldValue) private valueRepo: Repository<CustomFieldValue>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ========== Custom Field CRUD ==========
 
   async findFields(query: { module?: string }) {
-    const qb = this.fieldRepo.createQueryBuilder('cf');
-    if (query.module) {
-      qb.andWhere('cf.module = :m', { m: query.module });
-    }
-    qb.orderBy('cf.module', 'ASC').addOrderBy('cf.sort_order', 'ASC').addOrderBy('cf.id', 'ASC');
-    return qb.getMany();
+    const where: any = {};
+    if (query.module) where.module = query.module;
+
+    return this.prisma.customField.findMany({
+      where,
+      orderBy: [{ module: 'asc' }, { sort_order: 'asc' }, { id: 'asc' }],
+    });
   }
 
   async findOneField(id: number) {
-    const field = await this.fieldRepo.findOne({ where: { id } });
+    const field = await this.prisma.customField.findUnique({ where: { id } });
     if (!field) throw new NotFoundException('自定義欄位不存在');
     return field;
   }
 
-  async createField(dto: Partial<CustomField>) {
-    const entity = this.fieldRepo.create(dto);
-    return this.fieldRepo.save(entity);
+  async createField(dto: any) {
+    return this.prisma.customField.create({ data: dto });
   }
 
-  async updateField(id: number, dto: Partial<CustomField>) {
-    const field = await this.fieldRepo.findOne({ where: { id } });
+  async updateField(id: number, dto: any) {
+    const field = await this.prisma.customField.findUnique({ where: { id } });
     if (!field) throw new NotFoundException('自定義欄位不存在');
-    const { created_at, updated_at, id: _id, ...updateData } = dto as any;
-    await this.fieldRepo.update(id, updateData);
-    return this.fieldRepo.findOne({ where: { id } });
+    const { created_at, updated_at, id: _id, ...updateData } = dto;
+    return this.prisma.customField.update({ where: { id }, data: updateData });
   }
 
   async deleteField(id: number) {
-    const field = await this.fieldRepo.findOne({ where: { id } });
+    const field = await this.prisma.customField.findUnique({ where: { id } });
     if (!field) throw new NotFoundException('自定義欄位不存在');
     // Delete all values for this field
-    await this.valueRepo.delete({ custom_field_id: id });
-    await this.fieldRepo.delete(id);
+    await this.prisma.customFieldValue.deleteMany({ where: { custom_field_id: id } });
+    await this.prisma.customField.delete({ where: { id } });
     return { deleted: true };
   }
 
   // ========== Custom Field Value CRUD ==========
 
   async findValues(query: { module?: string; entityId?: number; customFieldId?: number }) {
-    const qb = this.valueRepo.createQueryBuilder('cfv')
-      .leftJoinAndSelect('cfv.custom_field', 'cf');
-    if (query.module) {
-      qb.andWhere('cfv.module = :m', { m: query.module });
-    }
-    if (query.entityId) {
-      qb.andWhere('cfv.entity_id = :eid', { eid: query.entityId });
-    }
-    if (query.customFieldId) {
-      qb.andWhere('cfv.custom_field_id = :cfid', { cfid: query.customFieldId });
-    }
-    qb.orderBy('cf.sort_order', 'ASC').addOrderBy('cf.id', 'ASC');
-    return qb.getMany();
+    const where: any = {};
+    if (query.module) where.module = query.module;
+    if (query.entityId) where.entity_id = query.entityId;
+    if (query.customFieldId) where.custom_field_id = query.customFieldId;
+
+    return this.prisma.customFieldValue.findMany({
+      where,
+      include: { custom_field: true },
+      orderBy: [{ custom_field: { sort_order: 'asc' } }, { custom_field: { id: 'asc' } }],
+    });
   }
 
   async batchUpdateValues(data: {
@@ -73,10 +63,10 @@ export class CustomFieldsService {
     entityId: number;
     values: { customFieldId: number; value: string }[];
   }) {
-    const results: CustomFieldValue[] = [];
+    const results: any[] = [];
 
     for (const item of data.values) {
-      let existing = await this.valueRepo.findOne({
+      const existing = await this.prisma.customFieldValue.findFirst({
         where: {
           custom_field_id: item.customFieldId,
           entity_id: data.entityId,
@@ -85,16 +75,21 @@ export class CustomFieldsService {
       });
 
       if (existing) {
-        existing.value = item.value;
-        results.push(await this.valueRepo.save(existing));
-      } else {
-        const newVal = this.valueRepo.create({
-          custom_field_id: item.customFieldId,
-          entity_id: data.entityId,
-          module: data.module,
-          value: item.value,
+        const updated = await this.prisma.customFieldValue.update({
+          where: { id: existing.id },
+          data: { value: item.value },
         });
-        results.push(await this.valueRepo.save(newVal));
+        results.push(updated);
+      } else {
+        const created = await this.prisma.customFieldValue.create({
+          data: {
+            custom_field_id: item.customFieldId,
+            entity_id: data.entityId,
+            module: data.module,
+            value: item.value,
+          },
+        });
+        results.push(created);
       }
     }
 
@@ -105,7 +100,7 @@ export class CustomFieldsService {
 
   async getExpiryAlerts() {
     // Find all date fields with expiry alert enabled
-    const alertFields = await this.fieldRepo.find({
+    const alertFields = await this.prisma.customField.findMany({
       where: { field_type: 'date', has_expiry_alert: true, is_active: true },
     });
 
@@ -118,7 +113,7 @@ export class CustomFieldsService {
     const alerts: any[] = [];
 
     for (const field of alertFields) {
-      const values = await this.valueRepo.find({
+      const values = await this.prisma.customFieldValue.findMany({
         where: { custom_field_id: field.id },
       });
 

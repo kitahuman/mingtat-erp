@@ -1,18 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Project } from './project.entity';
-import { ProjectSequence } from './project-sequence.entity';
-import { Company } from '../companies/company.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(
-    @InjectRepository(Project) private repo: Repository<Project>,
-    @InjectRepository(ProjectSequence) private seqRepo: Repository<ProjectSequence>,
-    @InjectRepository(Company) private companyRepo: Repository<Company>,
-    private dataSource: DataSource,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'project_no', 'project_name', 'status', 'start_date', 'end_date', 'created_at',
@@ -23,7 +14,7 @@ export class ProjectsService {
    * 序號每年重置，兩位數字（01-99）
    */
   async generateProjectNo(companyId: number): Promise<string> {
-    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company || !company.internal_prefix) {
       throw new NotFoundException('公司不存在或未設定前綴');
     }
@@ -31,19 +22,23 @@ export class ProjectsService {
     const prefix = company.internal_prefix;
     const year = String(new Date().getFullYear());
 
-    return await this.dataSource.transaction(async (manager) => {
-      let seq = await manager.findOne(ProjectSequence, {
+    return await this.prisma.$transaction(async (tx) => {
+      let seq = await tx.projectSequence.findFirst({
         where: { prefix, year },
       });
 
       if (!seq) {
-        seq = manager.create(ProjectSequence, { prefix, year, last_seq: 0 });
+        seq = await tx.projectSequence.create({
+          data: { prefix, year, last_seq: 0 },
+        });
       }
 
-      seq.last_seq += 1;
-      await manager.save(seq);
+      const updated = await tx.projectSequence.update({
+        where: { id: seq.id },
+        data: { last_seq: seq.last_seq + 1 },
+      });
 
-      const seqStr = String(seq.last_seq).padStart(2, '0');
+      const seqStr = String(updated.last_seq).padStart(2, '0');
       return `${prefix}-${year}-P${seqStr}`;
     });
   }
@@ -55,69 +50,76 @@ export class ProjectsService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('p')
-      .leftJoinAndSelect('p.company', 'company')
-      .leftJoinAndSelect('p.client', 'client');
+    const where: any = {};
 
+    if (query.company_id) where.company_id = Number(query.company_id);
+    if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.status) where.status = query.status;
     if (query.search) {
-      qb.andWhere(
-        '(p.project_no ILIKE :s OR p.project_name ILIKE :s OR p.address ILIKE :s OR client.name ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.OR = [
+        { project_no: { contains: query.search, mode: 'insensitive' } },
+        { project_name: { contains: query.search, mode: 'insensitive' } },
+        { address: { contains: query.search, mode: 'insensitive' } },
+        { client: { name: { contains: query.search, mode: 'insensitive' } } },
+      ];
     }
-    if (query.company_id) qb.andWhere('p.company_id = :cid', { cid: query.company_id });
-    if (query.client_id) qb.andWhere('p.client_id = :clid', { clid: query.client_id });
-    if (query.status) qb.andWhere('p.status = :st', { st: query.status });
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
-    qb.orderBy(`p.${sortBy}`, sortOrder);
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.project.findMany({
+        where,
+        include: { company: true, client: true },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.project.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const project = await this.repo.findOne({
+    const project = await this.prisma.project.findUnique({
       where: { id },
-      relations: ['company', 'client'],
+      include: { company: true, client: true },
     });
     if (!project) throw new NotFoundException('工程項目不存在');
     return project;
   }
 
   async findSimple() {
-    return this.repo.find({
+    return this.prisma.project.findMany({
       where: { status: 'active' },
-      select: ['id', 'project_no', 'project_name', 'company_id', 'client_id'],
-      order: { project_no: 'DESC' },
+      select: { id: true, project_no: true, project_name: true, company_id: true, client_id: true },
+      orderBy: { project_no: 'desc' },
     });
   }
 
   async create(dto: any) {
     const project_no = await this.generateProjectNo(dto.company_id);
-    const entity = this.repo.create({ ...dto, project_no });
-    const saved: Project = await (this.repo.save(entity) as any);
+    const { company, client, ...data } = dto;
+    const saved = await this.prisma.project.create({
+      data: { ...data, project_no },
+    });
     return this.findOne(saved.id);
   }
 
   async update(id: number, dto: any) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
 
     const { company, client, created_at, updated_at, id: _id, project_no, ...updateData } = dto;
-    await this.repo.update(id, updateData);
+    await this.prisma.project.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
 
   async updateStatus(id: number, status: string) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
-    await this.repo.update(id, { status });
+    await this.prisma.project.update({ where: { id }, data: { status } });
     return this.findOne(id);
   }
 }

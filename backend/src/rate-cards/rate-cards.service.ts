@@ -1,15 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { RateCard } from './rate-card.entity';
-import { RateCardOtRate } from './rate-card-ot-rate.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class RateCardsService {
-  constructor(
-    @InjectRepository(RateCard) private repo: Repository<RateCard>,
-    @InjectRepository(RateCardOtRate) private otRepo: Repository<RateCardOtRate>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'name', 'service_type', 'vehicle_tonnage', 'vehicle_type',
@@ -27,78 +21,95 @@ export class RateCardsService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('rc')
-      .leftJoinAndSelect('rc.company', 'company')
-      .leftJoinAndSelect('rc.client', 'client')
-      .leftJoinAndSelect('rc.source_quotation', 'source_quotation')
-      .leftJoinAndSelect('rc.project', 'project');
+    const where: any = {};
 
+    if (query.company_id) where.company_id = Number(query.company_id);
+    if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.service_type) where.service_type = query.service_type;
+    if (query.vehicle_tonnage) where.vehicle_tonnage = query.vehicle_tonnage;
+    if (query.vehicle_type) where.vehicle_type = query.vehicle_type;
+    if (query.status) where.status = query.status;
+    if (query.rate_card_type) where.rate_card_type = query.rate_card_type;
+    if (query.project_id) where.project_id = Number(query.project_id);
+    if (query.source_quotation_id) where.source_quotation_id = Number(query.source_quotation_id);
     if (query.search) {
-      qb.andWhere(
-        '(rc.name ILIKE :s OR rc.description ILIKE :s OR rc.origin ILIKE :s OR rc.destination ILIKE :s OR rc.contract_no ILIKE :s OR client.name ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { description: { contains: query.search, mode: 'insensitive' } },
+        { origin: { contains: query.search, mode: 'insensitive' } },
+        { destination: { contains: query.search, mode: 'insensitive' } },
+        { contract_no: { contains: query.search, mode: 'insensitive' } },
+        { client: { name: { contains: query.search, mode: 'insensitive' } } },
+      ];
     }
-    if (query.company_id) qb.andWhere('rc.company_id = :cid', { cid: query.company_id });
-    if (query.client_id) qb.andWhere('rc.client_id = :clid', { clid: query.client_id });
-    if (query.service_type) qb.andWhere('rc.service_type = :st', { st: query.service_type });
-    if (query.vehicle_tonnage) qb.andWhere('rc.vehicle_tonnage = :vt', { vt: query.vehicle_tonnage });
-    if (query.vehicle_type) qb.andWhere('rc.vehicle_type = :vtp', { vtp: query.vehicle_type });
-    if (query.status) qb.andWhere('rc.status = :status', { status: query.status });
-    if (query.rate_card_type) qb.andWhere('rc.rate_card_type = :rct', { rct: query.rate_card_type });
-    if (query.project_id) qb.andWhere('rc.project_id = :pid', { pid: query.project_id });
-    if (query.source_quotation_id) qb.andWhere('rc.source_quotation_id = :sqid', { sqid: query.source_quotation_id });
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
-    qb.orderBy(`rc.${sortBy}`, sortOrder);
+    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.rateCard.findMany({
+        where,
+        include: { company: true, client: true, source_quotation: true, project: true },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.rateCard.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const rc = await this.repo.findOne({
+    const rc = await this.prisma.rateCard.findUnique({
       where: { id },
-      relations: ['company', 'client', 'ot_rates', 'source_quotation', 'project'],
+      include: { company: true, client: true, ot_rates: true, source_quotation: true, project: true },
     });
     if (!rc) throw new NotFoundException('價目表不存在');
     return rc;
   }
 
   async create(dto: any) {
-    const { ot_rates, ...data } = dto;
-    const entity = this.repo.create(data);
-    const saved: RateCard = await (this.repo.save(entity) as any);
+    const { ot_rates, company, client, source_quotation, project, ...data } = dto;
+    if (data.effective_date) data.effective_date = new Date(data.effective_date);
+    if (data.expiry_date) data.expiry_date = new Date(data.expiry_date);
 
-    if (ot_rates && ot_rates.length > 0) {
-      const otEntities = ot_rates.map((ot: any) =>
-        this.otRepo.create({ ...ot, rate_card_id: saved.id }),
-      );
-      await this.otRepo.save(otEntities);
-    }
-
+    const saved = await this.prisma.rateCard.create({
+      data: {
+        ...data,
+        ot_rates: ot_rates?.length ? {
+          create: ot_rates.map((ot: any) => ({
+            time_slot: ot.time_slot,
+            rate: ot.rate,
+            unit: ot.unit,
+          })),
+        } : undefined,
+      },
+    });
     return this.findOne(saved.id);
   }
 
   async update(id: number, dto: any) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('價目表不存在');
 
     const { ot_rates, company, client, source_quotation, project, created_at, updated_at, id: _id, ...updateData } = dto;
-    await this.repo.update(id, updateData);
+    if (updateData.effective_date) updateData.effective_date = new Date(updateData.effective_date);
+    if (updateData.expiry_date) updateData.expiry_date = new Date(updateData.expiry_date);
+
+    await this.prisma.rateCard.update({ where: { id }, data: updateData });
 
     if (ot_rates !== undefined) {
-      await this.otRepo.delete({ rate_card_id: id });
+      await this.prisma.rateCardOtRate.deleteMany({ where: { rate_card_id: id } });
       if (ot_rates.length > 0) {
-        const otEntities = ot_rates.map((ot: any) =>
-          this.otRepo.create({ ...ot, rate_card_id: id, id: undefined }),
-        );
-        await this.otRepo.save(otEntities);
+        await this.prisma.rateCardOtRate.createMany({
+          data: ot_rates.map((ot: any) => ({
+            rate_card_id: id,
+            time_slot: ot.time_slot,
+            rate: ot.rate,
+            unit: ot.unit,
+          })),
+        });
       }
     }
 

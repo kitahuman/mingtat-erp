@@ -1,19 +1,17 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { User, UserRole } from './user.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User) private userRepo: Repository<User>,
+    private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
 
   async login(username: string, password: string) {
-    const user = await this.userRepo.findOne({ where: { username } });
+    const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('帳號或密碼錯誤');
     }
@@ -23,8 +21,10 @@ export class AuthService {
     }
 
     // Update last login time
-    user.lastLoginAt = new Date();
-    await this.userRepo.save(user);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     const payload = { sub: user.id, username: user.username, role: user.role };
     return {
@@ -43,7 +43,7 @@ export class AuthService {
   }
 
   async getProfile(userId: number) {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     return {
       id: user.id,
@@ -60,23 +60,27 @@ export class AuthService {
   }
 
   async seedAdmin() {
-    const exists = await this.userRepo.findOne({ where: { username: 'admin' } });
+    const exists = await this.prisma.user.findUnique({ where: { username: 'admin' } });
     if (!exists) {
       const hashed = await bcrypt.hash('admin123', 10);
-      await this.userRepo.save({
-        username: 'admin',
-        password: hashed,
-        displayName: '系統管理員',
-        role: UserRole.ADMIN,
-        department: '辦公室',
-        isActive: true,
+      await this.prisma.user.create({
+        data: {
+          username: 'admin',
+          password: hashed,
+          displayName: '系統管理員',
+          role: 'admin',
+          department: '辦公室',
+          isActive: true,
+        },
       });
       console.log('Admin user seeded: admin / admin123');
     } else {
       // Ensure existing admin has admin role
-      if (exists.role !== UserRole.ADMIN) {
-        exists.role = UserRole.ADMIN;
-        await this.userRepo.save(exists);
+      if (exists.role !== 'admin') {
+        await this.prisma.user.update({
+          where: { id: exists.id },
+          data: { role: 'admin' },
+        });
         console.log('Existing admin user upgraded to admin role');
       }
     }

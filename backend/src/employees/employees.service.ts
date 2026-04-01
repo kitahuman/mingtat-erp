@@ -1,17 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Employee } from './employee.entity';
-import { EmployeeSalarySetting } from './employee-salary-setting.entity';
-import { EmployeeTransfer } from './employee-transfer.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class EmployeesService {
-  constructor(
-    @InjectRepository(Employee) private repo: Repository<Employee>,
-    @InjectRepository(EmployeeSalarySetting) private salaryRepo: Repository<EmployeeSalarySetting>,
-    @InjectRepository(EmployeeTransfer) private transferRepo: Repository<EmployeeTransfer>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async findAll(query: {
     page?: number; limit?: number; search?: string;
@@ -20,94 +12,121 @@ export class EmployeesService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('e')
-      .leftJoinAndSelect('e.company', 'c');
+    const where: any = {};
 
+    if (query.role) where.role = query.role;
+    if (query.company_id) where.company_id = Number(query.company_id);
+    if (query.status) where.status = query.status;
     if (query.search) {
-      qb.andWhere('(e.name_zh ILIKE :s OR e.name_en ILIKE :s OR e.emp_code ILIKE :s OR e.phone ILIKE :s OR e.nickname ILIKE :s OR e.id_number ILIKE :s)', { s: `%${query.search}%` });
+      where.OR = [
+        { name_zh: { contains: query.search, mode: 'insensitive' } },
+        { name_en: { contains: query.search, mode: 'insensitive' } },
+        { emp_code: { contains: query.search, mode: 'insensitive' } },
+        { phone: { contains: query.search, mode: 'insensitive' } },
+        { nickname: { contains: query.search, mode: 'insensitive' } },
+        { id_number: { contains: query.search, mode: 'insensitive' } },
+      ];
     }
-    if (query.role) qb.andWhere('e.role = :role', { role: query.role });
-    if (query.company_id) qb.andWhere('e.company_id = :cid', { cid: query.company_id });
-    if (query.status) qb.andWhere('e.status = :st', { st: query.status });
 
     const allowedSortFields = ['emp_code', 'name_zh', 'role', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id', 'join_date', 'termination_date'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
-    qb.orderBy(`e.${sortBy}`, sortOrder);
+    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.employee.findMany({
+        where,
+        include: { company: true },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.employee.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const emp = await this.repo.findOne({
+    const emp = await this.prisma.employee.findUnique({
       where: { id },
-      relations: ['company', 'salary_settings', 'transfers', 'transfers.from_company', 'transfers.to_company'],
+      include: {
+        company: true,
+        salary_settings: { orderBy: { effective_date: 'desc' } },
+        transfers: {
+          include: { from_company: true, to_company: true },
+          orderBy: { transfer_date: 'desc' },
+        },
+      },
     });
     if (!emp) throw new NotFoundException('員工不存在');
-    if (emp.salary_settings) {
-      emp.salary_settings.sort((a, b) => b.effective_date.localeCompare(a.effective_date));
-    }
-    if (emp.transfers) {
-      emp.transfers.sort((a, b) => b.transfer_date.localeCompare(a.transfer_date));
-    }
     return emp;
   }
 
-  async create(dto: Partial<Employee>) {
-    const entity = this.repo.create(dto);
-    return this.repo.save(entity);
+  async create(dto: any) {
+    const { company, salary_settings, transfers, ...data } = dto;
+    const saved = await this.prisma.employee.create({ data });
+    return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: Partial<Employee>) {
-    const { salary_settings, transfers, company, ...updateData } = dto as any;
-    await this.repo.update(id, updateData);
+  async update(id: number, dto: any) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('員工不存在');
+    const { salary_settings, transfers, company, created_at, updated_at, id: _id, ...updateData } = dto;
+    await this.prisma.employee.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
 
   async terminate(id: number, dto: { termination_date: string; termination_reason?: string }) {
-    const emp = await this.repo.findOne({ where: { id } });
+    const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
-    await this.repo.update(id, {
-      status: 'inactive',
-      termination_date: dto.termination_date,
-      termination_reason: dto.termination_reason || undefined,
+    await this.prisma.employee.update({
+      where: { id },
+      data: {
+        status: 'inactive',
+        termination_date: new Date(dto.termination_date),
+        termination_reason: dto.termination_reason || null,
+      },
     });
     return this.findOne(id);
   }
 
   async reinstate(id: number) {
-    const emp = await this.repo.findOne({ where: { id } });
+    const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
-    await this.repo
-      .createQueryBuilder()
-      .update()
-      .set({ status: 'active', termination_date: () => 'NULL', termination_reason: () => 'NULL' })
-      .where('id = :id', { id })
-      .execute();
+    await this.prisma.employee.update({
+      where: { id },
+      data: { status: 'active', termination_date: null, termination_reason: null },
+    });
     return this.findOne(id);
   }
 
-  async addSalarySetting(employeeId: number, dto: Partial<EmployeeSalarySetting>) {
-    const entity = this.salaryRepo.create({ ...dto, employee_id: employeeId });
-    return this.salaryRepo.save(entity);
+  async addSalarySetting(employeeId: number, dto: any) {
+    return this.prisma.employeeSalarySetting.create({
+      data: { ...dto, employee_id: employeeId },
+    });
   }
 
   async getSalarySettings(employeeId: number) {
-    return this.salaryRepo.find({
+    return this.prisma.employeeSalarySetting.findMany({
       where: { employee_id: employeeId },
-      order: { effective_date: 'DESC' },
+      orderBy: { effective_date: 'desc' },
     });
   }
 
   async transferEmployee(employeeId: number, dto: { from_company_id: number; to_company_id: number; transfer_date: string; notes?: string }) {
-    const transfer = this.transferRepo.create({ ...dto, employee_id: employeeId });
-    await this.transferRepo.save(transfer);
-    await this.repo.update(employeeId, { company_id: dto.to_company_id });
+    await this.prisma.employeeTransfer.create({
+      data: {
+        employee_id: employeeId,
+        from_company_id: dto.from_company_id,
+        to_company_id: dto.to_company_id,
+        transfer_date: new Date(dto.transfer_date),
+        notes: dto.notes,
+      },
+    });
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { company_id: dto.to_company_id },
+    });
     return this.findOne(employeeId);
   }
 }

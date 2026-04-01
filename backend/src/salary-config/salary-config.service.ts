@@ -1,15 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EmployeeSalarySetting } from '../employees/employee-salary-setting.entity';
-import { Employee } from '../employees/employee.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SalaryConfigService {
-  constructor(
-    @InjectRepository(EmployeeSalarySetting) private repo: Repository<EmployeeSalarySetting>,
-    @InjectRepository(Employee) private empRepo: Repository<Employee>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'employee_id', 'effective_date', 'base_salary', 'salary_type', 'created_at',
@@ -20,48 +14,55 @@ export class SalaryConfigService {
     employee_id?: number; salary_type?: string; is_piece_rate?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('ss')
-      .leftJoinAndSelect('ss.employee', 'employee')
-      .leftJoinAndSelect('employee.company', 'company');
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
 
+    const where: any = {};
+    if (query.employee_id) where.employee_id = Number(query.employee_id);
+    if (query.salary_type) where.salary_type = query.salary_type;
+    if (query.is_piece_rate === 'true') where.is_piece_rate = true;
+    if (query.is_piece_rate === 'false') where.is_piece_rate = false;
     if (query.search) {
-      qb.andWhere(
-        '(employee.name_zh ILIKE :s OR employee.name_en ILIKE :s OR employee.emp_code ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.employee = {
+        OR: [
+          { name_zh: { contains: query.search, mode: 'insensitive' } },
+          { name_en: { contains: query.search, mode: 'insensitive' } },
+          { emp_code: { contains: query.search, mode: 'insensitive' } },
+        ],
+      };
     }
-    if (query.employee_id) qb.andWhere('ss.employee_id = :eid', { eid: query.employee_id });
-    if (query.salary_type) qb.andWhere('ss.salary_type = :st', { st: query.salary_type });
-    if (query.is_piece_rate === 'true') qb.andWhere('ss.is_piece_rate = true');
-    if (query.is_piece_rate === 'false') qb.andWhere('ss.is_piece_rate = false');
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'effective_date';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
-    qb.orderBy(`ss.${sortBy}`, sortOrder);
+    const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc') as 'asc' | 'desc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.employeeSalarySetting.findMany({
+        where,
+        include: { employee: { include: { company: true } } },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
+      }),
+      this.prisma.employeeSalarySetting.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const ss = await this.repo.findOne({
+    const ss = await this.prisma.employeeSalarySetting.findUnique({
       where: { id },
-      relations: ['employee', 'employee.company'],
+      include: { employee: { include: { company: true } } },
     });
     if (!ss) throw new NotFoundException('薪酬設定不存在');
     return ss;
   }
 
   async findByEmployee(employeeId: number) {
-    return this.repo.find({
+    return this.prisma.employeeSalarySetting.findMany({
       where: { employee_id: employeeId },
-      order: { effective_date: 'DESC' },
+      orderBy: { effective_date: 'desc' },
     });
   }
 
@@ -80,13 +81,12 @@ export class SalaryConfigService {
       }
     }
 
-    const entity = this.repo.create(dto);
-    const saved: EmployeeSalarySetting = await (this.repo.save(entity) as any);
+    const saved = await this.prisma.employeeSalarySetting.create({ data: dto });
     return this.findOne(saved.id);
   }
 
   async update(id: number, dto: any) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
 
     const { employee, created_at, id: _id, ...updateData } = dto;
@@ -104,14 +104,14 @@ export class SalaryConfigService {
       }
     }
 
-    await this.repo.update(id, updateData);
+    await this.prisma.employeeSalarySetting.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
 
   async delete(id: number) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
-    await this.repo.delete(id);
+    await this.prisma.employeeSalarySetting.delete({ where: { id } });
     return { deleted: true };
   }
 }

@@ -6,8 +6,8 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: pnpm install && pnpm run build
-    startCommand: node dist/main
+    buildCommand: pnpm install && npx prisma generate && pnpm run build
+    startCommand: node dist/src/main
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,7 +19,6 @@ services:
         sync: false
       - key: PORT
         value: 10000
-
   # Frontend Next.js
   - type: web
     name: mingtat-erp-web

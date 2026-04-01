@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { WorkLog } from './work-log.entity';
-import { Vehicle } from '../vehicles/vehicle.entity';
-import { Machinery } from '../machinery/machinery.entity';
-import { RateCard } from '../rate-cards/rate-card.entity';
-import { CompanyProfile } from '../company-profiles/company-profile.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 // 車輛類機種
 const VEHICLE_TYPES = ['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車'];
@@ -14,18 +8,7 @@ const MACHINERY_TYPES = ['挖掘機', '火轆'];
 
 @Injectable()
 export class WorkLogsService {
-  constructor(
-    @InjectRepository(WorkLog)
-    private readonly repo: Repository<WorkLog>,
-    @InjectRepository(Vehicle)
-    private readonly vehicleRepo: Repository<Vehicle>,
-    @InjectRepository(Machinery)
-    private readonly machineryRepo: Repository<Machinery>,
-    @InjectRepository(RateCard)
-    private readonly rateCardRepo: Repository<RateCard>,
-    @InjectRepository(CompanyProfile)
-    private readonly companyProfileRepo: Repository<CompanyProfile>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── 工作記錄 CRUD ─────────────────────────────────────────
 
@@ -46,53 +29,73 @@ export class WorkLogsService {
       sortOrder = 'DESC',
     } = query;
 
+    const where: any = {};
+    if (publisher_id) where.publisher_id = Number(publisher_id);
+    if (status) where.status = status;
+    if (company_profile_id) where.company_profile_id = Number(company_profile_id);
+    if (client_id) where.client_id = Number(client_id);
+    if (quotation_id) where.quotation_id = Number(quotation_id);
+    if (employee_id) where.employee_id = Number(employee_id);
+    if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
+    if (date_from || date_to) {
+      where.scheduled_date = {};
+      if (date_from) where.scheduled_date.gte = new Date(date_from);
+      if (date_to) where.scheduled_date.lte = new Date(date_to);
+    }
+
     const allowedSort = [
       'id', 'scheduled_date', 'status', 'service_type',
       'machine_type', 'equipment_number', 'day_night', 'created_at',
     ];
-    const safeSortBy = allowedSort.includes(sortBy) ? `wl.${sortBy}` : 'wl.scheduled_date';
-    const safeSortOrder: 'ASC' | 'DESC' = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+    const safeSortBy = allowedSort.includes(sortBy) ? sortBy : 'scheduled_date';
+    const safeSortOrder = sortOrder === 'ASC' ? 'asc' : 'desc';
 
-    const qb = this.repo.createQueryBuilder('wl')
-      .leftJoinAndSelect('wl.publisher', 'publisher')
-      .leftJoinAndSelect('wl.company_profile', 'company_profile')
-      .leftJoinAndSelect('wl.client', 'client')
-      .leftJoinAndSelect('wl.quotation', 'quotation')
-      .leftJoinAndSelect('wl.employee', 'employee');
+    const pg = Number(page);
+    const lm = Number(limit);
 
-    if (publisher_id) qb.andWhere('wl.publisher_id = :publisher_id', { publisher_id: Number(publisher_id) });
-    if (status) qb.andWhere('wl.status = :status', { status });
-    if (company_profile_id) qb.andWhere('wl.company_profile_id = :company_profile_id', { company_profile_id: Number(company_profile_id) });
-    if (client_id) qb.andWhere('wl.client_id = :client_id', { client_id: Number(client_id) });
-    if (quotation_id) qb.andWhere('wl.quotation_id = :quotation_id', { quotation_id: Number(quotation_id) });
-    if (employee_id) qb.andWhere('wl.employee_id = :employee_id', { employee_id: Number(employee_id) });
-    if (equipment_number) qb.andWhere('wl.equipment_number ILIKE :eq', { eq: `%${equipment_number}%` });
-    if (date_from) qb.andWhere('wl.scheduled_date >= :date_from', { date_from });
-    if (date_to) qb.andWhere('wl.scheduled_date <= :date_to', { date_to });
+    const [data, total] = await Promise.all([
+      this.prisma.workLog.findMany({
+        where,
+        include: {
+          publisher: true,
+          company_profile: true,
+          client: true,
+          quotation: true,
+          employee: true,
+        },
+        orderBy: { [safeSortBy]: safeSortOrder },
+        skip: (pg - 1) * lm,
+        take: lm,
+      }),
+      this.prisma.workLog.count({ where }),
+    ]);
 
-    qb.orderBy(safeSortBy, safeSortOrder)
-      .skip((Number(page) - 1) * Number(limit))
-      .take(Number(limit));
-
-    const [data, total] = await qb.getManyAndCount();
-    return { data, total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) };
+    return { data, total, page: pg, limit: lm, totalPages: Math.ceil(total / lm) };
   }
 
   async findOne(id: number) {
-    return this.repo.findOne({
+    return this.prisma.workLog.findUnique({
       where: { id },
-      relations: ['publisher', 'company_profile', 'client', 'quotation', 'employee'],
+      include: {
+        publisher: true,
+        company_profile: true,
+        client: true,
+        quotation: true,
+        employee: true,
+      },
     });
   }
 
   async create(dto: any, userId: number) {
-    const entity = this.repo.create({
-      ...dto,
-      publisher_id: dto.publisher_id ?? userId,
-      equipment_source: this.resolveEquipmentSource(dto.machine_type),
+    const { publisher, company_profile, client, quotation, employee, ...data } = dto;
+    const saved = await this.prisma.workLog.create({
+      data: {
+        ...data,
+        publisher_id: data.publisher_id ?? userId,
+        equipment_source: this.resolveEquipmentSource(data.machine_type),
+        scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : undefined,
+      },
     });
-    const savedResult = await this.repo.save(entity);
-    const saved = (Array.isArray(savedResult) ? savedResult[0] : savedResult) as WorkLog;
     // 自動匹配價格
     await this.matchAndSavePrice(saved);
     return this.findOne(saved.id);
@@ -103,81 +106,79 @@ export class WorkLogsService {
     if (rest.machine_type !== undefined) {
       rest.equipment_source = this.resolveEquipmentSource(rest.machine_type);
     }
-    await this.repo.update(id, rest);
+    if (rest.scheduled_date) rest.scheduled_date = new Date(rest.scheduled_date);
+
+    await this.prisma.workLog.update({ where: { id }, data: rest });
     const updated = await this.findOne(id);
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
     if (hasPriceChange && updated) {
-      await this.matchAndSavePrice(updated);
+      await this.matchAndSavePrice(updated as any);
     }
     return this.findOne(id);
   }
 
   async remove(id: number) {
-    await this.repo.delete(id);
+    await this.prisma.workLog.delete({ where: { id } });
     return { success: true };
   }
 
   async bulkDelete(ids: number[]) {
-    await this.repo.delete({ id: In(ids) });
+    await this.prisma.workLog.deleteMany({ where: { id: { in: ids } } });
     return { success: true, deleted: ids.length };
   }
 
   async bulkConfirm(ids: number[]) {
-    await this.repo.update({ id: In(ids) }, { is_confirmed: true });
+    await this.prisma.workLog.updateMany({ where: { id: { in: ids } }, data: { is_confirmed: true } });
     return { success: true, confirmed: ids.length };
   }
 
   async duplicate(id: number, userId: number) {
-    const original = await this.repo.findOne({ where: { id } });
+    const original = await this.prisma.workLog.findUnique({ where: { id } });
     if (!original) throw new Error('WorkLog not found');
-    const copy = this.repo.create({
-      status: 'editing',
-      service_type: original.service_type,
-      scheduled_date: original.scheduled_date,
-      company_profile_id: original.company_profile_id,
-      client_id: original.client_id,
-      quotation_id: original.quotation_id,
-      employee_id: original.employee_id,
-      machine_type: original.machine_type,
-      equipment_number: original.equipment_number,
-      equipment_source: original.equipment_source,
-      tonnage: original.tonnage,
-      day_night: original.day_night,
-      start_location: original.start_location,
-      start_time: original.start_time,
-      end_location: original.end_location,
-      end_time: original.end_time,
-      quantity: original.quantity,
-      unit: original.unit,
-      ot_quantity: original.ot_quantity,
-      ot_unit: original.ot_unit,
-      goods_quantity: original.goods_quantity,
-      remarks: original.remarks,
-      publisher_id: userId,
-      is_confirmed: false,
-      is_paid: false,
-    } as any);
-    const savedResult2 = await this.repo.save(copy);
-    const saved = (Array.isArray(savedResult2) ? savedResult2[0] : savedResult2) as WorkLog;
-    await this.matchAndSavePrice(saved);
-    return this.findOne(saved.id);
+    const copy = await this.prisma.workLog.create({
+      data: {
+        status: 'editing',
+        service_type: original.service_type,
+        scheduled_date: original.scheduled_date,
+        company_profile_id: original.company_profile_id,
+        client_id: original.client_id,
+        quotation_id: original.quotation_id,
+        employee_id: original.employee_id,
+        machine_type: original.machine_type,
+        equipment_number: original.equipment_number,
+        equipment_source: original.equipment_source,
+        tonnage: original.tonnage,
+        day_night: original.day_night,
+        start_location: original.start_location,
+        start_time: original.start_time,
+        end_location: original.end_location,
+        end_time: original.end_time,
+        quantity: original.quantity,
+        unit: original.unit,
+        ot_quantity: original.ot_quantity,
+        ot_unit: original.ot_unit,
+        goods_quantity: original.goods_quantity,
+        remarks: original.remarks,
+        publisher_id: userId,
+        is_confirmed: false,
+        is_paid: false,
+      },
+    });
+    await this.matchAndSavePrice(copy);
+    return this.findOne(copy.id);
   }
 
   // ── 地點自動完成 ─────────────────────────────────────────
 
   async getLocationSuggestions(type: 'start' | 'end', q: string) {
     const field = type === 'start' ? 'start_location' : 'end_location';
-    const rows = await this.repo.createQueryBuilder('wl')
-      .select(`DISTINCT wl.${field}`, 'location')
-      .where(`wl.${field} ILIKE :q`, { q: `%${q}%` })
-      .andWhere(`wl.${field} IS NOT NULL`)
-      .andWhere(`wl.${field} != ''`)
-      .orderBy('location', 'ASC')
-      .limit(20)
-      .getRawMany();
-    return rows.map(r => r.location).filter(Boolean);
+    const results = await this.prisma.$queryRawUnsafe<{ location: string }[]>(
+      `SELECT DISTINCT "${field}" AS location FROM work_logs WHERE "${field}" ILIKE $1 AND "${field}" IS NOT NULL AND "${field}" != '' ORDER BY location ASC LIMIT 20`,
+      `%${q}%`,
+    );
+    return results.map(r => r.location).filter(Boolean);
   }
 
   // ── 機號聯動查詢 ─────────────────────────────────────────
@@ -187,17 +188,16 @@ export class WorkLogsService {
     if (!source) return [];
 
     if (source === 'vehicle') {
-      const qb = this.vehicleRepo.createQueryBuilder('v')
-        .select(['v.id', 'v.plate_number', 'v.vehicle_type', 'v.tonnage'])
-        .where('v.status = :status', { status: 'active' });
-
+      const where: any = { status: 'active' };
       if (tonnage) {
         const tonnageNum = parseFloat(tonnage.replace('噸', ''));
-        if (!isNaN(tonnageNum)) {
-          qb.andWhere('v.tonnage = :tonnage', { tonnage: tonnageNum });
-        }
+        if (!isNaN(tonnageNum)) where.tonnage = tonnageNum;
       }
-      const vehicles = await qb.orderBy('v.plate_number', 'ASC').getMany();
+      const vehicles = await this.prisma.vehicle.findMany({
+        where,
+        select: { id: true, plate_number: true, vehicle_type: true, tonnage: true },
+        orderBy: { plate_number: 'asc' },
+      });
       return vehicles.map(v => ({
         id: v.id,
         value: v.plate_number,
@@ -209,17 +209,16 @@ export class WorkLogsService {
     }
 
     if (source === 'machinery') {
-      const qb = this.machineryRepo.createQueryBuilder('m')
-        .select(['m.id', 'm.machine_code', 'm.machine_type', 'm.tonnage'])
-        .where('m.status = :status', { status: 'active' });
-
+      const where: any = { status: 'active' };
       if (tonnage) {
         const tonnageNum = parseFloat(tonnage.replace('噸', ''));
-        if (!isNaN(tonnageNum)) {
-          qb.andWhere('m.tonnage = :tonnage', { tonnage: tonnageNum });
-        }
+        if (!isNaN(tonnageNum)) where.tonnage = tonnageNum;
       }
-      const machines = await qb.orderBy('m.machine_code', 'ASC').getMany();
+      const machines = await this.prisma.machinery.findMany({
+        where,
+        select: { id: true, machine_code: true, machine_type: true, tonnage: true },
+        orderBy: { machine_code: 'asc' },
+      });
       return machines.map(m => ({
         id: m.id,
         value: m.machine_code,
@@ -234,77 +233,73 @@ export class WorkLogsService {
   }
 
   // ── 自動價格匹配 ─────────────────────────────────────────
-  /**
-   * 匹配策略（由精確到模糊，取第一個命中）：
-   * 1. client_id + company_id(from CompanyProfile) + source_quotation_id + vehicle_type + tonnage + origin + destination
-   * 2. 同上，但不限 origin/destination
-   * 3. 同上，但不限 vehicle_type/tonnage
-   * 4. 只匹配 client_id + company_id
-   *
-   * 日/夜/中直 → 取對應的 day_rate / night_rate / mid_shift_rate
-   */
-  private async matchAndSavePrice(workLog: WorkLog | null) {
+  private async matchAndSavePrice(workLog: any) {
     if (!workLog) return;
 
-    // 需要至少有客戶才能匹配
     if (!workLog.client_id) {
-      await this.repo.update(workLog.id, {
-        price_match_status: 'pending',
-        price_match_note: '缺少客戶資訊，無法匹配',
-        matched_rate_card_id: null,
-        matched_rate: null,
-        matched_unit: null,
-        matched_ot_rate: null,
-      } as any);
+      await this.prisma.workLog.update({
+        where: { id: workLog.id },
+        data: {
+          price_match_status: 'pending',
+          price_match_note: '缺少客戶資訊，無法匹配',
+          matched_rate_card_id: null,
+          matched_rate: null,
+          matched_unit: null,
+          matched_ot_rate: null,
+        },
+      });
       return;
     }
 
-    // 從 CompanyProfile 找對應的 Company ID（rate_cards 用 company_id 而非 company_profile_id）
+    // 從 CompanyProfile 找對應的 Company ID
     let companyId: number | null = null;
     if (workLog.company_profile_id) {
-      const cp = await this.companyProfileRepo.findOne({ where: { id: workLog.company_profile_id } });
+      const cp = await this.prisma.companyProfile.findUnique({ where: { id: workLog.company_profile_id } });
       if (cp && (cp as any).company_id) {
         companyId = (cp as any).company_id;
       }
     }
 
-    // 噸數數字（去除「噸」字）
     const tonnageNum = workLog.tonnage ? workLog.tonnage.replace('噸', '') : null;
 
-    // 嘗試各層次匹配
     const card = await this.tryMatchRateCard(
       workLog.client_id,
       companyId,
-      workLog.quotation_id,    // source_quotation_id
-      workLog.machine_type,    // vehicle_type
-      tonnageNum,              // vehicle_tonnage
-      workLog.start_location,  // origin
-      workLog.end_location,    // destination
+      workLog.quotation_id,
+      workLog.machine_type,
+      tonnageNum,
+      workLog.start_location,
+      workLog.end_location,
     );
 
     if (!card) {
-      await this.repo.update(workLog.id, {
-        price_match_status: 'unmatched',
-        price_match_note: '找不到對應的價目表，請人工處理',
-        matched_rate_card_id: null,
-        matched_rate: null,
-        matched_unit: null,
-        matched_ot_rate: null,
-      } as any);
+      await this.prisma.workLog.update({
+        where: { id: workLog.id },
+        data: {
+          price_match_status: 'unmatched',
+          price_match_note: '找不到對應的價目表，請人工處理',
+          matched_rate_card_id: null,
+          matched_rate: null,
+          matched_unit: null,
+          matched_ot_rate: null,
+        },
+      });
       return;
     }
 
-    // 根據日/夜/中直取對應費率
     const { rate, unit } = this.resolveRate(card, workLog.day_night);
 
-    await this.repo.update(workLog.id, {
-      price_match_status: 'matched',
-      price_match_note: `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`,
-      matched_rate_card_id: card.id,
-      matched_rate: rate,
-      matched_unit: unit,
-      matched_ot_rate: card.ot_rate ?? null,
-    } as any);
+    await this.prisma.workLog.update({
+      where: { id: workLog.id },
+      data: {
+        price_match_status: 'matched',
+        price_match_note: `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`,
+        matched_rate_card_id: card.id,
+        matched_rate: rate,
+        matched_unit: unit,
+        matched_ot_rate: card.ot_rate ?? null,
+      },
+    });
   }
 
   /**
@@ -318,51 +313,33 @@ export class WorkLogsService {
     tonnage: string | null,
     origin: string | null,
     destination: string | null,
-  ): Promise<RateCard | null> {
-    // 匹配層次定義
+  ): Promise<any | null> {
     const attempts = [
-      // 層次 1：最精確 — 客戶 + 公司 + 合約 + 機種 + 噸數 + 起終點
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
-      // 層次 2：客戶 + 公司 + 合約 + 機種 + 噸數（不限路線）
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
-      // 層次 3：客戶 + 公司 + 合約 + 機種（不限噸數/路線）
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: false, useRoute: false },
-      // 層次 4：客戶 + 公司 + 合約（不限機種）
       { useCompany: true, useQuotation: true, useVehicle: false, useTonnage: false, useRoute: false },
-      // 層次 5：客戶 + 機種 + 噸數 + 路線（不限公司/合約）
       { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: true, useRoute: true },
-      // 層次 6：客戶 + 機種（最寬鬆）
       { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: false, useRoute: false },
-      // 層次 7：只匹配客戶
       { useCompany: false, useQuotation: false, useVehicle: false, useTonnage: false, useRoute: false },
     ];
 
     for (const attempt of attempts) {
-      const qb = this.rateCardRepo.createQueryBuilder('rc')
-        .where('rc.status = :status', { status: 'active' })
-        .andWhere('rc.client_id = :clientId', { clientId });
+      const where: any = { status: 'active', client_id: clientId };
 
-      if (attempt.useCompany && companyId) {
-        qb.andWhere('rc.company_id = :companyId', { companyId });
-      }
-      if (attempt.useQuotation && quotationId) {
-        qb.andWhere('rc.source_quotation_id = :quotationId', { quotationId });
-      }
-      if (attempt.useVehicle && vehicleType) {
-        qb.andWhere('rc.vehicle_type = :vehicleType', { vehicleType });
-      }
-      if (attempt.useTonnage && tonnage) {
-        qb.andWhere('rc.vehicle_tonnage = :tonnage', { tonnage });
-      }
+      if (attempt.useCompany && companyId) where.company_id = companyId;
+      if (attempt.useQuotation && quotationId) where.source_quotation_id = quotationId;
+      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
+      if (attempt.useTonnage && tonnage) where.vehicle_tonnage = tonnage;
       if (attempt.useRoute) {
-        if (origin) qb.andWhere('rc.origin ILIKE :origin', { origin: `%${origin}%` });
-        if (destination) qb.andWhere('rc.destination ILIKE :destination', { destination: `%${destination}%` });
+        if (origin) where.origin = { contains: origin, mode: 'insensitive' };
+        if (destination) where.destination = { contains: destination, mode: 'insensitive' };
       }
 
-      // 優先取最新生效的
-      qb.orderBy('rc.effective_date', 'DESC').limit(1);
-
-      const card = await qb.getOne();
+      const card = await this.prisma.rateCard.findFirst({
+        where,
+        orderBy: { effective_date: 'desc' },
+      });
       if (card) return card;
     }
 
@@ -372,14 +349,13 @@ export class WorkLogsService {
   /**
    * 根據日/夜/中直取對應費率
    */
-  private resolveRate(card: RateCard, dayNight: string | null): { rate: number; unit: string } {
+  private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
     if (dayNight === '夜') {
       return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.day_unit || '' };
     }
     if (dayNight === '中直') {
       return { rate: Number(card.mid_shift_rate) || 0, unit: card.mid_shift_unit || card.day_unit || '' };
     }
-    // 日班或未指定
     return { rate: Number(card.day_rate) || 0, unit: card.day_unit || '' };
   }
 

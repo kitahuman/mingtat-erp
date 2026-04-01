@@ -1,7 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FieldOption } from './field-option.entity';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_OPTIONS: Record<string, string[]> = {
   machine_type: ['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車', '挖掘機', '火轆'],
@@ -14,48 +12,48 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
 
 @Injectable()
 export class FieldOptionsService {
-  constructor(
-    @InjectRepository(FieldOption) private repo: Repository<FieldOption>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async seedDefaults() {
-    const count = await this.repo.count();
+    const count = await this.prisma.fieldOption.count();
     if (count === 0) {
       // First time: seed all categories
-      const entities: Partial<FieldOption>[] = [];
+      const data: any[] = [];
       for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
         labels.forEach((label, idx) => {
-          entities.push({ category, label, sort_order: idx + 1, is_active: true });
+          data.push({ category, label, sort_order: idx + 1, is_active: true });
         });
       }
-      await this.repo.save(entities);
-      console.log(`Seeded ${entities.length} field options`);
+      await this.prisma.fieldOption.createMany({ data });
+      console.log(`Seeded ${data.length} field options`);
       return;
     }
 
-    // Seed any new categories that don't exist yet (e.g., vehicle_type)
+    // Seed any new categories that don't exist yet
     for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
-      const existing = await this.repo.count({ where: { category } });
+      const existing = await this.prisma.fieldOption.count({ where: { category } });
       if (existing === 0) {
-        const entities: Partial<FieldOption>[] = labels.map((label, idx) => ({
+        const data = labels.map((label, idx) => ({
           category, label, sort_order: idx + 1, is_active: true,
         }));
-        await this.repo.save(entities);
-        console.log(`Seeded ${entities.length} field options for new category: ${category}`);
+        await this.prisma.fieldOption.createMany({ data });
+        console.log(`Seeded ${data.length} field options for new category: ${category}`);
       }
     }
   }
 
   async findByCategory(category: string) {
-    return this.repo.find({
+    return this.prisma.fieldOption.findMany({
       where: { category },
-      order: { sort_order: 'ASC', id: 'ASC' },
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
     });
   }
 
   async findAllGrouped() {
-    const all = await this.repo.find({ order: { sort_order: 'ASC', id: 'ASC' } });
-    const grouped: Record<string, FieldOption[]> = {};
+    const all = await this.prisma.fieldOption.findMany({
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+    const grouped: Record<string, any[]> = {};
     for (const opt of all) {
       if (!grouped[opt.category]) grouped[opt.category] = [];
       grouped[opt.category].push(opt);
@@ -64,36 +62,35 @@ export class FieldOptionsService {
   }
 
   async create(dto: { category: string; label: string; sort_order?: number }) {
-    // Get max sort_order for category
     if (!dto.sort_order) {
-      const max = await this.repo
-        .createQueryBuilder('fo')
-        .select('MAX(fo.sort_order)', 'max')
-        .where('fo.category = :cat', { cat: dto.category })
-        .getRawOne();
-      dto.sort_order = (max?.max || 0) + 1;
+      const max = await this.prisma.fieldOption.aggregate({
+        where: { category: dto.category },
+        _max: { sort_order: true },
+      });
+      dto.sort_order = (max._max.sort_order || 0) + 1;
     }
-    const entity = this.repo.create(dto);
-    return this.repo.save(entity);
+    return this.prisma.fieldOption.create({ data: dto as any });
   }
 
   async update(id: number, dto: { label?: string; sort_order?: number; is_active?: boolean }) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('選項不存在');
-    Object.assign(existing, dto);
-    return this.repo.save(existing);
+    return this.prisma.fieldOption.update({ where: { id }, data: dto });
   }
 
   async remove(id: number) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('選項不存在');
-    await this.repo.remove(existing);
+    await this.prisma.fieldOption.delete({ where: { id } });
     return { success: true };
   }
 
   async reorder(category: string, orderedIds: number[]) {
     for (let i = 0; i < orderedIds.length; i++) {
-      await this.repo.update(orderedIds[i], { sort_order: i + 1 });
+      await this.prisma.fieldOption.update({
+        where: { id: orderedIds[i] },
+        data: { sort_order: i + 1 },
+      });
     }
     return this.findByCategory(category);
   }

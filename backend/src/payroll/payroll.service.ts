@@ -1,47 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { Payroll } from './payroll.entity';
-import { PayrollItem } from './payroll-item.entity';
-import { PayrollWorkLog } from './payroll-work-log.entity';
-import { PayrollAdjustment } from './payroll-adjustment.entity';
-import { PayrollDailyAllowance } from './payroll-daily-allowance.entity';
-import { Employee } from '../employees/employee.entity';
-import { EmployeeSalarySetting } from '../employees/employee-salary-setting.entity';
-import { WorkLog } from '../work-logs/work-log.entity';
-import { FleetRateCard } from '../fleet-rate-cards/fleet-rate-card.entity';
-import { CompanyProfile } from '../company-profiles/company-profile.entity';
-import { RateCard } from '../rate-cards/rate-card.entity';
-import { Partner } from '../partners/partner.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PayrollService {
-  constructor(
-    @InjectRepository(Payroll)
-    private payrollRepo: Repository<Payroll>,
-    @InjectRepository(PayrollItem)
-    private payrollItemRepo: Repository<PayrollItem>,
-    @InjectRepository(PayrollWorkLog)
-    private payrollWorkLogRepo: Repository<PayrollWorkLog>,
-    @InjectRepository(PayrollAdjustment)
-    private payrollAdjustmentRepo: Repository<PayrollAdjustment>,
-    @InjectRepository(PayrollDailyAllowance)
-    private dailyAllowanceRepo: Repository<PayrollDailyAllowance>,
-    @InjectRepository(Employee)
-    private employeeRepo: Repository<Employee>,
-    @InjectRepository(EmployeeSalarySetting)
-    private salarySettingRepo: Repository<EmployeeSalarySetting>,
-    @InjectRepository(WorkLog)
-    private workLogRepo: Repository<WorkLog>,
-    @InjectRepository(FleetRateCard)
-    private fleetRateCardRepo: Repository<FleetRateCard>,
-    @InjectRepository(CompanyProfile)
-    private companyProfileRepo: Repository<CompanyProfile>,
-    @InjectRepository(RateCard)
-    private rateCardRepo: Repository<RateCard>,
-    @InjectRepository(Partner)
-    private partnerRepo: Repository<Partner>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
   async findAll(query: any) {
@@ -49,63 +11,66 @@ export class PayrollService {
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const qb = this.payrollRepo.createQueryBuilder('p')
-      .leftJoinAndSelect('p.employee', 'employee')
-      .leftJoinAndSelect('employee.company', 'company')
-      .leftJoinAndSelect('p.company_profile', 'company_profile');
-
-    if (query.period) {
-      qb.andWhere('p.period = :period', { period: query.period });
-    }
-    if (query.company_profile_id) {
-      qb.andWhere('p.company_profile_id = :cpId', { cpId: Number(query.company_profile_id) });
-    }
-    if (query.employee_id) {
-      qb.andWhere('p.employee_id = :empId', { empId: Number(query.employee_id) });
-    }
-    if (query.status) {
-      qb.andWhere('p.status = :status', { status: query.status });
-    }
+    const where: any = {};
+    if (query.period) where.period = query.period;
+    if (query.company_profile_id) where.company_profile_id = Number(query.company_profile_id);
+    if (query.employee_id) where.employee_id = Number(query.employee_id);
+    if (query.status) where.status = query.status;
     if (query.search) {
-      qb.andWhere('(employee.name_zh ILIKE :s OR employee.name_en ILIKE :s OR employee.emp_code ILIKE :s)', { s: `%${query.search}%` });
+      where.employee = {
+        OR: [
+          { name_zh: { contains: query.search, mode: 'insensitive' } },
+          { name_en: { contains: query.search, mode: 'insensitive' } },
+          { emp_code: { contains: query.search, mode: 'insensitive' } },
+        ],
+      };
     }
 
     const sortBy = query.sortBy || 'id';
-    const sortOrder = (query.sortOrder || 'DESC').toUpperCase() as 'ASC' | 'DESC';
+    const sortOrder = (query.sortOrder || 'DESC').toLowerCase() === 'asc' ? 'asc' : 'desc';
     const allowedSort = ['id', 'period', 'net_amount', 'status', 'created_at'];
-    if (allowedSort.includes(sortBy)) {
-      qb.orderBy(`p.${sortBy}`, sortOrder);
-    } else {
-      qb.orderBy('p.id', 'DESC');
-    }
+    const orderBy = allowedSort.includes(sortBy) ? { [sortBy]: sortOrder } : { id: 'desc' as const };
 
-    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.payroll.findMany({
+        where,
+        include: {
+          employee: { include: { company: true } },
+          company_profile: true,
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.payroll.count({ where }),
+    ]);
+
     return { data, total, page, limit };
   }
 
   // ── 詳情（含工作記錄、調整項、每日津貼）──────────────────────────────
   async findOne(id: number) {
-    const payroll = await this.payrollRepo.findOne({
+    const payroll = await this.prisma.payroll.findUnique({
       where: { id },
-      relations: ['employee', 'employee.company', 'company_profile', 'items', 'adjustments', 'daily_allowances'],
+      include: {
+        employee: { include: { company: true } },
+        company_profile: true,
+        items: { orderBy: { sort_order: 'asc' } },
+        adjustments: { orderBy: { sort_order: 'asc' } },
+        daily_allowances: true,
+      },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.items) {
-      payroll.items.sort((a, b) => a.sort_order - b.sort_order);
-    }
-    if (payroll.adjustments) {
-      payroll.adjustments.sort((a, b) => a.sort_order - b.sort_order);
-    }
 
     // Load payroll work logs
-    let pwls = await this.payrollWorkLogRepo.find({
+    let pwls = await this.prisma.payrollWorkLog.findMany({
       where: { payroll_id: id },
-      order: { scheduled_date: 'ASC', id: 'ASC' },
+      orderBy: [{ scheduled_date: 'asc' }, { id: 'asc' }],
     });
 
     // ── 自動回填：如果 payroll_work_logs 為空（舊糧單），從 work_logs 表查詢並回填 ──
     if (pwls.length === 0 && payroll.date_from && payroll.date_to && payroll.employee_id) {
-      pwls = await this.backfillPayrollWorkLogs(payroll);
+      pwls = await this.backfillPayrollWorkLogs(payroll as any);
     }
 
     // Build grouped settlement
@@ -113,11 +78,13 @@ export class PayrollService {
     const grouped = this.buildGroupedSettlement(activePwls);
 
     // Get salary setting for daily calculation
-    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
-      .where('ss.employee_id = :empId', { empId: payroll.employee_id })
-      .andWhere('ss.effective_date <= :end', { end: payroll.date_to || payroll.period + '-28' })
-      .orderBy('ss.effective_date', 'DESC')
-      .getOne();
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: payroll.employee_id,
+        effective_date: { lte: payroll.date_to || payroll.period + '-28' },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
 
     // Build daily calculation
     const dailyAllowances = payroll.daily_allowances || [];
@@ -139,65 +106,69 @@ export class PayrollService {
   /**
    * 自動回填 payroll_work_logs（針對舊糧單，從 work_logs 表查詢對應工作記錄並保存副本）
    */
-  private async backfillPayrollWorkLogs(payroll: Payroll): Promise<PayrollWorkLog[]> {
+  private async backfillPayrollWorkLogs(payroll: any): Promise<any[]> {
     try {
-      const wlQb = this.workLogRepo.createQueryBuilder('wl')
-        .leftJoinAndSelect('wl.company_profile', 'company_profile')
-        .leftJoinAndSelect('wl.client', 'client')
-        .leftJoinAndSelect('wl.quotation', 'quotation')
-        .where('wl.employee_id = :empId', { empId: payroll.employee_id })
-        .andWhere('wl.scheduled_date >= :start', { start: payroll.date_from })
-        .andWhere('wl.scheduled_date <= :end', { end: payroll.date_to })
-        .andWhere("wl.service_type != '請假/休息'")
-        .orderBy('wl.scheduled_date', 'ASC');
-
+      const wlWhere: any = {
+        employee_id: payroll.employee_id,
+        scheduled_date: {
+          gte: new Date(payroll.date_from),
+          lte: new Date(payroll.date_to),
+        },
+        service_type: { not: '請假/休息' },
+      };
       if (payroll.company_profile_id) {
-        wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: payroll.company_profile_id });
+        wlWhere.company_profile_id = payroll.company_profile_id;
       }
 
-      const workLogs = await wlQb.getMany();
+      const workLogs = await this.prisma.workLog.findMany({
+        where: wlWhere,
+        include: { company_profile: true, client: true, quotation: true },
+        orderBy: { scheduled_date: 'asc' },
+      });
+
       if (workLogs.length === 0) return [];
 
       // Enrich with price info
       const enrichedWorkLogs = await this.enrichWorkLogsWithPrice(workLogs);
 
       // Save as payroll_work_logs
-      const savedPwls: PayrollWorkLog[] = [];
+      const savedPwls: any[] = [];
       for (const wl of enrichedWorkLogs) {
-        const pwl = this.payrollWorkLogRepo.create({
-          payroll_id: payroll.id,
-          work_log_id: wl.id,
-          service_type: wl.service_type,
-          scheduled_date: wl.scheduled_date,
-          day_night: wl.day_night,
-          start_location: wl.start_location,
-          end_location: wl.end_location,
-          machine_type: wl.machine_type,
-          tonnage: wl.tonnage,
-          equipment_number: wl.equipment_number,
-          quantity: wl.quantity,
-          unit: wl.unit,
-          ot_quantity: wl.ot_quantity,
-          ot_unit: wl.ot_unit,
-          remarks: wl.remarks,
-          matched_rate_card_id: (wl as any)._matched_rate_card_id ?? wl.matched_rate_card_id,
-          matched_rate: (wl as any)._matched_rate ?? wl.matched_rate,
-          matched_unit: (wl as any)._matched_unit ?? wl.matched_unit,
-          matched_ot_rate: (wl as any)._matched_ot_rate ?? wl.matched_ot_rate,
-          price_match_status: (wl as any)._price_match_status ?? wl.price_match_status,
-          price_match_note: (wl as any)._price_match_note ?? wl.price_match_note,
-          line_amount: (wl as any)._line_amount ?? 0,
-          group_key: (wl as any)._group_key ?? '',
-          client_id: wl.client_id,
-          client_name: wl.client?.name ?? (wl as any).client_name ?? null,
-          company_profile_id: wl.company_profile_id,
-          company_profile_name: wl.company_profile?.chinese_name ?? (wl as any).company_profile_name ?? null,
-          quotation_id: wl.quotation_id,
-          contract_no: wl.quotation?.quotation_number ?? (wl as any).contract_no ?? null,
-          is_modified: false,
-          is_excluded: false,
+        const saved = await this.prisma.payrollWorkLog.create({
+          data: {
+            payroll_id: payroll.id,
+            work_log_id: wl.id,
+            service_type: wl.service_type,
+            scheduled_date: wl.scheduled_date,
+            day_night: wl.day_night,
+            start_location: wl.start_location,
+            end_location: wl.end_location,
+            machine_type: wl.machine_type,
+            tonnage: wl.tonnage,
+            equipment_number: wl.equipment_number,
+            quantity: wl.quantity,
+            unit: wl.unit,
+            ot_quantity: wl.ot_quantity,
+            ot_unit: wl.ot_unit,
+            remarks: wl.remarks,
+            matched_rate_card_id: wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
+            matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
+            matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
+            matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+            price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
+            price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
+            line_amount: wl._line_amount ?? 0,
+            group_key: wl._group_key ?? '',
+            client_id: wl.client_id ?? null,
+            client_name: wl.client?.name ?? wl.client_name ?? null,
+            company_profile_id: wl.company_profile_id ?? null,
+            company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+            quotation_id: wl.quotation_id ?? null,
+            contract_no: wl.quotation?.quotation_number ?? wl.contract_no ?? null,
+            is_modified: false,
+            is_excluded: false,
+          },
         });
-        const saved = await this.payrollWorkLogRepo.save(pwl);
         savedPwls.push(saved);
       }
 
@@ -221,35 +192,36 @@ export class PayrollService {
     if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
     if (date_from > date_to) throw new BadRequestException('開始日期不能晚於結束日期');
 
-    const emp = await this.employeeRepo.findOne({
+    const emp = await this.prisma.employee.findUnique({
       where: { id: employee_id },
-      relations: ['company'],
+      include: { company: true },
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
     // Get salary setting
-    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
-      .where('ss.employee_id = :empId', { empId: emp.id })
-      .andWhere('ss.effective_date <= :end', { end: date_to })
-      .orderBy('ss.effective_date', 'DESC')
-      .getOne();
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: emp.id,
+        effective_date: { lte: date_to },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
 
     // Get work logs
-    const wlQb = this.workLogRepo.createQueryBuilder('wl')
-      .leftJoinAndSelect('wl.company_profile', 'company_profile')
-      .leftJoinAndSelect('wl.client', 'client')
-      .leftJoinAndSelect('wl.quotation', 'quotation')
-      .where('wl.employee_id = :empId', { empId: emp.id })
-      .andWhere('wl.scheduled_date >= :start', { start: date_from })
-      .andWhere('wl.scheduled_date <= :end', { end: date_to })
-      .andWhere("wl.service_type != '請假/休息'")
-      .orderBy('wl.scheduled_date', 'ASC');
-
+    const wlWhere: any = {
+      employee_id: emp.id,
+      scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
+      service_type: { not: '請假/休息' },
+    };
     if (company_profile_id) {
-      wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
+      wlWhere.company_profile_id = Number(company_profile_id);
     }
 
-    const workLogs = await wlQb.getMany();
+    const workLogs = await this.prisma.workLog.findMany({
+      where: wlWhere,
+      include: { company_profile: true, client: true, quotation: true },
+      orderBy: { scheduled_date: 'asc' },
+    });
 
     // Enrich work logs with price info from rate cards
     const enrichedWorkLogs = await this.enrichWorkLogsWithPrice(workLogs);
@@ -257,7 +229,7 @@ export class PayrollService {
     // Build grouped settlement for preview
     const grouped = this.buildGroupedSettlementFromWorkLogs(enrichedWorkLogs);
 
-    // Build daily calculation for preview (no daily allowances yet in preview)
+    // Build daily calculation for preview
     const dailyCalc = this.buildDailyCalculationFromWorkLogs(enrichedWorkLogs, salarySetting, []);
 
     // Build available allowance options
@@ -297,51 +269,52 @@ export class PayrollService {
 
     const period = body.period || date_from.substring(0, 7);
 
-    const emp = await this.employeeRepo.findOne({
+    const emp = await this.prisma.employee.findUnique({
       where: { id: employee_id },
-      relations: ['company'],
+      include: { company: true },
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
     // Check for existing payroll
-    const existingQb = this.payrollRepo.createQueryBuilder('p')
-      .where('p.employee_id = :empId', { empId: emp.id })
-      .andWhere('p.date_from = :dateFrom', { dateFrom: date_from })
-      .andWhere('p.date_to = :dateTo', { dateTo: date_to });
-
+    const existingWhere: any = {
+      employee_id: emp.id,
+      date_from,
+      date_to,
+    };
     if (company_profile_id) {
-      existingQb.andWhere('p.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
+      existingWhere.company_profile_id = Number(company_profile_id);
     }
-
-    const existing = await existingQb.getOne();
+    const existing = await this.prisma.payroll.findFirst({ where: existingWhere });
     if (existing) {
       throw new BadRequestException(`此員工在 ${date_from} 至 ${date_to} 的糧單已存在（ID: ${existing.id}）`);
     }
 
-    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
-      .where('ss.employee_id = :empId', { empId: emp.id })
-      .andWhere('ss.effective_date <= :end', { end: date_to })
-      .orderBy('ss.effective_date', 'DESC')
-      .getOne();
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: emp.id,
+        effective_date: { lte: date_to },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
 
     if (!salarySetting) {
       throw new BadRequestException('此員工沒有薪酬配置，無法生成糧單');
     }
 
-    const wlQb = this.workLogRepo.createQueryBuilder('wl')
-      .leftJoinAndSelect('wl.company_profile', 'company_profile')
-      .leftJoinAndSelect('wl.client', 'client')
-      .leftJoinAndSelect('wl.quotation', 'quotation')
-      .where('wl.employee_id = :empId', { empId: emp.id })
-      .andWhere('wl.scheduled_date >= :start', { start: date_from })
-      .andWhere('wl.scheduled_date <= :end', { end: date_to })
-      .andWhere("wl.service_type != '請假/休息'");
-
+    const wlWhere: any = {
+      employee_id: emp.id,
+      scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
+      service_type: { not: '請假/休息' },
+    };
     if (company_profile_id) {
-      wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: Number(company_profile_id) });
+      wlWhere.company_profile_id = Number(company_profile_id);
     }
 
-    const workLogs = await wlQb.getMany();
+    const workLogs = await this.prisma.workLog.findMany({
+      where: wlWhere,
+      include: { company_profile: true, client: true, quotation: true },
+      orderBy: { scheduled_date: 'asc' },
+    });
 
     const calc = await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null);
 
@@ -351,75 +324,77 @@ export class PayrollService {
     }
 
     // Create payroll record
-    const payroll = this.payrollRepo.create({
-      period,
-      date_from,
-      date_to,
-      employee_id: emp.id,
-      company_profile_id: actualCpId ?? undefined,
-      salary_type: calc.salary_type,
-      base_rate: calc.base_rate,
-      work_days: calc.work_days,
-      base_amount: calc.base_amount,
-      allowance_total: calc.allowance_total,
-      ot_total: calc.ot_total,
-      commission_total: calc.commission_total,
-      mpf_deduction: calc.mpf_deduction,
-      mpf_plan: calc.mpf_plan,
-      mpf_employer: calc.mpf_employer,
-      adjustment_total: 0,
-      net_amount: calc.net_amount,
-      status: 'draft',
+    const saved = await this.prisma.payroll.create({
+      data: {
+        period,
+        date_from,
+        date_to,
+        employee_id: emp.id,
+        company_profile_id: actualCpId ?? undefined,
+        salary_type: calc.salary_type,
+        base_rate: calc.base_rate,
+        work_days: calc.work_days,
+        base_amount: calc.base_amount,
+        allowance_total: calc.allowance_total,
+        ot_total: calc.ot_total,
+        commission_total: calc.commission_total,
+        mpf_deduction: calc.mpf_deduction,
+        mpf_plan: calc.mpf_plan,
+        mpf_employer: calc.mpf_employer,
+        adjustment_total: 0,
+        net_amount: calc.net_amount,
+        status: 'draft',
+      },
     });
-
-    const saved = await this.payrollRepo.save(payroll) as Payroll;
 
     // Save payroll items
     for (const item of calc.items) {
-      const payrollItem = this.payrollItemRepo.create({
-        ...item,
-        payroll_id: saved.id,
+      await this.prisma.payrollItem.create({
+        data: {
+          ...item,
+          payroll_id: saved.id,
+        },
       });
-      await this.payrollItemRepo.save(payrollItem);
     }
 
     // Save payroll work logs with price info
     const enrichedWorkLogs = await this.enrichWorkLogsWithPrice(workLogs);
     for (const wl of enrichedWorkLogs) {
-      const pwl = this.payrollWorkLogRepo.create({
-        payroll_id: saved.id,
-        work_log_id: wl.id,
-        service_type: wl.service_type,
-        scheduled_date: wl.scheduled_date,
-        day_night: wl.day_night,
-        start_location: wl.start_location,
-        end_location: wl.end_location,
-        machine_type: wl.machine_type,
-        tonnage: wl.tonnage,
-        equipment_number: wl.equipment_number,
-        quantity: wl.quantity,
-        unit: wl.unit,
-        ot_quantity: wl.ot_quantity,
-        ot_unit: wl.ot_unit,
-        remarks: wl.remarks,
-        matched_rate_card_id: (wl as any)._matched_rate_card_id ?? wl.matched_rate_card_id,
-        matched_rate: (wl as any)._matched_rate ?? wl.matched_rate,
-        matched_unit: (wl as any)._matched_unit ?? wl.matched_unit,
-        matched_ot_rate: (wl as any)._matched_ot_rate ?? wl.matched_ot_rate,
-        price_match_status: (wl as any)._price_match_status ?? wl.price_match_status,
-        price_match_note: (wl as any)._price_match_note ?? wl.price_match_note,
-        line_amount: (wl as any)._line_amount ?? 0,
-        group_key: (wl as any)._group_key ?? '',
-        client_id: wl.client_id,
-        client_name: wl.client?.name ?? (wl as any).client_name ?? null,
-        company_profile_id: wl.company_profile_id,
-        company_profile_name: wl.company_profile?.chinese_name ?? (wl as any).company_profile_name ?? null,
-        quotation_id: wl.quotation_id,
-        contract_no: wl.quotation?.quotation_number ?? (wl as any).contract_no ?? null,
-        is_modified: false,
-        is_excluded: false,
+      await this.prisma.payrollWorkLog.create({
+        data: {
+          payroll_id: saved.id,
+          work_log_id: wl.id,
+          service_type: wl.service_type,
+          scheduled_date: wl.scheduled_date,
+          day_night: wl.day_night,
+          start_location: wl.start_location,
+          end_location: wl.end_location,
+          machine_type: wl.machine_type,
+          tonnage: wl.tonnage,
+          equipment_number: wl.equipment_number,
+          quantity: wl.quantity,
+          unit: wl.unit,
+          ot_quantity: wl.ot_quantity,
+          ot_unit: wl.ot_unit,
+          remarks: wl.remarks,
+          matched_rate_card_id: wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
+          matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
+          matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
+          matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+          price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
+          price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
+          line_amount: wl._line_amount ?? 0,
+          group_key: wl._group_key ?? '',
+          client_id: wl.client_id ?? null,
+          client_name: wl.client?.name ?? wl.client_name ?? null,
+          company_profile_id: wl.company_profile_id ?? null,
+          company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+          quotation_id: wl.quotation_id ?? null,
+          contract_no: wl.quotation?.quotation_number ?? wl.contract_no ?? null,
+          is_modified: false,
+          is_excluded: false,
+        },
       });
-      await this.payrollWorkLogRepo.save(pwl);
     }
 
     return this.findOne(saved.id);
@@ -427,14 +402,14 @@ export class PayrollService {
 
   // ── 核心計算邏輯（可被 preview 和 generate 共用）────────────
   private async calculatePayroll(
-    emp: Employee,
-    salarySetting: EmployeeSalarySetting,
-    workLogs: WorkLog[],
+    emp: any,
+    salarySetting: any,
+    workLogs: any[],
     dateFrom: string,
     dateTo: string,
     companyProfileId: number | null,
   ) {
-    const items: Partial<PayrollItem>[] = [];
+    const items: any[] = [];
     let sortOrder = 1;
 
     const baseSalary = Number(salarySetting.base_salary) || 0;
@@ -445,7 +420,7 @@ export class PayrollService {
     let workDays = 0;
 
     if (salaryType === 'daily') {
-      const workDates = new Set(workLogs.map(wl => wl.scheduled_date));
+      const workDates = new Set(workLogs.map(wl => String(wl.scheduled_date)));
       workDays = workDates.size;
       baseAmount = baseSalary * workDays;
 
@@ -474,7 +449,7 @@ export class PayrollService {
     // ── (2) 津貼計算 ──
     let allowanceTotal = 0;
 
-    const allowanceFields: { field: string; label: string; condition?: (wl: WorkLog) => boolean }[] = [
+    const allowanceFields: { field: string; label: string; condition?: (wl: any) => boolean }[] = [
       { field: 'allowance_night', label: '夜班津貼', condition: (wl) => wl.day_night === '夜' },
       { field: 'allowance_rent', label: '租車津貼' },
       { field: 'allowance_3runway', label: '三跑津貼' },
@@ -493,10 +468,10 @@ export class PayrollService {
 
       let days = 0;
       if (af.condition) {
-        const matchDates = new Set(workLogs.filter(af.condition).map(wl => wl.scheduled_date));
+        const matchDates = new Set(workLogs.filter(af.condition).map(wl => String(wl.scheduled_date)));
         days = matchDates.size;
       } else {
-        const workDates = new Set(workLogs.map(wl => wl.scheduled_date));
+        const workDates = new Set(workLogs.map(wl => String(wl.scheduled_date)));
         days = workDates.size;
       }
 
@@ -517,10 +492,10 @@ export class PayrollService {
 
     // Custom allowances
     if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
-      for (const ca of salarySetting.custom_allowances) {
+      for (const ca of salarySetting.custom_allowances as any[]) {
         if (!ca.amount || ca.amount === 0) continue;
-        const workDates = new Set(workLogs.map(wl => wl.scheduled_date));
-        const days = workDates.size;
+        const workDatesSet = new Set(workLogs.map(wl => String(wl.scheduled_date)));
+        const days = workDatesSet.size;
         if (days === 0) continue;
 
         const amount = Number(ca.amount) * days;
@@ -572,7 +547,7 @@ export class PayrollService {
       if (rate === 0) continue;
 
       const otDays = new Set(
-        workLogs.filter(wl => wl.ot_quantity && Number(wl.ot_quantity) > 0).map(wl => wl.scheduled_date)
+        workLogs.filter(wl => wl.ot_quantity && Number(wl.ot_quantity) > 0).map(wl => String(wl.scheduled_date))
       ).size;
 
       if (otDays === 0) continue;
@@ -594,7 +569,7 @@ export class PayrollService {
     let commissionTotal = 0;
 
     if (salarySetting.is_piece_rate && salarySetting.fleet_rate_card_id) {
-      const fleetRateCard = await this.fleetRateCardRepo.findOne({
+      const fleetRateCard = await this.prisma.fleetRateCard.findUnique({
         where: { id: salarySetting.fleet_rate_card_id },
       });
 
@@ -635,7 +610,7 @@ export class PayrollService {
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
 
     if (mpfPlan === 'industry') {
-      const workDatesForMpf = new Set(workLogs.map(wl => wl.scheduled_date));
+      const workDatesForMpf = new Set(workLogs.map(wl => String(wl.scheduled_date)));
       const mpfDays = workDatesForMpf.size;
       mpfDeduction = 50 * mpfDays;
       mpfEmployer = 50 * mpfDays;
@@ -688,23 +663,24 @@ export class PayrollService {
 
   // ── 更新糧單 ──────────────────────────────────────────────────
   async update(id: number, body: any) {
-    const payroll = await this.payrollRepo.findOne({ where: { id } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
-    if (body.payment_date !== undefined) payroll.payment_date = body.payment_date;
-    if (body.cheque_number !== undefined) payroll.cheque_number = body.cheque_number;
-    if (body.notes !== undefined) payroll.notes = body.notes;
-    if (body.status !== undefined) payroll.status = body.status;
+    const updateData: any = {};
+    if (body.payment_date !== undefined) updateData.payment_date = body.payment_date;
+    if (body.cheque_number !== undefined) updateData.cheque_number = body.cheque_number;
+    if (body.notes !== undefined) updateData.notes = body.notes;
+    if (body.status !== undefined) updateData.status = body.status;
 
-    return this.payrollRepo.save(payroll);
+    return this.prisma.payroll.update({ where: { id }, data: updateData });
   }
 
   // ── 批量確認 ──────────────────────────────────────────────────
   async bulkConfirm(ids: number[]) {
-    await this.payrollRepo.update(
-      { id: In(ids) },
-      { status: 'confirmed' },
-    );
+    await this.prisma.payroll.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'confirmed' },
+    });
     return { updated: ids.length };
   }
 
@@ -714,34 +690,37 @@ export class PayrollService {
     if (paymentDate) updateData.payment_date = paymentDate;
     if (chequeNumber) updateData.cheque_number = chequeNumber;
 
-    await this.payrollRepo.update(
-      { id: In(ids) },
-      updateData,
-    );
+    await this.prisma.payroll.updateMany({
+      where: { id: { in: ids } },
+      data: updateData,
+    });
     return { updated: ids.length };
   }
 
   // ── 刪除糧單 ──────────────────────────────────────────────────
   async remove(id: number) {
-    const payroll = await this.payrollRepo.findOne({ where: { id } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能刪除草稿狀態的糧單');
     }
 
-    await this.payrollWorkLogRepo.delete({ payroll_id: id });
-    await this.payrollAdjustmentRepo.delete({ payroll_id: id });
-    await this.dailyAllowanceRepo.delete({ payroll_id: id });
-    await this.payrollItemRepo.delete({ payroll_id: id });
-    await this.payrollRepo.remove(payroll);
+    await this.prisma.payrollWorkLog.deleteMany({ where: { payroll_id: id } });
+    await this.prisma.payrollAdjustment.deleteMany({ where: { payroll_id: id } });
+    await this.prisma.payrollDailyAllowance.deleteMany({ where: { payroll_id: id } });
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+    await this.prisma.payroll.delete({ where: { id } });
     return { deleted: true };
   }
 
   // ── 重新計算糧單 ──────────────────────────────────────────────
   async recalculate(id: number) {
-    const payroll = await this.payrollRepo.findOne({
+    const payroll = await this.prisma.payroll.findUnique({
       where: { id },
-      relations: ['employee', 'employee.company', 'adjustments'],
+      include: {
+        employee: { include: { company: true } },
+        adjustments: true,
+      },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
@@ -749,34 +728,36 @@ export class PayrollService {
     }
 
     const empId = payroll.employee_id;
-    const dateFrom = payroll.date_from || `${payroll.period}-01`;
-    const dateTo = payroll.date_to || (() => {
+    const dateFrom = String(payroll.date_from || `${payroll.period}-01`);
+    const dateTo = String(payroll.date_to || (() => {
       const [y, m] = payroll.period.split('-');
       const lastDay = new Date(Number(y), Number(m), 0).getDate();
       return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
-    })();
+    })());
     const cpId = payroll.company_profile_id;
 
-    const emp = await this.employeeRepo.findOne({
+    const emp = await this.prisma.employee.findUnique({
       where: { id: empId },
-      relations: ['company'],
+      include: { company: true },
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
-    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
-      .where('ss.employee_id = :empId', { empId: emp.id })
-      .andWhere('ss.effective_date <= :end', { end: dateTo })
-      .orderBy('ss.effective_date', 'DESC')
-      .getOne();
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: emp.id,
+        effective_date: { lte: dateTo },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
 
     if (!salarySetting) {
       throw new BadRequestException('此員工沒有薪酬配置，無法重新計算');
     }
 
     // Get active payroll work logs (use snapshot data, not original work logs)
-    const pwls = await this.payrollWorkLogRepo.find({
+    const pwls = await this.prisma.payrollWorkLog.findMany({
       where: { payroll_id: id, is_excluded: false },
-      order: { scheduled_date: 'ASC' },
+      orderBy: { scheduled_date: 'asc' },
     });
 
     // Convert PayrollWorkLog to WorkLog-like objects for calculation
@@ -804,7 +785,7 @@ export class PayrollService {
       matched_ot_rate: pwl.matched_ot_rate,
       price_match_status: pwl.price_match_status,
       price_match_note: pwl.price_match_note,
-    })) as unknown as WorkLog[];
+    }));
 
     const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, cpId);
 
@@ -813,43 +794,49 @@ export class PayrollService {
     const adjustmentTotal = adjustments.reduce((sum, adj) => sum + Number(adj.amount), 0);
 
     // Update payroll items
-    await this.payrollItemRepo.delete({ payroll_id: id });
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
     for (const item of calc.items) {
-      const payrollItem = this.payrollItemRepo.create({
-        ...item,
-        payroll_id: id,
+      await this.prisma.payrollItem.create({
+        data: {
+          ...item,
+          payroll_id: id,
+        },
       });
-      await this.payrollItemRepo.save(payrollItem);
     }
 
     // Update payroll totals
-    payroll.salary_type = calc.salary_type;
-    payroll.base_rate = calc.base_rate;
-    payroll.work_days = calc.work_days;
-    payroll.base_amount = calc.base_amount;
-    payroll.allowance_total = calc.allowance_total;
-    payroll.ot_total = calc.ot_total;
-    payroll.commission_total = calc.commission_total;
-    payroll.mpf_deduction = calc.mpf_deduction;
-    payroll.mpf_plan = calc.mpf_plan;
-    payroll.mpf_employer = calc.mpf_employer;
-    payroll.adjustment_total = adjustmentTotal;
-    payroll.net_amount = calc.net_amount + adjustmentTotal;
-
-    await this.payrollRepo.save(payroll);
+    await this.prisma.payroll.update({
+      where: { id },
+      data: {
+        salary_type: calc.salary_type,
+        base_rate: calc.base_rate,
+        work_days: calc.work_days,
+        base_amount: calc.base_amount,
+        allowance_total: calc.allowance_total,
+        ot_total: calc.ot_total,
+        commission_total: calc.commission_total,
+        mpf_deduction: calc.mpf_deduction,
+        mpf_plan: calc.mpf_plan,
+        mpf_employer: calc.mpf_employer,
+        adjustment_total: adjustmentTotal,
+        net_amount: calc.net_amount + adjustmentTotal,
+      },
+    });
 
     return this.findOne(id);
   }
 
   // ── 編輯糧單工作記錄（只改糧單記錄）──────────────────────────
   async updatePayrollWorkLog(payrollId: number, pwlId: number, body: any) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const pwl = await this.payrollWorkLogRepo.findOne({ where: { id: pwlId, payroll_id: payrollId } });
+    const pwl = await this.prisma.payrollWorkLog.findFirst({
+      where: { id: pwlId, payroll_id: payrollId },
+    });
     if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
 
     // Update snapshot fields
@@ -859,38 +846,48 @@ export class PayrollService {
       'ot_quantity', 'ot_unit', 'remarks', 'client_name', 'contract_no',
     ];
 
+    const updateData: any = { is_modified: true };
     for (const field of editableFields) {
       if (body[field] !== undefined) {
-        (pwl as any)[field] = body[field];
+        updateData[field] = body[field];
       }
     }
-
-    pwl.is_modified = true;
 
     // Re-match price if relevant fields changed
     const priceRelatedFields = ['client_id', 'company_profile_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => body[f] !== undefined);
+
+    // Merge current data with updates for price matching
+    const mergedPwl = { ...pwl, ...updateData };
+
     if (hasPriceChange) {
-      await this.rematchPayrollWorkLogPrice(pwl);
+      const priceInfo = await this.rematchPayrollWorkLogPrice(mergedPwl);
+      Object.assign(updateData, priceInfo);
     }
 
     // Recalculate line amount
-    pwl.line_amount = this.calculateLineAmount(pwl);
+    const finalPwl = { ...pwl, ...updateData };
+    updateData.line_amount = this.calculateLineAmount(finalPwl);
 
-    await this.payrollWorkLogRepo.save(pwl);
+    await this.prisma.payrollWorkLog.update({
+      where: { id: pwlId },
+      data: updateData,
+    });
 
-    return pwl;
+    return this.prisma.payrollWorkLog.findUnique({ where: { id: pwlId } });
   }
 
   // ── 編輯原始工作記錄（編輯大數據）──────────────────────────
   async updateOriginalWorkLog(payrollId: number, pwlId: number, body: any) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const pwl = await this.payrollWorkLogRepo.findOne({ where: { id: pwlId, payroll_id: payrollId } });
+    const pwl = await this.prisma.payrollWorkLog.findFirst({
+      where: { id: pwlId, payroll_id: payrollId },
+    });
     if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
 
     // Update original work log
@@ -900,89 +897,106 @@ export class PayrollService {
       'ot_quantity', 'ot_unit', 'remarks',
     ];
 
-    const updateData: any = {};
+    const wlUpdateData: any = {};
     for (const field of editableFields) {
       if (body[field] !== undefined) {
-        updateData[field] = body[field];
+        wlUpdateData[field] = body[field];
       }
     }
 
-    if (Object.keys(updateData).length > 0 && pwl.work_log_id) {
-      await this.workLogRepo.update(pwl.work_log_id, updateData);
+    if (Object.keys(wlUpdateData).length > 0 && pwl.work_log_id) {
+      await this.prisma.workLog.update({
+        where: { id: pwl.work_log_id },
+        data: wlUpdateData,
+      });
     }
 
     // Also update the snapshot in payroll_work_logs
+    const pwlUpdateData: any = {};
     for (const field of editableFields) {
       if (body[field] !== undefined) {
-        (pwl as any)[field] = body[field];
+        pwlUpdateData[field] = body[field];
       }
     }
 
     // Re-match price
-    await this.rematchPayrollWorkLogPrice(pwl);
-    pwl.line_amount = this.calculateLineAmount(pwl);
+    const mergedPwl = { ...pwl, ...pwlUpdateData };
+    const priceInfo = await this.rematchPayrollWorkLogPrice(mergedPwl);
+    Object.assign(pwlUpdateData, priceInfo);
+    pwlUpdateData.line_amount = this.calculateLineAmount({ ...mergedPwl, ...priceInfo });
 
-    await this.payrollWorkLogRepo.save(pwl);
+    await this.prisma.payrollWorkLog.update({
+      where: { id: pwlId },
+      data: pwlUpdateData,
+    });
 
-    return pwl;
+    return this.prisma.payrollWorkLog.findUnique({ where: { id: pwlId } });
   }
 
   // ── 從糧單移除工作記錄 ──────────────────────────────────────
   async excludePayrollWorkLog(payrollId: number, pwlId: number) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const pwl = await this.payrollWorkLogRepo.findOne({ where: { id: pwlId, payroll_id: payrollId } });
+    const pwl = await this.prisma.payrollWorkLog.findFirst({
+      where: { id: pwlId, payroll_id: payrollId },
+    });
     if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
 
-    pwl.is_excluded = true;
-    await this.payrollWorkLogRepo.save(pwl);
+    await this.prisma.payrollWorkLog.update({
+      where: { id: pwlId },
+      data: { is_excluded: true },
+    });
 
     return { success: true };
   }
 
   // ── 恢復已移除的工作記錄 ──────────────────────────────────────
   async restorePayrollWorkLog(payrollId: number, pwlId: number) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const pwl = await this.payrollWorkLogRepo.findOne({ where: { id: pwlId, payroll_id: payrollId } });
+    const pwl = await this.prisma.payrollWorkLog.findFirst({
+      where: { id: pwlId, payroll_id: payrollId },
+    });
     if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
 
-    pwl.is_excluded = false;
-    await this.payrollWorkLogRepo.save(pwl);
+    await this.prisma.payrollWorkLog.update({
+      where: { id: pwlId },
+      data: { is_excluded: false },
+    });
 
     return { success: true };
   }
 
   // ── 新增自定義調整項 ──────────────────────────────────────────
   async addAdjustment(payrollId: number, body: { item_name: string; amount: number; remarks?: string }) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const maxSort = await this.payrollAdjustmentRepo.createQueryBuilder('a')
-      .where('a.payroll_id = :pid', { pid: payrollId })
-      .select('MAX(a.sort_order)', 'max')
-      .getRawOne();
-
-    const adj = this.payrollAdjustmentRepo.create({
-      payroll_id: payrollId,
-      item_name: body.item_name,
-      amount: body.amount,
-      remarks: body.remarks || undefined,
-      sort_order: (maxSort?.max || 0) + 1,
+    const maxSortResult = await this.prisma.payrollAdjustment.aggregate({
+      where: { payroll_id: payrollId },
+      _max: { sort_order: true },
     });
 
-    const saved = await this.payrollAdjustmentRepo.save(adj);
+    const saved = await this.prisma.payrollAdjustment.create({
+      data: {
+        payroll_id: payrollId,
+        item_name: body.item_name,
+        amount: body.amount,
+        remarks: body.remarks || undefined,
+        sort_order: (maxSortResult._max.sort_order || 0) + 1,
+      },
+    });
 
     // Recalculate adjustment total and net amount
     await this.recalcAdjustmentTotal(payrollId);
@@ -992,16 +1006,18 @@ export class PayrollService {
 
   // ── 刪除自定義調整項 ──────────────────────────────────────────
   async removeAdjustment(payrollId: number, adjId: number) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const adj = await this.payrollAdjustmentRepo.findOne({ where: { id: adjId, payroll_id: payrollId } });
+    const adj = await this.prisma.payrollAdjustment.findFirst({
+      where: { id: adjId, payroll_id: payrollId },
+    });
     if (!adj) throw new NotFoundException('Adjustment not found');
 
-    await this.payrollAdjustmentRepo.remove(adj);
+    await this.prisma.payrollAdjustment.delete({ where: { id: adjId } });
 
     // Recalculate
     await this.recalcAdjustmentTotal(payrollId);
@@ -1021,45 +1037,48 @@ export class PayrollService {
     amount: number;
     remarks?: string;
   }) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
     // Check if same allowance already exists for this date
-    const existing = await this.dailyAllowanceRepo.findOne({
+    const existing = await this.prisma.payrollDailyAllowance.findFirst({
       where: { payroll_id: payrollId, date: body.date, allowance_key: body.allowance_key },
     });
     if (existing) {
       throw new BadRequestException(`此日期已有「${body.allowance_name}」津貼`);
     }
 
-    const da = this.dailyAllowanceRepo.create({
-      payroll_id: payrollId,
-      date: body.date,
-      allowance_key: body.allowance_key,
-      allowance_name: body.allowance_name,
-      amount: body.amount,
-      remarks: body.remarks || undefined,
+    const saved = await this.prisma.payrollDailyAllowance.create({
+      data: {
+        payroll_id: payrollId,
+        date: body.date,
+        allowance_key: body.allowance_key,
+        allowance_name: body.allowance_name,
+        amount: body.amount,
+        remarks: body.remarks || undefined,
+      },
     });
 
-    const saved = await this.dailyAllowanceRepo.save(da);
     return saved;
   }
 
   // 刪除每日津貼
   async removeDailyAllowance(payrollId: number, daId: number) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
-    const da = await this.dailyAllowanceRepo.findOne({ where: { id: daId, payroll_id: payrollId } });
+    const da = await this.prisma.payrollDailyAllowance.findFirst({
+      where: { id: daId, payroll_id: payrollId },
+    });
     if (!da) throw new NotFoundException('Daily allowance not found');
 
-    await this.dailyAllowanceRepo.remove(da);
+    await this.prisma.payrollDailyAllowance.delete({ where: { id: daId } });
 
     return { success: true };
   }
@@ -1069,27 +1088,31 @@ export class PayrollService {
     date: string;
     allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
   }) {
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能編輯草稿狀態的糧單');
     }
 
     // Delete existing allowances for this date
-    await this.dailyAllowanceRepo.delete({ payroll_id: payrollId, date: body.date });
+    await this.prisma.payrollDailyAllowance.deleteMany({
+      where: { payroll_id: payrollId, date: body.date },
+    });
 
     // Create new ones
-    const saved: PayrollDailyAllowance[] = [];
+    const saved: any[] = [];
     for (const a of body.allowances) {
-      const da = this.dailyAllowanceRepo.create({
-        payroll_id: payrollId,
-        date: body.date,
-        allowance_key: a.allowance_key,
-        allowance_name: a.allowance_name,
-        amount: a.amount,
-        remarks: a.remarks || undefined,
+      const da = await this.prisma.payrollDailyAllowance.create({
+        data: {
+          payroll_id: payrollId,
+          date: body.date,
+          allowance_key: a.allowance_key,
+          allowance_name: a.allowance_name,
+          amount: a.amount,
+          remarks: a.remarks || undefined,
+        },
       });
-      saved.push(await this.dailyAllowanceRepo.save(da));
+      saved.push(da);
     }
 
     return saved;
@@ -1097,44 +1120,44 @@ export class PayrollService {
 
   // 取得員工可用的津貼選項
   async getAllowanceOptions(employeeId: number, dateTo: string) {
-    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
-      .where('ss.employee_id = :empId', { empId: employeeId })
-      .andWhere('ss.effective_date <= :end', { end: dateTo })
-      .orderBy('ss.effective_date', 'DESC')
-      .getOne();
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: employeeId,
+        effective_date: { lte: dateTo },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
 
     return this.buildAllowanceOptions(salarySetting);
   }
 
   // ── 統計摘要 ──────────────────────────────────────────────────
   async getSummary(query: any) {
-    const qb = this.payrollRepo.createQueryBuilder('p');
+    const where: any = {};
+    if (query.period) where.period = query.period;
+    if (query.company_profile_id) where.company_profile_id = Number(query.company_profile_id);
 
-    if (query.period) {
-      qb.andWhere('p.period = :period', { period: query.period });
-    }
-    if (query.company_profile_id) {
-      qb.andWhere('p.company_profile_id = :cpId', { cpId: Number(query.company_profile_id) });
-    }
-
-    const result = await qb
-      .select('COUNT(*)', 'count')
-      .addSelect('SUM(p.base_amount)', 'total_base')
-      .addSelect('SUM(p.allowance_total)', 'total_allowance')
-      .addSelect('SUM(p.ot_total)', 'total_ot')
-      .addSelect('SUM(p.commission_total)', 'total_commission')
-      .addSelect('SUM(p.mpf_deduction)', 'total_mpf')
-      .addSelect('SUM(p.net_amount)', 'total_net')
-      .getRawOne();
+    const result = await this.prisma.payroll.aggregate({
+      where,
+      _count: true,
+      _sum: {
+        base_amount: true,
+        allowance_total: true,
+        ot_total: true,
+        commission_total: true,
+        mpf_deduction: true,
+        net_amount: true,
+      },
+    });
 
     return {
-      count: Number(result.count) || 0,
-      total_base: Number(result.total_base) || 0,
-      total_allowance: Number(result.total_allowance) || 0,
-      total_ot: Number(result.total_ot) || 0,
-      total_commission: Number(result.total_commission) || 0,
-      total_mpf: Number(result.total_mpf) || 0,
-      total_net: Number(result.total_net) || 0,
+      count: result._count || 0,
+      total_base: Number(result._sum.base_amount) || 0,
+      total_allowance: Number(result._sum.allowance_total) || 0,
+      total_ot: Number(result._sum.ot_total) || 0,
+      total_commission: Number(result._sum.commission_total) || 0,
+      total_mpf: Number(result._sum.mpf_deduction) || 0,
+      total_net: Number(result._sum.net_amount) || 0,
     };
   }
 
@@ -1142,58 +1165,43 @@ export class PayrollService {
   // ── 逐日計算邏輯 ──────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════
 
-  /**
-   * 從 PayrollWorkLog 構建逐日計算（用於已生成的糧單）
-   */
   private buildDailyCalculation(
-    pwls: PayrollWorkLog[],
-    salarySetting: EmployeeSalarySetting | null,
-    dailyAllowances: PayrollDailyAllowance[],
+    pwls: any[],
+    salarySetting: any | null,
+    dailyAllowances: any[],
   ): any[] {
     const baseSalary = salarySetting ? Number(salarySetting.base_salary) || 0 : 0;
 
-    // Group work logs by date
-    const dateMap = new Map<string, PayrollWorkLog[]>();
+    const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
-      const date = pwl.scheduled_date;
+      const date = String(pwl.scheduled_date);
       if (!dateMap.has(date)) dateMap.set(date, []);
       dateMap.get(date)!.push(pwl);
     }
 
-    // Group daily allowances by date
-    const daMap = new Map<string, PayrollDailyAllowance[]>();
+    const daMap = new Map<string, any[]>();
     for (const da of dailyAllowances) {
-      const date = da.date;
+      const date = String(da.date);
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
 
-    // Sort dates
     const sortedDates = Array.from(dateMap.keys()).sort();
 
     return sortedDates.map(date => {
       const dayPwls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
 
-      // Calculate work income for this day (sum of line_amount from rate card matching)
-      const workIncome = dayPwls.reduce((sum, pwl) => sum + (Number(pwl.line_amount) || 0), 0);
-
-      // Check if work income is less than base salary (need to top up)
+      const workIncome = dayPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0), 0);
       const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
       const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-
-      // Effective income for this day = max(workIncome, baseSalary)
       const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
-
-      // Daily allowance total
-      const dailyAllowanceTotal = dayAllowances.reduce((sum, da) => sum + (Number(da.amount) || 0), 0);
-
-      // Day total = effective income + daily allowances
+      const dailyAllowanceTotal = dayAllowances.reduce((sum: number, da: any) => sum + (Number(da.amount) || 0), 0);
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
 
       return {
         date,
-        work_logs: dayPwls.map(pwl => ({
+        work_logs: dayPwls.map((pwl: any) => ({
           id: pwl.id,
           service_type: pwl.service_type,
           day_night: pwl.day_night,
@@ -1211,7 +1219,7 @@ export class PayrollService {
         needs_top_up: needsTopUp,
         top_up_amount: topUpAmount,
         effective_income: effectiveIncome,
-        daily_allowances: dayAllowances.map(da => ({
+        daily_allowances: dayAllowances.map((da: any) => ({
           id: da.id,
           allowance_key: da.allowance_key,
           allowance_name: da.allowance_name,
@@ -1224,53 +1232,38 @@ export class PayrollService {
     });
   }
 
-  /**
-   * 從 enriched WorkLog 構建逐日計算（用於 preview）
-   */
   private buildDailyCalculationFromWorkLogs(
     workLogs: any[],
-    salarySetting: EmployeeSalarySetting | null,
-    dailyAllowances: PayrollDailyAllowance[],
+    salarySetting: any | null,
+    dailyAllowances: any[],
   ): any[] {
     const baseSalary = salarySetting ? Number(salarySetting.base_salary) || 0 : 0;
 
-    // Group work logs by date
     const dateMap = new Map<string, any[]>();
     for (const wl of workLogs) {
-      const date = wl.scheduled_date;
+      const date = String(wl.scheduled_date);
       if (!dateMap.has(date)) dateMap.set(date, []);
       dateMap.get(date)!.push(wl);
     }
 
-    // Group daily allowances by date
-    const daMap = new Map<string, PayrollDailyAllowance[]>();
+    const daMap = new Map<string, any[]>();
     for (const da of dailyAllowances) {
-      const date = da.date;
+      const date = String(da.date);
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
 
-    // Sort dates
     const sortedDates = Array.from(dateMap.keys()).sort();
 
     return sortedDates.map(date => {
       const dayWls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
 
-      // Calculate work income for this day
       const workIncome = dayWls.reduce((sum: number, wl: any) => sum + (Number(wl._line_amount) || 0), 0);
-
-      // Check if work income is less than base salary
       const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
       const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-
-      // Effective income
       const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
-
-      // Daily allowance total
-      const dailyAllowanceTotal = dayAllowances.reduce((sum, da) => sum + (Number(da.amount) || 0), 0);
-
-      // Day total
+      const dailyAllowanceTotal = dayAllowances.reduce((sum: number, da: any) => sum + (Number(da.amount) || 0), 0);
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
 
       return {
@@ -1293,7 +1286,7 @@ export class PayrollService {
         needs_top_up: needsTopUp,
         top_up_amount: topUpAmount,
         effective_income: effectiveIncome,
-        daily_allowances: dayAllowances.map(da => ({
+        daily_allowances: dayAllowances.map((da: any) => ({
           id: da.id,
           allowance_key: da.allowance_key,
           allowance_name: da.allowance_name,
@@ -1306,10 +1299,7 @@ export class PayrollService {
     });
   }
 
-  /**
-   * 從員工薪酬配置構建可用津貼選項列表
-   */
-  private buildAllowanceOptions(salarySetting: EmployeeSalarySetting | null): any[] {
+  private buildAllowanceOptions(salarySetting: any | null): any[] {
     if (!salarySetting) return [];
 
     const options: any[] = [];
@@ -1340,7 +1330,7 @@ export class PayrollService {
 
     // Custom allowances
     if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
-      for (const ca of salarySetting.custom_allowances) {
+      for (const ca of salarySetting.custom_allowances as any[]) {
         if (ca.amount && Number(ca.amount) > 0) {
           options.push({
             key: `custom:${ca.name}`,
@@ -1358,20 +1348,19 @@ export class PayrollService {
   // ── 輔助方法 ──────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════
 
-  /**
-   * 為工作記錄添加價格資訊（從 rate card 取價）- 批量優化版本
-   */
-  private async enrichWorkLogsWithPrice(workLogs: WorkLog[]): Promise<any[]> {
+  private async enrichWorkLogsWithPrice(workLogs: any[]): Promise<any[]> {
     if (workLogs.length === 0) return [];
 
-    // 批量加載所有相關客戶的 rate cards（只查一次）
+    // 批量加載所有相關客戶的 rate cards
     const clientIds = [...new Set(workLogs.filter(wl => wl.client_id).map(wl => wl.client_id!))];
     const companyProfileIds = [...new Set(workLogs.filter(wl => wl.company_profile_id).map(wl => wl.company_profile_id!))];
 
     // 批量加載 company profiles
-    const companyProfileMap = new Map<number, number>(); // cpId -> companyId
+    const companyProfileMap = new Map<number, number>();
     if (companyProfileIds.length > 0) {
-      const cps = await this.companyProfileRepo.findBy({ id: In(companyProfileIds) });
+      const cps = await this.prisma.companyProfile.findMany({
+        where: { id: { in: companyProfileIds } },
+      });
       for (const cp of cps) {
         if ((cp as any).company_id) {
           companyProfileMap.set(cp.id, (cp as any).company_id);
@@ -1380,13 +1369,15 @@ export class PayrollService {
     }
 
     // 批量加載所有相關 rate cards
-    let allRateCards: RateCard[] = [];
+    let allRateCards: any[] = [];
     if (clientIds.length > 0) {
-      allRateCards = await this.rateCardRepo.createQueryBuilder('rc')
-        .where('rc.status = :status', { status: 'active' })
-        .andWhere('rc.client_id IN (:...clientIds)', { clientIds })
-        .orderBy('rc.effective_date', 'DESC')
-        .getMany();
+      allRateCards = await this.prisma.rateCard.findMany({
+        where: {
+          status: 'active',
+          client_id: { in: clientIds },
+        },
+        orderBy: { effective_date: 'desc' },
+      });
     }
 
     const result: any[] = [];
@@ -1394,7 +1385,6 @@ export class PayrollService {
     for (const wl of workLogs) {
       const enriched: any = { ...wl };
 
-      // Use existing matched price if available
       if (wl.price_match_status === 'matched' && wl.matched_rate) {
         const rate = Number(wl.matched_rate) || 0;
         const qty = Number(wl.quantity) || 1;
@@ -1407,7 +1397,6 @@ export class PayrollService {
         enriched._line_amount = rate * qty;
         enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
       } else if (wl.client_id) {
-        // Match in memory from pre-loaded rate cards
         const companyId = wl.company_profile_id ? (companyProfileMap.get(wl.company_profile_id) ?? null) : null;
         const tonnageNum = wl.tonnage ? wl.tonnage.replace('噸', '') : null;
         const clientCards = allRateCards.filter(rc => rc.client_id === wl.client_id);
@@ -1430,7 +1419,7 @@ export class PayrollService {
           enriched._matched_unit = unit;
           enriched._matched_ot_rate = card.ot_rate;
           enriched._price_match_status = 'matched';
-          enriched._price_match_note = `匹配到：${(card as any).name || card.contract_no || `RateCard#${card.id}`}`;
+          enriched._price_match_note = `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`;
           enriched._line_amount = rate * qty;
         } else {
           enriched._matched_rate_card_id = null;
@@ -1459,18 +1448,15 @@ export class PayrollService {
     return result;
   }
 
-  /**
-   * 在內存中匹配 rate card（批量優化，避免 N+1 查詢）
-   */
   private tryMatchRateCardInMemory(
-    clientCards: RateCard[],
+    clientCards: any[],
     companyId: number | null,
     quotationId: number | null,
     vehicleType: string | null,
     tonnage: string | null,
     origin: string | null,
     destination: string | null,
-  ): RateCard | null {
+  ): any | null {
     const attempts = [
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
@@ -1483,8 +1469,8 @@ export class PayrollService {
 
     for (const attempt of attempts) {
       const matched = clientCards.filter(rc => {
-        if (attempt.useCompany && companyId && (rc as any).company_id !== companyId) return false;
-        if (attempt.useQuotation && quotationId && (rc as any).source_quotation_id !== quotationId) return false;
+        if (attempt.useCompany && companyId && rc.company_id !== companyId) return false;
+        if (attempt.useQuotation && quotationId && rc.source_quotation_id !== quotationId) return false;
         if (attempt.useVehicle && vehicleType && rc.vehicle_type !== vehicleType) return false;
         if (attempt.useTonnage && tonnage && rc.vehicle_tonnage !== tonnage) return false;
         if (attempt.useRoute) {
@@ -1494,12 +1480,11 @@ export class PayrollService {
         return true;
       });
 
-      // Sort by effective_date DESC and take first
       if (matched.length > 0) {
-        matched.sort((a, b) => {
-          const da = (a as any).effective_date || '';
-          const db = (b as any).effective_date || '';
-          return db.localeCompare(da);
+        matched.sort((a: any, b: any) => {
+          const da = a.effective_date || '';
+          const db = b.effective_date || '';
+          return String(db).localeCompare(String(da));
         });
         return matched[0];
       }
@@ -1508,15 +1493,12 @@ export class PayrollService {
     return null;
   }
 
-  /**
-   * 為單個工作記錄匹配 rate card（保留供其他地方使用）
-   */
-  private async matchRateCardForWorkLog(wl: WorkLog): Promise<{ card: RateCard; rate: number; unit: string } | null> {
+  private async matchRateCardForWorkLog(wl: any): Promise<{ card: any; rate: number; unit: string } | null> {
     if (!wl.client_id) return null;
 
     let companyId: number | null = null;
     if (wl.company_profile_id) {
-      const cp = await this.companyProfileRepo.findOne({ where: { id: wl.company_profile_id } });
+      const cp = await this.prisma.companyProfile.findUnique({ where: { id: wl.company_profile_id } });
       if (cp && (cp as any).company_id) {
         companyId = (cp as any).company_id;
       }
@@ -1540,9 +1522,6 @@ export class PayrollService {
     return { card, rate, unit };
   }
 
-  /**
-   * 多層次模糊匹配 rate card（保留供 matchRateCardForWorkLog 使用）
-   */
   private async tryMatchRateCard(
     clientId: number,
     companyId: number | null,
@@ -1551,7 +1530,7 @@ export class PayrollService {
     tonnage: string | null,
     origin: string | null,
     destination: string | null,
-  ): Promise<RateCard | null> {
+  ): Promise<any | null> {
     const attempts = [
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
       { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
@@ -1563,40 +1542,28 @@ export class PayrollService {
     ];
 
     for (const attempt of attempts) {
-      const qb = this.rateCardRepo.createQueryBuilder('rc')
-        .where('rc.status = :status', { status: 'active' })
-        .andWhere('rc.client_id = :clientId', { clientId });
+      const where: any = { status: 'active', client_id: clientId };
 
-      if (attempt.useCompany && companyId) {
-        qb.andWhere('rc.company_id = :companyId', { companyId });
-      }
-      if (attempt.useQuotation && quotationId) {
-        qb.andWhere('rc.source_quotation_id = :quotationId', { quotationId });
-      }
-      if (attempt.useVehicle && vehicleType) {
-        qb.andWhere('rc.vehicle_type = :vehicleType', { vehicleType });
-      }
-      if (attempt.useTonnage && tonnage) {
-        qb.andWhere('rc.vehicle_tonnage = :tonnage', { tonnage });
-      }
+      if (attempt.useCompany && companyId) where.company_id = companyId;
+      if (attempt.useQuotation && quotationId) where.source_quotation_id = quotationId;
+      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
+      if (attempt.useTonnage && tonnage) where.vehicle_tonnage = tonnage;
       if (attempt.useRoute) {
-        if (origin) qb.andWhere('rc.origin ILIKE :origin', { origin: `%${origin}%` });
-        if (destination) qb.andWhere('rc.destination ILIKE :destination', { destination: `%${destination}%` });
+        if (origin) where.origin = { contains: origin, mode: 'insensitive' };
+        if (destination) where.destination = { contains: destination, mode: 'insensitive' };
       }
 
-      qb.orderBy('rc.effective_date', 'DESC').limit(1);
-
-      const card = await qb.getOne();
+      const card = await this.prisma.rateCard.findFirst({
+        where,
+        orderBy: { effective_date: 'desc' },
+      });
       if (card) return card;
     }
 
     return null;
   }
 
-  /**
-   * 根據日/夜/中直取對應費率
-   */
-  private resolveRate(card: RateCard, dayNight: string | null): { rate: number; unit: string } {
+  private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
     if (dayNight === '夜') {
       return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.day_unit || '' };
     }
@@ -1606,9 +1573,6 @@ export class PayrollService {
     return { rate: Number(card.day_rate) || 0, unit: card.day_unit || '' };
   }
 
-  /**
-   * 從工作記錄構建歸組鍵
-   */
   private buildGroupKeyFromWorkLog(wl: any): string {
     const parts = [
       wl.client?.name || wl.client_name || `client_${wl.client_id || ''}`,
@@ -1623,28 +1587,8 @@ export class PayrollService {
     return parts.join('|');
   }
 
-  /**
-   * 從 PayrollWorkLog 構建歸組結算
-   */
-  private buildGroupedSettlement(pwls: PayrollWorkLog[]): any[] {
-    const groups = new Map<string, {
-      group_key: string;
-      client_name: string;
-      contract_no: string;
-      service_type: string;
-      day_night: string;
-      start_location: string;
-      end_location: string;
-      machine_type: string;
-      tonnage: string;
-      matched_rate: number | null;
-      matched_unit: string | null;
-      total_quantity: number;
-      total_amount: number;
-      count: number;
-      price_match_status: string;
-      work_log_ids: number[];
-    }>();
+  private buildGroupedSettlement(pwls: any[]): any[] {
+    const groups = new Map<string, any>();
 
     for (const pwl of pwls) {
       const key = pwl.group_key || this.buildGroupKeyFromPwl(pwl);
@@ -1680,9 +1624,6 @@ export class PayrollService {
     return Array.from(groups.values());
   }
 
-  /**
-   * 從 enriched WorkLog 構建歸組結算（用於 preview）
-   */
   private buildGroupedSettlementFromWorkLogs(workLogs: any[]): any[] {
     const groups = new Map<string, any>();
 
@@ -1720,7 +1661,7 @@ export class PayrollService {
     return Array.from(groups.values());
   }
 
-  private buildGroupKeyFromPwl(pwl: PayrollWorkLog): string {
+  private buildGroupKeyFromPwl(pwl: any): string {
     const parts = [
       pwl.client_name || `client_${pwl.client_id || ''}`,
       pwl.contract_no || `q_${pwl.quotation_id || ''}`,
@@ -1734,33 +1675,28 @@ export class PayrollService {
     return parts.join('|');
   }
 
-  /**
-   * 計算單筆工作記錄金額
-   */
-  private calculateLineAmount(pwl: PayrollWorkLog): number {
+  private calculateLineAmount(pwl: any): number {
     if (!pwl.matched_rate || pwl.price_match_status !== 'matched') return 0;
     const rate = Number(pwl.matched_rate) || 0;
     const qty = Number(pwl.quantity) || 1;
     return rate * qty;
   }
 
-  /**
-   * 重新匹配 PayrollWorkLog 的價格
-   */
-  private async rematchPayrollWorkLogPrice(pwl: PayrollWorkLog): Promise<void> {
+  private async rematchPayrollWorkLogPrice(pwl: any): Promise<any> {
     if (!pwl.client_id) {
-      pwl.price_match_status = 'pending';
-      pwl.price_match_note = '缺少客戶資訊';
-      pwl.matched_rate_card_id = null as any;
-      pwl.matched_rate = null as any;
-      pwl.matched_unit = null as any;
-      pwl.matched_ot_rate = null as any;
-      return;
+      return {
+        price_match_status: 'pending',
+        price_match_note: '缺少客戶資訊',
+        matched_rate_card_id: null,
+        matched_rate: null,
+        matched_unit: null,
+        matched_ot_rate: null,
+      };
     }
 
     let companyId: number | null = null;
     if (pwl.company_profile_id) {
-      const cp = await this.companyProfileRepo.findOne({ where: { id: pwl.company_profile_id } });
+      const cp = await this.prisma.companyProfile.findUnique({ where: { id: pwl.company_profile_id } });
       if (cp && (cp as any).company_id) {
         companyId = (cp as any).company_id;
       }
@@ -1779,41 +1715,46 @@ export class PayrollService {
     );
 
     if (!card) {
-      pwl.price_match_status = 'unmatched';
-      pwl.price_match_note = '未設定';
-      pwl.matched_rate_card_id = null as any;
-      pwl.matched_rate = null as any;
-      pwl.matched_unit = null as any;
-      pwl.matched_ot_rate = null as any;
-      return;
+      return {
+        price_match_status: 'unmatched',
+        price_match_note: '未設定',
+        matched_rate_card_id: null,
+        matched_rate: null,
+        matched_unit: null,
+        matched_ot_rate: null,
+      };
     }
 
     const { rate, unit } = this.resolveRate(card, pwl.day_night);
-    pwl.matched_rate_card_id = card.id;
-    pwl.matched_rate = rate;
-    pwl.matched_unit = unit;
-    pwl.matched_ot_rate = card.ot_rate ?? (null as any);
-    pwl.price_match_status = 'matched';
-    pwl.price_match_note = `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`;
+    return {
+      matched_rate_card_id: card.id,
+      matched_rate: rate,
+      matched_unit: unit,
+      matched_ot_rate: card.ot_rate ?? null,
+      price_match_status: 'matched',
+      price_match_note: `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`,
+    };
   }
 
-  /**
-   * 重算自定義調整總額並更新淨額
-   */
   private async recalcAdjustmentTotal(payrollId: number): Promise<void> {
-    const adjustments = await this.payrollAdjustmentRepo.find({ where: { payroll_id: payrollId } });
+    const adjustments = await this.prisma.payrollAdjustment.findMany({
+      where: { payroll_id: payrollId },
+    });
     const adjustmentTotal = adjustments.reduce((sum, adj) => sum + Number(adj.amount), 0);
 
-    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) return;
 
     const grossIncome = Number(payroll.base_amount) + Number(payroll.allowance_total) +
       Number(payroll.ot_total) + Number(payroll.commission_total);
     const mpfDeduction = Number(payroll.mpf_deduction);
 
-    payroll.adjustment_total = adjustmentTotal;
-    payroll.net_amount = grossIncome - mpfDeduction + adjustmentTotal;
-
-    await this.payrollRepo.save(payroll);
+    await this.prisma.payroll.update({
+      where: { id: payrollId },
+      data: {
+        adjustment_total: adjustmentTotal,
+        net_amount: grossIncome - mpfDeduction + adjustmentTotal,
+      },
+    });
   }
 }

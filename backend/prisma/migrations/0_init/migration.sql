@@ -1,0 +1,12 @@
+-- CreateTable (baseline migration - tables already exist in production)
+-- This migration was created as a baseline for the existing database.
+-- All tables were already created by TypeORM synchronize.
+-- This file is intentionally left as a placeholder.
+
+-- Tables: users, companies, employees, employee_salary_settings, employee_transfers,
+-- vehicles, vehicle_plate_histories, vehicle_transfers, machinery, machinery_transfers,
+-- partners, projects, project_sequences, quotations, quotation_items, quotation_sequences,
+-- rate_cards, rate_card_ot_rates, fleet_rate_cards, subcon_rate_cards,
+-- work_logs, payrolls, payroll_items, payroll_adjustments, payroll_daily_allowances,
+-- payroll_work_logs, custom_fields, custom_field_values, documents,
+-- field_options, company_profiles

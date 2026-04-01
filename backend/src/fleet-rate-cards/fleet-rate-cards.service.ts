@@ -1,13 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { FleetRateCard } from './fleet-rate-card.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FleetRateCardsService {
-  constructor(
-    @InjectRepository(FleetRateCard) private repo: Repository<FleetRateCard>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'vehicle_tonnage', 'vehicle_type', 'origin', 'destination',
@@ -21,53 +17,59 @@ export class FleetRateCardsService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('frc')
-      .leftJoinAndSelect('frc.client', 'client')
-      .leftJoinAndSelect('frc.source_quotation', 'source_quotation');
+    const where: any = {};
 
+    if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.vehicle_tonnage) where.vehicle_tonnage = query.vehicle_tonnage;
+    if (query.vehicle_type) where.vehicle_type = query.vehicle_type;
+    if (query.status) where.status = query.status;
     if (query.search) {
-      qb.andWhere(
-        '(frc.origin ILIKE :s OR frc.destination ILIKE :s OR frc.contract_no ILIKE :s OR frc.remarks ILIKE :s OR client.name ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.OR = [
+        { origin: { contains: query.search, mode: 'insensitive' } },
+        { destination: { contains: query.search, mode: 'insensitive' } },
+        { contract_no: { contains: query.search, mode: 'insensitive' } },
+        { remarks: { contains: query.search, mode: 'insensitive' } },
+        { client: { name: { contains: query.search, mode: 'insensitive' } } },
+      ];
     }
-    if (query.client_id) qb.andWhere('frc.client_id = :clid', { clid: query.client_id });
-    if (query.vehicle_tonnage) qb.andWhere('frc.vehicle_tonnage = :vt', { vt: query.vehicle_tonnage });
-    if (query.vehicle_type) qb.andWhere('frc.vehicle_type = :vtp', { vtp: query.vehicle_type });
-    if (query.status) qb.andWhere('frc.status = :status', { status: query.status });
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
-    qb.orderBy(`frc.${sortBy}`, sortOrder);
+    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.fleetRateCard.findMany({
+        where,
+        include: { client: true, source_quotation: true },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.fleetRateCard.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const frc = await this.repo.findOne({
+    const frc = await this.prisma.fleetRateCard.findUnique({
       where: { id },
-      relations: ['client', 'source_quotation'],
+      include: { client: true, source_quotation: true },
     });
     if (!frc) throw new NotFoundException('車隊價目表不存在');
     return frc;
   }
 
-  async create(dto: Partial<FleetRateCard>) {
-    const entity = this.repo.create(dto);
-    const saved: FleetRateCard = await (this.repo.save(entity) as any);
+  async create(dto: any) {
+    const { client, source_quotation, ...data } = dto;
+    const saved = await this.prisma.fleetRateCard.create({ data });
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: Partial<FleetRateCard>) {
-    const existing = await this.repo.findOne({ where: { id } });
+  async update(id: number, dto: any) {
+    const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('車隊價目表不存在');
-    const { created_at, updated_at, id: _id, client, ...updateData } = dto as any;
-    await this.repo.update(id, updateData);
+    const { created_at, updated_at, id: _id, client, source_quotation, ...updateData } = dto;
+    await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
 }

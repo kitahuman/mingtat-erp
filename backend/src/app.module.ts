@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
@@ -26,32 +26,7 @@ import { PayrollModule } from './payroll/payroll.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const databaseUrl = config.get('DATABASE_URL');
-        if (databaseUrl) {
-          return {
-            type: 'postgres',
-            url: databaseUrl,
-            autoLoadEntities: true,
-            synchronize: true,
-            ssl: { rejectUnauthorized: false },
-          };
-        }
-        return {
-          type: 'postgres',
-          host: config.get('DATABASE_HOST', 'localhost'),
-          port: config.get<number>('DATABASE_PORT', 5432),
-          username: config.get('DATABASE_USER', 'mingtat'),
-          password: config.get('DATABASE_PASSWORD', 'mingtat2026'),
-          database: config.get('DATABASE_NAME', 'mingtat_erp'),
-          autoLoadEntities: true,
-          synchronize: true,
-        };
-      },
-    }),
+    PrismaModule,
     AuthModule,
     UsersModule,
     CompaniesModule,

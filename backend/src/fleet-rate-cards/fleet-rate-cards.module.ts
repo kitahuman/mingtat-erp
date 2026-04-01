@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { FleetRateCard } from './fleet-rate-card.entity';
+import { PrismaModule } from '../prisma/prisma.module';
 import { FleetRateCardsService } from './fleet-rate-cards.service';
 import { FleetRateCardsController } from './fleet-rate-cards.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([FleetRateCard])],
+  imports: [PrismaModule],
   providers: [FleetRateCardsService],
   controllers: [FleetRateCardsController],
   exports: [FleetRateCardsService],

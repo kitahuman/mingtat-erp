@@ -1,33 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Company } from '../companies/company.entity';
-import { Employee } from '../employees/employee.entity';
-import { Vehicle } from '../vehicles/vehicle.entity';
-import { Machinery } from '../machinery/machinery.entity';
-import { CompanyProfile } from '../company-profiles/company-profile.entity';
+import { PrismaService } from '../prisma/prisma.service';
 import { CompanyProfilesService } from '../company-profiles/company-profiles.service';
 import { CustomFieldsService } from '../custom-fields/custom-fields.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
-    @InjectRepository(Company) private companyRepo: Repository<Company>,
-    @InjectRepository(Employee) private employeeRepo: Repository<Employee>,
-    @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
-    @InjectRepository(Machinery) private machineryRepo: Repository<Machinery>,
-    @InjectRepository(CompanyProfile) private companyProfileRepo: Repository<CompanyProfile>,
+    private readonly prisma: PrismaService,
     private companyProfilesService: CompanyProfilesService,
     private customFieldsService: CustomFieldsService,
   ) {}
 
   async getStats() {
     const [companies, employees, vehicles, machinery, companyProfiles] = await Promise.all([
-      this.companyRepo.count({ where: { status: 'active' } }),
-      this.employeeRepo.count({ where: { status: 'active' } }),
-      this.vehicleRepo.count({ where: { status: 'active' } }),
-      this.machineryRepo.count({ where: { status: 'active' } }),
-      this.companyProfileRepo.count({ where: { status: 'active' } }),
+      this.prisma.company.count({ where: { status: 'active' } }),
+      this.prisma.employee.count({ where: { status: 'active' } }),
+      this.prisma.vehicle.count({ where: { status: 'active' } }),
+      this.prisma.machinery.count({ where: { status: 'active' } }),
+      this.prisma.companyProfile.count({ where: { status: 'active' } }),
     ]);
 
     const sixtyDaysLater = new Date();
@@ -36,9 +26,9 @@ export class DashboardService {
 
     // Employee expiry alerts
     const employeeAlerts: any[] = [];
-    const activeEmployees = await this.employeeRepo.find({
-      where: { status: 'active' as any },
-      relations: ['company'],
+    const activeEmployees = await this.prisma.employee.findMany({
+      where: { status: 'active' },
+      include: { company: true },
     });
     for (const e of activeEmployees) {
       const checks = [
@@ -47,7 +37,7 @@ export class DashboardService {
         { type: '駕駛執照', date: e.driving_license_expiry },
       ];
       for (const c of checks) {
-        if (c.date && c.date <= sixtyStr) {
+        if (c.date && String(c.date) <= sixtyStr) {
           employeeAlerts.push({
             id: e.id,
             name: e.name_zh,
@@ -62,9 +52,9 @@ export class DashboardService {
 
     // Vehicle expiry alerts
     const vehicleAlerts: any[] = [];
-    const activeVehicles = await this.vehicleRepo.find({
-      where: { status: 'active' as any },
-      relations: ['owner_company'],
+    const activeVehicles = await this.prisma.vehicle.findMany({
+      where: { status: 'active' },
+      include: { owner_company: true },
     });
     for (const v of activeVehicles) {
       const checks = [
@@ -74,7 +64,7 @@ export class DashboardService {
         { type: '行車證', date: v.license_expiry },
       ];
       for (const c of checks) {
-        if (c.date && c.date <= sixtyStr) {
+        if (c.date && String(c.date) <= sixtyStr) {
           vehicleAlerts.push({
             id: v.id,
             name: v.plate_number,
@@ -89,9 +79,9 @@ export class DashboardService {
 
     // Machinery expiry alerts
     const machineryAlerts: any[] = [];
-    const activeMachinery = await this.machineryRepo.find({
-      where: { status: 'active' as any },
-      relations: ['owner_company'],
+    const activeMachinery = await this.prisma.machinery.findMany({
+      where: { status: 'active' },
+      include: { owner_company: true },
     });
     for (const m of activeMachinery) {
       const checks = [
@@ -99,7 +89,7 @@ export class DashboardService {
         { type: '保險', date: m.insurance_expiry },
       ];
       for (const c of checks) {
-        if (c.date && c.date <= sixtyStr) {
+        if (c.date && String(c.date) <= sixtyStr) {
           machineryAlerts.push({
             id: m.id,
             name: m.machine_code,
@@ -118,13 +108,13 @@ export class DashboardService {
     // Custom field expiry alerts
     const customFieldAlerts = await this.customFieldsService.getExpiryAlerts();
 
-    // Employee role breakdown
-    const roleBreakdown = await this.employeeRepo.createQueryBuilder('e')
-      .select('e.role', 'role')
-      .addSelect('COUNT(*)', 'count')
-      .where('e.status = :s', { s: 'active' })
-      .groupBy('e.role')
-      .getRawMany();
+    // Employee role breakdown using raw query
+    const roleBreakdown = await this.prisma.$queryRaw`
+      SELECT role, COUNT(*)::int as count
+      FROM employees
+      WHERE status = 'active'
+      GROUP BY role
+    `;
 
     return {
       companies,

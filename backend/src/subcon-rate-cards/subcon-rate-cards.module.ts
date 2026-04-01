@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { SubconRateCard } from './subcon-rate-card.entity';
+import { PrismaModule } from '../prisma/prisma.module';
 import { SubconRateCardsService } from './subcon-rate-cards.service';
 import { SubconRateCardsController } from './subcon-rate-cards.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SubconRateCard])],
+  imports: [PrismaModule],
   providers: [SubconRateCardsService],
   controllers: [SubconRateCardsController],
   exports: [SubconRateCardsService],

@@ -1,32 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Quotation } from './quotation.entity';
-import { QuotationItem } from './quotation-item.entity';
-import { QuotationSequence } from './quotation-sequence.entity';
-import { Company } from '../companies/company.entity';
-import { Partner } from '../partners/partner.entity';
-import { Project } from '../projects/project.entity';
-import { ProjectSequence } from '../projects/project-sequence.entity';
-import { RateCard } from '../rate-cards/rate-card.entity';
-import { FleetRateCard } from '../fleet-rate-cards/fleet-rate-card.entity';
-import { SubconRateCard } from '../subcon-rate-cards/subcon-rate-card.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class QuotationsService {
-  constructor(
-    @InjectRepository(Quotation) private repo: Repository<Quotation>,
-    @InjectRepository(QuotationItem) private itemRepo: Repository<QuotationItem>,
-    @InjectRepository(QuotationSequence) private seqRepo: Repository<QuotationSequence>,
-    @InjectRepository(Company) private companyRepo: Repository<Company>,
-    @InjectRepository(Partner) private partnerRepo: Repository<Partner>,
-    @InjectRepository(Project) private projectRepo: Repository<Project>,
-    @InjectRepository(ProjectSequence) private projectSeqRepo: Repository<ProjectSequence>,
-    @InjectRepository(RateCard) private rateCardRepo: Repository<RateCard>,
-    @InjectRepository(FleetRateCard) private fleetRateCardRepo: Repository<FleetRateCard>,
-    @InjectRepository(SubconRateCard) private subconRateCardRepo: Repository<SubconRateCard>,
-    private dataSource: DataSource,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
     'id', 'quotation_no', 'quotation_date', 'project_name', 'total_amount', 'status', 'created_at',
@@ -38,14 +15,14 @@ export class QuotationsService {
    * Format without client code: {CompanyPrefix}Q{YYMM}{4-digit hex seq}
    */
   async generateQuotationNo(companyId: number, clientId: number | null, date: string): Promise<string> {
-    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company || !company.internal_prefix) {
       throw new NotFoundException('公司不存在或未設定前綴');
     }
 
     let clientCode = '';
     if (clientId) {
-      const partner = await this.partnerRepo.findOne({ where: { id: clientId } });
+      const partner = await this.prisma.partner.findUnique({ where: { id: clientId } });
       if (partner?.english_code) {
         clientCode = partner.english_code;
       }
@@ -60,25 +37,23 @@ export class QuotationsService {
       ? `${company.internal_prefix}Q${clientCode}`
       : `${company.internal_prefix}Q`;
 
-    // Use transaction to safely increment sequence
-    return await this.dataSource.transaction(async (manager) => {
-      let seq = await manager.findOne(QuotationSequence, {
+    return await this.prisma.$transaction(async (tx) => {
+      let seq = await tx.quotationSequence.findFirst({
         where: { prefix, year_month: yearMonth },
       });
 
       if (!seq) {
-        seq = manager.create(QuotationSequence, {
-          prefix,
-          year_month: yearMonth,
-          last_seq: 0,
+        seq = await tx.quotationSequence.create({
+          data: { prefix, year_month: yearMonth, last_seq: 0 },
         });
       }
 
-      seq.last_seq += 1;
-      await manager.save(seq);
+      const updated = await tx.quotationSequence.update({
+        where: { id: seq.id },
+        data: { last_seq: seq.last_seq + 1 },
+      });
 
-      // Convert to 4-digit hex uppercase
-      const seqHex = seq.last_seq.toString(16).toUpperCase().padStart(4, '0');
+      const seqHex = updated.last_seq.toString(16).toUpperCase().padStart(4, '0');
       return `${prefix}${yearMonth}${seqHex}`;
     });
   }
@@ -87,7 +62,7 @@ export class QuotationsService {
    * Generate project number: {公司代碼}-{年份}-P{序號}
    */
   private async generateProjectNo(companyId: number): Promise<string> {
-    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company || !company.internal_prefix) {
       throw new NotFoundException('公司不存在或未設定前綴');
     }
@@ -95,19 +70,23 @@ export class QuotationsService {
     const prefix = company.internal_prefix;
     const year = String(new Date().getFullYear());
 
-    return await this.dataSource.transaction(async (manager) => {
-      let seq = await manager.findOne(ProjectSequence, {
+    return await this.prisma.$transaction(async (tx) => {
+      let seq = await tx.projectSequence.findFirst({
         where: { prefix, year },
       });
 
       if (!seq) {
-        seq = manager.create(ProjectSequence, { prefix, year, last_seq: 0 });
+        seq = await tx.projectSequence.create({
+          data: { prefix, year, last_seq: 0 },
+        });
       }
 
-      seq.last_seq += 1;
-      await manager.save(seq);
+      const updated = await tx.projectSequence.update({
+        where: { id: seq.id },
+        data: { last_seq: seq.last_seq + 1 },
+      });
 
-      const seqStr = String(seq.last_seq).padStart(2, '0');
+      const seqStr = String(updated.last_seq).padStart(2, '0');
       return `${prefix}-${year}-P${seqStr}`;
     });
   }
@@ -120,49 +99,48 @@ export class QuotationsService {
   }) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const qb = this.repo.createQueryBuilder('q')
-      .leftJoinAndSelect('q.company', 'company')
-      .leftJoinAndSelect('q.client', 'client')
-      .leftJoinAndSelect('q.project', 'project');
+    const where: any = {};
 
+    if (query.company_id) where.company_id = Number(query.company_id);
+    if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.status) where.status = query.status;
+    if (query.quotation_type) where.quotation_type = query.quotation_type;
     if (query.search) {
-      qb.andWhere(
-        '(q.quotation_no ILIKE :s OR q.project_name ILIKE :s OR client.name ILIKE :s)',
-        { s: `%${query.search}%` },
-      );
+      where.OR = [
+        { quotation_no: { contains: query.search, mode: 'insensitive' } },
+        { project_name: { contains: query.search, mode: 'insensitive' } },
+        { client: { name: { contains: query.search, mode: 'insensitive' } } },
+      ];
     }
-    if (query.company_id) qb.andWhere('q.company_id = :cid', { cid: query.company_id });
-    if (query.client_id) qb.andWhere('q.client_id = :clid', { clid: query.client_id });
-    if (query.status) qb.andWhere('q.status = :st', { st: query.status });
-    if (query.quotation_type) qb.andWhere('q.quotation_type = :qt', { qt: query.quotation_type });
 
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
-    const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
-    qb.orderBy(`q.${sortBy}`, sortOrder);
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
 
-    const [data, total] = await qb
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getManyAndCount();
+    const [data, total] = await Promise.all([
+      this.prisma.quotation.findMany({
+        where,
+        include: { company: true, client: true, project: true },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.quotation.count({ where }),
+    ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const quotation = await this.repo.findOne({
+    const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      relations: ['company', 'client', 'items', 'project'],
+      include: { company: true, client: true, items: { orderBy: { sort_order: 'asc' } }, project: true },
     });
     if (!quotation) throw new NotFoundException('報價單不存在');
-    // Sort items by sort_order
-    if (quotation.items) {
-      quotation.items.sort((a, b) => a.sort_order - b.sort_order);
-    }
     return quotation;
   }
 
   async create(dto: any) {
-    const { items, ...quotationData } = dto;
+    const { items, company, client, project, ...quotationData } = dto;
 
     // Generate quotation number
     const quotation_no = await this.generateQuotationNo(
@@ -173,38 +151,38 @@ export class QuotationsService {
 
     // Calculate total
     let total_amount = 0;
+    const processedItems: any[] = [];
     if (items && items.length > 0) {
-      for (const item of items) {
-        item.amount = Number(item.quantity || 0) * Number(item.unit_price || 0);
-        total_amount += item.amount;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const amount = Number(item.quantity || 0) * Number(item.unit_price || 0);
+        total_amount += amount;
+        processedItems.push({
+          ...item,
+          amount,
+          sort_order: item.sort_order || i + 1,
+          id: undefined,
+        });
       }
     }
 
-    const quotation = this.repo.create({
-      ...quotationData,
-      quotation_no,
-      total_amount,
+    const saved = await this.prisma.quotation.create({
+      data: {
+        ...quotationData,
+        quotation_no,
+        total_amount,
+        quotation_date: new Date(quotationData.quotation_date),
+        items: processedItems.length > 0 ? {
+          create: processedItems.map(({ id: _id, quotation_id: _qid, ...item }) => item),
+        } : undefined,
+      },
     });
-
-    const saved: Quotation = await (this.repo.save(quotation) as any);
-
-    // Save items
-    if (items && items.length > 0) {
-      const itemEntities = items.map((item: any, index: number) =>
-        this.itemRepo.create({
-          ...item,
-          quotation_id: saved.id,
-          sort_order: item.sort_order || index + 1,
-        }),
-      );
-      await this.itemRepo.save(itemEntities);
-    }
 
     return this.findOne(saved.id);
   }
 
   async update(id: number, dto: any) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
     const { items, company, client, project, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -219,21 +197,29 @@ export class QuotationsService {
       updateData.total_amount = total_amount;
     }
 
-    await this.repo.update(id, updateData);
+    if (updateData.quotation_date) {
+      updateData.quotation_date = new Date(updateData.quotation_date);
+    }
+
+    await this.prisma.quotation.update({ where: { id }, data: updateData });
 
     // Replace items if provided
     if (items !== undefined) {
-      await this.itemRepo.delete({ quotation_id: id });
+      await this.prisma.quotationItem.deleteMany({ where: { quotation_id: id } });
       if (items.length > 0) {
-        const itemEntities = items.map((item: any, index: number) =>
-          this.itemRepo.create({
-            ...item,
+        await this.prisma.quotationItem.createMany({
+          data: items.map((item: any, index: number) => ({
             quotation_id: id,
+            item_name: item.item_name,
+            item_description: item.item_description,
+            quantity: item.quantity || 0,
+            unit: item.unit,
+            unit_price: item.unit_price || 0,
+            amount: item.amount || 0,
+            remarks: item.remarks,
             sort_order: item.sort_order || index + 1,
-            id: undefined,
-          }),
-        );
-        await this.itemRepo.save(itemEntities);
+          })),
+        });
       }
     }
 
@@ -241,155 +227,145 @@ export class QuotationsService {
   }
 
   async updateStatus(id: number, status: string) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
-    await this.repo.update(id, { status });
+    await this.prisma.quotation.update({ where: { id }, data: { status } });
 
-    // Cascade status to all three rate card tables when cancelled or deleted
+    // Cascade status to all three rate card tables when cancelled or rejected
     if (status === 'cancelled' || status === 'rejected') {
-      await this.rateCardRepo.update(
-        { source_quotation_id: id },
-        { status: 'cancelled' },
-      );
-      await this.fleetRateCardRepo.update(
-        { source_quotation_id: id },
-        { status: 'cancelled' },
-      );
-      await this.subconRateCardRepo.update(
-        { source_quotation_id: id },
-        { status: 'cancelled' },
-      );
+      await this.prisma.rateCard.updateMany({
+        where: { source_quotation_id: id },
+        data: { status: 'cancelled' },
+      });
+      await this.prisma.fleetRateCard.updateMany({
+        where: { source_quotation_id: id },
+        data: { status: 'cancelled' },
+      });
+      await this.prisma.subconRateCard.updateMany({
+        where: { source_quotation_id: id },
+        data: { status: 'cancelled' },
+      });
     }
 
     return this.findOne(id);
   }
 
   async remove(id: number) {
-    const existing = await this.repo.findOne({ where: { id } });
+    const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
     // Cascade deleted status to all three rate card tables before removing
-    await this.rateCardRepo.update(
-      { source_quotation_id: id },
-      { status: 'deleted' },
-    );
-    await this.fleetRateCardRepo.update(
-      { source_quotation_id: id },
-      { status: 'deleted' },
-    );
-    await this.subconRateCardRepo.update(
-      { source_quotation_id: id },
-      { status: 'deleted' },
-    );
+    await this.prisma.rateCard.updateMany({
+      where: { source_quotation_id: id },
+      data: { status: 'deleted' },
+    });
+    await this.prisma.fleetRateCard.updateMany({
+      where: { source_quotation_id: id },
+      data: { status: 'deleted' },
+    });
+    await this.prisma.subconRateCard.updateMany({
+      where: { source_quotation_id: id },
+      data: { status: 'deleted' },
+    });
 
-    await this.repo.delete(id);
+    await this.prisma.quotation.delete({ where: { id } });
     return { success: true };
   }
 
   /**
-   * Accept a quotation and generate related records:
-   * - For project type: create a Project + generate rate card records
-   * - For rental type: generate rate card records only
+   * Accept a quotation and generate related records
    */
   async acceptQuotation(id: number, options?: {
     project_name?: string;
     effective_date?: string;
     expiry_date?: string;
   }) {
-    const quotation = await this.repo.findOne({
+    const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      relations: ['company', 'client', 'items'],
+      include: { company: true, client: true, items: true },
     });
     if (!quotation) throw new NotFoundException('報價單不存在');
     if (quotation.status === 'accepted') {
       throw new BadRequestException('報價單已經被接受');
     }
 
-    // Update status to accepted
-    await this.repo.update(id, { status: 'accepted' });
+    await this.prisma.quotation.update({ where: { id }, data: { status: 'accepted' } });
 
-    let project: Project | null = null;
+    let projectId: number | null = null;
 
     // For project type: create a project
     if (quotation.quotation_type === 'project') {
       const project_no = await this.generateProjectNo(quotation.company_id);
-      const projectEntity = this.projectRepo.create({
-        project_no,
-        project_name: options?.project_name || quotation.project_name || quotation.quotation_no,
-        company_id: quotation.company_id,
-        client_id: quotation.client_id,
-        status: 'active',
+      const project = await this.prisma.project.create({
+        data: {
+          project_no,
+          project_name: options?.project_name || quotation.project_name || quotation.quotation_no,
+          company_id: quotation.company_id,
+          client_id: quotation.client_id,
+          status: 'active',
+        },
       });
-      project = await (this.projectRepo.save(projectEntity) as any) as Project;
-
-      // Link quotation to project
-      await this.repo.update(id, { project_id: project.id });
+      projectId = project.id;
+      await this.prisma.quotation.update({ where: { id }, data: { project_id: projectId } });
     }
 
     // Generate rate card records from quotation items (all 3 tables)
     if (quotation.items && quotation.items.length > 0) {
       for (const item of quotation.items) {
-        const itemName = (item as any).item_name || (item as any).description || '';
+        const itemName = item.item_name || '';
         const contractNo = (quotation as any).contract_name || undefined;
-        const effectiveDate = options?.effective_date || quotation.quotation_date;
-        const expiryDate = options?.expiry_date || undefined;
+        const effectiveDate = options?.effective_date ? new Date(options.effective_date) : quotation.quotation_date;
+        const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
-        // 1. 租賃價目表（有價錢，從報價單帶過來）
-        const rateCardData: Partial<RateCard> = {
-          company_id: quotation.company_id,
-          client_id: quotation.client_id,
-          contract_no: contractNo,
-          name: itemName,
-          description: (item as any).item_description || undefined,
-          service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
-          rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
-          day_rate: Number(item.unit_price) || 0,
-          day_unit: item.unit,
-          effective_date: effectiveDate,
-          expiry_date: expiryDate,
-          source_quotation_id: quotation.id,
-          project_id: project?.id || undefined,
-          remarks: item.remarks || undefined,
-          status: 'active',
-        };
-        const rateCard = this.rateCardRepo.create(rateCardData as any);
-        await this.rateCardRepo.save(rateCard);
+        // 1. 租賃價目表
+        await this.prisma.rateCard.create({
+          data: {
+            company_id: quotation.company_id,
+            client_id: quotation.client_id!,
+            contract_no: contractNo,
+            name: itemName,
+            description: item.item_description || undefined,
+            service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
+            rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
+            day_rate: Number(item.unit_price) || 0,
+            day_unit: item.unit,
+            effective_date: effectiveDate,
+            expiry_date: expiryDate,
+            source_quotation_id: quotation.id,
+            project_id: projectId || undefined,
+            remarks: item.remarks || undefined,
+            status: 'active',
+          },
+        });
 
-        // 2. 車隊價目表（相同欄位，價錢留空）
-        const fleetData: Partial<FleetRateCard> = {
-          client_id: quotation.client_id,
-          contract_no: contractNo,
-          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
-          vehicle_type: (item as any).vehicle_type || undefined,
-          origin: (item as any).origin || undefined,
-          destination: (item as any).destination || undefined,
-          day_rate: 0,
-          night_rate: 0,
-          mid_shift_rate: 0,
-          ot_rate: 0,
-          unit: item.unit,
-          remarks: item.remarks || undefined,
-          source_quotation_id: quotation.id,
-          status: 'active',
-        };
-        const fleetCard = this.fleetRateCardRepo.create(fleetData as any);
-        await this.fleetRateCardRepo.save(fleetCard);
+        // 2. 車隊價目表
+        await this.prisma.fleetRateCard.create({
+          data: {
+            client_id: quotation.client_id,
+            contract_no: contractNo,
+            day_rate: 0,
+            night_rate: 0,
+            mid_shift_rate: 0,
+            ot_rate: 0,
+            unit: item.unit,
+            remarks: item.remarks || undefined,
+            source_quotation_id: quotation.id,
+            status: 'active',
+          },
+        });
 
-        // 3. 街車價目表（相同欄位，價錢留空）
-        const subconData: Partial<SubconRateCard> = {
-          client_id: quotation.client_id,
-          contract_no: contractNo,
-          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
-          origin: (item as any).origin || undefined,
-          destination: (item as any).destination || undefined,
-          unit_price: 0,
-          unit: item.unit,
-          remarks: item.remarks || undefined,
-          source_quotation_id: quotation.id,
-          status: 'active',
-        };
-        const subconCard = this.subconRateCardRepo.create(subconData as any);
-        await this.subconRateCardRepo.save(subconCard);
+        // 3. 街車價目表
+        await this.prisma.subconRateCard.create({
+          data: {
+            client_id: quotation.client_id,
+            contract_no: contractNo,
+            unit_price: 0,
+            unit: item.unit,
+            remarks: item.remarks || undefined,
+            source_quotation_id: quotation.id,
+            status: 'active',
+          },
+        });
       }
     }
 
@@ -398,62 +374,52 @@ export class QuotationsService {
 
   /**
    * Sync quotation items to rate cards (price list)
-   * Works for both project and rental quotation types
    */
   async syncToRateCards(id: number, options?: {
     effective_date?: string;
     expiry_date?: string;
     overwrite?: boolean;
   }) {
-    const quotation = await this.repo.findOne({
+    const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      relations: ['company', 'client', 'items'],
+      include: { company: true, client: true, items: true },
     });
     if (!quotation) throw new NotFoundException('報價單不存在');
 
-    const results: { created: number; overwritten: number; skipped: number; conflicts: any[] } = {
-      created: 0,
-      overwritten: 0,
-      skipped: 0,
-      conflicts: [],
-    };
+    const results = { created: 0, overwritten: 0, skipped: 0, conflicts: [] as any[] };
 
     if (!quotation.items || quotation.items.length === 0) {
       return results;
     }
 
     for (const item of quotation.items) {
-      const itemName = (item as any).item_name || (item as any).description || '';
+      const itemName = item.item_name || '';
       const rateCardType = quotation.quotation_type === 'project' ? 'project' : 'rental';
       const contractNo = (quotation as any).contract_name || undefined;
-      const effectiveDate = options?.effective_date || quotation.quotation_date;
-      const expiryDate = options?.expiry_date || undefined;
+      const effectiveDate = options?.effective_date ? new Date(options.effective_date) : quotation.quotation_date;
+      const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
-      // Check for existing duplicate in rental rate cards (same client + same name)
-      const existing = await this.rateCardRepo.findOne({
+      // Check for existing duplicate
+      const existing = await this.prisma.rateCard.findFirst({
         where: {
-          client_id: quotation.client_id,
+          client_id: quotation.client_id!,
           name: itemName,
           rate_card_type: rateCardType,
         },
       });
 
       if (existing && !options?.overwrite) {
-        results.conflicts.push({
-          item_name: itemName,
-          existing_id: existing.id,
-        });
+        results.conflicts.push({ item_name: itemName, existing_id: existing.id });
         results.skipped++;
         continue;
       }
 
-      // 1. 租賃價目表（有價錢，從報價單帶過來）
-      const rateCardData: Partial<RateCard> = {
+      const rateCardData: any = {
         company_id: quotation.company_id,
-        client_id: quotation.client_id,
+        client_id: quotation.client_id!,
         contract_no: contractNo,
         name: itemName,
-        description: (item as any).item_description || undefined,
+        description: item.item_description || undefined,
         service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
         rate_card_type: rateCardType,
         day_rate: Number(item.unit_price) || 0,
@@ -466,54 +432,42 @@ export class QuotationsService {
       };
 
       if (existing && options?.overwrite) {
-        await this.rateCardRepo.update(existing.id, rateCardData);
+        await this.prisma.rateCard.update({ where: { id: existing.id }, data: rateCardData });
         results.overwritten++;
       } else {
-        const rateCard = this.rateCardRepo.create(rateCardData as any);
-        await this.rateCardRepo.save(rateCard);
+        await this.prisma.rateCard.create({ data: rateCardData });
         results.created++;
       }
 
-      // 2. 車隊價目表（相同欄位，價錢留空）
-      const existingFleet = await this.fleetRateCardRepo.findOne({
+      // 2. 車隊價目表
+      const existingFleet = await this.prisma.fleetRateCard.findFirst({
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });
       if (!existingFleet || options?.overwrite) {
-        const fleetData: Partial<FleetRateCard> = {
+        const fleetData: any = {
           client_id: quotation.client_id,
           contract_no: contractNo,
-          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
-          vehicle_type: (item as any).vehicle_type || undefined,
-          origin: (item as any).origin || undefined,
-          destination: (item as any).destination || undefined,
-          day_rate: 0,
-          night_rate: 0,
-          mid_shift_rate: 0,
-          ot_rate: 0,
+          day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
           unit: item.unit,
           remarks: item.remarks || undefined,
           source_quotation_id: quotation.id,
           status: 'active',
         };
         if (existingFleet && options?.overwrite) {
-          await this.fleetRateCardRepo.update(existingFleet.id, fleetData);
+          await this.prisma.fleetRateCard.update({ where: { id: existingFleet.id }, data: fleetData });
         } else {
-          const fleetCard = this.fleetRateCardRepo.create(fleetData as any);
-          await this.fleetRateCardRepo.save(fleetCard);
+          await this.prisma.fleetRateCard.create({ data: fleetData });
         }
       }
 
-      // 3. 街車價目表（相同欄位，價錢留空）
-      const existingSubcon = await this.subconRateCardRepo.findOne({
+      // 3. 街車價目表
+      const existingSubcon = await this.prisma.subconRateCard.findFirst({
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });
       if (!existingSubcon || options?.overwrite) {
-        const subconData: Partial<SubconRateCard> = {
+        const subconData: any = {
           client_id: quotation.client_id,
           contract_no: contractNo,
-          vehicle_tonnage: (item as any).vehicle_tonnage || undefined,
-          origin: (item as any).origin || undefined,
-          destination: (item as any).destination || undefined,
           unit_price: 0,
           unit: item.unit,
           remarks: item.remarks || undefined,
@@ -521,10 +475,9 @@ export class QuotationsService {
           status: 'active',
         };
         if (existingSubcon && options?.overwrite) {
-          await this.subconRateCardRepo.update(existingSubcon.id, subconData);
+          await this.prisma.subconRateCard.update({ where: { id: existingSubcon.id }, data: subconData });
         } else {
-          const subconCard = this.subconRateCardRepo.create(subconData as any);
-          await this.subconRateCardRepo.save(subconCard);
+          await this.prisma.subconRateCard.create({ data: subconData });
         }
       }
     }
@@ -536,10 +489,10 @@ export class QuotationsService {
    * Get quotations linked to a specific project
    */
   async findByProject(projectId: number) {
-    return this.repo.find({
+    return this.prisma.quotation.findMany({
       where: { project_id: projectId },
-      relations: ['company', 'client'],
-      order: { created_at: 'DESC' },
+      include: { company: true, client: true },
+      orderBy: { created_at: 'desc' },
     });
   }
 }
