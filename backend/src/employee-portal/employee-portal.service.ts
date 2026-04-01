@@ -91,7 +91,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employee = null;
+     let employee: any = null;
     if (user.employee_id) {
       employee = await this.prisma.employee.findUnique({
         where: { id: user.employee_id },
@@ -103,7 +103,6 @@ export class EmployeePortalService {
         include: { company: { select: { id: true, name: true } } },
       });
     }
-
     return { user, employee };
   }
 
