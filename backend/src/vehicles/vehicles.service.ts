@@ -10,8 +10,8 @@ export class VehiclesService {
     vehicle_type?: string; owner_company_id?: number; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.vehicle_type) where.vehicle_type = query.vehicle_type;

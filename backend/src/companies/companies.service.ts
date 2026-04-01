@@ -6,8 +6,8 @@ export class CompaniesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.company_type) where.company_type = query.company_type;

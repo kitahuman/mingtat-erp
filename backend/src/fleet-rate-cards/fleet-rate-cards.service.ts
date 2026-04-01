@@ -15,8 +15,8 @@ export class FleetRateCardsService {
     client_id?: number; vehicle_tonnage?: string; vehicle_type?: string;
     status?: string; sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.client_id) where.client_id = Number(query.client_id);

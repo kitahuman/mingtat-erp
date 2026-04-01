@@ -14,8 +14,8 @@ export class CompanyProfilesService {
     page?: number; limit?: number; search?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.search) {

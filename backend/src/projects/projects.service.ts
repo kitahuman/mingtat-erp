@@ -48,8 +48,8 @@ export class ProjectsService {
     company_id?: number; client_id?: number; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.company_id) where.company_id = Number(query.company_id);

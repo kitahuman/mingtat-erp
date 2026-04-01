@@ -143,6 +143,53 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'exclude_fuel', label: '不含油費', type: 'boolean', description: '是/否' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
+  'work-logs': [
+    { key: 'scheduled_date', label: '日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
+    { key: 'company_name', label: '公司名稱', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'employee_code', label: '員工編號', type: 'string', description: '員工編號（系統自動匹配）' },
+    { key: 'machine_type', label: '機械類型', type: 'string' },
+    { key: 'equipment_number', label: '設備編號', type: 'string' },
+    { key: 'tonnage', label: '噸數', type: 'string' },
+    { key: 'day_night', label: '日/夜班', type: 'string', description: '日班/夜班/中直' },
+    { key: 'start_location', label: '起點', type: 'string' },
+    { key: 'start_time', label: '開始時間', type: 'string' },
+    { key: 'end_location', label: '終點', type: 'string' },
+    { key: 'end_time', label: '結束時間', type: 'string' },
+    { key: 'quantity', label: '數量', type: 'number' },
+    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'ot_quantity', label: 'OT數量', type: 'number' },
+    { key: 'ot_unit', label: 'OT單位', type: 'string' },
+    { key: 'remarks', label: '備註', type: 'string' },
+  ],
+  'projects': [
+    { key: 'project_no', label: '工程編號', required: true, type: 'string' },
+    { key: 'project_name', label: '工程名稱', required: true, type: 'string' },
+    { key: 'company_name', label: '公司名稱', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'status', label: '狀態', type: 'string', description: 'pending/active/completed/cancelled' },
+    { key: 'description', label: '描述', type: 'string' },
+    { key: 'address', label: '地址', type: 'string' },
+    { key: 'start_date', label: '開始日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'end_date', label: '結束日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'remarks', label: '備註', type: 'string' },
+  ],
+  'quotations': [
+    { key: 'quotation_no', label: '報價單編號', required: true, type: 'string' },
+    { key: 'quotation_type', label: '報價類型', type: 'string', description: 'project/monthly' },
+    { key: 'company_name', label: '公司名稱', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'quotation_date', label: '報價日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'contract_name', label: '合約名稱', type: 'string' },
+    { key: 'project_name', label: '工程名稱', type: 'string' },
+    { key: 'total_amount', label: '總金額', type: 'number' },
+    { key: 'status', label: '狀態', type: 'string', description: 'draft/sent/accepted/rejected' },
+    { key: 'validity_period', label: '有效期', type: 'string' },
+    { key: 'payment_terms', label: '付款條款', type: 'string' },
+    { key: 'external_remark', label: '外部備註', type: 'string' },
+    { key: 'internal_remark', label: '內部備註', type: 'string' },
+  ],
 };
 
 @Injectable()
@@ -276,6 +323,9 @@ export class CsvImportService {
       case 'rate-cards': return this.importRateCard(data);
       case 'fleet-rate-cards': return this.importFleetRateCard(data);
       case 'subcon-rate-cards': return this.importSubconRateCard(data);
+      case 'work-logs': return this.importWorkLog(data);
+      case 'projects': return this.importProject(data);
+      case 'quotations': return this.importQuotation(data);
       default: throw new Error(`不支援的模組: ${module}`);
     }
   }
@@ -431,6 +481,93 @@ export class CsvImportService {
       data: { ...rest, subcon_id: subconId, client_id: clientId },
     });
     return { status: 'created' as const, id: created.id };
+  }
+
+  private async importWorkLog(data: any) {
+    const { company_name, client_name, employee_code, ...rest } = data;
+    const companyProfileId = company_name ? await this.resolveCompanyProfileId(company_name) : null;
+    const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+    let employeeId: number | null = null;
+    if (employee_code) {
+      const emp = await this.prisma.employee.findFirst({ where: { emp_code: employee_code } });
+      employeeId = emp?.id ?? null;
+    }
+
+    if (rest.scheduled_date) rest.scheduled_date = new Date(rest.scheduled_date);
+    for (const nf of ['quantity', 'ot_quantity']) {
+      if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
+    }
+
+    const created = await this.prisma.workLog.create({
+      data: {
+        ...rest,
+        company_profile_id: companyProfileId,
+        client_id: clientId,
+        employee_id: employeeId,
+        status: 'editing',
+      },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importProject(data: any) {
+    const { company_name, client_name, ...rest } = data;
+    const companyId = await this.resolveCompanyId(company_name);
+    if (!companyId) throw new Error(`找不到公司: ${company_name}`);
+    const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+
+    for (const df of ['start_date', 'end_date']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+
+    const existing = await this.prisma.project.findFirst({ where: { project_no: rest.project_no } });
+    if (existing) {
+      await this.prisma.project.update({ where: { id: existing.id }, data: { ...rest, company_id: companyId, client_id: clientId } });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.project.create({
+      data: { ...rest, company_id: companyId, client_id: clientId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importQuotation(data: any) {
+    const { company_name, client_name, project_name, ...rest } = data;
+    const companyId = await this.resolveCompanyId(company_name);
+    if (!companyId) throw new Error(`找不到公司: ${company_name}`);
+    const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+    let projectId: number | null = null;
+    if (project_name) {
+      const proj = await this.prisma.project.findFirst({ where: { project_name: { contains: project_name, mode: 'insensitive' } } });
+      projectId = proj?.id ?? null;
+    }
+
+    if (rest.quotation_date) rest.quotation_date = new Date(rest.quotation_date);
+    if (rest.total_amount !== undefined) rest.total_amount = Number(rest.total_amount) || 0;
+
+    const existing = await this.prisma.quotation.findFirst({ where: { quotation_no: rest.quotation_no } });
+    if (existing) {
+      await this.prisma.quotation.update({ where: { id: existing.id }, data: { ...rest, company_id: companyId, client_id: clientId, project_id: projectId } });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.quotation.create({
+      data: { ...rest, company_id: companyId, client_id: clientId, project_id: projectId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async resolveCompanyProfileId(name: string): Promise<number | null> {
+    const cp = await this.prisma.companyProfile.findFirst({
+      where: {
+        OR: [
+          { chinese_name: { contains: name, mode: 'insensitive' } },
+          { code: { equals: name, mode: 'insensitive' } },
+        ],
+      },
+    });
+    return cp?.id ?? null;
   }
 
   // ── Helpers ──────────────────────────────────────────────────

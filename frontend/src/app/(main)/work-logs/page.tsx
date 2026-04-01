@@ -9,6 +9,7 @@ import WorkLogRow from './WorkLogRow';
 import SearchableSelect from './SearchableSelect';
 import { STATUS_OPTIONS } from './constants';
 import ExportButton from '@/components/ExportButton';
+import CsvImportModal from '@/components/CsvImportModal';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -281,6 +282,7 @@ export default function WorkLogsPage() {
           >
             ＋ 新增記錄
           </button>
+          <CsvImportModal module="work-logs" onImportComplete={fetchLogs} />
         </div>
       </div>
 

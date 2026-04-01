@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import CsvImportModal from '@/components/CsvImportModal';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕',
@@ -194,7 +195,10 @@ export default function QuotationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">報價單</h1>
           <p className="text-gray-500 text-sm mt-1">管理工程報價單及租賃/運輸報價單</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增報價單</button>
+        <div className="flex items-center gap-2">
+          <CsvImportModal module="quotations" onImportComplete={load} />
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增報價單</button>
+        </div>
       </div>
 
       <div className="card">

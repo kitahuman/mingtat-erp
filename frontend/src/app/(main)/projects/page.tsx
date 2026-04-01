@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import CsvImportModal from '@/components/CsvImportModal';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -75,7 +76,10 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">工程項目</h1>
           <p className="text-gray-500 text-sm mt-1">管理工程項目，追蹤工程進度</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增工程項目</button>
+        <div className="flex items-center gap-2">
+          <CsvImportModal module="projects" onImportComplete={load} />
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增工程項目</button>
+        </div>
       </div>
 
       <div className="card">

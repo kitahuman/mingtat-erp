@@ -16,8 +16,8 @@ export class SubconRateCardsService {
     day_night?: string; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.subcon_id) where.subcon_id = Number(query.subcon_id);

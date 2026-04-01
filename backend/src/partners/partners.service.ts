@@ -15,8 +15,8 @@ export class PartnersService {
     partner_type?: string; category?: string; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.partner_type) where.partner_type = query.partner_type;
