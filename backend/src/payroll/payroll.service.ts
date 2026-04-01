@@ -94,11 +94,16 @@ export class PayrollService {
       payroll.adjustments.sort((a, b) => a.sort_order - b.sort_order);
     }
 
-    // Load payroll work logs (non-excluded)
-    const pwls = await this.payrollWorkLogRepo.find({
+    // Load payroll work logs
+    let pwls = await this.payrollWorkLogRepo.find({
       where: { payroll_id: id },
       order: { scheduled_date: 'ASC', id: 'ASC' },
     });
+
+    // ── 自動回填：如果 payroll_work_logs 為空（舊糧單），從 work_logs 表查詢並回填 ──
+    if (pwls.length === 0 && payroll.date_from && payroll.date_to && payroll.employee_id) {
+      pwls = await this.backfillPayrollWorkLogs(payroll);
+    }
 
     // Build grouped settlement
     const grouped = this.buildGroupedSettlement(pwls.filter(p => !p.is_excluded));
@@ -108,6 +113,78 @@ export class PayrollService {
       payroll_work_logs: pwls,
       grouped_settlement: grouped,
     };
+  }
+
+  /**
+   * 自動回填 payroll_work_logs（針對舊糧單，從 work_logs 表查詢對應工作記錄並保存副本）
+   */
+  private async backfillPayrollWorkLogs(payroll: Payroll): Promise<PayrollWorkLog[]> {
+    try {
+      const wlQb = this.workLogRepo.createQueryBuilder('wl')
+        .leftJoinAndSelect('wl.company_profile', 'company_profile')
+        .leftJoinAndSelect('wl.client', 'client')
+        .leftJoinAndSelect('wl.quotation', 'quotation')
+        .where('wl.employee_id = :empId', { empId: payroll.employee_id })
+        .andWhere('wl.scheduled_date >= :start', { start: payroll.date_from })
+        .andWhere('wl.scheduled_date <= :end', { end: payroll.date_to })
+        .andWhere("wl.service_type != '請假/休息'")
+        .orderBy('wl.scheduled_date', 'ASC');
+
+      if (payroll.company_profile_id) {
+        wlQb.andWhere('wl.company_profile_id = :cpId', { cpId: payroll.company_profile_id });
+      }
+
+      const workLogs = await wlQb.getMany();
+      if (workLogs.length === 0) return [];
+
+      // Enrich with price info
+      const enrichedWorkLogs = await this.enrichWorkLogsWithPrice(workLogs);
+
+      // Save as payroll_work_logs
+      const savedPwls: PayrollWorkLog[] = [];
+      for (const wl of enrichedWorkLogs) {
+        const pwl = this.payrollWorkLogRepo.create({
+          payroll_id: payroll.id,
+          work_log_id: wl.id,
+          service_type: wl.service_type,
+          scheduled_date: wl.scheduled_date,
+          day_night: wl.day_night,
+          start_location: wl.start_location,
+          end_location: wl.end_location,
+          machine_type: wl.machine_type,
+          tonnage: wl.tonnage,
+          equipment_number: wl.equipment_number,
+          quantity: wl.quantity,
+          unit: wl.unit,
+          ot_quantity: wl.ot_quantity,
+          ot_unit: wl.ot_unit,
+          remarks: wl.remarks,
+          matched_rate_card_id: (wl as any)._matched_rate_card_id ?? wl.matched_rate_card_id,
+          matched_rate: (wl as any)._matched_rate ?? wl.matched_rate,
+          matched_unit: (wl as any)._matched_unit ?? wl.matched_unit,
+          matched_ot_rate: (wl as any)._matched_ot_rate ?? wl.matched_ot_rate,
+          price_match_status: (wl as any)._price_match_status ?? wl.price_match_status,
+          price_match_note: (wl as any)._price_match_note ?? wl.price_match_note,
+          line_amount: (wl as any)._line_amount ?? 0,
+          group_key: (wl as any)._group_key ?? '',
+          client_id: wl.client_id,
+          client_name: wl.client?.name ?? (wl as any).client_name ?? null,
+          company_profile_id: wl.company_profile_id,
+          company_profile_name: wl.company_profile?.chinese_name ?? (wl as any).company_profile_name ?? null,
+          quotation_id: wl.quotation_id,
+          contract_no: wl.quotation?.quotation_number ?? (wl as any).contract_no ?? null,
+          is_modified: false,
+          is_excluded: false,
+        });
+        const saved = await this.payrollWorkLogRepo.save(pwl);
+        savedPwls.push(saved);
+      }
+
+      return savedPwls;
+    } catch (err) {
+      console.error('Failed to backfill payroll work logs:', err);
+      return [];
+    }
   }
 
   // ── 預覽計糧（不儲存，返回計算結果、工作記錄明細、歸組結算）──

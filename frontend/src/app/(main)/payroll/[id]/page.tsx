@@ -369,10 +369,9 @@ export default function PayrollDetailPage() {
       </div>
 
       {/* ── Work Logs Section ── */}
-      {pwls.length > 0 && (
-        <div className="card mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">工作記錄 ({activePwls.length} 筆)</h2>
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">工作記錄 ({activePwls.length} 筆)</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setWlViewMode('detail')}
@@ -452,6 +451,11 @@ export default function PayrollDetailPage() {
             <GroupedSettlementView groups={grouped} />
           )}
 
+          {/* Empty state when no work logs */}
+          {pwls.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">此糧單暫無工作記錄</p>
+          )}
+
           {/* Excluded work logs */}
           {excludedPwls.length > 0 && isDraft && (
             <div className="mt-4">
@@ -477,7 +481,6 @@ export default function PayrollDetailPage() {
             </div>
           )}
         </div>
-      )}
 
       {/* ── Adjustments Section ── */}
       <div className="card mb-6">
