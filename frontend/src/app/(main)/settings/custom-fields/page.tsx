@@ -123,16 +123,16 @@ function CustomFieldsPageContent() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full" style={{ minWidth: '560px' }}>
               <thead>
                 <tr className="border-b text-left">
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">排序</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">欄位名稱</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">類型</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">必填</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">到期提醒</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">狀態</th>
-                  <th className="py-3 px-4 text-sm font-medium text-gray-500">操作</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">排序</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">欄位名稱</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">類型</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">必填</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">到期提醒</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">狀態</th>
+                  <th className="py-3 px-4 text-sm font-medium text-gray-500 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody>

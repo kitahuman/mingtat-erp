@@ -154,9 +154,14 @@ export default function DataTable({
             <button onClick={handleSearch} className="btn-primary whitespace-nowrap">搜尋</button>
           </div>
         )}
-        {filters}
+        {/* Filters - wrap on mobile */}
+        {filters && (
+          <div className="flex flex-wrap gap-2 items-center">
+            {filters}
+          </div>
+        )}
         {actions}
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center shrink-0">
           <ExportButton
             columns={columns}
             data={filteredData}
@@ -185,19 +190,25 @@ export default function DataTable({
         </div>
       )}
 
-      {/* Table */}
+      {/* Table - always scrollable horizontally */}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
-        <table className="w-full text-sm" style={{ tableLayout: onColumnResize ? 'fixed' : 'auto' }}>
+        <table
+          className="w-full text-sm"
+          style={{
+            tableLayout: onColumnResize ? 'fixed' : 'auto',
+            minWidth: '600px',
+          }}
+        >
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-left font-semibold text-gray-600 relative ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                  className={`px-4 py-3 text-left font-semibold text-gray-600 relative whitespace-nowrap ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
                   style={
                     (col._width || (columnWidths && columnWidths[col.key]))
                       ? { width: `${col._width || columnWidths?.[col.key]}px`, minWidth: `${col._width || columnWidths?.[col.key]}px` }
-                      : undefined
+                      : { minWidth: '80px' }
                   }
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
@@ -245,11 +256,15 @@ export default function DataTable({
                   className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 ${col.className || ''}`} style={
-                      (col._width || (columnWidths && columnWidths[col.key]))
-                        ? { maxWidth: `${col._width || columnWidths?.[col.key]}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-                        : undefined
-                    }>
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 ${col.className || ''}`}
+                      style={
+                        (col._width || (columnWidths && columnWidths[col.key]))
+                          ? { maxWidth: `${col._width || columnWidths?.[col.key]}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                          : { whiteSpace: 'nowrap' }
+                      }
+                    >
                       {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
                     </td>
                   ))}
@@ -261,7 +276,7 @@ export default function DataTable({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between mt-4">
+      <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-2">
         <p className="text-sm text-gray-600">
           {filteredTotal > 0 ? (
             <>
@@ -274,7 +289,7 @@ export default function DataTable({
           )}
         </p>
         {totalPages > 1 && (
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap justify-center">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}

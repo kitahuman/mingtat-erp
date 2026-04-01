@@ -219,16 +219,16 @@ function UsersPageContent() {
           <div className="text-center py-12 text-gray-500">沒有找到用戶</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" style={{ minWidth: '640px' }}>
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">用戶名</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">顯示名稱</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">角色</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">部門</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">狀態</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">最後登入</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">操作</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">用戶名</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">顯示名稱</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">角色</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">部門</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">狀態</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">最後登入</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y">

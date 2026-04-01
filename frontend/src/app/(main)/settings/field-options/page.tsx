@@ -224,12 +224,12 @@ export default function FieldOptionsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" style={{ minWidth: '360px' }}>
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="px-3 py-2 w-8"></th>
-                      <th className="px-3 py-2 text-left">選項名稱</th>
-                      <th className="px-3 py-2 text-center w-20">狀態</th>
+                      <th className="px-3 py-2 text-left whitespace-nowrap">選項名稱</th>
+                      <th className="px-3 py-2 text-center w-20 whitespace-nowrap">狀態</th>
                       <th className="px-3 py-2 w-28"></th>
                     </tr>
                   </thead>

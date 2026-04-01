@@ -270,12 +270,12 @@ export default function WorkLogsPage() {
   return (
     <div className="flex flex-col h-full bg-gray-50 -m-4 sm:-m-6">
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">工作記錄</h1>
-          <p className="text-sm text-gray-500 mt-0.5">共 {total} 筆記錄</p>
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 gap-2">
+        <div className="shrink-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900">工作記錄</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">共 {total} 筆記錄</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
           {selected.size > 0 && (
             <>
               <span className="text-sm text-gray-600">已選 {selected.size} 筆</span>
@@ -324,8 +324,8 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Filters ──────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
-        <div className="flex flex-wrap gap-2 items-end">
+      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto">
+        <div className="flex gap-2 items-end" style={{ minWidth: 'max-content' }}>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">發佈人</label>
             <div className="w-28">
