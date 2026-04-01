@@ -27,6 +27,7 @@ model User {
   createdBy   Int?      @map("created_by")
 
   work_logs WorkLog[]
+  employee_id Int? @map("employee_id")
 
   @@map("users")
 }
@@ -198,6 +199,8 @@ model Employee {
   work_logs       WorkLog[]
   payrolls        Payroll[]
   expenses        Expense[]
+  attendances     EmployeeAttendance[]
+  leaves          EmployeeLeave[]
 
   @@map("employees")
 }
@@ -899,6 +902,54 @@ model SubcontractorFleetDriver {
   subcontractor        Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
 
   @@map("subcontractor_fleet_drivers")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Employee Attendance (員工打卡)
+// ══════════════════════════════════════════════════════════════
+
+model EmployeeAttendance {
+  id           Int       @id @default(autoincrement())
+  employee_id  Int
+  user_id      Int?
+  type         String    // "clock_in" | "clock_out"
+  timestamp    DateTime  @default(now())
+  photo_url    String?   @db.Text
+  latitude     Float?
+  longitude    Float?
+  address      String?   @db.Text
+  remarks      String?   @db.Text
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+
+  employee Employee @relation(fields: [employee_id], references: [id])
+
+  @@map("employee_attendances")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Employee Leave (員工請假)
+// ══════════════════════════════════════════════════════════════
+
+model EmployeeLeave {
+  id           Int       @id @default(autoincrement())
+  employee_id  Int
+  user_id      Int?
+  leave_type   String    // "sick" | "annual"
+  date_from    DateTime  @db.Date
+  date_to      DateTime  @db.Date
+  days         Float     @default(1)
+  reason       String?   @db.Text
+  status       String    @default("pending") // "pending" | "approved" | "rejected"
+  approved_by  Int?
+  approved_at  DateTime?
+  remarks      String?   @db.Text
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+
+  employee Employee @relation(fields: [employee_id], references: [id])
+
+  @@map("employee_leaves")
 }
 
 // ══════════════════════════════════════════════════════════════

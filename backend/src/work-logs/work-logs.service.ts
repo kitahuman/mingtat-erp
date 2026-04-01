@@ -179,11 +179,12 @@ export class WorkLogsService {
 
   async getLocationSuggestions(type: 'start' | 'end', q: string) {
     const field = type === 'start' ? 'start_location' : 'end_location';
-    const results = await this.prisma.$queryRawUnsafe<{ location: string }[]>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results: any[] = await (this.prisma.$queryRawUnsafe as any)(
       `SELECT DISTINCT "${field}" AS location FROM work_logs WHERE "${field}" ILIKE $1 AND "${field}" IS NOT NULL AND "${field}" != '' ORDER BY location ASC LIMIT 20`,
       `%${q}%`,
     );
-    return results.map(r => r.location).filter(Boolean);
+    return results.map((r: { location: string }) => r.location).filter(Boolean);
   }
 
   // ── 機號聯動查詢 ─────────────────────────────────────────

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -26,10 +28,15 @@ import { CsvImportModule } from './csv-import/csv-import.module';
 import { SubconFleetDriversModule } from './subcon-fleet-drivers/subcon-fleet-drivers.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { ExpenseCategoriesModule } from './expense-categories/expense-categories.module';
+import { EmployeePortalModule } from './employee-portal/employee-portal.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -56,6 +63,7 @@ import { ExpenseCategoriesModule } from './expense-categories/expense-categories
     SubconFleetDriversModule,
     ExpensesModule,
     ExpenseCategoriesModule,
+    EmployeePortalModule,
   ],
 })
 export class AppModule {}
