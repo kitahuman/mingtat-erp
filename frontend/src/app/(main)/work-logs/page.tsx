@@ -108,7 +108,17 @@ export default function WorkLogsPage() {
       setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
       setContracts(((qt.data?.data) || []).map((q: any) => ({ value: q.id, label: q.quotation_no, _raw: q })));
-      setEmployees((em.data?.data || []).map((e: any) => ({ value: e.id, label: e.name_zh })));
+      const employeeList = (em.data?.data || []).map((e: any) => ({
+        value: `emp_${e.id}`,
+        label: e.name_zh,
+        _raw: e
+      }));
+      const partnerList = (pt.data || []).map((p: any) => ({
+        value: `part_${p.id}`,
+        label: `(街車) ${p.name}`,
+        _raw: p
+      }));
+      setEmployees([...employeeList, ...partnerList]);
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
       // Map field options to Option[] format
       const grouped: Record<string, Option[]> = {};
@@ -132,7 +142,13 @@ export default function WorkLogsPage() {
       if (filterCompany)   params.company_profile_id = filterCompany;
       if (filterClient)    params.client_id        = filterClient;
       if (filterContract)  params.quotation_id     = filterContract;
-      if (filterEmployee)  params.employee_id      = filterEmployee;
+      if (filterEmployee && typeof filterEmployee === 'string') {
+        if (filterEmployee.startsWith('emp_')) {
+          params.employee_id = Number(filterEmployee.replace('emp_', ''));
+        } else if (filterEmployee.startsWith('part_')) {
+          params.client_id = Number(filterEmployee.replace('part_', ''));
+        }
+      }
       if (filterEquipment) params.equipment_number = filterEquipment;
       if (filterDateFrom)  params.date_from        = filterDateFrom;
       if (filterDateTo)    params.date_to          = filterDateTo;

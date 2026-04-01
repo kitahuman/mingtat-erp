@@ -198,12 +198,20 @@ export class WorkLogsService {
         const tonnageNum = parseFloat(tonnage.replace('噸', ''));
         if (!isNaN(tonnageNum)) where.tonnage = tonnageNum;
       }
-      const vehicles = await this.prisma.vehicle.findMany({
-        where,
-        select: { id: true, plate_number: true, vehicle_type: true, tonnage: true },
-        orderBy: { plate_number: 'asc' },
-      });
-      return vehicles.map(v => ({
+      const [vehicles, subconDrivers] = await Promise.all([
+        this.prisma.vehicle.findMany({
+          where,
+          select: { id: true, plate_number: true, vehicle_type: true, tonnage: true },
+          orderBy: { plate_number: 'asc' },
+        }),
+        this.prisma.subcontractorFleetDriver.findMany({
+          where: { status: 'active', plate_no: { not: null } },
+          select: { id: true, plate_no: true, vehicle_type: true, subcontractor: { select: { name: true } } },
+          orderBy: { plate_no: 'asc' },
+        }),
+      ]);
+
+      const vehicleOptions = vehicles.map(v => ({
         id: v.id,
         value: v.plate_number,
         label: v.plate_number,
@@ -211,6 +219,16 @@ export class WorkLogsService {
         type: v.vehicle_type,
         source: 'vehicle',
       }));
+
+      const subconOptions = subconDrivers.map(d => ({
+        id: d.id,
+        value: d.plate_no!,
+        label: `${d.plate_no} (${d.subcontractor.name})`,
+        type: d.vehicle_type,
+        source: 'subcon_fleet',
+      }));
+
+      return [...vehicleOptions, ...subconOptions];
     }
 
     if (source === 'machinery') {

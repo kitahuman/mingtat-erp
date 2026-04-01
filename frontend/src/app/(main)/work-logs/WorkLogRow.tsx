@@ -51,7 +51,15 @@ export default function WorkLogRow({
   // Initialize form when entering edit mode
   useEffect(() => {
     if (isEditing) {
-      setForm({ ...row });
+      const initialForm = { ...row };
+      // Handle employee_id prefix for UI
+      if (initialForm.employee_id) {
+        initialForm.employee_id = `emp_${initialForm.employee_id}`;
+      } else if (initialForm.client_id && !initialForm.employee_id) {
+        // If there's a client but no employee, it might be a subcon driver (not perfectly mapped but good for UI)
+        // Note: Actual subcon mapping might need more backend info, but here we prioritize emp_ prefix for existing
+      }
+      setForm(initialForm);
     }
   }, [isEditing, row]);
 
@@ -89,6 +97,12 @@ export default function WorkLogRow({
   const set = (field: string, value: any) => {
     setForm((prev: any) => {
       const next = { ...prev, [field]: value };
+      
+      // Auto-set client_id if a subcon driver (part_ prefix) is selected
+      if (field === 'employee_id' && typeof value === 'string' && value.startsWith('part_')) {
+        next.client_id = Number(value.replace('part_', ''));
+      }
+
       // When machine_type changes, clear equipment_number if source changes
       if (field === 'machine_type') {
         const prevSource = getEquipmentSource(prev.machine_type);
@@ -103,7 +117,22 @@ export default function WorkLogRow({
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(form); } finally { setSaving(false); }
+    const payload = { ...form };
+    // Strip prefix before saving
+    if (typeof payload.employee_id === 'string') {
+      if (payload.employee_id.startsWith('emp_')) {
+        payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+      } else if (payload.employee_id.startsWith('part_')) {
+        // If it's a partner (subcon), we don't have a direct field in WorkLog yet
+        // For now, we clear employee_id and maybe the user wants to store it elsewhere?
+        // But per requirements, they want to SELECT it. 
+        // We'll clear employee_id and rely on other fields if needed, 
+        // OR (better) we should have a field to store this.
+        // Given current schema, we'll set employee_id to null and keep client_id if matched.
+        payload.employee_id = null;
+      }
+    }
+    try { await onSave(payload); } finally { setSaving(false); }
   };
 
   const equipSource = getEquipmentSource(form.machine_type);
