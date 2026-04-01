@@ -14,6 +14,7 @@ interface Column {
   filterable?: boolean;
   filterRender?: (value: any, row: any) => string;
   _width?: number;
+  minWidth?: number; // explicit override
 }
 
 interface DataTableProps {
@@ -39,6 +40,92 @@ interface DataTableProps {
   onColumnConfigReset?: () => void;
   columnWidths?: Record<string, number>;
   onColumnResize?: (key: string, width: number) => void;
+}
+
+/**
+ * 根據欄位 key 名稱和 label 自動推算合理的最小寬度（px）
+ * 確保手機上表格欄位不會被壓縮
+ */
+function getColMinWidth(key: string, label: string, explicitWidth?: number): number {
+  // 如果有明確設定的寬度，使用該寬度
+  if (explicitWidth) return explicitWidth;
+
+  const k = key.toLowerCase();
+  const l = label;
+
+  // ── 操作按鈕欄 ──────────────────────────────────────────
+  if (k === 'actions' || k === '_actions') return 100;
+
+  // ── ID / 編號類 ──────────────────────────────────────────
+  if (k === 'id') return 60;
+  if (k.endsWith('_code') || k === 'emp_code' || k === 'machine_code' || k === 'code') return 90;
+  if (k.endsWith('_no') || k === 'work_order_no' || k === 'quotation_no' || k === 'contract_no' || k === 'receipt_no' || k === 'cheque_number' || k === 'br_number') return 110;
+  if (k === 'plate_no' || k === 'plate_number') return 100;
+  if (k === 'id_number') return 130; // 香港身份證
+
+  // ── 日期類（最重要！防止日期被截斷）──────────────────────
+  if (k.endsWith('_date') || k.endsWith('_expiry') || k.endsWith('_at') || k === 'period' || k === 'date_of_birth') return 115;
+  if (k.endsWith('_time') || k === 'start_time' || k === 'end_time') return 90;
+
+  // ── 姓名類 ──────────────────────────────────────────────
+  if (k === 'name_zh' || k === 'chinese_name') return 110;
+  if (k === 'name_en' || k === 'english_name') return 130;
+  if (k === 'name' || k === 'short_name') return 110;
+  if (k === 'display_name' || k === 'contact_person') return 110;
+
+  // ── 公司 / 合作單位 / 員工 ────────────────────────────────
+  if (k === 'company' || k === 'owner_company' || k === 'company_type') return 120;
+  if (k === 'subcontractor' || k === 'subcontractor_id') return 120;
+  if (k === 'employee' || k === 'publisher') return 110;
+  if (k === 'client') return 110;
+  if (k === 'project' || k === 'project_name' || k === 'project_no') return 120;
+
+  // ── 金額類 ──────────────────────────────────────────────
+  if (k.startsWith('allowance_') || k.startsWith('ot_rate') || k === 'ot_rate_standard') return 100;
+  if (k === 'base_salary' || k === 'base_amount' || k === 'net_amount' || k === 'total_amount') return 100;
+  if (k === 'unit_price' || k === 'day_rate' || k === 'night_rate' || k === 'mid_shift_rate') return 100;
+  if (k === 'mpf_deduction' || k === 'ot_total' || k === 'allowance_total') return 100;
+  if (k.endsWith('_amount') || k.endsWith('_salary') || k.endsWith('_rate') || k.endsWith('_total')) return 100;
+
+  // ── 類型 / 狀態 / 標籤類 ──────────────────────────────────
+  if (k === 'status') return 90;
+  if (k === 'role' || k === 'salary_type' || k === 'vehicle_type' || k === 'machine_type' || k === 'partner_type' || k === 'quotation_type') return 100;
+  if (k === 'day_night' || k === 'service_type') return 90;
+  if (k === 'tonnage' || k === 'vehicle_tonnage') return 80;
+
+  // ── 布林值（Y/N）類 ──────────────────────────────────────
+  if (k === 'is_confirmed' || k === 'is_paid' || k === 'is_piece_rate' || k === 'exclude_fuel' || k === 'has_d_cert' || k === 'is_cert_returned') return 80;
+  if (k.startsWith('is_') || k.startsWith('has_')) return 80;
+
+  // ── 聯絡資料 ──────────────────────────────────────────────
+  if (k === 'phone' || k === 'mobile') return 110;
+  if (k === 'email') return 150;
+  if (k === 'address') return 160;
+
+  // ── 地點 / 路線 ──────────────────────────────────────────
+  if (k === 'origin' || k === 'destination' || k === 'start_location' || k === 'end_location') return 120;
+
+  // ── 車輛 / 機械 ──────────────────────────────────────────
+  if (k === 'brand' || k === 'model') return 100;
+  if (k === 'equipment_number') return 110;
+
+  // ── 數量 / 單位 ──────────────────────────────────────────
+  if (k === 'quantity' || k === 'ot_quantity' || k === 'goods_quantity') return 80;
+  if (k === 'unit' || k === 'ot_unit' || k === 'wage_unit') return 80;
+
+  // ── 其他文字類 ──────────────────────────────────────────
+  if (k === 'description' || k === 'remarks' || k === 'termination_reason') return 140;
+  if (k === 'contract_name' || k === 'quotation') return 130;
+  if (k === 'subsidiaries' || k === 'internal_prefix' || k === 'english_code') return 100;
+  if (k === 'source_quotation') return 120;
+
+  // ── 證書號碼 ──────────────────────────────────────────────
+  if (k === 'yellow_cert_no' || k === 'red_cert_no') return 110;
+
+  // ── 根據 label 長度估算（fallback）──────────────────────
+  // 每個中文字約 14px，加上 padding 32px
+  const labelWidth = l.length * 14 + 32;
+  return Math.max(80, Math.min(labelWidth, 160));
 }
 
 export default function DataTable({
@@ -137,6 +224,14 @@ export default function DataTable({
   // Determine if column customization is enabled
   const hasColumnCustomization = !!columnConfigs && !!onColumnConfigChange;
 
+  // Calculate total min-width for the table (sum of all column min-widths)
+  const tableMinWidth = useMemo(() => {
+    return columns.reduce((sum, col) => {
+      const explicit = col._width || (columnWidths && columnWidths[col.key]);
+      return sum + getColMinWidth(col.key, col.label, explicit || col.minWidth);
+    }, 0);
+  }, [columns, columnWidths]);
+
   return (
     <div>
       {/* Toolbar */}
@@ -196,49 +291,53 @@ export default function DataTable({
           className="w-full text-sm"
           style={{
             tableLayout: onColumnResize ? 'fixed' : 'auto',
-            minWidth: '600px',
+            minWidth: `${Math.max(tableMinWidth, 600)}px`,
           }}
         >
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-4 py-3 text-left font-semibold text-gray-600 relative whitespace-nowrap ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
-                  style={
-                    (col._width || (columnWidths && columnWidths[col.key]))
-                      ? { width: `${col._width || columnWidths?.[col.key]}px`, minWidth: `${col._width || columnWidths?.[col.key]}px` }
-                      : { minWidth: '80px' }
-                  }
-                  onClick={() => col.sortable && handleSort(col.key)}
-                >
-                  <div className="flex items-center gap-1">
-                    <span className="truncate">{col.label}</span>
-                    {col.sortable && onSort && (
-                      <span className="text-xs text-gray-400">
-                        {sortBy === col.key ? (sortOrder === 'ASC' ? '\u25B2' : '\u25BC') : '\u25B4\u25BE'}
-                      </span>
-                    )}
-                    {col.filterable !== false && (
-                      <ColumnFilter
-                        columnKey={col.key}
-                        data={data}
-                        activeFilters={columnFilters}
-                        onFilterChange={handleFilterChange}
-                        renderValue={col.filterRender}
+              {columns.map((col) => {
+                const explicitW = col._width || (columnWidths && columnWidths[col.key]);
+                const minW = getColMinWidth(col.key, col.label, explicitW || col.minWidth);
+                return (
+                  <th
+                    key={col.key}
+                    className={`px-3 py-3 text-left font-semibold text-gray-600 relative ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                    style={
+                      explicitW
+                        ? { width: `${explicitW}px`, minWidth: `${explicitW}px` }
+                        : { minWidth: `${minW}px` }
+                    }
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <span>{col.label}</span>
+                      {col.sortable && onSort && (
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {sortBy === col.key ? (sortOrder === 'ASC' ? '▲' : '▼') : '▴▾'}
+                        </span>
+                      )}
+                      {col.filterable !== false && (
+                        <ColumnFilter
+                          columnKey={col.key}
+                          data={data}
+                          activeFilters={columnFilters}
+                          onFilterChange={handleFilterChange}
+                          renderValue={col.filterRender}
+                        />
+                      )}
+                    </div>
+                    {/* Resize handle */}
+                    {onColumnResize && (
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors"
+                        onMouseDown={(e) => handleResizeStart(e, col.key)}
+                        onClick={(e) => e.stopPropagation()}
                       />
                     )}
-                  </div>
-                  {/* Resize handle */}
-                  {onColumnResize && (
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors"
-                      onMouseDown={(e) => handleResizeStart(e, col.key)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  )}
-                </th>
-              ))}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -255,19 +354,23 @@ export default function DataTable({
                   onClick={() => onRowClick?.(row)}
                   className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                 >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-4 py-3 ${col.className || ''}`}
-                      style={
-                        (col._width || (columnWidths && columnWidths[col.key]))
-                          ? { maxWidth: `${col._width || columnWidths?.[col.key]}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-                          : { whiteSpace: 'nowrap' }
-                      }
-                    >
-                      {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
-                    </td>
-                  ))}
+                  {columns.map((col) => {
+                    const explicitW = col._width || (columnWidths && columnWidths[col.key]);
+                    const minW = getColMinWidth(col.key, col.label, explicitW || col.minWidth);
+                    return (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-3 ${col.className || ''}`}
+                        style={
+                          explicitW
+                            ? { width: `${explicitW}px`, maxWidth: `${explicitW}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                            : { minWidth: `${minW}px`, whiteSpace: 'nowrap' }
+                        }
+                      >
+                        {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}
