@@ -20,7 +20,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'role', label: '職位', type: 'string', description: 'worker/driver/operator/foreman/manager' },
     { key: 'phone', label: '電話', type: 'string' },
     { key: 'emergency_contact', label: '緊急聯絡人', type: 'string' },
-    { key: 'join_date', label: '入職日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'join_date', label: '入職日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'company_name', label: '所屬公司', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'bank_name', label: '銀行名稱', type: 'string' },
     { key: 'bank_account', label: '銀行帳號', type: 'string' },
@@ -36,10 +36,10 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'brand', label: '品牌', type: 'string' },
     { key: 'model', label: '型號', type: 'string' },
-    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'permit_fee_expiry', label: '牌費到期日', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'inspection_date', label: '驗車日期', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'license_expiry', label: '行車證到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'permit_fee_expiry', label: '牌費到期日', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'inspection_date', label: '驗車日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'license_expiry', label: '行車證到期日', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'notes', label: '備註', type: 'string' },
   ],
   machinery: [
@@ -50,8 +50,8 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'tonnage', label: '噸數', type: 'number' },
     { key: 'serial_number', label: '序列號', type: 'string' },
     { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
-    { key: 'inspection_cert_expiry', label: '檢驗證到期日', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'inspection_cert_expiry', label: '檢驗證到期日', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'notes', label: '備註', type: 'string' },
   ],
   partners: [
@@ -72,7 +72,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
   ],
   'salary-config': [
     { key: 'employee_code', label: '員工編號', required: true, type: 'string', description: '員工編號（系統自動匹配）' },
-    { key: 'effective_date', label: '生效日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'effective_date', label: '生效日期', required: true, type: 'date', description: 'DD/MM/YYYY' },
     { key: 'salary_type', label: '薪酬類型', type: 'string', description: 'daily/monthly' },
     { key: 'base_salary', label: '底薪', type: 'number' },
     { key: 'allowance_night', label: '晚間津貼', type: 'number' },
@@ -111,8 +111,8 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'mid_shift_unit', label: '中直單位', type: 'string' },
     { key: 'ot_rate', label: 'OT價格', type: 'number' },
     { key: 'ot_unit', label: 'OT單位', type: 'string' },
-    { key: 'effective_date', label: '生效日期', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'expiry_date', label: '到期日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'effective_date', label: '生效日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'expiry_date', label: '到期日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'fleet-rate-cards': [
@@ -144,7 +144,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'work-logs': [
-    { key: 'scheduled_date', label: '日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'scheduled_date', label: '日期', required: true, type: 'date', description: 'DD/MM/YYYY' },
     { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
     { key: 'company_name', label: '公司名稱', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
@@ -171,8 +171,8 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'status', label: '狀態', type: 'string', description: 'pending/active/completed/cancelled' },
     { key: 'description', label: '描述', type: 'string' },
     { key: 'address', label: '地址', type: 'string' },
-    { key: 'start_date', label: '開始日期', type: 'date', description: 'YYYY-MM-DD' },
-    { key: 'end_date', label: '結束日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'start_date', label: '開始日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'end_date', label: '結束日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'quotations': [
@@ -180,7 +180,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'quotation_type', label: '報價類型', type: 'string', description: 'project/monthly' },
     { key: 'company_name', label: '公司名稱', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
-    { key: 'quotation_date', label: '報價日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'quotation_date', label: '報價日期', required: true, type: 'date', description: 'DD/MM/YYYY' },
     { key: 'contract_name', label: '合約名稱', type: 'string' },
     { key: 'project_name', label: '工程名稱', type: 'string' },
     { key: 'total_amount', label: '總金額', type: 'number' },
@@ -211,11 +211,19 @@ export class CsvImportService {
       return parts.join(', ') || '';
     });
 
+    // CSV escape: wrap fields containing commas in double quotes
+    const escapeCsv = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return '"' + val.replace(/"/g, '""') + '"';
+      }
+      return val;
+    };
+
     return {
       module,
       fields,
-      csvHeader: headers.join(','),
-      csvDescription: descriptions.join(','),
+      csvHeader: headers.map(escapeCsv).join(','),
+      csvDescription: descriptions.map(escapeCsv).join(','),
     };
   }
 
