@@ -63,7 +63,7 @@ export default function ClockPage() {
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: 'user' },
       });
       streamRef.current = stream;
       setCameraOpen(true);
@@ -78,7 +78,7 @@ export default function ClockPage() {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.capture = 'environment';
+      input.capture = 'user';
       input.onchange = (e: any) => {
         const file = e.target.files?.[0];
         if (file) {

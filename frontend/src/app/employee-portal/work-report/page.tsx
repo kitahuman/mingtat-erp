@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
@@ -31,12 +31,14 @@ interface FormData {
   // Common
   start_time: string;
   end_time: string;
-  day_night: string;
+  shift: 'D' | 'N';
+  mid_shift: boolean;
   quantity: string;
   unit: string;
   overtime: boolean;
   remarks: string;
   photo_urls: string[];
+  signature_url: string;
 }
 
 const defaultForm: FormData = {
@@ -57,14 +59,139 @@ const defaultForm: FormData = {
   destination: '',
   start_time: '',
   end_time: '',
-  day_night: 'N',
+  shift: 'D',
+  mid_shift: false,
   quantity: '',
   unit: '',
   overtime: false,
   remarks: '',
   photo_urls: [],
+  signature_url: '',
 };
 
+// ── Signature Pad Component ──────────────────────────────────────────────────
+function SignaturePad({
+  onSave,
+  onClear,
+  hasSignature,
+}: {
+  onSave: (dataUrl: string) => void;
+  onClear: () => void;
+  hasSignature: boolean;
+}) {
+  const { t } = useI18n();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawing = useRef(false);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+  const getPos = (e: React.TouchEvent | React.MouseEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ('touches' in e) {
+      const touch = e.touches[0];
+      return {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY,
+      };
+    }
+    return {
+      x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
+      y: ((e as React.MouseEvent).clientY - rect.top) * scaleY,
+    };
+  };
+
+  const startDraw = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    isDrawing.current = true;
+    lastPos.current = getPos(e, canvas);
+  };
+
+  const draw = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (!isDrawing.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getPos(e, canvas);
+    if (lastPos.current) {
+      ctx.beginPath();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.strokeStyle = '#1a1a2e';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+    lastPos.current = pos;
+  };
+
+  const endDraw = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    lastPos.current = null;
+    // Save signature
+    const canvas = canvasRef.current;
+    if (canvas) {
+      onSave(canvas.toDataURL('image/png'));
+    }
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onClear();
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-semibold text-gray-700">{t('signatureLabel')}</label>
+        <button
+          type="button"
+          onClick={handleClear}
+          className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+        >
+          {t('clearSignature')}
+        </button>
+      </div>
+      <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50">
+        <p className="absolute top-2 left-0 right-0 text-center text-xs text-gray-400 pointer-events-none select-none">
+          {t('signatureHint')}
+        </p>
+        <canvas
+          ref={canvasRef}
+          width={600}
+          height={160}
+          className="w-full touch-none cursor-crosshair"
+          style={{ height: '160px' }}
+          onMouseDown={startDraw}
+          onMouseMove={draw}
+          onMouseUp={endDraw}
+          onMouseLeave={endDraw}
+          onTouchStart={startDraw}
+          onTouchMove={draw}
+          onTouchEnd={endDraw}
+        />
+      </div>
+      {hasSignature && (
+        <p className="text-xs text-green-600 flex items-center gap-1">
+          ✅ {t('signature')} {t('success')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
 export default function WorkReportPage() {
   const { t } = useI18n();
   const [form, setForm] = useState<FormData>(defaultForm);
@@ -73,6 +200,7 @@ export default function WorkReportPage() {
   const [error, setError] = useState('');
   const [clients, setClients] = useState<any[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingSignature, setUploadingSignature] = useState(false);
 
   useEffect(() => {
     portalSharedApi
@@ -95,7 +223,30 @@ export default function WorkReportPage() {
       }
     } catch {}
     setUploadingPhoto(false);
+    e.target.value = '';
   };
+
+  const handleSignatureSave = useCallback(async (dataUrl: string) => {
+    // Convert dataUrl to File and upload
+    setUploadingSignature(true);
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `signature_${Date.now()}.png`, { type: 'image/png' });
+      const uploadRes = await employeePortalApi.uploadPhoto(file);
+      if (uploadRes.data.url) {
+        set('signature_url', uploadRes.data.url);
+      }
+    } catch {
+      // If upload fails, store dataUrl locally as fallback
+      set('signature_url', dataUrl);
+    }
+    setUploadingSignature(false);
+  }, []);
+
+  const handleSignatureClear = useCallback(() => {
+    set('signature_url', '');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +254,9 @@ export default function WorkReportPage() {
     setError('');
     setSuccess('');
     try {
+      const midShiftLabel = form.mid_shift ? '有' : '無';
+      const shiftLabel = form.shift === 'D' ? '日更' : '夜更';
+
       const payload: any = {
         service_type: form.work_type === 'engineering' ? (form.service_type || '工程') : '運輸',
         scheduled_date: form.scheduled_date,
@@ -110,12 +264,15 @@ export default function WorkReportPage() {
         tonnage: form.tonnage || undefined,
         start_time: form.start_time || undefined,
         end_time: form.end_time || undefined,
-        day_night: form.day_night,
+        day_night: form.shift,
         quantity: form.quantity || undefined,
         unit: form.unit || undefined,
         remarks: [
           form.work_content ? `工作內容：${form.work_content}` : '',
+          `更次：${shiftLabel}`,
+          `中直：${midShiftLabel}`,
           form.overtime ? '超時工作' : '',
+          form.signature_url ? `簽名：${form.signature_url}` : '',
           form.remarks,
         ].filter(Boolean).join('\n') || undefined,
       };
@@ -368,10 +525,40 @@ export default function WorkReportPage() {
           </div>
         )}
 
-        {/* Time & Other */}
+        {/* Time & Shift */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
           <h3 className="font-semibold text-gray-800 text-sm border-b pb-2">{t('time')}</h3>
 
+          {/* Day / Night Shift Selector — above time inputs */}
+          <div>
+            <label className={labelClass}>{t('shift')}</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => set('shift', 'D')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                  form.shift === 'D'
+                    ? 'bg-amber-400 border-amber-400 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-amber-300'
+                }`}
+              >
+                ☀️ {t('dayShift')}
+              </button>
+              <button
+                type="button"
+                onClick={() => set('shift', 'N')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                  form.shift === 'N'
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300'
+                }`}
+              >
+                🌙 {t('nightShift')}
+              </button>
+            </div>
+          </div>
+
+          {/* Time inputs */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className={labelClass}>{t('timeFrom')}</label>
@@ -393,26 +580,32 @@ export default function WorkReportPage() {
             </div>
           </div>
 
-          {/* Mid Shift */}
-          <div className="flex items-center justify-between py-1">
-            <label className="text-sm font-semibold text-gray-700">{t('midShift')}</label>
+          {/* Mid Shift — Yes / No buttons */}
+          <div>
+            <label className={labelClass}>{t('midShift')}</label>
             <div className="flex gap-2">
-              {['日', '夜', '中直'].map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => set('day_night', opt === '日' ? 'D' : opt === '夜' ? 'N' : 'M')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    (opt === '日' && form.day_night === 'D') ||
-                    (opt === '夜' && form.day_night === 'N') ||
-                    (opt === '中直' && form.day_night === 'M')
-                      ? 'bg-blue-700 text-white'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {opt}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => set('mid_shift', true)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                  form.mid_shift
+                    ? 'bg-green-600 border-green-600 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-green-300'
+                }`}
+              >
+                ✓ {t('midShiftYes')}
+              </button>
+              <button
+                type="button"
+                onClick={() => set('mid_shift', false)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                  !form.mid_shift
+                    ? 'bg-gray-600 border-gray-600 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+                }`}
+              >
+                ✕ {t('midShiftNo')}
+              </button>
             </div>
           </div>
 
@@ -468,6 +661,21 @@ export default function WorkReportPage() {
               <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
             </label>
           </div>
+        </div>
+
+        {/* Signature Pad */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <h3 className="font-semibold text-gray-800 text-sm mb-3">
+            ✍️ {t('signature')}
+            {uploadingSignature && (
+              <span className="ml-2 text-xs text-gray-400 font-normal">{t('loading')}</span>
+            )}
+          </h3>
+          <SignaturePad
+            onSave={handleSignatureSave}
+            onClear={handleSignatureClear}
+            hasSignature={!!form.signature_url}
+          />
         </div>
 
         {/* Submit */}
