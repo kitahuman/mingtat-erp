@@ -23,6 +23,7 @@ import { WorkLogsModule } from './work-logs/work-logs.module';
 import { FieldOptionsModule } from './field-options/field-options.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { CsvImportModule } from './csv-import/csv-import.module';
+import { SubconFleetDriversModule } from './subcon-fleet-drivers/subcon-fleet-drivers.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { CsvImportModule } from './csv-import/csv-import.module';
     FieldOptionsModule,
     PayrollModule,
     CsvImportModule,
+    SubconFleetDriversModule,
   ],
 })
 export class AppModule {}

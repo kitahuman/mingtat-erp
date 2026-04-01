@@ -391,6 +391,7 @@ model Partner {
   subcon_as_subcon       SubconRateCard[] @relation("subcon_partner")
   subcon_as_client       SubconRateCard[] @relation("subcon_client")
   work_logs              WorkLog[]
+  subcon_fleet_drivers   SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
 
   @@map("partners")
 }
@@ -862,4 +863,33 @@ model PayrollDailyAllowance {
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 
   @@map("payroll_daily_allowances")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Subcontractor Fleet Drivers
+// ══════════════════════════════════════════════════════════════
+
+model SubcontractorFleetDriver {
+  id                   Int      @id @default(autoincrement())
+  subcontractor_id     Int
+  short_name           String?
+  name_zh              String
+  name_en              String?
+  id_number            String?
+  vehicle_type         String?
+  plate_no             String?
+  phone                String?
+  date_of_birth        DateTime? @db.Date
+  yellow_cert_no       String?
+  red_cert_no          String?
+  has_d_cert           Boolean   @default(false)
+  is_cert_returned     Boolean   @default(false)
+  address              String?   @db.Text
+  status               String    @default("active")
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @default(now()) @updatedAt
+
+  subcontractor        Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
+
+  @@map("subcontractor_fleet_drivers")
 }

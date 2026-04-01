@@ -16,7 +16,7 @@ export interface InlineColumn {
   // Inline edit config
   editable?: boolean;       // default: true (set false to explicitly disable)
   editType?: 'text' | 'number' | 'select' | 'date';
-  editOptions?: { value: string | number; label: string }[];
+  editOptions?: { value: string | number | boolean; label: string }[];
   editRender?: (value: any, onChange: (val: any) => void, row: any) => React.ReactNode;
 }
 
@@ -142,7 +142,7 @@ export default function InlineEditDataTable({
                 >
                   <option value="">-</option>
                   {col.editOptions?.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
                   ))}
                 </select>
               );

@@ -40,6 +40,7 @@ const navEntries: NavEntry[] = [
       { href: '/vehicles', label: '車輛管理', icon: '🚛', minRole: 'clerk' },
       { href: '/machinery', label: '機械管理', icon: '⚙️', minRole: 'clerk' },
       { href: '/partners', label: '合作單位', icon: '🤝', minRole: 'clerk' },
+      { href: '/subcon-fleet-drivers', label: '街車車隊管理', icon: '🚐', minRole: 'clerk' },
     ],
   },
   { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },

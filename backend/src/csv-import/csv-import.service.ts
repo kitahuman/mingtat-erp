@@ -190,6 +190,23 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'external_remark', label: '外部備註', type: 'string' },
     { key: 'internal_remark', label: '內部備註', type: 'string' },
   ],
+  'subcon-fleet-drivers': [
+    { key: 'subcon_name', label: '街車公司', required: true, type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'short_name', label: '簡稱', type: 'string' },
+    { key: 'name_zh', label: '中文姓名', required: true, type: 'string' },
+    { key: 'name_en', label: '英文姓名', type: 'string' },
+    { key: 'id_number', label: '身份證號碼', type: 'string' },
+    { key: 'vehicle_type', label: '車類型', type: 'string' },
+    { key: 'plate_no', label: '常用車牌', type: 'string' },
+    { key: 'phone', label: '聯絡電話', type: 'string' },
+    { key: 'date_of_birth', label: '出生日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'yellow_cert_no', label: '黃證no', type: 'string' },
+    { key: 'red_cert_no', label: '紅證no', type: 'string' },
+    { key: 'has_d_cert', label: 'D證', type: 'boolean', description: '是/否' },
+    { key: 'is_cert_returned', label: '已還證', type: 'boolean', description: '是/否' },
+    { key: 'address', label: '聯絡地址', type: 'string' },
+    { key: 'status', label: '狀態', type: 'string', description: 'active/inactive' },
+  ],
 };
 
 @Injectable()
@@ -340,6 +357,7 @@ export class CsvImportService {
       case 'work-logs': return this.importWorkLog(data);
       case 'projects': return this.importProject(data);
       case 'quotations': return this.importQuotation(data);
+      case 'subcon-fleet-drivers': return this.importSubconFleetDriver(data);
       default: throw new Error(`不支援的模組: ${module}`);
     }
   }
@@ -568,6 +586,19 @@ export class CsvImportService {
 
     const created = await this.prisma.quotation.create({
       data: { ...rest, company_id: companyId, client_id: clientId, project_id: projectId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importSubconFleetDriver(data: any) {
+    const { subcon_name, ...rest } = data;
+    const subconId = await this.resolvePartnerId(subcon_name);
+    if (!subconId) throw new Error(`找不到街車公司: ${subcon_name}`);
+
+    if (rest.date_of_birth) rest.date_of_birth = new Date(rest.date_of_birth);
+
+    const created = await this.prisma.subcontractorFleetDriver.create({
+      data: { ...rest, subcontractor_id: subconId },
     });
     return { status: 'created' as const, id: created.id };
   }

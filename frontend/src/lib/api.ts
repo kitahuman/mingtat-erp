@@ -317,3 +317,12 @@ export function getExpiryLabel(status: string): string {
     default: return '';
   }
 }
+
+// Subcontractor Fleet Drivers (街車車隊管理)
+export const subconFleetDriversApi = {
+  list: (params?: any) => api.get('/subcon-fleet-drivers', { params }),
+  get: (id: number) => api.get(`/subcon-fleet-drivers/${id}`),
+  create: (data: any) => api.post('/subcon-fleet-drivers', data),
+  update: (id: number, data: any) => api.put(`/subcon-fleet-drivers/${id}`, data),
+  delete: (id: number) => api.delete(`/subcon-fleet-drivers/${id}`),
+};
