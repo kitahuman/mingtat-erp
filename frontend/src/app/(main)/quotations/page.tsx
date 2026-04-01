@@ -171,21 +171,21 @@ export default function QuotationsPage() {
 
   const columns = [
     { key: 'quotation_no', label: '報價單號', sortable: true, render: (v: any) => <span className="font-mono font-bold text-primary-600">{v}</span> },
-    { key: 'quotation_type', label: '類型', render: (v: any) => (
+    { key: 'quotation_type', label: '類型', sortable: true, render: (v: any) => (
       <span className={v === 'project' ? 'badge-blue' : 'badge-purple'}>
         {typeLabels[v] || v}
       </span>
     ), filterRender: (v: any) => typeLabels[v] || v },
-    { key: 'company', label: '開立公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'contract_name', label: '合約', render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
+    { key: 'company', label: '開立公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'contract_name', label: '合約', sortable: true, render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
     { key: 'quotation_date', label: '日期', sortable: true },
-    { key: 'project_name', label: '工程/服務名稱', render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
-    { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
+    { key: 'project_name', label: '工程/服務名稱', sortable: true, render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
+    { key: 'project', label: '工程項目', sortable: true, render: (_: any, row: any) => row.project ? (
       <span className="text-primary-600 font-mono text-xs">{row.project.project_no}</span>
     ) : '-' },
     { key: 'total_amount', label: '總金額', sortable: true, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
-    { key: 'status', label: '狀態', render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
+    { key: 'status', label: '狀態', sortable: true, render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
   ];
 
   return (

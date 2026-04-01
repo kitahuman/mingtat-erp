@@ -4,6 +4,7 @@ import { fieldOptionsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 
 const CATEGORY_LABELS: Record<string, string> = {
+  employee_role: '員工職位',
   machine_type: '機種',
   tonnage: '噸數',
   wage_unit: '工資單位',

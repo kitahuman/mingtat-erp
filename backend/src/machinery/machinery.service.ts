@@ -26,7 +26,7 @@ export class MachineryService {
       ];
     }
 
-    const allowedSortFields = ['machine_code', 'machine_type', 'brand', 'model', 'tonnage', 'inspection_cert_expiry', 'insurance_expiry', 'status', 'id'];
+    const allowedSortFields = ['machine_code', 'machine_type', 'brand', 'model', 'tonnage', 'inspection_cert_expiry', 'insurance_expiry', 'status', 'id', 'created_at', 'plate_number'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'machine_code';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 

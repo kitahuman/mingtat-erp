@@ -109,15 +109,15 @@ export default function PartnersPage() {
     { key: 'code', label: '代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
     { key: 'english_code', label: '英文代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-primary-600">{v}</span> : '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v}</span> },
-    { key: 'name_en', label: '英文名稱', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'partner_type', label: '類型', editable: true, editType: 'select' as const, editOptions: partnerTypes, render: (v: string) => {
+    { key: 'name_en', label: '英文名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'partner_type', label: '類型', sortable: true, editable: true, editType: 'select' as const, editOptions: partnerTypes, render: (v: string) => {
       const colors: Record<string, string> = {
         client: 'badge-blue', supplier: 'badge-green', subcontractor: 'badge-yellow',
         insurance: 'badge-purple', repair_shop: 'badge-gray', other: 'badge-gray'
       };
       return <span className={colors[v] || 'badge-gray'}>{typeLabels[v] || v}</span>;
     }, filterRender: (v: string) => typeLabels[v] || v },
-    { key: 'subsidiaries', label: '旗下公司', editable: false, render: (v: string[] | string) => {
+    { key: 'subsidiaries', label: '旗下公司', sortable: true, editable: false, render: (v: string[] | string) => {
       if (!v) return '-';
       const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
       if (arr.length === 0) return '-';
@@ -133,10 +133,10 @@ export default function PartnersPage() {
       const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
       return arr.length > 0 ? arr.join(', ') : '-';
     }},
-    { key: 'contact_person', label: '聯絡人', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'mobile', label: '手提電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'email', label: '電郵', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'contact_person', label: '聯絡人', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'phone', label: '電話', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'mobile', label: '手提電話', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'email', label: '電郵', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
   ];
 
   const {

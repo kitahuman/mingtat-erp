@@ -90,7 +90,7 @@ export default function MachineryPage() {
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'model', label: '型號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
-    { key: 'owner_company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
+    { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
     { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (

@@ -12,6 +12,7 @@ export class SalaryConfigService {
   async findAll(query: {
     page?: number; limit?: number; search?: string;
     employee_id?: number; salary_type?: string; is_piece_rate?: string;
+    employee_status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
@@ -23,8 +24,12 @@ export class SalaryConfigService {
     if (query.salary_type) where.salary_type = query.salary_type;
     if (query.is_piece_rate === 'true') where.is_piece_rate = true;
     if (query.is_piece_rate === 'false') where.is_piece_rate = false;
+    if (query.employee_status) {
+      where.employee = { ...where.employee, status: query.employee_status };
+    }
     if (query.search) {
       where.employee = {
+        ...where.employee,
         OR: [
           { name_zh: { contains: query.search, mode: 'insensitive' } },
           { name_en: { contains: query.search, mode: 'insensitive' } },

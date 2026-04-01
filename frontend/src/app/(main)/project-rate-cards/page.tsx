@@ -2,11 +2,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import Modal from '@/components/Modal';
 
 const SERVICE_TYPES = ['工程', '人工', '物料', '服務'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: '啟用' },
+  { value: 'inactive', label: '停用' },
+];
 
 export default function ProjectRateCardsPage() {
   const router = useRouter();
@@ -68,22 +75,41 @@ export default function ProjectRateCardsPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    const payload: any = {};
+    const textFields = ['service_type', 'name', 'contract_no', 'remarks', 'status', 'day_unit'];
+    const numFields = ['day_rate'];
+    const dateFields = ['effective_date', 'expiry_date'];
+    textFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
+    numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
+    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f] || null; });
+    await rateCardsApi.update(id, payload);
+    load();
+  };
+
+  const serviceTypeOptions = SERVICE_TYPES.map(t => ({ value: t, label: t }));
+
   const columns = [
-    { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
+    { key: 'project', label: '工程項目', sortable: true, editable: false, render: (_: any, row: any) => row.project ? (
       <span className="font-mono text-xs text-primary-600">{row.project.project_no}</span>
     ) : '-', filterRender: (_: any, row: any) => row.project?.project_no || '-' },
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'company', label: '公司', render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'name', label: '項目名稱', render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
-    { key: 'service_type', label: '服務類型' },
-    { key: 'day_rate', label: '單價', sortable: true, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || 'JOB'}</span> : '-' },
-    { key: 'effective_date', label: '生效日期', sortable: true, render: (v: any) => v || '-' },
-    { key: 'expiry_date', label: '到期日期', render: (v: any) => v || '-' },
-    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'name', label: '項目名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions },
+    { key: 'day_rate', label: '單價', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || 'JOB'}</span> : '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'expiry_date', label: '到期日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: STATUS_OPTIONS, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
   ];
+
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('project-rate-cards', columns);
 
   return (
     <div>
@@ -92,13 +118,21 @@ export default function ProjectRateCardsPage() {
           <h1 className="text-2xl font-bold text-gray-900">工程價目表</h1>
           <p className="text-gray-500 text-sm mt-1">管理工程項目相關的一次性價目記錄</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增工程價目</button>
+        <div className="flex gap-2">
+          <CsvImportModal module="rate-cards" onImportComplete={load} />
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增工程價目</button>
+        </div>
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="工程價目表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -111,6 +145,7 @@ export default function ProjectRateCardsPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSave={handleInlineSave}
           filters={
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部狀態</option>

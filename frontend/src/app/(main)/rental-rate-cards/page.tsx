@@ -2,13 +2,20 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import Modal from '@/components/Modal';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
-const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: '生效中' },
+  { value: 'inactive', label: '停用' },
+  { value: 'cancelled', label: '取消' },
+];
 
 export default function RentalRateCardsPage() {
   const router = useRouter();
@@ -75,22 +82,39 @@ export default function RentalRateCardsPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    const payload: any = {};
+    const textFields = ['service_type', 'name', 'vehicle_tonnage', 'vehicle_type', 'origin', 'destination', 'contract_no', 'remarks', 'status', 'day_unit', 'night_unit', 'mid_shift_unit', 'ot_unit'];
+    const numFields = ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate'];
+    const dateFields = ['effective_date', 'expiry_date'];
+    textFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
+    numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
+    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f] || null; });
+    await rateCardsApi.update(id, payload);
+    load();
+  };
+
+  const serviceTypeOptions = SERVICE_TYPES.map(t => ({ value: t, label: t }));
+  const tonnageOptions = TONNAGE_OPTIONS.map(t => ({ value: t, label: t }));
+  const unitOptions = UNIT_OPTIONS.map(u => ({ value: u, label: u }));
+
   const columns = [
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'company', label: '公司', render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'service_type', label: '服務類型' },
-    { key: 'name', label: '名稱', render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', render: (v: any) => v || '-' },
-    { key: 'day_rate', label: '日間', sortable: true, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
-    { key: 'night_rate', label: '夜間', className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
-    { key: 'mid_shift_rate', label: '中直', className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.mid_shift_unit || '天'}</span> : '-' },
-    { key: 'effective_date', label: '生效日期', sortable: true, render: (v: any) => v || '-' },
-    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions },
+    { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: tonnageOptions, render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
+    { key: 'night_rate', label: '夜間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
+    { key: 'mid_shift_rate', label: '中直', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.mid_shift_unit || '天'}</span> : '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'expiry_date', label: '到期日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', render: (v: any) => {
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: STATUS_OPTIONS, render: (v: any) => {
       const map: Record<string, { label: string; cls: string }> = {
         active: { label: '生效中', cls: 'badge-green' },
         cancelled: { label: '取消', cls: 'badge-red' },
@@ -102,6 +126,11 @@ export default function RentalRateCardsPage() {
     }, filterRender: (v: any) => ({ active: '生效中', cancelled: '取消', deleted: '已刪除', inactive: '停用' }[v] || v) },
   ];
 
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('rental-rate-cards', columns);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -109,13 +138,21 @@ export default function RentalRateCardsPage() {
           <h1 className="text-2xl font-bold text-gray-900">租賃價目表</h1>
           <p className="text-gray-500 text-sm mt-1">管理持續性租賃/運輸標準定價，按路線/車型/日夜更定價</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增租賃價目</button>
+        <div className="flex gap-2">
+          <CsvImportModal module="rate-cards" onImportComplete={load} />
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增租賃價目</button>
+        </div>
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="租賃價目表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -128,6 +165,7 @@ export default function RentalRateCardsPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={serviceTypeFilter} onChange={e => { setServiceTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">

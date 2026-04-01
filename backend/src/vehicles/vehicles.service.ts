@@ -25,7 +25,7 @@ export class VehiclesService {
       ];
     }
 
-    const allowedSortFields = ['plate_number', 'vehicle_type', 'tonnage', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id'];
+    const allowedSortFields = ['plate_number', 'vehicle_type', 'tonnage', 'brand', 'model', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id', 'created_at'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 

@@ -100,7 +100,7 @@ export default function VehiclesPage() {
   const columns = [
     { key: 'plate_number', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
-    { key: 'owner_company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
+    { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },

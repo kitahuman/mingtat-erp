@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { employeesApi, companiesApi } from '@/lib/api';
+import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
@@ -9,23 +9,12 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 
-const roleLabels: Record<string, string> = {
+// Fallback role labels for display (used when API options not loaded yet)
+const FALLBACK_ROLE_LABELS: Record<string, string> = {
   admin: '管理', driver: '司機', operator: '機手', worker: '雜工',
   subcontractor: '鴻輝代工', casual_operator: '散工機手',
   foreman: '管工', safety_officer: '安全督導員', director: '董事', t1: 'T1',
 };
-const roleOptions = [
-  { value: 'driver', label: '司機' },
-  { value: 'operator', label: '機手' },
-  { value: 'worker', label: '雜工' },
-  { value: 'admin', label: '管理' },
-  { value: 'subcontractor', label: '鴻輝代工' },
-  { value: 'casual_operator', label: '散工機手' },
-  { value: 'foreman', label: '管工' },
-  { value: 'safety_officer', label: '安全督導員' },
-  { value: 'director', label: '董事' },
-  { value: 't1', label: 'T1' },
-];
 
 const roleBadgeClass = (v: string) => {
   switch (v) {
@@ -60,7 +49,26 @@ export default function EmployeesPage() {
   const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
   const [showCsvImport, setShowCsvImport] = useState(false);
 
-  useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
+  const [roleOptions, setRoleOptions] = useState<{value: string; label: string}[]>([]);
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>(FALLBACK_ROLE_LABELS);
+
+  useEffect(() => {
+    companiesApi.simple().then(res => setCompanies(res.data));
+    fieldOptionsApi.getByCategory('employee_role').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
+      if (opts.length > 0) {
+        setRoleOptions(opts);
+        const labels: Record<string, string> = {};
+        opts.forEach((o: any) => { labels[o.value] = o.label; });
+        setRoleLabels({ ...FALLBACK_ROLE_LABELS, ...labels });
+      } else {
+        // Fallback to hardcoded options
+        setRoleOptions(Object.entries(FALLBACK_ROLE_LABELS).map(([value, label]) => ({ value, label })));
+      }
+    }).catch(() => {
+      setRoleOptions(Object.entries(FALLBACK_ROLE_LABELS).map(([value, label]) => ({ value, label })));
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,12 +143,12 @@ export default function EmployeesPage() {
     { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const, render: (_: any, row: any) => (
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
     )},
-    { key: 'name_en', label: '英文姓名', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'name_en', label: '英文姓名', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
-    { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'phone', label: '電話', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
     { key: 'green_card_expiry', label: '平安卡到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
@@ -157,9 +165,9 @@ export default function EmployeesPage() {
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
-    { key: 'company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
     { key: 'termination_date', label: '離職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'termination_reason', label: '離職原因', editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="text-gray-600 text-sm">{v}</span> : '-' },
+    { key: 'termination_reason', label: '離職原因', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="text-gray-600 text-sm">{v}</span> : '-' },
     { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
   ];
 

@@ -102,24 +102,24 @@ export default function RateCardsPage() {
   ];
 
   const columns = [
-    { key: 'client', label: '客戶', editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'company', label: '公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'service_type', label: '服務類型', editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
-    { key: 'name', label: '名稱', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
+    { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
-    { key: 'night_rate', label: '夜間', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
+    { key: 'night_rate', label: '夜間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
     { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
-    { key: 'expiry_date', label: '到期日期', editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
-    { key: 'source_quotation', label: '來源報價單', editable: false, render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'expiry_date', label: '到期日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'project', label: '工程項目', editable: false, render: (_: any, row: any) => row.project ? (
+    { key: 'project', label: '工程項目', sortable: true, editable: false, render: (_: any, row: any) => row.project ? (
       <span className="font-mono text-xs text-primary-600">{row.project.project_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
   ];
 
   const {

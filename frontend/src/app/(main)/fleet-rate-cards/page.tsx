@@ -81,21 +81,21 @@ export default function FleetRateCardsPage() {
   ];
 
   const columns = [
-    { key: 'client', label: '客戶', editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'contract_no', label: '合約', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
-    { key: 'vehicle_type', label: '車型', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_rate', label: '日間分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'night_rate', label: '夜間分傭', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'mid_shift_rate', label: '中直分傭', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_rate', label: 'OT分傭', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'unit', label: '單位', editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
-    { key: 'source_quotation', label: '來源報價單', editable: false, render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'night_rate', label: '夜間分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'mid_shift_rate', label: '中直分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_rate', label: 'OT分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => {
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => {
       const map: Record<string, { label: string; cls: string }> = {
         active: { label: '生效中', cls: 'badge-green' },
         cancelled: { label: '取消', cls: 'badge-red' },

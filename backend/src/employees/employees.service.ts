@@ -28,7 +28,7 @@ export class EmployeesService {
       ];
     }
 
-    const allowedSortFields = ['emp_code', 'name_zh', 'role', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id', 'join_date', 'termination_date'];
+    const allowedSortFields = ['emp_code', 'name_zh', 'name_en', 'role', 'phone', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id', 'join_date', 'termination_date', 'created_at'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 

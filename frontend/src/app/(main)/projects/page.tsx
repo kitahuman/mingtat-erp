@@ -62,11 +62,11 @@ export default function ProjectsPage() {
   const columns = [
     { key: 'project_no', label: '工程編號', sortable: true, render: (v: any) => <span className="font-mono font-bold text-primary-600">{v}</span> },
     { key: 'project_name', label: '工程名稱', sortable: true, render: (v: any) => <span className="max-w-[250px] truncate block">{v || '-'}</span> },
-    { key: 'company', label: '公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'start_date', label: '開始日期', sortable: true, render: (v: any) => v || '-' },
     { key: 'end_date', label: '結束日期', sortable: true, render: (v: any) => v || '-' },
-    { key: 'status', label: '狀態', render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
+    { key: 'status', label: '狀態', sortable: true, render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
   ];
 
   return (

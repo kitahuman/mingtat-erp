@@ -31,6 +31,8 @@ const OT_FIELDS = [
   { key: 'ot_mid_shift', label: '中直OT津貼' },
 ];
 
+type TabType = 'active' | 'inactive';
+
 export default function SalaryConfigPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
@@ -38,6 +40,7 @@ export default function SalaryConfigPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [salaryTypeFilter, setSalaryTypeFilter] = useState('');
+  const [activeTab, setActiveTab] = useState<TabType>('active');
   const [sortBy, setSortBy] = useState('effective_date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
@@ -63,15 +66,22 @@ export default function SalaryConfigPage() {
     salaryConfigApi.list({
       page, limit: 20, search,
       salary_type: salaryTypeFilter || undefined,
+      employee_status: activeTab,
       sortBy, sortOrder,
     }).then(res => { setData(res.data.data); setTotal(res.data.total); })
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [page, search, salaryTypeFilter, sortBy, sortOrder]);
+  useEffect(() => { load(); }, [page, search, salaryTypeFilter, sortBy, sortOrder, activeTab]);
   useEffect(() => {
     employeesApi.list({ limit: 500 }).then(res => setEmployees(res.data.data || []));
   }, []);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setPage(1);
+    setSearch('');
+  };
 
   const addCustomAllowance = () => {
     setForm({ ...form, custom_allowances: [...(form.custom_allowances || []), { name: '', amount: 0 }] });
@@ -95,14 +105,13 @@ export default function SalaryConfigPage() {
   };
 
   const handleInlineSave = async (id: number, formData: any) => {
-    await salaryConfigApi.update(id, {
-      effective_date: formData.effective_date || undefined,
-      salary_type: formData.salary_type,
-      base_salary: formData.base_salary ? Number(formData.base_salary) : 0,
-      allowance_night: formData.allowance_night ? Number(formData.allowance_night) : 0,
-      ot_rate_standard: formData.ot_rate_standard ? Number(formData.ot_rate_standard) : 0,
-      ot_mid_shift: formData.ot_mid_shift ? Number(formData.ot_mid_shift) : 0,
-    });
+    const payload: any = {};
+    const numFields = ['base_salary', 'allowance_night', 'ot_rate_standard', 'ot_mid_shift'];
+    const dateFields = ['effective_date'];
+    if (formData.salary_type !== undefined) payload.salary_type = formData.salary_type;
+    numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
+    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f] || undefined; });
+    await salaryConfigApi.update(id, payload);
     load();
   };
 
@@ -112,24 +121,24 @@ export default function SalaryConfigPage() {
   ];
 
   const columns = [
-    { key: 'employee', label: '員工', editable: false, render: (_: any, row: any) => {
+    { key: 'employee', label: '員工', sortable: true, editable: false, render: (_: any, row: any) => {
       const emp = row.employee;
       return emp ? <span>{emp.emp_code} - {emp.name_zh || emp.name_en}</span> : '-';
     }, filterRender: (_: any, row: any) => row.employee?.name_zh || '-' },
-    { key: 'company', label: '公司', editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
+    { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
     { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
-    { key: 'salary_type', label: '薪酬類型', editable: true, editType: 'select' as const, editOptions: salaryTypeOptions, render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
+    { key: 'salary_type', label: '薪酬類型', sortable: true, editable: true, editType: 'select' as const, editOptions: salaryTypeOptions, render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
     { key: 'base_salary', label: '底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
-    { key: 'allowance_night', label: '晚間津貼', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_rate_standard', label: '標準OT', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_mid_shift', label: '中直OT', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'is_piece_rate', label: '按件計酬', editable: false, render: (v: any) => v ? <span className="badge-blue">是</span> : '-', filterRender: (v: any) => v ? '是' : '否' },
+    { key: 'allowance_night', label: '晚間津貼', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_rate_standard', label: '標準OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_mid_shift', label: '中直OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'is_piece_rate', label: '按件計酬', sortable: true, editable: false, render: (v: any) => v ? <span className="badge-blue">是</span> : '-', filterRender: (v: any) => v ? '是' : '否' },
   ];
 
   const {
     columnConfigs, columnWidths, visibleColumns,
     handleColumnConfigChange, handleReset, handleColumnResize,
-  } = useColumnConfig('salary-config', columns);
+  } = useColumnConfig(`salary-config-${activeTab}`, columns);
 
   return (
     <div>
@@ -144,9 +153,25 @@ export default function SalaryConfigPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mb-4">
+        <button
+          onClick={() => handleTabChange('active')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'active' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          在職員工薪酬
+        </button>
+        <button
+          onClick={() => handleTabChange('inactive')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'inactive' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          已離職員工薪酬
+        </button>
+      </div>
+
       <div className="card">
         <InlineEditDataTable
-          exportFilename="薪酬配置列表"
+          exportFilename={activeTab === 'active' ? '在職員工薪酬' : '已離職員工薪酬'}
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
@@ -236,7 +261,7 @@ export default function SalaryConfigPage() {
               <div key={idx} className="flex gap-2 mb-2">
                 <input value={ca.name} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], name: e.target.value}; setForm({...form, custom_allowances: cas}); }} className="input-field flex-1 text-sm" placeholder="津貼名稱" />
                 <input type="number" value={ca.amount} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], amount: Number(e.target.value)}; setForm({...form, custom_allowances: cas}); }} className="input-field w-32 text-sm" placeholder="金額" />
-                <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 hover:text-red-700">x</button>
+                <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 text-sm">刪除</button>
               </div>
             ))}
           </div>
