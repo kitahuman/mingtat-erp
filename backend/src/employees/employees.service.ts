@@ -24,13 +24,13 @@ export class EmployeesService {
       .leftJoinAndSelect('e.company', 'c');
 
     if (query.search) {
-      qb.andWhere('(e.name_zh ILIKE :s OR e.name_en ILIKE :s OR e.emp_code ILIKE :s OR e.phone ILIKE :s)', { s: `%${query.search}%` });
+      qb.andWhere('(e.name_zh ILIKE :s OR e.name_en ILIKE :s OR e.emp_code ILIKE :s OR e.phone ILIKE :s OR e.nickname ILIKE :s OR e.id_number ILIKE :s)', { s: `%${query.search}%` });
     }
     if (query.role) qb.andWhere('e.role = :role', { role: query.role });
     if (query.company_id) qb.andWhere('e.company_id = :cid', { cid: query.company_id });
     if (query.status) qb.andWhere('e.status = :st', { st: query.status });
 
-    const allowedSortFields = ['emp_code', 'name_zh', 'role', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id'];
+    const allowedSortFields = ['emp_code', 'name_zh', 'role', 'green_card_expiry', 'construction_card_expiry', 'driving_license_expiry', 'status', 'id', 'join_date', 'termination_date'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = (query.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC') as 'ASC' | 'DESC';
     qb.orderBy(`e.${sortBy}`, sortOrder);
@@ -66,6 +66,28 @@ export class EmployeesService {
   async update(id: number, dto: Partial<Employee>) {
     const { salary_settings, transfers, company, ...updateData } = dto as any;
     await this.repo.update(id, updateData);
+    return this.findOne(id);
+  }
+
+  async terminate(id: number, dto: { termination_date: string; termination_reason?: string }) {
+    const emp = await this.repo.findOne({ where: { id } });
+    if (!emp) throw new NotFoundException('員工不存在');
+    await this.repo.update(id, {
+      status: 'inactive',
+      termination_date: dto.termination_date,
+      termination_reason: dto.termination_reason || null,
+    });
+    return this.findOne(id);
+  }
+
+  async reinstate(id: number) {
+    const emp = await this.repo.findOne({ where: { id } });
+    if (!emp) throw new NotFoundException('員工不存在');
+    await this.repo.update(id, {
+      status: 'active',
+      termination_date: null,
+      termination_reason: null,
+    });
     return this.findOne(id);
   }
 

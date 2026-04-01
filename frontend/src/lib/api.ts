@@ -83,6 +83,8 @@ export const employeesApi = {
   addSalary: (id: number, data: any) => api.post(`/employees/${id}/salary-settings`, data),
   getSalary: (id: number) => api.get(`/employees/${id}/salary-settings`),
   transfer: (id: number, data: any) => api.post(`/employees/${id}/transfer`, data),
+  terminate: (id: number, data: { termination_date: string; termination_reason?: string }) => api.post(`/employees/${id}/terminate`, data),
+  reinstate: (id: number) => api.post(`/employees/${id}/reinstate`),
 };
 
 // Vehicles

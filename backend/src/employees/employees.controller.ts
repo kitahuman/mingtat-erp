@@ -27,6 +27,16 @@ export class EmployeesController {
     return this.service.update(+id, dto);
   }
 
+  @Post(':id/terminate')
+  terminate(@Param('id') id: number, @Body() dto: { termination_date: string; termination_reason?: string }) {
+    return this.service.terminate(+id, dto);
+  }
+
+  @Post(':id/reinstate')
+  reinstate(@Param('id') id: number) {
+    return this.service.reinstate(+id);
+  }
+
   @Post(':id/salary-settings')
   addSalarySetting(@Param('id') id: number, @Body() dto: any) {
     return this.service.addSalarySetting(+id, dto);
