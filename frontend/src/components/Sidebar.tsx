@@ -340,6 +340,29 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
           })}
         </nav>
 
+        {/* Employee Portal Quick Link */}
+        <div className={`px-2 pb-2 ${collapsed ? 'text-center' : ''}`}>
+          <a
+            href="/employee-portal"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="員工手機入口"
+            className={`
+              flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg transition-colors
+              bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium
+              ${collapsed ? 'justify-center px-0' : ''}
+            `}
+          >
+            <span className="text-lg">📱</span>
+            {!collapsed && <span>員工手機入口</span>}
+            {!collapsed && (
+              <svg className="w-3.5 h-3.5 ml-auto opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            )}
+          </a>
+        </div>
+
         {/* User section */}
         <div className={`p-4 border-t border-gray-700 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && (
