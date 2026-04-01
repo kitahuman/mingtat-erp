@@ -268,10 +268,18 @@ export const workLogsApi = {
   duplicate: (id: number) => api.post(`/work-logs/${id}/duplicate`),
   bulkDelete: (ids: number[]) => api.post('/work-logs/bulk/delete', { ids }),
   bulkConfirm: (ids: number[]) => api.post('/work-logs/bulk/confirm', { ids }),
+  bulkUnconfirm: (ids: number[]) => api.post('/work-logs/bulk/unconfirm', { ids }),
   equipmentOptions: (machineType: string, tonnage?: string) =>
     api.get('/work-logs/equipment-options', { params: { machine_type: machineType, tonnage } }),
   locationSuggestions: (type: 'start' | 'end', q: string) =>
     api.get('/work-logs/location-suggestions', { params: { type, q } }),
+};
+
+// CSV Import (CSV 匯入)
+export const csvImportApi = {
+  getTemplate: (module: string) => api.get('/csv-import/template', { params: { module } }),
+  preview: (module: string, csvData: string) => api.post('/csv-import/preview', { module, csvData }),
+  execute: (module: string, rows: any[]) => api.post('/csv-import/execute', { module, rows }),
 };
 
 // Utility: Expiry date helpers

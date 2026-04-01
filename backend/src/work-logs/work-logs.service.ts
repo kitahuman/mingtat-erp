@@ -134,6 +134,11 @@ export class WorkLogsService {
     return { success: true, confirmed: ids.length };
   }
 
+  async bulkUnconfirm(ids: number[]) {
+    await this.prisma.workLog.updateMany({ where: { id: { in: ids } }, data: { is_confirmed: false } });
+    return { success: true, unconfirmed: ids.length };
+  }
+
   async duplicate(id: number, userId: number) {
     const original = await this.prisma.workLog.findUnique({ where: { id } });
     if (!original) throw new Error('WorkLog not found');

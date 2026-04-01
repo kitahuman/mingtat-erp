@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 
@@ -56,6 +58,7 @@ export default function EmployeesPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
 
@@ -100,21 +103,37 @@ export default function EmployeesPage() {
     setPage(1);
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    await employeesApi.update(id, {
+      name_zh: formData.name_zh,
+      name_en: formData.name_en,
+      emp_code: formData.emp_code,
+      role: formData.role,
+      phone: formData.phone,
+      company_id: formData.company_id ? Number(formData.company_id) : undefined,
+    });
+    load();
+  };
+
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
   const filterExpiry = (v: string) => {
     if (!v) return '-';
     return new Date(v).toLocaleDateString('zh-HK');
   };
 
+  const companyOptions = companies.map(c => ({ value: c.id, label: c.internal_prefix || c.name }));
+
   const activeColumns = [
-    { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', render: (v: string) => v || '-' },
-    { key: 'name_zh', label: '姓名', sortable: true, render: (_: any, row: any) => (
+    { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const, render: (_: any, row: any) => (
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
     )},
-    { key: 'role', label: '職位', sortable: true, render: (v: string) => (
+    { key: 'name_en', label: '英文姓名', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
-    { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
     { key: 'green_card_expiry', label: '平安卡到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
     { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
     { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
@@ -124,20 +143,24 @@ export default function EmployeesPage() {
   ];
 
   const inactiveColumns = [
-    { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', render: (v: string) => v || '-' },
-    { key: 'name_zh', label: '姓名', sortable: true, render: (_: any, row: any) => (
+    { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const, render: (_: any, row: any) => (
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
     )},
-    { key: 'role', label: '職位', sortable: true, render: (v: string) => (
+    { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
     { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
-    { key: 'termination_date', label: '離職日期', sortable: true, render: (v: string) => v || '-' },
-    { key: 'termination_reason', label: '離職原因', render: (v: string) => v ? <span className="text-gray-600 text-sm">{v}</span> : '-' },
-    { key: 'join_date', label: '入職日期', sortable: true, render: (v: string) => v || '-' },
+    { key: 'termination_date', label: '離職日期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v || '-' },
+    { key: 'termination_reason', label: '離職原因', editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="text-gray-600 text-sm">{v}</span> : '-' },
+    { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v || '-' },
   ];
 
-  const columns = activeTab === 'active' ? activeColumns : inactiveColumns;
+  const defaultColumns = activeTab === 'active' ? activeColumns : inactiveColumns;
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig(`employees-${activeTab}`, defaultColumns);
 
   return (
     <div>
@@ -147,7 +170,10 @@ export default function EmployeesPage() {
           <p className="text-gray-500 mt-1">管理所有員工資料、薪資設定及調動紀錄</p>
         </div>
         {hasMinRole('clerk') && (
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
+          </div>
         )}
       </div>
 
@@ -168,9 +194,14 @@ export default function EmployeesPage() {
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename={activeTab === 'active' ? '在職員工列表' : '已離職員工列表'}
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -183,6 +214,7 @@ export default function EmployeesPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -197,6 +229,14 @@ export default function EmployeesPage() {
           }
         />
       </div>
+
+      <CsvImportModal
+        module="employees"
+        moduleName="員工管理"
+        isOpen={showCsvImport}
+        onClose={() => setShowCsvImport(false)}
+        onSuccess={load}
+      />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

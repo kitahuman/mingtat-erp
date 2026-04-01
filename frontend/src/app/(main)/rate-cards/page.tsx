@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
@@ -21,6 +23,7 @@ export default function RateCardsPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -96,6 +99,11 @@ export default function RateCardsPage() {
     { key: 'status', label: '狀態', render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
   ];
 
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('rate-cards', columns);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -103,13 +111,21 @@ export default function RateCardsPage() {
           <h1 className="text-2xl font-bold text-gray-900">客戶價目表</h1>
           <p className="text-gray-500 text-sm mt-1">管理客戶定價，支援日/夜/中直/OT多維度費率</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
+        </div>
       </div>
 
       <div className="card">
         <DataTable
           exportFilename="客戶價目表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -139,6 +155,8 @@ export default function RateCardsPage() {
       </div>
 
       {/* Create Modal */}
+      <CsvImportModal module="rate-cards" moduleName="租賃價目表" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
+
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增客戶價目" size="xl">
         <form onSubmit={handleCreate} className="space-y-4 max-h-[75vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

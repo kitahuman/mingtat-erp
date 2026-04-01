@@ -73,7 +73,7 @@ export class SalaryConfigService {
       'ot_rate_standard', 'allowance_well', 'allowance_machine', 'allowance_roller',
       'allowance_crane', 'allowance_move_machine', 'allowance_kwh_night',
       'allowance_mid_shift', 'ot_1800_1900', 'ot_1900_2000', 'ot_0600_0700',
-      'ot_0700_0800', 'change_amount',
+      'ot_0700_0800', 'ot_mid_shift', 'change_amount',
     ];
     for (const field of numericFields) {
       if (dto[field] !== undefined) {
@@ -96,7 +96,7 @@ export class SalaryConfigService {
       'ot_rate_standard', 'allowance_well', 'allowance_machine', 'allowance_roller',
       'allowance_crane', 'allowance_move_machine', 'allowance_kwh_night',
       'allowance_mid_shift', 'ot_1800_1900', 'ot_1900_2000', 'ot_0600_0700',
-      'ot_0700_0800', 'change_amount',
+      'ot_0700_0800', 'ot_mid_shift', 'change_amount',
     ];
     for (const field of numericFields) {
       if (updateData[field] !== undefined) {

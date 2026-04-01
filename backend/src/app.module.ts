@@ -22,6 +22,7 @@ import { EnumsModule } from './common/enums.module';
 import { WorkLogsModule } from './work-logs/work-logs.module';
 import { FieldOptionsModule } from './field-options/field-options.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { CsvImportModule } from './csv-import/csv-import.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PayrollModule } from './payroll/payroll.module';
     WorkLogsModule,
     FieldOptionsModule,
     PayrollModule,
+    CsvImportModule,
   ],
 })
 export class AppModule {}

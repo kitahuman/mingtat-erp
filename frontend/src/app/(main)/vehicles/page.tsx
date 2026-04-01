@@ -2,12 +2,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 
-// Fallback vehicle types in case field options haven't loaded yet
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
 export default function VehiclesPage() {
@@ -30,8 +31,8 @@ export default function VehiclesPage() {
     plate_number: '', vehicle_type: '', tonnage: '', owner_company_id: '',
     brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
   });
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
-  // Load reference data including dynamic vehicle types
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
     fieldOptionsApi.getByCategory('vehicle_type').then(res => {
@@ -70,34 +71,50 @@ export default function VehiclesPage() {
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
 
-  const handleSort = (field: string, order: string) => {
-    setSortBy(field);
-    setSortOrder(order);
-    setPage(1);
+  const handleSort = (field: string, order: string) => { setSortBy(field); setSortOrder(order); setPage(1); };
+
+  const handleInlineSave = async (id: number, formData: any) => {
+    await vehiclesApi.update(id, {
+      plate_number: formData.plate_number,
+      vehicle_type: formData.vehicle_type,
+      tonnage: formData.tonnage ? Number(formData.tonnage) : null,
+      brand: formData.brand,
+      model: formData.model,
+      status: formData.status,
+    });
+    load();
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => {
-    if (!v) return '-';
-    return new Date(v).toLocaleDateString('zh-HK');
-  };
+  const filterExpiry = (v: string) => { if (!v) return '-'; return new Date(v).toLocaleDateString('zh-HK'); };
+
+  const statusOptions = [
+    { value: 'active', label: '使用中' },
+    { value: 'maintenance', label: '維修中' },
+    { value: 'inactive', label: '停用' },
+  ];
 
   const columns = [
-    { key: 'plate_number', label: '車牌', sortable: true, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
-    { key: 'vehicle_type', label: '車型', sortable: true },
+    { key: 'plate_number', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
+    { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
     { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
-    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'inspection_date', label: '驗車到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'license_expiry', label: '行車證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
       </span>
     ), filterRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用',
-       exportRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
+        exportRender: (v: string) => v === '使用中' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
   ];
+
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('vehicles', columns);
 
   return (
     <div>
@@ -107,14 +124,22 @@ export default function VehiclesPage() {
           <p className="text-gray-500 mt-1">管理所有車輛資料、車牌變更及過戶紀錄</p>
         </div>
         {hasMinRole('clerk') && (
-          <button onClick={() => { setForm({ ...form, vehicle_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <button onClick={() => { setForm({ ...form, vehicle_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="車輛列表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -127,6 +152,7 @@ export default function VehiclesPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -141,6 +167,8 @@ export default function VehiclesPage() {
           }
         />
       </div>
+
+      <CsvImportModal module="vehicles" moduleName="車輛管理" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增車輛" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

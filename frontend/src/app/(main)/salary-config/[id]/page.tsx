@@ -25,6 +25,7 @@ const OT_FIELDS = [
   { key: 'ot_0600_0700', label: 'OT 0600-0700' },
   { key: 'ot_0700_0800', label: 'OT 0700-0800' },
   { key: 'ot_rate_standard', label: '標準OT時薪' },
+  { key: 'ot_mid_shift', label: '中直OT津貼' },
 ];
 
 export default function SalaryConfigDetailPage() {

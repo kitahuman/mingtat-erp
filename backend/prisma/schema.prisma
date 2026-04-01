@@ -168,6 +168,22 @@ model Employee {
   compaction_load_cert_expiry DateTime? @db.Date
   aerial_platform_cert_no     String?
   aerial_platform_cert_expiry DateTime? @db.Date
+  site_rigging_a12_cert_no              String?
+  site_rigging_a12_cert_expiry           DateTime? @db.Date
+  slinging_signaler_a12s_cert_no         String?
+  slinging_signaler_a12s_cert_expiry     DateTime? @db.Date
+  zero_injury_cert_no                    String?
+  zero_injury_cert_expiry                DateTime? @db.Date
+  designated_trade_safety_cert_no        String?
+  designated_trade_safety_cert_expiry    DateTime? @db.Date
+  small_loader_cert_expiry               DateTime? @db.Date
+  safety_supervisor_cert_expiry          DateTime? @db.Date
+  safe_work_procedure_cert_expiry        DateTime? @db.Date
+  grinding_wheel_cert_expiry             DateTime? @db.Date
+  ship_cargo_cert_expiry                 DateTime? @db.Date
+  arc_welding_cert_expiry                DateTime? @db.Date
+  gas_welding_cert_expiry                DateTime? @db.Date
+  clp_safety_cert_expiry                 DateTime? @db.Date
   other_certificates          Json?     @db.JsonB
   company_id                  Int
   status                      String    @default("active")
@@ -205,6 +221,8 @@ model EmployeeSalarySetting {
   ot_1900_2000         Decimal  @default(0) @db.Decimal(10, 2)
   ot_0600_0700         Decimal  @default(0) @db.Decimal(10, 2)
   ot_0700_0800         Decimal  @default(0) @db.Decimal(10, 2)
+  ot_mid_shift              Decimal  @default(0) @db.Decimal(10, 2)
+  mid_shift_ot_allowance   Decimal  @default(0) @db.Decimal(10, 2)
   custom_allowances    Json?    @db.JsonB
   is_piece_rate        Boolean  @default(false)
   fleet_rate_card_id   Int?

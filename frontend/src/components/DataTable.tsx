@@ -1,7 +1,8 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import ColumnFilter from './ColumnFilter';
 import ExportButton from './ExportButton';
+import ColumnCustomizer, { ColumnConfig } from './ColumnCustomizer';
 
 interface Column {
   key: string;
@@ -12,6 +13,7 @@ interface Column {
   sortable?: boolean;
   filterable?: boolean;
   filterRender?: (value: any, row: any) => string;
+  _width?: number;
 }
 
 interface DataTableProps {
@@ -31,15 +33,24 @@ interface DataTableProps {
   sortOrder?: string;
   onSort?: (field: string, order: string) => void;
   exportFilename?: string;
+  // Column customization props
+  columnConfigs?: ColumnConfig[];
+  onColumnConfigChange?: (configs: ColumnConfig[]) => void;
+  onColumnConfigReset?: () => void;
+  columnWidths?: Record<string, number>;
+  onColumnResize?: (key: string, width: number) => void;
 }
 
 export default function DataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
   searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading,
-  sortBy, sortOrder, onSort, exportFilename
+  sortBy, sortOrder, onSort, exportFilename,
+  columnConfigs, onColumnConfigChange, onColumnConfigReset,
+  columnWidths, onColumnResize,
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
   const handleSearch = () => {
     onSearch?.(searchTerm);
@@ -65,6 +76,35 @@ export default function DataTable({
       return next;
     });
   };
+
+  // Column resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent, key: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.target as HTMLElement).closest('th');
+    const startWidth = th?.offsetWidth || 120;
+    resizingRef.current = { key, startX: e.clientX, startWidth };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const diff = e.clientX - resizingRef.current.startX;
+      const newWidth = Math.max(60, resizingRef.current.startWidth + diff);
+      onColumnResize?.(resizingRef.current.key, newWidth);
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [onColumnResize]);
 
   // Apply client-side column filters
   const filteredData = useMemo(() => {
@@ -94,6 +134,9 @@ export default function DataTable({
   // Check if any column filter is active
   const hasActiveFilters = Object.keys(columnFilters).length > 0;
 
+  // Determine if column customization is enabled
+  const hasColumnCustomization = !!columnConfigs && !!onColumnConfigChange;
+
   return (
     <div>
       {/* Toolbar */}
@@ -113,11 +156,20 @@ export default function DataTable({
         )}
         {filters}
         {actions}
-        <ExportButton
-          columns={columns}
-          data={filteredData}
-          filename={exportFilename || 'export'}
-        />
+        <div className="flex gap-2 items-center">
+          <ExportButton
+            columns={columns}
+            data={filteredData}
+            filename={exportFilename || 'export'}
+          />
+          {hasColumnCustomization && (
+            <ColumnCustomizer
+              columns={columnConfigs!}
+              onChange={onColumnConfigChange!}
+              onReset={onColumnConfigReset || (() => {})}
+            />
+          )}
+        </div>
       </div>
 
       {/* Active filter indicator */}
@@ -135,17 +187,22 @@ export default function DataTable({
 
       {/* Table */}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{ tableLayout: onColumnResize ? 'fixed' : 'auto' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-left font-semibold text-gray-600 ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                  className={`px-4 py-3 text-left font-semibold text-gray-600 relative ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                  style={
+                    (col._width || (columnWidths && columnWidths[col.key]))
+                      ? { width: `${col._width || columnWidths?.[col.key]}px`, minWidth: `${col._width || columnWidths?.[col.key]}px` }
+                      : undefined
+                  }
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
                   <div className="flex items-center gap-1">
-                    <span>{col.label}</span>
+                    <span className="truncate">{col.label}</span>
                     {col.sortable && onSort && (
                       <span className="text-xs text-gray-400">
                         {sortBy === col.key ? (sortOrder === 'ASC' ? '\u25B2' : '\u25BC') : '\u25B4\u25BE'}
@@ -161,6 +218,14 @@ export default function DataTable({
                       />
                     )}
                   </div>
+                  {/* Resize handle */}
+                  {onColumnResize && (
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors"
+                      onMouseDown={(e) => handleResizeStart(e, col.key)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
                 </th>
               ))}
             </tr>
@@ -180,7 +245,11 @@ export default function DataTable({
                   className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 ${col.className || ''}`}>
+                    <td key={col.key} className={`px-4 py-3 ${col.className || ''}`} style={
+                      (col._width || (columnWidths && columnWidths[col.key]))
+                        ? { maxWidth: `${col._width || columnWidths?.[col.key]}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                        : undefined
+                    }>
                       {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
                     </td>
                   ))}

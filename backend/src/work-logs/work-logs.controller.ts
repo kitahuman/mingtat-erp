@@ -67,6 +67,11 @@ export class WorkLogsController {
     return this.service.bulkConfirm(ids);
   }
 
+  @Post('bulk/unconfirm')
+  bulkUnconfirm(@Body('ids') ids: number[]) {
+    return this.service.bulkUnconfirm(ids);
+  }
+
   // ── 複製 ─────────────────────────────────────────────────
 
   @Post(':id/duplicate')

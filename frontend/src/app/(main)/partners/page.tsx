@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { partnersApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 
 const partnerTypes = [
@@ -44,6 +46,7 @@ export default function PartnersPage() {
   const [form, setForm] = useState<any>({ ...emptyForm });
   const [sortBy, setSortBy] = useState('code');
   const [sortOrder, setSortOrder] = useState('ASC');
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,10 +89,22 @@ export default function PartnersPage() {
     }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    await partnersApi.update(id, {
+      code: formData.code,
+      english_code: formData.english_code,
+      name: formData.name,
+      partner_type: formData.partner_type,
+      contact_person: formData.contact_person,
+      phone: formData.phone,
+    });
+    load();
+  };
+
   const columns = [
-    { key: 'code', label: '代碼', sortable: true, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
-    { key: 'english_code', label: '英文代碼', sortable: true, render: (v: string) => v ? <span className="font-mono text-primary-600">{v}</span> : '-' },
-    { key: 'name', label: '名稱', sortable: true, render: (v: string) => <span className="font-medium">{v}</span> },
+    { key: 'code', label: '代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
+    { key: 'english_code', label: '英文代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-primary-600">{v}</span> : '-' },
+    { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v}</span> },
     { key: 'partner_type', label: '類型', render: (v: string) => {
       const colors: Record<string, string> = {
         client: 'badge-blue', supplier: 'badge-green', subcontractor: 'badge-yellow',
@@ -113,9 +128,14 @@ export default function PartnersPage() {
       const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
       return arr.length > 0 ? arr.join(', ') : '-';
     }},
-    { key: 'contact_person', label: '聯絡人', render: (v: string) => v || '-' },
-    { key: 'phone', label: '電話', render: (v: string) => v || '-' },
+    { key: 'contact_person', label: '聯絡人', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
   ];
+
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('partners', columns);
 
   return (
     <div>
@@ -125,14 +145,22 @@ export default function PartnersPage() {
           <p className="text-gray-500 mt-1">管理客戶、供應商、判頭及其他合作夥伴</p>
         </div>
         {hasMinRole('clerk') && (
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增合作單位</button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <button onClick={() => setShowModal(true)} className="btn-primary">新增合作單位</button>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="合作夥伴列表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -145,6 +173,7 @@ export default function PartnersPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
+          onSave={handleInlineSave}
           filters={
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>
@@ -153,6 +182,8 @@ export default function PartnersPage() {
           }
         />
       </div>
+
+      <CsvImportModal module="partners" moduleName="合作單位" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增合作單位" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

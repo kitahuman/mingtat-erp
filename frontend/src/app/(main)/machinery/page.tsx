@@ -2,12 +2,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { machineryApi, companiesApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 
 const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
+const statusOptions = [
+  { value: 'active', label: '使用中' },
+  { value: 'maintenance', label: '維修中' },
+  { value: 'inactive', label: '停用' },
+];
 
 export default function MachineryPage() {
   const router = useRouter();
@@ -28,6 +35,7 @@ export default function MachineryPage() {
     machine_code: '', machine_type: '挖掘機', brand: '', model: '', tonnage: '',
     serial_number: '', owner_company_id: '', inspection_cert_expiry: '', insurance_expiry: ''
   });
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
 
@@ -58,33 +66,43 @@ export default function MachineryPage() {
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
 
-  const handleSort = (field: string, order: string) => {
-    setSortBy(field);
-    setSortOrder(order);
-    setPage(1);
+  const handleSort = (field: string, order: string) => { setSortBy(field); setSortOrder(order); setPage(1); };
+
+  const handleInlineSave = async (id: number, formData: any) => {
+    await machineryApi.update(id, {
+      machine_code: formData.machine_code,
+      machine_type: formData.machine_type,
+      brand: formData.brand,
+      model: formData.model,
+      tonnage: formData.tonnage ? Number(formData.tonnage) : null,
+      status: formData.status,
+    });
+    load();
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => {
-    if (!v) return '-';
-    return new Date(v).toLocaleDateString('zh-HK');
-  };
+  const filterExpiry = (v: string) => { if (!v) return '-'; return new Date(v).toLocaleDateString('zh-HK'); };
 
   const columns = [
-    { key: 'machine_code', label: '編號', sortable: true, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
-    { key: 'machine_type', label: '類型', sortable: true },
-    { key: 'brand', label: '品牌', sortable: true, render: (v: string) => v || '-' },
-    { key: 'model', label: '型號', sortable: true, render: (v: string) => v || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
+    { key: 'machine_code', label: '編號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
+    { key: 'machine_type', label: '類型', sortable: true, editable: true, editType: 'select' as const, editOptions: machineTypes.map(t => ({ value: t, label: t })) },
+    { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'model', label: '型號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
     { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
     { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
       </span>
-    ), filterRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
+    ), filterRender: (v: string) => v === '使用中' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
   ];
+
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('machinery', columns);
 
   return (
     <div>
@@ -94,14 +112,22 @@ export default function MachineryPage() {
           <p className="text-gray-500 mt-1">管理所有機械設備資料及過戶紀錄</p>
         </div>
         {hasMinRole('clerk') && (
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="機械列表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -114,6 +140,7 @@ export default function MachineryPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -128,6 +155,8 @@ export default function MachineryPage() {
           }
         />
       </div>
+
+      <CsvImportModal module="machinery" moduleName="機械管理" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增機械" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

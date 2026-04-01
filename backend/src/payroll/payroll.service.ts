@@ -535,20 +535,24 @@ export class PayrollService {
       });
     }
 
-    const otSlots: { field: string; label: string }[] = [
+    const otSlots: { field: string; label: string; condition?: (wl: any) => boolean }[] = [
       { field: 'ot_1800_1900', label: 'OT 18:00-19:00' },
       { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
       { field: 'ot_0600_0700', label: 'OT 06:00-07:00' },
       { field: 'ot_0700_0800', label: 'OT 07:00-08:00' },
+      { field: 'ot_mid_shift', label: '中直OT津貼', condition: (wl) => wl.day_night === '中直' },
     ];
 
     for (const os of otSlots) {
       const rate = Number((salarySetting as any)[os.field]) || 0;
       if (rate === 0) continue;
 
-      const otDays = new Set(
-        workLogs.filter(wl => wl.ot_quantity && Number(wl.ot_quantity) > 0).map(wl => String(wl.scheduled_date))
-      ).size;
+      const filteredLogs = workLogs.filter(wl => {
+        if (!(wl.ot_quantity && Number(wl.ot_quantity) > 0)) return false;
+        if (os.condition) return os.condition(wl);
+        return true;
+      });
+      const otDays = new Set(filteredLogs.map(wl => String(wl.scheduled_date))).size;
 
       if (otDays === 0) continue;
 

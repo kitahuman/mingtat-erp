@@ -1,0 +1,496 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+
+export interface FieldDef {
+  key: string;
+  label: string;
+  required?: boolean;
+  type?: 'string' | 'number' | 'date' | 'boolean';
+  description?: string;
+  lookupModel?: string;
+  lookupField?: string;
+}
+
+const MODULE_FIELDS: Record<string, FieldDef[]> = {
+  employees: [
+    { key: 'emp_code', label: '員工編號', type: 'string' },
+    { key: 'name_zh', label: '中文姓名', required: true, type: 'string' },
+    { key: 'name_en', label: '英文姓名', type: 'string' },
+    { key: 'nickname', label: '暱稱', type: 'string' },
+    { key: 'role', label: '職位', type: 'string', description: 'worker/driver/operator/foreman/manager' },
+    { key: 'phone', label: '電話', type: 'string' },
+    { key: 'emergency_contact', label: '緊急聯絡人', type: 'string' },
+    { key: 'join_date', label: '入職日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'company_name', label: '所屬公司', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'bank_name', label: '銀行名稱', type: 'string' },
+    { key: 'bank_account', label: '銀行帳號', type: 'string' },
+    { key: 'id_number', label: '身份證號碼', type: 'string' },
+    { key: 'gender', label: '性別', type: 'string', description: '男/女' },
+    { key: 'address', label: '地址', type: 'string' },
+    { key: 'notes', label: '備註', type: 'string' },
+  ],
+  vehicles: [
+    { key: 'plate_number', label: '車牌號碼', required: true, type: 'string' },
+    { key: 'vehicle_type', label: '車輛類型', type: 'string' },
+    { key: 'tonnage', label: '噸數', type: 'number' },
+    { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'brand', label: '品牌', type: 'string' },
+    { key: 'model', label: '型號', type: 'string' },
+    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'permit_fee_expiry', label: '牌費到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'inspection_date', label: '驗車日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'license_expiry', label: '行車證到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'notes', label: '備註', type: 'string' },
+  ],
+  machinery: [
+    { key: 'machine_code', label: '機械編號', required: true, type: 'string' },
+    { key: 'machine_type', label: '機械類型', type: 'string' },
+    { key: 'brand', label: '品牌', type: 'string' },
+    { key: 'model', label: '型號', type: 'string' },
+    { key: 'tonnage', label: '噸數', type: 'number' },
+    { key: 'serial_number', label: '序列號', type: 'string' },
+    { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'inspection_cert_expiry', label: '檢驗證到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'notes', label: '備註', type: 'string' },
+  ],
+  partners: [
+    { key: 'name', label: '公司名稱', required: true, type: 'string' },
+    { key: 'name_en', label: '英文名稱', type: 'string' },
+    { key: 'code', label: '公司代碼', type: 'string' },
+    { key: 'partner_type', label: '類型', required: true, type: 'string', description: 'client/subcontractor/supplier/other' },
+    { key: 'category', label: '分類', type: 'string' },
+    { key: 'contact_person', label: '聯絡人', type: 'string' },
+    { key: 'phone', label: '電話', type: 'string' },
+    { key: 'mobile', label: '手機', type: 'string' },
+    { key: 'email', label: '電郵', type: 'string' },
+    { key: 'fax', label: '傳真', type: 'string' },
+    { key: 'address', label: '地址', type: 'string' },
+    { key: 'bank_name', label: '銀行名稱', type: 'string' },
+    { key: 'bank_account', label: '銀行帳號', type: 'string' },
+    { key: 'notes', label: '備註', type: 'string' },
+  ],
+  'salary-config': [
+    { key: 'employee_code', label: '員工編號', required: true, type: 'string', description: '員工編號（系統自動匹配）' },
+    { key: 'effective_date', label: '生效日期', required: true, type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'salary_type', label: '薪酬類型', type: 'string', description: 'daily/monthly' },
+    { key: 'base_salary', label: '底薪', type: 'number' },
+    { key: 'allowance_night', label: '晚間津貼', type: 'number' },
+    { key: 'allowance_3runway', label: '3跑津貼', type: 'number' },
+    { key: 'allowance_rent', label: '租車津貼', type: 'number' },
+    { key: 'allowance_well', label: '落井津貼', type: 'number' },
+    { key: 'allowance_machine', label: '揸機津貼', type: 'number' },
+    { key: 'allowance_roller', label: '火轆津貼', type: 'number' },
+    { key: 'allowance_crane', label: '吊/挾車津貼', type: 'number' },
+    { key: 'allowance_move_machine', label: '搬機津貼', type: 'number' },
+    { key: 'allowance_kwh_night', label: '嘉華-夜間津貼', type: 'number' },
+    { key: 'allowance_mid_shift', label: '中直津貼', type: 'number' },
+    { key: 'ot_rate_standard', label: '標準OT時薪', type: 'number' },
+    { key: 'ot_1800_1900', label: 'OT 1800-1900', type: 'number' },
+    { key: 'ot_1900_2000', label: 'OT 1900-2000', type: 'number' },
+    { key: 'ot_0600_0700', label: 'OT 0600-0700', type: 'number' },
+    { key: 'ot_0700_0800', label: 'OT 0700-0800', type: 'number' },
+    { key: 'ot_mid_shift', label: '中直OT津貼', type: 'number' },
+    { key: 'notes', label: '備註', type: 'string' },
+  ],
+  'rate-cards': [
+    { key: 'client_name', label: '客戶名稱', required: true, type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'company_name', label: '公司名稱', required: true, type: 'string', description: '公司名稱（系統自動匹配）' },
+    { key: 'contract_no', label: '合約編號', type: 'string' },
+    { key: 'service_type', label: '服務類型', type: 'string' },
+    { key: 'name', label: '名稱', type: 'string' },
+    { key: 'vehicle_tonnage', label: '車輛噸數', type: 'string' },
+    { key: 'vehicle_type', label: '車輛類型', type: 'string' },
+    { key: 'origin', label: '起點', type: 'string' },
+    { key: 'destination', label: '終點', type: 'string' },
+    { key: 'day_rate', label: '日班價格', type: 'number' },
+    { key: 'day_unit', label: '日班單位', type: 'string' },
+    { key: 'night_rate', label: '夜班價格', type: 'number' },
+    { key: 'night_unit', label: '夜班單位', type: 'string' },
+    { key: 'mid_shift_rate', label: '中直價格', type: 'number' },
+    { key: 'mid_shift_unit', label: '中直單位', type: 'string' },
+    { key: 'ot_rate', label: 'OT價格', type: 'number' },
+    { key: 'ot_unit', label: 'OT單位', type: 'string' },
+    { key: 'effective_date', label: '生效日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'expiry_date', label: '到期日期', type: 'date', description: 'YYYY-MM-DD' },
+    { key: 'remarks', label: '備註', type: 'string' },
+  ],
+  'fleet-rate-cards': [
+    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'contract_no', label: '合約編號', type: 'string' },
+    { key: 'vehicle_tonnage', label: '車輛噸數', type: 'string' },
+    { key: 'vehicle_type', label: '車輛類型', type: 'string' },
+    { key: 'origin', label: '起點', type: 'string' },
+    { key: 'destination', label: '終點', type: 'string' },
+    { key: 'day_rate', label: '日班價格', type: 'number' },
+    { key: 'night_rate', label: '夜班價格', type: 'number' },
+    { key: 'mid_shift_rate', label: '中直價格', type: 'number' },
+    { key: 'ot_rate', label: 'OT價格', type: 'number' },
+    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'remarks', label: '備註', type: 'string' },
+  ],
+  'subcon-rate-cards': [
+    { key: 'subcon_name', label: '街車公司', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'plate_no', label: '車牌號碼', type: 'string' },
+    { key: 'vehicle_tonnage', label: '車輛噸數', type: 'string' },
+    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'contract_no', label: '合約編號', type: 'string' },
+    { key: 'day_night', label: '日/夜班', type: 'string', description: '日/夜/中直' },
+    { key: 'origin', label: '起點', type: 'string' },
+    { key: 'destination', label: '終點', type: 'string' },
+    { key: 'unit_price', label: '單價', type: 'number' },
+    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'exclude_fuel', label: '不含油費', type: 'boolean', description: '是/否' },
+    { key: 'remarks', label: '備註', type: 'string' },
+  ],
+};
+
+@Injectable()
+export class CsvImportService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  getTemplate(module: string) {
+    const fields = MODULE_FIELDS[module];
+    if (!fields) throw new BadRequestException(`不支援的模組: ${module}`);
+
+    const headers = fields.map(f => f.label);
+    const descriptions = fields.map(f => {
+      const parts: string[] = [];
+      if (f.required) parts.push('必填');
+      if (f.type === 'date') parts.push('日期格式: YYYY-MM-DD');
+      if (f.type === 'number') parts.push('數字');
+      if (f.type === 'boolean') parts.push('是/否');
+      if (f.description) parts.push(f.description);
+      return parts.join(', ') || '';
+    });
+
+    return {
+      module,
+      fields,
+      csvHeader: headers.join(','),
+      csvDescription: descriptions.join(','),
+    };
+  }
+
+  preview(module: string, csvData: string) {
+    const fields = MODULE_FIELDS[module];
+    if (!fields) throw new BadRequestException(`不支援的模組: ${module}`);
+
+    const lines = csvData.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length < 2) throw new BadRequestException('CSV 至少需要標題行和一行數據');
+
+    // Parse header
+    const headerLine = this.parseCsvLine(lines[0]);
+    const fieldMap = new Map<number, FieldDef>();
+
+    for (let i = 0; i < headerLine.length; i++) {
+      const header = headerLine[i].trim();
+      const field = fields.find(f => f.label === header || f.key === header);
+      if (field) fieldMap.set(i, field);
+    }
+
+    // Parse data rows
+    const rows: any[] = [];
+    const errors: { row: number; field: string; message: string }[] = [];
+
+    for (let lineIdx = 1; lineIdx < lines.length; lineIdx++) {
+      const values = this.parseCsvLine(lines[lineIdx]);
+      const row: any = { _rowNumber: lineIdx + 1 };
+
+      for (const [colIdx, field] of fieldMap.entries()) {
+        const rawValue = (values[colIdx] || '').trim();
+        if (!rawValue && field.required) {
+          errors.push({ row: lineIdx + 1, field: field.label, message: `${field.label} 為必填欄位` });
+          continue;
+        }
+        if (!rawValue) continue;
+
+        if (field.type === 'number') {
+          const num = Number(rawValue);
+          if (isNaN(num)) {
+            errors.push({ row: lineIdx + 1, field: field.label, message: `${field.label} 必須為數字` });
+          } else {
+            row[field.key] = num;
+          }
+        } else if (field.type === 'date') {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+            errors.push({ row: lineIdx + 1, field: field.label, message: `${field.label} 日期格式必須為 YYYY-MM-DD` });
+          } else {
+            row[field.key] = rawValue;
+          }
+        } else if (field.type === 'boolean') {
+          row[field.key] = rawValue === '是' || rawValue === 'true' || rawValue === '1';
+        } else {
+          row[field.key] = rawValue;
+        }
+      }
+
+      rows.push(row);
+    }
+
+    // Check required fields
+    for (const row of rows) {
+      for (const field of fields) {
+        if (field.required && !row[field.key] && row[field.key] !== 0) {
+          const existing = errors.find(e => e.row === row._rowNumber && e.field === field.label);
+          if (!existing) {
+            errors.push({ row: row._rowNumber, field: field.label, message: `${field.label} 為必填欄位` });
+          }
+        }
+      }
+    }
+
+    return { rows, errors, totalRows: rows.length, errorCount: errors.length };
+  }
+
+  async execute(module: string, rows: any[]) {
+    const fields = MODULE_FIELDS[module];
+    if (!fields) throw new BadRequestException(`不支援的模組: ${module}`);
+
+    const results: { row: number; status: 'created' | 'updated' | 'error'; message?: string; id?: number }[] = [];
+
+    for (const row of rows) {
+      try {
+        const { _rowNumber, ...data } = row;
+        const result = await this.importRow(module, data);
+        results.push({ row: _rowNumber, ...result });
+      } catch (err: any) {
+        results.push({ row: row._rowNumber, status: 'error', message: err.message });
+      }
+    }
+
+    const created = results.filter(r => r.status === 'created').length;
+    const updated = results.filter(r => r.status === 'updated').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+
+    return { results, summary: { created, updated, errors: errorCount, total: rows.length } };
+  }
+
+  private async importRow(module: string, data: any): Promise<{ status: 'created' | 'updated'; id: number }> {
+    switch (module) {
+      case 'employees': return this.importEmployee(data);
+      case 'vehicles': return this.importVehicle(data);
+      case 'machinery': return this.importMachinery(data);
+      case 'partners': return this.importPartner(data);
+      case 'salary-config': return this.importSalaryConfig(data);
+      case 'rate-cards': return this.importRateCard(data);
+      case 'fleet-rate-cards': return this.importFleetRateCard(data);
+      case 'subcon-rate-cards': return this.importSubconRateCard(data);
+      default: throw new Error(`不支援的模組: ${module}`);
+    }
+  }
+
+  private async importEmployee(data: any) {
+    const companyId = await this.resolveCompanyId(data.company_name);
+    const { company_name, ...rest } = data;
+
+    // Check if employee exists by emp_code
+    if (rest.emp_code) {
+      const existing = await this.prisma.employee.findFirst({ where: { emp_code: rest.emp_code } });
+      if (existing) {
+        if (rest.join_date) rest.join_date = new Date(rest.join_date);
+        await this.prisma.employee.update({ where: { id: existing.id }, data: { ...rest, company_id: companyId || existing.company_id } });
+        return { status: 'updated' as const, id: existing.id };
+      }
+    }
+
+    if (!companyId) throw new Error('找不到對應的公司，請確認公司名稱');
+    if (rest.join_date) rest.join_date = new Date(rest.join_date);
+    const created = await this.prisma.employee.create({ data: { ...rest, company_id: companyId } });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importVehicle(data: any) {
+    const companyId = await this.resolveCompanyId(data.company_name);
+    if (!companyId) throw new Error('找不到對應的公司，請確認公司名稱');
+    const { company_name, ...rest } = data;
+
+    // Convert dates
+    for (const df of ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+
+    // Check existing by plate_number
+    const existing = await this.prisma.vehicle.findFirst({ where: { plate_number: rest.plate_number } });
+    if (existing) {
+      await this.prisma.vehicle.update({ where: { id: existing.id }, data: { ...rest, owner_company_id: companyId } });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.vehicle.create({ data: { ...rest, owner_company_id: companyId } });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importMachinery(data: any) {
+    const companyId = await this.resolveCompanyId(data.company_name);
+    if (!companyId) throw new Error('找不到對應的公司，請確認公司名稱');
+    const { company_name, ...rest } = data;
+
+    for (const df of ['inspection_cert_expiry', 'insurance_expiry']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+
+    const existing = await this.prisma.machinery.findFirst({ where: { machine_code: rest.machine_code } });
+    if (existing) {
+      await this.prisma.machinery.update({ where: { id: existing.id }, data: { ...rest, owner_company_id: companyId } });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.machinery.create({ data: { ...rest, owner_company_id: companyId } });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importPartner(data: any) {
+    const existing = await this.prisma.partner.findFirst({ where: { name: data.name } });
+    if (existing) {
+      await this.prisma.partner.update({ where: { id: existing.id }, data });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.partner.create({ data });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importSalaryConfig(data: any) {
+    const { employee_code, ...rest } = data;
+    const employee = await this.prisma.employee.findFirst({ where: { emp_code: employee_code } });
+    if (!employee) throw new Error(`找不到員工編號: ${employee_code}`);
+
+    if (rest.effective_date) rest.effective_date = new Date(rest.effective_date);
+
+    // Numeric fields
+    const numericFields = [
+      'base_salary', 'allowance_night', 'allowance_rent', 'allowance_3runway',
+      'ot_rate_standard', 'allowance_well', 'allowance_machine', 'allowance_roller',
+      'allowance_crane', 'allowance_move_machine', 'allowance_kwh_night',
+      'allowance_mid_shift', 'ot_1800_1900', 'ot_1900_2000', 'ot_0600_0700',
+      'ot_0700_0800', 'ot_mid_shift',
+    ];
+    for (const f of numericFields) {
+      if (rest[f] !== undefined) rest[f] = Number(rest[f]) || 0;
+    }
+
+    // Check existing by employee + effective_date
+    const existing = await this.prisma.employeeSalarySetting.findFirst({
+      where: { employee_id: employee.id, effective_date: rest.effective_date },
+    });
+
+    if (existing) {
+      await this.prisma.employeeSalarySetting.update({ where: { id: existing.id }, data: rest });
+      return { status: 'updated' as const, id: existing.id };
+    }
+
+    const created = await this.prisma.employeeSalarySetting.create({
+      data: { ...rest, employee_id: employee.id },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importRateCard(data: any) {
+    const { client_name, company_name, ...rest } = data;
+    const clientId = await this.resolvePartnerId(client_name);
+    if (!clientId) throw new Error(`找不到客戶: ${client_name}`);
+    const companyId = await this.resolveCompanyId(company_name);
+    if (!companyId) throw new Error(`找不到公司: ${company_name}`);
+
+    for (const df of ['effective_date', 'expiry_date']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+    for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
+      if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
+    }
+
+    const created = await this.prisma.rateCard.create({
+      data: { ...rest, client_id: clientId, company_id: companyId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importFleetRateCard(data: any) {
+    const { client_name, ...rest } = data;
+    const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+
+    for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
+      if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
+    }
+
+    const created = await this.prisma.fleetRateCard.create({
+      data: { ...rest, client_id: clientId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  private async importSubconRateCard(data: any) {
+    const { subcon_name, client_name, ...rest } = data;
+    const subconId = subcon_name ? await this.resolvePartnerId(subcon_name) : null;
+    const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+
+    if (rest.unit_price !== undefined) rest.unit_price = Number(rest.unit_price) || 0;
+
+    const created = await this.prisma.subconRateCard.create({
+      data: { ...rest, subcon_id: subconId, client_id: clientId },
+    });
+    return { status: 'created' as const, id: created.id };
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+
+  private async resolveCompanyId(name: string | undefined): Promise<number | null> {
+    if (!name) return null;
+    const company = await this.prisma.company.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name, mode: 'insensitive' } },
+          { internal_prefix: { equals: name, mode: 'insensitive' } },
+        ],
+      },
+    });
+    return company?.id ?? null;
+  }
+
+  private async resolvePartnerId(name: string | undefined): Promise<number | null> {
+    if (!name) return null;
+    const partner = await this.prisma.partner.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name, mode: 'insensitive' } },
+          { code: { equals: name, mode: 'insensitive' } },
+        ],
+      },
+    });
+    return partner?.id ?? null;
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          result.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+    }
+    result.push(current);
+    return result;
+  }
+}

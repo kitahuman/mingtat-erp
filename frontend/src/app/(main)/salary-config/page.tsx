@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
@@ -26,6 +28,7 @@ const OT_FIELDS = [
   { key: 'ot_0600_0700', label: 'OT 0600-0700' },
   { key: 'ot_0700_0800', label: 'OT 0700-0800' },
   { key: 'ot_rate_standard', label: '標準OT時薪' },
+  { key: 'ot_mid_shift', label: '中直OT津貼' },
 ];
 
 export default function SalaryConfigPage() {
@@ -48,12 +51,13 @@ export default function SalaryConfigPage() {
     allowance_well: 0, allowance_machine: 0, allowance_roller: 0,
     allowance_crane: 0, allowance_move_machine: 0, allowance_kwh_night: 0,
     allowance_mid_shift: 0,
-    ot_rate_standard: 0, ot_1800_1900: 0, ot_1900_2000: 0, ot_0600_0700: 0, ot_0700_0800: 0,
+    ot_rate_standard: 0, ot_1800_1900: 0, ot_1900_2000: 0, ot_0600_0700: 0, ot_0700_0800: 0, ot_mid_shift: 0,
     is_piece_rate: false, fleet_rate_card_id: null,
     custom_allowances: [] as { name: string; amount: number }[],
     change_type: '', change_amount: 0, notes: '',
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -105,6 +109,11 @@ export default function SalaryConfigPage() {
     { key: 'is_piece_rate', label: '按件計酬', render: (v: any) => v ? <span className="badge-blue">是</span> : '-', filterRender: (v: any) => v ? '是' : '否' },
   ];
 
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('salary-config', columns);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -112,13 +121,21 @@ export default function SalaryConfigPage() {
           <h1 className="text-2xl font-bold text-gray-900">員工薪酬配置</h1>
           <p className="text-gray-500 text-sm mt-1">管理員工薪酬設定、津貼配置及變更歷史</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增薪酬設定</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增薪酬設定</button>
+        </div>
       </div>
 
       <div className="card">
         <DataTable
           exportFilename="薪酬配置列表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -140,6 +157,8 @@ export default function SalaryConfigPage() {
           }
         />
       </div>
+
+      <CsvImportModal module="salary-config" moduleName="員工薪酬" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工薪酬設定" size="xl">
         <form onSubmit={handleCreate} className="space-y-4 max-h-[70vh] overflow-y-auto">

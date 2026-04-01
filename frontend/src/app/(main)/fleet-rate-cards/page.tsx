@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { fleetRateCardsApi, partnersApi } from '@/lib/api';
+import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
@@ -19,6 +21,7 @@ export default function FleetRateCardsPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
@@ -79,6 +82,11 @@ export default function FleetRateCardsPage() {
     }, filterRender: (v: any) => ({ active: '生效中', cancelled: '取消', deleted: '已刪除', inactive: '停用' }[v] || v) },
   ];
 
+  const {
+    columnConfigs, columnWidths, visibleColumns,
+    handleColumnConfigChange, handleReset, handleColumnResize,
+  } = useColumnConfig('fleet-rate-cards', columns);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -86,13 +94,21 @@ export default function FleetRateCardsPage() {
           <h1 className="text-2xl font-bold text-gray-900">車隊價目表</h1>
           <p className="text-gray-500 text-sm mt-1">管理明達車隊司機分傭費率</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
+        </div>
       </div>
 
       <div className="card">
         <DataTable
           exportFilename="車隊價目表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}
@@ -116,6 +132,8 @@ export default function FleetRateCardsPage() {
           }
         />
       </div>
+
+      <CsvImportModal module="fleet-rate-cards" moduleName="車隊價目表" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增車隊價目" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

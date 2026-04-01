@@ -193,6 +193,14 @@ export default function WorkLogsPage() {
     await fetchLogs();
   };
 
+  const handleBulkUnconfirm = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`確定取消確認選取的 ${selected.size} 筆記錄？`)) return;
+    await workLogsApi.bulkUnconfirm(Array.from(selected));
+    setSelected(new Set());
+    await fetchLogs();
+  };
+
   const toggleSelect = (id: number, checked: boolean) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -241,6 +249,10 @@ export default function WorkLogsPage() {
               <button onClick={handleBulkConfirm}
                 className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
                 批量確認
+              </button>
+              <button onClick={handleBulkUnconfirm}
+                className="px-3 py-1.5 text-sm bg-yellow-600 text-white rounded hover:bg-yellow-700">
+                取消確認
               </button>
               <button onClick={handleBulkDelete}
                 className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">
