@@ -14,18 +14,30 @@ interface DashboardData {
   employeeId: number | null;
 }
 
+interface ExpiringCert {
+  key: string;
+  name_zh: string;
+  name_en: string;
+  expiry_date: string;
+  days_left: number;
+  is_expired: boolean;
+}
+
 export default function EmployeePortalHome() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { user } = useEmployeePortalAuth();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [expiringCerts, setExpiringCerts] = useState<ExpiringCert[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    employeePortalApi
-      .getDashboard()
-      .then((res) => setDashboard(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.allSettled([
+      employeePortalApi.getDashboard(),
+      employeePortalApi.getExpiringCerts(90),
+    ]).then(([dashRes, certRes]) => {
+      if (dashRes.status === 'fulfilled') setDashboard(dashRes.value.data);
+      if (certRes.status === 'fulfilled') setExpiringCerts(certRes.value.data.expiring || []);
+    }).finally(() => setLoading(false));
   }, []);
 
   const displayName = user?.employee?.name_zh || user?.displayName || '';
@@ -66,6 +78,13 @@ export default function EmployeePortalHome() {
       iconBg: 'bg-purple-100',
     },
     {
+      href: '/employee-portal/certificates',
+      label: t('certificates'),
+      icon: '🪪',
+      color: 'bg-teal-50 border-teal-200 text-teal-700',
+      iconBg: 'bg-teal-100',
+    },
+    {
       href: '/employee-portal/records',
       label: t('myRecords'),
       icon: '👤',
@@ -74,16 +93,91 @@ export default function EmployeePortalHome() {
     },
   ];
 
+  const expiredCerts = expiringCerts.filter(c => c.is_expired);
+  const urgentCerts = expiringCerts.filter(c => !c.is_expired && c.days_left <= 30);
+  const warnCerts = expiringCerts.filter(c => !c.is_expired && c.days_left > 30 && c.days_left <= 90);
+
   return (
     <div className="p-4 space-y-4">
       {/* Welcome */}
       <div className="bg-gradient-to-r from-blue-700 to-blue-600 rounded-2xl p-5 text-white shadow-md">
-        <p className="text-blue-200 text-sm mb-1">{t('today')} · {new Date().toLocaleDateString('zh-HK', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
-        <h2 className="text-xl font-bold">
-          {t('appSubtitle')} 👋
-        </h2>
+        <p className="text-blue-200 text-sm mb-1">
+          {t('today')} · {new Date().toLocaleDateString('zh-HK', { month: 'long', day: 'numeric', weekday: 'short' })}
+        </p>
+        <h2 className="text-xl font-bold">{t('appSubtitle')} 👋</h2>
         <p className="text-blue-100 text-sm mt-1">{displayName}</p>
       </div>
+
+      {/* Certificate Expiry Alerts */}
+      {!loading && expiringCerts.length > 0 && (
+        <div className="space-y-2">
+          {expiredCerts.length > 0 && (
+            <Link href="/employee-portal/certificates">
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl shrink-0">🔴</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-red-800 text-sm">{t('certExpiredAlert')}</p>
+                    <div className="mt-1 space-y-0.5">
+                      {expiredCerts.map(c => (
+                        <p key={c.key} className="text-xs text-red-700">
+                          • {lang === 'zh' ? c.name_zh : c.name_en} — {t('certExpired')}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-red-400 text-sm shrink-0">›</span>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {urgentCerts.length > 0 && (
+            <Link href="/employee-portal/certificates">
+              <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl shrink-0">⚠️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-orange-800 text-sm">{t('certExpiringAlert')}</p>
+                    <div className="mt-1 space-y-0.5">
+                      {urgentCerts.map(c => (
+                        <p key={c.key} className="text-xs text-orange-700">
+                          • {lang === 'zh' ? c.name_zh : c.name_en} — {c.days_left} {t('daysLeft')}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-orange-400 text-sm shrink-0">›</span>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {warnCerts.length > 0 && expiredCerts.length === 0 && urgentCerts.length === 0 && (
+            <Link href="/employee-portal/certificates">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl shrink-0">🟡</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-amber-800 text-sm">{t('certExpiringWarn')}</p>
+                    <div className="mt-1 space-y-0.5">
+                      {warnCerts.slice(0, 3).map(c => (
+                        <p key={c.key} className="text-xs text-amber-700">
+                          • {lang === 'zh' ? c.name_zh : c.name_en} — {c.days_left} {t('daysLeft')}
+                        </p>
+                      ))}
+                      {warnCerts.length > 3 && (
+                        <p className="text-xs text-amber-600">+{warnCerts.length - 3} {t('more')}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-amber-400 text-sm shrink-0">›</span>
+                </div>
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Today's Attendance Summary */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -130,7 +224,7 @@ export default function EmployeePortalHome() {
 
       {/* Quick Actions */}
       <div>
-        <h3 className="font-semibold text-gray-700 mb-3 text-sm">{t('appSubtitle')}</h3>
+        <h3 className="font-semibold text-gray-700 mb-3 text-sm">{t('quickActions')}</h3>
         <div className="grid grid-cols-2 gap-3">
           {quickActions.map((action) => (
             <Link

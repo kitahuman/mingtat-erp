@@ -187,6 +187,7 @@ model Employee {
   gas_welding_cert_expiry                DateTime? @db.Date
   clp_safety_cert_expiry                 DateTime? @db.Date
   other_certificates          Json?     @db.JsonB
+  cert_photos                 Json?     @db.JsonB  // { "driving_license": "url", "green_card": "url", ... }
   company_id                  Int
   status                      String    @default("active")
   notes                       String?   @db.Text

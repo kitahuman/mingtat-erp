@@ -89,6 +89,13 @@ export const employeePortalApi = {
 
   // Dashboard
   getDashboard: () => portalApi.get('/employee-portal/dashboard'),
+
+  // Certificates
+  getCertificates: () => portalApi.get('/employee-portal/certificates'),
+  updateCertPhoto: (certKey: string, photoUrl: string) =>
+    portalApi.post('/employee-portal/certificates/photo', { cert_key: certKey, photo_url: photoUrl }),
+  getExpiringCerts: (days?: number) =>
+    portalApi.get('/employee-portal/certificates/expiring', { params: days ? { days } : {} }),
 };
 
 // Shared API for dropdown data (uses same base URL, no special auth needed)

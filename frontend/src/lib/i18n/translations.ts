@@ -134,6 +134,23 @@ export const translations = {
     receiptNo: '入帳票號碼',
     receiptNoPlaceholder: '輸入入帳票號碼',
 
+    // Certificates
+    certificates: '證件',
+    certificatesSubtitle: '我的證件資料',
+    certNo: '證件編號',
+    certExpiry: '到期日',
+    certExpired: '已過期',
+    certExpiredAlert: '證件已過期，請盡快更新！',
+    certExpiringAlert: '證件即將到期，請盡快處理！',
+    certExpiringWarn: '證件將於 90 天內到期',
+    daysLeft: '天後到期',
+    noCertificates: '未找到證件資料',
+    uploadCertPhoto: '上載證件相片',
+    updatePhoto: '更新相片',
+    uploading: '上載中...',
+    more: '項更多',
+    quickActions: '快速功能',
+
     // Expense
     expenseTitle: '報銷支出',
     expenseDate: '日期',
@@ -329,6 +346,23 @@ export const translations = {
     workOrderNoPlaceholder: 'Enter work order no.',
     receiptNo: 'Receipt No.',
     receiptNoPlaceholder: 'Enter receipt no.',
+
+    // Certificates
+    certificates: 'Certificates',
+    certificatesSubtitle: 'My Certificate Records',
+    certNo: 'Cert No.',
+    certExpiry: 'Expiry Date',
+    certExpired: 'Expired',
+    certExpiredAlert: 'Certificate(s) have expired, please renew!',
+    certExpiringAlert: 'Certificate(s) expiring soon, please take action!',
+    certExpiringWarn: 'Certificate(s) expiring within 90 days',
+    daysLeft: 'days left',
+    noCertificates: 'No certificate records found',
+    uploadCertPhoto: 'Upload Certificate Photo',
+    updatePhoto: 'Update Photo',
+    uploading: 'Uploading...',
+    more: 'more',
+    quickActions: 'Quick Actions',
 
     // Expense
     expenseTitle: 'Expense Claim',

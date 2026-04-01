@@ -550,7 +550,199 @@ export class EmployeePortalService {
       username: user.username,
       displayName: user.displayName,
       phone: (user as any).phone ?? null,
-      role: user.role,
+       role: user.role,
     };
+  }
+
+  // ── Get Employee Certificates ──────────────────────────────────────────────
+  async getCertificates(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) {
+      return { certificates: [], cert_photos: {} };
+    }
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        driving_license_no: true, driving_license_expiry: true, driving_license_class: true,
+        approved_worker_cert_no: true, approved_worker_cert_expiry: true,
+        green_card_no: true, green_card_expiry: true,
+        construction_card_no: true, construction_card_expiry: true,
+        earth_mover_cert_no: true, earth_mover_cert_expiry: true,
+        excavator_cert_no: true, excavator_cert_expiry: true,
+        crane_operator_cert_no: true, crane_operator_cert_expiry: true,
+        lorry_crane_cert_no: true, lorry_crane_cert_expiry: true,
+        crawler_crane_cert_no: true, crawler_crane_cert_expiry: true,
+        hydraulic_crane_cert_no: true, hydraulic_crane_cert_expiry: true,
+        airport_pass_no: true, airport_pass_expiry: true,
+        gammon_pass_no: true, gammon_pass_expiry: true,
+        leighton_pass_no: true, leighton_pass_expiry: true,
+        confined_space_cert_no: true, confined_space_cert_expiry: true,
+        compactor_cert_no: true, compactor_cert_expiry: true,
+        slinging_silver_card_no: true, slinging_silver_card_expiry: true,
+        craft_test_cert_no: true, craft_test_cert_expiry: true,
+        compaction_load_cert_no: true, compaction_load_cert_expiry: true,
+        aerial_platform_cert_no: true, aerial_platform_cert_expiry: true,
+        site_rigging_a12_cert_no: true, site_rigging_a12_cert_expiry: true,
+        slinging_signaler_a12s_cert_no: true, slinging_signaler_a12s_cert_expiry: true,
+        zero_injury_cert_no: true, zero_injury_cert_expiry: true,
+        designated_trade_safety_cert_no: true, designated_trade_safety_cert_expiry: true,
+        small_loader_cert_expiry: true,
+        safety_supervisor_cert_expiry: true,
+        safe_work_procedure_cert_expiry: true,
+        grinding_wheel_cert_expiry: true,
+        ship_cargo_cert_expiry: true,
+        arc_welding_cert_expiry: true,
+        gas_welding_cert_expiry: true,
+        clp_safety_cert_expiry: true,
+        other_certificates: true,
+        cert_photos: true,
+      },
+    }) as any;
+    if (!employee) return { certificates: [], cert_photos: {} };
+
+    const certPhotos = (employee.cert_photos as Record<string, string>) || {};
+
+    const CERT_MAP: Array<{
+      key: string; nameZh: string; nameEn: string;
+      no: string | null; expiry: Date | null; extra?: string | null;
+    }> = [
+      { key: 'driving_license', nameZh: '\u99d5\u99db\u57f7\u7167', nameEn: 'Driving License', no: employee.driving_license_no, expiry: employee.driving_license_expiry, extra: employee.driving_license_class ? `\u8eca\u7a2e: ${employee.driving_license_class}` : null },
+      { key: 'approved_worker_cert', nameZh: '\u5efa\u9020\u696d\u5de5\u4eba\u8a3b\u518a\u8b49', nameEn: 'Approved Worker Cert', no: employee.approved_worker_cert_no, expiry: employee.approved_worker_cert_expiry },
+      { key: 'green_card', nameZh: '\u7da0\u5361', nameEn: 'Green Card', no: employee.green_card_no, expiry: employee.green_card_expiry },
+      { key: 'construction_card', nameZh: '\u5efa\u9020\u696d\u5de5\u4eba\u8b49', nameEn: 'Construction Card', no: employee.construction_card_no, expiry: employee.construction_card_expiry },
+      { key: 'earth_mover_cert', nameZh: '\u571f\u5de5\u6a5f\u68b0\u64cd\u4f5c\u8b49', nameEn: 'Earth Mover Cert', no: employee.earth_mover_cert_no, expiry: employee.earth_mover_cert_expiry },
+      { key: 'excavator_cert', nameZh: '\u6316\u6398\u6a5f\u8b49', nameEn: 'Excavator Cert', no: employee.excavator_cert_no, expiry: employee.excavator_cert_expiry },
+      { key: 'crane_operator_cert', nameZh: '\u8d77\u91cd\u6a5f\u64cd\u4f5c\u8b49', nameEn: 'Crane Operator Cert', no: employee.crane_operator_cert_no, expiry: employee.crane_operator_cert_expiry },
+      { key: 'lorry_crane_cert', nameZh: '\u968e\u53f0\u8d77\u91cd\u6a5f\u8b49', nameEn: 'Lorry Crane Cert', no: employee.lorry_crane_cert_no, expiry: employee.lorry_crane_cert_expiry },
+      { key: 'crawler_crane_cert', nameZh: '\u5c65\u5e36\u5f0f\u8d77\u91cd\u6a5f\u8b49', nameEn: 'Crawler Crane Cert', no: employee.crawler_crane_cert_no, expiry: employee.crawler_crane_cert_expiry },
+      { key: 'hydraulic_crane_cert', nameZh: '\u6db2\u58d3\u8d77\u91cd\u6a5f\u8b49', nameEn: 'Hydraulic Crane Cert', no: employee.hydraulic_crane_cert_no, expiry: employee.hydraulic_crane_cert_expiry },
+      { key: 'airport_pass', nameZh: '\u6a5f\u5834\u901a\u884c\u8b49', nameEn: 'Airport Pass', no: employee.airport_pass_no, expiry: employee.airport_pass_expiry },
+      { key: 'gammon_pass', nameZh: 'Gammon \u901a\u884c\u8b49', nameEn: 'Gammon Pass', no: employee.gammon_pass_no, expiry: employee.gammon_pass_expiry },
+      { key: 'leighton_pass', nameZh: 'Leighton \u901a\u884c\u8b49', nameEn: 'Leighton Pass', no: employee.leighton_pass_no, expiry: employee.leighton_pass_expiry },
+      { key: 'confined_space_cert', nameZh: '\u5c01\u9589\u7a7a\u9593\u8b49', nameEn: 'Confined Space Cert', no: employee.confined_space_cert_no, expiry: employee.confined_space_cert_expiry },
+      { key: 'compactor_cert', nameZh: '\u58d3\u8def\u6a5f\u8b49', nameEn: 'Compactor Cert', no: employee.compactor_cert_no, expiry: employee.compactor_cert_expiry },
+      { key: 'slinging_silver_card', nameZh: '\u7d54\u7d22\u9280\u5361', nameEn: 'Slinging Silver Card', no: employee.slinging_silver_card_no, expiry: employee.slinging_silver_card_expiry },
+      { key: 'craft_test_cert', nameZh: '\u5de5\u85dd\u6e2c\u8a66\u8b49', nameEn: 'Craft Test Cert', no: employee.craft_test_cert_no, expiry: employee.craft_test_cert_expiry },
+      { key: 'compaction_load_cert', nameZh: '\u58d3\u5b9e\u8ca0\u8377\u8b49', nameEn: 'Compaction Load Cert', no: employee.compaction_load_cert_no, expiry: employee.compaction_load_cert_expiry },
+      { key: 'aerial_platform_cert', nameZh: '\u9ad8\u7a7a\u4f5c\u696d\u5e73\u53f0\u8b49', nameEn: 'Aerial Platform Cert', no: employee.aerial_platform_cert_no, expiry: employee.aerial_platform_cert_expiry },
+      { key: 'site_rigging_a12_cert', nameZh: 'A12 \u5de5\u5730\u7d51\u7d22\u8b49', nameEn: 'Site Rigging A12 Cert', no: employee.site_rigging_a12_cert_no, expiry: employee.site_rigging_a12_cert_expiry },
+      { key: 'slinging_signaler_a12s_cert', nameZh: 'A12S \u7d51\u7d22\u4fe1\u865f\u8b49', nameEn: 'Slinging Signaler A12S Cert', no: employee.slinging_signaler_a12s_cert_no, expiry: employee.slinging_signaler_a12s_cert_expiry },
+      { key: 'zero_injury_cert', nameZh: '\u96f6\u50b7\u5bb3\u8b49', nameEn: 'Zero Injury Cert', no: employee.zero_injury_cert_no, expiry: employee.zero_injury_cert_expiry },
+      { key: 'designated_trade_safety_cert', nameZh: '\u6307\u5b9a\u884c\u696d\u5b89\u5168\u8b49', nameEn: 'Designated Trade Safety Cert', no: employee.designated_trade_safety_cert_no, expiry: employee.designated_trade_safety_cert_expiry },
+      { key: 'small_loader_cert', nameZh: '\u5c0f\u578b\u88dd\u8f09\u6a5f\u8b49', nameEn: 'Small Loader Cert', no: null, expiry: employee.small_loader_cert_expiry },
+      { key: 'safety_supervisor_cert', nameZh: '\u5b89\u5168\u76e3\u7763\u8b49', nameEn: 'Safety Supervisor Cert', no: null, expiry: employee.safety_supervisor_cert_expiry },
+      { key: 'safe_work_procedure_cert', nameZh: '\u5b89\u5168\u5de5\u4f5c\u7a0b\u5e8f\u8b49', nameEn: 'Safe Work Procedure Cert', no: null, expiry: employee.safe_work_procedure_cert_expiry },
+      { key: 'grinding_wheel_cert', nameZh: '\u7814\u5edf\u8b49', nameEn: 'Grinding Wheel Cert', no: null, expiry: employee.grinding_wheel_cert_expiry },
+      { key: 'ship_cargo_cert', nameZh: '\u8239\u8ca8\u8b49', nameEn: 'Ship Cargo Cert', no: null, expiry: employee.ship_cargo_cert_expiry },
+      { key: 'arc_welding_cert', nameZh: '\u96fb\u5f27\u7126\u63a5\u8b49', nameEn: 'Arc Welding Cert', no: null, expiry: employee.arc_welding_cert_expiry },
+      { key: 'gas_welding_cert', nameZh: '\u6c23\u9ad4\u7126\u63a5\u8b49', nameEn: 'Gas Welding Cert', no: null, expiry: employee.gas_welding_cert_expiry },
+      { key: 'clp_safety_cert', nameZh: 'CLP \u5b89\u5168\u8b49', nameEn: 'CLP Safety Cert', no: null, expiry: employee.clp_safety_cert_expiry },
+    ];
+
+    const certificates = CERT_MAP
+      .filter(c => c.no || c.expiry || certPhotos[c.key])
+      .map(c => ({
+        key: c.key,
+        name_zh: c.nameZh,
+        name_en: c.nameEn,
+        cert_no: c.no || null,
+        expiry_date: c.expiry || null,
+        extra: c.extra || null,
+        photo_url: certPhotos[c.key] || null,
+      }));
+
+    return { certificates, cert_photos: certPhotos };
+  }
+
+  // ── Update Certificate Photo ──────────────────────────────────────────────
+  async updateCertPhoto(userId: number, certKey: string, photoUrl: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('\u54e1\u5de5\u8cc7\u6599\u4e0d\u5b58\u5728');
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { cert_photos: true },
+    }) as any;
+
+    const existing = (employee?.cert_photos as Record<string, string>) || {};
+    const updated = { ...existing, [certKey]: photoUrl };
+
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { cert_photos: updated } as any,
+    });
+
+    return { success: true, cert_photos: updated };
+  }
+
+  // ── Get Expiring Certificates (for dashboard) ──────────────────────────────
+  async getExpiringCerts(userId: number, daysAhead = 90) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) return { expiring: [] };
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        driving_license_expiry: true, approved_worker_cert_expiry: true,
+        green_card_expiry: true, construction_card_expiry: true,
+        earth_mover_cert_expiry: true, excavator_cert_expiry: true,
+        crane_operator_cert_expiry: true, lorry_crane_cert_expiry: true,
+        crawler_crane_cert_expiry: true, hydraulic_crane_cert_expiry: true,
+        airport_pass_expiry: true, gammon_pass_expiry: true,
+        leighton_pass_expiry: true, confined_space_cert_expiry: true,
+        compactor_cert_expiry: true, slinging_silver_card_expiry: true,
+        craft_test_cert_expiry: true, compaction_load_cert_expiry: true,
+        aerial_platform_cert_expiry: true, site_rigging_a12_cert_expiry: true,
+        slinging_signaler_a12s_cert_expiry: true, zero_injury_cert_expiry: true,
+        designated_trade_safety_cert_expiry: true, small_loader_cert_expiry: true,
+        safety_supervisor_cert_expiry: true, safe_work_procedure_cert_expiry: true,
+        grinding_wheel_cert_expiry: true, ship_cargo_cert_expiry: true,
+        arc_welding_cert_expiry: true, gas_welding_cert_expiry: true,
+        clp_safety_cert_expiry: true,
+      },
+    }) as any;
+    if (!employee) return { expiring: [] };
+
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+    const EXPIRY_MAP: Array<{ key: string; nameZh: string; nameEn: string; expiry: Date | null }> = [
+      { key: 'driving_license', nameZh: '\u99d5\u99db\u57f7\u7167', nameEn: 'Driving License', expiry: employee.driving_license_expiry },
+      { key: 'approved_worker_cert', nameZh: '\u5efa\u9020\u696d\u5de5\u4eba\u8a3b\u518a\u8b49', nameEn: 'Approved Worker Cert', expiry: employee.approved_worker_cert_expiry },
+      { key: 'green_card', nameZh: '\u7da0\u5361', nameEn: 'Green Card', expiry: employee.green_card_expiry },
+      { key: 'construction_card', nameZh: '\u5efa\u9020\u696d\u5de5\u4eba\u8b49', nameEn: 'Construction Card', expiry: employee.construction_card_expiry },
+      { key: 'earth_mover_cert', nameZh: '\u571f\u5de5\u6a5f\u68b0\u64cd\u4f5c\u8b49', nameEn: 'Earth Mover Cert', expiry: employee.earth_mover_cert_expiry },
+      { key: 'excavator_cert', nameZh: '\u6316\u6398\u6a5f\u8b49', nameEn: 'Excavator Cert', expiry: employee.excavator_cert_expiry },
+      { key: 'crane_operator_cert', nameZh: '\u8d77\u91cd\u6a5f\u64cd\u4f5c\u8b49', nameEn: 'Crane Operator Cert', expiry: employee.crane_operator_cert_expiry },
+      { key: 'lorry_crane_cert', nameZh: '\u968e\u53f0\u8d77\u91cd\u6a5f\u8b49', nameEn: 'Lorry Crane Cert', expiry: employee.lorry_crane_cert_expiry },
+      { key: 'airport_pass', nameZh: '\u6a5f\u5834\u901a\u884c\u8b49', nameEn: 'Airport Pass', expiry: employee.airport_pass_expiry },
+      { key: 'confined_space_cert', nameZh: '\u5c01\u9589\u7a7a\u9593\u8b49', nameEn: 'Confined Space Cert', expiry: employee.confined_space_cert_expiry },
+      { key: 'aerial_platform_cert', nameZh: '\u9ad8\u7a7a\u4f5c\u696d\u5e73\u53f0\u8b49', nameEn: 'Aerial Platform Cert', expiry: employee.aerial_platform_cert_expiry },
+      { key: 'safety_supervisor_cert', nameZh: '\u5b89\u5168\u76e3\u7763\u8b49', nameEn: 'Safety Supervisor Cert', expiry: employee.safety_supervisor_cert_expiry },
+    ];
+
+    const expiring = EXPIRY_MAP
+      .filter(c => c.expiry && new Date(c.expiry) <= cutoff)
+      .map(c => {
+        const expiryDate = new Date(c.expiry!);
+        const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          key: c.key,
+          name_zh: c.nameZh,
+          name_en: c.nameEn,
+          expiry_date: c.expiry,
+          days_left: daysLeft,
+          is_expired: daysLeft < 0,
+        };
+      })
+      .sort((a, b) => a.days_left - b.days_left);
+
+    return { expiring };
   }
 }

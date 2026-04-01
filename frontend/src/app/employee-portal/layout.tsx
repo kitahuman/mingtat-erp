@@ -49,6 +49,13 @@ function UserIcon({ active }: { active: boolean }) {
     </svg>
   );
 }
+function CertIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 2} className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" />
+    </svg>
+  );
+}
 
 function PortalInner({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useEmployeePortalAuth();
@@ -87,6 +94,7 @@ function PortalInner({ children }: { children: React.ReactNode }) {
     { href: '/employee-portal/work-report', label: t('workReport'), icon: DocumentIcon },
     { href: '/employee-portal/expense', label: t('expense'), icon: WalletIcon },
     { href: '/employee-portal/leave', label: t('leave'), icon: CalendarIcon },
+    { href: '/employee-portal/certificates', label: t('certificates'), icon: CertIcon },
     { href: '/employee-portal/records', label: t('myRecords'), icon: UserIcon },
   ];
 
@@ -141,7 +149,7 @@ function PortalInner({ children }: { children: React.ReactNode }) {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 z-40 shadow-lg">
-        <div className="grid grid-cols-6 h-16">
+        <div className="grid grid-cols-7 h-16">
           {navItems.map((item) => {
             const active = isActive(item.href);
             const Icon = item.icon;

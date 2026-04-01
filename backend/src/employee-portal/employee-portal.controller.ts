@@ -194,4 +194,29 @@ export class EmployeePortalController {
   async getDashboard(@Request() req: any) {
     return this.service.getDashboard(req.user.sub);
   }
+
+  // ── Certificates (證件) ────────────────────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Get('certificates')
+  async getCertificates(@Request() req: any) {
+    return this.service.getCertificates(req.user.sub);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('certificates/photo')
+  async updateCertPhoto(
+    @Request() req: any,
+    @Body() body: { cert_key: string; photo_url: string },
+  ) {
+    return this.service.updateCertPhoto(req.user.sub, body.cert_key, body.photo_url);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('certificates/expiring')
+  async getExpiringCerts(
+    @Request() req: any,
+    @Query('days') days?: number,
+  ) {
+    return this.service.getExpiringCerts(req.user.sub, days ? Number(days) : 90);
+  }
 }
