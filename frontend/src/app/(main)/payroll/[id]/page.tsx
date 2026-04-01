@@ -16,6 +16,15 @@ const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
 };
 
+const TAB_KEYS = ['detail', 'grouped', 'daily', 'print'] as const;
+type TabKey = typeof TAB_KEYS[number];
+const TAB_LABELS: Record<TabKey, string> = {
+  detail: '逐筆明細',
+  grouped: '歸組結算',
+  daily: '逐日計算',
+  print: '列印預覽',
+};
+
 // ─── Grouped Settlement View ──────────────────────────────────
 function GroupedSettlementView({ groups }: { groups: any[] }) {
   if (!groups || groups.length === 0) {
@@ -72,6 +81,200 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+// ─── Daily Calculation View ──────────────────────────────────
+function DailyCalculationView({
+  dailyCalc,
+  allowanceOptions,
+  payrollId,
+  isDraft,
+  onAddAllowance,
+  onRemoveAllowance,
+}: {
+  dailyCalc: any[];
+  allowanceOptions: any[];
+  payrollId: number;
+  isDraft: boolean;
+  onAddAllowance: (date: string, key: string, name: string, amount: number) => Promise<void>;
+  onRemoveAllowance: (daId: number) => Promise<void>;
+}) {
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [addingDate, setAddingDate] = useState<string | null>(null);
+  const [selectedAllowance, setSelectedAllowance] = useState('');
+
+  if (!dailyCalc || dailyCalc.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
+  }
+
+  const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
+  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.top_up_amount) || 0), 0);
+  const totalAllowances = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.daily_allowance_total) || 0), 0);
+
+  const handleAddAllowance = async (date: string) => {
+    if (!selectedAllowance) return;
+    const opt = allowanceOptions.find((o: any) => o.key === selectedAllowance);
+    if (!opt) return;
+    await onAddAllowance(date, opt.key, opt.label, opt.default_amount);
+    setAddingDate(null);
+    setSelectedAllowance('');
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* Summary bar */}
+      <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
+        <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => d.needs_top_up).length}天</span></div>
+        <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>
+        <div><span className="text-gray-500">每日津貼合計：</span><span className="font-bold text-blue-600">${totalAllowances.toLocaleString()}</span></div>
+        <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
+      </div>
+
+      {/* Daily rows */}
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">每日津貼</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
+              {isDraft && <th className="px-3 py-2 text-center font-medium text-gray-600 w-20">操作</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {dailyCalc.map((day: any, idx: number) => {
+              const isExpanded = expandedDate === day.date;
+              const isAdding = addingDate === day.date;
+              const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
+              return (
+                <>
+                  <tr key={day.date} className={`border-b ${day.needs_top_up ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
+                        {isExpanded ? '▼' : '▶'}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      {day.date} <span className="text-xs text-gray-400">({weekday})</span>
+                      {day.work_logs.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      ${Number(day.work_income).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-500">
+                      ${Number(day.base_salary).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {day.needs_top_up ? (
+                        <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
+                      ) : (
+                        <span className="text-green-600">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {day.daily_allowances && day.daily_allowances.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {day.daily_allowances.map((da: any) => (
+                            <span key={da.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                              {da.allowance_name} ${Number(da.amount).toLocaleString()}
+                              {isDraft && (
+                                <button onClick={() => onRemoveAllowance(da.id)} className="ml-0.5 text-blue-400 hover:text-red-500">&times;</button>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-bold">
+                      ${Number(day.day_total).toLocaleString()}
+                    </td>
+                    {isDraft && (
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={() => { setAddingDate(isAdding ? null : day.date); setSelectedAllowance(''); }}
+                          className="text-xs text-blue-500 hover:underline"
+                        >
+                          {isAdding ? '取消' : '+津貼'}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                  {/* Add allowance row */}
+                  {isAdding && isDraft && (
+                    <tr key={`add-${day.date}`} className="bg-blue-50 border-b">
+                      <td colSpan={isDraft ? 8 : 7} className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">選擇津貼：</span>
+                          <select
+                            value={selectedAllowance}
+                            onChange={e => setSelectedAllowance(e.target.value)}
+                            className="input-field text-xs py-1 w-48"
+                          >
+                            <option value="">-- 請選擇 --</option>
+                            {allowanceOptions.map((opt: any) => (
+                              <option key={opt.key} value={opt.key}>
+                                {opt.label} (${Number(opt.default_amount).toLocaleString()})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleAddAllowance(day.date)}
+                            disabled={!selectedAllowance}
+                            className="btn-primary text-xs py-1 px-3"
+                          >
+                            新增
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {/* Expanded work log details */}
+                  {isExpanded && (
+                    <tr key={`exp-${day.date}`} className="bg-gray-50 border-b">
+                      <td colSpan={isDraft ? 8 : 7} className="px-6 py-2">
+                        <div className="text-xs space-y-1">
+                          {day.work_logs.map((wl: any, wIdx: number) => (
+                            <div key={wIdx} className="flex items-center gap-3 py-1 border-b border-gray-200 last:border-0">
+                              <span className={`px-1 py-0.5 rounded text-xs ${
+                                wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'
+                              }`}>{wl.day_night || '日'}</span>
+                              <span className="text-gray-600">{wl.client_name || '-'}</span>
+                              <span className="text-gray-400">{[wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '-'}</span>
+                              <span className="ml-auto font-mono">
+                                {wl.matched_rate ? `$${Number(wl.matched_rate).toLocaleString()} x ${wl.quantity}` : '未設定'}
+                              </span>
+                              <span className="font-mono font-bold w-24 text-right">
+                                ${Number(wl.line_amount).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
+          </tbody>
+          <tfoot className="border-t-2 border-gray-900">
+            <tr className="bg-gray-50">
+              <td colSpan={isDraft ? 6 : 5} className="px-3 py-2 font-bold text-right">逐日合計</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-primary-600" colSpan={isDraft ? 2 : 2}>
+                ${grandTotal.toLocaleString()}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }
@@ -141,8 +344,8 @@ export default function PayrollDetailPage() {
   const [chequeNumber, setChequeNumber] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Work log view mode
-  const [wlViewMode, setWlViewMode] = useState<'detail' | 'grouped'>('grouped');
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabKey>('daily');
 
   // Adjustment form
   const [showAdjForm, setShowAdjForm] = useState(false);
@@ -270,10 +473,10 @@ export default function PayrollDetailPage() {
         amount: Number(adjAmount),
         remarks: adjRemarks || undefined,
       });
+      setShowAdjForm(false);
       setAdjName('');
       setAdjAmount('');
       setAdjRemarks('');
-      setShowAdjForm(false);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -291,208 +494,115 @@ export default function PayrollDetailPage() {
     }
   };
 
-  const handlePrint = () => {
-    const content = printRef.current;
-    if (!content) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>糧單 - ${payroll.employee?.name_zh}</title>
-        <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; margin: 0; padding: 20px; color: #000; }
-          .payslip { max-width: 800px; margin: 0 auto; }
-          @media print { body { padding: 0; } }
-        </style>
-      </head>
-      <body>${content.innerHTML}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); }, 500);
+  // ── Daily allowance actions ──
+  const handleAddDailyAllowance = async (date: string, key: string, name: string, amount: number) => {
+    try {
+      await payrollApi.addDailyAllowance(payroll.id, {
+        date,
+        allowance_key: key,
+        allowance_name: name,
+        amount,
+      });
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    }
   };
 
-  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
-  if (!payroll) return null;
+  const handleRemoveDailyAllowance = async (daId: number) => {
+    try {
+      await payrollApi.removeDailyAllowance(payroll.id, daId);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>糧單</title>
+      <style>body{font-family:'Microsoft JhengHei','PingFang TC',sans-serif;padding:20px}
+      @media print{body{padding:0}}</style></head><body>`);
+    w.document.write(printRef.current.innerHTML);
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => { w.print(); }, 500);
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-400">載入中...</div>;
+  if (!payroll) return <div className="p-8 text-center text-red-500">找不到糧單</div>;
 
   const emp = payroll.employee;
   const cp = payroll.company_profile;
   const items = payroll.items || [];
   const adjustments = payroll.adjustments || [];
   const pwls = payroll.payroll_work_logs || [];
-  const activePwls = pwls.filter((p: any) => !p.is_excluded);
-  const excludedPwls = pwls.filter((p: any) => p.is_excluded);
   const grouped = payroll.grouped_settlement || [];
+  const dailyCalc = payroll.daily_calculation || [];
+  const allowanceOptions = payroll.allowance_options || [];
   const isDraft = payroll.status === 'draft';
 
-  const [yearStr, monthStr] = payroll.period.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const lastDay = new Date(year, month, 0).getDate();
-  const periodStart = `${year}年${month}月1日`;
+  const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
+  const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
 
   return (
-    <div>
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/payroll" className="hover:text-primary-600">計糧管理</Link>
-        <span>/</span>
-        <span className="text-gray-900">糧單詳情</span>
-      </div>
-
+    <div className="max-w-6xl mx-auto">
+      {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{emp?.name_zh} - {payroll.period} 糧單</h1>
-          <p className="text-sm text-gray-500">
-            {emp?.name_en} | {emp?.emp_code} |
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[payroll.status] || ''}`}>
-              {STATUS_LABELS[payroll.status] || payroll.status}
-            </span>
-          </p>
+        <div className="flex items-center gap-4">
+          <Link href="/payroll-records" className="text-gray-400 hover:text-gray-600">← 返回</Link>
+          <h1 className="text-2xl font-bold text-gray-900">
+            糧單 #{payroll.id}
+          </h1>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[payroll.status] || ''}`}>
+            {STATUS_LABELS[payroll.status] || payroll.status}
+          </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {isDraft && (
             <>
-              <button onClick={handleRecalculate} className="btn-secondary">重新計算</button>
-              <button onClick={handleConfirm} className="btn-primary">確認糧單</button>
-              <button onClick={handleDelete} className="btn-secondary text-red-600 hover:text-red-700">刪除</button>
+              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
+              <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
+              <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
           )}
           {payroll.status === 'confirmed' && (
-            <button onClick={() => setShowPayment(true)} className="btn-primary">記錄付款</button>
+            <button onClick={() => setShowPayment(true)} className="btn-primary text-sm">記錄付款</button>
           )}
-          <button onClick={handlePrint} className="btn-secondary">列印 / PDF</button>
         </div>
       </div>
 
-      {/* ── Work Logs Section ── */}
-      <div className="card mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">工作記錄 ({activePwls.length} 筆)</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setWlViewMode('detail')}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  wlViewMode === 'detail' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >逐筆明細</button>
-              <button
-                onClick={() => setWlViewMode('grouped')}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  wlViewMode === 'grouped' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >歸組結算</button>
-            </div>
-          </div>
-
-          {/* Detail view */}
-          {wlViewMode === 'detail' && (
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日期</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-600 whitespace-nowrap">服務類型</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-600 whitespace-nowrap">日/夜</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-600 whitespace-nowrap">地點</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-600 whitespace-nowrap">數量</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-600 whitespace-nowrap">OT</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-600 whitespace-nowrap">單價</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-600 whitespace-nowrap">金額</th>
-                    {isDraft && <th className="px-2 py-2 text-center font-medium text-gray-600 whitespace-nowrap">操作</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activePwls.map((pwl: any, idx: number) => {
-                    const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
-                    return (
-                      <tr key={pwl.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${pwl.is_modified ? 'border-l-2 border-l-orange-400' : ''}`}>
-                        <td className="px-2 py-1.5 font-mono text-xs whitespace-nowrap">{pwl.scheduled_date}</td>
-                        <td className="px-2 py-1.5 text-xs whitespace-nowrap">{pwl.service_type || '-'}</td>
-                        <td className="px-2 py-1.5">
-                          <span className={`px-1 py-0.5 rounded text-xs font-medium ${
-                            pwl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
-                            pwl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>{pwl.day_night || '日'}</span>
-                        </td>
-                        <td className="px-2 py-1.5 text-gray-600 text-xs max-w-40 truncate">
-                          {[pwl.start_location, pwl.end_location].filter(Boolean).join(' → ') || '-'}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono text-xs">{pwl.quantity || '-'}</td>
-                        <td className="px-2 py-1.5 text-right font-mono text-xs">
-                          {pwl.ot_quantity ? <span className="text-orange-600">{pwl.ot_quantity}h</span> : '-'}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono text-xs">
-                          {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono text-xs font-bold">
-                          {hasPrice ? `$${Number(pwl.line_amount).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
-                        </td>
-                        {isDraft && (
-                          <td className="px-2 py-1.5 text-center whitespace-nowrap">
-                            <button onClick={() => openEditWorkLog(pwl)} className="text-xs text-primary-600 hover:underline mr-2">編輯</button>
-                            <button onClick={() => handleExcludeWorkLog(pwl.id)} className="text-xs text-red-500 hover:underline">移除</button>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Grouped view */}
-          {wlViewMode === 'grouped' && (
-            <GroupedSettlementView groups={grouped} />
-          )}
-
-          {/* Empty state when no work logs */}
-          {pwls.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">此糧單暫無工作記錄</p>
-          )}
-
-          {/* Excluded work logs */}
-          {excludedPwls.length > 0 && isDraft && (
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">已移除的工作記錄 ({excludedPwls.length} 筆)</h3>
-              <div className="overflow-x-auto border border-dashed border-gray-300 rounded-lg">
-                <table className="w-full text-sm">
-                  <tbody>
-                    {excludedPwls.map((pwl: any) => (
-                      <tr key={pwl.id} className="bg-gray-50 text-gray-400">
-                        <td className="px-2 py-1.5 font-mono text-xs">{pwl.scheduled_date}</td>
-                        <td className="px-2 py-1.5 text-xs">{pwl.service_type || '-'}</td>
-                        <td className="px-2 py-1.5 text-xs">{pwl.day_night || '日'}</td>
-                        <td className="px-2 py-1.5 text-xs">{[pwl.start_location, pwl.end_location].filter(Boolean).join(' → ') || '-'}</td>
-                        <td className="px-2 py-1.5 text-right font-mono text-xs">{pwl.quantity || '-'}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          <button onClick={() => handleRestoreWorkLog(pwl.id)} className="text-xs text-primary-600 hover:underline">恢復</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="card">
+          <p className="text-xs text-gray-500">員工</p>
+          <p className="font-bold">{emp?.name_zh || emp?.name_en || '-'}</p>
+          <p className="text-xs text-gray-400">{emp?.emp_code}</p>
         </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">公司</p>
+          <p className="font-bold text-sm">{cp?.chinese_name || '-'}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">計糧期間</p>
+          <p className="font-bold text-sm">{payroll.date_from} 至 {payroll.date_to}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">淨額</p>
+          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+        </div>
+      </div>
 
-      {/* ── Adjustments Section ── */}
+      {/* ── Custom Adjustments ── */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">自定義津貼/扣款</h2>
           {isDraft && (
-            <button onClick={() => setShowAdjForm(true)} className="btn-secondary text-sm">
-              + 新增項目
-            </button>
+            <button onClick={() => setShowAdjForm(true)} className="text-sm text-primary-600 hover:underline">+ 新增項目</button>
           )}
         </div>
-
         {adjustments.length > 0 ? (
           <div className="overflow-x-auto border rounded-lg">
             <table className="w-full text-sm">
@@ -539,144 +649,260 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
-      {/* ── Printable Payslip ── */}
+      {/* ── Work Logs Tabs ── */}
       <div className="card mb-6">
-        <div ref={printRef}>
-          <div className="payslip">
-            {/* Company Header */}
-            <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
-              <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
-                {cp?.chinese_name || '明達建築有限公司'}
-              </h1>
-              <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
-                {cp?.english_name || 'DICKY CONSTRUCTION COMPANY LIMITED'}
-              </h2>
-              <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
-                {cp?.registered_address || cp?.office_address || 'P. O. BOX 120, TUNG CHUNG POST OFFICE, TUNG CHUNG, LANTAU ISLAND, NT'}
-              </p>
-            </div>
-
-            {/* Employee Info */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-              <tbody>
-                {[
-                  ['員工姓名(中)：', emp?.name_zh],
-                  ['員工姓名(英)：', emp?.name_en],
-                  ['身份證號碼：', emp?.id_number],
-                  ['地址：', emp?.address],
-                  ['緊急聯絡人：', emp?.emergency_contact],
-                  ['出糧戶口：', emp?.bank_account],
-                  ['受僱日期：', emp?.join_date ? `${new Date(emp.join_date).getFullYear()}年${new Date(emp.join_date).getMonth() + 1}月${new Date(emp.join_date).getDate()}日` : '-'],
-                ].map(([label, value], i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', width: '120px', textAlign: 'right', fontSize: '13px' }}>{label}</td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>{value || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Period */}
-            <div style={{ margin: '15px 0', fontSize: '14px' }}>
-              <strong>本月工作日期：</strong>
-              <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStart}-{lastDay}日</span>
-            </div>
-
-            {/* Grouped Settlement in print */}
-            <PrintGroupedSettlement groups={grouped} />
-
-            {/* Calculation Table */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', width: '200px', fontSize: '13px' }}></th>
-                  <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>單價($)</th>
-                  <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>天數/數量</th>
-                  <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'right', fontSize: '13px' }} colSpan={2}>金額($)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item: any, idx: number) => {
-                  const isDeduction = Number(item.amount) < 0;
-                  const displayAmount = Math.abs(Number(item.amount));
-                  return (
-                    <tr key={item.id || idx}>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                        ({idx + 1}) {item.item_name}
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                        {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
-                          ? `${(Number(item.quantity) * 100).toFixed(0)}%`
-                          : Number(item.unit_price).toFixed(2)}
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                        {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
-                      </td>
-                      <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                        {isDeduction ? '-$' : '$'}
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                        {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {/* Adjustment items in print */}
-                {adjustments.map((adj: any, idx: number) => {
-                  const isNeg = Number(adj.amount) < 0;
-                  const displayAmount = Math.abs(Number(adj.amount));
-                  return (
-                    <tr key={`adj-${adj.id}`}>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                        ({items.length + idx + 1}) {adj.item_name}
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                        -
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                        -
-                      </td>
-                      <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                        {isNeg ? '-$' : '$'}
-                      </td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                        {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {/* Total row */}
-                <tr style={{ borderTop: '2px solid #000' }}>
-                  <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
-                  <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                    {Number(payroll.net_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* Payment Info */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0' }}>
-              <tbody>
-                <tr>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', width: '200px', fontSize: '13px' }}></td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>付款日期:</td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px', width: '200px' }}>
-                    {payroll.payment_date || ''}
-                  </td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '6px 12px' }}></td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>支票號碼:</td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                    {payroll.cheque_number || ''}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div className="flex items-center border-b mb-4">
+          {TAB_KEYS.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {TAB_LABELS[tab]}
+              {tab === 'daily' && dailyCalc.length > 0 && (
+                <span className="ml-1 text-xs bg-primary-100 text-primary-600 px-1.5 py-0.5 rounded-full">{dailyCalc.length}天</span>
+              )}
+              {tab === 'detail' && pwls.length > 0 && (
+                <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{pwls.filter((p: any) => !p.is_excluded).length}筆</span>
+              )}
+              {tab === 'grouped' && grouped.length > 0 && (
+                <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{grouped.length}組</span>
+              )}
+            </button>
+          ))}
         </div>
+
+        {/* Tab Content */}
+        {activeTab === 'detail' && (
+          <div>
+            {pwls.length > 0 ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">日期</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">服務類型</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">日/夜</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">起點</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">終點</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">數量</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">OT</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">單價</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">金額</th>
+                      {isDraft && <th className="px-2 py-2 text-center font-medium text-gray-600">操作</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pwls.map((pwl: any) => {
+                      const isExcluded = pwl.is_excluded;
+                      const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
+                      return (
+                        <tr key={pwl.id} className={`border-b ${isExcluded ? 'bg-red-50 opacity-50 line-through' : ''}`}>
+                          <td className="px-2 py-1.5">{pwl.scheduled_date}</td>
+                          <td className="px-2 py-1.5">{pwl.service_type || '-'}</td>
+                          <td className="px-2 py-1.5">
+                            <span className={`px-1 py-0.5 rounded text-xs ${
+                              pwl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                              pwl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>{pwl.day_night || '日'}</span>
+                          </td>
+                          <td className="px-2 py-1.5">{pwl.start_location || '-'}</td>
+                          <td className="px-2 py-1.5">{pwl.end_location || '-'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">{pwl.quantity || 1}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">{pwl.ot_quantity || '-'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">
+                            {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono font-bold">
+                            {hasPrice ? `$${Number(pwl.line_amount).toLocaleString()}` : <span className="text-orange-500">-</span>}
+                          </td>
+                          {isDraft && (
+                            <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                              {isExcluded ? (
+                                <button onClick={() => handleRestoreWorkLog(pwl.id)} className="text-xs text-blue-500 hover:underline">恢復</button>
+                              ) : (
+                                <>
+                                  <button onClick={() => openEditWorkLog(pwl)} className="text-xs text-blue-500 hover:underline mr-2">編輯</button>
+                                  <button onClick={() => handleExcludeWorkLog(pwl.id)} className="text-xs text-red-500 hover:underline">移除</button>
+                                </>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">此糧單暫無工作記錄</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'grouped' && (
+          <GroupedSettlementView groups={grouped} />
+        )}
+
+        {activeTab === 'daily' && (
+          <DailyCalculationView
+            dailyCalc={dailyCalc}
+            allowanceOptions={allowanceOptions}
+            payrollId={payroll.id}
+            isDraft={isDraft}
+            onAddAllowance={handleAddDailyAllowance}
+            onRemoveAllowance={handleRemoveDailyAllowance}
+          />
+        )}
+
+        {activeTab === 'print' && (
+          <div>
+            <div className="flex justify-end mb-4">
+              <button onClick={handlePrint} className="btn-primary text-sm">列印糧單</button>
+            </div>
+            <div ref={printRef} className="border rounded-lg p-6 bg-white">
+              <div className="payslip">
+                {/* Company Header */}
+                <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
+                  <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
+                    {cp?.chinese_name || '明達建築有限公司'}
+                  </h1>
+                  <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
+                    {cp?.english_name || 'DICKY CONSTRUCTION COMPANY LIMITED'}
+                  </h2>
+                  <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
+                    {cp?.registered_address || cp?.office_address || 'P. O. BOX 120, TUNG CHUNG POST OFFICE, TUNG CHUNG, LANTAU ISLAND, NT'}
+                  </p>
+                </div>
+
+                {/* Employee Info */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
+                  <tbody>
+                    {[
+                      ['員工姓名(中)：', emp?.name_zh],
+                      ['員工姓名(英)：', emp?.name_en],
+                      ['身份證號碼：', emp?.id_number],
+                      ['地址：', emp?.address],
+                      ['緊急聯絡人：', emp?.emergency_contact],
+                      ['出糧戶口：', emp?.bank_account],
+                      ['受僱日期：', emp?.join_date ? `${new Date(emp.join_date).getFullYear()}年${new Date(emp.join_date).getMonth() + 1}月${new Date(emp.join_date).getDate()}日` : '-'],
+                    ].map(([label, value], i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '6px 12px', border: '1px solid #000', width: '120px', textAlign: 'right', fontSize: '13px' }}>{label}</td>
+                        <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>{value || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Period */}
+                <div style={{ margin: '15px 0', fontSize: '14px' }}>
+                  <strong>本月工作日期：</strong>
+                  <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStart}-{lastDay}日</span>
+                </div>
+
+                {/* Grouped Settlement in print */}
+                <PrintGroupedSettlement groups={grouped} />
+
+                {/* Calculation Table */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', width: '200px', fontSize: '13px' }}></th>
+                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>單價($)</th>
+                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>天數/數量</th>
+                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'right', fontSize: '13px' }} colSpan={2}>金額($)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item: any, idx: number) => {
+                      const isDeduction = Number(item.amount) < 0;
+                      const displayAmount = Math.abs(Number(item.amount));
+                      return (
+                        <tr key={item.id || idx}>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                            ({idx + 1}) {item.item_name}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
+                              ? `${(Number(item.quantity) * 100).toFixed(0)}%`
+                              : Number(item.unit_price).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
+                          </td>
+                          <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
+                            {isDeduction ? '-$' : '$'}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
+                            {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Adjustment items in print */}
+                    {adjustments.map((adj: any, idx: number) => {
+                      const isNeg = Number(adj.amount) < 0;
+                      const displayAmount = Math.abs(Number(adj.amount));
+                      return (
+                        <tr key={`adj-${adj.id}`}>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                            ({items.length + idx + 1}) {adj.item_name}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                            -
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                            -
+                          </td>
+                          <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
+                            {isNeg ? '-$' : '$'}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
+                            {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Total row */}
+                    <tr style={{ borderTop: '2px solid #000' }}>
+                      <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
+                      <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
+                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
+                        {Number(payroll.net_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Payment Info */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0' }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', width: '200px', fontSize: '13px' }}></td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>付款日期:</td>
+                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px', width: '200px' }}>
+                        {payroll.payment_date || ''}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 12px' }}></td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>支票號碼:</td>
+                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                        {payroll.cheque_number || ''}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Calculation Breakdown ── */}
@@ -693,7 +919,7 @@ export default function PayrollDetailPage() {
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500">工作天數</p>
-            <p className="font-bold">{Number(payroll.work_days)}</p>
+            <p className="font-bold">{payroll.salary_type === 'daily' ? `${Number(payroll.work_days)}天` : '-'}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500">強積金計劃</p>

@@ -6,6 +6,7 @@ import { Payroll } from './payroll.entity';
 import { PayrollItem } from './payroll-item.entity';
 import { PayrollWorkLog } from './payroll-work-log.entity';
 import { PayrollAdjustment } from './payroll-adjustment.entity';
+import { PayrollDailyAllowance } from './payroll-daily-allowance.entity';
 import { Employee } from '../employees/employee.entity';
 import { EmployeeSalarySetting } from '../employees/employee-salary-setting.entity';
 import { WorkLog } from '../work-logs/work-log.entity';
@@ -21,6 +22,7 @@ import { Partner } from '../partners/partner.entity';
       PayrollItem,
       PayrollWorkLog,
       PayrollAdjustment,
+      PayrollDailyAllowance,
       Employee,
       EmployeeSalarySetting,
       WorkLog,

@@ -133,4 +133,49 @@ export class PayrollController {
   ) {
     return this.payrollService.removeAdjustment(+id, +adjId);
   }
+
+  // ── 每日津貼管理 ──────────────────────────────────────────
+
+  // 新增每日津貼
+  @Post(':id/daily-allowances')
+  addDailyAllowance(
+    @Param('id') id: string,
+    @Body() body: {
+      date: string;
+      allowance_key: string;
+      allowance_name: string;
+      amount: number;
+      remarks?: string;
+    },
+  ) {
+    return this.payrollService.addDailyAllowance(+id, body);
+  }
+
+  // 刪除每日津貼
+  @Delete(':id/daily-allowances/:daId')
+  removeDailyAllowance(
+    @Param('id') id: string,
+    @Param('daId') daId: string,
+  ) {
+    return this.payrollService.removeDailyAllowance(+id, +daId);
+  }
+
+  // 批量設定某日的津貼
+  @Post(':id/daily-allowances/batch')
+  setDailyAllowances(
+    @Param('id') id: string,
+    @Body() body: {
+      date: string;
+      allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
+    },
+  ) {
+    return this.payrollService.setDailyAllowances(+id, body);
+  }
+
+  // 取得員工可用的津貼選項
+  @Get(':id/allowance-options')
+  async getAllowanceOptions(@Param('id') id: string) {
+    const payroll = await this.payrollService.findOne(+id);
+    return payroll.allowance_options;
+  }
 }

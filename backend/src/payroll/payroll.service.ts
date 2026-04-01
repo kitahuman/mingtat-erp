@@ -5,6 +5,7 @@ import { Payroll } from './payroll.entity';
 import { PayrollItem } from './payroll-item.entity';
 import { PayrollWorkLog } from './payroll-work-log.entity';
 import { PayrollAdjustment } from './payroll-adjustment.entity';
+import { PayrollDailyAllowance } from './payroll-daily-allowance.entity';
 import { Employee } from '../employees/employee.entity';
 import { EmployeeSalarySetting } from '../employees/employee-salary-setting.entity';
 import { WorkLog } from '../work-logs/work-log.entity';
@@ -24,6 +25,8 @@ export class PayrollService {
     private payrollWorkLogRepo: Repository<PayrollWorkLog>,
     @InjectRepository(PayrollAdjustment)
     private payrollAdjustmentRepo: Repository<PayrollAdjustment>,
+    @InjectRepository(PayrollDailyAllowance)
+    private dailyAllowanceRepo: Repository<PayrollDailyAllowance>,
     @InjectRepository(Employee)
     private employeeRepo: Repository<Employee>,
     @InjectRepository(EmployeeSalarySetting)
@@ -80,11 +83,11 @@ export class PayrollService {
     return { data, total, page, limit };
   }
 
-  // ── 詳情（含工作記錄和調整項）──────────────────────────────
+  // ── 詳情（含工作記錄、調整項、每日津貼）──────────────────────────────
   async findOne(id: number) {
     const payroll = await this.payrollRepo.findOne({
       where: { id },
-      relations: ['employee', 'employee.company', 'company_profile', 'items', 'adjustments'],
+      relations: ['employee', 'employee.company', 'company_profile', 'items', 'adjustments', 'daily_allowances'],
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.items) {
@@ -106,12 +109,30 @@ export class PayrollService {
     }
 
     // Build grouped settlement
-    const grouped = this.buildGroupedSettlement(pwls.filter(p => !p.is_excluded));
+    const activePwls = pwls.filter(p => !p.is_excluded);
+    const grouped = this.buildGroupedSettlement(activePwls);
+
+    // Get salary setting for daily calculation
+    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
+      .where('ss.employee_id = :empId', { empId: payroll.employee_id })
+      .andWhere('ss.effective_date <= :end', { end: payroll.date_to || payroll.period + '-28' })
+      .orderBy('ss.effective_date', 'DESC')
+      .getOne();
+
+    // Build daily calculation
+    const dailyAllowances = payroll.daily_allowances || [];
+    const dailyCalc = this.buildDailyCalculation(activePwls, salarySetting, dailyAllowances);
+
+    // Build available allowance options from salary setting
+    const allowanceOptions = this.buildAllowanceOptions(salarySetting);
 
     return {
       ...payroll,
       payroll_work_logs: pwls,
       grouped_settlement: grouped,
+      daily_calculation: dailyCalc,
+      allowance_options: allowanceOptions,
+      salary_setting: salarySetting,
     };
   }
 
@@ -187,7 +208,7 @@ export class PayrollService {
     }
   }
 
-  // ── 預覽計糧（不儲存，返回計算結果、工作記錄明細、歸組結算）──
+  // ── 預覽計糧（不儲存，返回計算結果、工作記錄明細、歸組結算、逐日計算）──
   async preview(body: {
     employee_id: number;
     date_from: string;
@@ -236,6 +257,12 @@ export class PayrollService {
     // Build grouped settlement for preview
     const grouped = this.buildGroupedSettlementFromWorkLogs(enrichedWorkLogs);
 
+    // Build daily calculation for preview (no daily allowances yet in preview)
+    const dailyCalc = this.buildDailyCalculationFromWorkLogs(enrichedWorkLogs, salarySetting, []);
+
+    // Build available allowance options
+    const allowanceOptions = this.buildAllowanceOptions(salarySetting);
+
     // Calculate preview
     const calculation = salarySetting
       ? await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null)
@@ -246,6 +273,8 @@ export class PayrollService {
       salary_setting: salarySetting,
       work_logs: enrichedWorkLogs,
       grouped_settlement: grouped,
+      daily_calculation: dailyCalc,
+      allowance_options: allowanceOptions,
       calculation,
       date_from,
       date_to,
@@ -702,6 +731,7 @@ export class PayrollService {
 
     await this.payrollWorkLogRepo.delete({ payroll_id: id });
     await this.payrollAdjustmentRepo.delete({ payroll_id: id });
+    await this.dailyAllowanceRepo.delete({ payroll_id: id });
     await this.payrollItemRepo.delete({ payroll_id: id });
     await this.payrollRepo.remove(payroll);
     return { deleted: true };
@@ -979,6 +1009,103 @@ export class PayrollService {
     return { success: true };
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ── 每日津貼管理 ──────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+
+  // 新增每日津貼
+  async addDailyAllowance(payrollId: number, body: {
+    date: string;
+    allowance_key: string;
+    allowance_name: string;
+    amount: number;
+    remarks?: string;
+  }) {
+    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft') {
+      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    }
+
+    // Check if same allowance already exists for this date
+    const existing = await this.dailyAllowanceRepo.findOne({
+      where: { payroll_id: payrollId, date: body.date, allowance_key: body.allowance_key },
+    });
+    if (existing) {
+      throw new BadRequestException(`此日期已有「${body.allowance_name}」津貼`);
+    }
+
+    const da = this.dailyAllowanceRepo.create({
+      payroll_id: payrollId,
+      date: body.date,
+      allowance_key: body.allowance_key,
+      allowance_name: body.allowance_name,
+      amount: body.amount,
+      remarks: body.remarks || undefined,
+    });
+
+    const saved = await this.dailyAllowanceRepo.save(da);
+    return saved;
+  }
+
+  // 刪除每日津貼
+  async removeDailyAllowance(payrollId: number, daId: number) {
+    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft') {
+      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    }
+
+    const da = await this.dailyAllowanceRepo.findOne({ where: { id: daId, payroll_id: payrollId } });
+    if (!da) throw new NotFoundException('Daily allowance not found');
+
+    await this.dailyAllowanceRepo.remove(da);
+
+    return { success: true };
+  }
+
+  // 批量設定某日的津貼
+  async setDailyAllowances(payrollId: number, body: {
+    date: string;
+    allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
+  }) {
+    const payroll = await this.payrollRepo.findOne({ where: { id: payrollId } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft') {
+      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    }
+
+    // Delete existing allowances for this date
+    await this.dailyAllowanceRepo.delete({ payroll_id: payrollId, date: body.date });
+
+    // Create new ones
+    const saved: PayrollDailyAllowance[] = [];
+    for (const a of body.allowances) {
+      const da = this.dailyAllowanceRepo.create({
+        payroll_id: payrollId,
+        date: body.date,
+        allowance_key: a.allowance_key,
+        allowance_name: a.allowance_name,
+        amount: a.amount,
+        remarks: a.remarks || undefined,
+      });
+      saved.push(await this.dailyAllowanceRepo.save(da));
+    }
+
+    return saved;
+  }
+
+  // 取得員工可用的津貼選項
+  async getAllowanceOptions(employeeId: number, dateTo: string) {
+    const salarySetting = await this.salarySettingRepo.createQueryBuilder('ss')
+      .where('ss.employee_id = :empId', { empId: employeeId })
+      .andWhere('ss.effective_date <= :end', { end: dateTo })
+      .orderBy('ss.effective_date', 'DESC')
+      .getOne();
+
+    return this.buildAllowanceOptions(salarySetting);
+  }
+
   // ── 統計摘要 ──────────────────────────────────────────────────
   async getSummary(query: any) {
     const qb = this.payrollRepo.createQueryBuilder('p');
@@ -1009,6 +1136,222 @@ export class PayrollService {
       total_mpf: Number(result.total_mpf) || 0,
       total_net: Number(result.total_net) || 0,
     };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ── 逐日計算邏輯 ──────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * 從 PayrollWorkLog 構建逐日計算（用於已生成的糧單）
+   */
+  private buildDailyCalculation(
+    pwls: PayrollWorkLog[],
+    salarySetting: EmployeeSalarySetting | null,
+    dailyAllowances: PayrollDailyAllowance[],
+  ): any[] {
+    const baseSalary = salarySetting ? Number(salarySetting.base_salary) || 0 : 0;
+
+    // Group work logs by date
+    const dateMap = new Map<string, PayrollWorkLog[]>();
+    for (const pwl of pwls) {
+      const date = pwl.scheduled_date;
+      if (!dateMap.has(date)) dateMap.set(date, []);
+      dateMap.get(date)!.push(pwl);
+    }
+
+    // Group daily allowances by date
+    const daMap = new Map<string, PayrollDailyAllowance[]>();
+    for (const da of dailyAllowances) {
+      const date = da.date;
+      if (!daMap.has(date)) daMap.set(date, []);
+      daMap.get(date)!.push(da);
+    }
+
+    // Sort dates
+    const sortedDates = Array.from(dateMap.keys()).sort();
+
+    return sortedDates.map(date => {
+      const dayPwls = dateMap.get(date) || [];
+      const dayAllowances = daMap.get(date) || [];
+
+      // Calculate work income for this day (sum of line_amount from rate card matching)
+      const workIncome = dayPwls.reduce((sum, pwl) => sum + (Number(pwl.line_amount) || 0), 0);
+
+      // Check if work income is less than base salary (need to top up)
+      const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
+      const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
+
+      // Effective income for this day = max(workIncome, baseSalary)
+      const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+
+      // Daily allowance total
+      const dailyAllowanceTotal = dayAllowances.reduce((sum, da) => sum + (Number(da.amount) || 0), 0);
+
+      // Day total = effective income + daily allowances
+      const dayTotal = effectiveIncome + dailyAllowanceTotal;
+
+      return {
+        date,
+        work_logs: dayPwls.map(pwl => ({
+          id: pwl.id,
+          service_type: pwl.service_type,
+          day_night: pwl.day_night,
+          start_location: pwl.start_location,
+          end_location: pwl.end_location,
+          client_name: pwl.client_name,
+          contract_no: pwl.contract_no,
+          quantity: Number(pwl.quantity) || 1,
+          matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
+          line_amount: Number(pwl.line_amount) || 0,
+          price_match_status: pwl.price_match_status,
+        })),
+        work_income: workIncome,
+        base_salary: baseSalary,
+        needs_top_up: needsTopUp,
+        top_up_amount: topUpAmount,
+        effective_income: effectiveIncome,
+        daily_allowances: dayAllowances.map(da => ({
+          id: da.id,
+          allowance_key: da.allowance_key,
+          allowance_name: da.allowance_name,
+          amount: Number(da.amount),
+          remarks: da.remarks,
+        })),
+        daily_allowance_total: dailyAllowanceTotal,
+        day_total: dayTotal,
+      };
+    });
+  }
+
+  /**
+   * 從 enriched WorkLog 構建逐日計算（用於 preview）
+   */
+  private buildDailyCalculationFromWorkLogs(
+    workLogs: any[],
+    salarySetting: EmployeeSalarySetting | null,
+    dailyAllowances: PayrollDailyAllowance[],
+  ): any[] {
+    const baseSalary = salarySetting ? Number(salarySetting.base_salary) || 0 : 0;
+
+    // Group work logs by date
+    const dateMap = new Map<string, any[]>();
+    for (const wl of workLogs) {
+      const date = wl.scheduled_date;
+      if (!dateMap.has(date)) dateMap.set(date, []);
+      dateMap.get(date)!.push(wl);
+    }
+
+    // Group daily allowances by date
+    const daMap = new Map<string, PayrollDailyAllowance[]>();
+    for (const da of dailyAllowances) {
+      const date = da.date;
+      if (!daMap.has(date)) daMap.set(date, []);
+      daMap.get(date)!.push(da);
+    }
+
+    // Sort dates
+    const sortedDates = Array.from(dateMap.keys()).sort();
+
+    return sortedDates.map(date => {
+      const dayWls = dateMap.get(date) || [];
+      const dayAllowances = daMap.get(date) || [];
+
+      // Calculate work income for this day
+      const workIncome = dayWls.reduce((sum: number, wl: any) => sum + (Number(wl._line_amount) || 0), 0);
+
+      // Check if work income is less than base salary
+      const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
+      const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
+
+      // Effective income
+      const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+
+      // Daily allowance total
+      const dailyAllowanceTotal = dayAllowances.reduce((sum, da) => sum + (Number(da.amount) || 0), 0);
+
+      // Day total
+      const dayTotal = effectiveIncome + dailyAllowanceTotal;
+
+      return {
+        date,
+        work_logs: dayWls.map((wl: any) => ({
+          id: wl.id,
+          service_type: wl.service_type,
+          day_night: wl.day_night,
+          start_location: wl.start_location,
+          end_location: wl.end_location,
+          client_name: wl.client?.name || '',
+          contract_no: wl.quotation?.quotation_number || '',
+          quantity: Number(wl.quantity) || 1,
+          matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
+          line_amount: Number(wl._line_amount) || 0,
+          price_match_status: wl._price_match_status || 'unmatched',
+        })),
+        work_income: workIncome,
+        base_salary: baseSalary,
+        needs_top_up: needsTopUp,
+        top_up_amount: topUpAmount,
+        effective_income: effectiveIncome,
+        daily_allowances: dayAllowances.map(da => ({
+          id: da.id,
+          allowance_key: da.allowance_key,
+          allowance_name: da.allowance_name,
+          amount: Number(da.amount),
+          remarks: da.remarks,
+        })),
+        daily_allowance_total: dailyAllowanceTotal,
+        day_total: dayTotal,
+      };
+    });
+  }
+
+  /**
+   * 從員工薪酬配置構建可用津貼選項列表
+   */
+  private buildAllowanceOptions(salarySetting: EmployeeSalarySetting | null): any[] {
+    if (!salarySetting) return [];
+
+    const options: any[] = [];
+
+    const builtInAllowances: { key: string; label: string; field: string }[] = [
+      { key: 'allowance_night', label: '夜班津貼', field: 'allowance_night' },
+      { key: 'allowance_rent', label: '租車津貼', field: 'allowance_rent' },
+      { key: 'allowance_3runway', label: '三跑津貼', field: 'allowance_3runway' },
+      { key: 'allowance_well', label: '落井津貼', field: 'allowance_well' },
+      { key: 'allowance_machine', label: '揸機津貼', field: 'allowance_machine' },
+      { key: 'allowance_roller', label: '火轆津貼', field: 'allowance_roller' },
+      { key: 'allowance_crane', label: '吊/挾車津貼', field: 'allowance_crane' },
+      { key: 'allowance_move_machine', label: '搬機津貼', field: 'allowance_move_machine' },
+      { key: 'allowance_kwh_night', label: '嘉華-夜間津貼', field: 'allowance_kwh_night' },
+      { key: 'allowance_mid_shift', label: '中直津貼', field: 'allowance_mid_shift' },
+    ];
+
+    for (const ba of builtInAllowances) {
+      const amount = Number((salarySetting as any)[ba.field]) || 0;
+      if (amount > 0) {
+        options.push({
+          key: ba.key,
+          label: ba.label,
+          default_amount: amount,
+        });
+      }
+    }
+
+    // Custom allowances
+    if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
+      for (const ca of salarySetting.custom_allowances) {
+        if (ca.amount && Number(ca.amount) > 0) {
+          options.push({
+            key: `custom:${ca.name}`,
+            label: ca.name || '自定義津貼',
+            default_amount: Number(ca.amount),
+          });
+        }
+      }
+    }
+
+    return options;
   }
 
   // ══════════════════════════════════════════════════════════════

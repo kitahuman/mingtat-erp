@@ -39,9 +39,7 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
   if (!groups || groups.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
   }
-
   const totalAmount = groups.reduce((sum: number, g: any) => sum + (Number(g.total_amount) || 0), 0);
-
   return (
     <div className="overflow-x-auto border rounded-lg">
       <table className="w-full text-sm">
@@ -96,6 +94,124 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
   );
 }
 
+// ─── Daily Calculation View (Preview mode - read only) ───────
+function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
+  if (!dailyCalc || dailyCalc.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
+  }
+
+  const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
+  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.top_up_amount) || 0), 0);
+
+  return (
+    <div className="space-y-1">
+      {/* Summary bar */}
+      <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
+        <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter((d: any) => d.needs_top_up).length}天</span></div>
+        <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>
+        <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
+      </div>
+
+      {/* Daily rows */}
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailyCalc.map((day: any, idx: number) => {
+              const isExpanded = expandedDate === day.date;
+              const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
+              return (
+                <>
+                  <tr key={day.date} className={`border-b ${day.needs_top_up ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
+                        {isExpanded ? '▼' : '▶'}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      {day.date} <span className="text-xs text-gray-400">({weekday})</span>
+                      {day.work_logs?.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      ${Number(day.work_income).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-500">
+                      ${Number(day.base_salary).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {day.needs_top_up ? (
+                        <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
+                      ) : (
+                        <span className="text-green-600">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-bold">
+                      ${Number(day.day_total).toLocaleString()}
+                    </td>
+                  </tr>
+                  {/* Expanded work log details */}
+                  {isExpanded && (
+                    <tr key={`exp-${day.date}`} className="bg-gray-50 border-b">
+                      <td colSpan={6} className="px-6 py-2">
+                        <div className="text-xs space-y-1">
+                          {(day.work_logs || []).map((wl: any, wIdx: number) => (
+                            <div key={wIdx} className="flex items-center gap-3 py-1 border-b border-gray-200 last:border-0">
+                              <span className={`px-1 py-0.5 rounded text-xs ${
+                                wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'
+                              }`}>{wl.day_night || '日'}</span>
+                              <span className="text-gray-600">{wl.client_name || '-'}</span>
+                              <span className="text-gray-400">{[wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '-'}</span>
+                              <span className="ml-auto font-mono">
+                                {wl.matched_rate ? `$${Number(wl.matched_rate).toLocaleString()} x ${wl.quantity || 1}` : '未設定'}
+                              </span>
+                              <span className="font-mono font-bold w-24 text-right">
+                                ${Number(wl.line_amount || 0).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
+          </tbody>
+          <tfoot className="border-t-2 border-gray-900">
+            <tr className="bg-gray-50">
+              <td colSpan={5} className="px-3 py-2 font-bold text-right">逐日合計</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">
+                ${grandTotal.toLocaleString()}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab type for wizard step 3 ──────────────────────────────
+const WIZARD_TABS = ['detail', 'grouped', 'daily'] as const;
+type WizardTab = typeof WIZARD_TABS[number];
+const WIZARD_TAB_LABELS: Record<WizardTab, string> = {
+  detail: '逐筆明細',
+  grouped: '歸組結算',
+  daily: '逐日計算',
+};
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function PayrollPage() {
   const router = useRouter();
@@ -118,7 +234,7 @@ export default function PayrollPage() {
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [previewError, setPreviewError] = useState('');
-  const [viewMode, setViewMode] = useState<'detail' | 'grouped'>('detail');
+  const [wizardTab, setWizardTab] = useState<WizardTab>('daily');
 
   // Step 4: Generate
   const [generating, setGenerating] = useState(false);
@@ -200,7 +316,7 @@ export default function PayrollPage() {
     setGenerated(null);
     setGenerateError('');
     setEmpSearch('');
-    setViewMode('detail');
+    setWizardTab('daily');
   };
 
   const filteredEmployees = employees.filter(emp =>
@@ -376,7 +492,7 @@ export default function PayrollPage() {
           </div>
         )}
 
-        {/* ── Step 3: 核對工作記錄 ── */}
+        {/* ── Step 3: 核對工作記錄 (with Tabs) ── */}
         {step === 3 && preview && (
           <div>
             <div className="flex items-center gap-3 mb-4">
@@ -413,36 +529,37 @@ export default function PayrollPage() {
               </div>
             )}
 
-            {/* View mode toggle */}
+            {/* Tabs */}
             {preview.work_logs?.length > 0 && (
-              <div className="mb-4">
-                <div className="flex gap-2 mb-3">
-                  <button
-                    onClick={() => setViewMode('detail')}
-                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-                      viewMode === 'detail'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    逐筆明細
-                  </button>
-                  <button
-                    onClick={() => setViewMode('grouped')}
-                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-                      viewMode === 'grouped'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    歸組結算
-                  </button>
+              <div className="mb-5">
+                <div className="flex items-center border-b mb-4">
+                  {WIZARD_TABS.map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setWizardTab(tab)}
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        wizardTab === tab
+                          ? 'border-primary-600 text-primary-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      {WIZARD_TAB_LABELS[tab]}
+                      {tab === 'daily' && preview.daily_calculation?.length > 0 && (
+                        <span className="ml-1 text-xs bg-primary-100 text-primary-600 px-1.5 py-0.5 rounded-full">{preview.daily_calculation.length}天</span>
+                      )}
+                      {tab === 'detail' && (
+                        <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{preview.work_logs.length}筆</span>
+                      )}
+                      {tab === 'grouped' && preview.grouped_settlement?.length > 0 && (
+                        <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{preview.grouped_settlement.length}組</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
 
                 {/* Detail view */}
-                {viewMode === 'detail' && (
-                  <div className="mb-5">
-                    <h3 className="text-sm font-bold text-gray-700 mb-2">工作記錄明細</h3>
+                {wizardTab === 'detail' && (
+                  <div>
                     <div className="overflow-x-auto border rounded-lg">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
@@ -499,11 +616,13 @@ export default function PayrollPage() {
                 )}
 
                 {/* Grouped view */}
-                {viewMode === 'grouped' && (
-                  <div className="mb-5">
-                    <h3 className="text-sm font-bold text-gray-700 mb-2">歸組結算</h3>
-                    <GroupedSettlementView groups={preview.grouped_settlement} />
-                  </div>
+                {wizardTab === 'grouped' && (
+                  <GroupedSettlementView groups={preview.grouped_settlement} />
+                )}
+
+                {/* Daily calculation view */}
+                {wizardTab === 'daily' && (
+                  <DailyCalculationPreview dailyCalc={preview.daily_calculation} />
                 )}
               </div>
             )}

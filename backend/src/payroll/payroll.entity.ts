@@ -8,6 +8,7 @@ import { CompanyProfile } from '../company-profiles/company-profile.entity';
 import { PayrollItem } from './payroll-item.entity';
 import { PayrollWorkLog } from './payroll-work-log.entity';
 import { PayrollAdjustment } from './payroll-adjustment.entity';
+import { PayrollDailyAllowance } from './payroll-daily-allowance.entity';
 
 @Entity('payrolls')
 export class Payroll {
@@ -115,4 +116,7 @@ export class Payroll {
 
   @OneToMany(() => PayrollAdjustment, (adj) => adj.payroll, { cascade: true })
   adjustments: PayrollAdjustment[];
+
+  @OneToMany(() => PayrollDailyAllowance, (da) => da.payroll, { cascade: true })
+  daily_allowances: PayrollDailyAllowance[];
 }

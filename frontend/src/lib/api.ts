@@ -238,6 +238,17 @@ export const payrollApi = {
     api.post(`/payroll/${payrollId}/adjustments`, data),
   removeAdjustment: (payrollId: number, adjId: number) =>
     api.delete(`/payroll/${payrollId}/adjustments/${adjId}`),
+
+  // ── 每日津貼管理 ──
+  addDailyAllowance: (payrollId: number, data: {
+    date: string; allowance_key: string; allowance_name: string; amount: number; remarks?: string;
+  }) => api.post(`/payroll/${payrollId}/daily-allowances`, data),
+  removeDailyAllowance: (payrollId: number, daId: number) =>
+    api.delete(`/payroll/${payrollId}/daily-allowances/${daId}`),
+  setDailyAllowances: (payrollId: number, data: {
+    date: string;
+    allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
+  }) => api.post(`/payroll/${payrollId}/daily-allowances/batch`, data),
 };
 
 // Enums (系統枚舉)
