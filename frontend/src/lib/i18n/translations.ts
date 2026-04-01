@@ -129,6 +129,10 @@ export const translations = {
     searchOrTypeClient: '搜尋或輸入客戶名稱',
     newClientWarning: '未確認客戶，提交後請行政確認',
     noResults: '無結果',
+    workOrderNo: '單號',
+    workOrderNoPlaceholder: '輸入單號',
+    receiptNo: '入帳票號碼',
+    receiptNoPlaceholder: '輸入入帳票號碼',
 
     // Expense
     expenseTitle: '報銷支出',
@@ -321,6 +325,10 @@ export const translations = {
     searchOrTypeClient: 'Search or type client name',
     newClientWarning: 'Unverified client — please confirm with admin after submission',
     noResults: 'No results',
+    workOrderNo: 'Work Order No.',
+    workOrderNoPlaceholder: 'Enter work order no.',
+    receiptNo: 'Receipt No.',
+    receiptNoPlaceholder: 'Enter receipt no.',
 
     // Expense
     expenseTitle: 'Expense Claim',

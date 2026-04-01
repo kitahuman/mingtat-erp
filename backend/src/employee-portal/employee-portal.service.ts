@@ -339,6 +339,8 @@ export class EmployeePortalService {
         ot_quantity: data.ot_hours ? Number(data.ot_hours) : undefined,
         ot_unit: data.ot_hours ? '小時' : undefined,
         goods_quantity: data.goods_quantity ? Number(data.goods_quantity) : undefined,
+        work_order_no: data.work_order_no || undefined,
+        receipt_no: data.receipt_no || undefined,
         remarks: data.remarks,
       },
     });

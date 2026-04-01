@@ -34,6 +34,8 @@ interface FormData {
   destination: string;
   quantity: string;
   unit: string;
+  work_order_no: string;         // transport: delivery note no
+  receipt_no: string;            // transport: invoice no
   // Common
   start_time: string;
   end_time: string;
@@ -66,6 +68,8 @@ const defaultForm: FormData = {
   destination: '',
   quantity: '',
   unit: '',
+  work_order_no: '',
+  receipt_no: '',
   start_time: '',
   end_time: '',
   shift: 'D',
@@ -405,6 +409,8 @@ export default function WorkReportPage() {
         payload.quantity = form.quantity || undefined;
         payload.unit = form.unit || undefined;
         payload.goods_quantity = form.goods ? 1 : undefined;
+        payload.work_order_no = form.work_order_no || undefined;
+        payload.receipt_no = form.receipt_no || undefined;
       }
 
       await employeePortalApi.submitWorkLog(payload);
@@ -659,6 +665,30 @@ export default function WorkReportPage() {
                   <option value="">單位</option>
                   {UNIT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
+              </div>
+            </div>
+
+            {/* Work Order No & Receipt No — transport only */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClass}>{t('workOrderNo')}</label>
+                <input
+                  type="text"
+                  value={form.work_order_no}
+                  onChange={(e) => set('work_order_no', e.target.value)}
+                  className={inputClass}
+                  placeholder={t('workOrderNoPlaceholder')}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>{t('receiptNo')}</label>
+                <input
+                  type="text"
+                  value={form.receipt_no}
+                  onChange={(e) => set('receipt_no', e.target.value)}
+                  className={inputClass}
+                  placeholder={t('receiptNoPlaceholder')}
+                />
               </div>
             </div>
           </div>
