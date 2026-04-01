@@ -35,7 +35,6 @@ export default function MachineryPage() {
     machine_code: '', machine_type: '挖掘機', brand: '', model: '', tonnage: '',
     serial_number: '', owner_company_id: '', inspection_cert_expiry: '', insurance_expiry: ''
   });
-  const [showCsvImport, setShowCsvImport] = useState(false);
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
 
@@ -76,12 +75,14 @@ export default function MachineryPage() {
       model: formData.model,
       tonnage: formData.tonnage ? Number(formData.tonnage) : null,
       status: formData.status,
+      inspection_cert_expiry: formData.inspection_cert_expiry || null,
+      insurance_expiry: formData.insurance_expiry || null,
     });
     load();
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => { if (!v) return '-'; return new Date(v).toLocaleDateString('zh-HK'); };
+  const filterExpiry = (v: string) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } };
 
   const columns = [
     { key: 'machine_code', label: '編號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
@@ -89,9 +90,9 @@ export default function MachineryPage() {
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'model', label: '型號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
-    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'owner_company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
+    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
@@ -113,7 +114,7 @@ export default function MachineryPage() {
         </div>
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
-            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <CsvImportModal module="machinery" onImportComplete={load} />
             <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
           </div>
         )}
@@ -155,8 +156,6 @@ export default function MachineryPage() {
           }
         />
       </div>
-
-      <CsvImportModal module="machinery" moduleName="機械管理" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增機械" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

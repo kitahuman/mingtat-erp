@@ -104,21 +104,28 @@ export default function EmployeesPage() {
   };
 
   const handleInlineSave = async (id: number, formData: any) => {
-    await employeesApi.update(id, {
+    const payload: any = {
       name_zh: formData.name_zh,
       name_en: formData.name_en,
       emp_code: formData.emp_code,
       role: formData.role,
       phone: formData.phone,
       company_id: formData.company_id ? Number(formData.company_id) : undefined,
-    });
+      join_date: formData.join_date || null,
+      green_card_expiry: formData.green_card_expiry || null,
+      construction_card_expiry: formData.construction_card_expiry || null,
+      driving_license_expiry: formData.driving_license_expiry || null,
+      termination_date: formData.termination_date || null,
+      termination_reason: formData.termination_reason || null,
+    };
+    await employeesApi.update(id, payload);
     load();
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
   const filterExpiry = (v: string) => {
     if (!v) return '-';
-    return new Date(v).toLocaleDateString('zh-HK');
+    try { return new Date(v).toISOString().substring(0, 10); } catch { return v; }
   };
 
   const companyOptions = companies.map(c => ({ value: c.id, label: c.internal_prefix || c.name }));
@@ -134,10 +141,10 @@ export default function EmployeesPage() {
     ), filterRender: (v: string) => roleLabels[v] || v },
     { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
-    { key: 'green_card_expiry', label: '平安卡到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
+    { key: 'green_card_expiry', label: '平安卡到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'construction_card_expiry', label: '工人註冊證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'driving_license_expiry', label: '駕駛執照到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'status', label: '狀態', sortable: true, editable: false, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : 'badge-red'}>{v === 'active' ? '在職' : '離職'}</span>
     ), filterRender: (v: string) => v === 'active' ? '在職' : '離職' },
   ];
@@ -150,10 +157,10 @@ export default function EmployeesPage() {
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
-    { key: 'company', label: '所屬公司', render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
-    { key: 'termination_date', label: '離職日期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v || '-' },
+    { key: 'company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
+    { key: 'termination_date', label: '離職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'termination_reason', label: '離職原因', editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="text-gray-600 text-sm">{v}</span> : '-' },
-    { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v || '-' },
+    { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
   ];
 
   const defaultColumns = activeTab === 'active' ? activeColumns : inactiveColumns;
@@ -171,7 +178,7 @@ export default function EmployeesPage() {
         </div>
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
-            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <CsvImportModal module="employees" onImportComplete={load} />
             <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
           </div>
         )}
@@ -229,14 +236,6 @@ export default function EmployeesPage() {
           }
         />
       </div>
-
-      <CsvImportModal
-        module="employees"
-        moduleName="員工管理"
-        isOpen={showCsvImport}
-        onClose={() => setShowCsvImport(false)}
-        onSuccess={load}
-      />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

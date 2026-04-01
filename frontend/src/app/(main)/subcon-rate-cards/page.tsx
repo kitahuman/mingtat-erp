@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { subconRateCardsApi, partnersApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 
 const UNIT_OPTIONS = ['天','晚','車','噸','小時','次'];
@@ -22,7 +22,6 @@ export default function SubconRateCardsPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showCsvImport, setShowCsvImport] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
@@ -61,20 +60,51 @@ export default function SubconRateCardsPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    await subconRateCardsApi.update(id, {
+      plate_no: formData.plate_no,
+      vehicle_tonnage: formData.vehicle_tonnage,
+      contract_no: formData.contract_no,
+      day_night: formData.day_night,
+      origin: formData.origin,
+      destination: formData.destination,
+      unit_price: formData.unit_price ? Number(formData.unit_price) : 0,
+      unit: formData.unit,
+      exclude_fuel: formData.exclude_fuel,
+      status: formData.status,
+      remarks: formData.remarks,
+    });
+    load();
+  };
+
+  const dayNightOptions = [
+    { value: '日', label: '日' },
+    { value: '夜', label: '夜' },
+    { value: '中直', label: '中直' },
+  ];
+
+  const statusOptions = [
+    { value: 'active', label: '生效中' },
+    { value: 'cancelled', label: '取消' },
+    { value: 'inactive', label: '停用' },
+  ];
+
   const columns = [
-    { key: 'subcontractor', label: '街車公司/司機', render: (_: any, row: any) => row.subcontractor?.name || '-', filterRender: (_: any, row: any) => row.subcontractor?.name || '-' },
-    { key: 'plate_no', label: '車牌', render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數/類別', render: (v: any) => v || '-' },
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'day_night', label: '日/夜', render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', render: (v: any) => v || '-' },
-    { key: 'unit_price', label: '單價', sortable: true, className: 'text-right', render: (v: any, row: any) => <span className="font-mono">${Number(v).toLocaleString()}/{row.unit || '天'}</span> },
-    { key: 'exclude_fuel', label: '包油', render: (v: any) => v ? <span className="badge-red">不包油</span> : <span className="badge-green">包油</span>, filterRender: (v: any) => v ? '不包油' : '包油' },
-    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'subcontractor', label: '街車公司/司機', editable: false, render: (_: any, row: any) => row.subcontractor?.name || '-', filterRender: (_: any, row: any) => row.subcontractor?.name || '-' },
+    { key: 'plate_no', label: '車牌', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數/類別', editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'client', label: '客戶', editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'contract_no', label: '合約', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', editable: true, editType: 'select' as const, editOptions: dayNightOptions },
+    { key: 'origin', label: '起點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'unit_price', label: '單價', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => <span className="font-mono">${Number(v).toLocaleString()}/{row.unit || '天'}</span> },
+    { key: 'unit', label: '單位', editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
+    { key: 'exclude_fuel', label: '包油', editable: true, editType: 'select' as const, editOptions: [{ value: false, label: '包油' }, { value: true, label: '不包油' }], render: (v: any) => v ? <span className="badge-red">不包油</span> : <span className="badge-green">包油</span>, filterRender: (v: any) => v ? '不包油' : '包油' },
+    { key: 'source_quotation', label: '來源報價單', editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', render: (v: any) => {
+    { key: 'status', label: '狀態', editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => {
       const map: Record<string, { label: string; cls: string }> = {
         active: { label: '生效中', cls: 'badge-green' },
         cancelled: { label: '取消', cls: 'badge-red' },
@@ -99,13 +129,13 @@ export default function SubconRateCardsPage() {
           <p className="text-gray-500 text-sm mt-1">管理外判車輛（街車）費用</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <CsvImportModal module="subcon-rate-cards" onImportComplete={load} />
           <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
         </div>
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="街車價目表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
@@ -125,6 +155,7 @@ export default function SubconRateCardsPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={dayNightFilter} onChange={e => { setDayNightFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -143,8 +174,6 @@ export default function SubconRateCardsPage() {
           }
         />
       </div>
-
-      <CsvImportModal module="subcon-rate-cards" moduleName="街車價目表" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增街車價目" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

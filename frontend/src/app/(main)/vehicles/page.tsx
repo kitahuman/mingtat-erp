@@ -31,7 +31,6 @@ export default function VehiclesPage() {
     plate_number: '', vehicle_type: '', tonnage: '', owner_company_id: '',
     brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
   });
-  const [showCsvImport, setShowCsvImport] = useState(false);
 
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
@@ -81,12 +80,16 @@ export default function VehiclesPage() {
       brand: formData.brand,
       model: formData.model,
       status: formData.status,
+      insurance_expiry: formData.insurance_expiry || null,
+      permit_fee_expiry: formData.permit_fee_expiry || null,
+      inspection_date: formData.inspection_date || null,
+      license_expiry: formData.license_expiry || null,
     });
     load();
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => { if (!v) return '-'; return new Date(v).toLocaleDateString('zh-HK'); };
+  const filterExpiry = (v: string) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } };
 
   const statusOptions = [
     { value: 'active', label: '使用中' },
@@ -97,12 +100,12 @@ export default function VehiclesPage() {
   const columns = [
     { key: 'plate_number', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
-    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
+    { key: 'owner_company', label: '所屬公司', editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'inspection_date', label: '驗車到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'license_expiry', label: '行車證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
@@ -125,7 +128,7 @@ export default function VehiclesPage() {
         </div>
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
-            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <CsvImportModal module="vehicles" onImportComplete={load} />
             <button onClick={() => { setForm({ ...form, vehicle_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
           </div>
         )}
@@ -167,8 +170,6 @@ export default function VehiclesPage() {
           }
         />
       </div>
-
-      <CsvImportModal module="vehicles" moduleName="車輛管理" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增車輛" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

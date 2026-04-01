@@ -46,7 +46,6 @@ export default function PartnersPage() {
   const [form, setForm] = useState<any>({ ...emptyForm });
   const [sortBy, setSortBy] = useState('code');
   const [sortOrder, setSortOrder] = useState('ASC');
-  const [showCsvImport, setShowCsvImport] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,9 +93,14 @@ export default function PartnersPage() {
       code: formData.code,
       english_code: formData.english_code,
       name: formData.name,
+      name_en: formData.name_en,
       partner_type: formData.partner_type,
       contact_person: formData.contact_person,
       phone: formData.phone,
+      mobile: formData.mobile,
+      email: formData.email,
+      fax: formData.fax,
+      address: formData.address,
     });
     load();
   };
@@ -105,14 +109,15 @@ export default function PartnersPage() {
     { key: 'code', label: '代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
     { key: 'english_code', label: '英文代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-primary-600">{v}</span> : '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v}</span> },
-    { key: 'partner_type', label: '類型', render: (v: string) => {
+    { key: 'name_en', label: '英文名稱', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'partner_type', label: '類型', editable: true, editType: 'select' as const, editOptions: partnerTypes, render: (v: string) => {
       const colors: Record<string, string> = {
         client: 'badge-blue', supplier: 'badge-green', subcontractor: 'badge-yellow',
         insurance: 'badge-purple', repair_shop: 'badge-gray', other: 'badge-gray'
       };
       return <span className={colors[v] || 'badge-gray'}>{typeLabels[v] || v}</span>;
     }, filterRender: (v: string) => typeLabels[v] || v },
-    { key: 'subsidiaries', label: '旗下公司', render: (v: string[] | string) => {
+    { key: 'subsidiaries', label: '旗下公司', editable: false, render: (v: string[] | string) => {
       if (!v) return '-';
       const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',').filter(Boolean) : []);
       if (arr.length === 0) return '-';
@@ -130,6 +135,8 @@ export default function PartnersPage() {
     }},
     { key: 'contact_person', label: '聯絡人', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'phone', label: '電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'mobile', label: '手提電話', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'email', label: '電郵', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
   ];
 
   const {
@@ -146,7 +153,7 @@ export default function PartnersPage() {
         </div>
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
-            <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+            <CsvImportModal module="partners" onImportComplete={load} />
             <button onClick={() => setShowModal(true)} className="btn-primary">新增合作單位</button>
           </div>
         )}
@@ -183,8 +190,6 @@ export default function PartnersPage() {
         />
       </div>
 
-      <CsvImportModal module="partners" moduleName="合作單位" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
-
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增合作單位" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           {/* Basic Info */}
@@ -217,12 +222,7 @@ export default function PartnersPage() {
                     ? 'bg-primary-50 border-primary-300 text-primary-700'
                     : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
                 }`}>
-                  <input
-                    type="checkbox"
-                    checked={(form.subsidiaries || []).includes(opt)}
-                    onChange={() => toggleSubsidiary(opt)}
-                    className="sr-only"
-                  />
+                  <input type="checkbox" checked={(form.subsidiaries || []).includes(opt)} onChange={() => toggleSubsidiary(opt)} className="sr-only" />
                   {(form.subsidiaries || []).includes(opt) && <span>&#10003;</span>}
                   {opt}
                 </label>
@@ -245,16 +245,17 @@ export default function PartnersPage() {
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider pt-2">銀行及發票資料</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-gray-700 mb-1">銀行名</label><input value={form.bank_name} onChange={e => setForm({...form, bank_name: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label><input value={form.bank_account} onChange={e => setForm({...form, bank_account: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">發票標題</label><input value={form.invoice_title} onChange={e => setForm({...form, invoice_title: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">銀行帳號</label><input value={form.bank_account} onChange={e => setForm({...form, bank_account: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label><input value={form.invoice_title} onChange={e => setForm({...form, invoice_title: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">發票描述</label><input value={form.invoice_description} onChange={e => setForm({...form, invoice_description: e.target.value})} className="input-field" /></div>
           </div>
 
           {/* Remarks */}
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider pt-2">備註</h3>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">報價備註</label><textarea value={form.quotation_remarks} onChange={e => setForm({...form, quotation_remarks: e.target.value})} className="input-field" rows={3} /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">發票備註</label><textarea value={form.invoice_remarks} onChange={e => setForm({...form, invoice_remarks: e.target.value})} className="input-field" rows={3} /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">其他備註</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="input-field" rows={2} /></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">報價備註</label><textarea value={form.quotation_remarks} onChange={e => setForm({...form, quotation_remarks: e.target.value})} className="input-field" rows={2} /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">發票備註</label><textarea value={form.invoice_remarks} onChange={e => setForm({...form, invoice_remarks: e.target.value})} className="input-field" rows={2} /></div>
+          </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="input-field" rows={2} /></div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button>

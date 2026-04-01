@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
@@ -23,7 +23,6 @@ export default function RateCardsPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showCsvImport, setShowCsvImport] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -78,25 +77,49 @@ export default function RateCardsPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    await rateCardsApi.update(id, {
+      service_type: formData.service_type,
+      name: formData.name,
+      vehicle_tonnage: formData.vehicle_tonnage,
+      origin: formData.origin,
+      destination: formData.destination,
+      day_rate: formData.day_rate ? Number(formData.day_rate) : 0,
+      night_rate: formData.night_rate ? Number(formData.night_rate) : 0,
+      mid_shift_rate: formData.mid_shift_rate ? Number(formData.mid_shift_rate) : 0,
+      ot_rate: formData.ot_rate ? Number(formData.ot_rate) : 0,
+      effective_date: formData.effective_date || null,
+      expiry_date: formData.expiry_date || null,
+      status: formData.status,
+      remarks: formData.remarks,
+    });
+    load();
+  };
+
+  const statusOptions = [
+    { value: 'active', label: '啟用' },
+    { value: 'inactive', label: '停用' },
+  ];
+
   const columns = [
-    { key: 'client', label: '客戶', render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'company', label: '公司', render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'service_type', label: '服務類型' },
-    { key: 'name', label: '名稱', render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', render: (v: any) => v || '-' },
-    { key: 'day_rate', label: '日間', sortable: true, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
-    { key: 'night_rate', label: '夜間', className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
-    { key: 'effective_date', label: '生效日期', sortable: true, render: (v: any) => v || '-' },
-    { key: 'expiry_date', label: '到期日期', render: (v: any) => v || '-' },
-    { key: 'source_quotation', label: '來源報價單', render: (_: any, row: any) => row.source_quotation ? (
+    { key: 'client', label: '客戶', editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
+    { key: 'service_type', label: '服務類型', editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
+    { key: 'name', label: '名稱', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數', editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
+    { key: 'night_rate', label: '夜間', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.night_unit || '晚'}</span> : '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'expiry_date', label: '到期日期', editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'source_quotation', label: '來源報價單', editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
     ) : '-' },
-    { key: 'project', label: '工程項目', render: (_: any, row: any) => row.project ? (
+    { key: 'project', label: '工程項目', editable: false, render: (_: any, row: any) => row.project ? (
       <span className="font-mono text-xs text-primary-600">{row.project.project_no}</span>
     ) : '-' },
-    { key: 'status', label: '狀態', render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
+    { key: 'status', label: '狀態', editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
   ];
 
   const {
@@ -112,13 +135,13 @@ export default function RateCardsPage() {
           <p className="text-gray-500 text-sm mt-1">管理客戶定價，支援日/夜/中直/OT多維度費率</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <CsvImportModal module="rate-cards" onImportComplete={load} />
           <button onClick={() => setShowModal(true)} className="btn-primary">新增價目</button>
         </div>
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="客戶價目表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
@@ -138,6 +161,7 @@ export default function RateCardsPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSave={handleInlineSave}
           filters={
             <div className="flex gap-2">
               <select value={serviceTypeFilter} onChange={e => { setServiceTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -153,9 +177,6 @@ export default function RateCardsPage() {
           }
         />
       </div>
-
-      {/* Create Modal */}
-      <CsvImportModal module="rate-cards" moduleName="租賃價目表" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增客戶價目" size="xl">
         <form onSubmit={handleCreate} className="space-y-4 max-h-[75vh] overflow-y-auto">
@@ -205,7 +226,6 @@ export default function RateCardsPage() {
             </div>
           </div>
 
-          {/* Dates and Project */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-bold text-gray-700 mb-3">有效期及關聯</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

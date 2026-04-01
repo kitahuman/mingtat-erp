@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
-import DataTable from '@/components/DataTable';
+import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
@@ -57,7 +57,6 @@ export default function SalaryConfigPage() {
     change_type: '', change_amount: 0, notes: '',
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
-  const [showCsvImport, setShowCsvImport] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -95,18 +94,36 @@ export default function SalaryConfigPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
 
+  const handleInlineSave = async (id: number, formData: any) => {
+    await salaryConfigApi.update(id, {
+      effective_date: formData.effective_date || undefined,
+      salary_type: formData.salary_type,
+      base_salary: formData.base_salary ? Number(formData.base_salary) : 0,
+      allowance_night: formData.allowance_night ? Number(formData.allowance_night) : 0,
+      ot_rate_standard: formData.ot_rate_standard ? Number(formData.ot_rate_standard) : 0,
+      ot_mid_shift: formData.ot_mid_shift ? Number(formData.ot_mid_shift) : 0,
+    });
+    load();
+  };
+
+  const salaryTypeOptions = [
+    { value: 'daily', label: '日薪制' },
+    { value: 'monthly', label: '月薪制' },
+  ];
+
   const columns = [
-    { key: 'employee', label: '員工', render: (_: any, row: any) => {
+    { key: 'employee', label: '員工', editable: false, render: (_: any, row: any) => {
       const emp = row.employee;
       return emp ? <span>{emp.emp_code} - {emp.name_zh || emp.name_en}</span> : '-';
     }, filterRender: (_: any, row: any) => row.employee?.name_zh || '-' },
-    { key: 'company', label: '公司', render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
-    { key: 'effective_date', label: '生效日期', sortable: true },
-    { key: 'salary_type', label: '薪酬類型', render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
-    { key: 'base_salary', label: '底薪', sortable: true, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
-    { key: 'allowance_night', label: '晚間津貼', className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_rate_standard', label: '標準OT', className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'is_piece_rate', label: '按件計酬', render: (v: any) => v ? <span className="badge-blue">是</span> : '-', filterRender: (v: any) => v ? '是' : '否' },
+    { key: 'company', label: '公司', editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'salary_type', label: '薪酬類型', editable: true, editType: 'select' as const, editOptions: salaryTypeOptions, render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
+    { key: 'base_salary', label: '底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
+    { key: 'allowance_night', label: '晚間津貼', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_rate_standard', label: '標準OT', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_mid_shift', label: '中直OT', editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'is_piece_rate', label: '按件計酬', editable: false, render: (v: any) => v ? <span className="badge-blue">是</span> : '-', filterRender: (v: any) => v ? '是' : '否' },
   ];
 
   const {
@@ -122,13 +139,13 @@ export default function SalaryConfigPage() {
           <p className="text-gray-500 text-sm mt-1">管理員工薪酬設定、津貼配置及變更歷史</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCsvImport(true)} className="btn-secondary">匯入 CSV</button>
+          <CsvImportModal module="salary-config" onImportComplete={load} />
           <button onClick={() => setShowModal(true)} className="btn-primary">新增薪酬設定</button>
         </div>
       </div>
 
       <div className="card">
-        <DataTable
+        <InlineEditDataTable
           exportFilename="薪酬配置列表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
@@ -148,6 +165,7 @@ export default function SalaryConfigPage() {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSave={handleInlineSave}
           filters={
             <select value={salaryTypeFilter} onChange={e => { setSalaryTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>
@@ -157,8 +175,6 @@ export default function SalaryConfigPage() {
           }
         />
       </div>
-
-      <CsvImportModal module="salary-config" moduleName="員工薪酬" isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} onSuccess={load} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工薪酬設定" size="xl">
         <form onSubmit={handleCreate} className="space-y-4 max-h-[70vh] overflow-y-auto">
@@ -220,7 +236,7 @@ export default function SalaryConfigPage() {
               <div key={idx} className="flex gap-2 mb-2">
                 <input value={ca.name} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], name: e.target.value}; setForm({...form, custom_allowances: cas}); }} className="input-field flex-1 text-sm" placeholder="津貼名稱" />
                 <input type="number" value={ca.amount} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], amount: Number(e.target.value)}; setForm({...form, custom_allowances: cas}); }} className="input-field w-32 text-sm" placeholder="金額" />
-                <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 hover:text-red-700">×</button>
+                <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 hover:text-red-700">x</button>
               </div>
             ))}
           </div>

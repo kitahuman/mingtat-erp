@@ -13,7 +13,7 @@ export interface InlineColumn {
   filterRender?: (value: any, row: any) => string;
   _width?: number;
   // Inline edit config
-  editable?: boolean;
+  editable?: boolean;       // default: true (set false to explicitly disable)
   editType?: 'text' | 'number' | 'select' | 'date';
   editOptions?: { value: string | number; label: string }[];
   editRender?: (value: any, onChange: (val: any) => void, row: any) => React.ReactNode;
@@ -46,6 +46,27 @@ interface InlineEditDataTableProps {
   onSave: (id: number, data: any) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
   idField?: string;
+}
+
+/** Auto-detect if a field key looks like a date field */
+function isDateKey(key: string): boolean {
+  return /(_date|_expiry|_at|_birthday|date$|expiry$)/i.test(key);
+}
+
+/** Format date value for date input (YYYY-MM-DD) */
+function toDateInputValue(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    // ISO format
+    try {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
+    } catch {}
+    return val.substring(0, 10);
+  }
+  return '';
 }
 
 export default function InlineEditDataTable({
@@ -98,74 +119,85 @@ export default function InlineEditDataTable({
   }, []);
 
   // Build display columns with inline edit support
-  const displayColumns = columns.map(col => ({
-    ...col,
-    render: (value: any, row: any) => {
-      const isEditing = row[idField] === editingId;
+  const displayColumns = columns.map(col => {
+    // Determine effective editable: default true unless explicitly false
+    const isEditable = col.editable !== false;
+    // Auto-detect edit type if not specified
+    const effectiveEditType = col.editType || (isDateKey(col.key) ? 'date' : 'text');
 
-      if (isEditing && col.editable) {
-        // Custom edit renderer
-        if (col.editRender) {
-          return col.editRender(
-            editForm[col.key],
-            (val: any) => handleFieldChange(col.key, val),
-            editForm
-          );
+    return {
+      ...col,
+      render: (value: any, row: any) => {
+        const isEditing = row[idField] === editingId;
+
+        if (isEditing && isEditable) {
+          // Custom edit renderer
+          if (col.editRender) {
+            return col.editRender(
+              editForm[col.key],
+              (val: any) => handleFieldChange(col.key, val),
+              editForm
+            );
+          }
+
+          // Standard edit types
+          switch (effectiveEditType) {
+            case 'select':
+              return (
+                <select
+                  value={editForm[col.key] ?? ''}
+                  onChange={(e) => handleFieldChange(col.key, e.target.value)}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <option value="">-</option>
+                  {col.editOptions?.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              );
+            case 'number':
+              return (
+                <input
+                  type="number"
+                  value={editForm[col.key] ?? ''}
+                  onChange={(e) => handleFieldChange(col.key, e.target.value === '' ? null : Number(e.target.value))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              );
+            case 'date':
+              return (
+                <input
+                  type="date"
+                  value={toDateInputValue(editForm[col.key])}
+                  onChange={(e) => handleFieldChange(col.key, e.target.value || null)}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              );
+            default: // text
+              return (
+                <input
+                  type="text"
+                  value={editForm[col.key] ?? ''}
+                  onChange={(e) => handleFieldChange(col.key, e.target.value)}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              );
+          }
         }
 
-        // Standard edit types
-        switch (col.editType) {
-          case 'select':
-            return (
-              <select
-                value={editForm[col.key] ?? ''}
-                onChange={(e) => handleFieldChange(col.key, e.target.value)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="">-</option>
-                {col.editOptions?.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            );
-          case 'number':
-            return (
-              <input
-                type="number"
-                value={editForm[col.key] ?? ''}
-                onChange={(e) => handleFieldChange(col.key, e.target.value === '' ? null : Number(e.target.value))}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                onClick={(e) => e.stopPropagation()}
-              />
-            );
-          case 'date':
-            return (
-              <input
-                type="date"
-                value={editForm[col.key] ? editForm[col.key].substring(0, 10) : ''}
-                onChange={(e) => handleFieldChange(col.key, e.target.value || null)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                onClick={(e) => e.stopPropagation()}
-              />
-            );
-          default: // text
-            return (
-              <input
-                type="text"
-                value={editForm[col.key] ?? ''}
-                onChange={(e) => handleFieldChange(col.key, e.target.value)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                onClick={(e) => e.stopPropagation()}
-              />
-            );
+        // Normal display mode - format dates automatically
+        if (!isEditing && isDateKey(col.key) && value && !col.render) {
+          return toDateInputValue(value) || '-';
         }
-      }
 
-      // Normal display mode
-      return col.render ? col.render(value, row) : (value ?? '-');
-    },
-  }));
+        return col.render ? col.render(value, row) : (value ?? '-');
+      },
+    };
+  });
 
   // Add action column
   const actionColumn = {
