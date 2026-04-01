@@ -45,12 +45,13 @@ const navEntries: NavEntry[] = [
   },
   { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
   {
-    label: '計糧',
+    label: '會計部門',
     icon: '💵',
     minRole: 'clerk',
     items: [
       { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
       { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
+      { href: '/expenses', label: '支出管理', icon: '💸', minRole: 'clerk' },
     ],
   },
   {
@@ -74,6 +75,7 @@ const navEntries: NavEntry[] = [
       { href: '/settings/users', label: '用戶管理', icon: '👥', roles: ['admin'] },
       { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
       { href: '/settings/field-options', label: '選項管理', icon: '📋', roles: ['admin'] },
+      { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', roles: ['admin'] },
     ],
   },
 ];
@@ -154,7 +156,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '公司內部資料': false,
     '報價及價目': true,
-    '計糧': false,
+    '會計部門': false,
     '系統設定': false,
   });
 

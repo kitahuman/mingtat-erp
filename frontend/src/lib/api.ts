@@ -326,3 +326,23 @@ export const subconFleetDriversApi = {
   update: (id: number, data: any) => api.put(`/subcon-fleet-drivers/${id}`, data),
   delete: (id: number) => api.delete(`/subcon-fleet-drivers/${id}`),
 };
+
+// Expenses (支出)
+export const expensesApi = {
+  list: (params?: any) => api.get('/expenses', { params }),
+  get: (id: number) => api.get(`/expenses/${id}`),
+  create: (data: any) => api.post('/expenses', data),
+  update: (id: number, data: any) => api.put(`/expenses/${id}`, data),
+  delete: (id: number) => api.delete(`/expenses/${id}`),
+};
+
+// Expense Categories (支出類別)
+export const expenseCategoriesApi = {
+  getAll: () => api.get('/expense-categories'),
+  getTree: () => api.get('/expense-categories/tree'),
+  get: (id: number) => api.get(`/expense-categories/${id}`),
+  create: (data: { name: string; parent_id?: number }) => api.post('/expense-categories', data),
+  update: (id: number, data: { name?: string; is_active?: boolean; sort_order?: number }) => api.put(`/expense-categories/${id}`, data),
+  remove: (id: number) => api.delete(`/expense-categories/${id}`),
+  reorder: (parent_id: number | null, orderedIds: number[]) => api.post('/expense-categories/reorder', { parent_id, orderedIds }),
+};

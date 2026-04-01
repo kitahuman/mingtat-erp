@@ -24,6 +24,8 @@ import { FieldOptionsModule } from './field-options/field-options.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { CsvImportModule } from './csv-import/csv-import.module';
 import { SubconFleetDriversModule } from './subcon-fleet-drivers/subcon-fleet-drivers.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { ExpenseCategoriesModule } from './expense-categories/expense-categories.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { SubconFleetDriversModule } from './subcon-fleet-drivers/subcon-fleet-dr
     PayrollModule,
     CsvImportModule,
     SubconFleetDriversModule,
+    ExpensesModule,
+    ExpenseCategoriesModule,
   ],
 })
 export class AppModule {}

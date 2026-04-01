@@ -61,6 +61,7 @@ model Company {
   projects                 Project[]
   quotations               Quotation[]
   rate_cards               RateCard[]
+  expenses                 Expense[]
 
   @@map("companies")
 }
@@ -196,6 +197,7 @@ model Employee {
   transfers       EmployeeTransfer[]
   work_logs       WorkLog[]
   payrolls        Payroll[]
+  expenses        Expense[]
 
   @@map("employees")
 }
@@ -332,6 +334,7 @@ model Machinery {
 
   owner_company Company            @relation(fields: [owner_company_id], references: [id])
   transfers     MachineryTransfer[]
+  expenses      Expense[]
 
   @@map("machinery")
 }
@@ -392,6 +395,8 @@ model Partner {
   subcon_as_client       SubconRateCard[] @relation("subcon_client")
   work_logs              WorkLog[]
   subcon_fleet_drivers   SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
+  expenses_as_supplier   Expense[] @relation("expense_supplier")
+  expenses_as_client     Expense[] @relation("expense_client")
 
   @@map("partners")
 }
@@ -419,6 +424,7 @@ model Project {
   client     Partner?   @relation("project_client", fields: [client_id], references: [id])
   quotations Quotation[]
   rate_cards RateCard[]
+  expenses   Expense[]
 
   @@map("projects")
 }
@@ -465,6 +471,7 @@ model Quotation {
   fleet_rate_cards FleetRateCard[]
   subcon_rate_cards SubconRateCard[]
   work_logs        WorkLog[]
+  expenses         Expense[]
 
   @@map("quotations")
 }
@@ -892,4 +899,63 @@ model SubcontractorFleetDriver {
   subcontractor        Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
 
   @@map("subcontractor_fleet_drivers")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Expense Categories (支出類別 – 大類別/子類別)
+// ══════════════════════════════════════════════════════════════
+
+model ExpenseCategory {
+  id         Int      @id @default(autoincrement())
+  name       String
+  parent_id  Int?
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  parent   ExpenseCategory?  @relation("category_hierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
+  children ExpenseCategory[] @relation("category_hierarchy")
+  expenses Expense[]
+
+  @@map("expense_categories")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Expenses (支出)
+// ══════════════════════════════════════════════════════════════
+
+model Expense {
+  id                 Int       @id @default(autoincrement())
+  date               DateTime  @db.Date
+  company_id         Int?
+  supplier_name      String?
+  supplier_partner_id Int?
+  category_id        Int?
+  employee_id        Int?
+  item               String?
+  total_amount       Decimal   @default(0) @db.Decimal(12, 2)
+  paid_amount        Decimal   @default(0) @db.Decimal(12, 2)
+  payment_date       DateTime? @db.Date
+  payment_ref        String?
+  remarks            String?   @db.Text
+  machine_code       String?
+  machinery_id       Int?
+  client_id          Int?
+  contract_id        Int?
+  project_id         Int?
+  quotation_id       Int?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @default(now()) @updatedAt
+
+  company   Company?         @relation(fields: [company_id], references: [id])
+  supplier  Partner?         @relation("expense_supplier", fields: [supplier_partner_id], references: [id])
+  category  ExpenseCategory? @relation(fields: [category_id], references: [id])
+  employee  Employee?        @relation(fields: [employee_id], references: [id])
+  machinery Machinery?       @relation(fields: [machinery_id], references: [id])
+  client    Partner?         @relation("expense_client", fields: [client_id], references: [id])
+  project   Project?         @relation(fields: [project_id], references: [id])
+  quotation Quotation?       @relation(fields: [quotation_id], references: [id])
+
+  @@map("expenses")
 }

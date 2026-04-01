@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AuthService } from './auth/auth.service';
 import { PrismaService } from './prisma/prisma.service';
+import { ExpenseCategoriesService } from './expense-categories/expense-categories.service';
 
 async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);
@@ -183,6 +184,10 @@ async function seed() {
     machineryCount++;
   }
   console.log(`Seeded ${machineryCount} machinery`);
+
+  // Seed expense categories
+  const expenseCategoriesService = app.get(ExpenseCategoriesService);
+  await expenseCategoriesService.seedDefaults();
 
   console.log('Seed completed!');
   await app.close();
