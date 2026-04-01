@@ -75,7 +75,7 @@ export class EmployeesService {
     await this.repo.update(id, {
       status: 'inactive',
       termination_date: dto.termination_date,
-      termination_reason: dto.termination_reason || null,
+      termination_reason: dto.termination_reason || undefined,
     });
     return this.findOne(id);
   }
@@ -83,11 +83,12 @@ export class EmployeesService {
   async reinstate(id: number) {
     const emp = await this.repo.findOne({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
-    await this.repo.update(id, {
-      status: 'active',
-      termination_date: null,
-      termination_reason: null,
-    });
+    await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'active', termination_date: () => 'NULL', termination_reason: () => 'NULL' })
+      .where('id = :id', { id })
+      .execute();
     return this.findOne(id);
   }
 
