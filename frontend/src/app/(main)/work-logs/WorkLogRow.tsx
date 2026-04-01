@@ -140,12 +140,15 @@ export default function WorkLogRow({
     ? '請先選擇機種'
     : equipSource === 'vehicle' ? '選擇車牌' : '選擇機號';
 
-  // ── Display mode ─────────────────────────────────────────
+  // ── Display mode ───────────────────────────────────────────────────────────────────────────────────────
   if (!isEditing) {
     const statusColor = STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600';
+    const hasUnverifiedClient = !!row.unverified_client_name;
     return (
       <tr
-        className="hover:bg-blue-50 cursor-pointer border-b border-gray-100 text-xs"
+        className={`cursor-pointer border-b border-gray-100 text-xs ${
+          hasUnverifiedClient ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-blue-50'
+        }`}
         onClick={onEdit}
       >
         {/* Checkbox - sticky */}
@@ -173,7 +176,17 @@ export default function WorkLogRow({
         {/* 公司 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.company_profile?.code || '—'}</td>
         {/* 客戶公司 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-32 max-w-[128px] truncate">{row.client?.name || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-32 max-w-[128px] truncate">
+          {row.unverified_client_name ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800 whitespace-nowrap">
+                ⚠️ {row.unverified_client_name}
+              </span>
+            </span>
+          ) : (
+            row.client?.name || '—'
+          )}
+        </td>
         {/* 合約 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.quotation?.quotation_no || '—'}</td>
         {/* 員工 */}

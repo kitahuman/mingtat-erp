@@ -287,12 +287,29 @@ export class EmployeePortalService {
     }
   }
 
-  // ── Submit Work Log (報工) ─────────────────────────────────────
+  // ── Submit Work Log (報工) ─────────────────────────────────
   async submitWorkLog(userId: number, data: any) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
     const employeeId = await this.resolveEmployeeId(user);
+
+    // Handle unverified client: if client_id is a free-text name (not a number), treat as unverified
+    let clientId: number | undefined = undefined;
+    let unverifiedClientName: string | undefined = undefined;
+
+    if (data.unverified_client_name) {
+      // Explicit unverified client name field
+      unverifiedClientName = String(data.unverified_client_name);
+    } else if (data.client_id) {
+      const parsed = Number(data.client_id);
+      if (!isNaN(parsed) && parsed > 0) {
+        clientId = parsed;
+      } else {
+        // Free-text client name entered by employee
+        unverifiedClientName = String(data.client_id);
+      }
+    }
 
     const workLog = await this.prisma.workLog.create({
       data: {
@@ -302,7 +319,8 @@ export class EmployeePortalService {
         service_type: data.service_type,
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : new Date(),
         company_profile_id: data.company_profile_id ? Number(data.company_profile_id) : undefined,
-        client_id: data.client_id ? Number(data.client_id) : undefined,
+        client_id: clientId,
+        unverified_client_name: unverifiedClientName,
         quotation_id: data.quotation_id ? Number(data.quotation_id) : undefined,
         tonnage: data.tonnage,
         machine_type: data.machine_type,
@@ -312,8 +330,14 @@ export class EmployeePortalService {
         start_time: data.start_time,
         end_time: data.end_time,
         day_night: data.day_night,
-        quantity: data.quantity ? Number(data.quantity) : undefined,
-        unit: data.unit,
+        // Engineering: quantity in days
+        quantity: data.eng_quantity
+          ? Number(data.eng_quantity)
+          : data.quantity ? Number(data.quantity) : undefined,
+        unit: data.eng_quantity ? '天' : data.unit,
+        // OT hours
+        ot_quantity: data.ot_hours ? Number(data.ot_hours) : undefined,
+        ot_unit: data.ot_hours ? '小時' : undefined,
         goods_quantity: data.goods_quantity ? Number(data.goods_quantity) : undefined,
         remarks: data.remarks,
       },

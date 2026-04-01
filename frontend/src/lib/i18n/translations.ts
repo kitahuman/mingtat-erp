@@ -121,6 +121,14 @@ export const translations = {
     selectTonnage: '請選擇噸數',
     selectMachinery: '請選擇機械',
     selectVehicleType: '請選擇車種',
+    otHours: '超時工作（小時）',
+    hours: '小時',
+    engQuantity: '數量',
+    days: '天',
+    basicInfo: '基本資料',
+    searchOrTypeClient: '搜尋或輸入客戶名稱',
+    newClientWarning: '未確認客戶，提交後請行政確認',
+    noResults: '無結果',
 
     // Expense
     expenseTitle: '報銷支出',
@@ -305,6 +313,14 @@ export const translations = {
     selectTonnage: 'Select tonnage',
     selectMachinery: 'Select machinery',
     selectVehicleType: 'Select vehicle type',
+    otHours: 'Overtime (Hours)',
+    hours: 'hrs',
+    engQuantity: 'Quantity',
+    days: 'days',
+    basicInfo: 'Basic Info',
+    searchOrTypeClient: 'Search or type client name',
+    newClientWarning: 'Unverified client — please confirm with admin after submission',
+    noResults: 'No results',
 
     // Expense
     expenseTitle: 'Expense Claim',

@@ -730,11 +730,12 @@ model WorkLog {
   price_match_note     String?   @db.Text
   receipt_no           String?
   work_order_no        String?
-  is_confirmed         Boolean   @default(false)
-  is_paid              Boolean   @default(false)
-  remarks              String?   @db.Text
-  created_at           DateTime  @default(now())
-  updated_at           DateTime  @default(now()) @updatedAt
+  is_confirmed              Boolean   @default(false)
+  is_paid                   Boolean   @default(false)
+  unverified_client_name    String?   // 員工自行輸入的未確認客戶名
+  remarks                   String?   @db.Text
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @default(now()) @updatedAt
 
   publisher         User?           @relation(fields: [publisher_id], references: [id])
   company_profile   CompanyProfile? @relation(fields: [company_profile_id], references: [id])

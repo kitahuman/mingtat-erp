@@ -323,6 +323,20 @@ export default function WorkLogsPage() {
         </div>
       </div>
 
+      {/* ── Unverified Client Banner ── */}
+      {(() => {
+        const unverifiedCount = rows.filter(r => r.unverified_client_name).length;
+        if (unverifiedCount === 0) return null;
+        return (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
+            <span className="text-amber-600 text-lg">⚠️</span>
+            <p className="text-sm text-amber-800 font-medium">
+              有 <span className="font-bold text-amber-900">{unverifiedCount}</span> 筆記錄包含未確認客戶，請盡快處理（已用黃色標示）
+            </p>
+          </div>
+        );
+      })()}
+
       {/* ── Filters ──────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto">
         <div className="flex gap-2 items-end" style={{ minWidth: 'max-content' }}>

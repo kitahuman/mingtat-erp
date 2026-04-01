@@ -14,7 +14,10 @@ interface FormData {
   work_type: 'engineering' | 'transport';
   service_type: string;
   scheduled_date: string;
+  // Client combobox: either a numeric id (string) or free-text new client name
   client_id: string;
+  client_input: string;          // raw text in the combobox input
+  is_new_client: boolean;        // true if client_id is a free-text name
   contract_no: string;
   tonnage: string;
   // Engineering
@@ -22,20 +25,21 @@ interface FormData {
   equipment_number: string;
   start_location: string;
   work_content: string;
+  eng_quantity: string;          // engineering quantity in days
   // Transport
   vehicle_type: string;
   plate_no: string;
   goods: string;
   origin: string;
   destination: string;
+  quantity: string;
+  unit: string;
   // Common
   start_time: string;
   end_time: string;
   shift: 'D' | 'N';
   mid_shift: boolean;
-  quantity: string;
-  unit: string;
-  overtime: boolean;
+  ot_hours: string;              // OT hours (number input)
   remarks: string;
   photo_urls: string[];
   signature_url: string;
@@ -46,28 +50,126 @@ const defaultForm: FormData = {
   service_type: '',
   scheduled_date: new Date().toISOString().split('T')[0],
   client_id: '',
+  client_input: '',
+  is_new_client: false,
   contract_no: '',
   tonnage: '',
   machine_type: '',
   equipment_number: '',
   start_location: '',
   work_content: '',
+  eng_quantity: '',
   vehicle_type: '',
   plate_no: '',
   goods: '',
   origin: '',
   destination: '',
+  quantity: '',
+  unit: '',
   start_time: '',
   end_time: '',
   shift: 'D',
   mid_shift: false,
-  quantity: '',
-  unit: '',
-  overtime: false,
+  ot_hours: '',
   remarks: '',
   photo_urls: [],
   signature_url: '',
 };
+
+// ── Client Combobox ──────────────────────────────────────────────────────────
+function ClientCombobox({
+  clients,
+  value,
+  inputValue,
+  isNew,
+  onChange,
+}: {
+  clients: any[];
+  value: string;
+  inputValue: string;
+  isNew: boolean;
+  onChange: (clientId: string, inputVal: string, isNew: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(inputValue);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync query when inputValue changes externally
+  useEffect(() => { setQuery(inputValue); }, [inputValue]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = query.trim()
+    ? clients.filter((c) =>
+        c.name?.toLowerCase().includes(query.toLowerCase()) ||
+        c.name_en?.toLowerCase().includes(query.toLowerCase())
+      )
+    : clients.slice(0, 30);
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    setOpen(true);
+    // Mark as new client (free text) until user picks from list
+    onChange('', val, val.trim().length > 0);
+  };
+
+  const handleSelect = (client: any) => {
+    setQuery(client.name);
+    setOpen(false);
+    onChange(String(client.id), client.name, false);
+  };
+
+  const inputClass = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white';
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        className={inputClass + (isNew && query ? ' border-amber-400' : '')}
+        placeholder={t('searchOrTypeClient')}
+        autoComplete="off"
+      />
+      {isNew && query && (
+        <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+          ⚠️ {t('newClientWarning')}
+        </p>
+      )}
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-400">{t('noResults')}</div>
+          ) : (
+            filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                onMouseDown={() => handleSelect(c)}
+              >
+                {c.name}
+                {c.name_en && <span className="text-gray-400 ml-1 text-xs">({c.name_en})</span>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Signature Pad Component ──────────────────────────────────────────────────
 function SignaturePad({
@@ -135,7 +237,6 @@ function SignaturePad({
     if (!isDrawing.current) return;
     isDrawing.current = false;
     lastPos.current = null;
-    // Save signature
     const canvas = canvasRef.current;
     if (canvas) {
       onSave(canvas.toDataURL('image/png'));
@@ -212,6 +313,15 @@ export default function WorkReportPage() {
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const handleClientChange = (clientId: string, inputVal: string, isNew: boolean) => {
+    setForm((prev) => ({
+      ...prev,
+      client_id: clientId,
+      client_input: inputVal,
+      is_new_client: isNew,
+    }));
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -227,7 +337,6 @@ export default function WorkReportPage() {
   };
 
   const handleSignatureSave = useCallback(async (dataUrl: string) => {
-    // Convert dataUrl to File and upload
     setUploadingSignature(true);
     try {
       const res = await fetch(dataUrl);
@@ -238,7 +347,6 @@ export default function WorkReportPage() {
         set('signature_url', uploadRes.data.url);
       }
     } catch {
-      // If upload fails, store dataUrl locally as fallback
       set('signature_url', dataUrl);
     }
     setUploadingSignature(false);
@@ -260,32 +368,42 @@ export default function WorkReportPage() {
       const payload: any = {
         service_type: form.work_type === 'engineering' ? (form.service_type || '工程') : '運輸',
         scheduled_date: form.scheduled_date,
-        client_id: form.client_id || undefined,
         tonnage: form.tonnage || undefined,
         start_time: form.start_time || undefined,
         end_time: form.end_time || undefined,
         day_night: form.shift,
-        quantity: form.quantity || undefined,
-        unit: form.unit || undefined,
+        // OT hours
+        ot_hours: form.ot_hours ? Number(form.ot_hours) : undefined,
         remarks: [
           form.work_content ? `工作內容：${form.work_content}` : '',
           `更次：${shiftLabel}`,
           `中直：${midShiftLabel}`,
-          form.overtime ? '超時工作' : '',
+          form.ot_hours ? `超時：${form.ot_hours}小時` : '',
           form.signature_url ? `簽名：${form.signature_url}` : '',
           form.remarks,
         ].filter(Boolean).join('\n') || undefined,
       };
 
+      // Client: either existing id or unverified new name
+      if (form.is_new_client && form.client_input.trim()) {
+        payload.unverified_client_name = form.client_input.trim();
+      } else if (form.client_id) {
+        payload.client_id = form.client_id;
+      }
+
       if (form.work_type === 'engineering') {
         payload.machine_type = form.machine_type || undefined;
         payload.equipment_number = form.equipment_number || undefined;
         payload.start_location = form.start_location || undefined;
+        // Engineering quantity in days
+        payload.eng_quantity = form.eng_quantity || undefined;
       } else {
         payload.machine_type = form.vehicle_type || undefined;
         payload.equipment_number = form.plate_no || undefined;
         payload.start_location = form.origin || undefined;
         payload.end_location = form.destination || undefined;
+        payload.quantity = form.quantity || undefined;
+        payload.unit = form.unit || undefined;
         payload.goods_quantity = form.goods ? 1 : undefined;
       }
 
@@ -313,7 +431,7 @@ export default function WorkReportPage() {
         </div>
       )}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm text-center">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium text-center">
           ❌ {error}
         </div>
       )}
@@ -347,7 +465,7 @@ export default function WorkReportPage() {
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Common Fields */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
-          <h3 className="font-semibold text-gray-800 text-sm border-b pb-2">{t('scheduledDate')}</h3>
+          <h3 className="font-semibold text-gray-800 text-sm border-b pb-2">{t('basicInfo')}</h3>
 
           <div>
             <label className={labelClass}>{t('scheduledDate')}</label>
@@ -368,12 +486,16 @@ export default function WorkReportPage() {
             </select>
           </div>
 
+          {/* Client Combobox */}
           <div>
             <label className={labelClass}>{t('client')}</label>
-            <select value={form.client_id} onChange={(e) => set('client_id', e.target.value)} className={selectClass}>
-              <option value="">{t('selectClient')}</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <ClientCombobox
+              clients={clients}
+              value={form.client_id}
+              inputValue={form.client_input}
+              isNew={form.is_new_client}
+              onChange={handleClientChange}
+            />
           </div>
 
           <div>
@@ -440,6 +562,23 @@ export default function WorkReportPage() {
                 rows={3}
                 placeholder="工作內容描述"
               />
+            </div>
+
+            {/* Engineering quantity in days */}
+            <div>
+              <label className={labelClass}>{t('engQuantity')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={form.eng_quantity}
+                  onChange={(e) => set('eng_quantity', e.target.value)}
+                  className={inputClass}
+                  placeholder="0"
+                  min="0"
+                  step="0.5"
+                />
+                <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">{t('days')}</span>
+              </div>
             </div>
           </div>
         )}
@@ -529,7 +668,7 @@ export default function WorkReportPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
           <h3 className="font-semibold text-gray-800 text-sm border-b pb-2">{t('time')}</h3>
 
-          {/* Day / Night Shift Selector — above time inputs */}
+          {/* Day / Night Shift Selector */}
           <div>
             <label className={labelClass}>{t('shift')}</label>
             <div className="flex gap-2">
@@ -609,22 +748,21 @@ export default function WorkReportPage() {
             </div>
           </div>
 
-          {/* Overtime */}
-          <div className="flex items-center justify-between py-1">
-            <label className="text-sm font-semibold text-gray-700">{t('overtime')}</label>
-            <button
-              type="button"
-              onClick={() => set('overtime', !form.overtime)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                form.overtime ? 'bg-blue-700' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  form.overtime ? 'translate-x-6' : 'translate-x-1'
-                }`}
+          {/* OT Hours — number input */}
+          <div>
+            <label className={labelClass}>{t('otHours')}</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={form.ot_hours}
+                onChange={(e) => set('ot_hours', e.target.value)}
+                className={inputClass}
+                placeholder="0"
+                min="0"
+                step="0.5"
               />
-            </button>
+              <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">{t('hours')}</span>
+            </div>
           </div>
 
           <div>
