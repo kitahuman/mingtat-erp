@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { MachineryService } from './machinery.service';
 
@@ -31,4 +31,11 @@ export class MachineryController {
   transferMachinery(@Param('id') id: number, @Body() dto: any) {
     return this.service.transferMachinery(+id, dto);
   }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'))
+  remove(@Param('id') id: string) {
+    return this.service.remove(Number(id));
+  }
+
 }

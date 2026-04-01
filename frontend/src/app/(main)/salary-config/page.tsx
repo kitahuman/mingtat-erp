@@ -140,6 +140,12 @@ export default function SalaryConfigPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig(`salary-config-${activeTab}`, columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await salaryConfigApi.delete(id);
+    loadSalaryConfigs();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -191,6 +197,7 @@ export default function SalaryConfigPage() {
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <select value={salaryTypeFilter} onChange={e => { setSalaryTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>

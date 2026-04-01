@@ -76,4 +76,12 @@ export class SubconRateCardsService {
     await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('街車價目表不存在');
+    await this.prisma.subconRateCard.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

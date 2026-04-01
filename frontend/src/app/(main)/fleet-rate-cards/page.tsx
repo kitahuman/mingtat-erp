@@ -112,6 +112,12 @@ export default function FleetRateCardsPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('fleet-rate-cards', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await fleetRateCardsApi.delete(id);
+    loadFleetRateCards();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -147,6 +153,7 @@ export default function FleetRateCardsPage() {
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部狀態</option>

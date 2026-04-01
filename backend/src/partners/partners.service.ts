@@ -82,4 +82,12 @@ export class PartnersService {
     }
     return results;
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.partner.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('合作單位不存在');
+    await this.prisma.partner.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

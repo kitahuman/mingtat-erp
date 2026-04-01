@@ -72,4 +72,12 @@ export class FleetRateCardsService {
     await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('車隊價目表不存在');
+    await this.prisma.fleetRateCard.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

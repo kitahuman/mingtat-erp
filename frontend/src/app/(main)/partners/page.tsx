@@ -144,6 +144,12 @@ export default function PartnersPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('partners', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await partnersApi.delete(id);
+    loadPartners();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -181,6 +187,7 @@ export default function PartnersPage() {
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>

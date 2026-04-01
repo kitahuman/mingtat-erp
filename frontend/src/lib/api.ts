@@ -85,6 +85,7 @@ export const employeesApi = {
   transfer: (id: number, data: any) => api.post(`/employees/${id}/transfer`, data),
   terminate: (id: number, data: { termination_date: string; termination_reason?: string }) => api.post(`/employees/${id}/terminate`, data),
   reinstate: (id: number) => api.post(`/employees/${id}/reinstate`),
+  delete: (id: number) => api.delete(`/employees/${id}`),
 };
 
 // Vehicles
@@ -95,6 +96,7 @@ export const vehiclesApi = {
   update: (id: number, data: any) => api.put(`/vehicles/${id}`, data),
   changePlate: (id: number, data: any) => api.post(`/vehicles/${id}/change-plate`, data),
   transfer: (id: number, data: any) => api.post(`/vehicles/${id}/transfer`, data),
+  delete: (id: number) => api.delete(`/vehicles/${id}`),
 };
 
 // Machinery
@@ -104,6 +106,7 @@ export const machineryApi = {
   create: (data: any) => api.post('/machinery', data),
   update: (id: number, data: any) => api.put(`/machinery/${id}`, data),
   transfer: (id: number, data: any) => api.post(`/machinery/${id}/transfer`, data),
+  delete: (id: number) => api.delete(`/machinery/${id}`),
 };
 
 // Documents
@@ -122,6 +125,7 @@ export const partnersApi = {
   get: (id: number) => api.get(`/partners/${id}`),
   create: (data: any) => api.post('/partners', data),
   update: (id: number, data: any) => api.put(`/partners/${id}`, data),
+  delete: (id: number) => api.delete(`/partners/${id}`),
 };
 
 // Custom Fields
@@ -179,6 +183,7 @@ export const rateCardsApi = {
   get: (id: number) => api.get(`/rate-cards/${id}`),
   create: (data: any) => api.post('/rate-cards', data),
   update: (id: number, data: any) => api.put(`/rate-cards/${id}`, data),
+  delete: (id: number) => api.delete(`/rate-cards/${id}`),
 };
 
 // Fleet Rate Cards (車隊價目表)
@@ -187,6 +192,7 @@ export const fleetRateCardsApi = {
   get: (id: number) => api.get(`/fleet-rate-cards/${id}`),
   create: (data: any) => api.post('/fleet-rate-cards', data),
   update: (id: number, data: any) => api.put(`/fleet-rate-cards/${id}`, data),
+  delete: (id: number) => api.delete(`/fleet-rate-cards/${id}`),
 };
 
 // Subcontractor Vehicle Rate Cards (街車價目表)
@@ -195,6 +201,7 @@ export const subconRateCardsApi = {
   get: (id: number) => api.get(`/subcon-rate-cards/${id}`),
   create: (data: any) => api.post('/subcon-rate-cards', data),
   update: (id: number, data: any) => api.put(`/subcon-rate-cards/${id}`, data),
+  delete: (id: number) => api.delete(`/subcon-rate-cards/${id}`),
 };
 
 // Salary Config (員工薪酬配置)

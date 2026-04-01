@@ -115,4 +115,12 @@ export class RateCardsService {
 
     return this.findOne(id);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.rateCard.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('價目表不存在');
+    await this.prisma.rateCard.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

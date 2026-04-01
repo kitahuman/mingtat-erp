@@ -203,7 +203,7 @@ export default function InlineEditDataTable({
   const actionColumn = {
     key: '_actions',
     label: '操作',
-    className: 'w-28 text-center',
+    className: 'w-40 text-center',
     filterable: false,
     render: (_: any, row: any) => {
       const isEditing = row[idField] === editingId;
@@ -223,6 +223,14 @@ export default function InlineEditDataTable({
             >
               取消
             </button>
+            {onDelete && (
+              <button
+                onClick={() => handleDelete(row[idField])}
+                className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                刪除
+              </button>
+            )}
           </div>
         );
       }

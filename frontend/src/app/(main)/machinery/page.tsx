@@ -105,6 +105,12 @@ export default function MachineryPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('machinery', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await machineryApi.delete(id);
+    loadMachinery();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -142,6 +148,7 @@ export default function MachineryPage() {
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">

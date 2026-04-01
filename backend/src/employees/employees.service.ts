@@ -129,4 +129,12 @@ export class EmployeesService {
     });
     return this.findOne(employeeId);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('員工不存在');
+    await this.prisma.employee.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

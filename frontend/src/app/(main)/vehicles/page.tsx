@@ -119,6 +119,12 @@ export default function VehiclesPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('vehicles', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await vehiclesApi.delete(id);
+    loadVehicles();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -156,6 +162,7 @@ export default function VehiclesPage() {
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">

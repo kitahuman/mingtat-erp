@@ -121,6 +121,12 @@ export default function SubconRateCardsPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('subcon-rate-cards', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await subconRateCardsApi.delete(id);
+    loadSubconRateCards();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -156,6 +162,7 @@ export default function SubconRateCardsPage() {
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
               <select value={dayNightFilter} onChange={e => { setDayNightFilter(e.target.value); setPage(1); }} className="input-field w-auto">

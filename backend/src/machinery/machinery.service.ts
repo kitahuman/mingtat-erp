@@ -89,4 +89,12 @@ export class MachineryService {
     });
     return this.findOne(id);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.machinery.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('機械不存在');
+    await this.prisma.machinery.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

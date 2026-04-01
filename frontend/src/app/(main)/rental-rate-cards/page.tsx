@@ -131,6 +131,12 @@ export default function RentalRateCardsPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig('rental-rate-cards', columns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await rateCardsApi.delete(id);
+    loadRentalRateCards();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -166,6 +172,7 @@ export default function RentalRateCardsPage() {
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
               <select value={serviceTypeFilter} onChange={e => { setServiceTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">

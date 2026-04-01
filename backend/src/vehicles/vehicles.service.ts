@@ -111,4 +111,12 @@ export class VehiclesService {
     });
     return this.findOne(id);
   }
+
+  async remove(id: number) {
+    const existing = await this.prisma.vehicle.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('車輛不存在');
+    await this.prisma.vehicle.delete({ where: { id } });
+    return { message: '刪除成功' };
+  }
+
 }

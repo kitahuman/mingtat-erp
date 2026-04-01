@@ -177,6 +177,12 @@ export default function EmployeesPage() {
     handleColumnConfigChange, handleReset, handleColumnResize,
   } = useColumnConfig(`employees-${activeTab}`, defaultColumns);
 
+
+  const handleInlineDelete = async (id: number) => {
+    await employeesApi.delete(id);
+    loadEmployees();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -230,6 +236,7 @@ export default function EmployeesPage() {
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
+        onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
               <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="input-field w-auto">
