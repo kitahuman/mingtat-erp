@@ -29,6 +29,8 @@ import { SubconFleetDriversModule } from './subcon-fleet-drivers/subcon-fleet-dr
 import { ExpensesModule } from './expenses/expenses.module';
 import { ExpenseCategoriesModule } from './expense-categories/expense-categories.module';
 import { EmployeePortalModule } from './employee-portal/employee-portal.module';
+import { AttendancesModule } from './attendances/attendances.module';
+import { LeavesModule } from './leaves/leaves.module';
 
 @Module({
   imports: [
@@ -64,6 +66,8 @@ import { EmployeePortalModule } from './employee-portal/employee-portal.module';
     ExpensesModule,
     ExpenseCategoriesModule,
     EmployeePortalModule,
+    AttendancesModule,
+    LeavesModule,
   ],
 })
 export class AppModule {}

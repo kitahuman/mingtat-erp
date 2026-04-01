@@ -346,3 +346,21 @@ export const expenseCategoriesApi = {
   remove: (id: number) => api.delete(`/expense-categories/${id}`),
   reorder: (parent_id: number | null, orderedIds: number[]) => api.post('/expense-categories/reorder', { parent_id, orderedIds }),
 };
+
+// Attendances (打卡紀錄) - Admin view
+export const attendancesApi = {
+  list: (params?: any) => api.get('/attendances', { params }),
+  get: (id: number) => api.get(`/attendances/${id}`),
+  update: (id: number, data: any) => api.put(`/attendances/${id}`, data),
+  delete: (id: number) => api.delete(`/attendances/${id}`),
+};
+
+// Leaves (請假紀錄) - Admin view
+export const leavesApi = {
+  list: (params?: any) => api.get('/leaves', { params }),
+  get: (id: number) => api.get(`/leaves/${id}`),
+  update: (id: number, data: any) => api.put(`/leaves/${id}`, data),
+  approve: (id: number) => api.post(`/leaves/${id}/approve`),
+  reject: (id: number, remarks?: string) => api.post(`/leaves/${id}/reject`, { remarks }),
+  delete: (id: number) => api.delete(`/leaves/${id}`),
+};

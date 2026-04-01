@@ -45,6 +45,15 @@ const navEntries: NavEntry[] = [
   },
   { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
   {
+    label: '人力資源',
+    icon: '👥',
+    minRole: 'clerk',
+    items: [
+      { href: '/attendances', label: '打卡紀錄', icon: '🕐', minRole: 'clerk' },
+      { href: '/leaves', label: '請假紀錄', icon: '📅', minRole: 'clerk' },
+    ],
+  },
+  {
     label: '會計部門',
     icon: '💵',
     minRole: 'clerk',
