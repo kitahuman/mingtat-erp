@@ -6,6 +6,7 @@ import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -46,6 +47,8 @@ export default function SalaryConfigPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [roleOptions, setRoleOptions] = useState<{ value: string; label: string }[]>([]);
+  const [roleFilter, setRoleFilter] = useState('');
 
   const defaultForm = {
     employee_id: '', effective_date: new Date().toISOString().slice(0, 10),
@@ -67,14 +70,22 @@ export default function SalaryConfigPage() {
       page, limit: 20, search,
       salary_type: salaryTypeFilter || undefined,
       employee_status: activeTab,
+      role: roleFilter || undefined,
       sortBy, sortOrder,
     }).then(res => { setData(res.data.data); setTotal(res.data.total); })
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [page, search, salaryTypeFilter, sortBy, sortOrder, activeTab]);
+  useEffect(() => { load(); }, [page, search, salaryTypeFilter, roleFilter, sortBy, sortOrder, activeTab]);
   useEffect(() => {
     employeesApi.list({ limit: 500 }).then(res => setEmployees(res.data.data || []));
+    // Load role options from field-options API
+    import('@/lib/api').then(({ fieldOptionsApi }) => {
+      fieldOptionsApi.getByCategory('employee_role').then(res => {
+        const opts = (res.data || []).map((o: any) => ({ value: o.value, label: o.label }));
+        setRoleOptions(opts);
+      }).catch(() => {});
+    });
   }, []);
 
   const handleTabChange = (tab: TabType) => {
@@ -126,7 +137,8 @@ export default function SalaryConfigPage() {
       return emp ? <span>{emp.emp_code} - {emp.name_zh || emp.name_en}</span> : '-';
     }, filterRender: (_: any, row: any) => row.employee?.name_zh || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
-    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } } },
+    { key: 'role', label: '職位', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.role || '-', filterRender: (_: any, row: any) => row.employee?.role || '-' },
+    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => fmtDate(v) },
     { key: 'salary_type', label: '薪酬類型', sortable: true, editable: true, editType: 'select' as const, editOptions: salaryTypeOptions, render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
     { key: 'base_salary', label: '底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
     { key: 'allowance_night', label: '晚間津貼', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
@@ -141,10 +153,6 @@ export default function SalaryConfigPage() {
   } = useColumnConfig(`salary-config-${activeTab}`, columns);
 
 
-  const handleInlineDelete = async (id: number) => {
-    await salaryConfigApi.delete(id);
-    load();
-  };
 
   return (
     <div>
@@ -197,13 +205,18 @@ export default function SalaryConfigPage() {
           sortOrder={sortOrder}
           onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
           onSave={handleInlineSave}
-        onDelete={handleInlineDelete}
           filters={
-            <select value={salaryTypeFilter} onChange={e => { setSalaryTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
-              <option value="">全部類型</option>
-              <option value="daily">日薪制</option>
-              <option value="monthly">月薪制</option>
-            </select>
+            <div className="flex gap-2">
+              <select value={salaryTypeFilter} onChange={e => { setSalaryTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部類型</option>
+                <option value="daily">日薪制</option>
+                <option value="monthly">月薪制</option>
+              </select>
+              <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部職位</option>
+                {roleOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
           }
         />
       </div>

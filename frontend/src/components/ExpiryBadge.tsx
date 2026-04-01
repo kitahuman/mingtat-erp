@@ -1,30 +1,16 @@
 'use client';
 import { getExpiryStatus, getExpiryColor, getExpiryLabel } from '@/lib/api';
+import { fmtDate } from '@/lib/dateUtils';
 
 interface ExpiryBadgeProps {
   date: string | null;
   showLabel?: boolean;
 }
 
-/** Format any date string/ISO to YYYY-MM-DD for display */
-function formatDate(d: string): string {
-  if (!d) return '-';
-  // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  // ISO or other parseable format
-  try {
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return d;
-    return dt.toISOString().substring(0, 10);
-  } catch {
-    return d;
-  }
-}
-
 export default function ExpiryBadge({ date, showLabel = true }: ExpiryBadgeProps) {
   if (!date) return <span className="text-gray-400">-</span>;
 
-  const formatted = formatDate(date);
+  const formatted = fmtDate(date);
   const status = getExpiryStatus(date);
   const color = getExpiryColor(status);
   const label = getExpiryLabel(status);
@@ -50,4 +36,7 @@ export function ExpiryDot({ date }: { date: string | null }) {
   );
 }
 
-export { formatDate };
+/** @deprecated Use fmtDate from @/lib/dateUtils instead */
+export function formatDate(d: string): string {
+  return fmtDate(d);
+}

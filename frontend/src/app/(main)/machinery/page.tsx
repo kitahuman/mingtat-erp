@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
+import { fmtDate } from '@/lib/dateUtils';
 
 const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
 const statusOptions = [
@@ -82,7 +83,7 @@ export default function MachineryPage() {
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } };
+  const filterExpiry = (v: string) => fmtDate(v);
 
   const columns = [
     { key: 'machine_code', label: '編號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },

@@ -5,6 +5,7 @@ import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
+import { fmtDate } from '@/lib/dateUtils';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕',
@@ -179,7 +180,7 @@ export default function QuotationsPage() {
     { key: 'company', label: '開立公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'contract_name', label: '合約', sortable: true, render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
-    { key: 'quotation_date', label: '日期', sortable: true },
+    { key: 'quotation_date', label: '日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'project_name', label: '工程/服務名稱', sortable: true, render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
     { key: 'project', label: '工程項目', sortable: true, render: (_: any, row: any) => row.project ? (
       <span className="text-primary-600 font-mono text-xs">{row.project.project_no}</span>

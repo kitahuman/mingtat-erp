@@ -9,13 +9,12 @@ import {
   STATUS_COLORS, getStatusLabel, getEquipmentSource,
 } from './constants';
 import { workLogsApi } from '@/lib/api';
+import { fmtDate as globalFmtDate } from '@/lib/dateUtils';
 
-// Format date as YYYY-MM-DD (strip time component)
+// Format date as DD/MM/YYYY
 const fmtDate = (d: any) => {
   if (!d) return '—';
-  const s = String(d);
-  if (s.includes('T')) return s.split('T')[0];
-  return s || '—';
+  return globalFmtDate(d);
 };
 
 interface Option { value: string | number; label: string; }

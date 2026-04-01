@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
+import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DataTable from './DataTable';
 import { ColumnConfig } from './ColumnCustomizer';
 
@@ -55,18 +56,7 @@ function isDateKey(key: string): boolean {
 
 /** Format date value for date input (YYYY-MM-DD) */
 function toDateInputValue(val: any): string {
-  if (!val) return '';
-  if (typeof val === 'string') {
-    // Already YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-    // ISO format
-    try {
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-    } catch {}
-    return val.substring(0, 10);
-  }
-  return '';
+  return toInputDate(val);
 }
 
 export default function InlineEditDataTable({
@@ -189,9 +179,9 @@ export default function InlineEditDataTable({
           }
         }
 
-        // Normal display mode - format dates automatically
+        // Normal display mode - format dates automatically as DD/MM/YYYY
         if (!isEditing && isDateKey(col.key) && value && !col.render) {
-          return toDateInputValue(value) || '-';
+          return fmtDate(value);
         }
 
         return col.render ? col.render(value, row) : (value ?? '-');

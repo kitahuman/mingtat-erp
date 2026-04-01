@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
+import { fmtDate } from '@/lib/dateUtils';
 
 // Fallback role labels for display (used when API options not loaded yet)
 const FALLBACK_ROLE_LABELS: Record<string, string> = {
@@ -133,7 +134,7 @@ export default function EmployeesPage() {
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
   const filterExpiry = (v: string) => {
     if (!v) return '-';
-    try { return new Date(v).toISOString().substring(0, 10); } catch { return v; }
+    return fmtDate(v);
   };
 
   const companyOptions = companies.map(c => ({ value: c.id, label: c.internal_prefix || c.name }));

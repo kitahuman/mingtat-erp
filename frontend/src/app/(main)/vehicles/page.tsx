@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
+import { fmtDate } from '@/lib/dateUtils';
 
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
@@ -89,7 +90,7 @@ export default function VehiclesPage() {
   };
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
-  const filterExpiry = (v: string) => { if (!v) return '-'; try { return new Date(v).toISOString().substring(0, 10); } catch { return v; } };
+  const filterExpiry = (v: string) => fmtDate(v);
 
   const statusOptions = [
     { value: 'active', label: '使用中' },

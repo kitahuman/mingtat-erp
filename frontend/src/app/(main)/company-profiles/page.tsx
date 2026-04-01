@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { companyProfilesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import ExpiryBadge from '@/components/ExpiryBadge';
+import { fmtDate } from '@/lib/dateUtils';
 
 export default function CompanyProfilesPage() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function CompanyProfilesPage() {
 
   const filterExpiry = (v: string) => {
     if (!v) return '-';
-    return new Date(v).toLocaleDateString('zh-HK');
+    return fmtDate(v);
   };
 
   const columns = [

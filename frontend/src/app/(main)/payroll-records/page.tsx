@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { payrollApi, companyProfilesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
+import { fmtDate } from '@/lib/dateUtils';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -80,7 +81,7 @@ export default function PayrollRecordsPage() {
         {STATUS_LABELS[row.status] || row.status}
       </span>
     )},
-    { key: 'payment_date', label: '付款日期', render: (_v: any, row: any) => row.payment_date || '-' },
+    { key: 'payment_date', label: '付款日期', render: (_v: any, row: any) => fmtDate(row.payment_date) },
     { key: 'cheque_number', label: '支票號碼', render: (_v: any, row: any) => row.cheque_number || '-' },
   ];
 
