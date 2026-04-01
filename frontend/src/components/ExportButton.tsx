@@ -15,6 +15,16 @@ interface ExportButtonProps {
   filename?: string;
 }
 
+// Format ISO date string to DD/MM/YYYY
+function formatExportDate(val: any): string | null {
+  if (!val) return null;
+  const s = String(val);
+  // Match ISO datetime: 2027-10-22T00:00:00.000Z or YYYY-MM-DD
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return null;
+}
+
 function getExportValue(col: ExportColumn, row: any): string {
   const raw = row[col.key];
   // Use exportRender if provided, then filterRender, then raw value
@@ -26,6 +36,9 @@ function getExportValue(col: ExportColumn, row: any): string {
   }
   if (raw === null || raw === undefined) return '';
   if (typeof raw === 'object') return JSON.stringify(raw);
+  // Auto-format ISO date strings
+  const formatted = formatExportDate(raw);
+  if (formatted) return formatted;
   return String(raw);
 }
 

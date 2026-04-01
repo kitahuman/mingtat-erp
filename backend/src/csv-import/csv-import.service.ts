@@ -204,7 +204,7 @@ export class CsvImportService {
     const descriptions = fields.map(f => {
       const parts: string[] = [];
       if (f.required) parts.push('必填');
-      if (f.type === 'date') parts.push('日期格式: YYYY-MM-DD');
+      if (f.type === 'date') parts.push('日期格式: DD/MM/YYYY');
       if (f.type === 'number') parts.push('數字');
       if (f.type === 'boolean') parts.push('是/否');
       if (f.description) parts.push(f.description);
@@ -260,10 +260,16 @@ export class CsvImportService {
             row[field.key] = num;
           }
         } else if (field.type === 'date') {
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
-            errors.push({ row: lineIdx + 1, field: field.label, message: `${field.label} 日期格式必須為 YYYY-MM-DD` });
-          } else {
+          // Support DD/MM/YYYY format
+          const ddmmyyyyMatch = rawValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (ddmmyyyyMatch) {
+            const [, day, month, year] = ddmmyyyyMatch;
+            row[field.key] = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+            // Also support YYYY-MM-DD for backward compatibility
             row[field.key] = rawValue;
+          } else {
+            errors.push({ row: lineIdx + 1, field: field.label, message: `${field.label} 日期格式必須為 DD/MM/YYYY` });
           }
         } else if (field.type === 'boolean') {
           row[field.key] = rawValue === '是' || rawValue === 'true' || rawValue === '1';

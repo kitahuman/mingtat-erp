@@ -10,6 +10,8 @@ import SearchableSelect from './SearchableSelect';
 import { STATUS_OPTIONS } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
+import ColumnCustomizer from '@/components/ColumnCustomizer';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -82,6 +84,16 @@ export default function WorkLogsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const totalPages = Math.ceil(total / limit);
+
+  // Column customization
+  const {
+    columnConfigs,
+    visibleColumns,
+    columnWidths,
+    handleColumnConfigChange,
+    handleReset,
+    handleColumnResize,
+  } = useColumnConfig('work-logs', COLUMNS.map(c => ({ key: c.key, label: c.label })));
 
   // ── Load reference data ─────────────────────────────────────
   useEffect(() => {
@@ -170,8 +182,12 @@ export default function WorkLogsPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('確定刪除此記錄？')) return;
-    await workLogsApi.remove(id);
-    await fetchLogs();
+    try {
+      await workLogsApi.remove(id);
+      await fetchLogs();
+    } catch (e: any) {
+      alert('刪除失敗：' + (e.response?.data?.message || e.message));
+    }
   };
 
   const handleDuplicate = async (id: number) => {
@@ -261,6 +277,11 @@ export default function WorkLogsPage() {
               </button>
             </>
           )}
+          <ColumnCustomizer
+            columns={columnConfigs}
+            onChange={handleColumnConfigChange}
+            onReset={handleReset}
+          />
           <ExportButton
             columns={COLUMNS.map(col => ({ key: col.key, label: col.label, exportRender: (val: any, row: any) => {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';

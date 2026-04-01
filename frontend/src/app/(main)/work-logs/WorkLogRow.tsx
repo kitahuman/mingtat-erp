@@ -10,6 +10,14 @@ import {
 } from './constants';
 import { workLogsApi } from '@/lib/api';
 
+// Format date as YYYY-MM-DD (strip time component)
+const fmtDate = (d: any) => {
+  if (!d) return '—';
+  const s = String(d);
+  if (s.includes('T')) return s.split('T')[0];
+  return s || '—';
+};
+
 interface Option { value: string | number; label: string; }
 
 interface Props {
@@ -131,7 +139,7 @@ export default function WorkLogRow({
           </span>
         </td>
         {/* 約定日期 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.scheduled_date || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-24">{fmtDate(row.scheduled_date)}</td>
         {/* 服務類型 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.service_type || '—'}</td>
         {/* 公司 */}
@@ -185,9 +193,9 @@ export default function WorkLogRow({
         {/* 操作 - sticky right */}
         <td className="sticky right-0 z-10 bg-white px-2 py-1.5 border-l border-gray-200 w-28" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
-            <button onClick={onEdit} className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100" title="編輯">✏️</button>
-            <button onClick={onDuplicate} className="px-1.5 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
-            <button onClick={onDelete} className="px-1.5 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
+            <button onClick={e => { e.stopPropagation(); onEdit(); }} className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100" title="編輯">✏️</button>
+            <button onClick={e => { e.stopPropagation(); onDuplicate(); }} className="px-1.5 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
+            <button onClick={e => { e.stopPropagation(); onDelete(); }} className="px-1.5 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
           </div>
         </td>
       </tr>
