@@ -15,20 +15,28 @@ export class EmployeePortalService {
     private jwtService: JwtService,
   ) {}
 
-  // ── Employee Login (phone + password) ─────────────────────────
-  async loginByPhone(phone: string, password: string) {
-    // Find user by phone number (employee portal users have role='employee')
-    const user = await this.prisma.user.findFirst({
-      where: { phone, isActive: true },
+  // ── Employee Portal Login (phone OR username + password) ────────
+  // Supports both employee phone login and admin username login for testing
+  async loginByPhone(identifier: string, password: string) {
+    // Try to find user by phone first, then by username
+    let user = await this.prisma.user.findFirst({
+      where: { phone: identifier, isActive: true },
     });
 
     if (!user) {
-      throw new UnauthorizedException('電話號碼或密碼錯誤');
+      // Fallback: try username (for admin accounts)
+      user = await this.prisma.user.findFirst({
+        where: { username: identifier, isActive: true },
+      });
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('帳號或密碼錯誤');
     }
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('電話號碼或密碼錯誤');
+      throw new UnauthorizedException('帳號或密碼錯誤');
     }
 
     // Update last login
@@ -44,13 +52,16 @@ export class EmployeePortalService {
         where: { id: user.employee_id },
         select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
       });
-    } else {
-      // Try to find by phone
+    } else if (user.phone) {
+      // Try to find by phone (for employee accounts)
       employee = await this.prisma.employee.findFirst({
-        where: { phone },
+        where: { phone: user.phone },
         select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
       });
     }
+    // Note: Admin accounts may not have a linked employee record - that's OK
+
+    const isAdmin = ['admin', 'superadmin', 'manager'].includes(user.role);
 
     const payload = {
       sub: user.id,
@@ -68,6 +79,7 @@ export class EmployeePortalService {
         displayName: user.displayName,
         role: user.role,
         phone: user.phone,
+        isAdmin,
         employeeId: employee?.id ?? null,
         employee,
       },

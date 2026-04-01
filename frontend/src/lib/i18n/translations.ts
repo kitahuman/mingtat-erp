@@ -32,15 +32,17 @@ export const translations = {
 
     // Auth
     login: '登入',
-    loginTitle: '員工登入',
+    loginTitle: '員工入口登入',
+    loginIdentifier: '電話號碼 / 用戶名',
+    loginIdentifierPlaceholder: '請輸入電話號碼或用戶名',
     phone: '電話號碼',
     password: '密碼',
     phonePlaceholder: '請輸入電話號碼',
     passwordPlaceholder: '請輸入密碼',
     loginButton: '登入',
     loginLoading: '登入中...',
-    loginError: '電話號碼或密碼錯誤',
-    defaultPasswordHint: '預設密碼：Aa-電話號碼',
+    loginError: '帳號或密碼錯誤',
+    defaultPasswordHint: '員工預設密碼：Aa-電話號碼；Admin 用現有帳號登入',
 
     // Navigation
     home: '主頁',
@@ -205,15 +207,17 @@ export const translations = {
 
     // Auth
     login: 'Login',
-    loginTitle: 'Employee Login',
+    loginTitle: 'Employee Portal Login',
+    loginIdentifier: 'Phone Number / Username',
+    loginIdentifierPlaceholder: 'Enter phone number or username',
     phone: 'Phone Number',
     password: 'Password',
     phonePlaceholder: 'Enter phone number',
     passwordPlaceholder: 'Enter password',
     loginButton: 'Login',
     loginLoading: 'Logging in...',
-    loginError: 'Invalid phone number or password',
-    defaultPasswordHint: 'Default password: Aa-[phone number]',
+    loginError: 'Invalid account or password',
+    defaultPasswordHint: 'Employee default: Aa-[phone]; Admin: use existing ERP account',
 
     // Navigation
     home: 'Home',

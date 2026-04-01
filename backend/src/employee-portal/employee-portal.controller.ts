@@ -38,10 +38,21 @@ const storage = diskStorage({
 export class EmployeePortalController {
   constructor(private readonly service: EmployeePortalService) {}
 
-  // ── Auth ───────────────────────────────────────────────────────
+  // ── Auth ───────────────────────────────────────────────
+  // Accepts phone number OR username (admin accounts can use username for testing)
   @Post('login')
-  async login(@Body() body: { phone: string; password: string }) {
-    return this.service.loginByPhone(body.phone, body.password);
+  async login(
+    @Body()
+    body: {
+      identifier?: string;
+      phone?: string;
+      username?: string;
+      password: string;
+    },
+  ) {
+    // Support multiple field names for flexibility
+    const identifier = body.identifier || body.phone || body.username || '';
+    return this.service.loginByPhone(identifier, body.password);
   }
 
   @UseGuards(AuthGuard('jwt'))

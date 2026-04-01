@@ -6,7 +6,7 @@ import { useEmployeePortalAuth } from '@/lib/employee-portal-auth';
 import { useI18n } from '@/lib/i18n/i18n-context';
 
 export default function EmployeeLoginPage() {
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,12 +14,15 @@ export default function EmployeeLoginPage() {
   const { t, lang, toggleLang } = useI18n();
   const router = useRouter();
 
+  // Detect if input looks like a phone number (digits only)
+  const isPhoneInput = /^\d+$/.test(identifier);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(phone, password);
+      await login(identifier, password);
       router.push('/employee-portal');
     } catch (err: any) {
       setError(err.response?.data?.message || t('loginError'));
@@ -63,17 +66,24 @@ export default function EmployeeLoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {t('phone')}
+                {t('loginIdentifier')}
               </label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
-                placeholder={t('phonePlaceholder')}
+                placeholder={t('loginIdentifierPlaceholder')}
                 required
-                inputMode="numeric"
+                autoComplete="username"
+                inputMode={isPhoneInput || identifier === '' ? 'text' : 'text'}
               />
+              {/* Hint text below input */}
+              <p className="text-xs text-gray-400 mt-1">
+                {lang === 'zh'
+                  ? '員工輸入電話號碼，管理員輸入用戶名'
+                  : 'Employees enter phone number, admins enter username'}
+              </p>
             </div>
 
             <div>
@@ -87,6 +97,7 @@ export default function EmployeeLoginPage() {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
                 placeholder={t('passwordPlaceholder')}
                 required
+                autoComplete="current-password"
               />
             </div>
 
@@ -99,9 +110,12 @@ export default function EmployeeLoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-gray-400 mt-4">
-            {t('defaultPasswordHint')}
-          </p>
+          {/* Login hint */}
+          <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <p className="text-xs text-gray-500 text-center leading-relaxed">
+              {t('defaultPasswordHint')}
+            </p>
+          </div>
         </div>
       </div>
     </div>

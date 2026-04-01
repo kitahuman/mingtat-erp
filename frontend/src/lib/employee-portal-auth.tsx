@@ -10,6 +10,7 @@ export interface EmployeeUser {
   displayName: string;
   role: string;
   phone?: string | null;
+  isAdmin?: boolean;
   employeeId?: number | null;
   employee?: {
     id: number;
@@ -23,7 +24,7 @@ export interface EmployeeUser {
 
 interface EmployeePortalAuthContextType {
   user: EmployeeUser | null;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
 }
@@ -47,8 +48,8 @@ export function EmployeePortalAuthProvider({ children }: { children: ReactNode }
     setLoading(false);
   }, []);
 
-  const login = async (phone: string, password: string) => {
-    const res = await employeePortalApi.login(phone, password);
+  const login = async (identifier: string, password: string) => {
+    const res = await employeePortalApi.login(identifier, password);
     Cookies.set('ep_token', res.data.access_token, { expires: 30 });
     Cookies.set('ep_user', JSON.stringify(res.data.user), { expires: 30 });
     setUser(res.data.user);

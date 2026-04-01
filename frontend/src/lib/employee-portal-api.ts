@@ -32,9 +32,9 @@ portalApi.interceptors.response.use(
 );
 
 export const employeePortalApi = {
-  // Auth
-  login: (phone: string, password: string) =>
-    portalApi.post('/employee-portal/login', { phone, password }),
+  // Auth - accepts phone number OR admin username
+  login: (identifier: string, password: string) =>
+    portalApi.post('/employee-portal/login', { identifier, password }),
 
   getProfile: () => portalApi.get('/employee-portal/profile'),
 
