@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { vehiclesApi, companiesApi } from '@/lib/api';
+import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 
-const vehicleTypes = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
+// Fallback vehicle types in case field options haven't loaded yet
+const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
 export default function VehiclesPage() {
   const router = useRouter();
@@ -21,15 +22,26 @@ export default function VehiclesPage() {
   const [companyFilter, setCompanyFilter] = useState(searchParams.get('owner_company_id') || '');
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({
-    plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '',
+    plate_number: '', vehicle_type: '', tonnage: '', owner_company_id: '',
     brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
   });
 
-  useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
+  // Load reference data including dynamic vehicle types
+  useEffect(() => {
+    companiesApi.simple().then(res => setCompanies(res.data));
+    fieldOptionsApi.getByCategory('vehicle_type').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => o.label);
+      if (opts.length > 0) {
+        setVehicleTypes(opts);
+        setForm((prev: any) => ({ ...prev, vehicle_type: prev.vehicle_type || opts[0] }));
+      }
+    }).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,7 +65,7 @@ export default function VehiclesPage() {
     try {
       await vehiclesApi.create({ ...form, owner_company_id: Number(form.owner_company_id), tonnage: form.tonnage ? Number(form.tonnage) : null });
       setShowModal(false);
-      setForm({ plate_number: '', vehicle_type: '泥頭車', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
+      setForm({ plate_number: '', vehicle_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
@@ -73,17 +85,18 @@ export default function VehiclesPage() {
   const columns = [
     { key: 'plate_number', label: '車牌', sortable: true, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'vehicle_type', label: '車型', sortable: true },
-    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'inspection_date', label: '驗車到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'license_expiry', label: '行車證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'owner_company', label: '所屬公司', render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
+    { key: 'tonnage', label: '噸數', sortable: true, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'inspection_date', label: '驗車到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'license_expiry', label: '行車證到期', sortable: true, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
       </span>
-    ), filterRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
+    ), filterRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用',
+       exportRender: (v: string) => v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
   ];
 
   return (
@@ -94,12 +107,13 @@ export default function VehiclesPage() {
           <p className="text-gray-500 mt-1">管理所有車輛資料、車牌變更及過戶紀錄</p>
         </div>
         {hasMinRole('clerk') && (
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增車輛</button>
+          <button onClick={() => { setForm({ ...form, vehicle_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
         )}
       </div>
 
       <div className="card">
         <DataTable
+          exportFilename="車輛列表"
           columns={columns}
           data={data}
           total={total}

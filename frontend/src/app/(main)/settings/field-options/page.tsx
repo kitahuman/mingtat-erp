@@ -9,6 +9,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   wage_unit: '工資單位',
   service_type: '服務類型',
   day_night: '日夜班',
+  vehicle_type: '車輛類型',
 };
 
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);

@@ -131,6 +131,7 @@ export default function PartnersPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="合作夥伴列表"
           columns={columns}
           data={data}
           total={total}

@@ -9,6 +9,7 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
   wage_unit: ['小時', '車', '天', '周', '月', '噸', 'M', 'M2', 'M3', 'JOB', '工', '次', '轉', 'trip', '晚'],
   service_type: ['運輸', '代工', '工程', '機械', '管工工作', '維修保養', '雜務', '上堂', '緊急情況', '請假/休息'],
   day_night: ['日', '夜', '中直'],
+  vehicle_type: ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'],
 };
 
 @Injectable()
@@ -19,16 +20,30 @@ export class FieldOptionsService {
 
   async seedDefaults() {
     const count = await this.repo.count();
-    if (count > 0) return; // Already seeded
-
-    const entities: Partial<FieldOption>[] = [];
-    for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
-      labels.forEach((label, idx) => {
-        entities.push({ category, label, sort_order: idx + 1, is_active: true });
-      });
+    if (count === 0) {
+      // First time: seed all categories
+      const entities: Partial<FieldOption>[] = [];
+      for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
+        labels.forEach((label, idx) => {
+          entities.push({ category, label, sort_order: idx + 1, is_active: true });
+        });
+      }
+      await this.repo.save(entities);
+      console.log(`Seeded ${entities.length} field options`);
+      return;
     }
-    await this.repo.save(entities);
-    console.log(`Seeded ${entities.length} field options`);
+
+    // Seed any new categories that don't exist yet (e.g., vehicle_type)
+    for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
+      const existing = await this.repo.count({ where: { category } });
+      if (existing === 0) {
+        const entities: Partial<FieldOption>[] = labels.map((label, idx) => ({
+          category, label, sort_order: idx + 1, is_active: true,
+        }));
+        await this.repo.save(entities);
+        console.log(`Seeded ${entities.length} field options for new category: ${category}`);
+      }
+    }
   }
 
   async findByCategory(category: string) {

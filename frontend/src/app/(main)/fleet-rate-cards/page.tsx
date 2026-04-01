@@ -91,6 +91,7 @@ export default function FleetRateCardsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="車隊價目表"
           columns={columns}
           data={data}
           total={total}

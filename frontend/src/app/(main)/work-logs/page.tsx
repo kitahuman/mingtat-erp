@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import WorkLogRow from './WorkLogRow';
 import SearchableSelect from './SearchableSelect';
 import { STATUS_OPTIONS } from './constants';
+import ExportButton from '@/components/ExportButton';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -247,6 +248,20 @@ export default function WorkLogsPage() {
               </button>
             </>
           )}
+          <ExportButton
+            columns={COLUMNS.map(col => ({ key: col.key, label: col.label, exportRender: (val: any, row: any) => {
+              if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
+              if (col.key === 'company') return row.company_profile?.code || '';
+              if (col.key === 'client') return row.client?.name || '';
+              if (col.key === 'quotation') return row.quotation?.quotation_no || '';
+              if (col.key === 'employee') return row.employee?.name_zh || '';
+              if (col.key === 'is_confirmed') return val ? '是' : '否';
+              if (col.key === 'is_paid') return val ? '是' : '否';
+              return val != null ? String(val) : '';
+            }}))}
+            data={rows}
+            filename="工作記錄"
+          />
           <button
             onClick={handleAddNew}
             disabled={editingId !== null}

@@ -199,6 +199,7 @@ export default function QuotationsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="報價單列表"
           columns={columns}
           data={data}
           total={total}

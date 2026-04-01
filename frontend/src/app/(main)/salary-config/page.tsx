@@ -117,6 +117,7 @@ export default function SalaryConfigPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="薪酬配置列表"
           columns={columns}
           data={data}
           total={total}

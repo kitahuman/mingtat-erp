@@ -58,6 +58,7 @@ export default function CompanyProfilesPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="公司資料列表"
           columns={columns}
           data={data}
           total={total}

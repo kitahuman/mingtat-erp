@@ -106,6 +106,7 @@ export default function EmployeesPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="員工列表"
           columns={columns}
           data={data}
           total={total}

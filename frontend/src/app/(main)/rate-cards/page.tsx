@@ -108,6 +108,7 @@ export default function RateCardsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="客戶價目表"
           columns={columns}
           data={data}
           total={total}

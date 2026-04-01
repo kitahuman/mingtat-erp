@@ -100,6 +100,7 @@ export default function MachineryPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="機械列表"
           columns={columns}
           data={data}
           total={total}

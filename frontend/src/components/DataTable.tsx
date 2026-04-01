@@ -1,11 +1,13 @@
 'use client';
 import { useState, useMemo } from 'react';
 import ColumnFilter from './ColumnFilter';
+import ExportButton from './ExportButton';
 
 interface Column {
   key: string;
   label: string;
   render?: (value: any, row: any) => React.ReactNode;
+  exportRender?: (value: any, row: any) => string;
   className?: string;
   sortable?: boolean;
   filterable?: boolean;
@@ -28,12 +30,13 @@ interface DataTableProps {
   sortBy?: string;
   sortOrder?: string;
   onSort?: (field: string, order: string) => void;
+  exportFilename?: string;
 }
 
 export default function DataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
   searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading,
-  sortBy, sortOrder, onSort
+  sortBy, sortOrder, onSort, exportFilename
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
@@ -110,6 +113,11 @@ export default function DataTable({
         )}
         {filters}
         {actions}
+        <ExportButton
+          columns={columns}
+          data={filteredData}
+          filename={exportFilename || 'export'}
+        />
       </div>
 
       {/* Active filter indicator */}

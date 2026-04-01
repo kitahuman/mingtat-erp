@@ -114,6 +114,7 @@ export default function RentalRateCardsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="租賃價目表"
           columns={columns}
           data={data}
           total={total}

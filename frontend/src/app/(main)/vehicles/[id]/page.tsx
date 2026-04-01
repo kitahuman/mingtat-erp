@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { vehiclesApi, companiesApi } from '@/lib/api';
+import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
-const vehicleTypes = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
+// Fallback vehicle types
+const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
 function isExpiringSoon(date: string | null) {
   if (!date) return false;
@@ -27,6 +28,7 @@ export default function VehicleDetailPage() {
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [showPlateModal, setShowPlateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [plateForm, setPlateForm] = useState({ new_plate: '', change_date: '', notes: '' });
@@ -36,7 +38,14 @@ export default function VehicleDetailPage() {
     vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/vehicles'));
   };
 
-  useEffect(() => { loadData(); companiesApi.simple().then(res => setCompanies(res.data)); }, [params.id]);
+  useEffect(() => {
+    loadData();
+    companiesApi.simple().then(res => setCompanies(res.data));
+    fieldOptionsApi.getByCategory('vehicle_type').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => o.label);
+      if (opts.length > 0) setVehicleTypes(opts);
+    }).catch(() => {});
+  }, [params.id]);
 
   const handleSave = async () => {
     try {

@@ -156,6 +156,7 @@ export default function PayrollRecordsPage() {
       </div>
 
       <DataTable
+          exportFilename="糧單記錄"
         columns={columns}
         data={data}
         total={total}

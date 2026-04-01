@@ -13,7 +13,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(User) private userRepo: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (req: any) => {
+          // Allow token from query parameter (used for document downloads via <a> tags)
+          return req?.query?.token || null;
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.get('JWT_SECRET') || 'default-secret',
     });

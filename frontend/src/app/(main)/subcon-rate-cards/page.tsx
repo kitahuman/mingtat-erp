@@ -95,6 +95,7 @@ export default function SubconRateCardsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="街車價目表"
           columns={columns}
           data={data}
           total={total}

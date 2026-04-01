@@ -97,6 +97,7 @@ export default function ProjectRateCardsPage() {
 
       <div className="card">
         <DataTable
+          exportFilename="工程價目表"
           columns={columns}
           data={data}
           total={total}
