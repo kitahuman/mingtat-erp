@@ -114,7 +114,7 @@ export default function ProjectRateCardsPage() {
 
   const handleInlineDelete = async (id: number) => {
     await rateCardsApi.delete(id);
-    loadProjectRateCards();
+    load();
   };
 
   return (

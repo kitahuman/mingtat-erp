@@ -115,7 +115,7 @@ export default function FleetRateCardsPage() {
 
   const handleInlineDelete = async (id: number) => {
     await fleetRateCardsApi.delete(id);
-    loadFleetRateCards();
+    load();
   };
 
   return (

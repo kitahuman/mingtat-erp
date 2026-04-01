@@ -130,7 +130,7 @@ export default function RateCardsPage() {
 
   const handleInlineDelete = async (id: number) => {
     await rateCardsApi.delete(id);
-    loadRateCards();
+    load();
   };
 
   return (

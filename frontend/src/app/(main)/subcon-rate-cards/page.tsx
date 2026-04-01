@@ -124,7 +124,7 @@ export default function SubconRateCardsPage() {
 
   const handleInlineDelete = async (id: number) => {
     await subconRateCardsApi.delete(id);
-    loadSubconRateCards();
+    load();
   };
 
   return (

@@ -108,7 +108,7 @@ export default function MachineryPage() {
 
   const handleInlineDelete = async (id: number) => {
     await machineryApi.delete(id);
-    loadMachinery();
+    load();
   };
 
   return (

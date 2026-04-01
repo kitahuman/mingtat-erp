@@ -143,7 +143,7 @@ export default function SalaryConfigPage() {
 
   const handleInlineDelete = async (id: number) => {
     await salaryConfigApi.delete(id);
-    loadSalaryConfigs();
+    load();
   };
 
   return (

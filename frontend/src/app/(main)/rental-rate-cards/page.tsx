@@ -134,7 +134,7 @@ export default function RentalRateCardsPage() {
 
   const handleInlineDelete = async (id: number) => {
     await rateCardsApi.delete(id);
-    loadRentalRateCards();
+    load();
   };
 
   return (

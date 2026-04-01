@@ -122,7 +122,7 @@ export default function VehiclesPage() {
 
   const handleInlineDelete = async (id: number) => {
     await vehiclesApi.delete(id);
-    loadVehicles();
+    load();
   };
 
   return (

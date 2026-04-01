@@ -147,7 +147,7 @@ export default function PartnersPage() {
 
   const handleInlineDelete = async (id: number) => {
     await partnersApi.delete(id);
-    loadPartners();
+    load();
   };
 
   return (

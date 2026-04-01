@@ -180,7 +180,7 @@ export default function EmployeesPage() {
 
   const handleInlineDelete = async (id: number) => {
     await employeesApi.delete(id);
-    loadEmployees();
+    load();
   };
 
   return (
