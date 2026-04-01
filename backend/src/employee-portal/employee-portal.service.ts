@@ -1,7 +1,6 @@
 import {
   Injectable,
   UnauthorizedException,
-  NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -15,19 +14,30 @@ export class EmployeePortalService {
     private jwtService: JwtService,
   ) {}
 
-  // ── Employee Portal Login (phone OR username + password) ────────
-  // Supports both employee phone login and admin username login for testing
+  // ── Employee Portal Login ──────────────────────────────────────
+  // Accepts: phone number (employee) OR username (admin/any user)
+  // Strategy: try username first (works for all users), then try phone
   async loginByPhone(identifier: string, password: string) {
-    // Try to find user by phone first, then by username
-    let user = await this.prisma.user.findFirst({
-      where: { phone: identifier, isActive: true },
-    });
+    let user: any = null;
 
-    if (!user) {
-      // Fallback: try username (for admin accounts)
+    // 1. Try username lookup first (works for admin accounts, no extra columns needed)
+    try {
       user = await this.prisma.user.findFirst({
         where: { username: identifier, isActive: true },
       });
+    } catch {
+      // ignore - column may not exist in old schema
+    }
+
+    // 2. If not found by username, try phone lookup
+    if (!user) {
+      try {
+        user = await this.prisma.user.findFirst({
+          where: { phone: identifier, isActive: true } as any,
+        });
+      } catch {
+        // phone column may not exist yet (migration pending) - skip
+      }
     }
 
     if (!user) {
@@ -39,27 +49,34 @@ export class EmployeePortalService {
       throw new UnauthorizedException('帳號或密碼錯誤');
     }
 
-    // Update last login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
-
-    // Find linked employee record
-    let employee: any = null;
-    if (user.employee_id) {
-      employee = await this.prisma.employee.findUnique({
-        where: { id: user.employee_id },
-        select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
+    // Update last login (best-effort, ignore errors)
+    try {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
       });
-    } else if (user.phone) {
-      // Try to find by phone (for employee accounts)
-      employee = await this.prisma.employee.findFirst({
-        where: { phone: user.phone },
-        select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
-      });
+    } catch {
+      // ignore if lastLoginAt column doesn't exist
     }
-    // Note: Admin accounts may not have a linked employee record - that's OK
+
+    // Find linked employee record (best-effort)
+    let employee: any = null;
+    try {
+      const employeeId = user.employee_id ?? null;
+      if (employeeId) {
+        employee = await this.prisma.employee.findUnique({
+          where: { id: employeeId },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
+        });
+      } else if (user.phone) {
+        employee = await this.prisma.employee.findFirst({
+          where: { phone: user.phone },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
+        });
+      }
+    } catch {
+      // employee lookup is optional - admin accounts may not have one
+    }
 
     const isAdmin = ['admin', 'superadmin', 'manager'].includes(user.role);
 
@@ -78,7 +95,7 @@ export class EmployeePortalService {
         username: user.username,
         displayName: user.displayName,
         role: user.role,
-        phone: user.phone,
+        phone: user.phone ?? null,
         isAdmin,
         employeeId: employee?.id ?? null,
         employee,
@@ -86,23 +103,38 @@ export class EmployeePortalService {
     };
   }
 
+  // ── Helper: resolve employeeId for a user ─────────────────────
+  private async resolveEmployeeId(user: any): Promise<number | null> {
+    try {
+      if (user.employee_id) return user.employee_id;
+      if (user.phone) {
+        const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
+        return emp?.id ?? null;
+      }
+    } catch {
+      // columns may not exist yet
+    }
+    return null;
+  }
+
   // ── Get employee profile ───────────────────────────────────────
   async getEmployeeProfile(userId: number) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-     let employee: any = null;
-    if (user.employee_id) {
-      employee = await this.prisma.employee.findUnique({
-        where: { id: user.employee_id },
-        include: { company: { select: { id: true, name: true } } },
-      });
-    } else if (user.phone) {
-      employee = await this.prisma.employee.findFirst({
-        where: { phone: user.phone },
-        include: { company: { select: { id: true, name: true } } },
-      });
+    let employee: any = null;
+    try {
+      const employeeId = await this.resolveEmployeeId(user);
+      if (employeeId) {
+        employee = await this.prisma.employee.findUnique({
+          where: { id: employeeId },
+          include: { company: { select: { id: true, name: true } } },
+        });
+      }
+    } catch {
+      // ignore
     }
+
     return { user, employee };
   }
 
@@ -121,12 +153,8 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
-    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄，請聯絡管理員');
 
     const record = await this.prisma.employeeAttendance.create({
       data: {
@@ -150,11 +178,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { records: [], employeeId: null };
 
     const today = new Date();
@@ -162,15 +186,18 @@ export class EmployeePortalService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const records = await this.prisma.employeeAttendance.findMany({
-      where: {
-        employee_id: employeeId,
-        timestamp: { gte: today, lt: tomorrow },
-      },
-      orderBy: { timestamp: 'asc' },
-    });
-
-    return { records, employeeId };
+    try {
+      const records = await this.prisma.employeeAttendance.findMany({
+        where: {
+          employee_id: employeeId,
+          timestamp: { gte: today, lt: tomorrow },
+        },
+        orderBy: { timestamp: 'asc' },
+      });
+      return { records, employeeId };
+    } catch {
+      return { records: [], employeeId };
+    }
   }
 
   // ── Get attendance history ─────────────────────────────────────
@@ -178,27 +205,26 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { data: [], total: 0 };
 
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
 
-    const [data, total] = await Promise.all([
-      this.prisma.employeeAttendance.findMany({
-        where: { employee_id: employeeId },
-        orderBy: { timestamp: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.employeeAttendance.count({ where: { employee_id: employeeId } }),
-    ]);
-
-    return { data, total, page, limit };
+    try {
+      const [data, total] = await Promise.all([
+        this.prisma.employeeAttendance.findMany({
+          where: { employee_id: employeeId },
+          orderBy: { timestamp: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.employeeAttendance.count({ where: { employee_id: employeeId } }),
+      ]);
+      return { data, total, page, limit };
+    } catch {
+      return { data: [], total: 0, page, limit };
+    }
   }
 
   // ── Submit Leave ───────────────────────────────────────────────
@@ -215,12 +241,8 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
-    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄，請聯絡管理員');
 
     const leave = await this.prisma.employeeLeave.create({
       data: {
@@ -243,27 +265,26 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { data: [], total: 0 };
 
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
 
-    const [data, total] = await Promise.all([
-      this.prisma.employeeLeave.findMany({
-        where: { employee_id: employeeId },
-        orderBy: { created_at: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.employeeLeave.count({ where: { employee_id: employeeId } }),
-    ]);
-
-    return { data, total, page, limit };
+    try {
+      const [data, total] = await Promise.all([
+        this.prisma.employeeLeave.findMany({
+          where: { employee_id: employeeId },
+          orderBy: { created_at: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.employeeLeave.count({ where: { employee_id: employeeId } }),
+      ]);
+      return { data, total, page, limit };
+    } catch {
+      return { data: [], total: 0, page, limit };
+    }
   }
 
   // ── Submit Work Log (報工) ─────────────────────────────────────
@@ -271,11 +292,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
 
     const workLog = await this.prisma.workLog.create({
       data: {
@@ -310,11 +327,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
 
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
@@ -348,11 +361,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
 
     const expense = await this.prisma.expense.create({
       data: {
@@ -374,30 +383,29 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { data: [], total: 0 };
 
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
 
-    const [data, total] = await Promise.all([
-      this.prisma.expense.findMany({
-        where: { employee_id: employeeId },
-        include: {
-          category: { include: { parent: true } },
-        },
-        orderBy: { date: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.expense.count({ where: { employee_id: employeeId } }),
-    ]);
-
-    return { data, total, page, limit };
+    try {
+      const [data, total] = await Promise.all([
+        this.prisma.expense.findMany({
+          where: { employee_id: employeeId },
+          include: {
+            category: { include: { parent: true } },
+          },
+          orderBy: { date: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.expense.count({ where: { employee_id: employeeId } }),
+      ]);
+      return { data, total, page, limit };
+    } catch {
+      return { data: [], total: 0, page, limit };
+    }
   }
 
   // ── Get My Payrolls ────────────────────────────────────────────
@@ -405,11 +413,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { data: [], total: 0 };
 
     const page = Number(query.page) || 1;
@@ -434,11 +438,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    let employeeId: number | null = user.employee_id ?? null;
-    if (!employeeId && user.phone) {
-      const emp = await this.prisma.employee.findFirst({ where: { phone: user.phone } });
-      employeeId = emp?.id ?? null;
-    }
+    const employeeId = await this.resolveEmployeeId(user);
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -449,38 +449,40 @@ export class EmployeePortalService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const [todayAttendance, monthWorkLogs, pendingExpenses, pendingLeaves] = await Promise.all([
-      employeeId
-        ? this.prisma.employeeAttendance.findMany({
-            where: { employee_id: employeeId, timestamp: { gte: today, lt: tomorrow } },
-            orderBy: { timestamp: 'asc' },
-          })
-        : Promise.resolve([]),
-      employeeId
-        ? this.prisma.workLog.count({
-            where: {
-              employee_id: employeeId,
-              scheduled_date: { gte: monthStart, lte: monthEnd },
-            },
-          })
-        : Promise.resolve(0),
-      employeeId
-        ? this.prisma.expense.count({
-            where: { employee_id: employeeId, paid_amount: 0 },
-          })
-        : Promise.resolve(0),
-      employeeId
-        ? this.prisma.employeeLeave.count({
-            where: { employee_id: employeeId, status: 'pending' },
-          })
-        : Promise.resolve(0),
-    ]);
+    // Use Promise.allSettled to avoid one failing query breaking the whole dashboard
+    const [attendanceResult, workLogsResult, expensesResult, leavesResult] =
+      await Promise.allSettled([
+        employeeId
+          ? this.prisma.employeeAttendance.findMany({
+              where: { employee_id: employeeId, timestamp: { gte: today, lt: tomorrow } },
+              orderBy: { timestamp: 'asc' },
+            })
+          : Promise.resolve([]),
+        employeeId
+          ? this.prisma.workLog.count({
+              where: {
+                employee_id: employeeId,
+                scheduled_date: { gte: monthStart, lte: monthEnd },
+              },
+            })
+          : Promise.resolve(0),
+        employeeId
+          ? this.prisma.expense.count({
+              where: { employee_id: employeeId, paid_amount: 0 },
+            })
+          : Promise.resolve(0),
+        employeeId
+          ? this.prisma.employeeLeave.count({
+              where: { employee_id: employeeId, status: 'pending' },
+            })
+          : Promise.resolve(0),
+      ]);
 
     return {
-      todayAttendance,
-      monthWorkLogs,
-      pendingExpenses,
-      pendingLeaves,
+      todayAttendance: attendanceResult.status === 'fulfilled' ? attendanceResult.value : [],
+      monthWorkLogs: workLogsResult.status === 'fulfilled' ? workLogsResult.value : 0,
+      pendingExpenses: expensesResult.status === 'fulfilled' ? expensesResult.value : 0,
+      pendingLeaves: leavesResult.status === 'fulfilled' ? leavesResult.value : 0,
       employeeId,
     };
   }
@@ -494,9 +496,15 @@ export class EmployeePortalService {
     const defaultPassword = `Aa-${data.phone}`;
     const hashed = await bcrypt.hash(defaultPassword, 10);
 
-    const existing = await this.prisma.user.findFirst({ where: { phone: data.phone } });
-    if (existing) {
-      throw new BadRequestException('該電話號碼已有帳號');
+    // Check for existing account by phone (best-effort)
+    try {
+      const existing = await this.prisma.user.findFirst({ where: { phone: data.phone } as any });
+      if (existing) {
+        throw new BadRequestException('該電話號碼已有帳號');
+      }
+    } catch (e: any) {
+      if (e instanceof BadRequestException) throw e;
+      // phone column may not exist - skip duplicate check
     }
 
     const user = await this.prisma.user.create({
@@ -508,14 +516,14 @@ export class EmployeePortalService {
         phone: data.phone,
         isActive: true,
         employee_id: data.employee_id,
-      },
+      } as any,
     });
 
     return {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
-      phone: user.phone,
+      phone: (user as any).phone ?? null,
       role: user.role,
     };
   }

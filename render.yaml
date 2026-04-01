@@ -7,7 +7,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pnpm install && npx prisma generate && pnpm run build
-    startCommand: node dist/src/main
+    startCommand: npx prisma migrate deploy && node dist/src/main
     envVars:
       - key: NODE_ENV
         value: production
