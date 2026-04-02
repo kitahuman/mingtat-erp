@@ -733,7 +733,7 @@ model WorkLog {
   matched_rate_card_id Int?
   matched_rate         Decimal?  @db.Decimal(12, 2)
   matched_unit         String?
-  matched_ot_rate      Int?
+  matched_ot_rate      Decimal?  @db.Decimal(12, 2)
   price_match_status   String?
   price_match_note     String?   @db.Text
   receipt_no           String?
