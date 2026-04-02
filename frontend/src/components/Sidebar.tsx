@@ -95,6 +95,7 @@ const navEntries: NavEntry[] = [
     minRole: 'clerk',
     items: [
       { href: '/profit-loss', label: '工程損益總覽', icon: '📊', minRole: 'clerk' },
+      { href: '/company-profit-loss', label: '公司損益表', icon: '📈', minRole: 'clerk' },
     ],
   },
   {

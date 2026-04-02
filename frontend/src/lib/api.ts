@@ -554,3 +554,12 @@ export const projectProfitLossApi = {
   getOverview: (params?: any) => api.get('/project-profit-loss/overview', { params }),
   getProjectPL: (projectId: number, params?: any) => api.get(`/project-profit-loss/${projectId}`, { params }),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Phase 11: Company Profit & Loss (公司損益表)
+// ══════════════════════════════════════════════════════════════
+
+export const companyProfitLossApi = {
+  get: (params?: any) => api.get('/company-profit-loss', { params }),
+  trend: (params?: any) => api.get('/company-profit-loss/trend', { params }),
+};

@@ -43,6 +43,7 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { ProjectProfitLossModule } from './project-profit-loss/project-profit-loss.module';
+import { CompanyProfitLossModule } from './company-profit-loss/company-profit-loss.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { ProjectProfitLossModule } from './project-profit-loss/project-profit-lo
     BankAccountsModule,
     BankReconciliationModule,
     ProjectProfitLossModule,
+    CompanyProfitLossModule,
   ],
 })
 export class AppModule {}
