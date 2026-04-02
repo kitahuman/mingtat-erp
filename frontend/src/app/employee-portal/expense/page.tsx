@@ -1,8 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+
+interface LineItem {
+  description: string;
+  quantity: string;
+  unit_price: string;
+  amount: string;
+}
 
 interface ExpenseForm {
   date: string;
@@ -10,8 +17,11 @@ interface ExpenseForm {
   item: string;
   supplier_name: string;
   total_amount: string;
+  payment_method: string;
+  payment_ref: string;
   remarks: string;
   receipt_url: string;
+  items: LineItem[];
 }
 
 const defaultForm: ExpenseForm = {
@@ -20,17 +30,21 @@ const defaultForm: ExpenseForm = {
   item: '',
   supplier_name: '',
   total_amount: '',
+  payment_method: '',
+  payment_ref: '',
   remarks: '',
   receipt_url: '',
+  items: [],
 };
 
 export default function ExpensePage() {
   const { t } = useI18n();
-  const [form, setForm] = useState<ExpenseForm>(defaultForm);
+  const [form, setForm] = useState<ExpenseForm>({ ...defaultForm });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [recentExpenses, setRecentExpenses] = useState<any[]>([]);
   const [tab, setTab] = useState<'form' | 'history'>('form');
@@ -39,6 +53,10 @@ export default function ExpensePage() {
     portalSharedApi
       .getExpenseCategories()
       .then((res) => setCategories(res.data?.data || res.data || []))
+      .catch(() => {});
+    portalSharedApi
+      .getFieldOptions('payment_method')
+      .then((res) => setPaymentMethods(res.data || []))
       .catch(() => {});
     loadExpenses();
   }, []);
@@ -50,7 +68,7 @@ export default function ExpensePage() {
     } catch {}
   };
 
-  const set = (field: keyof ExpenseForm, value: string) =>
+  const set = <K extends keyof ExpenseForm>(field: K, value: ExpenseForm[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,23 +82,72 @@ export default function ExpensePage() {
     setUploadingReceipt(false);
   };
 
+  // Line items helpers
+  const calcAmount = (qty: string, up: string) => {
+    const q = parseFloat(qty) || 0;
+    const u = parseFloat(up) || 0;
+    return (q * u).toFixed(2);
+  };
+
+  const addItemRow = () =>
+    set('items', [...form.items, { description: '', quantity: '1', unit_price: '', amount: '' }]);
+
+  const removeItemRow = (idx: number) =>
+    set('items', form.items.filter((_, i) => i !== idx));
+
+  const updateItemRow = (idx: number, field: keyof LineItem, val: string) => {
+    const items = [...form.items];
+    items[idx] = { ...items[idx], [field]: val };
+    if (field === 'quantity' || field === 'unit_price') {
+      items[idx].amount = calcAmount(
+        field === 'quantity' ? val : items[idx].quantity,
+        field === 'unit_price' ? val : items[idx].unit_price,
+      );
+    }
+    set('items', items);
+  };
+
+  const itemsTotal = useMemo(
+    () => form.items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
+    [form.items],
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await employeePortalApi.submitExpense({
+      const total = itemsTotal > 0 ? itemsTotal : parseFloat(form.total_amount) || 0;
+      const remarkParts = [
+        form.remarks,
+        form.receipt_url ? `單據：${form.receipt_url}` : '',
+      ].filter(Boolean);
+
+      const payload: any = {
         date: form.date,
         category_id: form.category_id || undefined,
         item: form.item,
         supplier_name: form.supplier_name || undefined,
-        total_amount: parseFloat(form.total_amount) || 0,
-        remarks: [
-          form.remarks,
-          form.receipt_url ? `單據：${form.receipt_url}` : '',
-        ].filter(Boolean).join('\n') || undefined,
-      });
+        total_amount: total,
+        payment_method: form.payment_method || undefined,
+        payment_ref: form.payment_ref || undefined,
+        remarks: remarkParts.join('\n') || undefined,
+      };
+
+      // Add line items if any
+      if (form.items.length > 0) {
+        payload.items = form.items
+          .filter((i) => i.description.trim())
+          .map((i) => ({
+            description: i.description,
+            quantity: parseFloat(i.quantity) || 1,
+            unit_price: parseFloat(i.unit_price) || 0,
+            amount: parseFloat(i.amount) || 0,
+          }));
+      }
+
+      await employeePortalApi.submitExpense(payload);
       setSuccess(t('expenseSuccess'));
       setForm({ ...defaultForm, date: form.date });
       await loadExpenses();
@@ -91,7 +158,8 @@ export default function ExpensePage() {
     }
   };
 
-  const inputClass = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white';
+  const inputClass =
+    'w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white';
   const labelClass = 'block text-sm font-semibold text-gray-700 mb-1';
 
   // Flatten categories for select
@@ -103,8 +171,13 @@ export default function ExpensePage() {
     }
   });
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('zh-HK');
-  const formatAmount = (n: any) => `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 2 })}`;
+  const activePaymentMethods = paymentMethods.filter((m: any) => m.is_active !== false);
+
+  const formatDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('zh-HK'); } catch { return d; }
+  };
+  const formatAmount = (n: any) =>
+    `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 2 })}`;
 
   return (
     <div className="p-4 pb-6">
@@ -140,6 +213,7 @@ export default function ExpensePage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Basic Info */}
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
               <div>
                 <label className={labelClass}>{t('expenseDate')}</label>
@@ -175,7 +249,7 @@ export default function ExpensePage() {
                   value={form.item}
                   onChange={(e) => set('item', e.target.value)}
                   className={inputClass}
-                  placeholder="報銷項目"
+                  placeholder="報銷項目描述"
                   required
                 />
               </div>
@@ -190,21 +264,146 @@ export default function ExpensePage() {
                   placeholder={t('optional')}
                 />
               </div>
+            </div>
 
+            {/* Payment Info */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+              <h3 className="font-semibold text-gray-800 text-sm">付款資料</h3>
+
+              {/* Payment Method */}
               <div>
-                <label className={labelClass}>{t('expenseAmount')} *</label>
-                <input
-                  type="number"
-                  value={form.total_amount}
-                  onChange={(e) => set('total_amount', e.target.value)}
-                  className={inputClass}
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  required
-                />
+                <label className={labelClass}>{t('expensePaymentMethod')}</label>
+                {activePaymentMethods.length > 0 ? (
+                  <select
+                    value={form.payment_method}
+                    onChange={(e) => set('payment_method', e.target.value)}
+                    className={inputClass + ' appearance-none'}
+                  >
+                    <option value="">{t('optional')}</option>
+                    {activePaymentMethods.map((m: any) => (
+                      <option key={m.id} value={m.label}>{m.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={form.payment_method}
+                    onChange={(e) => set('payment_method', e.target.value)}
+                    className={inputClass}
+                    placeholder="支票 / 現金 / 銀行轉帳..."
+                  />
+                )}
               </div>
 
+              {/* Payment Reference */}
+              <div>
+                <label className={labelClass}>{t('expensePaymentRef')}</label>
+                <input
+                  type="text"
+                  value={form.payment_ref}
+                  onChange={(e) => set('payment_ref', e.target.value)}
+                  className={inputClass}
+                  placeholder="收據號碼 / 支票號碼..."
+                />
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-800 text-sm">{t('expenseLineItems')}</h3>
+                <button
+                  type="button"
+                  onClick={addItemRow}
+                  className="text-xs text-blue-600 font-semibold py-1 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
+                >
+                  + {t('addLineItem')}
+                </button>
+              </div>
+
+              {form.items.length > 0 ? (
+                <div className="space-y-2">
+                  {form.items.map((item, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-500">明細 {idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeItemRow(idx)}
+                          className="text-red-400 hover:text-red-600 text-lg leading-none"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateItemRow(idx, 'description', e.target.value)}
+                        className={inputClass}
+                        placeholder="描述"
+                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">數量</label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={item.quantity}
+                            onChange={(e) => updateItemRow(idx, 'quantity', e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">單價</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.unit_price}
+                            onChange={(e) => updateItemRow(idx, 'unit_price', e.target.value)}
+                            className={inputClass}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">金額</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.amount}
+                            onChange={(e) => updateItemRow(idx, 'amount', e.target.value)}
+                            className={inputClass}
+                            placeholder="自動"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Items total */}
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <span className="text-sm font-semibold text-gray-700">明細合計</span>
+                    <span className="text-sm font-bold text-gray-900">{formatAmount(itemsTotal)}</span>
+                  </div>
+                </div>
+              ) : (
+                /* If no line items, show total amount field */
+                <div>
+                  <label className={labelClass}>{t('expenseAmount')} *</label>
+                  <input
+                    type="number"
+                    value={form.total_amount}
+                    onChange={(e) => set('total_amount', e.target.value)}
+                    className={inputClass}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    required={form.items.length === 0}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Remarks */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
               <div>
                 <label className={labelClass}>{t('remarks')}</label>
                 <textarea
@@ -221,8 +420,12 @@ export default function ExpensePage() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
               <h3 className="font-semibold text-gray-800 text-sm mb-3">{t('expenseReceipt')}</h3>
               {form.receipt_url ? (
-                <div className="relative inline-block">
-                  <img src={form.receipt_url} alt="receipt" className="w-full max-h-48 object-contain rounded-xl border" />
+                <div className="relative inline-block w-full">
+                  <img
+                    src={form.receipt_url}
+                    alt="receipt"
+                    className="w-full max-h-48 object-contain rounded-xl border"
+                  />
                   <button
                     type="button"
                     onClick={() => set('receipt_url', '')}
@@ -276,13 +479,24 @@ export default function ExpensePage() {
                     {exp.supplier_name && (
                       <p className="text-xs text-gray-400">{exp.supplier_name}</p>
                     )}
+                    {exp.payment_method && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        付款：{exp.payment_method}
+                        {exp.payment_ref ? ` (${exp.payment_ref})` : ''}
+                      </p>
+                    )}
+                    {exp.items && exp.items.length > 0 && (
+                      <p className="text-xs text-blue-500 mt-0.5">{exp.items.length} 項明細</p>
+                    )}
                   </div>
-                  <div className="text-right ml-3">
+                  <div className="text-right ml-3 shrink-0">
                     <p className="font-bold text-gray-900 text-sm">{formatAmount(exp.total_amount)}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      Number(exp.paid_amount) > 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {Number(exp.paid_amount) > 0 ? t('paid') : t('unpaid')}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        exp.is_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {exp.is_paid ? t('paid') : t('unpaid')}
                     </span>
                   </div>
                 </div>
