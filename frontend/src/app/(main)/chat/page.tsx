@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -48,81 +47,133 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  const getAuthToken = (): string => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    }
+    return '';
+  };
+
   const handleSendMessage = async (text?: string) => {
     const messageText = text || input;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: messageText };
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await axios.post('/api/ai-chat', {
-        messages: [...messages, userMessage].map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
-      }, {
-        responseType: 'stream',
+      const token = getAuthToken();
+      const response = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          messages: updatedMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
       });
 
-      let assistantContent = '';
-      let buffer = '';
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('AI Chat HTTP error:', response.status, errText);
+        throw new Error(`伺服器錯誤 ${response.status}`);
+      }
 
-      response.data.on('data', (chunk: any) => {
-        buffer += chunk.toString();
+      if (!response.body) {
+        throw new Error('無法取得回應串流');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let assistantContent = '';
+      let streamingMsgIndex = -1;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                assistantContent += parsed.content;
-              }
-              if (parsed.tool_call) {
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  content: assistantContent,
-                  tool_call: parsed.tool_call,
-                }]);
-                assistantContent = '';
-              }
-            } catch (e) {
-              // Ignore parse errors
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.error) {
+              console.error('AI service error:', parsed.error);
+              setMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: `❌ ${parsed.error}` },
+              ]);
+              setIsLoading(false);
+              return;
             }
+
+            if (parsed.tool_call) {
+              // Show tool call as a separate indicator message
+              setMessages(prev => {
+                const newMsgs = [...prev];
+                // Remove the streaming placeholder if exists
+                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex]) {
+                  if (!newMsgs[streamingMsgIndex].content.trim()) {
+                    newMsgs.splice(streamingMsgIndex, 1);
+                  }
+                }
+                streamingMsgIndex = -1;
+                assistantContent = '';
+                newMsgs.push({
+                  role: 'assistant',
+                  content: `🔧 正在查詢：${parsed.tool_call}...`,
+                  tool_call: parsed.tool_call,
+                });
+                return newMsgs;
+              });
+            }
+
+            if (parsed.content) {
+              assistantContent += parsed.content;
+              setMessages(prev => {
+                const newMsgs = [...prev];
+                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex] && !newMsgs[streamingMsgIndex].tool_call) {
+                  // Update existing streaming message
+                  newMsgs[streamingMsgIndex] = { role: 'assistant', content: assistantContent };
+                } else {
+                  // Add new streaming message
+                  newMsgs.push({ role: 'assistant', content: assistantContent });
+                  streamingMsgIndex = newMsgs.length - 1;
+                }
+                return newMsgs;
+              });
+            }
+          } catch {
+            // Ignore JSON parse errors for malformed chunks
           }
         }
-      });
-
-      response.data.on('end', () => {
-        if (assistantContent.trim()) {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: assistantContent,
-          }]);
-        }
-        setIsLoading(false);
-      });
-
-      response.data.on('error', (error: any) => {
-        console.error('Stream error:', error);
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: '抱歉，AI 服務暫時不可用，請稍後再試。',
-        }]);
-        setIsLoading(false);
-      });
-    } catch (error) {
+      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : '請稍後再試';
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '抱歉，發生錯誤，請稍後再試。',
-      }]);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `❌ 發生錯誤：${errMsg}`,
+        },
+      ]);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -181,16 +232,12 @@ export default function ChatPage() {
                 className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white'
+                    : msg.tool_call
+                    ? 'bg-blue-50 border border-blue-200 text-blue-700'
                     : 'bg-white border border-gray-200 shadow-sm'
                 }`}
               >
-                {msg.tool_call && (
-                  <div className="mb-2 p-2 bg-gray-50 rounded-lg text-xs border border-gray-200">
-                    <span className="font-mono text-blue-600">🔧 {msg.tool_call}</span>
-                    <span className="text-green-600 ml-2">✓ 完成</span>
-                  </div>
-                )}
-                <div className={`whitespace-pre-wrap text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-gray-900'}`}>
+                <div className={`whitespace-pre-wrap text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : msg.tool_call ? 'text-blue-700' : 'text-gray-900'}`}>
                   {msg.content}
                 </div>
               </div>
@@ -207,10 +254,10 @@ export default function ChatPage() {
         {isLoading && (
           <div className="flex gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm animate-spin">⏳</span>
+              <span className="text-white text-sm">🤖</span>
             </div>
             <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
+              <div className="flex gap-1 items-center">
                 <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
                 <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>

@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  tool_call?: string;
 }
 
 export function ChatWidget() {
@@ -22,72 +22,125 @@ export function ChatWidget() {
     }
   }, [messages]);
 
+  const getAuthToken = (): string => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    }
+    return '';
+  };
+
   const handleSendMessage = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await axios.post('/api/ai-chat', {
-        messages: [...messages, userMessage],
-      }, {
-        responseType: 'stream',
+      const token = getAuthToken();
+      const response = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          messages: updatedMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
       });
 
-      let assistantContent = '';
-      let buffer = '';
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('AI Chat HTTP error:', response.status, errText);
+        throw new Error(`伺服器錯誤 ${response.status}`);
+      }
 
-      response.data.on('data', (chunk: any) => {
-        buffer += chunk.toString();
+      if (!response.body) {
+        throw new Error('無法取得回應串流');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let assistantContent = '';
+      let streamingMsgIndex = -1;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                assistantContent += parsed.content;
-              }
-            } catch (e) {
-              // Ignore parse errors
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.error) {
+              console.error('AI service error:', parsed.error);
+              setMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: `❌ ${parsed.error}` },
+              ]);
+              setIsLoading(false);
+              return;
             }
+
+            if (parsed.tool_call) {
+              setMessages(prev => {
+                const newMsgs = [...prev];
+                streamingMsgIndex = -1;
+                assistantContent = '';
+                newMsgs.push({
+                  role: 'assistant',
+                  content: `🔧 正在查詢：${parsed.tool_call}...`,
+                  tool_call: parsed.tool_call,
+                });
+                return newMsgs;
+              });
+            }
+
+            if (parsed.content) {
+              assistantContent += parsed.content;
+              setMessages(prev => {
+                const newMsgs = [...prev];
+                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex] && !newMsgs[streamingMsgIndex].tool_call) {
+                  newMsgs[streamingMsgIndex] = { role: 'assistant', content: assistantContent };
+                } else {
+                  newMsgs.push({ role: 'assistant', content: assistantContent });
+                  streamingMsgIndex = newMsgs.length - 1;
+                }
+                return newMsgs;
+              });
+            }
+          } catch {
+            // Ignore JSON parse errors
           }
         }
-      });
-
-      response.data.on('end', () => {
-        if (assistantContent.trim()) {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: assistantContent,
-          }]);
-        }
-        setIsLoading(false);
-      });
-
-      response.data.on('error', () => {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: '抱歉，AI 服務暫時不可用。',
-        }]);
-        setIsLoading(false);
-      });
-    } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '抱歉，發生錯誤。',
-      }]);
+      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : '請稍後再試';
+      console.error('Chat error:', error);
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: `❌ 發生錯誤：${errMsg}` },
+      ]);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  const unreadCount = messages.filter(m => m.role === 'assistant').length;
+  const assistantMsgCount = messages.filter(m => m.role === 'assistant').length;
 
   return (
     <>
@@ -99,9 +152,9 @@ export function ChatWidget() {
           title="打開 AI 助手"
         >
           <span className="text-xl group-hover:scale-110 transition-transform">💬</span>
-          {unreadCount > 0 && (
+          {assistantMsgCount > 0 && (
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {assistantMsgCount > 9 ? '9+' : assistantMsgCount}
             </span>
           )}
         </button>
@@ -164,7 +217,9 @@ export function ChatWidget() {
                       className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
                         msg.role === 'user'
                           ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-200'
+                          : msg.tool_call
+                          ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                          : 'bg-white border border-gray-200 text-gray-900'
                       }`}
                     >
                       <div className="whitespace-pre-wrap leading-relaxed">

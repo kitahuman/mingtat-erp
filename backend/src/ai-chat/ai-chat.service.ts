@@ -54,6 +54,19 @@ export class AiChatService {
       {
         type: 'function',
         function: {
+          name: 'getCompanies',
+          description: '查詢公司列表。回傳公司名稱、類型、狀態。',
+          parameters: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['active', 'inactive', 'all'], description: '公司狀態' },
+            },
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
           name: 'getProjects',
           description: '查詢項目列表。可按狀態篩選。回傳項目名稱、狀態、合約數量。',
           parameters: {
@@ -174,6 +187,8 @@ export class AiChatService {
     const args = JSON.parse(toolCall.function.arguments);
 
     switch (name) {
+      case 'getCompanies':
+        return this.getCompanies(args.status);
       case 'getProjects':
         return this.getProjects(args.status, args.search);
       case 'getContracts':
@@ -196,6 +211,34 @@ export class AiChatService {
   }
 
   // --- Tool Implementations ---
+
+  private async getCompanies(status?: string) {
+    const companies = await this.prisma.company.findMany({
+      where: {
+        ...(status && status !== 'all' ? { status } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        name_en: true,
+        company_type: true,
+        status: true,
+        internal_prefix: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    return {
+      count: companies.length,
+      companies: companies.map(c => ({
+        id: c.id,
+        name: c.name,
+        name_en: c.name_en,
+        type: c.company_type,
+        status: c.status,
+        prefix: c.internal_prefix,
+      })),
+    };
+  }
 
   private async getProjects(status?: string, search?: string) {
     const projects = await this.prisma.project.findMany({
