@@ -10,6 +10,7 @@ interface NavItem {
   icon: string;
   minRole?: UserRole;
   roles?: UserRole[];
+  external?: boolean;
 }
 
 interface NavGroup {
@@ -70,7 +71,7 @@ const navEntries: NavEntry[] = [
     minRole: 'clerk',
     items: [
       { href: '/expenses', label: '支出管理', icon: '💸', minRole: 'clerk' },
-      { href: '/employee-portal/expense', label: '費用報銷', icon: '📝', minRole: 'worker' },
+      { href: '/employee-portal/expense', label: '費用報銷 (手機版)', icon: '📝', minRole: 'worker', external: true },
     ],
   },
   {
@@ -139,16 +140,34 @@ function CollapsedGroupItem({
             {entry.icon} {entry.label}
           </div>
           {filteredItems.map(item => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const isActive = !item.external && (pathname === item.href || pathname.startsWith(item.href + '/'));
+            const itemClass = `
+              flex items-center gap-2.5 px-3 py-2 text-sm transition-colors whitespace-nowrap
+              ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}
+            `;
+            if (item.external) {
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={itemClass}
+                >
+                  <span className="text-base">{item.icon}</span>
+                  <span>{item.label}</span>
+                  <svg className="w-3 h-3 ml-auto opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              );
+            }
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
-                className={`
-                  flex items-center gap-2.5 px-3 py-2 text-sm transition-colors whitespace-nowrap
-                  ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}
-                `}
+                className={itemClass}
               >
                 <span className="text-base">{item.icon}</span>
                 <span>{item.label}</span>
@@ -199,19 +218,37 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
 
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || '使用者' : '使用者';
 
-  // ── Expanded: plain nav item ──────────────────────────────
+  // ── Expanded: plain nav item ──────────────────────────
   const renderNavItem = (item: NavItem, nested = false) => {
-    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+    const isActive = !item.external && (pathname === item.href || pathname.startsWith(item.href + '/'));
+    const className = `
+      flex items-center px-4 py-2.5 mx-2 rounded-lg transition-colors mb-0.5
+      ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
+      ${nested ? 'pl-10' : ''}
+    `;
+    if (item.external) {
+      return (
+        <a
+          key={item.href}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={className}
+        >
+          <span className="text-lg">{item.icon}</span>
+          <span className="ml-3 text-sm font-medium">{item.label}</span>
+          <svg className="w-3 h-3 ml-auto opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+      );
+    }
     return (
       <Link
         key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
-        className={`
-          flex items-center px-4 py-2.5 mx-2 rounded-lg transition-colors mb-0.5
-          ${isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
-          ${nested ? 'pl-10' : ''}
-        `}
+        className={className}
       >
         <span className="text-lg">{item.icon}</span>
         <span className="ml-3 text-sm font-medium">{item.label}</span>

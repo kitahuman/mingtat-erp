@@ -396,13 +396,18 @@ export class EmployeePortalService {
     return { data, total, page, limit };
   }
 
-  // ── Submit Expense (報銷) ──────────────────────────────────────
+  // ── Submit Expense (報銷) ──────────────────────────────
   async submitExpense(userId: number, data: any) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-
     const employeeId = await this.resolveEmployeeId(user);
-
+    // Calculate total from items if provided
+    let totalAmount = data.total_amount ? Number(data.total_amount) : 0;
+    const items: any[] = Array.isArray(data.items) ? data.items : [];
+    if (items.length > 0) {
+      const itemsTotal = items.reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
+      if (itemsTotal > 0) totalAmount = itemsTotal;
+    }
     const expense = await this.prisma.expense.create({
       data: {
         date: data.date ? new Date(data.date) : new Date(),
@@ -410,11 +415,24 @@ export class EmployeePortalService {
         category_id: data.category_id ? Number(data.category_id) : undefined,
         item: data.item,
         supplier_name: data.supplier_name,
-        total_amount: data.total_amount ? Number(data.total_amount) : 0,
+        total_amount: totalAmount,
+        payment_method: data.payment_method || undefined,
+        payment_ref: data.payment_ref || undefined,
         remarks: data.remarks,
+        // Create line items if provided
+        items: items.length > 0 ? {
+          create: items
+            .filter((i: any) => i.description?.trim())
+            .map((i: any) => ({
+              description: i.description,
+              quantity: Number(i.quantity) || 1,
+              unit_price: Number(i.unit_price) || 0,
+              amount: Number(i.amount) || 0,
+            })),
+        } : undefined,
       },
+      include: { items: true, category: { include: { parent: true } } },
     });
-
     return expense;
   }
 
@@ -435,6 +453,7 @@ export class EmployeePortalService {
           where: { employee_id: employeeId },
           include: {
             category: { include: { parent: true } },
+            items: true,
           },
           orderBy: { date: 'desc' },
           skip: (page - 1) * limit,
