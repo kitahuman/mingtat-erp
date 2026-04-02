@@ -662,14 +662,40 @@ export class PaymentApplicationsService {
       throw new BadRequestException('僅已認證狀態可以記錄收款');
     }
 
+    const paidAmount = parseFloat(Number(dto.paid_amount).toFixed(2));
+    const paidDate = dto.paid_date ? new Date(dto.paid_date) : new Date();
+
     await this.prisma.paymentApplication.update({
       where: { id: paId },
       data: {
         status: 'paid',
-        paid_amount: parseFloat(Number(dto.paid_amount).toFixed(2)),
-        paid_date: dto.paid_date ? new Date(dto.paid_date) : new Date(),
+        paid_amount: paidAmount,
+        paid_date: paidDate,
       },
     });
+
+    // Phase 4: Auto-create PaymentIn record
+    await this.prisma.paymentIn.create({
+      data: {
+        date: paidDate,
+        amount: paidAmount,
+        source_type: 'payment_certificate',
+        source_ref_id: paId,
+        contract_id: contractId,
+        project_id: pa.project_id || null,
+        bank_account: dto.bank_account || null,
+        reference_no: dto.reference_no || null,
+        remarks: `IPA #${pa.pa_no} 收款`,
+      },
+    });
+
+    // Phase 6: Sync retention tracking
+    try {
+      await this.syncRetentionTracking(contractId);
+    } catch (e) {
+      // Non-critical, don't fail the main operation
+      console.error('Retention sync error:', e);
+    }
 
     return this.findOne(contractId, paId);
   }
@@ -723,6 +749,46 @@ export class PaymentApplicationsService {
   // ═══════════════════════════════════════════════════════════
   // Contract retention settings
   // ═══════════════════════════════════════════════════════════
+
+  // Phase 6: Sync retention tracking helper
+  private async syncRetentionTracking(contractId: number) {
+    const ipas = await this.prisma.paymentApplication.findMany({
+      where: {
+        contract_id: contractId,
+        status: { notIn: ['void', 'draft'] },
+      },
+      orderBy: { pa_no: 'asc' },
+    });
+
+    let prevCumulative = 0;
+    for (const ipa of ipas) {
+      const retentionAmount = this.toNum(ipa.retention_amount);
+      const periodRetention = retentionAmount - prevCumulative;
+
+      await this.prisma.retentionTracking.upsert({
+        where: {
+          contract_id_payment_application_id: {
+            contract_id: contractId,
+            payment_application_id: ipa.id,
+          },
+        },
+        create: {
+          contract_id: contractId,
+          payment_application_id: ipa.id,
+          pa_no: ipa.pa_no,
+          retention_amount: parseFloat(periodRetention.toFixed(2)),
+          cumulative_retention: parseFloat(retentionAmount.toFixed(2)),
+        },
+        update: {
+          pa_no: ipa.pa_no,
+          retention_amount: parseFloat(periodRetention.toFixed(2)),
+          cumulative_retention: parseFloat(retentionAmount.toFixed(2)),
+        },
+      });
+
+      prevCumulative = retentionAmount;
+    }
+  }
 
   async updateRetention(contractId: number, dto: { retention_rate?: number; retention_cap_rate?: number }) {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId } });

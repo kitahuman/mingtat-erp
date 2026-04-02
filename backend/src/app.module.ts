@@ -36,6 +36,9 @@ import { BqSectionsModule } from './bq-sections/bq-sections.module';
 import { BqItemsModule } from './bq-items/bq-items.module';
 import { VariationOrdersModule } from './variation-orders/variation-orders.module';
 import { PaymentApplicationsModule } from './payment-applications/payment-applications.module';
+import { PaymentInModule } from './payment-in/payment-in.module';
+import { PaymentOutModule } from './payment-out/payment-out.module';
+import { RetentionModule } from './retention/retention.module';
 
 @Module({
   imports: [
@@ -78,6 +81,9 @@ import { PaymentApplicationsModule } from './payment-applications/payment-applic
     BqItemsModule,
     VariationOrdersModule,
     PaymentApplicationsModule,
+    PaymentInModule,
+    PaymentOutModule,
+    RetentionModule,
   ],
 })
 export class AppModule {}

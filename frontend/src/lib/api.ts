@@ -471,3 +471,34 @@ export const paymentApplicationsApi = {
   updateRetention: (contractId: number, data: any) =>
     api.put(`/contracts/${contractId}/payment-applications/retention`, data),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Phase 4: PaymentIn (收款記錄) + PaymentOut (付款記錄)
+// ══════════════════════════════════════════════════════════════
+
+export const paymentInApi = {
+  list: (params?: any) => api.get('/payment-in', { params }),
+  get: (id: number) => api.get(`/payment-in/${id}`),
+  create: (data: any) => api.post('/payment-in', data),
+  update: (id: number, data: any) => api.put(`/payment-in/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-in/${id}`),
+};
+
+export const paymentOutApi = {
+  list: (params?: any) => api.get('/payment-out', { params }),
+  get: (id: number) => api.get(`/payment-out/${id}`),
+  create: (data: any) => api.post('/payment-out', data),
+  update: (id: number, data: any) => api.put(`/payment-out/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-out/${id}`),
+};
+
+// ══════════════════════════════════════════════════════════════
+// Phase 6: Retention (扣留金追蹤)
+// ══════════════════════════════════════════════════════════════
+
+export const retentionApi = {
+  getSummary: (contractId: number) => api.get(`/contracts/${contractId}/retention`),
+  sync: (contractId: number) => api.post(`/contracts/${contractId}/retention/sync`),
+  createRelease: (contractId: number, data: any) => api.post(`/contracts/${contractId}/retention/release`, data),
+  deleteRelease: (contractId: number, releaseId: number) => api.delete(`/contracts/${contractId}/retention/release/${releaseId}`),
+};

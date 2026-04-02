@@ -446,6 +446,13 @@ model Contract {
   // Phase 3: Payment Applications
   payment_applications PaymentApplication[]
 
+  // Phase 4
+  payment_ins          PaymentIn[]
+
+  // Phase 6
+  retention_trackings  RetentionTracking[]
+  retention_releases   RetentionRelease[]
+
   @@map("contracts")
 }
 
@@ -580,6 +587,11 @@ model Project {
   expenses   Expense[]
   work_logs  WorkLog[]
   payment_applications PaymentApplication[]
+
+  // Phase 4
+  payment_ins  PaymentIn[]
+  payment_outs PaymentOut[]
+
   @@map("projects")
 }
 
@@ -1168,6 +1180,9 @@ model Expense {
   items       ExpenseItem[]
   attachments ExpenseAttachment[]
 
+  // Phase 4
+  payment_outs PaymentOut[]
+
   @@map("expenses")
 }
 
@@ -1258,6 +1273,9 @@ model PaymentApplication {
   deductions              PaymentDeduction[]
   materials               PaymentMaterial[]
 
+  // Phase 6
+  retention_tracking      RetentionTracking?
+
   @@unique([contract_id, pa_no])
   @@map("payment_applications")
 }
@@ -1333,4 +1351,94 @@ model PaymentMaterial {
   payment_application    PaymentApplication @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
 
   @@map("payment_materials")
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// Phase 4: PaymentIn (收款記錄)
+// ══════════════════════════════════════════════════════════════
+
+model PaymentIn {
+  id               Int       @id @default(autoincrement())
+  date             DateTime  @db.Date
+  amount           Decimal   @db.Decimal(14, 2)
+  source_type      String    @db.VarChar(30)   // payment_certificate | invoice | retention_release | other
+  source_ref_id    Int?                         // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
+  project_id       Int?
+  contract_id      Int?
+  bank_account     String?   @db.VarChar(100)
+  reference_no     String?   @db.VarChar(100)   // 支票號碼 / 交易號碼
+  remarks          String?   @db.Text
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  project          Project?  @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  contract         Contract? @relation(fields: [contract_id], references: [id], onDelete: SetNull)
+
+  @@map("payment_ins")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 4: PaymentOut (付款記錄)
+// ══════════════════════════════════════════════════════════════
+
+model PaymentOut {
+  id               Int       @id @default(autoincrement())
+  date             DateTime  @db.Date
+  amount           Decimal   @db.Decimal(14, 2)
+  expense_id       Int?
+  project_id       Int?
+  bank_account     String?   @db.VarChar(100)
+  reference_no     String?   @db.VarChar(100)   // 支票號碼 / 交易號碼
+  remarks          String?   @db.Text
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  expense          Expense?  @relation(fields: [expense_id], references: [id], onDelete: SetNull)
+  project          Project?  @relation(fields: [project_id], references: [id], onDelete: SetNull)
+
+  @@map("payment_outs")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 6: RetentionTracking (扣留金追蹤)
+// ══════════════════════════════════════════════════════════════
+
+model RetentionTracking {
+  id                     Int       @id @default(autoincrement())
+  contract_id            Int
+  payment_application_id Int  @unique
+  pa_no                  Int                    // 第幾期
+  retention_amount       Decimal   @db.Decimal(14, 2)  // 本期扣留金額
+  cumulative_retention   Decimal   @db.Decimal(14, 2)  // 累計扣留金
+  remarks                String?   @db.Text
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @default(now()) @updatedAt
+
+  contract               Contract             @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+  payment_application    PaymentApplication   @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
+
+  @@unique([contract_id, payment_application_id])
+  @@map("retention_trackings")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 6: RetentionRelease (扣留金釋放)
+// ══════════════════════════════════════════════════════════════
+
+model RetentionRelease {
+  id               Int       @id @default(autoincrement())
+  contract_id      Int
+  release_date     DateTime  @db.Date
+  amount           Decimal   @db.Decimal(14, 2)
+  reason           String    @db.VarChar(200)   // pc_release | dlp_release | other
+  description      String?   @db.Text
+  payment_in_id    Int?                         // 自動建立的 PaymentIn ID
+  status           String    @default("pending") @db.VarChar(20)  // pending | approved | paid
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  contract         Contract  @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+
+  @@map("retention_releases")
 }

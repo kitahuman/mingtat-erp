@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import IpaTabContent from '@/components/payment/IpaTabContent';
+import RetentionTabContent from '@/components/retention/RetentionTabContent';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -296,6 +297,7 @@ export default function ContractDetailPage() {
     { key: 'vo', label: '變更指令 (VO)' },
     { key: 'projects', label: '項目列表' },
     { key: 'ipa', label: '計糧 (IPA)' },
+    { key: 'retention', label: '扣留金' },
   ];
 
   return (
@@ -601,6 +603,11 @@ export default function ContractDetailPage() {
       {/* ═══════════ Tab: 計糧 (IPA) ═══════════ */}
       {activeTab === 'ipa' && (
         <IpaTabContent contractId={contractId} />
+      )}
+
+      {/* ═══════════ Tab: 扣留金 ═══════════ */}
+      {activeTab === 'retention' && (
+        <RetentionTabContent contractId={contractId} />
       )}
 
       {/* ═══════════ Modals ═══════════ */}
