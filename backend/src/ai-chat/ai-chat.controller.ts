@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Res } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AiChatService } from './ai-chat.service';
-import * as express from 'express';
+import type { Response } from 'express';
 
 @Controller('ai-chat')
 @UseGuards(AuthGuard('jwt'))
@@ -9,7 +9,7 @@ export class AiChatController {
   constructor(private readonly service: AiChatService) {}
 
   @Post()
-  async chat(@Body('messages') messages: any[], @Res() res: express.Response) {
+  async chat(@Body('messages') messages: any[], @Res() res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
