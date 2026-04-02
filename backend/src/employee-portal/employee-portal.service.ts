@@ -494,7 +494,7 @@ export class EmployeePortalService {
           : Promise.resolve(0),
         employeeId
           ? this.prisma.expense.count({
-              where: { employee_id: employeeId, paid_amount: 0 },
+              where: { employee_id: employeeId, status: 'pending' } as any,
             })
           : Promise.resolve(0),
         employeeId

@@ -5,6 +5,7 @@ import RoleGuard from '@/components/RoleGuard';
 
 const CATEGORY_LABELS: Record<string, string> = {
   employee_role: '員工職位',
+  certificate_type: '證書/牌照類型',
   machine_type: '機種',
   tonnage: '噸數',
   wage_unit: '工資單位',

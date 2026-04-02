@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_OPTIONS: Record<string, string[]> = {
-  employee_role: ['司機', '機手', '雜工', '管理', '鴻輝代工', '散工機手', '管工', '安全督導員', '董事', 'T1'],
+  employee_role: ['管理', '司機', '機手', '雜工', '鴻輝代工', '散工機手', '管工', '安全督導員', '董事', 'T1'],
   machine_type: ['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車', '挖掘機', '火轆'],
   tonnage: ['3噸', '5.5噸', '8噸', '10噸', '11噸', '13噸', '14噸', '20噸', '24噸', '30噸', '33噸', '35噸', '38噸', '44噸', '49噸'],
   wage_unit: ['小時', '車', '天', '周', '月', '噸', 'M', 'M2', 'M3', 'JOB', '工', '次', '轉', 'trip', '晚'],
@@ -10,11 +10,23 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
   day_night: ['日', '夜', '中直'],
   vehicle_type: ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'],
   payment_method: ['支票', '現金', '銀行轉帳', 'EPS', 'FPS 轉數快', '信用卡', '網上銀行', '其他'],
+  certificate_type: [
+    '駕駛執照', '建造業安全訓練證明書（平安卡）', '建造業工人註冊證（工卡）',
+    '核准工人證明書', '操作搬土機證明書', '操作挖掘機證明書',
+    '起重機操作員證明書', '操作貨車弔機證明書', '操作履帶式固定弔臂起重機證明書',
+    '操作輪胎式液壓伸縮弔臂起重機證明書', '機場禁區通行證', '金門證', '禮頓證',
+    '密閉空間作業核准工人證明書', '操作壓實機證明書', '弔索銀咭',
+    '工藝測試證明書', '壓實負荷物移動機械操作員機證明書', '升降台安全使用訓練證書',
+  ],
 };
 
 @Injectable()
-export class FieldOptionsService {
+export class FieldOptionsService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    await this.seedDefaults();
+  }
 
   async seedDefaults() {
     const count = await this.prisma.fieldOption.count();

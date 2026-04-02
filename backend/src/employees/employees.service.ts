@@ -79,10 +79,15 @@ export class EmployeesService {
   async terminate(id: number, dto: { termination_date: string; termination_reason?: string }) {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
+    // 離職時註銷員工編號（加上 [revoked] 後綴，新員工不會重用此編號）
+    const revokedCode = emp.emp_code && !emp.emp_code.includes('[revoked]')
+      ? `${emp.emp_code} [revoked]`
+      : emp.emp_code;
     await this.prisma.employee.update({
       where: { id },
       data: {
         status: 'inactive',
+        emp_code: revokedCode,
         termination_date: new Date(dto.termination_date),
         termination_reason: dto.termination_reason || null,
       },
@@ -93,9 +98,11 @@ export class EmployeesService {
   async reinstate(id: number) {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
+    // 復職時恢復員工編號（移除 [revoked] 後綴）
+    const restoredCode = emp.emp_code ? emp.emp_code.replace(' [revoked]', '') : emp.emp_code;
     await this.prisma.employee.update({
       where: { id },
-      data: { status: 'active', termination_date: null, termination_reason: null },
+      data: { status: 'active', emp_code: restoredCode, termination_date: null, termination_reason: null },
     });
     return this.findOne(id);
   }

@@ -49,6 +49,9 @@ const navEntries: NavEntry[] = [
     icon: '👥',
     minRole: 'clerk',
     items: [
+      { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },
+      { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
+      { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
       { href: '/attendances', label: '打卡紀錄', icon: '🕐', minRole: 'clerk' },
       { href: '/leaves', label: '請假紀錄', icon: '📅', minRole: 'clerk' },
     ],
@@ -58,8 +61,6 @@ const navEntries: NavEntry[] = [
     icon: '💵',
     minRole: 'clerk',
     items: [
-      { href: '/payroll', label: '計粮管理', icon: '🧮', minRole: 'clerk' },
-      { href: '/payroll-records', label: '粮單記錄', icon: '📄', minRole: 'clerk' },
       { href: '/expenses', label: '支出管理', icon: '💸', minRole: 'clerk' },
       { href: '/employee-portal/expense', label: '費用報銷', icon: '📝', minRole: 'worker' },
     ],
@@ -74,7 +75,6 @@ const navEntries: NavEntry[] = [
       { href: '/rental-rate-cards', label: '租賃價目表', icon: '📊', minRole: 'clerk' },
       { href: '/fleet-rate-cards', label: '車隊價目表', icon: '🚚', minRole: 'clerk' },
       { href: '/subcon-rate-cards', label: '街車價目表', icon: '🚛', minRole: 'clerk' },
-      { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },
     ],
   },
   {
@@ -165,8 +165,9 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '公司內部資料': false,
-    '報價及價目': true,
+    '人力資源': false,
     '會計部門': false,
+    '報價及價目': true,
     '系統設定': false,
   });
 
