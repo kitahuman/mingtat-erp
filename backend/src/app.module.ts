@@ -42,6 +42,7 @@ import { RetentionModule } from './retention/retention.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
+import { ProjectProfitLossModule } from './project-profit-loss/project-profit-loss.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliat
     InvoicesModule,
     BankAccountsModule,
     BankReconciliationModule,
+    ProjectProfitLossModule,
   ],
 })
 export class AppModule {}

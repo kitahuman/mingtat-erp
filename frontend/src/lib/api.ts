@@ -548,3 +548,9 @@ export const bankReconciliationApi = {
   unmatch: (txId: number) => api.post(`/bank-reconciliation/unmatch/${txId}`),
   exclude: (txId: number, remarks?: string) => api.post(`/bank-reconciliation/exclude/${txId}`, { remarks }),
 };
+
+// Project Profit & Loss (工程損益表)
+export const projectProfitLossApi = {
+  getOverview: (params?: any) => api.get('/project-profit-loss/overview', { params }),
+  getProjectPL: (projectId: number, params?: any) => api.get(`/project-profit-loss/${projectId}`, { params }),
+};

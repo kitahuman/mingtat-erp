@@ -90,6 +90,14 @@ const navEntries: NavEntry[] = [
     ],
   },
   {
+    label: '報表',
+    icon: '📈',
+    minRole: 'clerk',
+    items: [
+      { href: '/profit-loss', label: '工程損益總覽', icon: '📊', minRole: 'clerk' },
+    ],
+  },
+  {
     label: '系統設定',
     icon: '⚙️',
     roles: ['admin'],
@@ -200,6 +208,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
     '人力資源': false,
     '會計部門': false,
     '報價及價目': true,
+    '報表': true,
     '系統設定': false,
   });
 
