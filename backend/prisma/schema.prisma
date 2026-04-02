@@ -1133,6 +1133,7 @@ model ExpenseCategory {
   id         Int      @id @default(autoincrement())
   name       String
   parent_id  Int?
+  type       String?  @db.VarChar(20) // DIRECT | OVERHEAD
   sort_order Int      @default(0)
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
@@ -1164,7 +1165,8 @@ model Expense {
   payment_date       DateTime? @db.Date
   payment_ref        String?
   remarks            String?   @db.Text
-  source             String?   @default("erp")  // "erp" | "employee_portal"
+  source             String?   @default("MANUAL")  // MANUAL | PURCHASE | PAYROLL | SUBCON | CONTRA
+  source_ref_id      Int?                            // 關聯到來源記錄的 ID
   machine_code       String?
   machinery_id       Int?
   client_id          Int?

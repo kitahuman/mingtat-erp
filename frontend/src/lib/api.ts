@@ -239,6 +239,8 @@ export const payrollApi = {
   bulkMarkPaid: (ids: number[], paymentDate?: string, chequeNumber?: string) =>
     api.post('/payroll/bulk/mark-paid', { ids, payment_date: paymentDate, cheque_number: chequeNumber }),
   recalculate: (id: number) => api.post(`/payroll/${id}/recalculate`),
+  finalize: (id: number) => api.post(`/payroll/${id}/finalize`),
+  unconfirm: (id: number) => api.post(`/payroll/${id}/unconfirm`),
   remove: (id: number) => api.delete(`/payroll/${id}`),
   summary: (params?: any) => api.get('/payroll/summary', { params }),
 
@@ -362,8 +364,8 @@ export const expenseCategoriesApi = {
   getAll: () => api.get('/expense-categories'),
   getTree: () => api.get('/expense-categories/tree'),
   get: (id: number) => api.get(`/expense-categories/${id}`),
-  create: (data: { name: string; parent_id?: number }) => api.post('/expense-categories', data),
-  update: (id: number, data: { name?: string; is_active?: boolean; sort_order?: number }) => api.put(`/expense-categories/${id}`, data),
+  create: (data: { name: string; parent_id?: number; type?: string }) => api.post('/expense-categories', data),
+  update: (id: number, data: { name?: string; is_active?: boolean; sort_order?: number; type?: string }) => api.put(`/expense-categories/${id}`, data),
   remove: (id: number) => api.delete(`/expense-categories/${id}`),
   reorder: (parent_id: number | null, orderedIds: number[]) => api.post('/expense-categories/reorder', { parent_id, orderedIds }),
 };

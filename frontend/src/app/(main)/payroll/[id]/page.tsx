@@ -374,8 +374,23 @@ export default function PayrollDetailPage() {
   useEffect(() => { loadData(); }, [params.id]);
 
   const handleConfirm = async () => {
+    if (!confirm('確定要確認此糧單？確認後將自動產生薪資支出記錄。')) return;
     try {
-      await payrollApi.update(payroll.id, { status: 'confirmed' });
+      const res = await payrollApi.finalize(payroll.id);
+      const count = res.data?.expenses_generated || 0;
+      alert(`已確認糧單，自動產生 ${count} 筆支出記錄`);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
+  const handleUnconfirm = async () => {
+    if (!confirm('確定要撤銷確認？相關的自動產生支出記錄將被刪除。')) return;
+    try {
+      const res = await payrollApi.unconfirm(payroll.id);
+      const count = res.data?.expenses_deleted || 0;
+      alert(`已撤銷確認，刪除了 ${count} 筆支出記錄`);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -569,7 +584,10 @@ export default function PayrollDetailPage() {
             </>
           )}
           {payroll.status === 'confirmed' && (
-            <button onClick={() => setShowPayment(true)} className="btn-primary text-sm">記錄付款</button>
+            <>
+              <button onClick={handleUnconfirm} className="btn-secondary text-sm">撤銷確認</button>
+              <button onClick={() => setShowPayment(true)} className="btn-primary text-sm">記錄付款</button>
+            </>
           )}
         </div>
       </div>

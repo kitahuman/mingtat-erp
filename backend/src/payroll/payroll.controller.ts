@@ -64,6 +64,18 @@ export class PayrollController {
     return this.payrollService.bulkMarkPaid(body.ids, body.payment_date, body.cheque_number);
   }
 
+  // 確認糧單（finalize）─ 自動產生支出記錄
+  @Post(':id/finalize')
+  finalize(@Param('id') id: string) {
+    return this.payrollService.finalize(+id);
+  }
+
+  // 撤銷確認 ─ 刪除自動產生的支出記錄
+  @Post(':id/unconfirm')
+  unconfirm(@Param('id') id: string) {
+    return this.payrollService.unconfirm(+id);
+  }
+
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string) {
     return this.payrollService.recalculate(+id);

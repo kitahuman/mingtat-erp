@@ -1,13 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-const DEFAULT_CATEGORIES: Record<string, string[]> = {
-  '工程支出': ['分判商工程費', '工程用材料費', '工程用租金', '工程用機械租金', '倉務雜費', '其他工程支出', '代支工程款'],
-  '出糧支出': ['出糧支出-文員', '出糧支出-管工', '出糧支出-司機', '出糧支出-雜工', '出糧支出-機手', '出糧支出-散工司機', '出糧支出-散工機手', '員工強積金', '代支出糧', '代支費用', '遣散費', '賠償', '勞保'],
-  '車輛支出': ['牌費', '油費', '維修費', '驗車費', '汽車零件', '車輛用其他費用', '車輛保險費', '買車', '供車會', '其他車隊租金', '汽車費用-GPS', '運輸費用'],
-  '機械支出': ['供機械會', '驗機費', '機械維修零件', '機械採購'],
-  '行政支出': ['辦公室用雜費', '辦公室用租金', '膳食', '行政費', '電腦及軟件費用', '裝修費', '應酬費', '報稅核數費及周年申報表申報費', '律師費', '供樓'],
-  '其他支出': ['買賣產品收入', '入帳票支出', '其他支出', '股東往來', '貸款還款', '利得稅', '罰款'],
+const DEFAULT_CATEGORIES: Record<string, { type: string; children: string[] }> = {
+  '工程支出': { type: 'DIRECT', children: ['分判商工程費', '工程用材料費', '工程用租金', '工程用機械租金', '倉務雜費', '其他工程支出', '代支工程款'] },
+  '出糧支出': { type: 'OVERHEAD', children: ['出糧支出-文員', '出糧支出-管工', '出糧支出-司機', '出糧支出-雜工', '出糧支出-機手', '出糧支出-散工司機', '出糧支出-散工機手', '員工強積金', '代支出糧', '代支費用', '遣散費', '賠償', '勞保'] },
+  '車輛支出': { type: 'OVERHEAD', children: ['牌費', '油費', '維修費', '驗車費', '汽車零件', '車輛用其他費用', '車輛保險費', '買車', '供車會', '其他車隊租金', '汽車費用-GPS', '運輸費用'] },
+  '機械支出': { type: 'OVERHEAD', children: ['供機械會', '驗機費', '機械維修零件', '機械採購'] },
+  '行政支出': { type: 'OVERHEAD', children: ['辦公室用雜費', '辦公室用租金', '膳食', '行政費', '電腦及軟件費用', '裝修費', '應酬費', '報稅核數費及周年申報表申報費', '律師費', '供樓'] },
+  '其他支出': { type: 'OVERHEAD', children: ['買賣產品收入', '入帳票支出', '其他支出', '股東往來', '貸款還款', '利得稅', '罰款'] },
 };
 
 @Injectable()
@@ -20,14 +20,14 @@ export class ExpenseCategoriesService {
     if (count > 0) return;
 
     let parentOrder = 1;
-    for (const [parentName, children] of Object.entries(DEFAULT_CATEGORIES)) {
+    for (const [parentName, config] of Object.entries(DEFAULT_CATEGORIES)) {
       const parent = await this.prisma.expenseCategory.create({
-        data: { name: parentName, sort_order: parentOrder++, is_active: true },
+        data: { name: parentName, type: config.type, sort_order: parentOrder++, is_active: true },
       });
       let childOrder = 1;
-      for (const childName of children) {
+      for (const childName of config.children) {
         await this.prisma.expenseCategory.create({
-          data: { name: childName, parent_id: parent.id, sort_order: childOrder++, is_active: true },
+          data: { name: childName, parent_id: parent.id, type: config.type, sort_order: childOrder++, is_active: true },
         });
       }
     }
@@ -65,9 +65,16 @@ export class ExpenseCategoriesService {
     return cat;
   }
 
-  async create(dto: { name: string; parent_id?: number }) {
+  async create(dto: { name: string; parent_id?: number; type?: string }) {
     const data: any = { name: dto.name, is_active: true };
     if (dto.parent_id) data.parent_id = Number(dto.parent_id);
+    if (dto.type) data.type = dto.type;
+
+    // If creating a child and no type specified, inherit from parent
+    if (data.parent_id && !data.type) {
+      const parent = await this.prisma.expenseCategory.findUnique({ where: { id: data.parent_id } });
+      if (parent?.type) data.type = parent.type;
+    }
 
     // Auto sort_order
     const max = await this.prisma.expenseCategory.aggregate({
@@ -79,10 +86,27 @@ export class ExpenseCategoriesService {
     return this.prisma.expenseCategory.create({ data });
   }
 
-  async update(id: number, dto: { name?: string; is_active?: boolean; sort_order?: number }) {
+  async update(id: number, dto: { name?: string; is_active?: boolean; sort_order?: number; type?: string }) {
     const existing = await this.prisma.expenseCategory.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('類別不存在');
-    return this.prisma.expenseCategory.update({ where: { id }, data: dto });
+
+    const updateData: any = {};
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.is_active !== undefined) updateData.is_active = dto.is_active;
+    if (dto.sort_order !== undefined) updateData.sort_order = dto.sort_order;
+    if (dto.type !== undefined) updateData.type = dto.type;
+
+    const updated = await this.prisma.expenseCategory.update({ where: { id }, data: updateData });
+
+    // If updating a parent's type, propagate to children
+    if (dto.type !== undefined && !existing.parent_id) {
+      await this.prisma.expenseCategory.updateMany({
+        where: { parent_id: id },
+        data: { type: dto.type },
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: number) {

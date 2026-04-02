@@ -80,6 +80,8 @@ export default function ExpensesPage() {
   const [companyFilter, setCompanyFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [paidFilter, setPaidFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
@@ -133,6 +135,8 @@ export default function ExpensesPage() {
         company_id: companyFilter || undefined,
         category_id: categoryFilter || undefined,
         is_paid: paidFilter !== '' ? paidFilter : undefined,
+        source: sourceFilter || undefined,
+        project_id: projectFilter || undefined,
         sortBy,
         sortOrder,
       })
@@ -141,7 +145,7 @@ export default function ExpensesPage() {
         setTotal(res.data.total);
       })
       .finally(() => setLoading(false));
-  }, [page, search, companyFilter, categoryFilter, paidFilter, sortBy, sortOrder]);
+  }, [page, search, companyFilter, categoryFilter, paidFilter, sourceFilter, projectFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -452,15 +456,31 @@ export default function ExpensesPage() {
       label: '來源',
       sortable: true,
       editable: false,
-      render: (v: any) => (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-          v === 'employee_portal' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-        }`}>
-          {v === 'employee_portal' ? '員工報銷' : 'ERP'}
-        </span>
-      ),
-      filterRender: (v: any) => v === 'employee_portal' ? '員工報銷' : 'ERP',
-      exportRender: (v: any) => v === 'employee_portal' ? '員工報銷' : 'ERP',
+      render: (v: any) => {
+        const sourceMap: Record<string, { label: string; color: string }> = {
+          'MANUAL': { label: '手動輸入', color: 'bg-gray-100 text-gray-600' },
+          'PURCHASE': { label: '採購', color: 'bg-blue-100 text-blue-700' },
+          'PAYROLL': { label: '薪資', color: 'bg-purple-100 text-purple-700' },
+          'SUBCON': { label: '分判', color: 'bg-orange-100 text-orange-700' },
+          'CONTRA': { label: '對沖', color: 'bg-yellow-100 text-yellow-700' },
+          'erp': { label: 'ERP', color: 'bg-gray-100 text-gray-600' },
+          'employee_portal': { label: '員工報銷', color: 'bg-blue-100 text-blue-700' },
+        };
+        const info = sourceMap[v] || { label: v || '-', color: 'bg-gray-100 text-gray-600' };
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${info.color}`}>
+            {info.label}
+          </span>
+        );
+      },
+      filterRender: (v: any) => {
+        const m: Record<string, string> = { 'MANUAL': '手動輸入', 'PURCHASE': '採購', 'PAYROLL': '薪資', 'SUBCON': '分判', 'CONTRA': '對沖', 'erp': 'ERP', 'employee_portal': '員工報銷' };
+        return m[v] || v || '-';
+      },
+      exportRender: (v: any) => {
+        const m: Record<string, string> = { 'MANUAL': '手動輸入', 'PURCHASE': '採購', 'PAYROLL': '薪資', 'SUBCON': '分判', 'CONTRA': '對沖', 'erp': 'ERP', 'employee_portal': '員工報銷' };
+        return m[v] || v || '-';
+      },
     },
   ];
 
@@ -520,6 +540,18 @@ export default function ExpensesPage() {
                 <option value="">全部狀態</option>
                 <option value="true">已付款</option>
                 <option value="false">未付款</option>
+              </select>
+              <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部來源</option>
+                <option value="MANUAL">手動輸入</option>
+                <option value="PURCHASE">採購</option>
+                <option value="PAYROLL">薪資</option>
+                <option value="SUBCON">分判</option>
+                <option value="CONTRA">對沖</option>
+              </select>
+              <select value={projectFilter} onChange={e => { setProjectFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部工程</option>
+                {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_no} {p.project_name || ''}</option>)}
               </select>
             </div>
           }

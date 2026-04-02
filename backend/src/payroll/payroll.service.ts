@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExpensesService } from '../expenses/expenses.service';
 
 @Injectable()
 export class PayrollService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly expensesService: ExpensesService,
+  ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
   async findAll(query: any) {
@@ -679,13 +683,70 @@ export class PayrollService {
     return this.prisma.payroll.update({ where: { id }, data: updateData });
   }
 
-  // ── 批量確認 ──────────────────────────────────────────────────
-  async bulkConfirm(ids: number[]) {
-    await this.prisma.payroll.updateMany({
-      where: { id: { in: ids } },
+  // ── 確認單筆糧單（finalize）────────────────────────────────────────
+  async finalize(id: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id },
+      include: {
+        employee: true,
+        payroll_work_logs: { where: { is_excluded: false } },
+      },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft') {
+      throw new BadRequestException('只能確認草稿狀態的糧單');
+    }
+
+    // Check if expenses already exist for this payroll
+    const alreadyExists = await this.expensesService.existsBySourceRef('PAYROLL', id);
+    if (alreadyExists) {
+      throw new BadRequestException('此糧單已產生過支出記錄，不能重複產生');
+    }
+
+    // Update status to confirmed
+    await this.prisma.payroll.update({
+      where: { id },
       data: { status: 'confirmed' },
     });
-    return { updated: ids.length };
+
+    // Auto-generate expenses
+    const expenseCount = await this.generateExpensesFromPayroll(payroll);
+
+    return { confirmed: true, expenses_generated: expenseCount };
+  }
+
+  // ── 撤銷確認（回到草稿）────────────────────────────────────────
+  async unconfirm(id: number) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'confirmed') {
+      throw new BadRequestException('只能撤銷已確認狀態的糧單');
+    }
+
+    // Delete auto-generated expenses
+    const deletedCount = await this.expensesService.deleteBySourceRef('PAYROLL', id);
+
+    // Revert status to draft
+    await this.prisma.payroll.update({
+      where: { id },
+      data: { status: 'draft' },
+    });
+
+    return { unconfirmed: true, expenses_deleted: deletedCount };
+  }
+
+  // ── 批量確認 ──────────────────────────────────────────────────
+  async bulkConfirm(ids: number[]) {
+    let totalExpenses = 0;
+    for (const id of ids) {
+      try {
+        const result = await this.finalize(id);
+        totalExpenses += result.expenses_generated;
+      } catch {
+        // Skip payrolls that can't be confirmed (already confirmed, etc.)
+      }
+    }
+    return { updated: ids.length, expenses_generated: totalExpenses };
   }
 
   // ── 批量標記已付款 ────────────────────────────────────────────
@@ -708,6 +769,9 @@ export class PayrollService {
     if (payroll.status !== 'draft') {
       throw new BadRequestException('只能刪除草稿狀態的糧單');
     }
+
+    // Delete any auto-generated expenses (safety check)
+    await this.expensesService.deleteBySourceRef('PAYROLL', id);
 
     await this.prisma.payrollWorkLog.deleteMany({ where: { payroll_id: id } });
     await this.prisma.payrollAdjustment.deleteMany({ where: { payroll_id: id } });
@@ -1760,5 +1824,165 @@ export class PayrollService {
         net_amount: grossIncome - mpfDeduction + adjustmentTotal,
       },
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Phase 8: Auto-generate expenses from payroll
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * 計糧確認後自動產生 Expense 記錄
+   * - 按出勤分攤到工程（project_id）
+   * - 如果員工當月只在一個工程工作 → 100% 歸入該工程
+   * - 如果員工當月在多個工程工作 → 按出勤天數比例分攤
+   * - 無法確定工程的 → project_id 留空（公司營運開支）
+   */
+  private async generateExpensesFromPayroll(payroll: any): Promise<number> {
+    const employee = payroll.employee;
+    const pwls = payroll.payroll_work_logs || [];
+    const netAmount = Number(payroll.net_amount) || 0;
+    const grossIncome = Number(payroll.base_amount) + Number(payroll.allowance_total) +
+      Number(payroll.ot_total) + Number(payroll.commission_total);
+
+    if (netAmount <= 0 && grossIncome <= 0) return 0;
+
+    // Find the salary expense category
+    const salaryCategory = await this.findSalaryCategoryId();
+
+    // Determine the expense date (use payroll period end date or last day of period)
+    const expenseDate = payroll.date_to
+      ? new Date(payroll.date_to)
+      : (() => {
+          const [y, m] = payroll.period.split('-');
+          return new Date(Number(y), Number(m), 0); // last day of month
+        })();
+
+    // Get project distribution from work logs
+    const projectDistribution = await this.calculateProjectDistribution(pwls);
+
+    const expenses: any[] = [];
+
+    if (projectDistribution.length === 0) {
+      // No work logs or no project info → single expense with no project
+      expenses.push({
+        date: expenseDate,
+        company_id: employee.company_id || null,
+        employee_id: employee.id,
+        category_id: salaryCategory,
+        item: `${payroll.period} 薪資 - ${employee.name_zh || employee.name_en || ''}`,
+        total_amount: grossIncome,
+        source: 'PAYROLL',
+        source_ref_id: payroll.id,
+        project_id: null,
+        remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}`,
+      });
+    } else if (projectDistribution.length === 1) {
+      // Single project → 100% allocation
+      const dist = projectDistribution[0];
+      expenses.push({
+        date: expenseDate,
+        company_id: employee.company_id || null,
+        employee_id: employee.id,
+        category_id: salaryCategory,
+        item: `${payroll.period} 薪資 - ${employee.name_zh || employee.name_en || ''}`,
+        total_amount: grossIncome,
+        source: 'PAYROLL',
+        source_ref_id: payroll.id,
+        project_id: dist.project_id,
+        remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}，出勤 ${dist.days} 天`,
+      });
+    } else {
+      // Multiple projects → proportional allocation
+      const totalDays = projectDistribution.reduce((sum, d) => sum + d.days, 0);
+      let allocated = 0;
+
+      for (let i = 0; i < projectDistribution.length; i++) {
+        const dist = projectDistribution[i];
+        const ratio = dist.days / totalDays;
+        // Last item gets the remainder to avoid rounding issues
+        const amount = i === projectDistribution.length - 1
+          ? Math.round((grossIncome - allocated) * 100) / 100
+          : Math.round(grossIncome * ratio * 100) / 100;
+        allocated += amount;
+
+        expenses.push({
+          date: expenseDate,
+          company_id: employee.company_id || null,
+          employee_id: employee.id,
+          category_id: salaryCategory,
+          item: `${payroll.period} 薪資 - ${employee.name_zh || employee.name_en || ''}`,
+          total_amount: amount,
+          source: 'PAYROLL',
+          source_ref_id: payroll.id,
+          project_id: dist.project_id,
+          remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}，出勤 ${dist.days}/${totalDays} 天 (${(ratio * 100).toFixed(1)}%)`,
+        });
+      }
+    }
+
+    // Bulk create expenses
+    await this.expensesService.bulkCreate(expenses);
+    return expenses.length;
+  }
+
+  /**
+   * 計算工作記錄中各工程的出勤天數分佈
+   * 從原始 WorkLog 查找 project_id，因為 PayrollWorkLog 沒有直接存儲 project_id
+   */
+  private async calculateProjectDistribution(pwls: any[]): Promise<{ project_id: number | null; days: number }[]> {
+    const projectDaysMap = new Map<number | null, Set<string>>();
+
+    // Collect work_log_ids to batch-query project_id
+    const workLogIds = pwls
+      .filter(p => p.work_log_id)
+      .map(p => p.work_log_id);
+
+    // Batch fetch original work logs to get project_id
+    const workLogProjectMap = new Map<number, number | null>();
+    if (workLogIds.length > 0) {
+      const workLogs = await this.prisma.workLog.findMany({
+        where: { id: { in: workLogIds } },
+        select: { id: true, project_id: true },
+      });
+      for (const wl of workLogs) {
+        workLogProjectMap.set(wl.id, wl.project_id);
+      }
+    }
+
+    for (const pwl of pwls) {
+      if (!pwl.scheduled_date) continue;
+      const dateStr = new Date(pwl.scheduled_date).toISOString().slice(0, 10);
+      const projectId = pwl.work_log_id
+        ? (workLogProjectMap.get(pwl.work_log_id) ?? null)
+        : null;
+
+      if (!projectDaysMap.has(projectId)) {
+        projectDaysMap.set(projectId, new Set());
+      }
+      projectDaysMap.get(projectId)!.add(dateStr);
+    }
+
+    const result: { project_id: number | null; days: number }[] = [];
+    for (const [projectId, dates] of projectDaysMap) {
+      result.push({ project_id: projectId, days: dates.size });
+    }
+
+    return result;
+  }
+
+  /**
+   * 查找「薪資」支出類別 ID
+   */
+  private async findSalaryCategoryId(): Promise<number | null> {
+    // Try to find a category matching salary-related names
+    const salaryNames = ['出糧支出', '薪資', '薪金', '工資'];
+    for (const name of salaryNames) {
+      const cat = await this.prisma.expenseCategory.findFirst({
+        where: { name: { contains: name }, is_active: true },
+        orderBy: { parent_id: 'asc' }, // prefer parent categories
+      });
+      if (cat) return cat.id;
+    }
+    return null;
   }
 }

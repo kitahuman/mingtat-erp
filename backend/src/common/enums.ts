@@ -60,3 +60,18 @@ export enum DayNightShift {
   DAY = '日',
   NIGHT = '夜',
 }
+
+// 支出來源類型
+export const EXPENSE_SOURCE_OPTIONS = [
+  { value: 'MANUAL', label: '手動輸入' },
+  { value: 'PURCHASE', label: '採購' },
+  { value: 'PAYROLL', label: '薪資' },
+  { value: 'SUBCON', label: '分判' },
+  { value: 'CONTRA', label: '對沖' },
+];
+
+// 支出類別類型
+export const EXPENSE_CATEGORY_TYPE_OPTIONS = [
+  { value: 'DIRECT', label: '直接成本' },
+  { value: 'OVERHEAD', label: '營運開支' },
+];

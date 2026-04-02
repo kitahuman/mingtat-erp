@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import {
   UNIT_OPTIONS, SERVICE_TYPE_OPTIONS,
   VEHICLE_TONNAGE_OPTIONS, VEHICLE_TYPE_OPTIONS,
+  EXPENSE_SOURCE_OPTIONS, EXPENSE_CATEGORY_TYPE_OPTIONS,
 } from './enums';
 import { FieldOptionsService } from '../field-options/field-options.service';
 
@@ -36,6 +37,8 @@ export class EnumsController {
         { value: 'daily', label: '日薪制' },
         { value: 'monthly', label: '月薪制' },
       ],
+      expense_sources: EXPENSE_SOURCE_OPTIONS,
+      expense_category_types: EXPENSE_CATEGORY_TYPE_OPTIONS,
     };
   }
 }

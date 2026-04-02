@@ -14,6 +14,10 @@ const EXPENSE_INCLUDE = {
   attachments: { orderBy: { uploaded_at: 'asc' as const } },
 };
 
+// Valid expense source types
+export const EXPENSE_SOURCES = ['MANUAL', 'PURCHASE', 'PAYROLL', 'SUBCON', 'CONTRA'] as const;
+export type ExpenseSource = typeof EXPENSE_SOURCES[number];
+
 @Injectable()
 export class ExpensesService {
   constructor(private prisma: PrismaService) {}
@@ -27,6 +31,7 @@ export class ExpensesService {
     employee_id?: number;
     project_id?: number;
     is_paid?: string;
+    source?: string;
     sortBy?: string;
     sortOrder?: string;
   }) {
@@ -40,6 +45,10 @@ export class ExpensesService {
     if (query.project_id) where.project_id = Number(query.project_id);
     if (query.is_paid !== undefined && query.is_paid !== '') {
       where.is_paid = query.is_paid === 'true';
+    }
+    // Phase 7: source filter
+    if (query.source && query.source !== '') {
+      where.source = query.source;
     }
     if (query.search) {
       where.OR = [
@@ -88,7 +97,7 @@ export class ExpensesService {
     if (data.payment_date === '') data.payment_date = null;
     else if (data.payment_date) data.payment_date = new Date(data.payment_date);
 
-    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
+    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id', 'source_ref_id'];
     for (const f of numericFields) {
       if (f in data) {
         data[f] = data[f] ? Number(data[f]) : null;
@@ -96,11 +105,21 @@ export class ExpensesService {
     }
     if ('total_amount' in data) data.total_amount = Number(data.total_amount) || 0;
     if ('is_paid' in data) data.is_paid = Boolean(data.is_paid);
+
+    // Normalize source
+    if ('source' in data) {
+      if (!data.source || !EXPENSE_SOURCES.includes(data.source)) {
+        data.source = 'MANUAL';
+      }
+    }
+
     return data;
   }
 
   async create(dto: any) {
     const data = this.normalizeDto(dto);
+    // Set default source if not provided
+    if (!data.source) data.source = 'MANUAL';
     const saved = await this.prisma.expense.create({ data });
     return this.findOne(saved.id);
   }
@@ -119,6 +138,40 @@ export class ExpensesService {
     if (!existing) throw new NotFoundException('支出記錄不存在');
     await this.prisma.expense.delete({ where: { id } });
     return { message: '刪除成功' };
+  }
+
+  // ── Bulk create expenses (for payroll auto-generation) ──────────
+  async bulkCreate(expenses: any[]): Promise<number[]> {
+    const createdIds: number[] = [];
+    for (const dto of expenses) {
+      const data = this.normalizeDto(dto);
+      if (!data.source) data.source = 'MANUAL';
+      const saved = await this.prisma.expense.create({ data });
+      createdIds.push(saved.id);
+    }
+    return createdIds;
+  }
+
+  // ── Delete expenses by source ref ──────────────────────────────
+  async deleteBySourceRef(source: string, sourceRefId: number): Promise<number> {
+    const result = await this.prisma.expense.deleteMany({
+      where: {
+        source,
+        source_ref_id: sourceRefId,
+      },
+    });
+    return result.count;
+  }
+
+  // ── Check if expenses exist for a source ref ──────────────────
+  async existsBySourceRef(source: string, sourceRefId: number): Promise<boolean> {
+    const count = await this.prisma.expense.count({
+      where: {
+        source,
+        source_ref_id: sourceRefId,
+      },
+    });
+    return count > 0;
   }
 
   // ── Expense Items ──────────────────────────────────────────────

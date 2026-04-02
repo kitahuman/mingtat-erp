@@ -7,10 +7,16 @@ interface Category {
   id: number;
   name: string;
   parent_id: number | null;
+  type?: string | null;
   sort_order: number;
   is_active: boolean;
   children?: Category[];
 }
+
+const TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  DIRECT: { label: '直接成本', color: 'bg-blue-100 text-blue-700' },
+  OVERHEAD: { label: '營運開支', color: 'bg-amber-100 text-amber-700' },
+};
 
 function DraggableRow({
   item,
@@ -41,6 +47,15 @@ function DraggableRow({
       <td className={`px-3 py-2 text-sm font-medium ${indent ? 'pl-10' : ''}`}>
         {indent && <span className="text-gray-400 mr-1">└</span>}
         {item.name}
+      </td>
+      <td className="px-3 py-2 text-center w-24">
+        {item.type && TYPE_LABELS[item.type] ? (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_LABELS[item.type].color}`}>
+            {TYPE_LABELS[item.type].label}
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs">-</span>
+        )}
       </td>
       <td className="px-3 py-2 text-center w-20">
         <span className={item.is_active ? 'badge-green' : 'badge-gray'}>
@@ -76,6 +91,7 @@ export default function ExpenseCategoriesPage() {
   const [editingItem, setEditingItem] = useState<Category | null>(null);
   const [formName, setFormName] = useState('');
   const [formParentId, setFormParentId] = useState<string>('');
+  const [formType, setFormType] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   // Drag state
@@ -99,6 +115,7 @@ export default function ExpenseCategoriesPage() {
     setEditingItem(null);
     setFormName('');
     setFormParentId('');
+    setFormType('');
     setShowModal(true);
   };
 
@@ -106,6 +123,9 @@ export default function ExpenseCategoriesPage() {
     setEditingItem(null);
     setFormName('');
     setFormParentId(String(parentId));
+    // Inherit type from parent
+    const parent = tree.find(p => p.id === parentId);
+    setFormType(parent?.type || '');
     setShowModal(true);
   };
 
@@ -113,6 +133,7 @@ export default function ExpenseCategoriesPage() {
     setEditingItem(c);
     setFormName(c.name);
     setFormParentId(c.parent_id ? String(c.parent_id) : '');
+    setFormType(c.type || '');
     setShowModal(true);
   };
 
@@ -121,12 +142,16 @@ export default function ExpenseCategoriesPage() {
     setSaving(true);
     try {
       if (editingItem) {
-        await expenseCategoriesApi.update(editingItem.id, { name: formName.trim() });
+        const updateData: any = { name: formName.trim() };
+        if (formType) updateData.type = formType;
+        await expenseCategoriesApi.update(editingItem.id, updateData);
       } else {
-        await expenseCategoriesApi.create({
+        const createData: any = {
           name: formName.trim(),
           parent_id: formParentId ? Number(formParentId) : undefined,
-        });
+        };
+        if (formType) createData.type = formType;
+        await expenseCategoriesApi.create(createData);
       }
       setShowModal(false);
       await load();
@@ -205,6 +230,9 @@ export default function ExpenseCategoriesPage() {
     }
   };
 
+  // Check if editing/creating a parent-level category (show type selector)
+  const isParentLevel = editingItem ? !editingItem.parent_id : !formParentId;
+
   return (
     <RoleGuard minRole="admin">
       <div>
@@ -229,9 +257,16 @@ export default function ExpenseCategoriesPage() {
             {tree.map((parent) => (
               <div key={parent.id} className="card">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-semibold text-gray-900">
-                    {parent.name}
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-base font-semibold text-gray-900">
+                      {parent.name}
+                    </h2>
+                    {parent.type && TYPE_LABELS[parent.type] && (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_LABELS[parent.type].color}`}>
+                        {TYPE_LABELS[parent.type].label}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => openAddChild(parent.id)}
@@ -254,12 +289,15 @@ export default function ExpenseCategoriesPage() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm" style={{ minWidth: '360px' }}>
+                  <table className="w-full text-sm" style={{ minWidth: '420px' }}>
                     <thead>
                       <tr className="bg-gray-50 border-b">
                         <th className="px-3 py-2 w-8"></th>
                         <th className="px-3 py-2 text-left whitespace-nowrap">
                           子類別名稱
+                        </th>
+                        <th className="px-3 py-2 text-center w-24 whitespace-nowrap">
+                          類型
                         </th>
                         <th className="px-3 py-2 text-center w-20 whitespace-nowrap">
                           狀態
@@ -270,7 +308,7 @@ export default function ExpenseCategoriesPage() {
                     <tbody>
                       {(!parent.children || parent.children.length === 0) ? (
                         <tr>
-                          <td colSpan={4} className="px-3 py-6 text-center text-gray-400">
+                          <td colSpan={5} className="px-3 py-6 text-center text-gray-400">
                             暫無子類別
                           </td>
                         </tr>
@@ -322,7 +360,14 @@ export default function ExpenseCategoriesPage() {
                     </label>
                     <select
                       value={formParentId}
-                      onChange={(e) => setFormParentId(e.target.value)}
+                      onChange={(e) => {
+                        setFormParentId(e.target.value);
+                        // Inherit type from selected parent
+                        if (e.target.value) {
+                          const parent = tree.find(p => p.id === Number(e.target.value));
+                          if (parent?.type) setFormType(parent.type);
+                        }
+                      }}
                       className="input-field"
                     >
                       <option value="">（頂層大類別）</option>
@@ -350,6 +395,26 @@ export default function ExpenseCategoriesPage() {
                     placeholder="輸入類別名稱"
                   />
                 </div>
+                {/* Type selector - shown for parent categories */}
+                {isParentLevel && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      類別類型
+                    </label>
+                    <select
+                      value={formType}
+                      onChange={(e) => setFormType(e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">請選擇</option>
+                      <option value="DIRECT">直接成本</option>
+                      <option value="OVERHEAD">營運開支</option>
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">
+                      直接成本：材料費、分判費等工程相關支出；營運開支：薪金、租金等公司營運支出
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button onClick={() => setShowModal(false)} className="btn-secondary">
