@@ -385,3 +385,39 @@ export const leavesApi = {
   reject: (id: number, remarks?: string) => api.post(`/leaves/${id}/reject`, { remarks }),
   delete: (id: number) => api.delete(`/leaves/${id}`),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Phase 2: BQ (工程量清單) + VO (變更指令)
+// ══════════════════════════════════════════════════════════════
+
+// BQ Sections (BQ 分部)
+export const bqSectionsApi = {
+  list: (contractId: number) => api.get(`/contracts/${contractId}/bq-sections`),
+  create: (contractId: number, data: any) => api.post(`/contracts/${contractId}/bq-sections`, data),
+  update: (contractId: number, id: number, data: any) => api.put(`/contracts/${contractId}/bq-sections/${id}`, data),
+  delete: (contractId: number, id: number) => api.delete(`/contracts/${contractId}/bq-sections/${id}`),
+};
+
+// BQ Items (BQ 項目)
+export const bqItemsApi = {
+  list: (contractId: number, params?: any) => api.get(`/contracts/${contractId}/bq-items`, { params }),
+  create: (contractId: number, data: any) => api.post(`/contracts/${contractId}/bq-items`, data),
+  update: (contractId: number, id: number, data: any) => api.put(`/contracts/${contractId}/bq-items/${id}`, data),
+  delete: (contractId: number, id: number) => api.delete(`/contracts/${contractId}/bq-items/${id}`),
+  batchCreate: (contractId: number, items: any[]) => api.post(`/contracts/${contractId}/bq-items/batch`, { items }),
+  reorder: (contractId: number, orderedIds: number[]) => api.put(`/contracts/${contractId}/bq-items/reorder`, { orderedIds }),
+};
+
+// Variation Orders (變更指令)
+export const variationOrdersApi = {
+  list: (contractId: number) => api.get(`/contracts/${contractId}/variation-orders`),
+  get: (contractId: number, id: number) => api.get(`/contracts/${contractId}/variation-orders/${id}`),
+  create: (contractId: number, data: any) => api.post(`/contracts/${contractId}/variation-orders`, data),
+  update: (contractId: number, id: number, data: any) => api.put(`/contracts/${contractId}/variation-orders/${id}`, data),
+  delete: (contractId: number, id: number) => api.delete(`/contracts/${contractId}/variation-orders/${id}`),
+};
+
+// Contract Summary (合約金額匯總)
+export const contractSummaryApi = {
+  get: (contractId: number) => api.get(`/contracts/${contractId}/summary`),
+};

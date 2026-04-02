@@ -32,6 +32,9 @@ import { EmployeePortalModule } from './employee-portal/employee-portal.module';
 import { AttendancesModule } from './attendances/attendances.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { ContractsModule } from './contracts/contracts.module';
+import { BqSectionsModule } from './bq-sections/bq-sections.module';
+import { BqItemsModule } from './bq-items/bq-items.module';
+import { VariationOrdersModule } from './variation-orders/variation-orders.module';
 
 @Module({
   imports: [
@@ -70,6 +73,9 @@ import { ContractsModule } from './contracts/contracts.module';
     AttendancesModule,
     LeavesModule,
     ContractsModule,
+    BqSectionsModule,
+    BqItemsModule,
+    VariationOrdersModule,
   ],
 })
 export class AppModule {}

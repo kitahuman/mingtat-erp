@@ -434,7 +434,108 @@ model Contract {
   projects        Project[]
   expenses        Expense[]
 
+  // Phase 2: BQ + VO relations
+  bq_sections      ContractBqSection[]
+  bq_items         ContractBqItem[]
+  variation_orders VariationOrder[]
+
   @@map("contracts")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Contract BQ Sections (工程量清單分部)
+// ══════════════════════════════════════════════════════════════
+
+model ContractBqSection {
+  id           Int      @id @default(autoincrement())
+  contract_id  Int
+  section_code String   @db.VarChar(20)
+  section_name String   @db.VarChar(200)
+  sort_order   Int      @default(0)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  contract     Contract           @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+  items        ContractBqItem[]
+
+  @@unique([contract_id, section_code])
+  @@map("contract_bq_sections")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Contract BQ Items (工程量清單項目)
+// ══════════════════════════════════════════════════════════════
+
+model ContractBqItem {
+  id           Int      @id @default(autoincrement())
+  contract_id  Int
+  section_id   Int?
+  item_no      String   @db.VarChar(30)
+  description  String   @db.Text
+  quantity     Decimal  @default(0) @db.Decimal(14, 4)
+  unit         String?  @db.VarChar(20)
+  unit_rate    Decimal  @default(0) @db.Decimal(14, 2)
+  amount       Decimal  @default(0) @db.Decimal(14, 2)
+  sort_order   Int      @default(0)
+  remarks      String?  @db.Text
+  status       String   @default("active") @db.VarChar(20)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  contract     Contract            @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+  section      ContractBqSection?  @relation(fields: [section_id], references: [id], onDelete: SetNull)
+
+  @@unique([contract_id, item_no])
+  @@map("contract_bq_items")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Variation Orders (變更指令)
+// ══════════════════════════════════════════════════════════════
+
+model VariationOrder {
+  id              Int       @id @default(autoincrement())
+  contract_id     Int
+  vo_no           String    @db.VarChar(30)
+  title           String    @db.VarChar(200)
+  description     String?   @db.Text
+  submitted_date  DateTime? @db.Date
+  approved_date   DateTime? @db.Date
+  total_amount    Decimal   @default(0) @db.Decimal(14, 2)
+  approved_amount Decimal   @default(0) @db.Decimal(14, 2)
+  status          String    @default("draft") @db.VarChar(20)
+  remarks         String?   @db.Text
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
+
+  contract        Contract             @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+  items           VariationOrderItem[]
+
+  @@unique([contract_id, vo_no])
+  @@map("variation_orders")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Variation Order Items (變更指令細項)
+// ══════════════════════════════════════════════════════════════
+
+model VariationOrderItem {
+  id                 Int      @id @default(autoincrement())
+  variation_order_id Int
+  item_no            String   @db.VarChar(30)
+  description        String   @db.Text
+  quantity           Decimal  @default(0) @db.Decimal(14, 4)
+  unit               String?  @db.VarChar(20)
+  unit_rate          Decimal  @default(0) @db.Decimal(14, 2)
+  amount             Decimal  @default(0) @db.Decimal(14, 2)
+  sort_order         Int      @default(0)
+  remarks            String?  @db.Text
+  created_at         DateTime @default(now())
+  updated_at         DateTime @default(now()) @updatedAt
+
+  variation_order    VariationOrder @relation(fields: [variation_order_id], references: [id], onDelete: Cascade)
+
+  @@map("variation_order_items")
 }
 
 // ══════════════════════════════════════════════════════════════
