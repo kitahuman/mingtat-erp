@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { projectsApi, companiesApi, partnersApi } from '@/lib/api';
+import { projectsApi, companiesApi, partnersApi, contractsApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -27,9 +27,10 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', project_name: '', description: '',
+    company_id: '', client_id: '', contract_id: '', project_name: '', description: '',
     address: '', start_date: '', end_date: '', status: 'pending', remarks: ''
   });
 
@@ -44,6 +45,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
+    contractsApi.simple().then(res => setContracts(res.data)).catch(() => {});
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -53,18 +55,25 @@ export default function ProjectsPage() {
         ...form,
         company_id: Number(form.company_id),
         client_id: form.client_id ? Number(form.client_id) : null,
+        contract_id: form.contract_id ? Number(form.contract_id) : null,
       });
       setShowModal(false);
-      setForm({ company_id: '', client_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'pending', remarks: '' });
+      setForm({ company_id: '', client_id: '', contract_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'pending', remarks: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
+
+  // Filter contracts by selected client
+  const filteredContracts = form.client_id
+    ? contracts.filter((c: any) => c.client_id === Number(form.client_id))
+    : contracts;
 
   const columns = [
     { key: 'project_no', label: '工程編號', sortable: true, render: (v: any) => <span className="font-mono font-bold text-primary-600">{v}</span> },
     { key: 'project_name', label: '工程名稱', sortable: true, render: (v: any) => <span className="max-w-[250px] truncate block">{v || '-'}</span> },
     { key: 'company', label: '公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'contract', label: '合約編號', sortable: false, render: (_: any, row: any) => row.contract?.contract_no ? <span className="font-mono text-xs text-blue-600">{row.contract.contract_no}</span> : <span className="text-gray-400">-</span>, filterRender: (_: any, row: any) => row.contract?.contract_no || '-' },
     { key: 'start_date', label: '開始日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'end_date', label: '結束日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'status', label: '狀態', sortable: true, render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
@@ -126,9 +135,16 @@ export default function ProjectsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field">
+              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value, contract_id: ''})} className="input-field">
                 <option value="">請選擇（可選）</option>
                 {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">關聯合約</label>
+              <select value={form.contract_id} onChange={e => setForm({...form, contract_id: e.target.value})} className="input-field">
+                <option value="">請選擇（可選）</option>
+                {filteredContracts.map((c: any) => <option key={c.id} value={c.id}>{c.contract_no} - {c.contract_name}</option>)}
               </select>
             </div>
             <div className="md:col-span-2">

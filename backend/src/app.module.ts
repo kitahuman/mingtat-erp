@@ -31,6 +31,7 @@ import { ExpenseCategoriesModule } from './expense-categories/expense-categories
 import { EmployeePortalModule } from './employee-portal/employee-portal.module';
 import { AttendancesModule } from './attendances/attendances.module';
 import { LeavesModule } from './leaves/leaves.module';
+import { ContractsModule } from './contracts/contracts.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { LeavesModule } from './leaves/leaves.module';
     EmployeePortalModule,
     AttendancesModule,
     LeavesModule,
+    ContractsModule,
   ],
 })
 export class AppModule {}

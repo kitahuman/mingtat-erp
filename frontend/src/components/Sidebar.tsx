@@ -43,7 +43,15 @@ const navEntries: NavEntry[] = [
       { href: '/subcon-fleet-drivers', label: '街車車隊管理', icon: '🚐', minRole: 'clerk' },
     ],
   },
-  { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
+  {
+    label: '工程管理',
+    icon: '🏗️',
+    minRole: 'clerk',
+    items: [
+      { href: '/contracts', label: '合約管理', icon: '📜', minRole: 'clerk' },
+      { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
+    ],
+  },
   {
     label: '人力資源',
     icon: '👥',
@@ -165,6 +173,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '公司內部資料': false,
+    '工程管理': true,
     '人力資源': false,
     '會計部門': false,
     '報價及價目': true,

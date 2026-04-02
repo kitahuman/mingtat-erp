@@ -45,7 +45,7 @@ export class ProjectsService {
 
   async findAll(query: {
     page?: number; limit?: number; search?: string;
-    company_id?: number; client_id?: number; status?: string;
+    company_id?: number; client_id?: number; contract_id?: number; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
@@ -54,6 +54,7 @@ export class ProjectsService {
 
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.contract_id) where.contract_id = Number(query.contract_id);
     if (query.status) where.status = query.status;
     if (query.search) {
       where.OR = [
@@ -70,7 +71,11 @@ export class ProjectsService {
     const [data, total] = await Promise.all([
       this.prisma.project.findMany({
         where,
-        include: { company: true, client: true },
+        include: {
+          company: true,
+          client: true,
+          contract: { select: { id: true, contract_no: true, contract_name: true, client: { select: { id: true, name: true } } } },
+        },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -84,7 +89,11 @@ export class ProjectsService {
   async findOne(id: number) {
     const project = await this.prisma.project.findUnique({
       where: { id },
-      include: { company: true, client: true },
+      include: {
+        company: true,
+        client: true,
+        contract: { select: { id: true, contract_no: true, contract_name: true, client: { select: { id: true, name: true } } } },
+      },
     });
     if (!project) throw new NotFoundException('工程項目不存在');
     return project;
@@ -111,7 +120,10 @@ export class ProjectsService {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
 
-    const { company, client, created_at, updated_at, id: _id, project_no, ...updateData } = dto;
+    const { company, client, contract, created_at, updated_at, id: _id, project_no, ...updateData } = dto;
+    if (updateData.contract_id !== undefined) {
+      updateData.contract_id = updateData.contract_id ? Number(updateData.contract_id) : null;
+    }
     await this.prisma.project.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }

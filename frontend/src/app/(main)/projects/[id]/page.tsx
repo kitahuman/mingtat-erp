@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi } from '@/lib/api';
+import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi } from '@/lib/api';
 import Link from 'next/link';
+import { fmtDate, toInputDate } from '@/lib/dateUtils';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -21,6 +22,7 @@ export default function ProjectDetailPage() {
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [linkedQuotations, setLinkedQuotations] = useState<any[]>([]);
   const [linkedRateCards, setLinkedRateCards] = useState<any[]>([]);
@@ -43,11 +45,20 @@ export default function ProjectDetailPage() {
     loadLinked();
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
+    contractsApi.simple().then(res => setContracts(res.data)).catch(() => {});
   }, [params.id]);
+
+  // Filter contracts by selected client
+  const filteredContracts = form.client_id
+    ? contracts.filter((c: any) => c.client_id === Number(form.client_id))
+    : contracts;
 
   const handleSave = async () => {
     try {
-      const { company, client, created_at, updated_at, ...updateData } = form;
+      const { company, client, contract, created_at, updated_at, ...updateData } = form;
+      if (updateData.contract_id !== undefined) {
+        updateData.contract_id = updateData.contract_id ? Number(updateData.contract_id) : null;
+      }
       const res = await projectsApi.update(project.id, updateData);
       setProject(res.data);
       setForm({ ...res.data });
@@ -112,15 +123,21 @@ export default function ProjectDetailPage() {
                 </select>
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶</label>
-                <select value={form.client_id || ''} onChange={e => setForm({...form, client_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
+                <select value={form.client_id || ''} onChange={e => setForm({...form, client_id: e.target.value ? Number(e.target.value) : null, contract_id: ''})} className="input-field">
                   <option value="">無</option>
                   {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
                 </select>
               </div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯合約</label>
+                <select value={form.contract_id || ''} onChange={e => setForm({...form, contract_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
+                  <option value="">無</option>
+                  {filteredContracts.map((c: any) => <option key={c.id} value={c.id}>{c.contract_no} - {c.contract_name}</option>)}
+                </select>
+              </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><input type="date" value={form.start_date || ''} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計結束日期</label><input type="date" value={form.end_date || ''} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><input type="date" value={toInputDate(form.start_date)} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計結束日期</label><input type="date" value={toInputDate(form.end_date)} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">說明</label><textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} className="input-field" rows={2} /></div>
               <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">備註</label><textarea value={form.remarks || ''} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={2} /></div>
             </>
@@ -130,9 +147,19 @@ export default function ProjectDetailPage() {
               <div><p className="text-sm text-gray-500">工程名稱</p><p className="font-medium">{project?.project_name}</p></div>
               <div><p className="text-sm text-gray-500">開立公司</p><p>{project?.company?.internal_prefix} - {project?.company?.name}</p></div>
               <div><p className="text-sm text-gray-500">客戶</p><p>{project?.client?.name || '-'}</p></div>
+              <div>
+                <p className="text-sm text-gray-500">關聯合約</p>
+                {project?.contract ? (
+                  <Link href={`/contracts/${project.contract.id}`} className="font-mono text-primary-600 hover:underline">
+                    {project.contract.contract_no} - {project.contract.contract_name}
+                  </Link>
+                ) : (
+                  <p className="text-gray-400">-</p>
+                )}
+              </div>
               <div><p className="text-sm text-gray-500">工程地址</p><p>{project?.address || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">預計開始日期</p><p>{project?.start_date || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">預計結束日期</p><p>{project?.end_date || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">預計開始日期</p><p>{fmtDate(project?.start_date)}</p></div>
+              <div><p className="text-sm text-gray-500">預計結束日期</p><p>{fmtDate(project?.end_date)}</p></div>
               {project?.description && <div className="lg:col-span-3"><p className="text-sm text-gray-500">說明</p><p>{project.description}</p></div>}
               {project?.remarks && <div className="lg:col-span-3"><p className="text-sm text-gray-500">備註</p><p>{project.remarks}</p></div>}
             </>
@@ -159,7 +186,7 @@ export default function ProjectDetailPage() {
                 {linkedQuotations.map((q: any) => (
                   <tr key={q.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/quotations/${q.id}`)}>
                     <td className="px-3 py-2 font-mono font-bold text-primary-600">{q.quotation_no}</td>
-                    <td className="px-3 py-2">{q.quotation_date}</td>
+                    <td className="px-3 py-2">{fmtDate(q.quotation_date)}</td>
                     <td className="px-3 py-2">{q.client?.name || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">${Number(q.total_amount).toLocaleString()}</td>
                     <td className="px-3 py-2"><span className={qStatusColors[q.status]}>{qStatusLabels[q.status]}</span></td>
@@ -198,8 +225,8 @@ export default function ProjectDetailPage() {
                     <td className="px-3 py-2">{rc.service_type || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">${Number(rc.day_rate).toLocaleString()}</td>
                     <td className="px-3 py-2">{rc.day_unit || '-'}</td>
-                    <td className="px-3 py-2">{rc.effective_date || '-'}</td>
-                    <td className="px-3 py-2">{rc.expiry_date || '-'}</td>
+                    <td className="px-3 py-2">{fmtDate(rc.effective_date)}</td>
+                    <td className="px-3 py-2">{fmtDate(rc.expiry_date)}</td>
                     <td className="px-3 py-2 font-mono text-xs">{rc.source_quotation?.quotation_no || '-'}</td>
                     <td className="px-3 py-2"><span className={rc.status === 'active' ? 'badge-green' : 'badge-gray'}>{rc.status === 'active' ? '啟用' : '停用'}</span></td>
                   </tr>

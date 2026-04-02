@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -84,8 +84,14 @@ export class PartnersService {
   }
 
   async remove(id: number) {
-    const existing = await this.prisma.partner.findUnique({ where: { id } });
+    const existing = await this.prisma.partner.findUnique({
+      where: { id },
+      include: { _count: { select: { contracts_as_client: true } } },
+    });
     if (!existing) throw new NotFoundException('合作單位不存在');
+    if (existing._count.contracts_as_client > 0) {
+      throw new BadRequestException('此客戶下仍有合約，無法刪除');
+    }
     await this.prisma.partner.delete({ where: { id } });
     return { message: '刪除成功' };
   }

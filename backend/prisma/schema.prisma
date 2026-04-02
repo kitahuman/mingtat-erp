@@ -407,8 +407,34 @@ model Partner {
   subcon_fleet_drivers   SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
   expenses_as_supplier   Expense[] @relation("expense_supplier")
   expenses_as_client     Expense[] @relation("expense_client")
+  contracts_as_client    Contract[] @relation("contract_client")
 
   @@map("partners")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Contracts (合約)
+// ══════════════════════════════════════════════════════════════
+
+model Contract {
+  id              Int        @id @default(autoincrement())
+  contract_no     String     @unique @db.VarChar(50)
+  client_id       Int
+  contract_name   String     @db.VarChar(200)
+  description     String?
+  sign_date       DateTime?  @db.Date
+  start_date      DateTime?  @db.Date
+  end_date        DateTime?  @db.Date
+  original_amount Decimal    @default(0) @db.Decimal(14, 2)
+  status          String     @default("active") @db.VarChar(20)
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @default(now()) @updatedAt
+
+  client          Partner    @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
+  projects        Project[]
+  expenses        Expense[]
+
+  @@map("contracts")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -430,8 +456,11 @@ model Project {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @default(now()) @updatedAt
 
+  contract_id  Int?
+
   company    Company    @relation(fields: [company_id], references: [id])
   client     Partner?   @relation("project_client", fields: [client_id], references: [id])
+  contract   Contract?  @relation(fields: [contract_id], references: [id])
   quotations Quotation[]
   rate_cards RateCard[]
   expenses   Expense[]
@@ -1018,6 +1047,7 @@ model Expense {
   employee    Employee?        @relation(fields: [employee_id], references: [id])
   machinery   Machinery?       @relation(fields: [machinery_id], references: [id])
   client      Partner?         @relation("expense_client", fields: [client_id], references: [id])
+  contract    Contract?        @relation(fields: [contract_id], references: [id])
   project     Project?         @relation(fields: [project_id], references: [id])
   quotation   Quotation?       @relation(fields: [quotation_id], references: [id])
   items       ExpenseItem[]

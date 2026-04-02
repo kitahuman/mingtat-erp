@@ -145,6 +145,16 @@ export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
 };
 
+// Contracts (合約)
+export const contractsApi = {
+  list: (params?: any) => api.get('/contracts', { params }),
+  simple: () => api.get('/contracts/simple'),
+  get: (id: number) => api.get(`/contracts/${id}`),
+  create: (data: any) => api.post('/contracts', data),
+  update: (id: number, data: any) => api.put(`/contracts/${id}`, data),
+  delete: (id: number) => api.delete(`/contracts/${id}`),
+};
+
 // Projects (工程項目)
 export const projectsApi = {
   list: (params?: any) => api.get('/projects', { params }),
