@@ -1509,3 +1509,52 @@ model RetentionRelease {
 
   @@map("retention_releases")
 }
+
+
+// ══════════════════════════════════════════════════════════════
+// Phase 9: BankAccount (銀行帳戶)
+// ══════════════════════════════════════════════════════════════
+
+model BankAccount {
+  id            Int       @id @default(autoincrement())
+  account_name  String    @db.VarChar(200)   // 帳戶名稱
+  bank_name     String    @db.VarChar(200)   // 銀行名稱
+  account_no    String    @db.VarChar(100)   // 帳號
+  currency      String    @default("HKD") @db.VarChar(10)  // 幣種
+  is_active     Boolean   @default(true)
+  remarks       String?   @db.Text
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now()) @updatedAt
+
+  transactions  BankTransaction[]
+
+  @@map("bank_accounts")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 9: BankTransaction (銀行交易記錄)
+// ══════════════════════════════════════════════════════════════
+
+model BankTransaction {
+  id                Int       @id @default(autoincrement())
+  bank_account_id   Int
+  date              DateTime  @db.Date
+  description       String    @db.Text
+  amount            Decimal   @db.Decimal(14, 2)  // 正數=存入(Credit)，負數=支出(Debit)
+  debit_credit      String    @db.VarChar(10)     // debit | credit
+  balance           Decimal?  @db.Decimal(14, 2)  // 餘額（如 CSV 有提供）
+  reference_no      String?   @db.VarChar(200)    // 支票號碼/交易號碼
+  match_status      String    @default("unmatched") @db.VarChar(20)  // unmatched | matched | excluded
+  matched_type      String?   @db.VarChar(30)     // payment_in | payment_out
+  matched_id        Int?                           // 配對的 PaymentIn.id 或 PaymentOut.id
+  import_batch      String?   @db.VarChar(100)    // 匯入批次識別
+  remarks           String?   @db.Text
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @default(now()) @updatedAt
+
+  bank_account      BankAccount @relation(fields: [bank_account_id], references: [id], onDelete: Restrict)
+
+  @@index([bank_account_id, date])
+  @@index([match_status])
+  @@map("bank_transactions")
+}

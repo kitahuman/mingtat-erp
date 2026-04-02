@@ -521,3 +521,30 @@ export const retentionApi = {
   createRelease: (contractId: number, data: any) => api.post(`/contracts/${contractId}/retention/release`, data),
   deleteRelease: (contractId: number, releaseId: number) => api.delete(`/contracts/${contractId}/retention/release/${releaseId}`),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Phase 9: Bank Accounts (銀行帳戶)
+// ══════════════════════════════════════════════════════════════
+
+export const bankAccountsApi = {
+  list: () => api.get('/bank-accounts'),
+  simple: () => api.get('/bank-accounts/simple'),
+  get: (id: number) => api.get(`/bank-accounts/${id}`),
+  create: (data: any) => api.post('/bank-accounts', data),
+  update: (id: number, data: any) => api.put(`/bank-accounts/${id}`, data),
+  delete: (id: number) => api.delete(`/bank-accounts/${id}`),
+};
+
+// ══════════════════════════════════════════════════════════════
+// Phase 9: Bank Reconciliation (銀行對帳)
+// ══════════════════════════════════════════════════════════════
+
+export const bankReconciliationApi = {
+  findTransactions: (params: any) => api.get('/bank-reconciliation/transactions', { params }),
+  importTransactions: (bankAccountId: number, rows: any[]) => api.post(`/bank-reconciliation/import/${bankAccountId}`, { rows }),
+  getSummary: (bankAccountId: number, month?: string) => api.get(`/bank-reconciliation/summary/${bankAccountId}`, { params: { month } }),
+  findCandidates: (txId: number) => api.get(`/bank-reconciliation/candidates/${txId}`),
+  match: (txId: number, type: 'payment_in' | 'payment_out', matchedId: number) => api.post(`/bank-reconciliation/match/${txId}`, { type, matchedId }),
+  unmatch: (txId: number) => api.post(`/bank-reconciliation/unmatch/${txId}`),
+  exclude: (txId: number, remarks?: string) => api.post(`/bank-reconciliation/exclude/${txId}`, { remarks }),
+};

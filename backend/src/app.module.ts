@@ -40,6 +40,8 @@ import { PaymentInModule } from './payment-in/payment-in.module';
 import { PaymentOutModule } from './payment-out/payment-out.module';
 import { RetentionModule } from './retention/retention.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
+import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 
 @Module({
   imports: [
@@ -86,6 +88,8 @@ import { InvoicesModule } from './invoices/invoices.module';
     PaymentOutModule,
     RetentionModule,
     InvoicesModule,
+    BankAccountsModule,
+    BankReconciliationModule,
   ],
 })
 export class AppModule {}

@@ -74,6 +74,7 @@ const navEntries: NavEntry[] = [
       { href: '/invoices', label: '發票管理', icon: '🧾', minRole: 'clerk' },
       { href: '/payment-in', label: '收款記錄', icon: '💰', minRole: 'clerk' },
       { href: '/payment-out', label: '付款記錄', icon: '💳', minRole: 'clerk' },
+      { href: '/bank-reconciliation', label: '銀行對帳', icon: '🏦', minRole: 'clerk' },
     ],
   },
   {
@@ -97,6 +98,7 @@ const navEntries: NavEntry[] = [
       { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
       { href: '/settings/field-options', label: '選項管理', icon: '📋', roles: ['admin'] },
       { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', roles: ['admin'] },
+      { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏦', roles: ['admin'] },
     ],
   },
 ];
