@@ -496,6 +496,23 @@ export const paymentOutApi = {
 // Phase 6: Retention (扣留金追蹤)
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// Phase 5: Invoices (發票管理)
+// ══════════════════════════════════════════════════════════════
+
+export const invoicesApi = {
+  list: (params?: any) => api.get('/invoices', { params }),
+  get: (id: number) => api.get(`/invoices/${id}`),
+  create: (data: any) => api.post('/invoices', data),
+  createFromQuotation: (quotationId: number, data?: any) => api.post(`/invoices/from-quotation/${quotationId}`, data || {}),
+  update: (id: number, data: any) => api.put(`/invoices/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/invoices/${id}/status`, { status }),
+  recordPayment: (id: number, data: any) => api.post(`/invoices/${id}/record-payment`, data),
+  deletePayment: (id: number, paymentId: number) => api.delete(`/invoices/${id}/payment/${paymentId}`),
+  getPayments: (id: number) => api.get(`/invoices/${id}/payments`),
+  delete: (id: number) => api.delete(`/invoices/${id}`),
+};
+
 export const retentionApi = {
   getSummary: (contractId: number) => api.get(`/contracts/${contractId}/retention`),
   sync: (contractId: number) => api.post(`/contracts/${contractId}/retention/sync`),

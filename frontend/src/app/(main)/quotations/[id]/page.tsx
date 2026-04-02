@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
+import { quotationsApi, companiesApi, partnersApi, invoicesApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
-const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕' };
-const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red' };
+const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
+const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
 const typeLabels: Record<string, string> = { project: '工程報價', rental: '租賃/運輸報價' };
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
@@ -86,6 +86,11 @@ export default function QuotationDetailPage() {
   const [accepting, setAccepting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState<any>({
+    date: new Date().toISOString().slice(0, 10), due_date: '', tax_rate: 0, payment_terms: '', remarks: '',
+  });
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   const loadData = () => {
     quotationsApi.get(Number(params.id)).then(res => {
@@ -155,6 +160,23 @@ export default function QuotationDetailPage() {
     } catch (err: any) {
       alert(err.response?.data?.message || '同步失敗');
     } finally { setSyncing(false); }
+  };
+
+  const handleCreateInvoice = async () => {
+    setCreatingInvoice(true);
+    try {
+      const res = await invoicesApi.createFromQuotation(quotation.id, {
+        date: invoiceForm.date,
+        due_date: invoiceForm.due_date || undefined,
+        tax_rate: Number(invoiceForm.tax_rate) || 0,
+        payment_terms: invoiceForm.payment_terms || undefined,
+        remarks: invoiceForm.remarks || undefined,
+      });
+      setShowInvoiceModal(false);
+      router.push(`/invoices/${res.data.id}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '轉換失敗');
+    } finally { setCreatingInvoice(false); }
   };
 
   const addItem = () => {
@@ -292,6 +314,12 @@ export default function QuotationDetailPage() {
               <button onClick={() => { setAcceptForm({ project_name: quotation.project_name || '', effective_date: quotation.quotation_date || new Date().toISOString().slice(0, 10), expiry_date: '' }); setShowAcceptModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">接受報價</button>
               <button onClick={() => handleStatusChange('rejected')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">已拒絕</button>
             </>
+          )}
+          {(quotation?.status === 'accepted' || quotation?.status === 'sent') && quotation?.status !== 'invoiced' && (
+            <button onClick={() => { setInvoiceForm({ date: new Date().toISOString().slice(0, 10), due_date: '', tax_rate: 0, payment_terms: quotation.payment_terms || '', remarks: '' }); setShowInvoiceModal(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">轉為發票</button>
+          )}
+          {quotation?.status === 'invoiced' && quotation?.invoices?.[0] && (
+            <Link href={`/invoices/${quotation.invoices[0].id}`} className="bg-purple-100 text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-200 text-sm">查看發票</Link>
           )}
           {editing ? (
             <>
@@ -574,6 +602,45 @@ export default function QuotationDetailPage() {
           )}
         </div>
       </Modal>
+
+      {/* Convert to Invoice Modal */}
+      {showInvoiceModal && (
+        <Modal isOpen={showInvoiceModal} title="報價單轉發票" onClose={() => setShowInvoiceModal(false)}>
+          <div className="space-y-4">
+            <div className="bg-purple-50 rounded-lg p-3 text-sm text-purple-700">
+              將報價單 <strong>{quotation.quotation_no}</strong> 的所有項目轉為發票
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">發票日期</label>
+                <input type="date" value={invoiceForm.date} onChange={e => setInvoiceForm({...invoiceForm, date: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
+                <input type="date" value={invoiceForm.due_date} onChange={e => setInvoiceForm({...invoiceForm, due_date: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">稅率 (%)</label>
+                <input type="number" value={invoiceForm.tax_rate} onChange={e => setInvoiceForm({...invoiceForm, tax_rate: e.target.value})} className="input-field" min="0" step="0.01" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">付款條件</label>
+                <input type="text" value={invoiceForm.payment_terms} onChange={e => setInvoiceForm({...invoiceForm, payment_terms: e.target.value})} className="input-field" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+              <textarea value={invoiceForm.remarks} onChange={e => setInvoiceForm({...invoiceForm, remarks: e.target.value})} className="input-field" rows={2} />
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <button onClick={() => setShowInvoiceModal(false)} className="btn-secondary">取消</button>
+              <button onClick={handleCreateInvoice} disabled={creatingInvoice} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm disabled:opacity-50">
+                {creatingInvoice ? '處理中...' : '確認轉換'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

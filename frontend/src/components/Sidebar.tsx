@@ -71,6 +71,7 @@ const navEntries: NavEntry[] = [
     minRole: 'clerk',
     items: [
       { href: '/expenses', label: '費用報銷', icon: '💸', minRole: 'clerk' },
+      { href: '/invoices', label: '發票管理', icon: '🧾', minRole: 'clerk' },
       { href: '/payment-in', label: '收款記錄', icon: '💰', minRole: 'clerk' },
       { href: '/payment-out', label: '付款記錄', icon: '💳', minRole: 'clerk' },
     ],

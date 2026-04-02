@@ -39,6 +39,7 @@ import { PaymentApplicationsModule } from './payment-applications/payment-applic
 import { PaymentInModule } from './payment-in/payment-in.module';
 import { PaymentOutModule } from './payment-out/payment-out.module';
 import { RetentionModule } from './retention/retention.module';
+import { InvoicesModule } from './invoices/invoices.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { RetentionModule } from './retention/retention.module';
     PaymentInModule,
     PaymentOutModule,
     RetentionModule,
+    InvoicesModule,
   ],
 })
 export class AppModule {}

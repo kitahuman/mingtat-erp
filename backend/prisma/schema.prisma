@@ -65,6 +65,7 @@ model Company {
   rate_cards               RateCard[]
   expenses                 Expense[]
   profiles                 CompanyProfile[]
+  invoices                 Invoice[]
 
   @@map("companies")
 }
@@ -408,6 +409,7 @@ model Partner {
   expenses_as_supplier   Expense[] @relation("expense_supplier")
   expenses_as_client     Expense[] @relation("expense_client")
   contracts_as_client    Contract[] @relation("contract_client")
+  invoices_as_client     Invoice[]  @relation("invoice_client")
 
   @@map("partners")
 }
@@ -592,6 +594,9 @@ model Project {
   payment_ins  PaymentIn[]
   payment_outs PaymentOut[]
 
+  // Phase 5
+  invoices     Invoice[]
+
   @@map("projects")
 }
 
@@ -638,6 +643,7 @@ model Quotation {
   subcon_rate_cards SubconRateCard[]
   work_logs        WorkLog[]
   expenses         Expense[]
+  invoices         Invoice[]
 
   @@map("quotations")
 }
@@ -1398,6 +1404,65 @@ model PaymentOut {
   project          Project?  @relation(fields: [project_id], references: [id], onDelete: SetNull)
 
   @@map("payment_outs")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 5: Invoice (發票 - 簡單項目用)
+// ══════════════════════════════════════════════════════════════
+
+model Invoice {
+  id               Int       @id @default(autoincrement())
+  invoice_no       String    @unique
+  date             DateTime  @db.Date
+  due_date         DateTime? @db.Date
+  client_id        Int?
+  project_id       Int?
+  quotation_id     Int?
+  company_id       Int
+  status           String    @default("draft") @db.VarChar(30)  // draft | issued | partially_paid | paid | void
+  subtotal         Decimal   @default(0) @db.Decimal(14, 2)
+  tax_rate         Decimal   @default(0) @db.Decimal(5, 2)
+  tax_amount       Decimal   @default(0) @db.Decimal(14, 2)
+  total_amount     Decimal   @default(0) @db.Decimal(14, 2)
+  paid_amount      Decimal   @default(0) @db.Decimal(14, 2)
+  outstanding      Decimal   @default(0) @db.Decimal(14, 2)
+  payment_terms    String?   @db.Text
+  remarks          String?   @db.Text
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  client           Partner?   @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
+  project          Project?   @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  quotation        Quotation? @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
+  company          Company    @relation(fields: [company_id], references: [id])
+  items            InvoiceItem[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id               Int     @id @default(autoincrement())
+  invoice_id       Int
+  sort_order       Int     @default(1)
+  description      String? @db.Text
+  quantity         Decimal @default(0) @db.Decimal(12, 4)
+  unit             String?
+  unit_price       Decimal @default(0) @db.Decimal(12, 2)
+  amount           Decimal @default(0) @db.Decimal(12, 2)
+
+  invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model InvoiceSequence {
+  id         Int    @id @default(autoincrement())
+  prefix     String
+  year_month String
+  last_seq   Int    @default(0)
+
+  @@unique([prefix, year_month])
+  @@map("invoice_sequences")
 }
 
 // ══════════════════════════════════════════════════════════════

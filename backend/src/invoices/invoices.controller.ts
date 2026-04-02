@@ -1,0 +1,59 @@
+import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { InvoicesService } from './invoices.service';
+
+@Controller('invoices')
+@UseGuards(AuthGuard('jwt'))
+export class InvoicesController {
+  constructor(private readonly service: InvoicesService) {}
+
+  @Get()
+  findAll(@Query() query: any) {
+    return this.service.findAll(query);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: number) {
+    return this.service.findOne(Number(id));
+  }
+
+  @Post()
+  create(@Body() dto: any) {
+    return this.service.create(dto);
+  }
+
+  @Post('from-quotation/:quotationId')
+  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: any) {
+    return this.service.createFromQuotation(Number(quotationId), dto);
+  }
+
+  @Put(':id')
+  update(@Param('id') id: number, @Body() dto: any) {
+    return this.service.update(Number(id), dto);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: number, @Body('status') status: string) {
+    return this.service.updateStatus(Number(id), status);
+  }
+
+  @Post(':id/record-payment')
+  recordPayment(@Param('id') id: number, @Body() dto: any) {
+    return this.service.recordPayment(Number(id), dto);
+  }
+
+  @Delete(':id/payment/:paymentId')
+  deletePayment(@Param('id') id: number, @Param('paymentId') paymentId: number) {
+    return this.service.deletePayment(Number(id), Number(paymentId));
+  }
+
+  @Get(':id/payments')
+  getPayments(@Param('id') id: number) {
+    return this.service.getPayments(Number(id));
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: number) {
+    return this.service.remove(Number(id));
+  }
+}
