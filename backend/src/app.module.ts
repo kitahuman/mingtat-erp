@@ -44,10 +44,12 @@ import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { ProjectProfitLossModule } from './project-profit-loss/project-profit-loss.module';
 import { CompanyProfitLossModule } from './company-profit-loss/company-profit-loss.module';
+import { AiChatModule } from './ai-chat/ai-chat.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    AiChatModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',

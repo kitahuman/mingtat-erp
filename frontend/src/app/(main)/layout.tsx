@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import Sidebar from '@/components/Sidebar';
+import { ChatWidget } from '@/components/ChatWidget';
 import { useAuth } from '@/lib/auth';
 
 // Keep layout in sync with Sidebar's collapsed state via a shared context-free approach:
@@ -50,6 +51,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {children}
         </div>
       </main>
+      <ChatWidget />
     </div>
   );
 }

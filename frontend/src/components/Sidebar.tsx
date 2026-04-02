@@ -29,6 +29,7 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 
 const navEntries: NavEntry[] = [
   { href: '/dashboard', label: '儀表板', icon: '📊', minRole: 'clerk' },
+  { href: '/chat', label: 'AI 助手', icon: '🤖', minRole: 'clerk' },
   { href: '/work-logs', label: '工作記錄', icon: '📝', minRole: 'clerk' },
   {
     label: '公司內部資料',
