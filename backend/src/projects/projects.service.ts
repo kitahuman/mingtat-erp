@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -107,11 +107,48 @@ export class ProjectsService {
     });
   }
 
+  /**
+   * Resolve client_id from contract if contract_id is provided.
+   * If contract_id is set, client_id is forced from the contract (ignoring frontend value).
+   * If no contract, client_id must be explicitly provided.
+   * Final validation: client_id must not be empty.
+   */
+  private async resolveClientId(dto: any): Promise<{ contract_id: number | null; client_id: number }> {
+    const contractId = dto.contract_id ? Number(dto.contract_id) : null;
+    let clientId: number | null = null;
+
+    if (contractId) {
+      // If contract is selected, force client_id from contract
+      const contract = await this.prisma.contract.findUnique({ where: { id: contractId } });
+      if (!contract) throw new BadRequestException('合約不存在');
+      clientId = contract.client_id;
+    } else {
+      // No contract — use the client_id from frontend
+      clientId = dto.client_id ? Number(dto.client_id) : null;
+    }
+
+    // Final validation: client_id is required
+    if (!clientId) {
+      throw new BadRequestException('請選擇客戶');
+    }
+
+    return { contract_id: contractId, client_id: clientId };
+  }
+
   async create(dto: any) {
     const project_no = await this.generateProjectNo(dto.company_id);
-    const { company, client, ...data } = dto;
+    const { contract_id, client_id } = await this.resolveClientId(dto);
+
+    const { company, client, contract, ...data } = dto;
+
     const saved = await this.prisma.project.create({
-      data: { ...data, project_no },
+      data: {
+        ...data,
+        project_no,
+        contract_id,
+        client_id,
+        company_id: Number(dto.company_id),
+      },
     });
     return this.findOne(saved.id);
   }
@@ -120,11 +157,18 @@ export class ProjectsService {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
 
+    const { contract_id, client_id } = await this.resolveClientId(dto);
+
     const { company, client, contract, created_at, updated_at, id: _id, project_no, ...updateData } = dto;
-    if (updateData.contract_id !== undefined) {
-      updateData.contract_id = updateData.contract_id ? Number(updateData.contract_id) : null;
-    }
-    await this.prisma.project.update({ where: { id }, data: updateData });
+
+    await this.prisma.project.update({
+      where: { id },
+      data: {
+        ...updateData,
+        contract_id,
+        client_id,
+      },
+    });
     return this.findOne(id);
   }
 

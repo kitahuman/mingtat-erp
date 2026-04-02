@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi } from '@/lib/api';
 import Link from 'next/link';
@@ -48,17 +48,44 @@ export default function ProjectDetailPage() {
     contractsApi.simple().then(res => setContracts(res.data)).catch(() => {});
   }, [params.id]);
 
-  // Filter contracts by selected client
-  const filteredContracts = form.client_id
-    ? contracts.filter((c: any) => c.client_id === Number(form.client_id))
-    : contracts;
+  // Derive whether a contract is selected in edit form
+  const selectedContract = useMemo(() => {
+    const cid = form.contract_id;
+    if (!cid) return null;
+    return contracts.find((c: any) => c.id === Number(cid)) || null;
+  }, [form.contract_id, contracts]);
+
+  const hasContract = !!selectedContract;
+
+  const resolvedClientName = useMemo(() => {
+    if (!selectedContract) return '';
+    return selectedContract.client?.name || '';
+  }, [selectedContract]);
+
+  const handleContractChange = (contractIdStr: string) => {
+    if (contractIdStr) {
+      const contract = contracts.find((c: any) => c.id === Number(contractIdStr));
+      setForm({
+        ...form,
+        contract_id: Number(contractIdStr),
+        client_id: contract ? contract.client_id : form.client_id,
+      });
+    } else {
+      // Clear contract → restore client to editable
+      setForm({ ...form, contract_id: null, client_id: '' });
+    }
+  };
 
   const handleSave = async () => {
+    // Frontend validation: client must be set
+    if (!hasContract && !form.client_id) {
+      alert('請選擇客戶');
+      return;
+    }
     try {
       const { company, client, contract, created_at, updated_at, ...updateData } = form;
-      if (updateData.contract_id !== undefined) {
-        updateData.contract_id = updateData.contract_id ? Number(updateData.contract_id) : null;
-      }
+      updateData.contract_id = updateData.contract_id ? Number(updateData.contract_id) : null;
+      updateData.client_id = updateData.client_id ? Number(updateData.client_id) : null;
       const res = await projectsApi.update(project.id, updateData);
       setProject(res.data);
       setForm({ ...res.data });
@@ -122,17 +149,40 @@ export default function ProjectDetailPage() {
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
                 </select>
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶</label>
-                <select value={form.client_id || ''} onChange={e => setForm({...form, client_id: e.target.value ? Number(e.target.value) : null, contract_id: ''})} className="input-field">
-                  <option value="">無</option>
-                  {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯合約</label>
+                <select
+                  value={form.contract_id || ''}
+                  onChange={e => handleContractChange(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">無合約</option>
+                  {contracts.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.contract_no} - {c.contract_name}{c.client?.name ? ` - ${c.client.name}` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯合約</label>
-                <select value={form.contract_id || ''} onChange={e => setForm({...form, contract_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
-                  <option value="">無</option>
-                  {filteredContracts.map((c: any) => <option key={c.id} value={c.id}>{c.contract_no} - {c.contract_name}</option>)}
-                </select>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶 *</label>
+                {hasContract ? (
+                  <input
+                    value={resolvedClientName}
+                    className="input-field bg-gray-100 cursor-not-allowed"
+                    readOnly
+                    tabIndex={-1}
+                  />
+                ) : (
+                  <select
+                    value={form.client_id || ''}
+                    onChange={e => setForm({...form, client_id: e.target.value ? Number(e.target.value) : null})}
+                    className="input-field"
+                  >
+                    <option value="">請選擇客戶</option>
+                    {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
@@ -154,7 +204,7 @@ export default function ProjectDetailPage() {
                     {project.contract.contract_no} - {project.contract.contract_name}
                   </Link>
                 ) : (
-                  <p className="text-gray-400">-</p>
+                  <p className="text-gray-400">無合約</p>
                 )}
               </div>
               <div><p className="text-sm text-gray-500">工程地址</p><p>{project?.address || '-'}</p></div>

@@ -86,12 +86,27 @@ export class PartnersService {
   async remove(id: number) {
     const existing = await this.prisma.partner.findUnique({
       where: { id },
-      include: { _count: { select: { contracts_as_client: true } } },
+      include: {
+        _count: {
+          select: {
+            contracts_as_client: true,
+            projects_as_client: true,
+          },
+        },
+      },
     });
     if (!existing) throw new NotFoundException('合作單位不存在');
+
+    // Check contracts first
     if (existing._count.contracts_as_client > 0) {
       throw new BadRequestException('此客戶下仍有合約，無法刪除');
     }
+
+    // Check direct projects (without contract)
+    if (existing._count.projects_as_client > 0) {
+      throw new BadRequestException('此客戶下仍有項目，無法刪除');
+    }
+
     await this.prisma.partner.delete({ where: { id } });
     return { message: '刪除成功' };
   }

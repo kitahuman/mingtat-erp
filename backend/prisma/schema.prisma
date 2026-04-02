@@ -460,7 +460,7 @@ model Project {
 
   company    Company    @relation(fields: [company_id], references: [id])
   client     Partner?   @relation("project_client", fields: [client_id], references: [id])
-  contract   Contract?  @relation(fields: [contract_id], references: [id])
+  contract   Contract?  @relation(fields: [contract_id], references: [id], onDelete: Restrict)
   quotations Quotation[]
   rate_cards RateCard[]
   expenses   Expense[]
