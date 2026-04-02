@@ -64,6 +64,7 @@ model Company {
   quotations               Quotation[]
   rate_cards               RateCard[]
   expenses                 Expense[]
+  profiles                 CompanyProfile[]
 
   @@map("companies")
 }
@@ -98,8 +99,11 @@ model CompanyProfile {
   created_at                DateTime @default(now())
   updated_at                DateTime @default(now()) @updatedAt
 
+  company_id Int?
+
   work_logs WorkLog[]
   payrolls  Payroll[]
+  company   Company? @relation(fields: [company_id], references: [id])
 
   @@map("company_profiles")
 }

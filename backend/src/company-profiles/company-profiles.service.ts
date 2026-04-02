@@ -32,6 +32,9 @@ export class CompanyProfilesService {
     const [data, total] = await Promise.all([
       this.prisma.companyProfile.findMany({
         where,
+        include: {
+          company: { select: { id: true, name: true, name_en: true, internal_prefix: true } },
+        },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -43,7 +46,12 @@ export class CompanyProfilesService {
   }
 
   async findOne(id: number) {
-    const profile = await this.prisma.companyProfile.findUnique({ where: { id } });
+    const profile = await this.prisma.companyProfile.findUnique({
+      where: { id },
+      include: {
+        company: { select: { id: true, name: true, name_en: true, internal_prefix: true } },
+      },
+    });
     if (!profile) throw new NotFoundException('公司資料不存在');
     return profile;
   }
