@@ -9,6 +9,7 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
   service_type: ['運輸', '代工', '工程', '機械', '管工工作', '維修保養', '雜務', '上堂', '緊急情況', '請假/休息'],
   day_night: ['日', '夜', '中直'],
   vehicle_type: ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'],
+  payment_method: ['支票', '現金', '銀行轉帳', 'EPS', 'FPS 轉數快', '信用卡', '網上銀行', '其他'],
 };
 
 @Injectable()

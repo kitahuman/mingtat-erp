@@ -11,6 +11,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   service_type: '服務類型',
   day_night: '日夜班',
   vehicle_type: '車輛類型',
+  payment_method: '付款方法',
 };
 
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);

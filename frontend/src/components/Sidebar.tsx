@@ -58,9 +58,10 @@ const navEntries: NavEntry[] = [
     icon: '💵',
     minRole: 'clerk',
     items: [
-      { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
-      { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
+      { href: '/payroll', label: '計粮管理', icon: '🧮', minRole: 'clerk' },
+      { href: '/payroll-records', label: '粮單記錄', icon: '📄', minRole: 'clerk' },
       { href: '/expenses', label: '支出管理', icon: '💸', minRole: 'clerk' },
+      { href: '/employee-portal/expense', label: '費用報銷', icon: '📝', minRole: 'worker' },
     ],
   },
   {

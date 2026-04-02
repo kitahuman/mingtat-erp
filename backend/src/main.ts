@@ -1,28 +1,33 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Serve uploaded files as static assets
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+
   const defaultOrigins = [
     'https://mingtat-erp-web.onrender.com',
     'http://localhost:3000',
   ];
-  
-  const allowedOrigins = process.env.CORS_ORIGIN 
+
+  const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
     : defaultOrigins;
-  
-  app.enableCors({ 
-    origin: allowedOrigins, 
+
+  app.enableCors({
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
-  
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: false }));
+
   const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`Backend running on port ${port}`);

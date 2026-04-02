@@ -334,6 +334,17 @@ export const expensesApi = {
   create: (data: any) => api.post('/expenses', data),
   update: (id: number, data: any) => api.put(`/expenses/${id}`, data),
   delete: (id: number) => api.delete(`/expenses/${id}`),
+  // Items
+  createItem: (id: number, data: any) => api.post(`/expenses/${id}/items`, data),
+  updateItem: (id: number, itemId: number, data: any) => api.put(`/expenses/${id}/items/${itemId}`, data),
+  deleteItem: (id: number, itemId: number) => api.delete(`/expenses/${id}/items/${itemId}`),
+  // Attachments
+  uploadAttachment: (id: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/expenses/${id}/attachments`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  deleteAttachment: (id: number, attachmentId: number) => api.delete(`/expenses/${id}/attachments/${attachmentId}`),
 };
 
 // Expense Categories (支出類別)
