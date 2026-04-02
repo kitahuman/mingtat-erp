@@ -431,6 +431,7 @@ model Project {
   quotations Quotation[]
   rate_cards RateCard[]
   expenses   Expense[]
+  work_logs  WorkLog[]
 
   @@map("projects")
 }
@@ -740,11 +741,14 @@ model WorkLog {
   created_at                DateTime  @default(now())
   updated_at                DateTime  @default(now()) @updatedAt
 
+  project_id        Int?
+
   publisher         User?           @relation(fields: [publisher_id], references: [id])
   company_profile   CompanyProfile? @relation(fields: [company_profile_id], references: [id])
   client            Partner?        @relation(fields: [client_id], references: [id])
   quotation         Quotation?      @relation(fields: [quotation_id], references: [id])
   employee          Employee?       @relation(fields: [employee_id], references: [id])
+  project           Project?        @relation(fields: [project_id], references: [id])
   payroll_work_logs PayrollWorkLog[]
 
   @@map("work_logs")

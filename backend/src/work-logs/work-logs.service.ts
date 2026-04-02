@@ -36,6 +36,7 @@ export class WorkLogsService {
     if (client_id) where.client_id = Number(client_id);
     if (quotation_id) where.quotation_id = Number(quotation_id);
     if (employee_id) where.employee_id = Number(employee_id);
+    if (query.project_id) where.project_id = Number(query.project_id);
     if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
     if (date_from || date_to) {
       where.scheduled_date = {};
@@ -62,6 +63,7 @@ export class WorkLogsService {
           client: true,
           quotation: true,
           employee: true,
+          project: true,
         },
         orderBy: { [safeSortBy]: safeSortOrder },
         skip: (pg - 1) * lm,
@@ -82,6 +84,7 @@ export class WorkLogsService {
         client: true,
         quotation: true,
         employee: true,
+        project: true,
       },
     });
   }
