@@ -40,6 +40,42 @@ export class EmployeePortalService {
       }
     }
 
+    // 3. Auto-create account: if identifier looks like a phone number and
+    //    an Employee record exists with that phone but no User yet, auto-create.
+    if (!user) {
+      try {
+        // Only attempt auto-create if identifier is a phone number (digits only, 8+ chars)
+        if (/^\d{8,}$/.test(identifier)) {
+          const employee = await this.prisma.employee.findFirst({
+            where: { phone: identifier },
+          });
+          if (employee) {
+            // Verify the password matches the default pattern Aa-<phone>
+            const defaultPassword = `Aa-${identifier}`;
+            // Direct string comparison (password is plain text at this point)
+            const passwordMatches = password === defaultPassword;
+            if (passwordMatches) {
+              // Auto-create the User account with default password
+              const hashed = await bcrypt.hash(defaultPassword, 10);
+              user = await this.prisma.user.create({
+                data: {
+                  username: `emp_${identifier}`,
+                  password: hashed,
+                  displayName: employee.name_zh || employee.name_en || identifier,
+                  role: 'worker',
+                  phone: identifier,
+                  isActive: true,
+                  employee_id: employee.id,
+                } as any,
+              });
+            }
+          }
+        }
+      } catch {
+        // auto-create failed - fall through to UnauthorizedException
+      }
+    }
+
     if (!user) {
       throw new UnauthorizedException('帳號或密碼錯誤');
     }
@@ -778,5 +814,78 @@ export class EmployeePortalService {
       .sort((a, b) => a.days_left - b.days_left);
 
     return { expiring };
+  }
+
+  // ── Bulk Create Employee Accounts ─────────────────────────────────────────
+  // Creates User accounts for all employees that have a phone number but no User yet.
+  async bulkCreateEmployeeAccounts() {
+    // Get all employees with phone numbers
+    const employees = await this.prisma.employee.findMany({
+      where: { phone: { not: null } },
+      select: { id: true, phone: true, name_zh: true, name_en: true },
+    });
+
+    const results: { created: any[]; skipped: any[]; errors: any[] } = {
+      created: [],
+      skipped: [],
+      errors: [],
+    };
+
+    for (const emp of employees) {
+      if (!emp.phone) continue;
+      try {
+        // Check if User already exists with this phone
+        const existing = await this.prisma.user.findFirst({
+          where: { phone: emp.phone } as any,
+        });
+        if (existing) {
+          results.skipped.push({ employee_id: emp.id, phone: emp.phone, name: emp.name_zh || emp.name_en, reason: '帳號已存在' });
+          continue;
+        }
+
+        // Also check by username pattern emp_<phone>
+        const existingByUsername = await this.prisma.user.findFirst({
+          where: { username: `emp_${emp.phone}` },
+        });
+        if (existingByUsername) {
+          results.skipped.push({ employee_id: emp.id, phone: emp.phone, name: emp.name_zh || emp.name_en, reason: 'username 已存在' });
+          continue;
+        }
+
+        const defaultPassword = `Aa-${emp.phone}`;
+        const hashed = await bcrypt.hash(defaultPassword, 10);
+        const user = await this.prisma.user.create({
+          data: {
+            username: `emp_${emp.phone}`,
+            password: hashed,
+            displayName: emp.name_zh || emp.name_en || emp.phone,
+            role: 'worker',
+            phone: emp.phone,
+            isActive: true,
+            employee_id: emp.id,
+          } as any,
+        });
+        results.created.push({
+          employee_id: emp.id,
+          user_id: user.id,
+          phone: emp.phone,
+          name: emp.name_zh || emp.name_en,
+          username: user.username,
+          default_password: defaultPassword,
+        });
+      } catch (e: any) {
+        results.errors.push({ employee_id: emp.id, phone: emp.phone, name: emp.name_zh || emp.name_en, error: e?.message ?? 'Unknown error' });
+      }
+    }
+
+    return {
+      total_employees: employees.length,
+      created_count: results.created.length,
+      skipped_count: results.skipped.length,
+      error_count: results.errors.length,
+      created: results.created,
+      skipped: results.skipped,
+      errors: results.errors,
+    };
   }
 }

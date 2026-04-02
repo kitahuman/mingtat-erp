@@ -96,6 +96,14 @@ export const employeePortalApi = {
     portalApi.post('/employee-portal/certificates/photo', { cert_key: certKey, photo_url: photoUrl }),
   getExpiringCerts: (days?: number) =>
     portalApi.get('/employee-portal/certificates/expiring', { params: days ? { days } : {} }),
+
+  // Admin: Bulk create accounts for all employees with phone numbers
+  bulkCreateAccounts: () =>
+    portalApi.post('/employee-portal/bulk-create-accounts', {}),
+
+  // Admin: Create a single employee account
+  createAccount: (data: { phone: string; displayName: string; employee_id?: number }) =>
+    portalApi.post('/employee-portal/create-account', data),
 };
 
 // Shared API for dropdown data (uses same base URL, no special auth needed)

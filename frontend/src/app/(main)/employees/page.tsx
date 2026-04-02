@@ -9,6 +9,7 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
+import api from '@/lib/api';
 
 // Fallback role labels for display (used when API options not loaded yet)
 const FALLBACK_ROLE_LABELS: Record<string, string> = {
@@ -49,6 +50,8 @@ export default function EmployeesPage() {
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
   const [showCsvImport, setShowCsvImport] = useState(false);
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkResult, setBulkResult] = useState<any>(null);
 
   const [roleOptions, setRoleOptions] = useState<{value: string; label: string}[]>([]);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(FALLBACK_ROLE_LABELS);
@@ -194,10 +197,72 @@ export default function EmployeesPage() {
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
             <CsvImportModal module="employees" onImportComplete={load} />
+            <button
+              onClick={async () => {
+                if (!confirm('為所有有電話號碼的員工建立手機登入帳號？預設密碼為 Aa-電話號碼。')) return;
+                setBulkCreating(true);
+                setBulkResult(null);
+                try {
+                  const res = await api.post('/employee-portal/bulk-create-accounts', {});
+                  setBulkResult(res.data);
+                } catch (e: any) {
+                  alert('建立帳號失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+                } finally {
+                  setBulkCreating(false);
+                }
+              }}
+              disabled={bulkCreating}
+              className="btn-secondary text-sm"
+              title="為所有有電話號碼的員工建立手機入口帳號"
+            >
+              {bulkCreating ? '建立中...' : '📱 建立手機帳號'}
+            </button>
             <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
           </div>
         )}
       </div>
+
+      {/* Bulk Create Result */}
+      {bulkResult && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-semibold text-green-800 mb-1">手機帳號建立完成</h3>
+              <p className="text-sm text-green-700">
+                共 {bulkResult.total_employees} 位員工，
+                新建 {bulkResult.created_count} 個帳號，
+                跳過 {bulkResult.skipped_count} 個（已存在）
+                {bulkResult.error_count > 0 && `，失敗 ${bulkResult.error_count} 個`}
+              </p>
+              {bulkResult.created?.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-xs text-green-600 cursor-pointer">查看新建帳號詳情</summary>
+                  <div className="mt-1 max-h-40 overflow-y-auto">
+                    {bulkResult.created.map((c: any, i: number) => (
+                      <div key={i} className="text-xs text-green-700 py-0.5">
+                        {c.name} ({c.phone}) — 帳號: {c.username}，預設密碼: {c.default_password}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {bulkResult.errors?.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-xs text-red-600 cursor-pointer">查看失敗詳情</summary>
+                  <div className="mt-1">
+                    {bulkResult.errors.map((e: any, i: number) => (
+                      <div key={i} className="text-xs text-red-600 py-0.5">
+                        {e.name} ({e.phone}): {e.error}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+            <button onClick={() => setBulkResult(null)} className="text-green-500 hover:text-green-700 text-lg">&#x2715;</button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-4">

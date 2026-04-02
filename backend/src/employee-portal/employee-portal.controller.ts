@@ -61,7 +61,7 @@ export class EmployeePortalController {
     return this.service.getEmployeeProfile(req.user.sub);
   }
 
-  // ── Admin: Create employee user account ───────────────────────
+  // ── Admin: Create employee user account ─────────────────────────────
   @UseGuards(AuthGuard('jwt'))
   @Post('create-account')
   async createAccount(
@@ -69,6 +69,13 @@ export class EmployeePortalController {
     @Body() body: { phone: string; displayName: string; employee_id?: number },
   ) {
     return this.service.createEmployeeUser(body);
+  }
+
+  // ── Admin: Bulk create accounts for all employees with phone numbers ────────
+  @UseGuards(AuthGuard('jwt'))
+  @Post('bulk-create-accounts')
+  async bulkCreateAccounts(@Request() req: any) {
+    return this.service.bulkCreateEmployeeAccounts();
   }
 
   // ── Attendance (打卡) ──────────────────────────────────────────
