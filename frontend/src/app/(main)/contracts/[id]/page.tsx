@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { contractsApi, partnersApi, projectsApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi } from '@/lib/api';
+import { contractsApi, partnersApi, projectsApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import IpaTabContent from '@/components/payment/IpaTabContent';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -294,6 +295,7 @@ export default function ContractDetailPage() {
     { key: 'bq', label: '工程量清單 (BQ)' },
     { key: 'vo', label: '變更指令 (VO)' },
     { key: 'projects', label: '項目列表' },
+    { key: 'ipa', label: '計糧 (IPA)' },
   ];
 
   return (
@@ -594,6 +596,11 @@ export default function ContractDetailPage() {
             <p className="text-gray-400 text-sm">暫無關聯工程項目</p>
           )}
         </div>
+      )}
+
+      {/* ═══════════ Tab: 計糧 (IPA) ═══════════ */}
+      {activeTab === 'ipa' && (
+        <IpaTabContent contractId={contractId} />
       )}
 
       {/* ═══════════ Modals ═══════════ */}

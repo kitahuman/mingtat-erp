@@ -35,6 +35,7 @@ import { ContractsModule } from './contracts/contracts.module';
 import { BqSectionsModule } from './bq-sections/bq-sections.module';
 import { BqItemsModule } from './bq-items/bq-items.module';
 import { VariationOrdersModule } from './variation-orders/variation-orders.module';
+import { PaymentApplicationsModule } from './payment-applications/payment-applications.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { VariationOrdersModule } from './variation-orders/variation-orders.modul
     BqSectionsModule,
     BqItemsModule,
     VariationOrdersModule,
+    PaymentApplicationsModule,
   ],
 })
 export class AppModule {}

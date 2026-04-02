@@ -421,3 +421,51 @@ export const variationOrdersApi = {
 export const contractSummaryApi = {
   get: (contractId: number) => api.get(`/contracts/${contractId}/summary`),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Phase 3: Payment Applications (IPA / 計糧)
+// ══════════════════════════════════════════════════════════════
+
+export const paymentApplicationsApi = {
+  list: (contractId: number) => api.get(`/contracts/${contractId}/payment-applications`),
+  get: (contractId: number, paId: number) => api.get(`/contracts/${contractId}/payment-applications/${paId}`),
+  create: (contractId: number, data: any) => api.post(`/contracts/${contractId}/payment-applications`, data),
+  update: (contractId: number, paId: number, data: any) => api.put(`/contracts/${contractId}/payment-applications/${paId}`, data),
+  delete: (contractId: number, paId: number) => api.delete(`/contracts/${contractId}/payment-applications/${paId}`),
+
+  // Progress
+  updateBqProgress: (contractId: number, paId: number, items: any[]) =>
+    api.put(`/contracts/${contractId}/payment-applications/${paId}/bq-progress`, { items }),
+  updateVoProgress: (contractId: number, paId: number, items: any[]) =>
+    api.put(`/contracts/${contractId}/payment-applications/${paId}/vo-progress`, { items }),
+
+  // Materials
+  addMaterial: (contractId: number, paId: number, data: any) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/materials`, data),
+  updateMaterial: (contractId: number, paId: number, materialId: number, data: any) =>
+    api.put(`/contracts/${contractId}/payment-applications/${paId}/materials/${materialId}`, data),
+  removeMaterial: (contractId: number, paId: number, materialId: number) =>
+    api.delete(`/contracts/${contractId}/payment-applications/${paId}/materials/${materialId}`),
+
+  // Deductions
+  addDeduction: (contractId: number, paId: number, data: any) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/deductions`, data),
+  updateDeduction: (contractId: number, paId: number, deductionId: number, data: any) =>
+    api.put(`/contracts/${contractId}/payment-applications/${paId}/deductions/${deductionId}`, data),
+  removeDeduction: (contractId: number, paId: number, deductionId: number) =>
+    api.delete(`/contracts/${contractId}/payment-applications/${paId}/deductions/${deductionId}`),
+
+  // Status transitions
+  submit: (contractId: number, paId: number) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/submit`),
+  certify: (contractId: number, paId: number, data: any) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/certify`, data),
+  recordPayment: (contractId: number, paId: number, data: any) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/record-payment`, data),
+  void: (contractId: number, paId: number) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/void`),
+
+  // Retention settings
+  updateRetention: (contractId: number, data: any) =>
+    api.put(`/contracts/${contractId}/payment-applications/retention`, data),
+};

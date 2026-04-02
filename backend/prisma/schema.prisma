@@ -430,6 +430,10 @@ model Contract {
   created_at      DateTime   @default(now())
   updated_at      DateTime   @default(now()) @updatedAt
 
+  // Phase 3: Retention settings
+  retention_rate       Decimal   @default(0.10) @db.Decimal(5, 4)
+  retention_cap_rate   Decimal   @default(0.05) @db.Decimal(5, 4)
+
   client          Partner    @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
   projects        Project[]
   expenses        Expense[]
@@ -438,6 +442,9 @@ model Contract {
   bq_sections      ContractBqSection[]
   bq_items         ContractBqItem[]
   variation_orders VariationOrder[]
+
+  // Phase 3: Payment Applications
+  payment_applications PaymentApplication[]
 
   @@map("contracts")
 }
@@ -484,6 +491,9 @@ model ContractBqItem {
 
   contract     Contract            @relation(fields: [contract_id], references: [id], onDelete: Restrict)
   section      ContractBqSection?  @relation(fields: [section_id], references: [id], onDelete: SetNull)
+
+  // Phase 3
+  payment_progress PaymentBqProgress[]
 
   @@unique([contract_id, item_no])
   @@map("contract_bq_items")
@@ -535,6 +545,9 @@ model VariationOrderItem {
 
   variation_order    VariationOrder @relation(fields: [variation_order_id], references: [id], onDelete: Cascade)
 
+  // Phase 3
+  payment_progress PaymentVoProgress[]
+
   @@map("variation_order_items")
 }
 
@@ -561,12 +574,12 @@ model Project {
 
   company    Company    @relation(fields: [company_id], references: [id])
   client     Partner?   @relation("project_client", fields: [client_id], references: [id])
-  contract   Contract?  @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+   contract   Contract?  @relation(fields: [contract_id], references: [id], onDelete: Restrict)
   quotations Quotation[]
   rate_cards RateCard[]
   expenses   Expense[]
   work_logs  WorkLog[]
-
+  payment_applications PaymentApplication[]
   @@map("projects")
 }
 
@@ -1194,4 +1207,130 @@ model ExpenseAttachment {
   expense Expense @relation(fields: [expense_id], references: [id], onDelete: Cascade)
 
   @@map("expense_attachments")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase 3: Payment Application (IPA / 計糧)
+// ══════════════════════════════════════════════════════════════
+
+model PaymentApplication {
+  id                      Int       @id @default(autoincrement())
+  contract_id             Int
+  project_id              Int?
+  pa_no                   Int
+  reference               String    @db.VarChar(100)
+  period_from             DateTime? @db.Date
+  period_to               DateTime  @db.Date
+  submission_date         DateTime? @db.Date
+  certification_date      DateTime? @db.Date
+  payment_due_date        DateTime? @db.Date
+
+  // 金額欄位（後端自動計算）
+  bq_work_done            Decimal   @default(0) @db.Decimal(14, 2)  // (A)
+  vo_work_done            Decimal   @default(0) @db.Decimal(14, 2)  // (B)
+  cumulative_work_done    Decimal   @default(0) @db.Decimal(14, 2)  // (C) = A + B
+  materials_on_site       Decimal   @default(0) @db.Decimal(14, 2)  // (D)
+  gross_amount            Decimal   @default(0) @db.Decimal(14, 2)  // (E) = C + D
+  retention_amount        Decimal   @default(0) @db.Decimal(14, 2)  // (F)
+  after_retention         Decimal   @default(0) @db.Decimal(14, 2)  // (G) = E - F
+  other_deductions        Decimal   @default(0) @db.Decimal(14, 2)  // (H)
+  certified_amount        Decimal   @default(0) @db.Decimal(14, 2)  // (I) = G - H
+  prev_certified_amount   Decimal   @default(0) @db.Decimal(14, 2)  // (J)
+  current_due             Decimal   @default(0) @db.Decimal(14, 2)  // (K) = I - J
+
+  // 客戶認證金額（可能與申請金額不同）
+  client_certified_amount Decimal?  @db.Decimal(14, 2)
+  client_current_due      Decimal?  @db.Decimal(14, 2)
+
+  // 付款追蹤
+  paid_amount             Decimal   @default(0) @db.Decimal(14, 2)
+  paid_date               DateTime? @db.Date
+
+  status                  String    @default("draft") @db.VarChar(20)
+  remarks                 String?   @db.Text
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @default(now()) @updatedAt
+
+  contract                Contract             @relation(fields: [contract_id], references: [id], onDelete: Restrict)
+  project                 Project?             @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  bq_progress             PaymentBqProgress[]
+  vo_progress             PaymentVoProgress[]
+  deductions              PaymentDeduction[]
+  materials               PaymentMaterial[]
+
+  @@unique([contract_id, pa_no])
+  @@map("payment_applications")
+}
+
+model PaymentBqProgress {
+  id                     Int      @id @default(autoincrement())
+  payment_application_id Int
+  bq_item_id             Int
+  prev_cumulative_qty    Decimal  @default(0) @db.Decimal(14, 4)
+  current_cumulative_qty Decimal  @default(0) @db.Decimal(14, 4)
+  this_period_qty        Decimal  @default(0) @db.Decimal(14, 4)
+  unit_rate              Decimal  @default(0) @db.Decimal(14, 2)
+  prev_cumulative_amount Decimal  @default(0) @db.Decimal(14, 2)
+  current_amount         Decimal  @default(0) @db.Decimal(14, 2)
+  this_period_amount     Decimal  @default(0) @db.Decimal(14, 2)
+  remarks                String?  @db.Text
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
+
+  payment_application    PaymentApplication @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
+  bq_item                ContractBqItem     @relation(fields: [bq_item_id], references: [id], onDelete: Restrict)
+
+  @@unique([payment_application_id, bq_item_id])
+  @@map("payment_bq_progress")
+}
+
+model PaymentVoProgress {
+  id                     Int      @id @default(autoincrement())
+  payment_application_id Int
+  vo_item_id             Int
+  prev_cumulative_qty    Decimal  @default(0) @db.Decimal(14, 4)
+  current_cumulative_qty Decimal  @default(0) @db.Decimal(14, 4)
+  this_period_qty        Decimal  @default(0) @db.Decimal(14, 4)
+  unit_rate              Decimal  @default(0) @db.Decimal(14, 2)
+  prev_cumulative_amount Decimal  @default(0) @db.Decimal(14, 2)
+  current_amount         Decimal  @default(0) @db.Decimal(14, 2)
+  this_period_amount     Decimal  @default(0) @db.Decimal(14, 2)
+  remarks                String?  @db.Text
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
+
+  payment_application    PaymentApplication @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
+  vo_item                VariationOrderItem @relation(fields: [vo_item_id], references: [id], onDelete: Restrict)
+
+  @@unique([payment_application_id, vo_item_id])
+  @@map("payment_vo_progress")
+}
+
+model PaymentDeduction {
+  id                     Int      @id @default(autoincrement())
+  payment_application_id Int
+  deduction_type         String   @db.VarChar(50)
+  description            String   @db.VarChar(500)
+  amount                 Decimal  @default(0) @db.Decimal(14, 2)
+  remarks                String?  @db.Text
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
+
+  payment_application    PaymentApplication @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
+
+  @@map("payment_deductions")
+}
+
+model PaymentMaterial {
+  id                     Int      @id @default(autoincrement())
+  payment_application_id Int
+  description            String   @db.VarChar(500)
+  amount                 Decimal  @default(0) @db.Decimal(14, 2)
+  remarks                String?  @db.Text
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
+
+  payment_application    PaymentApplication @relation(fields: [payment_application_id], references: [id], onDelete: Cascade)
+
+  @@map("payment_materials")
 }
