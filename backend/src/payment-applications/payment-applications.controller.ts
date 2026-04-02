@@ -164,6 +164,14 @@ export class PaymentApplicationsController {
     return this.service.recordPayment(+contractId, +paId, body);
   }
 
+  @Post(':paId/revert')
+  revert(
+    @Param('contractId') contractId: string,
+    @Param('paId') paId: string,
+  ) {
+    return this.service.revert(+contractId, +paId);
+  }
+
   @Post(':paId/void')
   voidPa(
     @Param('contractId') contractId: string,

@@ -462,6 +462,8 @@ export const paymentApplicationsApi = {
     api.post(`/contracts/${contractId}/payment-applications/${paId}/certify`, data),
   recordPayment: (contractId: number, paId: number, data: any) =>
     api.post(`/contracts/${contractId}/payment-applications/${paId}/record-payment`, data),
+  revert: (contractId: number, paId: number) =>
+    api.post(`/contracts/${contractId}/payment-applications/${paId}/revert`),
   void: (contractId: number, paId: number) =>
     api.post(`/contracts/${contractId}/payment-applications/${paId}/void`),
 

@@ -169,6 +169,16 @@ export default function IpaDetailPage() {
     }
   };
 
+  const handleRevert = async () => {
+    if (!confirm('確認退回此 IPA 至草稿狀態？')) return;
+    try {
+      await paymentApplicationsApi.revert(contractId, paId);
+      fetchIpa();
+    } catch (err: any) {
+      window.alert(err.response?.data?.message || '退回失敗');
+    }
+  };
+
   const handleVoid = async () => {
     if (!confirm('確認作廢此 IPA？')) return;
     try {
@@ -303,9 +313,14 @@ export default function IpaDetailPage() {
             </>
           )}
           {ipa.status === 'submitted' && (
-            <button onClick={() => { setClientAmount(String(Number(ipa.certified_amount))); setShowCertifyModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
-              認證
-            </button>
+            <>
+              <button onClick={() => { setClientAmount(String(Number(ipa.certified_amount))); setShowCertifyModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+                認證
+              </button>
+              <button onClick={handleRevert} className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 text-sm">
+                退回修改
+              </button>
+            </>
           )}
           {ipa.status === 'certified' && (
             <button onClick={() => { setPaidAmount(String(Number(ipa.client_current_due ?? ipa.current_due))); setShowPaymentModal(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">

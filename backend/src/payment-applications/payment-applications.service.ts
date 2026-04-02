@@ -236,11 +236,25 @@ export class PaymentApplicationsService {
     });
     if (!contract) throw new NotFoundException('合約不存在');
 
+    // Business rule: only 1 draft PA per contract at a time
+    const existingDraft = await this.prisma.paymentApplication.findFirst({
+      where: { contract_id: contractId, status: 'draft' },
+    });
+    if (existingDraft) {
+      throw new BadRequestException('已存在草稿狀態的 IPA，請先提交或刪除現有草稿');
+    }
+
     // Determine next pa_no
     const lastPa = await this.prisma.paymentApplication.findFirst({
       where: { contract_id: contractId },
       orderBy: { pa_no: 'desc' },
     });
+
+    // Business rule: previous PA must be certified/paid/void before creating new one
+    if (lastPa && !['certified', 'paid', 'void'].includes(lastPa.status)) {
+      throw new BadRequestException('上一期 IPA 尚未認證/收款/作廢，無法新增下一期');
+    }
+
     const nextPaNo = (lastPa?.pa_no || 0) + 1;
 
     // Determine project
@@ -654,6 +668,26 @@ export class PaymentApplicationsService {
         status: 'paid',
         paid_amount: parseFloat(Number(dto.paid_amount).toFixed(2)),
         paid_date: dto.paid_date ? new Date(dto.paid_date) : new Date(),
+      },
+    });
+
+    return this.findOne(contractId, paId);
+  }
+
+  async revert(contractId: number, paId: number) {
+    const pa = await this.prisma.paymentApplication.findFirst({
+      where: { id: paId, contract_id: contractId },
+    });
+    if (!pa) throw new NotFoundException('IPA 不存在');
+    if (pa.status !== 'submitted') {
+      throw new BadRequestException('僅已提交狀態可以退回修改');
+    }
+
+    await this.prisma.paymentApplication.update({
+      where: { id: paId },
+      data: {
+        status: 'draft',
+        submission_date: null,
       },
     });
 

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { paymentApplicationsApi } from '@/lib/api';
+import { paymentApplicationsApi, contractsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 
@@ -34,6 +34,7 @@ export default function IpaTabContent({ contractId }: Props) {
   const [retentionModal, setRetentionModal] = useState(false);
   const [retentionRate, setRetentionRate] = useState('10');
   const [retentionCapRate, setRetentionCapRate] = useState('5');
+  const [showChart, setShowChart] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -48,9 +49,22 @@ export default function IpaTabContent({ contractId }: Props) {
     }
   }, [contractId]);
 
+  // Load current retention settings from contract
+  const loadRetention = useCallback(async () => {
+    try {
+      const res = await contractsApi.get(contractId);
+      const c = res.data?.data || res.data;
+      if (c) {
+        setRetentionRate(String(Number(c.retention_rate || 0.1) * 100));
+        setRetentionCapRate(String(Number(c.retention_cap_rate || 0.05) * 100));
+      }
+    } catch {}
+  }, [contractId]);
+
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    loadRetention();
+  }, [fetchData, loadRetention]);
 
   const handleCreate = async () => {
     if (!periodTo) return;
@@ -84,6 +98,24 @@ export default function IpaTabContent({ contractId }: Props) {
     }
   };
 
+  // Trend chart data (non-void IPAs sorted by pa_no)
+  const chartData = useMemo(() => {
+    return ipas
+      .filter((i: any) => i.status !== 'void')
+      .sort((a: any, b: any) => a.pa_no - b.pa_no)
+      .map((i: any) => ({
+        label: `第${i.pa_no}期`,
+        cumWorkDone: Number(i.cumulative_work_done || 0),
+        certified: Number(i.certified_amount || 0),
+        retention: Number(i.retention_amount || 0),
+      }));
+  }, [ipas]);
+
+  const chartMax = useMemo(() => {
+    if (chartData.length === 0) return 1;
+    return Math.max(...chartData.map(d => Math.max(d.cumWorkDone, d.certified)), 1);
+  }, [chartData]);
+
   if (loading) {
     return <div className="py-8 text-center text-gray-500">載入中...</div>;
   }
@@ -116,11 +148,55 @@ export default function IpaTabContent({ contractId }: Props) {
         </div>
       )}
 
+      {/* Trend Chart */}
+      {chartData.length >= 2 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-700">累計完工趨勢</h4>
+            <button onClick={() => setShowChart(!showChart)} className="text-xs text-blue-600 hover:text-blue-800">
+              {showChart ? '隱藏圖表' : '顯示圖表'}
+            </button>
+          </div>
+          {showChart && (
+            <div className="space-y-3">
+              {/* Legend */}
+              <div className="flex gap-6 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span> 累計完工金額</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> 認證金額</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block"></span> 保留金</span>
+              </div>
+              {/* Simple bar chart */}
+              <div className="space-y-2">
+                {chartData.map((d, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="w-16 text-xs text-gray-500 text-right shrink-0">{d.label}</span>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-1">
+                        <div className="h-4 bg-blue-500 rounded-sm transition-all" style={{ width: `${(d.cumWorkDone / chartMax) * 100}%`, minWidth: d.cumWorkDone > 0 ? '2px' : '0' }}></div>
+                        <span className="text-xs text-gray-500 font-mono whitespace-nowrap">{fmt$(d.cumWorkDone)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-4 bg-green-500 rounded-sm transition-all" style={{ width: `${(d.certified / chartMax) * 100}%`, minWidth: d.certified > 0 ? '2px' : '0' }}></div>
+                        <span className="text-xs text-gray-500 font-mono whitespace-nowrap">{fmt$(d.certified)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-3 bg-red-400 rounded-sm transition-all" style={{ width: `${(d.retention / chartMax) * 100}%`, minWidth: d.retention > 0 ? '2px' : '0' }}></div>
+                        <span className="text-xs text-gray-400 font-mono whitespace-nowrap">{fmt$(d.retention)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">期中付款申請 (IPA) 列表</h3>
         <div className="flex gap-2">
-          <button onClick={() => setRetentionModal(true)} className="btn-secondary text-sm">
+          <button onClick={() => { loadRetention(); setRetentionModal(true); }} className="btn-secondary text-sm">
             保留金設定
           </button>
           <button onClick={() => setShowCreateModal(true)} className="btn-primary text-sm">
