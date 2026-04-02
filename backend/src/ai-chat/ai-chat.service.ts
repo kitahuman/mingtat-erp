@@ -7,8 +7,14 @@ export class AiChatService {
   private openai: OpenAI;
 
   constructor(private prisma: PrismaService) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[AiChatService] OPENAI_API_KEY is not set!');
+    } else {
+      console.log('[AiChatService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
+    }
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: apiKey,
     });
   }
 

@@ -14,8 +14,10 @@ export class AiChatController {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    console.log('[AI Chat] Request received, messages count:', messages?.length ?? 0);
+
     try {
-      const currentMessages = [...messages];
+      const currentMessages = [...(messages || [])];
       let toolCallCount = 0;
       const maxToolCalls = 5;
 
@@ -58,13 +60,23 @@ export class AiChatController {
           currentMessages.push(assistantToolCallMessage);
 
           for (const tc of toolCalls) {
+            console.log('[AI Chat] Calling tool:', tc.function.name);
             res.write(`data: ${JSON.stringify({ tool_call: tc.function.name })}\n\n`);
-            const result = await this.service.handleToolCall(tc);
-            toolCallResults.push({
-              role: 'tool',
-              tool_call_id: tc.id,
-              content: JSON.stringify(result),
-            });
+            try {
+              const result = await this.service.handleToolCall(tc);
+              toolCallResults.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                content: JSON.stringify(result),
+              });
+            } catch (toolError: any) {
+              console.error('[AI Chat] Tool call error:', tc.function.name, toolError?.message);
+              toolCallResults.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                content: JSON.stringify({ error: toolError?.message || 'Tool execution failed' }),
+              });
+            }
           }
           currentMessages.push(...toolCallResults);
           toolCallCount++;
@@ -74,9 +86,28 @@ export class AiChatController {
       }
       res.write('data: [DONE]\n\n');
       res.end();
-    } catch (error) {
-      console.error('AI Chat Error:', error);
-      res.write(`data: ${JSON.stringify({ error: 'AI 服務暫時不可用，請稍後再試。' })}\n\n`);
+      console.log('[AI Chat] Request completed successfully');
+    } catch (error: any) {
+      console.error('[AI Chat] Fatal error:', error?.message);
+      console.error('[AI Chat] Error type:', error?.constructor?.name);
+      console.error('[AI Chat] Error status:', error?.status);
+      console.error('[AI Chat] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+
+      let errorMsg = 'AI 服務暫時不可用，請稍後再試。';
+
+      // Distinguish OpenAI API errors from other errors
+      if (error?.status === 401 || error?.response?.status === 401) {
+        errorMsg = 'OpenAI API 認證失敗，請聯絡系統管理員檢查 API Key。';
+        console.error('[AI Chat] OpenAI 401: API Key may be invalid or missing');
+      } else if (error?.status === 429 || error?.response?.status === 429) {
+        errorMsg = 'OpenAI API 請求過於頻繁，請稍後再試。';
+      } else if (error?.status === 503 || error?.response?.status === 503) {
+        errorMsg = 'OpenAI 服務暫時不可用，請稍後再試。';
+      } else if (error?.message) {
+        errorMsg = `錯誤：${error.message}`;
+      }
+
+      res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
       res.end();
     }
   }

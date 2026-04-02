@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Cookies from 'js-cookie';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -48,10 +49,8 @@ export default function ChatPage() {
   }, [messages]);
 
   const getAuthToken = (): string => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-    }
-    return '';
+    // Token is stored in cookie by the auth system (see src/lib/auth.tsx)
+    return Cookies.get('token') || '';
   };
 
   const handleSendMessage = async (text?: string) => {
