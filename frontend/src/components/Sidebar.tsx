@@ -70,8 +70,7 @@ const navEntries: NavEntry[] = [
     icon: '💵',
     minRole: 'clerk',
     items: [
-      { href: '/expenses', label: '支出管理', icon: '💸', minRole: 'clerk' },
-      { href: '/employee-portal/expense', label: '費用報銷 (手機版)', icon: '📝', minRole: 'worker', external: true },
+      { href: '/expenses', label: '費用報銷', icon: '💸', minRole: 'clerk' },
     ],
   },
   {

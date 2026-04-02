@@ -1032,6 +1032,7 @@ model Expense {
   payment_date       DateTime? @db.Date
   payment_ref        String?
   remarks            String?   @db.Text
+  source             String?   @default("erp")  // "erp" | "employee_portal"
   machine_code       String?
   machinery_id       Int?
   client_id          Int?

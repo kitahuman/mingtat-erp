@@ -54,7 +54,7 @@ export class ExpensesService {
     const allowedSortFields = [
       'id', 'date', 'company_id', 'supplier_name', 'category_id',
       'employee_id', 'item', 'total_amount', 'is_paid',
-      'payment_date', 'payment_ref', 'machine_code', 'created_at',
+      'payment_date', 'payment_ref', 'machine_code', 'created_at', 'source',
     ];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
     const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';

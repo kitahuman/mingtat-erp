@@ -419,6 +419,7 @@ export class EmployeePortalService {
         payment_method: data.payment_method || undefined,
         payment_ref: data.payment_ref || undefined,
         remarks: data.remarks,
+        source: 'employee_portal',
         // Create line items if provided
         items: items.length > 0 ? {
           create: items

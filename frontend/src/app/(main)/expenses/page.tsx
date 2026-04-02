@@ -447,6 +447,21 @@ export default function ExpensesPage() {
       render: (_: any, row: any) => row.quotation?.quotation_no || '-',
       filterRender: (_: any, row: any) => row.quotation?.quotation_no || '-',
     },
+    {
+      key: 'source',
+      label: '來源',
+      sortable: true,
+      editable: false,
+      render: (v: any) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+          v === 'employee_portal' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+        }`}>
+          {v === 'employee_portal' ? '員工報銷' : 'ERP'}
+        </span>
+      ),
+      filterRender: (v: any) => v === 'employee_portal' ? '員工報銷' : 'ERP',
+      exportRender: (v: any) => v === 'employee_portal' ? '員工報銷' : 'ERP',
+    },
   ];
 
   const { columnConfigs, columnWidths, visibleColumns, handleColumnConfigChange, handleReset, handleColumnResize } =
@@ -456,8 +471,8 @@ export default function ExpensesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">支出管理</h1>
-          <p className="text-gray-500 text-sm mt-1">管理公司各項支出記錄，點擊行可查看詳情</p>
+          <h1 className="text-2xl font-bold text-gray-900">費用報銷</h1>
+          <p className="text-gray-500 text-sm mt-1">管理公司各項支出記錄（包括員工報銷），點擊行可查看詳情</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn-primary">新增支出</button>
       </div>
