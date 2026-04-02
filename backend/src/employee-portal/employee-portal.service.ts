@@ -59,16 +59,19 @@ export class EmployeePortalService {
       // ignore if lastLoginAt column doesn't exist
     }
 
-    // Find linked employee record (best-effort)
+    // Find linked employee record via relation (best-effort)
     let employee: any = null;
     try {
-      const employeeId = user.employee_id ?? null;
-      if (employeeId) {
-        employee = await this.prisma.employee.findUnique({
-          where: { id: employeeId },
-          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
-        });
-      } else if (user.phone) {
+      const userWithEmployee = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        include: {
+          employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true } },
+        },
+      });
+      employee = userWithEmployee?.employee ?? null;
+
+      // Fallback: if no relation but phone matches, try phone lookup
+      if (!employee && user.phone) {
         employee = await this.prisma.employee.findFirst({
           where: { phone: user.phone },
           select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
@@ -119,20 +122,31 @@ export class EmployeePortalService {
 
   // ── Get employee profile ───────────────────────────────────────
   async getEmployeeProfile(userId: number) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee: {
+          include: { company: { select: { id: true, name: true } } },
+        },
+      },
+    });
     if (!user) throw new UnauthorizedException();
 
-    let employee: any = null;
-    try {
-      const employeeId = await this.resolveEmployeeId(user);
-      if (employeeId) {
-        employee = await this.prisma.employee.findUnique({
-          where: { id: employeeId },
-          include: { company: { select: { id: true, name: true } } },
-        });
+    let employee: any = user.employee ?? null;
+
+    // Fallback: if no relation but phone matches
+    if (!employee) {
+      try {
+        const employeeId = await this.resolveEmployeeId(user);
+        if (employeeId) {
+          employee = await this.prisma.employee.findUnique({
+            where: { id: employeeId },
+            include: { company: { select: { id: true, name: true } } },
+          });
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
 
     return { user, employee };

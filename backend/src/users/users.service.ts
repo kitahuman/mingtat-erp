@@ -30,13 +30,21 @@ export class UsersService {
 
     const users = await this.prisma.user.findMany({
       where,
+      include: {
+        employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return users.map(u => this.sanitizeUser(u));
   }
 
   async findOne(id: number) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true } },
+      },
+    });
     if (!user) throw new NotFoundException('用戶不存在');
     return this.sanitizeUser(user);
   }
@@ -78,8 +86,15 @@ export class UsersService {
     if (dto.phone !== undefined) data.phone = dto.phone ?? null;
     if (dto.department !== undefined) data.department = dto.department ?? null;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.employee_id !== undefined) data.employee_id = dto.employee_id;
 
-    const saved = await this.prisma.user.update({ where: { id }, data });
+    const saved = await this.prisma.user.update({
+      where: { id },
+      data,
+      include: {
+        employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true } },
+      },
+    });
     return this.sanitizeUser(saved);
   }
 

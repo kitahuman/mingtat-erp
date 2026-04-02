@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsBoolean, MinLength } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsBoolean, IsNumber, MinLength } from 'class-validator';
 import { UserRole } from '../../auth/user-role.enum';
 
 export class UpdateUserDto {
@@ -30,4 +30,8 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  employee_id?: number | null;
 }
