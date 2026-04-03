@@ -183,7 +183,7 @@ export class PayrollService {
             company_profile_id: wl.company_profile_id ?? null,
             company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
             quotation_id: wl.quotation_id ?? null,
-            contract_no: wl.quotation?.quotation_no ?? wl.contract_no ?? null,
+            client_contract_no: wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
             is_modified: false,
             is_excluded: false,
           },
@@ -407,7 +407,7 @@ export class PayrollService {
           company_profile_id: wl.company_profile_id ?? null,
           company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
           quotation_id: wl.quotation_id ?? null,
-          contract_no: wl.quotation?.quotation_no ?? wl.contract_no ?? null,
+          client_contract_no: wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
           is_modified: false,
           is_excluded: false,
         },
@@ -918,7 +918,7 @@ export class PayrollService {
     const editableFields = [
       'service_type', 'scheduled_date', 'day_night', 'start_location', 'end_location',
       'machine_type', 'tonnage', 'equipment_number', 'quantity', 'unit',
-      'ot_quantity', 'ot_unit', 'is_mid_shift', 'remarks', 'client_name', 'contract_no',
+      'ot_quantity', 'ot_unit', 'is_mid_shift', 'remarks', 'client_name', 'client_contract_no',
     ];
 
     const updateData: any = { is_modified: true };
@@ -1283,7 +1283,7 @@ export class PayrollService {
           start_location: pwl.start_location,
           end_location: pwl.end_location,
           client_name: pwl.client_name,
-          contract_no: pwl.contract_no,
+          client_contract_no: pwl.client_contract_no,
           quantity: Number(pwl.quantity) || 1,
           matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
           line_amount: Number(pwl.line_amount) || 0,
@@ -1350,7 +1350,7 @@ export class PayrollService {
           start_location: wl.start_location,
           end_location: wl.end_location,
           client_name: wl.client?.name || '',
-          contract_no: wl.quotation?.quotation_no || '',
+          client_contract_no: wl.quotation?.quotation_no || wl.client_contract_no || '',
           quantity: Number(wl.quantity) || 1,
           matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
           line_amount: Number(wl._line_amount) || 0,
@@ -1451,7 +1451,7 @@ export class PayrollService {
         const { card, unmatchedReason } = this.pricingService.matchFleetRateCardInMemory(
           clientCards,
           wl.company_profile_id,
-          wl.contract_no || null,
+          wl.client_contract_no || null,
           wl.service_type,
           wl.day_night,
           wl.tonnage,
@@ -1471,7 +1471,7 @@ export class PayrollService {
           enriched._matched_ot_rate = amounts.otRate;
           enriched._matched_mid_shift_rate = amounts.midShiftRate;
           enriched._price_match_status = 'matched';
-          enriched._price_match_note = `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`;
+          enriched._price_match_note = `匹配到：${card.client_contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`;
           enriched._line_amount = amounts.baseAmount;
           enriched._ot_line_amount = amounts.otAmount;
           enriched._mid_shift_line_amount = amounts.midShiftAmount;
@@ -1517,7 +1517,7 @@ export class PayrollService {
     const { card } = await this.pricingService.matchFleetRateCardFromDb(
       wl.client_id,
       wl.company_id || null,
-      wl.contract_no || null,
+      wl.client_contract_no || null,
       wl.service_type || null,
       wl.day_night || null,
       wl.tonnage || null,
@@ -1542,7 +1542,7 @@ export class PayrollService {
   private buildGroupKeyFromWorkLog(wl: any): string {
     const parts = [
       wl.client?.name || wl.client_name || `client_${wl.client_id || ''}`,
-      wl.quotation?.quotation_no || wl.contract_no || `q_${wl.quotation_id || ''}`,  
+      wl.quotation?.quotation_no || wl.client_contract_no || `q_${wl.quotation_id || ''}`,  
       wl.service_type || '',
       wl.day_night || '日',
       wl.start_location || '',
@@ -1569,7 +1569,7 @@ export class PayrollService {
         groups.set(key, {
           group_key: key,
           client_name: pwl.client_name || '',
-          contract_no: pwl.contract_no || '',
+          client_contract_no: pwl.client_contract_no || '',
           service_type: pwl.service_type || '',
           day_night: pwl.day_night || '日',
           start_location: pwl.start_location || '',
@@ -1606,7 +1606,7 @@ export class PayrollService {
         groups.set(key, {
           group_key: key,
           client_name: wl.client?.name || '',
-          contract_no: wl.quotation?.quotation_no || '',
+          client_contract_no: wl.quotation?.quotation_no || wl.client_contract_no || '',
           service_type: wl.service_type || '',
           day_night: wl.day_night || '日',
           start_location: wl.start_location || '',
@@ -1630,7 +1630,7 @@ export class PayrollService {
   private buildGroupKeyFromPwl(pwl: any): string {
     const parts = [
       pwl.client_name || `client_${pwl.client_id || ''}`,
-      pwl.contract_no || `q_${pwl.quotation_id || ''}`,
+      pwl.client_contract_no || `q_${pwl.quotation_id || ''}`,
       pwl.service_type || '',
       pwl.day_night || '日',
       pwl.start_location || '',
@@ -1672,7 +1672,7 @@ export class PayrollService {
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       pwl.client_id,
       pwl.company_id || null,
-      pwl.contract_no || null,
+      pwl.client_contract_no || null,
       pwl.service_type || null,
       pwl.day_night || null,
       pwl.tonnage || null,
@@ -1710,7 +1710,7 @@ export class PayrollService {
       ot_line_amount: otRate * otQty,
       mid_shift_line_amount: isMidShift ? midShiftRate * 1 : 0,
       price_match_status: 'matched',
-      price_match_note: `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`,
+      price_match_note: `匹配到：${card.client_contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`,
     };
   }
 

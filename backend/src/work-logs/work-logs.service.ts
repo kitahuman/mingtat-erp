@@ -135,7 +135,7 @@ export class WorkLogsService {
 
     await this.prisma.workLog.update({ where: { id }, data: rest });
     // 自動匹配價格（如果關鍵欄位有變動）
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'contract_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
     if (hasPriceChange) {
       const updated = await this.findOne(id);
@@ -178,6 +178,7 @@ export class WorkLogsService {
         client_id: original.client_id,
         quotation_id: original.quotation_id,
         contract_id: original.contract_id,
+        client_contract_no: original.client_contract_no,
         employee_id: original.employee_id,
         machine_type: original.machine_type,
         equipment_number: original.equipment_number,
@@ -308,7 +309,7 @@ export class WorkLogsService {
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       workLog.client_id,
       workLog.company_profile_id,
-      workLog.contract_no || null,
+      workLog.client_contract_no || null,
       workLog.service_type,
       workLog.day_night,
       workLog.tonnage,
@@ -338,7 +339,7 @@ export class WorkLogsService {
       where: { id: workLog.id },
       data: {
         price_match_status: 'matched',
-        price_match_note: `匹配到：${card.name || card.contract_no || `FleetRC#${card.id}`}`,
+        price_match_note: `匹配到：${card.name || card.client_contract_no || `FleetRC#${card.id}`}`,
         matched_rate_card_id: card.id,
         matched_rate: rate,
         matched_unit: unit,

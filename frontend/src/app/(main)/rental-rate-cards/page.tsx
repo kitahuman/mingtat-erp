@@ -11,7 +11,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '生效中' },
@@ -39,10 +39,10 @@ export default function RentalRateCardsPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const contractNoOptions = optionsMap['contract_no'] || [];
+  const contractNoOptions = optionsMap['client_contract_no'] || [];
 
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', quotation_id: '', contract_no: '', service_type: '',
+    company_id: '', client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
     name: '', tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
@@ -52,7 +52,7 @@ export default function RentalRateCardsPage() {
 
   const resetForm = () => {
     setForm({
-      company_id: '', client_id: '', quotation_id: '', contract_no: '', service_type: '',
+      company_id: '', client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
       name: '', tonnage: '', machine_type: '',
       origin: '', destination: '',
       rate: 0, mid_shift_rate: 0, ot_rate: 0,
@@ -103,7 +103,7 @@ export default function RentalRateCardsPage() {
 
   const handleInlineSave = async (id: number, formData: any) => {
     const payload: any = {};
-    const textFields = ['service_type', 'name', 'tonnage', 'machine_type', 'origin', 'destination', 'contract_no', 'remarks', 'status', 'day_night', 'unit'];
+    const textFields = ['service_type', 'name', 'tonnage', 'machine_type', 'origin', 'destination', 'client_contract_no', 'remarks', 'status', 'day_night', 'unit'];
     const numFields = ['rate', 'mid_shift_rate', 'ot_rate'];
     const dateFields = ['effective_date', 'expiry_date'];
     textFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
@@ -136,14 +136,14 @@ export default function RentalRateCardsPage() {
     ) : '-' },
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'contract_no', label: '合約', sortable: true, editable: true, render: (v: any) => v || '-',
+    { key: 'client_contract_no', label: '客戶合約', sortable: true, editable: true, render: (v: any) => v || '-',
       editRender: (value: any, onChange: any) => (
         <Combobox
           value={value || ''}
           onChange={v => onChange(v || '')}
           options={contractNoOptions}
-          placeholder="合約編號"
-          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {} }}
+          placeholder="客戶合約"
+          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
         />
       )
     },
@@ -248,13 +248,13 @@ export default function RentalRateCardsPage() {
               {!form.client_id && <input tabIndex={-1} autoComplete="off" style={{ position: 'absolute', opacity: 0, height: 0, width: 0 }} value={form.client_id} onChange={() => {}} required />}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
               <Combobox
-                value={form.contract_no}
-                onChange={(v) => setForm({...form, contract_no: v || ''})}
+                value={form.client_contract_no}
+                onChange={(v) => setForm({...form, client_contract_no: v || ''})}
                 options={contractNoOptions}
-                placeholder="選擇或輸入合約編號"
-                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {} }}
+                placeholder="客戶合約"
+                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
               />
             </div>
             <div>

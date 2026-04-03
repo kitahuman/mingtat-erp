@@ -687,6 +687,7 @@ model RateCard {
   company_id          Int
   client_id           Int
   contract_no         String?
+  client_contract_no  String?
   service_type        String?
   name                String?
   description         String?   @db.Text
@@ -747,6 +748,7 @@ model FleetRateCard {
   client_id           Int?
   contract_id         Int?
   contract_no         String?
+  client_contract_no  String?
   service_type        String?
   name                String?
   description         String?   @db.Text
@@ -790,6 +792,7 @@ model SubconRateCard {
   plate_no            String?
   client_id           Int?
   contract_no         String?
+  client_contract_no  String?
   service_type        String?
   name                String?
   description         String?   @db.Text
@@ -935,6 +938,7 @@ model WorkLog {
   client_id            Int?
   quotation_id         Int?
   contract_id          Int?
+  client_contract_no   String?
   employee_id          Int?
   machine_type         String?
   equipment_number     String?
@@ -1071,6 +1075,7 @@ model PayrollWorkLog {
   company_profile_name String?
   quotation_id         Int?
   contract_no          String?
+  client_contract_no   String?
   is_modified          Boolean   @default(false)
   is_excluded          Boolean   @default(false)
   created_at           DateTime  @default(now())

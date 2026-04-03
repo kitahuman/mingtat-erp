@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
 // Field options categories
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
 
 interface FormData {
   work_type: 'engineering' | 'transport';
@@ -15,7 +15,7 @@ interface FormData {
   client_id: string;
   client_input: string;          // raw text in the combobox input
   is_new_client: boolean;        // true if client_id is a free-text name
-  contract_no: string;
+  client_contract_no: string;
   tonnage: string;
   // Engineering
   machine_type: string;
@@ -50,7 +50,7 @@ const defaultForm: FormData = {
   client_id: '',
   client_input: '',
   is_new_client: false,
-  contract_no: '',
+  client_contract_no: '',
   tonnage: '',
   machine_type: '',
   equipment_number: '',
@@ -406,7 +406,7 @@ export default function WorkReportPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const contractNoOptions = optionsMap['contract_no'] || [];
+  const clientContractNoOptions = optionsMap['client_contract_no'] || [];
 
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -467,6 +467,7 @@ export default function WorkReportPage() {
         service_type: form.work_type === 'engineering' ? (form.service_type || '工程') : '運輸',
         scheduled_date: form.scheduled_date,
         tonnage: form.tonnage || undefined,
+        client_contract_no: form.client_contract_no || undefined,
         start_time: form.start_time || undefined,
         end_time: form.end_time || undefined,
         day_night: form.shift,
@@ -602,11 +603,11 @@ export default function WorkReportPage() {
           </div>
 
           <div>
-            <label className={labelClass}>{t('contract')}</label>
+            <label className={labelClass}>客戶合約</label>
             <Combobox
-              value={form.contract_no}
-              onChange={(val) => set('contract_no', val)}
-              options={contractNoOptions}
+              value={form.client_contract_no}
+              onChange={(val) => set('client_contract_no', val)}
+              options={clientContractNoOptions}
               placeholder="合約號碼"
               className={inputClass}
             />

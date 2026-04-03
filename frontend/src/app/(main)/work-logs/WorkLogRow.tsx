@@ -188,8 +188,8 @@ export default function WorkLogRow({
         </td>
         {/* 報價單 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.quotation?.quotation_no || '—'}</td>
-        {/* 合約 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.contract_no || '—'}</td>
+        {/* 客戶合約 */}
+        <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.client_contract_no || '—'}</td>
         {/* 員工 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.employee?.name_zh || '—'}</td>
         {/* 機種 */}
@@ -321,15 +321,15 @@ export default function WorkLogRow({
           placeholder="選擇報價單"
         />
       </td>
-      {/* 合約 */}
+      {/* 客戶合約 */}
       <td className={`${cellCls} w-32`}>
         <Combobox
-          value={form.contract_no || ''}
-          onChange={v => set('contract_no', v ? String(v) : null)}
-          options={fieldOptions['contract_no'] || []}
-          placeholder="合約編號"
+          value={form.client_contract_no || ''}
+          onChange={v => set('client_contract_no', v ? String(v) : null)}
+          options={fieldOptions['client_contract_no'] || []}
+          placeholder="客戶合約"
           onCreateOption={async (val) => {
-            try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {}
+            try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {}
           }}
         />
       </td>
