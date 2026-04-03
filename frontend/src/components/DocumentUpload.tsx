@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { documentsApi, getExpiryStatus, getExpiryColor } from '@/lib/api';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import Cookies from 'js-cookie';
+import { fmtDate } from '@/lib/dateUtils';
 
 interface DocumentUploadProps {
   entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile';
@@ -154,7 +155,7 @@ export default function DocumentUpload({ entityType, entityId, docTypes }: Docum
                   <td className="px-4 py-2"><span className="badge-blue">{doc.doc_type}</span></td>
                   <td className="px-4 py-2"><ExpiryBadge date={doc.expiry_date} /></td>
                   <td className="px-4 py-2 text-gray-500">{formatFileSize(doc.file_size)}</td>
-                  <td className="px-4 py-2 text-gray-500">{doc.created_at?.split('T')[0]}</td>
+                  <td className="px-4 py-2 text-gray-500">{fmtDate(doc.created_at)}</td>
                   <td className="px-4 py-2">
                     <div className="flex gap-2">
                       <a href={getDownloadUrl(doc.id)} target="_blank" className="text-blue-600 hover:underline text-xs">下載</a>

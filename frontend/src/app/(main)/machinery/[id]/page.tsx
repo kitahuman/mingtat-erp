@@ -6,6 +6,7 @@ import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
 
@@ -57,9 +58,9 @@ export default function MachineryDetailPage() {
 
   const dateStatusBadge = (date: string | null) => {
     if (!date) return <span className="text-gray-400">未設定</span>;
-    if (isExpired(date)) return <span className="badge-red">{date} (已過期)</span>;
-    if (isExpiringSoon(date)) return <span className="badge-yellow">{date} (即將到期)</span>;
-    return <span className="badge-green">{date}</span>;
+    if (isExpired(date)) return <span className="badge-red">{fmtDate(date)} (已過期)</span>;
+    if (isExpiringSoon(date)) return <span className="badge-yellow">{fmtDate(date)} (即將到期)</span>;
+    return <span className="badge-green">{fmtDate(date)}</span>;
   };
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
@@ -143,7 +144,7 @@ export default function MachineryDetailPage() {
               <tbody>
                 {machine.transfers.map((t: any) => (
                   <tr key={t.id} className="border-b">
-                    <td className="px-3 py-2">{t.transfer_date}</td>
+                    <td className="px-3 py-2">{fmtDate(t.transfer_date)}</td>
                     <td className="px-3 py-2">{t.from_company?.internal_prefix || t.from_company?.name}</td>
                     <td className="px-3 py-2 text-center text-gray-400">→</td>
                     <td className="px-3 py-2">{t.to_company?.internal_prefix || t.to_company?.name}</td>

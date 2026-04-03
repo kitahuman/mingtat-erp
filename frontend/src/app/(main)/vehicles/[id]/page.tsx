@@ -6,6 +6,7 @@ import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 // Fallback vehicle types
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
@@ -78,9 +79,9 @@ export default function VehicleDetailPage() {
 
   const dateStatusBadge = (date: string | null) => {
     if (!date) return <span className="text-gray-400">未設定</span>;
-    if (isExpired(date)) return <span className="badge-red">{date} (已過期)</span>;
-    if (isExpiringSoon(date)) return <span className="badge-yellow">{date} (即將到期)</span>;
-    return <span className="badge-green">{date}</span>;
+    if (isExpired(date)) return <span className="badge-red">{fmtDate(date)} (已過期)</span>;
+    if (isExpiringSoon(date)) return <span className="badge-yellow">{fmtDate(date)} (即將到期)</span>;
+    return <span className="badge-green">{fmtDate(date)}</span>;
   };
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
@@ -164,7 +165,7 @@ export default function VehicleDetailPage() {
               <tbody>
                 {vehicle.plate_history.map((h: any) => (
                   <tr key={h.id} className="border-b">
-                    <td className="px-3 py-2">{h.change_date}</td>
+                    <td className="px-3 py-2">{fmtDate(h.change_date)}</td>
                     <td className="px-3 py-2 font-mono">{h.old_plate}</td>
                     <td className="px-3 py-2 text-center text-gray-400">→</td>
                     <td className="px-3 py-2 font-mono font-bold">{h.new_plate}</td>
@@ -199,7 +200,7 @@ export default function VehicleDetailPage() {
               <tbody>
                 {vehicle.transfers.map((t: any) => (
                   <tr key={t.id} className="border-b">
-                    <td className="px-3 py-2">{t.transfer_date}</td>
+                    <td className="px-3 py-2">{fmtDate(t.transfer_date)}</td>
                     <td className="px-3 py-2">{t.from_company?.internal_prefix || t.from_company?.name}</td>
                     <td className="px-3 py-2 text-center text-gray-400">→</td>
                     <td className="px-3 py-2">{t.to_company?.internal_prefix || t.to_company?.name}</td>

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
 import Link from 'next/link';
+import { fmtDate } from '@/lib/dateUtils';
 
 const SERVICE_TYPES = ['工程', '人工', '物料', '服務'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -143,8 +144,8 @@ export default function ProjectRateCardDetailPage() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">單價</p><p className="text-xl font-bold font-mono">${Number(record?.day_rate).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.day_unit || 'JOB'}</span></p></div>
-            <div><p className="text-sm text-gray-500">生效日期</p><p>{record?.effective_date || '-'}</p></div>
-            <div><p className="text-sm text-gray-500">到期日期</p><p>{record?.expiry_date || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">生效日期</p><p>{fmtDate(record?.effective_date)}</p></div>
+            <div><p className="text-sm text-gray-500">到期日期</p><p>{fmtDate(record?.expiry_date)}</p></div>
             <div><p className="text-sm text-gray-500">來源報價單</p>
               {record?.source_quotation ? (
                 <Link href={`/quotations/${record.source_quotation.id}`} className="text-primary-600 hover:underline font-mono">{record.source_quotation.quotation_no}</Link>

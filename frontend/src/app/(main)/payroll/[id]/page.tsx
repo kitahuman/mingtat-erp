@@ -4,12 +4,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { payrollApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 function formatDateDisplay(dateStr: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  return dateStr;
+  return fmtDate(dateStr);
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -626,7 +624,7 @@ export default function PayrollDetailPage() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">計糧期間</p>
-          <p className="font-bold text-sm">{payroll.date_from} 至 {payroll.date_to}</p>
+          <p className="font-bold text-sm">{fmtDate(payroll.date_from)} 至 {fmtDate(payroll.date_to)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">淨額</p>
@@ -1025,7 +1023,7 @@ export default function PayrollDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-gray-500">付款日期</p>
-            <p className="font-medium">{payroll.payment_date || '未付款'}</p>
+            <p className="font-medium">{payroll.payment_date ? fmtDate(payroll.payment_date) : '未付款'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">支票號碼</p>

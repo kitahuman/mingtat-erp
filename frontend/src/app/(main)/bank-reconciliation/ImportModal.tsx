@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { bankReconciliationApi } from '@/lib/api';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess }: any) {
   const [file, setFile] = useState<File | null>(null);
@@ -83,7 +84,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
                 <tbody>
                   {preview.map((p, i) => (
                     <tr key={i} className="border-b">
-                      <td className="p-2">{p.date}</td>
+                      <td className="p-2">{fmtDate(p.date)}</td>
                       <td className="p-2 truncate max-w-[150px]">{p.description}</td>
                       <td className={`p-2 text-right ${p.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>{p.amount}</td>
                     </tr>

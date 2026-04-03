@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi } from '@/lib/api';
 import Link from 'next/link';
+import { fmtDate } from '@/lib/dateUtils';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -84,7 +85,7 @@ export default function SalaryConfigDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{emp?.name_zh || emp?.name_en}</h1>
-          <p className="text-gray-500">{emp?.emp_code} | {SALARY_TYPE_LABELS[record?.salary_type]} | 生效日期: {record?.effective_date}</p>
+          <p className="text-gray-500">{emp?.emp_code} | {SALARY_TYPE_LABELS[record?.salary_type]} | 生效日期: {fmtDate(record?.effective_date)}</p>
         </div>
         <div className="flex gap-2">
           {editing ? (
@@ -124,7 +125,7 @@ export default function SalaryConfigDetailPage() {
               <p className="text-2xl font-bold font-mono">${Number(record?.base_salary).toLocaleString()}</p>
               <p className="text-xs text-gray-500 mt-1">{SALARY_TYPE_LABELS[record?.salary_type]}</p>
             </div>
-            <div><p className="text-sm text-gray-500">生效日期</p><p className="font-medium">{record?.effective_date}</p></div>
+            <div><p className="text-sm text-gray-500">生效日期</p><p className="font-medium">{fmtDate(record?.effective_date)}</p></div>
             <div><p className="text-sm text-gray-500">按件計酬</p><p>{record?.is_piece_rate ? <span className="badge-blue">是</span> : '否'}</p></div>
             {record?.change_type && (
               <div><p className="text-sm text-gray-500">最近變更</p><p>{record.change_type} {record.change_amount > 0 ? `+$${Number(record.change_amount).toLocaleString()}` : ''}</p></div>
@@ -233,7 +234,7 @@ export default function SalaryConfigDetailPage() {
             <tbody>
               {history.map((h: any) => (
                 <tr key={h.id} className={`border-b ${h.id === record?.id ? 'bg-primary-50' : ''}`}>
-                  <td className="px-3 py-2">{h.effective_date}</td>
+                  <td className="px-3 py-2">{fmtDate(h.effective_date)}</td>
                   <td className="px-3 py-2">{SALARY_TYPE_LABELS[h.salary_type] || h.salary_type}</td>
                   <td className="px-3 py-2 text-right font-mono">${Number(h.base_salary).toLocaleString()}</td>
                   <td className="px-3 py-2">{h.change_type || '初始設定'}</td>

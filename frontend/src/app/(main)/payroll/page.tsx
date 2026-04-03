@@ -6,6 +6,7 @@ import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { fmtDate } from '@/lib/dateUtils';
 
 const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
 const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
@@ -789,7 +790,7 @@ export default function PayrollPage() {
                             const hasPrice = status === 'matched' && rate;
                             return (
                               <tr key={wl.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                <td className="px-3 py-2 font-mono whitespace-nowrap">{wl.scheduled_date}</td>
+                                <td className="px-3 py-2 font-mono whitespace-nowrap">{fmtDate(wl.scheduled_date)}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{wl.service_type || '-'}</td>
                                 <td className="px-3 py-2">
                                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${

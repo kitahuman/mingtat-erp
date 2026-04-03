@@ -6,6 +6,7 @@ import Link from 'next/link';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { fmtDate } from '@/lib/dateUtils';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -237,8 +238,8 @@ export default function FleetRateCardDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><p className="text-sm text-gray-500">生效日期</p><p>{record?.effective_date ? String(record.effective_date).substring(0, 10) : '-'}</p></div>
-            <div><p className="text-sm text-gray-500">到期日期</p><p>{record?.expiry_date ? String(record.expiry_date).substring(0, 10) : '-'}</p></div>
+            <div><p className="text-sm text-gray-500">生效日期</p><p>{fmtDate(record?.effective_date)}</p></div>
+            <div><p className="text-sm text-gray-500">到期日期</p><p>{fmtDate(record?.expiry_date)}</p></div>
             <div>
               <p className="text-sm text-gray-500">來源報價單</p>
               {record?.source_quotation ? (

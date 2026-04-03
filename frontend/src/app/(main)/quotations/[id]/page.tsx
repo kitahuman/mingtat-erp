@@ -6,6 +6,7 @@ import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { fmtDate } from '@/lib/dateUtils';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
@@ -236,7 +237,7 @@ export default function QuotationDetailPage() {
       <h2 style="text-align:center; margin-bottom: 20px;">${typeText}</h2>
       <div class="info-grid">
         <div><span class="label">報價單號：</span><span style="font-family:monospace">${quotation.quotation_no}</span></div>
-        <div><span class="label">日期：</span>${quotation.quotation_date}</div>
+        <div><span class="label">日期：</span>${fmtDate(quotation.quotation_date)}</div>
         <div><span class="label">致：</span>${quotation.client?.name || '-'}</div>
         ${quotation.contract_name ? `<div><span class="label">合約：</span><span style="font-family:monospace">${quotation.contract_name}</span></div>` : ''}
         ${quotation.quotation_type === 'project' ? `<div><span class="label">工程名稱：</span>${quotation.project_name || '-'}</div>` : `<div><span class="label">服務說明：</span>${quotation.project_name || '-'}</div>`}
@@ -379,7 +380,7 @@ export default function QuotationDetailPage() {
               <div><p className="text-sm text-gray-500">報價類型</p><p><span className={quotation?.quotation_type === 'project' ? 'badge-blue' : 'badge-purple'}>{typeLabels[quotation?.quotation_type]}</span></p></div>
               <div><p className="text-sm text-gray-500">開立公司</p><p className="font-medium">{quotation?.company?.internal_prefix} - {quotation?.company?.name}</p></div>
               <div><p className="text-sm text-gray-500">客戶</p><p className="font-medium">{quotation?.client?.name || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">日期</p><p>{quotation?.quotation_date}</p></div>
+              <div><p className="text-sm text-gray-500">日期</p><p>{fmtDate(quotation?.quotation_date)}</p></div>
               {quotation?.contract_name && <div><p className="text-sm text-gray-500">客戶合約</p><p className="font-medium font-mono">{quotation.contract_name}</p></div>}
               <div><p className="text-sm text-gray-500">{quotation?.quotation_type === 'project' ? '工程名稱' : '服務說明'}</p><p>{quotation?.project_name || '-'}</p></div>
               {quotation?.project && (
