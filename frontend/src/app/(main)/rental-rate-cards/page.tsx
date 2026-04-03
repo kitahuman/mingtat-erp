@@ -148,7 +148,7 @@ export default function RentalRateCardsPage() {
       )
     },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions, render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夺', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夺', label: '夺' }], render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }], render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
     { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...vehicleTypeOptions], render: (v: any) => v || '-' },
@@ -333,7 +333,6 @@ export default function RentalRateCardsPage() {
                   <option value="">無</option>
                   <option value="日">日</option>
                   <option value="夜">夜</option>
-                  <option value="中直">中直</option>
                 </select>
               </div>
               <div>

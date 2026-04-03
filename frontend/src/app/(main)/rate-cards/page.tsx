@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi, projectsApi, fleetRateCardsApi, vehiclesApi, machineryApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, projectsApi, fleetRateCardsApi, vehiclesApi, machineryApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
@@ -14,7 +14,7 @@ import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'location', 'client_contract_no'];
 
 export default function RateCardsPage() {
   const router = useRouter();
@@ -35,6 +35,8 @@ export default function RateCardsPage() {
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
+  const locationOptions = optionsMap['location'] || [];
+  const contractNoOptions = optionsMap['client_contract_no'] || [];
 
   // Fleet rate card editing popup state
   const [showFleetModal, setShowFleetModal] = useState(false);
@@ -206,7 +208,7 @@ export default function RateCardsPage() {
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })), render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }], render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }], render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
     { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
@@ -345,11 +347,21 @@ export default function RateCardsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>
-              <input value={form.origin} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" />
+              <Combobox
+                value={form.origin}
+                onChange={(val) => setForm({...form, origin: val || ''})}
+                options={locationOptions}
+                placeholder="選擇或輸入起點"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">終點</label>
-              <input value={form.destination} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" />
+              <Combobox
+                value={form.destination}
+                onChange={(val) => setForm({...form, destination: val || ''})}
+                options={locationOptions}
+                placeholder="選擇或輸入終點"
+              />
             </div>
           </div>
 
@@ -383,7 +395,6 @@ export default function RateCardsPage() {
                   <option value="">無</option>
                   <option value="日">日</option>
                   <option value="夜">夜</option>
-                  <option value="中直">中直</option>
                 </select>
               </div>
               <div>
@@ -468,12 +479,17 @@ export default function RateCardsPage() {
                           <option value="">無</option>
                           <option value="日">日</option>
                           <option value="夜">夜</option>
-                          <option value="中直">中直</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">合約編號</label>
-                        <input value={card.contract_no || ''} onChange={e => updateFleetCard(idx, 'contract_no', e.target.value)} className="input-field text-sm" />
+                        <label className="block text-xs text-gray-500 mb-1">客戶合約</label>
+                        <Combobox
+                          value={card.client_contract_no || ''}
+                          onChange={(val) => updateFleetCard(idx, 'client_contract_no', val || '')}
+                          options={contractNoOptions}
+                          placeholder="客戶合約"
+                          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">服務類型</label>
@@ -506,11 +522,21 @@ export default function RateCardsPage() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">起點</label>
-                        <input value={card.origin || ''} onChange={e => updateFleetCard(idx, 'origin', e.target.value)} className="input-field text-sm" />
+                        <Combobox
+                          value={card.origin || ''}
+                          onChange={(val) => updateFleetCard(idx, 'origin', val || '')}
+                          options={locationOptions}
+                          placeholder="選擇或輸入起點"
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">終點</label>
-                        <input value={card.destination || ''} onChange={e => updateFleetCard(idx, 'destination', e.target.value)} className="input-field text-sm" />
+                        <Combobox
+                          value={card.destination || ''}
+                          onChange={(val) => updateFleetCard(idx, 'destination', val || '')}
+                          options={locationOptions}
+                          placeholder="選擇或輸入終點"
+                        />
                       </div>
                     </div>
 

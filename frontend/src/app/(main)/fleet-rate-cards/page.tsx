@@ -122,7 +122,6 @@ export default function FleetRateCardsPage() {
     { value: '', label: '-' },
     { value: '日', label: '日' },
     { value: '夜', label: '夜' },
-    { value: '中直', label: '中直' },
   ];
 
   const columns = [
@@ -219,7 +218,6 @@ export default function FleetRateCardsPage() {
                 <option value="">全部日/夜</option>
                 <option value="日">日</option>
                 <option value="夜">夜</option>
-                <option value="中直">中直</option>
               </select>
               <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部狀態</option>
@@ -284,7 +282,6 @@ export default function FleetRateCardsPage() {
                   <option value="">無</option>
                   <option value="日">日</option>
                   <option value="夜">夜</option>
-                  <option value="中直">中直</option>
                 </select>
               </div>
               <div>
