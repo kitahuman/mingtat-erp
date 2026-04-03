@@ -217,9 +217,6 @@ export class PayrollService {
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
     };
-    if (company_profile_id) {
-      wlWhere.company_profile_id = Number(company_profile_id);
-    }
 
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
@@ -310,9 +307,6 @@ export class PayrollService {
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
     };
-    if (company_profile_id) {
-      wlWhere.company_profile_id = Number(company_profile_id);
-    }
 
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
