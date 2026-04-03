@@ -50,6 +50,8 @@ export class AiChatService {
 - 表格數據用清晰的格式呈現
 - 如查無數據，告知用戶並建議可能的原因
 - 當用戶問「有多少」時，直接使用工具查詢並給出數字答案
+- 查詢員工時，預設只查在職員工（status=active），除非用戶明確要求查看離職員工或全部員工
+- 查詢員工人數時，回覆的數字應該是在職員工數量，不包含離職員工
 
 ## 安全規則
 - 不能刪除任何數據
@@ -88,7 +90,7 @@ export class AiChatService {
           parameters: {
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['active', 'inactive', 'all'], description: '在職狀態：active=在職，inactive=離職，不填則查全部' },
+              status: { type: 'string', enum: ['active', 'inactive', 'all'], description: '在職狀態：active=在職（預設），inactive=離職，all=全部。不填預設查在職員工。' },
               role: { type: 'string', description: '員工角色，如 worker、driver、operator 等' },
               companyId: { type: 'number', description: '公司 ID' },
               search: { type: 'string', description: '按姓名搜尋' },
@@ -489,17 +491,16 @@ export class AiChatService {
   }
 
   private async getEmployees(status?: string, role?: string, companyId?: number, search?: string) {
-    const now = new Date();
     let where: any = {};
 
-    if (status === 'active') {
-      where.OR = [
-        { termination_date: null },
-        { termination_date: { gt: now } },
-      ];
-    } else if (status === 'inactive') {
-      where.termination_date = { lte: now };
+    // 預設查在職員工，除非明確指定 'all' 或 'inactive'
+    const effectiveStatus = status || 'active';
+    if (effectiveStatus === 'active') {
+      where.status = 'active';
+    } else if (effectiveStatus === 'inactive') {
+      where.status = 'inactive';
     }
+    // effectiveStatus === 'all' 時不加 status 過濾
 
     if (role) where.role = { contains: role, mode: 'insensitive' };
     if (companyId) where.company_id = companyId;
