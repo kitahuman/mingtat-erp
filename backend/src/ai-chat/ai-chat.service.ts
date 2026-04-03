@@ -16,7 +16,7 @@ export class AiChatService {
     this.openai = new OpenAI({ apiKey });
   }
 
-  async chat(messages: any[]) {
+  private getPromptAndTools() {
     const systemPrompt = `你是一個專業的建築工程 ERP 系統智能助手，名叫「工程助手」。你擁有查詢系統內所有數據的能力。
 
 ## 你的完整能力
@@ -340,17 +340,85 @@ export class AiChatService {
       },
     ];
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      tools,
-      stream: true,
-    });
-
-    return response;
+    return { systemPrompt, tools };
   }
 
-  async handleToolCall(toolCall: any) {
+  /**
+   * Complete chat with tool-call loop (non-streaming).
+   * Executes the full OpenAI tool-call cycle server-side and returns
+   * the final text reply plus a list of tools that were called.
+   */
+  async chatWithTools(messages: any[]): Promise<{ reply: string; tool_calls: string[] }> {
+    const { systemPrompt, tools } = this.getPromptAndTools();
+    const currentMessages: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
+    const executedTools: string[] = [];
+    const maxRounds = 5;
+
+    for (let round = 0; round < maxRounds; round++) {
+      console.log(`[AI Chat] Round ${round + 1}: calling OpenAI (non-streaming) with ${currentMessages.length} messages`);
+
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: currentMessages,
+        tools,
+      });
+
+      const choice = response.choices[0];
+      const assistantMessage = choice.message;
+
+      console.log(`[AI Chat] Round ${round + 1}: finish_reason=${choice.finish_reason}, tool_calls=${assistantMessage.tool_calls?.length ?? 0}`);
+
+      // If no tool calls, return the final text reply
+      if (choice.finish_reason !== 'tool_calls' || !assistantMessage.tool_calls?.length) {
+        const reply = assistantMessage.content || '';
+        console.log(`[AI Chat] Final reply length: ${reply.length}`);
+        return { reply, tool_calls: executedTools };
+      }
+
+      // Push the assistant's tool-call message into history
+      const toolCalls = assistantMessage.tool_calls as any[];
+      currentMessages.push({
+        role: 'assistant',
+        content: assistantMessage.content || null,
+        tool_calls: toolCalls.map((tc: any) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.function.name, arguments: tc.function.arguments },
+        })),
+      });
+
+      // Execute each tool call
+      for (const tc of toolCalls) {
+        const toolName = tc.function.name;
+        console.log(`[AI Chat] Executing tool: ${toolName}`);
+        executedTools.push(toolName);
+
+        let toolResult: any;
+        try {
+          toolResult = await this.handleToolCall(tc);
+          console.log(`[AI Chat] Tool ${toolName} succeeded`);
+        } catch (toolError: any) {
+          console.error(`[AI Chat] Tool ${toolName} error:`, toolError?.message);
+          toolResult = { error: toolError?.message || 'Tool execution failed' };
+        }
+
+        currentMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(toolResult),
+        });
+      }
+
+      // Continue to next round for the final AI response
+    }
+
+    return { reply: '抱歉，處理時間過長，請稍後再試。', tool_calls: executedTools };
+  }
+
+  private async handleToolCall(toolCall: any) {
     const name = toolCall.function.name;
     const args = JSON.parse(toolCall.function.arguments);
 

@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  tool_call?: string;
+  isToolCall?: boolean;
 }
 
 export function ChatWidget() {
@@ -24,7 +24,6 @@ export function ChatWidget() {
   }, [messages]);
 
   const getAuthToken = (): string => {
-    // Token is stored in cookie by the auth system (see src/lib/auth.tsx)
     return Cookies.get('token') || '';
   };
 
@@ -39,17 +38,17 @@ export function ChatWidget() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch('/api/ai-chat', {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${apiBase}/api/ai-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: updatedMessages
+            .filter(m => !m.isToolCall)
+            .map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
@@ -59,73 +58,22 @@ export function ChatWidget() {
         throw new Error(`伺服器錯誤 ${response.status}`);
       }
 
-      if (!response.body) {
-        throw new Error('無法取得回應串流');
+      const data = await response.json();
+
+      // Show tool calls that were executed (if any)
+      if (data.tool_calls && data.tool_calls.length > 0) {
+        const toolMsg: Message = {
+          role: 'assistant',
+          content: `🔧 已查詢：${data.tool_calls.join('、')}`,
+          isToolCall: true,
+        };
+        setMessages(prev => [...prev, toolMsg]);
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let assistantContent = '';
-      let streamingMsgIndex = -1;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-
-            if (parsed.error) {
-              console.error('AI service error:', parsed.error);
-              setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: `❌ ${parsed.error}` },
-              ]);
-              setIsLoading(false);
-              return;
-            }
-
-            if (parsed.tool_call) {
-              setMessages(prev => {
-                const newMsgs = [...prev];
-                streamingMsgIndex = -1;
-                assistantContent = '';
-                newMsgs.push({
-                  role: 'assistant',
-                  content: `🔧 正在查詢：${parsed.tool_call}...`,
-                  tool_call: parsed.tool_call,
-                });
-                return newMsgs;
-              });
-            }
-
-            if (parsed.content) {
-              assistantContent += parsed.content;
-              setMessages(prev => {
-                const newMsgs = [...prev];
-                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex] && !newMsgs[streamingMsgIndex].tool_call) {
-                  newMsgs[streamingMsgIndex] = { role: 'assistant', content: assistantContent };
-                } else {
-                  newMsgs.push({ role: 'assistant', content: assistantContent });
-                  streamingMsgIndex = newMsgs.length - 1;
-                }
-                return newMsgs;
-              });
-            }
-          } catch {
-            // Ignore JSON parse errors
-          }
-        }
+      // Show the final reply
+      if (data.reply) {
+        const replyMsg: Message = { role: 'assistant', content: data.reply };
+        setMessages(prev => [...prev, replyMsg]);
       }
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : '請稍後再試';
@@ -139,7 +87,7 @@ export function ChatWidget() {
     }
   };
 
-  const assistantMsgCount = messages.filter(m => m.role === 'assistant').length;
+  const assistantMsgCount = messages.filter(m => m.role === 'assistant' && !m.isToolCall).length;
 
   return (
     <>
@@ -216,7 +164,7 @@ export function ChatWidget() {
                       className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
                         msg.role === 'user'
                           ? 'bg-blue-600 text-white'
-                          : msg.tool_call
+                          : msg.isToolCall
                           ? 'bg-blue-50 border border-blue-200 text-blue-700'
                           : 'bg-white border border-gray-200 text-gray-900'
                       }`}

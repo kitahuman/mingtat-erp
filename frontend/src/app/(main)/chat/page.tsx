@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  tool_call?: string;
+  isToolCall?: boolean;
 }
 
 const QUICK_ACTIONS = [
@@ -49,7 +49,6 @@ export default function ChatPage() {
   }, [messages]);
 
   const getAuthToken = (): string => {
-    // Token is stored in cookie by the auth system (see src/lib/auth.tsx)
     return Cookies.get('token') || '';
   };
 
@@ -65,17 +64,17 @@ export default function ChatPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch('/api/ai-chat', {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${apiBase}/api/ai-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: updatedMessages
+            .filter(m => !m.isToolCall)
+            .map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
@@ -85,92 +84,29 @@ export default function ChatPage() {
         throw new Error(`伺服器錯誤 ${response.status}`);
       }
 
-      if (!response.body) {
-        throw new Error('無法取得回應串流');
+      const data = await response.json();
+
+      // Show tool calls that were executed (if any)
+      if (data.tool_calls && data.tool_calls.length > 0) {
+        const toolMsg: Message = {
+          role: 'assistant',
+          content: `🔧 已查詢：${data.tool_calls.join('、')}`,
+          isToolCall: true,
+        };
+        setMessages(prev => [...prev, toolMsg]);
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let assistantContent = '';
-      let streamingMsgIndex = -1;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-
-            if (parsed.error) {
-              console.error('AI service error:', parsed.error);
-              setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: `❌ ${parsed.error}` },
-              ]);
-              setIsLoading(false);
-              return;
-            }
-
-            if (parsed.tool_call) {
-              // Show tool call as a separate indicator message
-              setMessages(prev => {
-                const newMsgs = [...prev];
-                // Remove the streaming placeholder if exists
-                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex]) {
-                  if (!newMsgs[streamingMsgIndex].content.trim()) {
-                    newMsgs.splice(streamingMsgIndex, 1);
-                  }
-                }
-                streamingMsgIndex = -1;
-                assistantContent = '';
-                newMsgs.push({
-                  role: 'assistant',
-                  content: `🔧 正在查詢：${parsed.tool_call}...`,
-                  tool_call: parsed.tool_call,
-                });
-                return newMsgs;
-              });
-            }
-
-            if (parsed.content) {
-              assistantContent += parsed.content;
-              setMessages(prev => {
-                const newMsgs = [...prev];
-                if (streamingMsgIndex >= 0 && newMsgs[streamingMsgIndex] && !newMsgs[streamingMsgIndex].tool_call) {
-                  // Update existing streaming message
-                  newMsgs[streamingMsgIndex] = { role: 'assistant', content: assistantContent };
-                } else {
-                  // Add new streaming message
-                  newMsgs.push({ role: 'assistant', content: assistantContent });
-                  streamingMsgIndex = newMsgs.length - 1;
-                }
-                return newMsgs;
-              });
-            }
-          } catch {
-            // Ignore JSON parse errors for malformed chunks
-          }
-        }
+      // Show the final reply
+      if (data.reply) {
+        const replyMsg: Message = { role: 'assistant', content: data.reply };
+        setMessages(prev => [...prev, replyMsg]);
       }
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : '請稍後再試';
       console.error('Chat error:', error);
       setMessages(prev => [
         ...prev,
-        {
-          role: 'assistant',
-          content: `❌ 發生錯誤：${errMsg}`,
-        },
+        { role: 'assistant', content: `❌ 發生錯誤：${errMsg}` },
       ]);
     } finally {
       setIsLoading(false);
@@ -231,12 +167,12 @@ export default function ChatPage() {
                 className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white'
-                    : msg.tool_call
+                    : msg.isToolCall
                     ? 'bg-blue-50 border border-blue-200 text-blue-700'
                     : 'bg-white border border-gray-200 shadow-sm'
                 }`}
               >
-                <div className={`whitespace-pre-wrap text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : msg.tool_call ? 'text-blue-700' : 'text-gray-900'}`}>
+                <div className={`whitespace-pre-wrap text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : msg.isToolCall ? 'text-blue-700' : 'text-gray-900'}`}>
                   {msg.content}
                 </div>
               </div>
