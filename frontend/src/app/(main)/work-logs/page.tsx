@@ -154,7 +154,7 @@ export default function WorkLogsPage() {
     try {
       const params: any = {
         page, limit,
-        sortBy: 'scheduled_date', sortOrder: 'DESC',
+        sortBy: 'created_at', sortOrder: 'DESC',
       };
       if (filterPublisher) params.publisher_id     = filterPublisher;
       if (filterStatus)    params.status           = filterStatus;
@@ -227,8 +227,11 @@ export default function WorkLogsPage() {
   };
 
   const handleDuplicate = async (id: number) => {
-    await workLogsApi.duplicate(id);
+    const res = await workLogsApi.duplicate(id);
     await fetchLogs();
+    // Auto-open the duplicated row in edit mode
+    const newId = res.data?.id;
+    if (newId) setEditingId(newId);
   };
 
   const handleBulkDelete = async () => {

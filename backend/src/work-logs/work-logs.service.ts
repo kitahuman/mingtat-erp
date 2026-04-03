@@ -31,7 +31,7 @@ export class WorkLogsService {
       equipment_number,
       date_from,
       date_to,
-      sortBy = 'scheduled_date',
+      sortBy = 'created_at',
       sortOrder = 'DESC',
     } = query;
 
