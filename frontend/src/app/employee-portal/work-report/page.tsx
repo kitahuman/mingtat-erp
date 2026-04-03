@@ -583,7 +583,7 @@ export default function WorkReportPage() {
               value={form.service_type}
               onChange={(val) => set('service_type', val)}
               options={serviceTypeOptions}
-              placeholder={t('selectServiceType')}
+              placeholder="選擇或輸入服務類型"
               className={inputClass}
             />
           </div>

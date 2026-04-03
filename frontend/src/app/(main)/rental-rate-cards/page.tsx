@@ -40,7 +40,16 @@ export default function RentalRateCardsPage() {
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
 
-  cons  const resetForm = () => {
+  const [form, setForm] = useState<any>({
+    company_id: '', client_id: '', quotation_id: '', service_type: '',
+    name: '', tonnage: '', machine_type: '',
+    origin: '', destination: '',
+    rate: 0, mid_shift_rate: 0, ot_rate: 0,
+    unit: '天', effective_date: '', expiry_date: '',
+    day_night: '日', remarks: '', status: 'active',
+  });
+
+  const resetForm = () => {
     setForm({
       company_id: '', client_id: '', quotation_id: '', service_type: '',
       name: '', tonnage: '', machine_type: '',
@@ -49,8 +58,7 @@ export default function RentalRateCardsPage() {
       unit: '天', effective_date: '', expiry_date: '',
       day_night: '日', remarks: '', status: 'active',
     });
-  };s: [],
-  });
+  };
 
   const load = () => {
     setLoading(true);

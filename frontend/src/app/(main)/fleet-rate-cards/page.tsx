@@ -63,7 +63,9 @@ export default function FleetRateCardsPage() {
       const mCodes = machinery.map((m: any) => m.machine_code).filter(Boolean);
       setAllEquipment([...vPlates, ...mCodes].map(s => ({ value: s, label: s })));
     }).catch(() => {});
-  }, []  const resetForm = () => {
+  }, []);
+
+  const resetForm = () => {
     setForm({
       company_id: '', client_id: '', quotation_id: '', service_type: '',
       name: '', day_night: '日',
@@ -72,7 +74,9 @@ export default function FleetRateCardsPage() {
       rate: 0, mid_shift_rate: 0, ot_rate: 0,
       unit: '天', remarks: '', status: 'active',
     });
-  }; = async (e: React.FormEvent) => {
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await fleetRateCardsApi.create({
@@ -318,9 +322,9 @@ export default function FleetRateCardsPage() {
                 <label className="block text-xs text-gray-500 mb-1">費率</label>
                 <div className="flex gap-1">
                   <input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" placeholder="0" />
-                       <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
-                  {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-                </select>ect>
+                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
+                    {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
