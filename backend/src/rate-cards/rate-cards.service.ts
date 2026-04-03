@@ -46,18 +46,25 @@ export class RateCardsService {
     const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await Promise.all([
-      this.prisma.rateCard.findMany({
-        where,
-        include: { company: true, client: true, source_quotation: true, project: true },
-        orderBy: { [sortBy]: sortOrder },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.rateCard.count({ where }),
-    ]);
-
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    try {
+      const [data, total] = await Promise.all([
+        this.prisma.rateCard.findMany({
+          where,
+          include: { company: true, client: true, source_quotation: true, project: true },
+          orderBy: { [sortBy]: sortOrder },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.rateCard.count({ where }),
+      ]);
+      return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    } catch (err: any) {
+      console.error('[RateCards.findAll] ERROR:', err?.message);
+      console.error('[RateCards.findAll] CODE:', err?.code);
+      console.error('[RateCards.findAll] META:', JSON.stringify(err?.meta));
+      console.error('[RateCards.findAll] STACK:', err?.stack?.split('\n').slice(0, 5).join('\n'));
+      throw err;
+    }
   }
 
   async findOne(id: number) {
