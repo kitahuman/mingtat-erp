@@ -21,6 +21,7 @@ export class WorkLogsService {
       company_profile_id,
       client_id,
       quotation_id,
+      contract_id,
       employee_id,
       equipment_number,
       date_from,
@@ -35,6 +36,7 @@ export class WorkLogsService {
     if (company_profile_id) where.company_profile_id = Number(company_profile_id);
     if (client_id) where.client_id = Number(client_id);
     if (quotation_id) where.quotation_id = Number(quotation_id);
+    if (contract_id) where.contract_id = Number(contract_id);
     if (employee_id) where.employee_id = Number(employee_id);
     if (query.project_id) where.project_id = Number(query.project_id);
     if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
@@ -62,6 +64,7 @@ export class WorkLogsService {
           company_profile: true,
           client: true,
           quotation: true,
+          contract: true,
           employee: true,
           project: true,
         },
@@ -83,6 +86,7 @@ export class WorkLogsService {
         company_profile: true,
         client: true,
         quotation: true,
+        contract: true,
         employee: true,
         project: true,
       },
@@ -90,7 +94,7 @@ export class WorkLogsService {
   }
 
   async create(dto: any, userId: number) {
-    const { publisher, company_profile, client, quotation, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
+    const { publisher, company_profile, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
@@ -108,7 +112,7 @@ export class WorkLogsService {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
       id: _id, created_at, updated_at,
-      publisher, company_profile, client, quotation, employee,
+      publisher, company_profile, client, quotation, contract, employee,
       project, payroll_work_logs,
       matched_rate_card, rate_card,
       ...rest
@@ -127,7 +131,7 @@ export class WorkLogsService {
 
     await this.prisma.workLog.update({ where: { id }, data: rest });
     // 自動匹配價格（如果關鍵欄位有變動）
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'contract_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
     if (hasPriceChange) {
       const updated = await this.findOne(id);
@@ -169,6 +173,7 @@ export class WorkLogsService {
         company_profile_id: original.company_profile_id,
         client_id: original.client_id,
         quotation_id: original.quotation_id,
+        contract_id: original.contract_id,
         employee_id: original.employee_id,
         machine_type: original.machine_type,
         equipment_number: original.equipment_number,

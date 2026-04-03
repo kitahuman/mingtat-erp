@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   workLogsApi, companyProfilesApi, partnersApi,
-  contractsApi, employeesApi, usersApi, fieldOptionsApi,
+  contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import WorkLogRow from './WorkLogRow';
@@ -18,33 +18,34 @@ interface Option { value: string | number; label: string; _raw?: any; }
 const LIMIT_OPTIONS = [25, 50, 100];
 
 const COLUMNS = [
-  { key: 'id',               label: 'ID',       width: 'w-12' },
-  { key: 'publisher',        label: '發佈人',    width: 'w-20' },
+  { key: 'id',               label: 'ID',       width: 'w-14' },
+  { key: 'publisher',        label: '發佈人',    width: 'w-24' },
   { key: 'status',           label: '狀態',      width: 'w-20' },
-  { key: 'scheduled_date',   label: '約定日期',  width: 'w-24' },
-  { key: 'service_type',     label: '服務類型',  width: 'w-24' },
-  { key: 'company',          label: '公司',      width: 'w-20' },
-  { key: 'client',           label: '客戶公司',  width: 'w-32' },
-  { key: 'quotation',        label: '合約',      width: 'w-28' },
-  { key: 'employee',         label: '員工',      width: 'w-20' },
-  { key: 'machine_type',     label: '機種',      width: 'w-20' },
-  { key: 'equipment_number', label: '機號',      width: 'w-24' },
-  { key: 'tonnage',          label: '噸數',      width: 'w-20' },
-  { key: 'day_night',        label: '日夜班',    width: 'w-16' },
-  { key: 'start_location',   label: '起點',      width: 'w-28' },
-  { key: 'start_time',       label: '起點時間',  width: 'w-20' },
-  { key: 'end_location',     label: '終點',      width: 'w-28' },
-  { key: 'end_time',         label: '終點時間',  width: 'w-20' },
-  { key: 'quantity',         label: '數量',      width: 'w-20' },
-  { key: 'unit',             label: '工資單位',  width: 'w-20' },
-  { key: 'ot_quantity',      label: 'OT數量',    width: 'w-20' },
-  { key: 'ot_unit',          label: 'OT單位',    width: 'w-20' },
-  { key: 'goods_quantity',   label: '商品數量',  width: 'w-20' },
-  { key: 'receipt_no',       label: '入帳票編號', width: 'w-24' },
-  { key: 'work_order_no',    label: '單號',      width: 'w-24' },
-  { key: 'is_confirmed',     label: '已確認',    width: 'w-16' },
-  { key: 'is_paid',          label: '已付款',    width: 'w-16' },
-  { key: 'remarks',          label: '備註',      width: 'w-32' },
+  { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },
+  { key: 'service_type',     label: '服務類型',  width: 'w-28' },
+  { key: 'company',          label: '公司',      width: 'w-24' },
+  { key: 'client',           label: '客戶公司',  width: 'w-36' },
+  { key: 'quotation',        label: '報價單',    width: 'w-32' },
+  { key: 'contract',         label: '合約',      width: 'w-32' },
+  { key: 'employee',         label: '員工',      width: 'w-24' },
+  { key: 'machine_type',     label: '機種',      width: 'w-24' },
+  { key: 'equipment_number', label: '機號',      width: 'w-28' },
+  { key: 'tonnage',          label: '噸數',      width: 'w-24' },
+  { key: 'day_night',        label: '日夜班',    width: 'w-20' },
+  { key: 'start_location',   label: '起點',      width: 'w-32' },
+  { key: 'start_time',       label: '起點時間',  width: 'w-24' },
+  { key: 'end_location',     label: '終點',      width: 'w-32' },
+  { key: 'end_time',         label: '終點時間',  width: 'w-24' },
+  { key: 'quantity',         label: '數量',      width: 'w-24' },
+  { key: 'unit',             label: '工資單位',  width: 'w-24' },
+  { key: 'ot_quantity',      label: 'OT數量',    width: 'w-24' },
+  { key: 'ot_unit',          label: 'OT單位',    width: 'w-24' },
+  { key: 'goods_quantity',   label: '商品數量',  width: 'w-24' },
+  { key: 'receipt_no',       label: '入帳票編號', width: 'w-28' },
+  { key: 'work_order_no',    label: '單號',      width: 'w-28' },
+  { key: 'is_confirmed',     label: '已確認',    width: 'w-20' },
+  { key: 'is_paid',          label: '已付款',    width: 'w-20' },
+  { key: 'remarks',          label: '備註',      width: 'w-36' },
 ];
 
 export default function WorkLogsPage() {
@@ -54,6 +55,7 @@ export default function WorkLogsPage() {
   const [companyProfiles, setCompanyProfiles] = useState<Option[]>([]);
   const [clients, setClients]                 = useState<Option[]>([]);
   const [contracts, setContracts]             = useState<Option[]>([]);
+  const [quotations, setQuotations]           = useState<Option[]>([]);
   const [employees, setEmployees]             = useState<Option[]>([]);
   const [users, setUsers]                     = useState<Option[]>([]);
   const [fieldOptions, setFieldOptions]       = useState<Record<string, Option[]>>({});
@@ -70,6 +72,7 @@ export default function WorkLogsPage() {
   const [filterStatus,    setFilterStatus]    = useState<string | number | null>(null);
   const [filterCompany,   setFilterCompany]   = useState<string | number | null>(null);
   const [filterClient,    setFilterClient]    = useState<string | number | null>(null);
+  const [filterQuotation, setFilterQuotation] = useState<string | number | null>(null);
   const [filterContract,  setFilterContract]  = useState<string | number | null>(null);
   const [filterEmployee,  setFilterEmployee]  = useState<string | number | null>(null);
   const [filterEquipment, setFilterEquipment] = useState('');
@@ -101,13 +104,16 @@ export default function WorkLogsPage() {
       companyProfilesApi.simple(),
       partnersApi.simple(),
       contractsApi.simple(),
+      quotationsApi.list({ limit: 500 }),
       employeesApi.list({ limit: 500, status: 'active' }),
       usersApi.list({ limit: 200 }),
       fieldOptionsApi.getAll(),
-    ]).then(([cp, pt, qt, em, us, fo]) => {
+    ]).then(([cp, pt, qt, qo, em, us, fo]) => {
       setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
+      const qoData = qo.data?.data || qo.data || [];
+      setQuotations(qoData.map((q: any) => ({ value: q.id, label: q.quotation_no + (q.contract_name ? ' ' + q.contract_name : ''), _raw: q })));
       const employeeList = (em.data?.data || []).map((e: any) => ({
         value: `emp_${e.id}`,
         label: e.name_zh,
@@ -141,7 +147,8 @@ export default function WorkLogsPage() {
       if (filterStatus)    params.status           = filterStatus;
       if (filterCompany)   params.company_profile_id = filterCompany;
       if (filterClient)    params.client_id        = filterClient;
-      if (filterContract)  params.quotation_id     = filterContract;
+      if (filterQuotation) params.quotation_id     = filterQuotation;
+      if (filterContract)  params.contract_id      = filterContract;
       if (filterEmployee && typeof filterEmployee === 'string') {
         if (filterEmployee.startsWith('emp_')) {
           params.employee_id = Number(filterEmployee.replace('emp_', ''));
@@ -162,7 +169,7 @@ export default function WorkLogsPage() {
       setLoading(false);
     }
   }, [page, limit, filterPublisher, filterStatus, filterCompany, filterClient,
-      filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo]);
+      filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -249,19 +256,20 @@ export default function WorkLogsPage() {
 
   const resetFilters = () => {
     setFilterPublisher(null); setFilterStatus(null);  setFilterCompany(null);
-    setFilterClient(null);    setFilterContract(null); setFilterEmployee(null);
+    setFilterClient(null);    setFilterQuotation(null); setFilterContract(null); setFilterEmployee(null);
     setFilterEquipment('');   setFilterDateFrom('');   setFilterDateTo('');
     setPage(1);
   };
 
   const hasFilters = !!(filterPublisher || filterStatus || filterCompany || filterClient ||
-    filterContract || filterEmployee || filterEquipment || filterDateFrom || filterDateTo);
+    filterQuotation || filterContract || filterEmployee || filterEquipment || filterDateFrom || filterDateTo);
 
   // shared props for WorkLogRow
   const rowProps = {
     companyProfiles,
     clients,
-    quotations: contracts,   // prop name stays "quotations" in WorkLogRow; label is "合約" in UI
+    quotations,
+    contracts,
     employees,
     users,
     fieldOptions,
@@ -303,7 +311,8 @@ export default function WorkLogsPage() {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
               if (col.key === 'company') return row.company_profile?.code || '';
               if (col.key === 'client') return row.client?.name || '';
-              if (col.key === 'quotation') return row.quotation?.quotation_no || '';  // export still uses quotation_no for backward compat
+              if (col.key === 'quotation') return row.quotation?.quotation_no || '';
+              if (col.key === 'contract') return row.contract?.contract_no || '';
               if (col.key === 'employee') return row.employee?.name_zh || '';
               if (col.key === 'is_confirmed') return val ? '是' : '否';
               if (col.key === 'is_paid') return val ? '是' : '否';
@@ -373,6 +382,14 @@ export default function WorkLogsPage() {
             </div>
           </div>
           <div className="flex flex-col gap-0.5">
+            <label className="text-xs text-gray-500">報價單</label>
+            <div className="w-32">
+              <SearchableSelect value={filterQuotation}
+                onChange={v => { setFilterQuotation(v); setPage(1); }}
+                options={quotations} placeholder="全部" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">合約</label>
             <div className="w-32">
               <SearchableSelect value={filterContract}
@@ -421,7 +438,7 @@ export default function WorkLogsPage() {
 
       {/* ── Table ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto">
-        <table className="border-collapse text-xs" style={{ minWidth: '2400px' }}>
+        <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>
               {/* Checkbox – sticky left */}

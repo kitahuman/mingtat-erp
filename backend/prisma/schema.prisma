@@ -455,8 +455,8 @@ model Contract {
 
   // Phase 6
   retention_trackings  RetentionTracking[]
-  retention_releases   RetentionRelease[]
-
+   retention_releases   RetentionRelease[]
+  work_logs            WorkLog[]
   @@map("contracts")
 }
 
@@ -896,6 +896,7 @@ model WorkLog {
   company_profile_id   Int?
   client_id            Int?
   quotation_id         Int?
+  contract_id          Int?
   employee_id          Int?
   machine_type         String?
   equipment_number     String?
@@ -932,6 +933,7 @@ model WorkLog {
   company_profile   CompanyProfile? @relation(fields: [company_profile_id], references: [id])
   client            Partner?        @relation(fields: [client_id], references: [id])
   quotation         Quotation?      @relation(fields: [quotation_id], references: [id])
+  contract          Contract?       @relation(fields: [contract_id], references: [id])
   employee          Employee?       @relation(fields: [employee_id], references: [id])
   project           Project?        @relation(fields: [project_id], references: [id])
   payroll_work_logs PayrollWorkLog[]
