@@ -128,6 +128,14 @@ export default function RateCardDetailPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">名稱</label><input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">日/夜</label>
+              <select value={form.day_night || ''} onChange={e => setForm({...form, day_night: e.target.value})} className="input-field">
+                <option value="">無</option>
+                <option value="日">日</option>
+                <option value="夜">夜</option>
+                <option value="中直">中直</option>
+              </select>
+            </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label>
               <Combobox
                 value={form.vehicle_tonnage || ''}
@@ -168,6 +176,7 @@ export default function RateCardDetailPage() {
             <div><p className="text-sm text-gray-500">合約編號</p><p>{record?.contract_no || '-'}</p></div>
             <div><p className="text-sm text-gray-500">服務類型</p><p>{record?.service_type}</p></div>
             <div><p className="text-sm text-gray-500">名稱</p><p>{record?.name || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">日/夜</p><p>{record?.day_night || '-'}</p></div>
             <div><p className="text-sm text-gray-500">噸數</p><p>{record?.vehicle_tonnage || '-'}</p></div>
             <div><p className="text-sm text-gray-500">機種</p><p>{record?.vehicle_type || '-'}</p></div>
             <div><p className="text-sm text-gray-500">機號</p><p>{record?.equipment_number || '-'}</p></div>
@@ -213,15 +222,7 @@ export default function RateCardDetailPage() {
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">費率</h2>
         {editing ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div><label className="block text-xs text-gray-500 mb-1">日/夜</label>
-              <select value={form.day_night || ''} onChange={e => setForm({...form, day_night: e.target.value})} className="input-field">
-                <option value="">無</option>
-                <option value="日">日</option>
-                <option value="夜">夜</option>
-                <option value="中直">中直</option>
-              </select>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div><label className="block text-xs text-gray-500 mb-1">費率</label>
               <div className="flex gap-1">
                 <input type="number" value={form.rate ?? form.day_rate ?? 0} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" />
@@ -239,8 +240,7 @@ export default function RateCardDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-600 mb-1">日/夜</p><p className="text-xl font-bold">{record?.day_night || '-'}</p></div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">費率</p><p className="text-xl font-bold font-mono">${Number(record?.rate || record?.day_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.unit || '車'}</span></p></div>
             <div className="bg-purple-50 rounded-lg p-3"><p className="text-xs text-purple-600 mb-1">中直</p><p className="text-xl font-bold font-mono">${Number(record?.mid_shift_rate || 0).toLocaleString()}</p></div>
             <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.ot_unit || '小時'}</span></p></div>

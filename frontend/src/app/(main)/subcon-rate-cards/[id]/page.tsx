@@ -47,6 +47,8 @@ export default function SubconRateCardDetailPage() {
     try {
       const { subcontractor, client, company, source_quotation, created_at, updated_at, ...updateData } = form;
       updateData.rate = Number(updateData.rate) || 0;
+      updateData.day_rate = Number(updateData.rate) || 0;
+      updateData.night_rate = 0;
       updateData.mid_shift_rate = Number(updateData.mid_shift_rate) || 0;
       updateData.ot_rate = Number(updateData.ot_rate) || 0;
       updateData.effective_date = updateData.effective_date || null;
@@ -280,7 +282,10 @@ export default function SubconRateCardDetailPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
-              <input type="number" value={form.ot_rate ?? 0} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" />
+              <div className="flex gap-1">
+                <input type="number" value={form.ot_rate ?? 0} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field flex-1" />
+                <select value={form.ot_unit || '小時'} onChange={e => setForm({...form, ot_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
+              </div>
             </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -293,7 +298,7 @@ export default function SubconRateCardDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">費率</p><p className="text-xl font-bold font-mono">${Number(record?.rate || record?.day_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.unit || '天'}</span></p></div>
             <div className="bg-purple-50 rounded-lg p-3"><p className="text-xs text-purple-600 mb-1">中直</p><p className="text-xl font-bold font-mono">${Number(record?.mid_shift_rate || 0).toLocaleString()}</p></div>
-            <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate || 0).toLocaleString()}</p></div>
+            <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.ot_unit || '小時'}</span></p></div>
             <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-600 mb-1">包油</p><p className="text-xl font-bold">{record?.exclude_fuel ? <span className="text-red-600">不包油</span> : <span className="text-green-600">包油</span>}</p></div>
           </div>
         )}
