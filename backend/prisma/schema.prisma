@@ -691,6 +691,7 @@ model RateCard {
   description         String?   @db.Text
   vehicle_tonnage     String?
   vehicle_type        String?
+  equipment_number    String?
   origin              String?
   destination         String?
   day_rate            Decimal   @default(0) @db.Decimal(12, 2)
@@ -747,6 +748,7 @@ model FleetRateCard {
   day_night           String?
   vehicle_tonnage     String?
   vehicle_type        String?
+  equipment_number    String?
   origin              String?
   destination         String?
   rate                Decimal   @default(0) @db.Decimal(12, 2)
@@ -766,6 +768,7 @@ model FleetRateCard {
   company          Company?   @relation(fields: [company_id], references: [id])
   client           Partner?   @relation(fields: [client_id], references: [id])
   source_quotation Quotation? @relation(fields: [source_quotation_id], references: [id])
+  ot_rates         FleetRateCardOtRate[]
 
   @@map("fleet_rate_cards")
 }
@@ -787,10 +790,17 @@ model SubconRateCard {
   day_night           String?
   vehicle_tonnage     String?
   vehicle_type        String?
+  equipment_number    String?
   origin              String?
   destination         String?
-  unit_price          Decimal   @default(0) @db.Decimal(12, 2)
+  day_rate            Decimal   @default(0) @db.Decimal(12, 2)
+  day_unit            String?
+  night_rate          Decimal   @default(0) @db.Decimal(12, 2)
+  night_unit          String?
+  mid_shift_rate      Decimal   @default(0) @db.Decimal(12, 2)
+  mid_shift_unit      String?
   ot_rate             Decimal   @default(0) @db.Decimal(12, 2)
+  ot_unit             String?
   unit                String?
   exclude_fuel        Boolean   @default(false)
   effective_date      DateTime? @db.Date
@@ -805,8 +815,29 @@ model SubconRateCard {
   subcontractor    Partner?   @relation("subcon_partner", fields: [subcon_id], references: [id])
   client           Partner?   @relation("subcon_client", fields: [client_id], references: [id])
   source_quotation Quotation? @relation(fields: [source_quotation_id], references: [id])
+  ot_rates         SubconRateCardOtRate[]
 
   @@map("subcon_rate_cards")
+}
+
+model FleetRateCardOtRate {
+  id                Int     @id @default(autoincrement())
+  fleet_rate_card_id Int
+  time_slot         String
+  rate              Decimal @default(0) @db.Decimal(12, 2)
+  unit              String?
+  fleet_rate_card FleetRateCard @relation(fields: [fleet_rate_card_id], references: [id], onDelete: Cascade)
+  @@map("fleet_rate_card_ot_rates")
+}
+
+model SubconRateCardOtRate {
+  id                 Int     @id @default(autoincrement())
+  subcon_rate_card_id Int
+  time_slot          String
+  rate               Decimal @default(0) @db.Decimal(12, 2)
+  unit               String?
+  subcon_rate_card SubconRateCard @relation(fields: [subcon_rate_card_id], references: [id], onDelete: Cascade)
+  @@map("subcon_rate_card_ot_rates")
 }
 
 // ══════════════════════════════════════════════════════════════

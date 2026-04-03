@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, projectsApi, vehiclesApi, machineryApi } from '@/lib/api';
 import Link from 'next/link';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
@@ -21,6 +21,7 @@ export default function RateCardDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [equipmentOptions, setEquipmentOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = () => {
@@ -36,6 +37,9 @@ export default function RateCardDetailPage() {
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
     projectsApi.simple().then(res => setProjects(res.data)).catch(() => {});
+    Promise.all([vehiclesApi.simple(), machineryApi.simple()]).then(([vRes, mRes]) => {
+      setEquipmentOptions([...vRes.data, ...mRes.data]);
+    }).catch(() => {});
   }, [params.id]);
 
   const handleSave = async () => {
@@ -136,6 +140,14 @@ export default function RateCardDetailPage() {
                 placeholder="選擇或輸入機種"
               />
             </div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">機號</label>
+              <Combobox
+                value={form.equipment_number || ''}
+                onChange={(val) => setForm({...form, equipment_number: val || ''})}
+                options={equipmentOptions}
+                placeholder="選擇或輸入機號"
+              />
+            </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">起點</label><input value={form.origin || ''} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">終點</label><input value={form.destination || ''} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label>
@@ -154,6 +166,7 @@ export default function RateCardDetailPage() {
             <div><p className="text-sm text-gray-500">名稱</p><p>{record?.name || '-'}</p></div>
             <div><p className="text-sm text-gray-500">噸數</p><p>{record?.vehicle_tonnage || '-'}</p></div>
             <div><p className="text-sm text-gray-500">機種</p><p>{record?.vehicle_type || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">機號</p><p>{record?.equipment_number || '-'}</p></div>
             <div><p className="text-sm text-gray-500">起點</p><p>{record?.origin || '-'}</p></div>
             <div><p className="text-sm text-gray-500">終點</p><p>{record?.destination || '-'}</p></div>
             <div><p className="text-sm text-gray-500">備註</p><p>{record?.remarks || '-'}</p></div>

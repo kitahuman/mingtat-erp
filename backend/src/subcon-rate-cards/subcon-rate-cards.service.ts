@@ -7,7 +7,7 @@ export class SubconRateCardsService {
 
   private readonly allowedSortFields = [
     'id', 'plate_no', 'vehicle_tonnage', 'day_night', 'origin', 'destination',
-    'unit_price', 'unit', 'status', 'created_at',
+    'day_rate', 'unit', 'status', 'created_at',
   ];
 
   async findAll(query: {
@@ -43,7 +43,7 @@ export class SubconRateCardsService {
     const [data, total] = await Promise.all([
       this.prisma.subconRateCard.findMany({
         where,
-        include: { company: true, subcontractor: true, client: true, source_quotation: true },
+        include: { company: true, subcontractor: true, client: true, source_quotation: true, ot_rates: true },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -57,23 +57,40 @@ export class SubconRateCardsService {
   async findOne(id: number) {
     const src = await this.prisma.subconRateCard.findUnique({
       where: { id },
-      include: { company: true, subcontractor: true, client: true, source_quotation: true },
+      include: { company: true, subcontractor: true, client: true, source_quotation: true, ot_rates: true },
     });
     if (!src) throw new NotFoundException('供應商價目表不存在');
     return src;
   }
 
   async create(dto: any) {
-    const { subcontractor, client, company, source_quotation, ...data } = dto;
+    const { subcontractor, client, company, source_quotation, ot_rates, ...data } = dto;
     const saved = await this.prisma.subconRateCard.create({ data });
+    if (ot_rates && Array.isArray(ot_rates) && ot_rates.length > 0) {
+      for (const otr of ot_rates) {
+        await this.prisma.subconRateCardOtRate.create({
+          data: { subcon_rate_card_id: saved.id, time_slot: otr.time_slot, rate: otr.rate, unit: otr.unit },
+        });
+      }
+    }
     return this.findOne(saved.id);
   }
 
   async update(id: number, dto: any) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
-    const { created_at, updated_at, id: _id, subcontractor, client, company, source_quotation, ...updateData } = dto;
+    const { created_at, updated_at, id: _id, subcontractor, client, company, source_quotation, ot_rates, ...updateData } = dto;
     await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
+    if (ot_rates !== undefined) {
+      await this.prisma.subconRateCardOtRate.deleteMany({ where: { subcon_rate_card_id: id } });
+      if (Array.isArray(ot_rates) && ot_rates.length > 0) {
+        for (const otr of ot_rates) {
+          await this.prisma.subconRateCardOtRate.create({
+            data: { subcon_rate_card_id: id, time_slot: otr.time_slot, rate: otr.rate, unit: otr.unit },
+          });
+        }
+      }
+    }
     return this.findOne(id);
   }
 

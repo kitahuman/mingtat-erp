@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   workLogsApi, companyProfilesApi, partnersApi,
   contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
+  vehiclesApi, machineryApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import WorkLogRow from './WorkLogRow';
@@ -59,6 +60,7 @@ export default function WorkLogsPage() {
   const [employees, setEmployees]             = useState<Option[]>([]);
   const [users, setUsers]                     = useState<Option[]>([]);
   const [fieldOptions, setFieldOptions]       = useState<Record<string, Option[]>>({});
+  const [allEquipment, setAllEquipment]       = useState<Option[]>([]);
 
   // ── List state ──────────────────────────────────────────────
   const [rows, setRows]   = useState<any[]>([]);
@@ -108,7 +110,9 @@ export default function WorkLogsPage() {
       employeesApi.list({ limit: 500, status: 'active' }),
       usersApi.list({ limit: 200 }),
       fieldOptionsApi.getAll(),
-    ]).then(([cp, pt, qt, qo, em, us, fo]) => {
+      vehiclesApi.simple().catch(() => ({ data: [] })),
+      machineryApi.simple().catch(() => ({ data: [] })),
+    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach]) => {
       setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
@@ -132,6 +136,12 @@ export default function WorkLogsPage() {
         grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
       }
       setFieldOptions(grouped);
+      // Combine vehicles and machinery into unified equipment list
+      const equipList = [
+        ...(veh.data || []),
+        ...(mach.data || []),
+      ];
+      setAllEquipment(equipList);
     }).catch(console.error);
   }, []);
 
@@ -273,6 +283,7 @@ export default function WorkLogsPage() {
     employees,
     users,
     fieldOptions,
+    allEquipment,
   };
 
   return (

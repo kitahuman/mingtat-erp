@@ -118,7 +118,7 @@ export class RateCardsService {
             vehicle_tonnage: data.vehicle_tonnage || null,
             origin: data.origin || null,
             destination: data.destination || null,
-            unit_price: 0,
+            day_rate: 0,
             unit: data.day_unit || null,
             remarks: `由客戶價目 #${saved.id} 自動建立`,
             status: 'active',

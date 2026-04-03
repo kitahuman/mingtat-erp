@@ -90,6 +90,7 @@ export const employeesApi = {
 
 // Vehicles
 export const vehiclesApi = {
+  simple: () => api.get('/vehicles/simple'),
   list: (params?: any) => api.get('/vehicles', { params }),
   get: (id: number) => api.get(`/vehicles/${id}`),
   create: (data: any) => api.post('/vehicles', data),
@@ -101,6 +102,7 @@ export const vehiclesApi = {
 
 // Machinery
 export const machineryApi = {
+  simple: () => api.get('/machinery/simple'),
   list: (params?: any) => api.get('/machinery', { params }),
   get: (id: number) => api.get(`/machinery/${id}`),
   create: (data: any) => api.post('/machinery', data),

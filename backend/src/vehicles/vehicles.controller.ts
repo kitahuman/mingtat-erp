@@ -7,6 +7,11 @@ import { VehiclesService } from './vehicles.service';
 export class VehiclesController {
   constructor(private service: VehiclesService) {}
 
+  @Get('simple')
+  simple() {
+    return this.service.simple();
+  }
+
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);

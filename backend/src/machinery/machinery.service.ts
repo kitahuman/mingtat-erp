@@ -5,6 +5,21 @@ import { PrismaService } from '../prisma/prisma.service';
 export class MachineryService {
   constructor(private prisma: PrismaService) {}
 
+  async simple() {
+    const machines = await this.prisma.machinery.findMany({
+      where: { status: 'active' },
+      select: { id: true, machine_code: true, machine_type: true, tonnage: true },
+      orderBy: { machine_code: 'asc' },
+    });
+    return machines.map(m => ({
+      value: m.machine_code,
+      label: m.machine_code,
+      type: m.machine_type,
+      tonnage: m.tonnage ? String(m.tonnage) : null,
+      category: 'machinery',
+    }));
+  }
+
   async findAll(query: {
     page?: number; limit?: number; search?: string;
     machine_type?: string; owner_company_id?: number; status?: string;

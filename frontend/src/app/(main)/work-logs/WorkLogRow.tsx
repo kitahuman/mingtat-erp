@@ -38,11 +38,12 @@ interface Props {
   employees: Option[];
   users: Option[];
   fieldOptions?: Record<string, Option[]>;
+  allEquipment?: Option[];
 }
 
 export default function WorkLogRow({
   row, isEditing, isNew, isSelected, onSelect, onEdit, onSave, onCancel, onDuplicate, onDelete,
-  companyProfiles, clients, quotations, contracts, employees, users, fieldOptions = {},
+  companyProfiles, clients, quotations, contracts, employees, users, fieldOptions = {}, allEquipment = [],
 }: Props) {
   const [form, setForm] = useState<any>({});
   const [equipmentOptions, setEquipmentOptions] = useState<Option[]>([]);
@@ -90,22 +91,12 @@ export default function WorkLogRow({
     }
   }, [form.client_id, contracts, isEditing]);
 
-  // Fetch equipment options when machine_type or tonnage changes
-  const fetchEquipment = useCallback(async (machineType: string, tonnage?: string) => {
-    if (!machineType) { setEquipmentOptions([]); return; }
-    try {
-      const res = await workLogsApi.equipmentOptions(machineType, tonnage);
-      setEquipmentOptions((res.data || []).map((e: any) => ({ value: e.value, label: e.label })));
-    } catch { setEquipmentOptions([]); }
-  }, []);
-
+  // Use allEquipment from props as the equipment options
   useEffect(() => {
-    if (isEditing && form.machine_type) {
-      fetchEquipment(form.machine_type, form.tonnage);
-    } else {
-      setEquipmentOptions([]);
+    if (allEquipment && allEquipment.length > 0) {
+      setEquipmentOptions(allEquipment);
     }
-  }, [form.machine_type, form.tonnage, isEditing, fetchEquipment]);
+  }, [allEquipment]);
 
   const set = (field: string, value: any) => {
     setForm((prev: any) => {
@@ -148,11 +139,6 @@ export default function WorkLogRow({
     }
     try { await onSave(payload); } finally { setSaving(false); }
   };
-
-  const equipSource = getEquipmentSource(form.machine_type);
-  const equipPlaceholder = !form.machine_type
-    ? '請先選擇機種'
-    : equipSource === 'vehicle' ? '選擇車牌' : '選擇機號';
 
   // ── Display mode ───────────────────────────────────────────────────────────────────────────────────────
   if (!isEditing) {
@@ -361,12 +347,11 @@ export default function WorkLogRow({
       </td>
       {/* 機號 */}
       <td className={`${cellCls} w-28`}>
-        <SearchableSelect
-          value={form.equipment_number}
-          onChange={v => set('equipment_number', v)}
+        <Combobox
+          value={form.equipment_number || ''}
+          onChange={v => set('equipment_number', v ? String(v) : null)}
           options={equipmentOptions}
-          placeholder={equipPlaceholder}
-          disabled={!form.machine_type}
+          placeholder="選擇或輸入機號"
         />
       </td>
       {/* 噸數 */}

@@ -359,7 +359,7 @@ export class QuotationsService {
           data: {
             client_id: quotation.client_id,
             contract_no: contractNo,
-            unit_price: 0,
+            day_rate: 0,
             unit: item.unit,
             remarks: item.remarks || undefined,
             source_quotation_id: quotation.id,
