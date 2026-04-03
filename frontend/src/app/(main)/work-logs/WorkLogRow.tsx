@@ -189,7 +189,7 @@ export default function WorkLogRow({
         {/* 報價單 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.quotation?.quotation_no || '—'}</td>
         {/* 合約 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.contract?.contract_no || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.contract_no || '—'}</td>
         {/* 員工 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.employee?.name_zh || '—'}</td>
         {/* 機種 */}
@@ -323,11 +323,14 @@ export default function WorkLogRow({
       </td>
       {/* 合約 */}
       <td className={`${cellCls} w-32`}>
-        <SearchableSelect
-          value={form.contract_id}
-          onChange={v => set('contract_id', v)}
-          options={filteredContracts}
-          placeholder="選擇合約"
+        <Combobox
+          value={form.contract_no || ''}
+          onChange={v => set('contract_no', v ? String(v) : null)}
+          options={fieldOptions['contract_no'] || []}
+          placeholder="合約編號"
+          onCreateOption={async (val) => {
+            try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {}
+          }}
         />
       </td>
       {/* 員工 */}

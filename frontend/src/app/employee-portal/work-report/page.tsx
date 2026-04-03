@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
 // Field options categories
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'contract_no'];
 
 interface FormData {
   work_type: 'engineering' | 'transport';
@@ -406,6 +406,7 @@ export default function WorkReportPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
+  const contractNoOptions = optionsMap['contract_no'] || [];
 
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -602,12 +603,12 @@ export default function WorkReportPage() {
 
           <div>
             <label className={labelClass}>{t('contract')}</label>
-            <input
-              type="text"
+            <Combobox
               value={form.contract_no}
-              onChange={(e) => set('contract_no', e.target.value)}
-              className={inputClass}
+              onChange={(val) => set('contract_no', val)}
+              options={contractNoOptions}
               placeholder="合約號碼"
+              className={inputClass}
             />
           </div>
 

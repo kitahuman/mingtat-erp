@@ -14,6 +14,8 @@ interface Props {
   disabled?: boolean;
   clearable?: boolean;
   className?: string;
+  /** If provided, called when user confirms a value not in the options list (to auto-save to field_options) */
+  onCreateOption?: (val: string) => void | Promise<void>;
 }
 
 /**
@@ -21,9 +23,11 @@ interface Props {
  * - Click the arrow to open dropdown
  * - Type to filter options OR enter a completely new value
  * - Press Enter or click outside to confirm typed value
+ * - If onCreateOption is provided, it is called when a new value (not in options) is confirmed
  */
 export default function Combobox({
   value, onChange, options, placeholder = '請選擇或輸入', disabled = false, clearable = true, className = '',
+  onCreateOption,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [inputVal, setInputVal] = useState('');
@@ -42,6 +46,18 @@ export default function Combobox({
     !inputVal || o.label.toLowerCase().includes(inputVal.toLowerCase())
   );
 
+  const isNewValue = (val: string) =>
+    !!val && !options.find(o => String(o.value) === val || o.label === val);
+
+  const commitValue = (val: string | null) => {
+    onChange(val || null);
+    if (val && isNewValue(val) && onCreateOption) {
+      onCreateOption(val);
+    }
+    setOpen(false);
+    setFocused(false);
+  };
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
@@ -49,13 +65,14 @@ export default function Combobox({
         setFocused(false);
         // Commit the typed value if it differs from current
         if (inputVal !== (value ?? '')) {
-          onChange(inputVal || null);
+          commitValue(inputVal || null);
         }
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [inputVal, value, onChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputVal, value]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputVal(e.target.value);
@@ -65,9 +82,7 @@ export default function Combobox({
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      onChange(inputVal || null);
-      setOpen(false);
-      setFocused(false);
+      commitValue(inputVal || null);
     } else if (e.key === 'Escape') {
       setInputVal(value ?? '');
       setOpen(false);
@@ -145,9 +160,9 @@ export default function Combobox({
               <button
                 type="button"
                 className="w-full text-left px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 border-t border-gray-100"
-                onMouseDown={() => handleSelect(inputVal)}
+                onMouseDown={() => commitValue(inputVal)}
               >
-                + 使用「{inputVal}」
+                + 使用「{inputVal}」{onCreateOption ? '（自動儲存為選項）' : ''}
               </button>
             )}
           </div>

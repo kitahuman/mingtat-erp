@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
@@ -11,7 +11,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'contract_no'];
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '生效中' },
@@ -39,9 +39,10 @@ export default function RentalRateCardsPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
+  const contractNoOptions = optionsMap['contract_no'] || [];
 
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', quotation_id: '', service_type: '',
+    company_id: '', client_id: '', quotation_id: '', contract_no: '', service_type: '',
     name: '', tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
@@ -51,7 +52,7 @@ export default function RentalRateCardsPage() {
 
   const resetForm = () => {
     setForm({
-      company_id: '', client_id: '', quotation_id: '', service_type: '',
+      company_id: '', client_id: '', quotation_id: '', contract_no: '', service_type: '',
       name: '', tonnage: '', machine_type: '',
       origin: '', destination: '',
       rate: 0, mid_shift_rate: 0, ot_rate: 0,
@@ -135,9 +136,19 @@ export default function RentalRateCardsPage() {
     ) : '-' },
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'contract_no', label: '合約', sortable: true, editable: true, render: (v: any) => v || '-',
+      editRender: (value: any, onChange: any) => (
+        <Combobox
+          value={value || ''}
+          onChange={v => onChange(v || '')}
+          options={contractNoOptions}
+          placeholder="合約編號"
+          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {} }}
+        />
+      )
+    },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions, render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }], render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夺', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夺', label: '夺' }], render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
     { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...vehicleTypeOptions], render: (v: any) => v || '-' },
@@ -237,13 +248,13 @@ export default function RentalRateCardsPage() {
               {!form.client_id && <input tabIndex={-1} autoComplete="off" style={{ position: 'absolute', opacity: 0, height: 0, width: 0 }} value={form.client_id} onChange={() => {}} required />}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">報價單/合約</label>
-              <SearchableSelect
-                value={form.quotation_id}
-                onChange={(val) => setForm({...form, quotation_id: val || ''})}
-                options={[]} // Should fetch quotations based on client_id
-                placeholder="選擇報價單..."
-                clearable={true}
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
+              <Combobox
+                value={form.contract_no}
+                onChange={(v) => setForm({...form, contract_no: v || ''})}
+                options={contractNoOptions}
+                placeholder="選擇或輸入合約編號"
+                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'contract_no', label: val }); } catch {} }}
               />
             </div>
             <div>

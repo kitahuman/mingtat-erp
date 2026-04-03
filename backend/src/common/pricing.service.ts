@@ -3,6 +3,8 @@
  *
  * 集中管理所有價目表匹配邏輯，供 payroll.service.ts 和 work-logs.service.ts 調用。
  * 採用完全匹配策略，不再逐步放寬條件。
+ * 所有文字欄位（合約、機種、噸數、服務類型、起點、終點）均來自同一套 field_options，
+ * 因此文字比對可確保一致性。
  */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,11 +26,12 @@ export class PricingService {
   /**
    * 從已載入的 FleetRateCard 列表中嚴格匹配（記憶體內）。
    * 不再逐步放寬條件，找不到即回傳未匹配原因。
+   * 合約用 contract_no 文字比對（來自 field_options，格式一致）。
    */
   matchFleetRateCardInMemory(
     clientCards: any[],
     companyId: number | null,
-    contractId: number | null,
+    contractNo: string | null,
     serviceType: string | null,
     dayNight: string | null,
     tonnage: string | null,
@@ -37,27 +40,26 @@ export class PricingService {
     destination: string | null,
   ): MatchResult {
     // [DEBUG] 輸出工作記錄的匹配條件
-    console.log(`[DEBUG matchFleetRateCardInMemory] 工作記錄條件: companyId=${companyId} contractId=${contractId} serviceType=${JSON.stringify(serviceType)} dayNight=${JSON.stringify(dayNight)} tonnage=${JSON.stringify(tonnage)} machineType=${JSON.stringify(machineType)} origin=${JSON.stringify(origin)} destination=${JSON.stringify(destination)}`);
+    console.log(`[DEBUG matchFleetRateCardInMemory] 工作記錄條件: companyId=${companyId} contractNo=${JSON.stringify(contractNo)} serviceType=${JSON.stringify(serviceType)} dayNight=${JSON.stringify(dayNight)} tonnage=${JSON.stringify(tonnage)} machineType=${JSON.stringify(machineType)} origin=${JSON.stringify(origin)} destination=${JSON.stringify(destination)}`);
     console.log(`[DEBUG matchFleetRateCardInMemory] clientCards 數量: ${clientCards.length}`);
-    
+
     clientCards.forEach((rc, i) => {
       const failCompany = companyId && rc.company_id && rc.company_id !== companyId;
-      const failContract = contractId && rc.contract_id && rc.contract_id !== contractId;
+      const failContract = contractNo && rc.contract_no && rc.contract_no !== contractNo;
       const failService = serviceType && rc.service_type && rc.service_type !== serviceType;
       const failDayNight = dayNight && rc.day_night && rc.day_night !== dayNight;
       const failTonnage = tonnage && rc.tonnage && rc.tonnage !== tonnage;
       const failMachineType = machineType && rc.machine_type !== machineType;
-      // 改為完全匹配，因為都來自 field_options
       const failOrigin = origin && rc.origin && rc.origin !== origin;
       const failDest = destination && rc.destination && rc.destination !== destination;
-      
+
       const pass = !failCompany && !failContract && !failService && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
-      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} contract_id=${rc.contract_id} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failCompany&&'company',failContract&&'contract_id',failService&&'service_type',failDayNight&&'day_night',failTonnage&&'tonnage',failMachineType&&'machine_type',failOrigin&&'origin',failDest&&'destination'].filter(Boolean).join(',')||'無'})`);
+      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} contract_no=${JSON.stringify(rc.contract_no)} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failCompany && 'company', failContract && 'contract_no', failService && 'service_type', failDayNight && 'day_night', failTonnage && 'tonnage', failMachineType && 'machine_type', failOrigin && 'origin', failDest && 'destination'].filter(Boolean).join(',') || '無'})`);
     });
 
     const matched = clientCards.filter(rc => {
       if (companyId && rc.company_id && rc.company_id !== companyId) return false;
-      if (contractId && rc.contract_id && rc.contract_id !== contractId) return false;
+      if (contractNo && rc.contract_no && rc.contract_no !== contractNo) return false;
       if (serviceType && rc.service_type && rc.service_type !== serviceType) return false;
       if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
       if (tonnage && rc.tonnage && rc.tonnage !== tonnage) return false;
@@ -72,7 +74,7 @@ export class PricingService {
       return { card: matched[0], unmatchedReason: '' };
     }
 
-    const reason = this.buildUnmatchedReason('租賃價目', null, dayNight, tonnage, machineType, origin, destination);
+    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnage, machineType, origin, destination);
     console.log(`[DEBUG matchFleetRateCardInMemory] 匹配失敗: ${reason}`);
     return { card: null, unmatchedReason: reason };
   }
@@ -80,11 +82,12 @@ export class PricingService {
   /**
    * 從資料庫嚴格匹配 FleetRateCard（非記憶體）。
    * 不再逐步放寬條件，找不到即回傳未匹配原因。
+   * 合約用 contract_no 文字比對（來自 field_options，格式一致）。
    */
   async matchFleetRateCardFromDb(
     clientId: number,
     companyId: number | null,
-    contractId: number | null,
+    contractNo: string | null,
     serviceType: string | null,
     dayNight: string | null,
     tonnage: string | null,
@@ -94,7 +97,7 @@ export class PricingService {
   ): Promise<MatchResult> {
     const where: any = { status: 'active', client_id: clientId };
     if (companyId) where.company_id = companyId;
-    if (contractId) where.contract_id = contractId;
+    if (contractNo) where.contract_no = contractNo;
     if (serviceType) where.service_type = serviceType;
     if (dayNight) where.day_night = dayNight;
     if (tonnage) where.tonnage = tonnage;
@@ -105,7 +108,7 @@ export class PricingService {
     const card = await this.prisma.fleetRateCard.findFirst({ where });
     if (card) return { card, unmatchedReason: '' };
 
-    const reason = this.buildUnmatchedReason('租賃價目', null, dayNight, tonnage, machineType, origin, destination);
+    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnage, machineType, origin, destination);
     return { card: null, unmatchedReason: reason };
   }
 
@@ -202,7 +205,7 @@ export class PricingService {
     const conditions: string[] = [];
     if (contractNo) conditions.push(`合約 ${contractNo}`);
     if (dayNight) conditions.push(`${dayNight}間`);
-    if (tonnage) conditions.push(`${tonnage}噸`);
+    if (tonnage) conditions.push(tonnage);
     if (machineType) conditions.push(machineType);
     if (origin) conditions.push(`起點: ${origin}`);
     if (destination) conditions.push(`終點: ${destination}`);
