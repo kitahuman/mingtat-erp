@@ -1451,7 +1451,7 @@ export class PayrollService {
         const { card, unmatchedReason } = this.pricingService.matchFleetRateCardInMemory(
           clientCards,
           wl.company_profile_id,
-          wl.quotation_id,
+          wl.contract_id || null,
           wl.service_type,
           wl.day_night,
           wl.tonnage,
@@ -1513,13 +1513,11 @@ export class PayrollService {
   private async matchFleetRateCardForWorkLog(wl: any): Promise<{ card: any; rate: number; unit: string } | null> {
     if (!wl.client_id) return null;
 
-    const contractNo = wl.quotation?.quotation_no || wl.contract_no || null;
-
     // 使用共用 PricingService 進行嚴格匹配
     const { card } = await this.pricingService.matchFleetRateCardFromDb(
       wl.client_id,
       wl.company_id || null,
-      wl.quotation_id || null,
+      wl.contract_id || null,
       wl.service_type || null,
       wl.day_night || null,
       wl.tonnage || null,
@@ -1674,7 +1672,7 @@ export class PayrollService {
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       pwl.client_id,
       pwl.company_id || null,
-      pwl.quotation_id || null,
+      pwl.contract_id || null,
       pwl.service_type || null,
       pwl.day_night || null,
       pwl.tonnage || null,

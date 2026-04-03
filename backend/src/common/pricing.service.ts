@@ -28,7 +28,7 @@ export class PricingService {
   matchFleetRateCardInMemory(
     clientCards: any[],
     companyId: number | null,
-    quotationId: number | null,
+    contractId: number | null,
     serviceType: string | null,
     dayNight: string | null,
     tonnage: string | null,
@@ -37,12 +37,12 @@ export class PricingService {
     destination: string | null,
   ): MatchResult {
     // [DEBUG] 輸出工作記錄的匹配條件
-    console.log(`[DEBUG matchFleetRateCardInMemory] 工作記錄條件: companyId=${companyId} quotationId=${quotationId} serviceType=${JSON.stringify(serviceType)} dayNight=${JSON.stringify(dayNight)} tonnage=${JSON.stringify(tonnage)} machineType=${JSON.stringify(machineType)} origin=${JSON.stringify(origin)} destination=${JSON.stringify(destination)}`);
+    console.log(`[DEBUG matchFleetRateCardInMemory] 工作記錄條件: companyId=${companyId} contractId=${contractId} serviceType=${JSON.stringify(serviceType)} dayNight=${JSON.stringify(dayNight)} tonnage=${JSON.stringify(tonnage)} machineType=${JSON.stringify(machineType)} origin=${JSON.stringify(origin)} destination=${JSON.stringify(destination)}`);
     console.log(`[DEBUG matchFleetRateCardInMemory] clientCards 數量: ${clientCards.length}`);
     
     clientCards.forEach((rc, i) => {
       const failCompany = companyId && rc.company_id && rc.company_id !== companyId;
-      const failQuotation = quotationId && rc.source_quotation_id && rc.source_quotation_id !== quotationId;
+      const failContract = contractId && rc.contract_id && rc.contract_id !== contractId;
       const failService = serviceType && rc.service_type && rc.service_type !== serviceType;
       const failDayNight = dayNight && rc.day_night && rc.day_night !== dayNight;
       const failTonnage = tonnage && rc.tonnage && rc.tonnage !== tonnage;
@@ -51,13 +51,13 @@ export class PricingService {
       const failOrigin = origin && rc.origin && rc.origin !== origin;
       const failDest = destination && rc.destination && rc.destination !== destination;
       
-      const pass = !failCompany && !failQuotation && !failService && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
-      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} quotation_id=${rc.source_quotation_id} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failCompany&&'company',failQuotation&&'quotation',failService&&'service_type',failDayNight&&'day_night',failTonnage&&'tonnage',failMachineType&&'machine_type',failOrigin&&'origin',failDest&&'destination'].filter(Boolean).join(',')||'無'})`);
+      const pass = !failCompany && !failContract && !failService && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
+      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} contract_id=${rc.contract_id} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failCompany&&'company',failContract&&'contract_id',failService&&'service_type',failDayNight&&'day_night',failTonnage&&'tonnage',failMachineType&&'machine_type',failOrigin&&'origin',failDest&&'destination'].filter(Boolean).join(',')||'無'})`);
     });
 
     const matched = clientCards.filter(rc => {
       if (companyId && rc.company_id && rc.company_id !== companyId) return false;
-      if (quotationId && rc.source_quotation_id && rc.source_quotation_id !== quotationId) return false;
+      if (contractId && rc.contract_id && rc.contract_id !== contractId) return false;
       if (serviceType && rc.service_type && rc.service_type !== serviceType) return false;
       if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
       if (tonnage && rc.tonnage && rc.tonnage !== tonnage) return false;
@@ -84,7 +84,7 @@ export class PricingService {
   async matchFleetRateCardFromDb(
     clientId: number,
     companyId: number | null,
-    quotationId: number | null,
+    contractId: number | null,
     serviceType: string | null,
     dayNight: string | null,
     tonnage: string | null,
@@ -94,7 +94,7 @@ export class PricingService {
   ): Promise<MatchResult> {
     const where: any = { status: 'active', client_id: clientId };
     if (companyId) where.company_id = companyId;
-    if (quotationId) where.source_quotation_id = quotationId;
+    if (contractId) where.contract_id = contractId;
     if (serviceType) where.service_type = serviceType;
     if (dayNight) where.day_night = dayNight;
     if (tonnage) where.tonnage = tonnage;

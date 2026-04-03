@@ -308,7 +308,7 @@ export class WorkLogsService {
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       workLog.client_id,
       workLog.company_profile_id,
-      workLog.quotation_id,
+      workLog.contract_id || null,
       workLog.service_type,
       workLog.day_night,
       workLog.tonnage,

@@ -457,6 +457,7 @@ model Contract {
   retention_trackings  RetentionTracking[]
    retention_releases   RetentionRelease[]
   work_logs            WorkLog[]
+  fleet_rate_cards     FleetRateCard[]
   @@map("contracts")
 }
 
@@ -744,6 +745,7 @@ model FleetRateCard {
   id                  Int       @id @default(autoincrement())
   company_id          Int?
   client_id           Int?
+  contract_id         Int?
   contract_no         String?
   service_type        String?
   name                String?
@@ -770,6 +772,7 @@ model FleetRateCard {
 
   company          Company?   @relation(fields: [company_id], references: [id])
   client           Partner?   @relation(fields: [client_id], references: [id])
+  contract         Contract?  @relation(fields: [contract_id], references: [id])
   source_quotation Quotation? @relation(fields: [source_quotation_id], references: [id])
   ot_rates         FleetRateCardOtRate[]
 
