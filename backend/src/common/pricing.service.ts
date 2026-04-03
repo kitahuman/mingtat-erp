@@ -36,6 +36,21 @@ export class PricingService {
   ): MatchResult {
     // 直接用原始噸數字串比較（如 "30噸"），不做格式轉換。
     // field_options 中噸數格式統一為帶噸字，工作記錄和價目表均使用相同格式。
+
+    // [DEBUG] 輸出工作記錄的匹配條件
+    console.log(`[DEBUG matchFleetRateCardInMemory] 工作記錄條件: contractNo=${JSON.stringify(contractNo)} dayNight=${JSON.stringify(dayNight)} tonnage=${JSON.stringify(tonnage)} machineType=${JSON.stringify(machineType)} origin=${JSON.stringify(origin)} destination=${JSON.stringify(destination)}`);
+    console.log(`[DEBUG matchFleetRateCardInMemory] clientCards 數量: ${clientCards.length}`);
+    clientCards.forEach((rc, i) => {
+      const failContractNo = contractNo && rc.contract_no !== contractNo;
+      const failDayNight = dayNight && rc.day_night && rc.day_night !== dayNight;
+      const failTonnage = tonnage && rc.tonnage && rc.tonnage !== tonnage;
+      const failMachineType = machineType && rc.machine_type !== machineType;
+      const failOrigin = origin && rc.origin && !rc.origin.toLowerCase().includes(origin.toLowerCase());
+      const failDest = destination && rc.destination && !rc.destination.toLowerCase().includes(destination.toLowerCase());
+      const pass = !failContractNo && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
+      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} contract_no=${JSON.stringify(rc.contract_no)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failContractNo&&'contract_no',failDayNight&&'day_night',failTonnage&&'tonnage',failMachineType&&'machine_type',failOrigin&&'origin',failDest&&'destination'].filter(Boolean).join(',')||'無'})`);
+    });
+
     const matched = clientCards.filter(rc => {
       if (contractNo && rc.contract_no !== contractNo) return false;
       if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
@@ -47,10 +62,12 @@ export class PricingService {
     });
 
     if (matched.length > 0) {
+      console.log(`[DEBUG matchFleetRateCardInMemory] 匹配成功: card.id=${matched[0].id}`);
       return { card: matched[0], unmatchedReason: '' };
     }
 
     const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnage, machineType, origin, destination);
+    console.log(`[DEBUG matchFleetRateCardInMemory] 匹配失敗: ${reason}`);
     return { card: null, unmatchedReason: reason };
   }
 
