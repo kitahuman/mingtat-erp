@@ -16,7 +16,7 @@ import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
 import { fmtDate } from '@/lib/dateUtils';
 
-interface Option { value: string | number; label: string; _raw?: any; }
+interface Option { value: string | number; label: string; _raw?: any; shortLabel?: string; }
 
 const LIMIT_OPTIONS = [25, 50, 100];
 
@@ -27,27 +27,27 @@ const COLUMNS = [
   { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },
   { key: 'service_type',     label: '服務類型',  width: 'w-28' },
   { key: 'company',          label: '公司',      width: 'w-24' },
-  { key: 'client',           label: '客戶公司',  width: 'w-36' },
+  { key: 'client',           label: '客戶公司',  width: 'w-28' },
   { key: 'quotation',        label: '報價單',    width: 'w-32' },
   { key: 'contract',         label: '合約',      width: 'w-32' },
   { key: 'client_contract_no', label: '客戶合約', width: 'w-32' },
   { key: 'employee',         label: '員工',      width: 'w-24' },
   { key: 'machine_type',     label: '機種',      width: 'w-24' },
   { key: 'equipment_number', label: '機號',      width: 'w-28' },
-  { key: 'tonnage',          label: '噸數',      width: 'w-24' },
-  { key: 'day_night',        label: '日夜班',    width: 'w-20' },
-  { key: 'start_location',   label: '起點',      width: 'w-32' },
+  { key: 'tonnage',          label: '噸數',      width: 'w-16' },
+  { key: 'day_night',        label: '日夜班',    width: 'w-14' },
+  { key: 'start_location',   label: '起點',      width: 'w-40' },
   { key: 'start_time',       label: '起點時間',  width: 'w-24' },
-  { key: 'end_location',     label: '終點',      width: 'w-32' },
+  { key: 'end_location',     label: '終點',      width: 'w-40' },
   { key: 'end_time',         label: '終點時間',  width: 'w-24' },
-  { key: 'quantity',         label: '數量',      width: 'w-24' },
-  { key: 'unit',             label: '工資單位',  width: 'w-24' },
+  { key: 'quantity',         label: '數量',      width: 'w-20' },
+  { key: 'unit',             label: '工資單位',  width: 'w-16' },
   { key: 'ot_quantity',      label: 'OT數量',    width: 'w-24' },
-  { key: 'ot_unit',          label: 'OT單位',    width: 'w-24' },
+  { key: 'ot_unit',          label: 'OT單位',    width: 'w-16' },
   { key: 'is_mid_shift',     label: '中直',      width: 'w-16' },
   { key: 'goods_quantity',   label: '商品數量',  width: 'w-24' },
-  { key: 'receipt_no',       label: '入帳票編號', width: 'w-28' },
-  { key: 'work_order_no',    label: '單號',      width: 'w-28' },
+  { key: 'receipt_no',       label: '入帳票編號', width: 'w-36' },
+  { key: 'work_order_no',    label: '單號',      width: 'w-36' },
   { key: 'is_confirmed',     label: '已確認',    width: 'w-20' },
   { key: 'is_paid',          label: '已付款',    width: 'w-20' },
   { key: 'remarks',          label: '備註',      width: 'w-36' },
@@ -129,7 +129,7 @@ export default function WorkLogsPage() {
       machineryApi.simple().catch(() => ({ data: [] })),
     ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach]) => {
       setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
-      setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
+      setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.short_name || p.code || p.name })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
       const qoData = qo.data?.data || qo.data || [];
       setQuotations(qoData.map((q: any) => ({ value: q.id, label: q.quotation_no + (q.contract_name ? ' ' + q.contract_name : ''), _raw: q })));
@@ -508,7 +508,10 @@ export default function WorkLogsPage() {
       const val = dirty[field];
       if (field === 'status') return getStatusLabel(val) || val || '—';
       if (field === 'company_id') return companies.find(o => o.value === val)?.label || '—';
-      if (field === 'client_id') return clients.find(o => o.value === val)?.label || '—';
+      if (field === 'client_id') {
+        const found = clients.find(o => o.value === val) as any;
+        return found ? (found.shortLabel || found.label) : '—';
+      }
       if (field === 'quotation_id') return quotations.find(o => o.value === val)?.label || '—';
       if (field === 'contract_id') return contracts.find(o => o.value === val)?.label || '—';
       if (field === 'employee_id') return employees.find(o => String(o.value) === String(val))?.label || '—';
@@ -519,7 +522,7 @@ export default function WorkLogsPage() {
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
     if (field === 'company_id') return row.company?.name || row.company_profile?.code || '—';
-    if (field === 'client_id') return row.unverified_client_name || row.client?.name || '—';
+    if (field === 'client_id') return row.unverified_client_name || row.client?.short_name || row.client?.code || row.client?.name || '—';
     if (field === 'quotation_id') return row.quotation?.quotation_no || '—';
     if (field === 'contract_id') return row.contract?.contract_no || '—';
     if (field === 'employee_id') return row.employee?.name_zh || '—';
