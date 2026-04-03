@@ -738,10 +738,12 @@ model FleetRateCard {
   id                  Int      @id @default(autoincrement())
   client_id           Int?
   contract_no         String?
+  day_night           String?
   vehicle_tonnage     String?
   vehicle_type        String?
   origin              String?
   destination         String?
+  rate                Decimal  @default(0) @db.Decimal(12, 2)
   day_rate            Decimal  @default(0) @db.Decimal(12, 2)
   night_rate          Decimal  @default(0) @db.Decimal(12, 2)
   mid_shift_rate      Decimal  @default(0) @db.Decimal(12, 2)

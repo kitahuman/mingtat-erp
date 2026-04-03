@@ -32,6 +32,7 @@ export default function FleetRateCardDetailPage() {
   const handleSave = async () => {
     try {
       const { client, created_at, updated_at, ...updateData } = form;
+      updateData.rate = Number(updateData.rate) || 0;
       updateData.day_rate = Number(updateData.day_rate) || 0;
       updateData.night_rate = Number(updateData.night_rate) || 0;
       updateData.mid_shift_rate = Number(updateData.mid_shift_rate) || 0;
@@ -88,6 +89,14 @@ export default function FleetRateCardDetailPage() {
             <div><label className="block text-sm font-medium text-gray-500 mb-1">車輛類型</label><input value={form.vehicle_type || ''} onChange={e => setForm({...form, vehicle_type: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">起點</label><input value={form.origin || ''} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">終點</label><input value={form.destination || ''} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">日/夜</label>
+              <select value={form.day_night || ''} onChange={e => setForm({...form, day_night: e.target.value})} className="input-field">
+                <option value="">無</option>
+                <option value="日">日</option>
+                <option value="夜">夜</option>
+                <option value="中直">中直</option>
+              </select>
+            </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">單位</label>
               <select value={form.unit || '車'} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
                 {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -108,6 +117,7 @@ export default function FleetRateCardDetailPage() {
             <div><p className="text-sm text-gray-500">車輛類型</p><p>{record?.vehicle_type || '-'}</p></div>
             <div><p className="text-sm text-gray-500">起點</p><p>{record?.origin || '-'}</p></div>
             <div><p className="text-sm text-gray-500">終點</p><p>{record?.destination || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">日/夜</p><p>{record?.day_night || '-'}</p></div>
             <div><p className="text-sm text-gray-500">單位</p><p>{record?.unit || '-'}</p></div>
             <div><p className="text-sm text-gray-500">狀態</p><p><span className={record?.status === 'active' ? 'badge-green' : 'badge-gray'}>{record?.status === 'active' ? '啟用' : '停用'}</span></p></div>
           </div>
@@ -118,17 +128,17 @@ export default function FleetRateCardDetailPage() {
         <h2 className="text-lg font-bold text-gray-900 mb-4">費率</h2>
         {editing ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div><label className="block text-xs text-gray-500 mb-1">日間</label><input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-xs text-gray-500 mb-1">夜間</label><input type="number" value={form.night_rate} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-xs text-gray-500 mb-1">中直</label><input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">統一費率</label><input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field" /></div>
             <div><label className="block text-xs text-gray-500 mb-1">OT</label><input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">日間（舊）</label><input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">夜間（舊）</label><input type="number" value={form.night_rate} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">日間</p><p className="text-xl font-bold font-mono">${Number(record?.day_rate).toLocaleString()}</p></div>
-            <div className="bg-indigo-50 rounded-lg p-3"><p className="text-xs text-indigo-600 mb-1">夜間</p><p className="text-xl font-bold font-mono">${Number(record?.night_rate).toLocaleString()}</p></div>
-            <div className="bg-purple-50 rounded-lg p-3"><p className="text-xs text-purple-600 mb-1">中直</p><p className="text-xl font-bold font-mono">${Number(record?.mid_shift_rate).toLocaleString()}</p></div>
+            <div className="bg-green-50 rounded-lg p-3"><p className="text-xs text-green-600 mb-1">統一費率</p><p className="text-xl font-bold font-mono">${Number(record?.rate || 0).toLocaleString()}</p></div>
             <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate).toLocaleString()}</p></div>
+            <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">日間（舊）</p><p className="text-xl font-bold font-mono">${Number(record?.day_rate).toLocaleString()}</p></div>
+            <div className="bg-indigo-50 rounded-lg p-3"><p className="text-xs text-indigo-600 mb-1">夜間（舊）</p><p className="text-xl font-bold font-mono">${Number(record?.night_rate).toLocaleString()}</p></div>
           </div>
         )}
       </div>

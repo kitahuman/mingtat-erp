@@ -23,10 +23,12 @@ export default function FleetRateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
 
+  const [dayNightFilter, setDayNightFilter] = useState('');
+
   const [form, setForm] = useState<any>({
     client_id: '', contract_no: '', vehicle_tonnage: '', vehicle_type: '',
-    origin: '', destination: '',
-    day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
+    origin: '', destination: '', day_night: '',
+    rate: 0, day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
   });
 
@@ -46,6 +48,7 @@ export default function FleetRateCardsPage() {
       await fleetRateCardsApi.create({
         ...form,
         client_id: form.client_id ? Number(form.client_id) : null,
+        rate: Number(form.rate) || 0,
         day_rate: Number(form.day_rate) || 0,
         night_rate: Number(form.night_rate) || 0,
         mid_shift_rate: Number(form.mid_shift_rate) || 0,
@@ -63,6 +66,8 @@ export default function FleetRateCardsPage() {
       vehicle_type: formData.vehicle_type,
       origin: formData.origin,
       destination: formData.destination,
+      day_night: formData.day_night || null,
+      rate: formData.rate ? Number(formData.rate) : 0,
       day_rate: formData.day_rate ? Number(formData.day_rate) : 0,
       night_rate: formData.night_rate ? Number(formData.night_rate) : 0,
       mid_shift_rate: formData.mid_shift_rate ? Number(formData.mid_shift_rate) : 0,
@@ -80,16 +85,22 @@ export default function FleetRateCardsPage() {
     { value: 'inactive', label: '停用' },
   ];
 
+  const dayNightOptions = [
+    { value: '', label: '-' },
+    { value: '日', label: '日' },
+    { value: '夜', label: '夜' },
+    { value: '中直', label: '中直' },
+  ];
+
   const columns = [
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions, render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
     { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
     { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'night_rate', label: '夜間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'mid_shift_rate', label: '中直', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'ot_rate', label: 'OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
     { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
@@ -155,13 +166,21 @@ export default function FleetRateCardsPage() {
           onSave={handleInlineSave}
         onDelete={handleInlineDelete}
           filters={
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
-              <option value="">全部狀態</option>
-              <option value="active">生效中</option>
-              <option value="cancelled">取消</option>
-              <option value="deleted">已刪除</option>
-              <option value="inactive">停用</option>
-            </select>
+            <div className="flex gap-2">
+              <select value={dayNightFilter} onChange={e => { setDayNightFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部日/夜</option>
+                <option value="日">日</option>
+                <option value="夜">夜</option>
+                <option value="中直">中直</option>
+              </select>
+              <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部狀態</option>
+                <option value="active">生效中</option>
+                <option value="cancelled">取消</option>
+                <option value="deleted">已刪除</option>
+                <option value="inactive">停用</option>
+              </select>
+            </div>
           }
         />
       </div>
@@ -204,16 +223,23 @@ export default function FleetRateCardsPage() {
           <div className="border-t pt-4">
             <h3 className="text-sm font-bold text-gray-700 mb-3">費率</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div><label className="block text-xs text-gray-500 mb-1">日間</label><input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-xs text-gray-500 mb-1">夜間</label><input type="number" value={form.night_rate} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-xs text-gray-500 mb-1">中直</label><input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" /></div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">日/夜</label>
+                <select value={form.day_night} onChange={e => setForm({...form, day_night: e.target.value})} className="input-field">
+                  <option value="">無</option>
+                  <option value="日">日</option>
+                  <option value="夜">夜</option>
+                  <option value="中直">中直</option>
+                </select>
+              </div>
+              <div><label className="block text-xs text-gray-500 mb-1">費率</label><input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field" /></div>
               <div><label className="block text-xs text-gray-500 mb-1">OT</label><input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" /></div>
-            </div>
-            <div className="mt-3">
-              <label className="block text-xs text-gray-500 mb-1">單位</label>
-              <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-32">
-                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">單位</label>
+                <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
+                  {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 

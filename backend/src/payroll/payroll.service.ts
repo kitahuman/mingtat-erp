@@ -2,6 +2,19 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpensesService } from '../expenses/expenses.service';
 
+/** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
+function toDateStr(d: any): string {
+  if (!d) return '';
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  const s = String(d);
+  // 如果已經是 YYYY-MM-DD 格式，直接返回
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // 嘗試解析為 Date
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return s;
+}
+
 @Injectable()
 export class PayrollService {
   constructor(
@@ -418,7 +431,7 @@ export class PayrollService {
     let workDays = 0;
 
     if (salaryType === 'daily') {
-      const workDates = new Set(workLogs.map(wl => String(wl.scheduled_date)));
+      const workDates = new Set(workLogs.map(wl => toDateStr(wl.scheduled_date)));
       workDays = workDates.size;
       baseAmount = baseSalary * workDays;
 
@@ -466,10 +479,10 @@ export class PayrollService {
 
       let days = 0;
       if (af.condition) {
-        const matchDates = new Set(workLogs.filter(af.condition).map(wl => String(wl.scheduled_date)));
+        const matchDates = new Set(workLogs.filter(af.condition).map(wl => toDateStr(wl.scheduled_date)));
         days = matchDates.size;
       } else {
-        const workDates = new Set(workLogs.map(wl => String(wl.scheduled_date)));
+        const workDates = new Set(workLogs.map(wl => toDateStr(wl.scheduled_date)));
         days = workDates.size;
       }
 
@@ -492,7 +505,7 @@ export class PayrollService {
     if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
       for (const ca of salarySetting.custom_allowances as any[]) {
         if (!ca.amount || ca.amount === 0) continue;
-        const workDatesSet = new Set(workLogs.map(wl => String(wl.scheduled_date)));
+        const workDatesSet = new Set(workLogs.map(wl => toDateStr(wl.scheduled_date)));
         const days = workDatesSet.size;
         if (days === 0) continue;
 
@@ -550,7 +563,7 @@ export class PayrollService {
         if (os.condition) return os.condition(wl);
         return true;
       });
-      const otDays = new Set(filteredLogs.map(wl => String(wl.scheduled_date))).size;
+      const otDays = new Set(filteredLogs.map(wl => toDateStr(wl.scheduled_date))).size;
 
       if (otDays === 0) continue;
 
@@ -612,7 +625,7 @@ export class PayrollService {
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
 
     if (mpfPlan === 'industry') {
-      const workDatesForMpf = new Set(workLogs.map(wl => String(wl.scheduled_date)));
+      const workDatesForMpf = new Set(workLogs.map(wl => toDateStr(wl.scheduled_date)));
       const mpfDays = workDatesForMpf.size;
       mpfDeduction = 50 * mpfDays;
       mpfEmployer = 50 * mpfDays;
@@ -1236,14 +1249,14 @@ export class PayrollService {
 
     const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
-      const date = String(pwl.scheduled_date);
+      const date = toDateStr(pwl.scheduled_date);
       if (!dateMap.has(date)) dateMap.set(date, []);
       dateMap.get(date)!.push(pwl);
     }
 
     const daMap = new Map<string, any[]>();
     for (const da of dailyAllowances) {
-      const date = String(da.date);
+      const date = toDateStr(da.date);
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
@@ -1303,14 +1316,14 @@ export class PayrollService {
 
     const dateMap = new Map<string, any[]>();
     for (const wl of workLogs) {
-      const date = String(wl.scheduled_date);
+      const date = toDateStr(wl.scheduled_date);
       if (!dateMap.has(date)) dateMap.set(date, []);
       dateMap.get(date)!.push(wl);
     }
 
     const daMap = new Map<string, any[]>();
     for (const da of dailyAllowances) {
-      const date = String(da.date);
+      const date = toDateStr(da.date);
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
@@ -1413,32 +1426,16 @@ export class PayrollService {
   private async enrichWorkLogsWithPrice(workLogs: any[]): Promise<any[]> {
     if (workLogs.length === 0) return [];
 
-    // 批量加載所有相關客戶的 rate cards
+    // 批量加載所有相關客戶的 FleetRateCard（租賃價目表）
     const clientIds = [...new Set(workLogs.filter(wl => wl.client_id).map(wl => wl.client_id!))];
-    const companyProfileIds = [...new Set(workLogs.filter(wl => wl.company_profile_id).map(wl => wl.company_profile_id!))];
 
-    // 批量加載 company profiles
-    const companyProfileMap = new Map<number, number>();
-    if (companyProfileIds.length > 0) {
-      const cps = await this.prisma.companyProfile.findMany({
-        where: { id: { in: companyProfileIds } },
-      });
-      for (const cp of cps) {
-        if ((cp as any).company_id) {
-          companyProfileMap.set(cp.id, (cp as any).company_id);
-        }
-      }
-    }
-
-    // 批量加載所有相關 rate cards
-    let allRateCards: any[] = [];
+    let allFleetRateCards: any[] = [];
     if (clientIds.length > 0) {
-      allRateCards = await this.prisma.rateCard.findMany({
+      allFleetRateCards = await this.prisma.fleetRateCard.findMany({
         where: {
           status: 'active',
           client_id: { in: clientIds },
         },
-        orderBy: { effective_date: 'desc' },
       });
     }
 
@@ -1447,41 +1444,29 @@ export class PayrollService {
     for (const wl of workLogs) {
       const enriched: any = { ...wl };
 
-      if (wl.price_match_status === 'matched' && wl.matched_rate) {
-        const rate = Number(wl.matched_rate) || 0;
-        const qty = Number(wl.quantity) || 1;
-        enriched._matched_rate_card_id = wl.matched_rate_card_id;
-        enriched._matched_rate = wl.matched_rate;
-        enriched._matched_unit = wl.matched_unit;
-        enriched._matched_ot_rate = wl.matched_ot_rate;
-        enriched._price_match_status = wl.price_match_status;
-        enriched._price_match_note = wl.price_match_note;
-        enriched._line_amount = rate * qty;
-        enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
-      } else if (wl.client_id) {
-        const companyId = wl.company_profile_id ? (companyProfileMap.get(wl.company_profile_id) ?? null) : null;
-        const tonnageNum = wl.tonnage ? wl.tonnage.replace('噸', '') : null;
-        const clientCards = allRateCards.filter(rc => rc.client_id === wl.client_id);
+      if (wl.client_id) {
+        const clientCards = allFleetRateCards.filter(rc => rc.client_id === wl.client_id);
+        const contractNo = wl.quotation?.quotation_no || null;
 
-        const card = this.tryMatchRateCardInMemory(
+        const card = this.tryMatchFleetRateCardInMemory(
           clientCards,
-          companyId,
-          wl.quotation_id,
+          contractNo,
+          wl.day_night,
+          wl.tonnage,
           wl.machine_type,
-          tonnageNum,
           wl.start_location,
           wl.end_location,
         );
 
         if (card) {
-          const { rate, unit } = this.resolveRate(card, wl.day_night);
+          const rate = Number(card.rate) || 0;
           const qty = Number(wl.quantity) || 1;
           enriched._matched_rate_card_id = card.id;
           enriched._matched_rate = rate;
-          enriched._matched_unit = unit;
+          enriched._matched_unit = card.unit || '';
           enriched._matched_ot_rate = card.ot_rate;
           enriched._price_match_status = 'matched';
-          enriched._price_match_note = `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`;
+          enriched._price_match_note = `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`;
           enriched._line_amount = rate * qty;
         } else {
           enriched._matched_rate_card_id = null;
@@ -1510,31 +1495,37 @@ export class PayrollService {
     return result;
   }
 
-  private tryMatchRateCardInMemory(
+  private tryMatchFleetRateCardInMemory(
     clientCards: any[],
-    companyId: number | null,
-    quotationId: number | null,
-    vehicleType: string | null,
+    contractNo: string | null,
+    dayNight: string | null,
     tonnage: string | null,
+    vehicleType: string | null,
     origin: string | null,
     destination: string | null,
   ): any | null {
+    // 配對條件優先順序：合約號碼 → 日/夜 → 噸數 → 機種 → 路線
+    // 注意：FleetRateCard 沒有 service_type 欄位
     const attempts = [
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: false, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: false, useTonnage: false, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: true },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: false, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: true, useDayNight: false, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: true, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: false, useTonnage: false, useVehicle: false, useRoute: false },
     ];
+
+    const tonnageNum = tonnage ? tonnage.replace('噸', '') : null;
 
     for (const attempt of attempts) {
       const matched = clientCards.filter(rc => {
-        if (attempt.useCompany && companyId && rc.company_id !== companyId) return false;
-        if (attempt.useQuotation && quotationId && rc.source_quotation_id !== quotationId) return false;
+        if (attempt.useContract && contractNo && rc.contract_no !== contractNo) return false;
+        if (attempt.useDayNight && dayNight && rc.day_night && rc.day_night !== dayNight) return false;
+        if (attempt.useTonnage && tonnageNum && rc.vehicle_tonnage !== tonnageNum) return false;
         if (attempt.useVehicle && vehicleType && rc.vehicle_type !== vehicleType) return false;
-        if (attempt.useTonnage && tonnage && rc.vehicle_tonnage !== tonnage) return false;
         if (attempt.useRoute) {
           if (origin && rc.origin && !rc.origin.toLowerCase().includes(origin.toLowerCase())) return false;
           if (destination && rc.destination && !rc.destination.toLowerCase().includes(destination.toLowerCase())) return false;
@@ -1543,11 +1534,6 @@ export class PayrollService {
       });
 
       if (matched.length > 0) {
-        matched.sort((a: any, b: any) => {
-          const da = a.effective_date || '';
-          const db = b.effective_date || '';
-          return String(db).localeCompare(String(da));
-        });
         return matched[0];
       }
     }
@@ -1555,77 +1541,77 @@ export class PayrollService {
     return null;
   }
 
-  private async matchRateCardForWorkLog(wl: any): Promise<{ card: any; rate: number; unit: string } | null> {
+  private async matchFleetRateCardForWorkLog(wl: any): Promise<{ card: any; rate: number; unit: string } | null> {
     if (!wl.client_id) return null;
 
-    let companyId: number | null = null;
-    if (wl.company_profile_id) {
-      const cp = await this.prisma.companyProfile.findUnique({ where: { id: wl.company_profile_id } });
-      if (cp && (cp as any).company_id) {
-        companyId = (cp as any).company_id;
-      }
-    }
-
+    const contractNo = wl.quotation?.quotation_no || wl.contract_no || null;
     const tonnageNum = wl.tonnage ? wl.tonnage.replace('噸', '') : null;
 
-    const card = await this.tryMatchRateCard(
+    const card = await this.tryMatchFleetRateCard(
       wl.client_id,
-      companyId,
-      wl.quotation_id,
-      wl.machine_type,
+      contractNo,
+      wl.day_night,
       tonnageNum,
+      wl.machine_type,
       wl.start_location,
       wl.end_location,
     );
 
     if (!card) return null;
 
-    const { rate, unit } = this.resolveRate(card, wl.day_night);
-    return { card, rate, unit };
+    const rate = Number(card.rate) || 0;
+    return { card, rate, unit: card.unit || '' };
   }
 
-  private async tryMatchRateCard(
+  private async tryMatchFleetRateCard(
     clientId: number,
-    companyId: number | null,
-    quotationId: number | null,
-    vehicleType: string | null,
+    contractNo: string | null,
+    dayNight: string | null,
     tonnage: string | null,
+    vehicleType: string | null,
     origin: string | null,
     destination: string | null,
   ): Promise<any | null> {
+    // 配對條件優先順序：合約號碼 → 日/夜 → 噸數 → 機種 → 路線
+    // 注意：FleetRateCard 沒有 service_type 欄位
     const attempts = [
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: false, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: false, useTonnage: false, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: true },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: true, useVehicle: false, useRoute: false },
+      { useContract: true, useDayNight: true, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: true, useDayNight: false, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: true, useVehicle: true, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: true, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: true, useTonnage: false, useVehicle: false, useRoute: false },
+      { useContract: false, useDayNight: false, useTonnage: false, useVehicle: false, useRoute: false },
     ];
 
     for (const attempt of attempts) {
       const where: any = { status: 'active', client_id: clientId };
 
-      if (attempt.useCompany && companyId) where.company_id = companyId;
-      if (attempt.useQuotation && quotationId) where.source_quotation_id = quotationId;
-      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
+      if (attempt.useContract && contractNo) where.contract_no = contractNo;
+      if (attempt.useDayNight && dayNight) where.day_night = dayNight;
       if (attempt.useTonnage && tonnage) where.vehicle_tonnage = tonnage;
+      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
       if (attempt.useRoute) {
         if (origin) where.origin = { contains: origin, mode: 'insensitive' };
         if (destination) where.destination = { contains: destination, mode: 'insensitive' };
       }
 
-      const card = await this.prisma.rateCard.findFirst({
-        where,
-        orderBy: { effective_date: 'desc' },
-      });
+      const card = await this.prisma.fleetRateCard.findFirst({ where });
       if (card) return card;
     }
 
     return null;
   }
 
+  // 保留舊的 resolveRate 以供 findOne 中的現有 PayrollWorkLog 使用
   private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
+    // 如果有新的統一 rate 欄位，優先使用
+    if (card.rate !== undefined && card.rate !== null && Number(card.rate) > 0) {
+      return { rate: Number(card.rate), unit: card.unit || '' };
+    }
+    // 否則回退到舊的 day_rate/night_rate
     if (dayNight === '夜') {
       return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.day_unit || '' };
     }
@@ -1756,24 +1742,16 @@ export class PayrollService {
       };
     }
 
-    let companyId: number | null = null;
-    if (pwl.company_profile_id) {
-      const cp = await this.prisma.companyProfile.findUnique({ where: { id: pwl.company_profile_id } });
-      if (cp && (cp as any).company_id) {
-        companyId = (cp as any).company_id;
-      }
-    }
-
     const tonnageNum = pwl.tonnage ? pwl.tonnage.replace('噸', '') : null;
 
-    const card = await this.tryMatchRateCard(
+    const card = await this.tryMatchFleetRateCard(
       pwl.client_id,
-      companyId,
-      pwl.quotation_id,
-      pwl.machine_type,
+      pwl.contract_no || null,
+      pwl.day_night || null,
       tonnageNum,
-      pwl.start_location,
-      pwl.end_location,
+      pwl.machine_type || null,
+      pwl.start_location || null,
+      pwl.end_location || null,
     );
 
     if (!card) {
@@ -1787,14 +1765,14 @@ export class PayrollService {
       };
     }
 
-    const { rate, unit } = this.resolveRate(card, pwl.day_night);
+    const rate = Number(card.rate) || 0;
     return {
       matched_rate_card_id: card.id,
       matched_rate: rate,
-      matched_unit: unit,
+      matched_unit: card.unit || '',
       matched_ot_rate: card.ot_rate ?? null,
       price_match_status: 'matched',
-      price_match_note: `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`,
+      price_match_note: `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`,
     };
   }
 

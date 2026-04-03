@@ -95,6 +95,15 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
 }
 
 // ─── Daily Calculation View (Preview mode - read only) ───────
+function formatDateDisplay(dateStr: string): string {
+  // 如果已經是 YYYY-MM-DD 格式，直接返回
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // 嘗試解析為 Date 並格式化
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return dateStr;
+}
+
 function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
@@ -131,6 +140,7 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
           <tbody>
             {dailyCalc.map((day: any, idx: number) => {
               const isExpanded = expandedDate === day.date;
+              const displayDate = formatDateDisplay(day.date);
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
               return (
                 <>
@@ -141,7 +151,7 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
                       </button>
                     </td>
                     <td className="px-3 py-2 font-medium">
-                      {day.date} <span className="text-xs text-gray-400">({weekday})</span>
+                      {displayDate} <span className="text-xs text-gray-400">({weekday})</span>
                       {day.work_logs?.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">

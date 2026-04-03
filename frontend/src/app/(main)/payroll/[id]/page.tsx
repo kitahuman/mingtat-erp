@@ -5,6 +5,13 @@ import { payrollApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
+function formatDateDisplay(dateStr: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return dateStr;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   confirmed: '已確認',
@@ -152,6 +159,7 @@ function DailyCalculationView({
             {dailyCalc.map((day: any, idx: number) => {
               const isExpanded = expandedDate === day.date;
               const isAdding = addingDate === day.date;
+              const displayDate = formatDateDisplay(day.date);
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
               return (
                 <>
@@ -162,7 +170,7 @@ function DailyCalculationView({
                       </button>
                     </td>
                     <td className="px-3 py-2 font-medium">
-                      {day.date} <span className="text-xs text-gray-400">({weekday})</span>
+                      {displayDate} <span className="text-xs text-gray-400">({weekday})</span>
                       {day.work_logs.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">

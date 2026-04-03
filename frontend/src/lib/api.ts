@@ -203,6 +203,7 @@ export const fleetRateCardsApi = {
   create: (data: any) => api.post('/fleet-rate-cards', data),
   update: (id: number, data: any) => api.put(`/fleet-rate-cards/${id}`, data),
   delete: (id: number) => api.delete(`/fleet-rate-cards/${id}`),
+  linked: (rateCardId: number) => api.get(`/fleet-rate-cards/linked/${rateCardId}`),
 };
 
 // Subcontractor Vehicle Rate Cards (供應商價目表)

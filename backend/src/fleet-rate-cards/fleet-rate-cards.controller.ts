@@ -12,6 +12,11 @@ export class FleetRateCardsController {
     return this.service.findAll(query);
   }
 
+  @Get('linked/:rateCardId')
+  findLinked(@Param('rateCardId') rateCardId: string) {
+    return this.service.findOrCreateLinked(Number(rateCardId));
+  }
+
   @Get(':id')
   findOne(@Param('id') id: number) {
     return this.service.findOne(Number(id));
