@@ -182,22 +182,40 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
                   {isExpanded && (
                     <tr key={`exp-${day.date}`} className="bg-gray-50 border-b">
                       <td colSpan={6} className="px-6 py-2">
-                        <div className="text-xs space-y-1">
-                          {(day.work_logs || []).map((wl: any, wIdx: number) => (
-                            <div key={wIdx} className="flex items-center gap-3 py-1 border-b border-gray-200 last:border-0">
-                              <span className={`px-1 py-0.5 rounded text-xs ${
-                                wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'
-                              }`}>{wl.day_night || '日'}</span>
-                              <span className="text-gray-600">{wl.client_name || '-'}</span>
-                              <span className="text-gray-400">{[wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '-'}</span>
-                              <span className="ml-auto font-mono">
-                                {wl.matched_rate ? `$${Number(wl.matched_rate).toLocaleString()} x ${wl.quantity || 1}` : '未設定'}
-                              </span>
-                              <span className="font-mono font-bold w-24 text-right">
-                                ${Number(wl.line_amount || 0).toLocaleString()}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="text-xs space-y-2">
+                          {(day.work_logs || []).map((wl: any, wIdx: number) => {
+                            const wlRoute = [wl.start_location, wl.end_location].filter(Boolean).join(' → ');
+                            const wlEquipment = [wl.tonnage, wl.machine_type, wl.equipment_number].filter(Boolean).join('');
+                            const wlShortName = wl.client_short_name || (wl.client_name ? wl.client_name.substring(0, 4) : '');
+                            const wlDesc = [
+                              wl.service_type,
+                              wlShortName,
+                              wl.client_contract_no,
+                              wlRoute,
+                              wlEquipment ? `(${wlEquipment})` : '',
+                              wl.day_night || '日',
+                              wl.ot_quantity && Number(wl.ot_quantity) > 0 ? 'OT' : '',
+                              wl.is_mid_shift ? '中直' : '',
+                            ].filter(Boolean).join(' ');
+                            const wlBaseAmt = wl.base_line_amount ?? (wl.matched_rate ? Number(wl.matched_rate) * Number(wl.quantity || 1) : 0);
+                            const wlOtAmt = wl.ot_line_amount ?? 0;
+                            const wlMidAmt = wl.mid_shift_line_amount ?? 0;
+                            return (
+                              <div key={wIdx} className="py-1 border-b border-gray-200 last:border-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-gray-700 font-medium">{wlDesc || '-'}</span>
+                                  <span className="font-mono font-bold text-primary-600">${Number(wl.line_amount || 0).toLocaleString()}</span>
+                                </div>
+                                {wl.matched_rate && (
+                                  <div className="flex gap-4 mt-0.5 text-gray-400">
+                                    <span>基本: ${Number(wl.matched_rate).toLocaleString()} × {wl.quantity} = ${wlBaseAmt.toLocaleString()}</span>
+                                    {wl.ot_quantity > 0 && <span>OT: ${wl.matched_ot_rate ? Number(wl.matched_ot_rate).toLocaleString() : '未設定'} × {wl.ot_quantity} = ${wlOtAmt.toLocaleString()}</span>}
+                                    {wl.is_mid_shift && <span>中直: ${wl.matched_mid_shift_rate ? Number(wl.matched_mid_shift_rate).toLocaleString() : '未設定'} = ${wlMidAmt.toLocaleString()}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </td>
                     </tr>

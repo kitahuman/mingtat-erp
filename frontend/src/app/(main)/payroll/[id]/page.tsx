@@ -219,22 +219,40 @@ function DailyCalculationView({
                   {isExpanded && (
                     <tr className="bg-blue-50">
                       <td colSpan={isDraft ? 8 : 7} className="px-6 py-2">
-                        <div className="text-xs space-y-1">
-                          {day.work_logs.map((wl: any, wIdx: number) => (
-                            <div key={wIdx} className="flex items-center gap-3 py-1 border-b border-gray-200 last:border-0">
-                              <span className={`px-1 py-0.5 rounded text-xs ${
-                                wl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'
-                              }`}>{wl.day_night || '日'}</span>
-                              <span className="text-gray-600">{wl.client_name || '-'}</span>
-                              <span className="text-gray-400">{[wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '-'}</span>
-                              <span className="ml-auto font-mono">
-                                {wl.matched_rate ? `$${Number(wl.matched_rate).toLocaleString()} x ${wl.quantity}` : '未設定'}
-                              </span>
-                              <span className="font-mono font-bold w-24 text-right">
-                                ${Number(wl.line_amount).toLocaleString()}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="text-xs space-y-2">
+                          {day.work_logs.map((wl: any, wIdx: number) => {
+                            const wlRoute = [wl.start_location, wl.end_location].filter(Boolean).join(' → ');
+                            const wlEquipment = [wl.tonnage, wl.machine_type, wl.equipment_number].filter(Boolean).join('');
+                            const wlShortName = wl.client_short_name || (wl.client_name ? wl.client_name.substring(0, 4) : '');
+                            const wlDesc = [
+                              wl.service_type,
+                              wlShortName,
+                              wl.client_contract_no,
+                              wlRoute,
+                              wlEquipment ? `(${wlEquipment})` : '',
+                              wl.day_night || '日',
+                              wl.ot_quantity && Number(wl.ot_quantity) > 0 ? 'OT' : '',
+                              wl.is_mid_shift ? '中直' : '',
+                            ].filter(Boolean).join(' ');
+                            const wlBaseAmt = wl.base_line_amount ?? (wl.matched_rate ? Number(wl.matched_rate) * Number(wl.quantity || 1) : 0);
+                            const wlOtAmt = wl.ot_line_amount ?? (wl.matched_ot_rate && wl.ot_quantity ? Number(wl.matched_ot_rate) * Number(wl.ot_quantity) : 0);
+                            const wlMidAmt = wl.mid_shift_line_amount ?? (wl.is_mid_shift && wl.matched_mid_shift_rate ? Number(wl.matched_mid_shift_rate) : 0);
+                            return (
+                              <div key={wIdx} className="py-1 border-b border-gray-200 last:border-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-gray-700 font-medium">{wlDesc || '-'}</span>
+                                  <span className="font-mono font-bold text-primary-600">${Number(wl.line_amount).toLocaleString()}</span>
+                                </div>
+                                {wl.matched_rate && (
+                                  <div className="flex gap-4 mt-0.5 text-gray-400">
+                                    <span>基本: ${Number(wl.matched_rate).toLocaleString()} × {wl.quantity} = ${wlBaseAmt.toLocaleString()}</span>
+                                    {wl.ot_quantity > 0 && <span>OT: ${wl.matched_ot_rate ? Number(wl.matched_ot_rate).toLocaleString() : '未設定'} × {wl.ot_quantity} = ${wlOtAmt.toLocaleString()}</span>}
+                                    {wl.is_mid_shift && <span>中直: ${wl.matched_mid_shift_rate ? Number(wl.matched_mid_shift_rate).toLocaleString() : '未設定'} = ${wlMidAmt.toLocaleString()}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </td>
                     </tr>
@@ -705,28 +723,34 @@ export default function PayrollDetailPage() {
                 {pwls.map((pwl: any) => {
                   const isExcluded = pwl.is_excluded;
                   const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
-                  const route = [pwl.start_location, pwl.end_location].filter(Boolean).join(' → ') || '-';
-                  const equipment = [pwl.tonnage, pwl.machine_type, pwl.equipment_number].filter(Boolean).join(' ');
-                  const clientShortName = pwl.client?.short_name || (pwl.client_name ? pwl.client_name.substring(0, 8) : '-');
+                  const route = [pwl.start_location, pwl.end_location].filter(Boolean).join(' → ');
+                  const equipment = [pwl.tonnage, pwl.machine_type, pwl.equipment_number].filter(Boolean).join('');
+                  // Use short_name if available, else truncate client_name to 4 chars
+                  const clientShortName = pwl.client?.short_name || (pwl.client_name ? pwl.client_name.substring(0, 4) : '');
                   
                   // Calculate line amounts for each component
                   const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
                   const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
-                  const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * Number(pwl.quantity || 1)) : 0;
+                  const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
+                  
+                  // Build description: service_type + client_short + contract + route + equipment + day/night [+ OT] [+ 中直]
+                  const descParts = [
+                    pwl.service_type,
+                    clientShortName,
+                    pwl.client_contract_no,
+                    route,
+                    equipment ? `(${equipment})` : '',
+                    pwl.day_night || '日',
+                    pwl.ot_quantity && Number(pwl.ot_quantity) > 0 ? 'OT' : '',
+                    pwl.is_mid_shift ? '中直' : '',
+                  ].filter(Boolean).join(' ');
                   
                   return (
                     <div key={pwl.id} className={`border rounded-lg p-3 ${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'bg-gray-50'}`}>
                       {/* Header row */}
                       <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{clientShortName}</span>
-                          <span className="text-xs text-gray-500">{route}</span>
-                          {equipment && <span className="text-xs text-gray-400">({equipment})</span>}
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            pwl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
-                            pwl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>{pwl.day_night || '日'}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-gray-900 text-sm">{descParts}</span>
                         </div>
                         {isDraft && (
                           <div className="flex gap-1">

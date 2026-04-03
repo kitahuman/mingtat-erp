@@ -158,7 +158,13 @@ export class PayrollService {
       // Save as payroll_work_logs
       const savedPwls: any[] = [];
       for (const wl of enrichedWorkLogs) {
-        const saved = await this.prisma.payrollWorkLog.create({
+            // Calculate total line amount including OT and mid-shift
+          const baseAmt = wl._line_amount ?? 0;
+          const otAmt = wl._ot_line_amount ?? 0;
+          const midShiftAmt = wl._mid_shift_line_amount ?? 0;
+          const totalLineAmount = baseAmt + otAmt + midShiftAmt;
+
+          const saved = await this.prisma.payrollWorkLog.create({
           data: {
             payroll_id: payroll.id,
             work_log_id: wl.id,
@@ -174,14 +180,18 @@ export class PayrollService {
             unit: wl.unit,
             ot_quantity: wl.ot_quantity,
             ot_unit: wl.ot_unit,
+            is_mid_shift: wl.is_mid_shift ?? false,
             remarks: wl.remarks,
             matched_rate_card_id: wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
             matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
             matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
             matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+            matched_mid_shift_rate: wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate ?? null,
             price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
             price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
-            line_amount: wl._line_amount ?? 0,
+            line_amount: totalLineAmount,
+            ot_line_amount: otAmt,
+            mid_shift_line_amount: midShiftAmt,
             group_key: wl._group_key ?? '',
             client_id: wl.client_id ?? null,
             client_name: wl.client?.name ?? wl.client_name ?? null,
@@ -414,7 +424,7 @@ export class PayrollService {
           matched_mid_shift_rate: wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate ?? null,
           price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
           price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
-          line_amount: wl._line_amount ?? 0,
+          line_amount: (wl._line_amount ?? 0) + (wl._ot_line_amount ?? 0) + (wl._mid_shift_line_amount ?? 0),
           ot_line_amount: wl._ot_line_amount ?? 0,
           mid_shift_line_amount: wl._mid_shift_line_amount ?? 0,
           group_key: wl._group_key ?? '',
@@ -1303,11 +1313,22 @@ export class PayrollService {
           day_night: pwl.day_night,
           start_location: pwl.start_location,
           end_location: pwl.end_location,
+          machine_type: pwl.machine_type,
+          tonnage: pwl.tonnage,
+          equipment_number: pwl.equipment_number,
           client_name: pwl.client_name,
+          client_short_name: pwl.company_name || null,
           client_contract_no: pwl.client_contract_no,
           quantity: Number(pwl.quantity) || 1,
+          ot_quantity: Number(pwl.ot_quantity) || 0,
+          is_mid_shift: pwl.is_mid_shift || false,
           matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
+          matched_ot_rate: pwl.matched_ot_rate ? Number(pwl.matched_ot_rate) : null,
+          matched_mid_shift_rate: pwl.matched_mid_shift_rate ? Number(pwl.matched_mid_shift_rate) : null,
           line_amount: Number(pwl.line_amount) || 0,
+          base_line_amount: Number(pwl.line_amount) - (Number(pwl.ot_line_amount) || 0) - (Number(pwl.mid_shift_line_amount) || 0),
+          ot_line_amount: Number(pwl.ot_line_amount) || 0,
+          mid_shift_line_amount: Number(pwl.mid_shift_line_amount) || 0,
           price_match_status: pwl.price_match_status,
         })),
         work_income: workIncome,
@@ -1355,7 +1376,12 @@ export class PayrollService {
       const dayWls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
 
-      const workIncome = dayWls.reduce((sum: number, wl: any) => sum + (Number(wl._line_amount) || 0), 0);
+      const workIncome = dayWls.reduce((sum: number, wl: any) => {
+        const base = Number(wl._line_amount) || 0;
+        const ot = Number(wl._ot_line_amount) || 0;
+        const mid = Number(wl._mid_shift_line_amount) || 0;
+        return sum + base + ot + mid;
+      }, 0);
       const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
       const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
       const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
@@ -1370,11 +1396,22 @@ export class PayrollService {
           day_night: wl.day_night,
           start_location: wl.start_location,
           end_location: wl.end_location,
-          client_name: wl.client?.name || '',
+          machine_type: wl.machine_type,
+          tonnage: wl.tonnage,
+          equipment_number: wl.equipment_number,
+          client_name: wl.client?.name || wl.client_name || '',
+          client_short_name: wl.client?.short_name || null,
           client_contract_no: wl.quotation?.quotation_no || wl.client_contract_no || '',
           quantity: Number(wl.quantity) || 1,
+          ot_quantity: Number(wl.ot_quantity) || 0,
+          is_mid_shift: wl.is_mid_shift || false,
           matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
-          line_amount: Number(wl._line_amount) || 0,
+          matched_ot_rate: wl._matched_ot_rate ? Number(wl._matched_ot_rate) : null,
+          matched_mid_shift_rate: wl._matched_mid_shift_rate ? Number(wl._matched_mid_shift_rate) : null,
+          line_amount: (Number(wl._line_amount) || 0) + (Number(wl._ot_line_amount) || 0) + (Number(wl._mid_shift_line_amount) || 0),
+          base_line_amount: Number(wl._line_amount) || 0,
+          ot_line_amount: Number(wl._ot_line_amount) || 0,
+          mid_shift_line_amount: Number(wl._mid_shift_line_amount) || 0,
           price_match_status: wl._price_match_status || 'unmatched',
         })),
         work_income: workIncome,
