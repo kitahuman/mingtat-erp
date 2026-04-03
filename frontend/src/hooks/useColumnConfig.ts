@@ -1,15 +1,18 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ColumnConfig } from '@/components/ColumnCustomizer';
-
 interface Column {
   key: string;
   label: string;
   [key: string]: any;
 }
 
+// 版本號：當欄位定義有重大變更時，遞增此版本號以強制重置所有用戶的 localStorage
+const COLUMN_CONFIG_VERSION = 2;
+
 export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
   const storageKey = `column-config-${pageKey}`;
+  const versionKey = `column-config-version-${pageKey}`;
 
   const getDefaultConfig = useCallback((): ColumnConfig[] => {
     return defaultColumns.map((col, index) => ({
@@ -23,18 +26,27 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(() => {
     if (typeof window === 'undefined') return getDefaultConfig();
     try {
+      // 版本號檢查：若版本不符，強制重置為預設值
+      const savedVersion = parseInt(localStorage.getItem(versionKey) || '0', 10);
+      if (savedVersion < COLUMN_CONFIG_VERSION) {
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(`${storageKey}-widths`);
+        localStorage.setItem(versionKey, String(COLUMN_CONFIG_VERSION));
+        return getDefaultConfig();
+      }
+
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed: ColumnConfig[] = JSON.parse(saved);
         // Merge with defaults: add new columns, remove deleted ones
         const savedKeys = new Set(parsed.map(c => c.key));
         const defaultKeys = new Set(defaultColumns.map(c => c.key));
-        
+
         // Keep saved configs for existing columns
         const merged = parsed.filter(c => defaultKeys.has(c.key));
-        
+
         // Add new columns that aren't in saved config
-        defaultColumns.forEach((col, index) => {
+        defaultColumns.forEach((col) => {
           if (!savedKeys.has(col.key)) {
             merged.push({
               key: col.key,
@@ -44,13 +56,13 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
             });
           }
         });
-        
+
         // Update labels from defaults
         merged.forEach(c => {
           const def = defaultColumns.find(d => d.key === c.key);
           if (def) c.label = def.label;
         });
-        
+
         return merged;
       }
     } catch {}
@@ -61,8 +73,9 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(columnConfigs));
+      localStorage.setItem(versionKey, String(COLUMN_CONFIG_VERSION));
     } catch {}
-  }, [columnConfigs, storageKey]);
+  }, [columnConfigs, storageKey, versionKey]);
 
   // Column widths
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
@@ -98,7 +111,7 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
     const sorted = [...columnConfigs]
       .filter(c => c.visible)
       .sort((a, b) => a.order - b.order);
-    
+
     return sorted.map(config => {
       const original = defaultColumns.find(c => c.key === config.key);
       if (!original) return null;
