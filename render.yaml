@@ -7,7 +7,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pnpm install && npx prisma generate && pnpm run build
-    startCommand: npx prisma migrate deploy && node dist/src/main
+    startCommand: npx prisma migrate resolve --applied 20260403120000_unify_rate_card_rate_fields 2>/dev/null || true && npx prisma migrate resolve --applied 20260404100000_fleet_rate_card_day_night_rate 2>/dev/null || true && npx prisma migrate deploy && node dist/src/main
     envVars:
       - key: NODE_ENV
         value: production

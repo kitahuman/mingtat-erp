@@ -1,8 +1,8 @@
 -- Phase 3: Payment Application (IPA / 計糧)
 
 -- Add retention fields to contracts
-ALTER TABLE "contracts" ADD COLUMN "retention_rate" DECIMAL(5,4) NOT NULL DEFAULT 0.10;
-ALTER TABLE "contracts" ADD COLUMN "retention_cap_rate" DECIMAL(5,4) NOT NULL DEFAULT 0.05;
+ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "retention_rate" DECIMAL(5,4) NOT NULL DEFAULT 0.10;
+ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "retention_cap_rate" DECIMAL(5,4) NOT NULL DEFAULT 0.05;
 
 -- Payment Applications
 CREATE TABLE "payment_applications" (

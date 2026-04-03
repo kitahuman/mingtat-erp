@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX "contracts_contract_no_key" ON "contracts"("contract_no");
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "partners"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AlterTable: Add contract_id to projects
-ALTER TABLE "projects" ADD COLUMN "contract_id" INTEGER;
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "contract_id" INTEGER;
 
 -- AddForeignKey (Project -> Contract)
 ALTER TABLE "projects" ADD CONSTRAINT "projects_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
