@@ -1,21 +1,14 @@
 -- ensure-columns.sql
--- Complete database setup: creates tables if missing, adds columns if missing.
--- Safe to run multiple times (idempotent).
--- Generated from Prisma schema.
+-- Complete database setup script. Safe to run multiple times (idempotent).
+-- Execution order:
+--   Step 1: CREATE TABLE IF NOT EXISTS (tables that may not exist)
+--   Step 2: ADD COLUMN IF NOT EXISTS (columns added after initial creation)
+--   Step 3: RENAME COLUMN (old column names, with exception handling)
+--   Step 4: UPDATE data migrations (with exception handling)
+--   Step 5: Foreign key constraints (safe, skips if already exists)
 
 -- ============================================================
--- STEP 0: Handle column renames (vehicle_type → machine_type, vehicle_tonnage → tonnage)
--- ============================================================
-DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
-UPDATE "field_options" SET "category" = 'machine_type' WHERE "category" = 'vehicle_type';
-
--- ============================================================
--- STEP 1: CREATE TABLE IF NOT EXISTS (for tables that may not exist)
+-- STEP 1: CREATE TABLE IF NOT EXISTS
 -- ============================================================
 
 -- Create table: users
@@ -1261,7 +1254,7 @@ CREATE TABLE IF NOT EXISTS "bank_transactions" (
 );
 
 -- ============================================================
--- STEP 2: ADD COLUMN IF NOT EXISTS (for columns added after initial creation)
+-- STEP 2: ADD COLUMN IF NOT EXISTS
 -- ============================================================
 
 -- Add missing columns: users
@@ -2212,7 +2205,27 @@ ALTER TABLE "bank_transactions" ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(
 ALTER TABLE "bank_transactions" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- ============================================================
--- STEP 3: Foreign keys (safe - skips if already exists)
+-- STEP 3: RENAME COLUMN (safe - exception if column already renamed)
+-- ============================================================
+
+DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+
+-- ============================================================
+-- STEP 4: Data migrations (safe - exception if table not found)
+-- ============================================================
+
+DO $$ BEGIN
+  UPDATE "field_options" SET "category" = 'machine_type' WHERE "category" = 'vehicle_type';
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+-- ============================================================
+-- STEP 5: Foreign key constraints
 -- ============================================================
 
 DO $$ BEGIN
