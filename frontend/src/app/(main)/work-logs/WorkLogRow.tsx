@@ -4,11 +4,10 @@ import SearchableSelect from './SearchableSelect';
 import Combobox from './Combobox';
 import LocationAutocomplete from './LocationAutocomplete';
 import {
-  STATUS_OPTIONS, SERVICE_TYPE_OPTIONS, TONNAGE_OPTIONS,
-  MACHINE_TYPE_OPTIONS, DAY_NIGHT_OPTIONS, UNIT_OPTIONS,
+  STATUS_OPTIONS, DAY_NIGHT_OPTIONS,
   STATUS_COLORS, getStatusLabel, getEquipmentSource,
 } from './constants';
-import { workLogsApi } from '@/lib/api';
+import { workLogsApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate as globalFmtDate } from '@/lib/dateUtils';
 
 // Format date as DD/MM/YYYY
@@ -291,7 +290,7 @@ export default function WorkLogRow({
         <Combobox
           value={form.service_type}
           onChange={v => set('service_type', v ? String(v) : null)}
-          options={fieldOptions['service_type']?.length ? fieldOptions['service_type'] : SERVICE_TYPE_OPTIONS.map(s => ({ value: s, label: s }))}
+          options={fieldOptions['service_type'] || []}
           placeholder="服務類型"
         />
       </td>
@@ -345,7 +344,7 @@ export default function WorkLogRow({
         <Combobox
           value={form.machine_type}
           onChange={v => set('machine_type', v ? String(v) : null)}
-          options={fieldOptions['machine_type']?.length ? fieldOptions['machine_type'] : MACHINE_TYPE_OPTIONS.map(m => ({ value: m, label: m }))}
+          options={fieldOptions['machine_type'] || []}
           placeholder="機種"
         />
       </td>
@@ -363,7 +362,7 @@ export default function WorkLogRow({
         <Combobox
           value={form.tonnage}
           onChange={v => set('tonnage', v ? String(v) : null)}
-          options={fieldOptions['tonnage']?.length ? fieldOptions['tonnage'] : TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+          options={fieldOptions['tonnage'] || []}
           placeholder="噸數"
         />
       </td>
@@ -372,13 +371,21 @@ export default function WorkLogRow({
         <Combobox
           value={form.day_night}
           onChange={v => set('day_night', v ? String(v) : null)}
-          options={fieldOptions['day_night']?.length ? fieldOptions['day_night'] : DAY_NIGHT_OPTIONS.map(d => ({ value: d, label: d }))}
+          options={fieldOptions['day_night'] || []}
           placeholder="班別"
         />
       </td>
       {/* 起點 */}
       <td className={`${cellCls} w-32`}>
-        <LocationAutocomplete value={form.start_location || ''} onChange={v => set('start_location', v)} type="start" placeholder="起點" />
+        <Combobox
+          value={form.start_location}
+          onChange={v => {
+            set('start_location', v);
+            if (v) fieldOptionsApi.create({ category: 'location', label: v }).catch(() => {});
+          }}
+          options={fieldOptions['location'] || []}
+          placeholder="起點"
+        />
       </td>
       {/* 起點時間 */}
       <td className={`${cellCls} w-24`}>
@@ -386,7 +393,15 @@ export default function WorkLogRow({
       </td>
       {/* 終點 */}
       <td className={`${cellCls} w-32`}>
-        <LocationAutocomplete value={form.end_location || ''} onChange={v => set('end_location', v)} type="end" placeholder="終點" />
+        <Combobox
+          value={form.end_location}
+          onChange={v => {
+            set('end_location', v);
+            if (v) fieldOptionsApi.create({ category: 'location', label: v }).catch(() => {});
+          }}
+          options={fieldOptions['location'] || []}
+          placeholder="終點"
+        />
       </td>
       {/* 終點時間 */}
       <td className={`${cellCls} w-24`}>
@@ -398,7 +413,7 @@ export default function WorkLogRow({
       </td>
       {/* 工資單位 */}
       <td className={`${cellCls} w-24`}>
-        <Combobox value={form.unit} onChange={v => set('unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="單位" />
+        <Combobox value={form.unit} onChange={v => set('unit', v ? String(v) : null)} options={fieldOptions['wage_unit'] || []} placeholder="單位" />
       </td>
       {/* OT 數量 */}
       <td className={`${cellCls} w-24`}>
@@ -406,7 +421,7 @@ export default function WorkLogRow({
       </td>
       {/* OT 單位 */}
       <td className={`${cellCls} w-24`}>
-        <Combobox value={form.ot_unit} onChange={v => set('ot_unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="OT單位" />
+        <Combobox value={form.ot_unit} onChange={v => set('ot_unit', v ? String(v) : null)} options={fieldOptions['wage_unit'] || []} placeholder="OT單位" />
       </td>
       {/* 中直 */}
       <td className={`${cellCls} w-16 text-center`}>

@@ -75,6 +75,15 @@ export class FieldOptionsService implements OnModuleInit {
   }
 
   async create(dto: { category: string; label: string; sort_order?: number }) {
+    // Check if it already exists in the same category to prevent duplicates
+    const existing = await this.prisma.fieldOption.findFirst({
+      where: {
+        category: dto.category,
+        label: dto.label,
+      },
+    });
+    if (existing) return existing;
+
     if (!dto.sort_order) {
       const max = await this.prisma.fieldOption.aggregate({
         where: { category: dto.category },

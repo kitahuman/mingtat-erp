@@ -4,11 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
-const TONNAGE_OPTIONS = ['3噸','5.5噸','8噸','10噸','11噸','13噸','14噸','20噸','24噸','30噸','33噸','35噸','38噸','44噸','49噸'];
-const VEHICLE_TYPES = ['平斗','勾斗','夾斗','拖頭','車斗','貨車','輕型貨車','私家車','燈車'];
-const MACHINERY_TYPES = ['挖掘機','火轆'];
-const UNIT_OPTIONS = ['小時','車','天','周','月','噸','M','M2','M3','JOB','工','次','轉','trip','晚'];
-const CATEGORY_OPTIONS = ['工程','運輸','代工','機械','管工工作','維修保養','雜務','上堂','緊急情況'];
+// Field options categories
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
 interface FormData {
   work_type: 'engineering' | 'transport';
@@ -77,6 +74,86 @@ const defaultForm: FormData = {
   photo_urls: [],
   signature_url: '',
 };
+
+// ── Generic Combobox ──────────────────────────────────────────────────────────
+function Combobox({
+  options,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options.slice(0, 30);
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    setOpen(true);
+    onChange(val);
+  };
+
+  const handleSelect = (opt: { value: string; label: string }) => {
+    setQuery(opt.label);
+    setOpen(false);
+    onChange(opt.value);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        className={className}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-400">無結果</div>
+          ) : (
+            filtered.map((o, i) => (
+              <button
+                key={i}
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                onMouseDown={() => handleSelect(o)}
+              >
+                {o.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Client Combobox ──────────────────────────────────────────────────────────
 function ClientCombobox({
@@ -304,13 +381,31 @@ export default function WorkReportPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
+  const [optionsMap, setOptionsMap] = useState<Record<string, {value: string, label: string}[]>>({});
 
   useEffect(() => {
     portalSharedApi
       .getPartners({ type: 'client', limit: 200 })
       .then((res) => setClients(res.data?.data || []))
       .catch(() => {});
+
+    // Fetch field options
+    Promise.all(FIELD_OPTION_CATEGORIES.map(cat => 
+      portalSharedApi.getFieldOptions(cat).then(res => ({ cat, data: res.data }))
+    )).then(results => {
+      const newMap: any = {};
+      results.forEach(r => {
+        newMap[r.cat] = r.data.map((o: any) => ({ value: o.value, label: o.label }));
+      });
+      setOptionsMap(newMap);
+    }).catch(() => {});
   }, []);
+
+  const tonnageOptions = optionsMap['tonnage'] || [];
+  const machineTypeOptions = optionsMap['machine_type'] || [];
+  const serviceTypeOptions = optionsMap['service_type'] || [];
+  const unitOptions = optionsMap['wage_unit'] || [];
+  const locationOptions = optionsMap['location'] || [];
 
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -483,11 +578,14 @@ export default function WorkReportPage() {
           </div>
 
           <div>
-            <label className={labelClass}>{t('category')}</label>
-            <select value={form.service_type} onChange={(e) => set('service_type', e.target.value)} className={selectClass}>
-              <option value="">{t('selectCategory')}</option>
-              {CATEGORY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <label className={labelClass}>{t('serviceType')}</label>
+            <Combobox
+              value={form.service_type}
+              onChange={(val) => set('service_type', val)}
+              options={serviceTypeOptions}
+              placeholder={t('selectServiceType')}
+              className={inputClass}
+            />
           </div>
 
           {/* Client Combobox */}
@@ -515,10 +613,13 @@ export default function WorkReportPage() {
 
           <div>
             <label className={labelClass}>{t('tonnage')}</label>
-            <select value={form.tonnage} onChange={(e) => set('tonnage', e.target.value)} className={selectClass}>
-              <option value="">{t('selectTonnage')}</option>
-              {TONNAGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <Combobox
+              value={form.tonnage}
+              onChange={(val) => set('tonnage', val)}
+              options={tonnageOptions}
+              placeholder={t('selectTonnage')}
+              className={inputClass}
+            />
           </div>
         </div>
 
@@ -529,10 +630,13 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('machinery')}</label>
-              <select value={form.machine_type} onChange={(e) => set('machine_type', e.target.value)} className={selectClass}>
-                <option value="">{t('selectMachinery')}</option>
-                {MACHINERY_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <Combobox
+                value={form.machine_type}
+                onChange={(val) => set('machine_type', val)}
+                options={machineTypeOptions}
+                placeholder={t('selectMachinery')}
+                className={inputClass}
+              />
             </div>
 
             <div>
@@ -548,12 +652,12 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('location')}</label>
-              <input
-                type="text"
+              <Combobox
                 value={form.start_location}
-                onChange={(e) => set('start_location', e.target.value)}
-                className={inputClass}
+                onChange={(val) => set('start_location', val)}
+                options={locationOptions}
                 placeholder="工作地點"
+                className={inputClass}
               />
             </div>
 
@@ -594,10 +698,13 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('vehicleType')}</label>
-              <select value={form.machine_type} onChange={(e) => set('machine_type', e.target.value)} className={selectClass}>
-                <option value="">{t('selectVehicleType')}</option>
-                {VEHICLE_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <Combobox
+                value={form.machine_type}
+                onChange={(val) => set('machine_type', val)}
+                options={machineTypeOptions}
+                placeholder={t('selectVehicleType')}
+                className={inputClass}
+              />
             </div>
 
             <div>
@@ -661,33 +768,33 @@ export default function WorkReportPage() {
                 <label className={labelClass}>{t('unit')}</label>
                 <select value={form.unit} onChange={(e) => set('unit', e.target.value)} className={selectClass}>
                   <option value="">單位</option>
-                  {UNIT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  {unitOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>
 
             {/* Work Order No & Receipt No — transport only */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelClass}>{t('workOrderNo')}</label>
-                <input
-                  type="text"
-                  value={form.work_order_no}
-                  onChange={(e) => set('work_order_no', e.target.value)}
-                  className={inputClass}
-                  placeholder={t('workOrderNoPlaceholder')}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>{t('receiptNo')}</label>
-                <input
-                  type="text"
-                  value={form.receipt_no}
-                  onChange={(e) => set('receipt_no', e.target.value)}
-                  className={inputClass}
-                  placeholder={t('receiptNoPlaceholder')}
-                />
-              </div>
+            <div>
+              <label className={labelClass}>{t('origin')}</label>
+              <Combobox
+                value={form.origin}
+                onChange={(val) => set('origin', val)}
+                options={locationOptions}
+                placeholder="起點地址"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>{t('destination')}</label>
+              <Combobox
+                value={form.destination}
+                onChange={(val) => set('destination', val)}
+                options={locationOptions}
+                placeholder="終點地址"
+                className={inputClass}
+              />
+            </div>
             </div>
           </div>
         )}

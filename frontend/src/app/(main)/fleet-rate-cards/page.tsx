@@ -10,9 +10,7 @@ import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
-const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
 export default function FleetRateCardsPage() {
   const router = useRouter();
@@ -31,16 +29,19 @@ export default function FleetRateCardsPage() {
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
+  const serviceTypeOptions = optionsMap['service_type'] || [];
+  const unitOptions = optionsMap['wage_unit'] || [];
+  const locationOptions = optionsMap['location'] || [];
 
   const [dayNightFilter, setDayNightFilter] = useState('');
 
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', contract_no: '', service_type: '',
-    name: '', day_night: '',
+    company_id: '', client_id: '', quotation_id: '', service_type: '',
+    name: '', day_night: '日',
     tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
-    unit: '車', remarks: '', status: 'active',
+    unit: '天', remarks: '', status: 'active',
   });
 
   const load = () => {
@@ -62,18 +63,16 @@ export default function FleetRateCardsPage() {
       const mCodes = machinery.map((m: any) => m.machine_code).filter(Boolean);
       setAllEquipment([...vPlates, ...mCodes].map(s => ({ value: s, label: s })));
     }).catch(() => {});
-  }, []);
-
-  const resetForm = () => setForm({
-    company_id: '', client_id: '', contract_no: '', service_type: '',
-    name: '', day_night: '',
-    tonnage: '', machine_type: '',
-    origin: '', destination: '',
-    rate: 0, mid_shift_rate: 0, ot_rate: 0,
-    unit: '車', remarks: '', status: 'active',
-  });
-
-  const handleCreate = async (e: React.FormEvent) => {
+  }, []  const resetForm = () => {
+    setForm({
+      company_id: '', client_id: '', quotation_id: '', service_type: '',
+      name: '', day_night: '日',
+      tonnage: '', machine_type: '',
+      origin: '', destination: '',
+      rate: 0, mid_shift_rate: 0, ot_rate: 0,
+      unit: '天', remarks: '', status: 'active',
+    });
+  }; = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await fleetRateCardsApi.create({
@@ -139,15 +138,15 @@ export default function FleetRateCardsPage() {
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'company', label: '公司', sortable: false, editable: false, render: (_: any, row: any) => row.company?.name || '-' },
     { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })), render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions, render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions, render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }], render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...vehicleTypeOptions], render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...locationOptions], render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...locationOptions], render: (v: any) => v || '-' },
     { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => Number(v) > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
+    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: unitOptions },
     { key: 'ot_rate', label: 'OT費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => Number(v) > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'mid_shift_rate', label: '中直費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => Number(v) > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
   ];
@@ -242,15 +241,22 @@ export default function FleetRateCardsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
-                <input value={form.contract_no} onChange={e => setForm({...form, contract_no: e.target.value})} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">報價單/合約</label>
+                <SearchableSelect
+                  value={form.quotation_id}
+                  onChange={(v) => setForm({...form, quotation_id: v})}
+                  options={[]} // Should fetch quotations based on client_id
+                  placeholder="選擇報價單"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">服務類型</label>
-                <select value={form.service_type} onChange={e => setForm({...form, service_type: e.target.value})} className="input-field">
-                  <option value="">請選擇</option>
-                  {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <Combobox
+                  value={form.service_type}
+                  onChange={(val) => setForm({...form, service_type: val || ''})}
+                  options={serviceTypeOptions}
+                  placeholder="選擇或輸入服務類型"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">名稱</label>
@@ -278,18 +284,28 @@ export default function FleetRateCardsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
                 <Combobox
                   value={form.machine_type}
-                  onChange={(v) => setForm({...form, machine_type: v})}
+                  onChange={(val) => setForm({...form, machine_type: val || ''})}
                   options={vehicleTypeOptions}
                   placeholder="選擇或輸入機種"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>
-                <input value={form.origin} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" />
+                <Combobox
+                  value={form.origin}
+                  onChange={(val) => setForm({...form, origin: val || ''})}
+                  options={locationOptions}
+                  placeholder="選擇或輸入起點"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">終點</label>
-                <input value={form.destination} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" />
+                <Combobox
+                  value={form.destination}
+                  onChange={(val) => setForm({...form, destination: val || ''})}
+                  options={locationOptions}
+                  placeholder="選擇或輸入終點"
+                />
               </div>
             </div>
           </div>
@@ -302,9 +318,9 @@ export default function FleetRateCardsPage() {
                 <label className="block text-xs text-gray-500 mb-1">費率</label>
                 <div className="flex gap-1">
                   <input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" placeholder="0" />
-                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-20">
-                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                       <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
+                  {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>ect>
                 </div>
               </div>
               <div>

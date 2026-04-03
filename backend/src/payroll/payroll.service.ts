@@ -1446,12 +1446,13 @@ export class PayrollService {
 
       if (wl.client_id) {
         const clientCards = allFleetRateCards.filter(rc => rc.client_id === wl.client_id);
-        const contractNo = wl.quotation?.quotation_no || null;
 
         // 使用共用 PricingService 進行嚴格匹配
         const { card, unmatchedReason } = this.pricingService.matchFleetRateCardInMemory(
           clientCards,
-          contractNo,
+          wl.company_profile_id,
+          wl.quotation_id,
+          wl.service_type,
           wl.day_night,
           wl.tonnage,
           wl.machine_type,
@@ -1517,12 +1518,14 @@ export class PayrollService {
     // 使用共用 PricingService 進行嚴格匹配
     const { card } = await this.pricingService.matchFleetRateCardFromDb(
       wl.client_id,
-      contractNo,
-      wl.day_night,
-      wl.tonnage,
-      wl.machine_type,
-      wl.start_location,
-      wl.end_location,
+      wl.company_id || null,
+      wl.quotation_id || null,
+      wl.service_type || null,
+      wl.day_night || null,
+      wl.tonnage || null,
+      wl.machine_type || null,
+      wl.start_location || null,
+      wl.end_location || null,
     );
 
     if (!card) return null;
@@ -1670,7 +1673,9 @@ export class PayrollService {
 
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       pwl.client_id,
-      pwl.contract_no || null,
+      pwl.company_id || null,
+      pwl.quotation_id || null,
+      pwl.service_type || null,
       pwl.day_night || null,
       pwl.tonnage || null,
       pwl.machine_type || null,

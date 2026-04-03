@@ -305,21 +305,13 @@ export class WorkLogsService {
 
     // 根據業務邏輯：工作記錄配對費率查 FleetRateCard（租賃價目表），用於計算員工薪酬/機械成本
     // RateCard（客戶價目表）用於開發票，SubconRateCard（供應商價目表）用於付款給供應商
-    // 直接用原始噸數字串（如 "30噸"），不做格式轉換。
-    // field_options 中噸數格式統一為帶噸字，工作記錄和價目表均使用相同格式。
-    const tonnage = workLog.tonnage || null;
-    // 合約編號：從已載入的 quotation 關聯取得；若未載入（如 create 後直接傳入原始記錄）則從 DB 查詢
-    let contractNo: string | null = workLog.quotation?.quotation_no || null;
-    if (!contractNo && workLog.quotation_id) {
-      const q = await this.prisma.quotation.findUnique({ where: { id: workLog.quotation_id }, select: { quotation_no: true } });
-      contractNo = q?.quotation_no || null;
-    }
-
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       workLog.client_id,
-      contractNo,
+      workLog.company_profile_id,
+      workLog.quotation_id,
+      workLog.service_type,
       workLog.day_night,
-      tonnage,
+      workLog.tonnage,
       workLog.machine_type,
       workLog.start_location,
       workLog.end_location,
