@@ -26,7 +26,7 @@ export default function FleetRateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
-  const [allEquipment, setAllEquipment] = useState<string[]>([]);
+  const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
 
   const [dayNightFilter, setDayNightFilter] = useState('');
 
@@ -56,7 +56,7 @@ export default function FleetRateCardsPage() {
     ]).then(([vehicles, machinery]) => {
       const vPlates = vehicles.map((v: any) => v.plate_number).filter(Boolean);
       const mCodes = machinery.map((m: any) => m.machine_code).filter(Boolean);
-      setAllEquipment([...vPlates, ...mCodes]);
+      setAllEquipment([...vPlates, ...mCodes].map(s => ({ value: s, label: s })));
     }).catch(() => {});
   }, []);
 
@@ -268,7 +268,7 @@ export default function FleetRateCardsPage() {
                 <Combobox
                   value={form.vehicle_tonnage}
                   onChange={(v) => setForm({...form, vehicle_tonnage: v})}
-                  options={TONNAGE_OPTIONS}
+                  options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
                   placeholder="選擇或輸入噸數"
                 />
               </div>
@@ -277,7 +277,7 @@ export default function FleetRateCardsPage() {
                 <Combobox
                   value={form.vehicle_type}
                   onChange={(v) => setForm({...form, vehicle_type: v})}
-                  options={['泥頭車', '吊臂車', '拖頭', '平板車', '夾斗車', '油壓車', '吊雞車', '炮機', '挖掘機']}
+                  options={['泥頭車', '吊臂車', '拖頭', '平板車', '夾斗車', '油壓車', '吊雞車', '炮機', '挖掘機'].map(t => ({ value: t, label: t }))}
                   placeholder="選擇或輸入機種"
                 />
               </div>
