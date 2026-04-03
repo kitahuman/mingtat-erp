@@ -77,7 +77,40 @@ export class WorkLogsController {
     return this.service.bulkUnconfirm(ids);
   }
 
-  // ── 複製 ─────────────────────────────────────────────────
+  // ── 批量儲存 (Airtable 風格) ───────────────────────────────────
+
+  @Post('bulk/save')
+  bulkSave(@Body('changes') changes: Array<{ id: number; data: any }>) {
+    return this.service.bulkSave(changes);
+  }
+
+  // ── 編輯鎖定 ─────────────────────────────────────
+
+  @Post('edit-lock/acquire')
+  acquireEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
+    return this.service.acquireEditLock(
+      body.lockKey,
+      req.user.id,
+      req.user.displayName || req.user.username,
+    );
+  }
+
+  @Post('edit-lock/heartbeat')
+  heartbeatEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
+    return this.service.heartbeatEditLock(body.lockKey, req.user.id);
+  }
+
+  @Post('edit-lock/release')
+  releaseEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
+    return this.service.releaseEditLock(body.lockKey, req.user.id);
+  }
+
+  @Get('edit-lock/status')
+  getEditLockStatus(@Query('lockKey') lockKey: string, @Request() req: any) {
+    return this.service.getEditLockStatus(lockKey, req.user.id);
+  }
+
+  // ── 複製 ─────────────────────────────────────────
 
   @Post(':id/duplicate')
   duplicate(@Param('id') id: string, @Request() req: any) {

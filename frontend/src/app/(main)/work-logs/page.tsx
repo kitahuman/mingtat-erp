@@ -1,19 +1,20 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   workLogsApi, companiesApi, partnersApi,
   contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
   vehiclesApi, machineryApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import WorkLogRow from './WorkLogRow';
+import EditableCell from './EditableCell';
 import SearchableSelect from './SearchableSelect';
-import { STATUS_OPTIONS } from './constants';
+import { STATUS_OPTIONS, STATUS_COLORS, getStatusLabel, getEquipmentSource } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
+import { fmtDate } from '@/lib/dateUtils';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -29,6 +30,7 @@ const COLUMNS = [
   { key: 'client',           label: '客戶公司',  width: 'w-36' },
   { key: 'quotation',        label: '報價單',    width: 'w-32' },
   { key: 'contract',         label: '合約',      width: 'w-32' },
+  { key: 'client_contract_no', label: '客戶合約', width: 'w-32' },
   { key: 'employee',         label: '員工',      width: 'w-24' },
   { key: 'machine_type',     label: '機種',      width: 'w-24' },
   { key: 'equipment_number', label: '機號',      width: 'w-28' },
@@ -83,15 +85,25 @@ export default function WorkLogsPage() {
   const [filterDateFrom,  setFilterDateFrom]  = useState('');
   const [filterDateTo,    setFilterDateTo]    = useState('');
 
-  // ── Editing ─────────────────────────────────────────────────
-  const [editingId, setEditingId] = useState<number | 'new' | null>(null);
-  const [newRow, setNewRow]       = useState<any | null>(null);
+  // ── Dirty tracking (Airtable-style) ─────────────────────────
+  // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields
+  const [dirtyRows, setDirtyRows] = useState<Map<number, Record<string, any>>>(new Map());
+  const [saving, setSaving] = useState(false);
 
-  // ── Selection ───────────────────────────────────────────
+  // ── New row ─────────────────────────────────────────────────
+  const [newRow, setNewRow] = useState<any | null>(null);
+  const [savingNew, setSavingNew] = useState(false);
+
+  // ── Selection ───────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
 
+  // ── Edit lock ───────────────────────────────────────────────
+  const [lockInfo, setLockInfo] = useState<{ locked: boolean; lockedBy?: string; isMe?: boolean } | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const totalPages = Math.ceil(total / limit);
+  const hasDirty = dirtyRows.size > 0;
 
   // Column customization
   const {
@@ -133,13 +145,11 @@ export default function WorkLogsPage() {
       }));
       setEmployees([...employeeList, ...partnerList]);
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
-      // Map field options to Option[] format
       const grouped: Record<string, Option[]> = {};
       for (const [cat, opts] of Object.entries(fo.data || {})) {
         grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
       }
       setFieldOptions(grouped);
-      // Combine vehicles and machinery into unified equipment list
       const equipList = [
         ...(veh.data || []),
         ...(mach.data || []),
@@ -186,40 +196,246 @@ export default function WorkLogsPage() {
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-  // ── Actions ─────────────────────────────────────────────────
+  // ── Edit lock management ────────────────────────────────────
+  const lockKey = `work-logs-page-${page}`;
+
+  useEffect(() => {
+    // Check lock status on page load
+    workLogsApi.editLockStatus(lockKey).then(res => {
+      setLockInfo(res.data);
+    }).catch(() => {});
+  }, [lockKey]);
+
+  const acquireLock = useCallback(async () => {
+    try {
+      const res = await workLogsApi.editLockAcquire(lockKey);
+      if (res.data.acquired) {
+        setLockInfo({ locked: true, isMe: true });
+        // Start heartbeat
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(() => {
+          workLogsApi.editLockHeartbeat(lockKey).catch(() => {});
+        }, 60_000); // every 60s
+        return true;
+      } else {
+        setLockInfo({ locked: true, lockedBy: res.data.lockedBy, isMe: false });
+        return false;
+      }
+    } catch {
+      return true; // If lock API fails, allow editing anyway
+    }
+  }, [lockKey]);
+
+  const releaseLock = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    workLogsApi.editLockRelease(lockKey).catch(() => {});
+    setLockInfo(null);
+  }, [lockKey]);
+
+  // Release lock on unmount
+  useEffect(() => {
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      workLogsApi.editLockRelease(lockKey).catch(() => {});
+    };
+  }, [lockKey]);
+
+  // ── Dirty tracking ─────────────────────────────────────────
+  const setCellValue = useCallback(async (rowId: number, field: string, value: any) => {
+    // Acquire lock on first edit
+    if (!hasDirty && !lockInfo?.isMe) {
+      const ok = await acquireLock();
+      if (!ok) {
+        alert(`此頁正在被 ${lockInfo?.lockedBy || '其他用戶'} 編輯中，請稍後再試。`);
+        return;
+      }
+    }
+
+    setDirtyRows(prev => {
+      const next = new Map(prev);
+      const existing = next.get(rowId) || {};
+      const originalRow = rows.find(r => r.id === rowId);
+
+      // Check if value is same as original — if so, remove from dirty
+      let originalValue = originalRow?.[field];
+      // Normalize for comparison
+      if (field === 'scheduled_date' && originalValue) {
+        originalValue = typeof originalValue === 'string' ? originalValue.split('T')[0] : originalValue;
+      }
+      if (field === 'employee_id' && originalValue) {
+        originalValue = `emp_${originalValue}`;
+      }
+
+      const isSameAsOriginal = String(value ?? '') === String(originalValue ?? '');
+
+      if (isSameAsOriginal) {
+        const { [field]: _, ...rest } = existing;
+        if (Object.keys(rest).length === 0) {
+          next.delete(rowId);
+        } else {
+          next.set(rowId, rest);
+        }
+      } else {
+        next.set(rowId, { ...existing, [field]: value });
+      }
+      return next;
+    });
+  }, [rows, hasDirty, lockInfo, acquireLock]);
+
+  // Get the effective value for a cell (dirty value or original)
+  const getCellValue = (row: any, field: string): any => {
+    const dirty = dirtyRows.get(row.id);
+    if (dirty && field in dirty) return dirty[field];
+    if (field === 'employee_id' && row.employee_id) return `emp_${row.employee_id}`;
+    if (field === 'scheduled_date' && row.scheduled_date) {
+      return typeof row.scheduled_date === 'string' ? row.scheduled_date.split('T')[0] : row.scheduled_date;
+    }
+    return row[field];
+  };
+
+  const isCellDirty = (rowId: number, field: string): boolean => {
+    const dirty = dirtyRows.get(rowId);
+    return !!dirty && field in dirty;
+  };
+
+  // ── Save all dirty rows ─────────────────────────────────────
+  const handleSaveAll = async () => {
+    if (dirtyRows.size === 0) return;
+    setSaving(true);
+    try {
+      const changes: Array<{ id: number; data: any }> = [];
+      for (const [id, fields] of Array.from(dirtyRows.entries())) {
+        const payload = { ...fields };
+        // Strip employee_id prefix
+        if ('employee_id' in payload) {
+          if (typeof payload.employee_id === 'string') {
+            if (payload.employee_id.startsWith('emp_')) {
+              payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+            } else if (payload.employee_id.startsWith('part_')) {
+              payload.employee_id = null;
+            }
+          }
+        }
+        changes.push({ id, data: payload });
+      }
+      const res = await workLogsApi.bulkSave(changes);
+      const result = res.data;
+      if (result.failed > 0) {
+        const failedIds = result.results.filter((r: any) => !r.success).map((r: any) => r.id);
+        alert(`已儲存 ${result.saved} 筆，${result.failed} 筆失敗（ID: ${failedIds.join(', ')}）`);
+        // Remove only successfully saved rows from dirty
+        setDirtyRows(prev => {
+          const next = new Map(prev);
+          for (const r of result.results) {
+            if (r.success) next.delete(r.id);
+          }
+          return next;
+        });
+      } else {
+        setDirtyRows(new Map());
+      }
+      await fetchLogs();
+      releaseLock();
+    } catch (e: any) {
+      alert('儲存失敗：' + (e.response?.data?.message || e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDiscardChanges = () => {
+    if (!confirm('確定放棄所有未儲存的修改？')) return;
+    setDirtyRows(new Map());
+    releaseLock();
+  };
+
+  // ── Page change with unsaved warning ────────────────────────
+  const changePage = (newPage: number) => {
+    if (hasDirty) {
+      if (!confirm('有未儲存的修改，切換分頁將會丟失。確定要繼續嗎？')) return;
+      setDirtyRows(new Map());
+      releaseLock();
+    }
+    setPage(newPage);
+  };
+
+  const changeLimit = (newLimit: number) => {
+    if (hasDirty) {
+      if (!confirm('有未儲存的修改，切換每頁筆數將會丟失。確定要繼續嗎？')) return;
+      setDirtyRows(new Map());
+      releaseLock();
+    }
+    setLimit(newLimit);
+    setPage(1);
+  };
+
+  // Browser beforeunload warning
+  useEffect(() => {
+    if (!hasDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasDirty]);
+
+  // ── New row ─────────────────────────────────────────────────
   const handleAddNew = () => {
     setNewRow({
       status: 'editing',
       publisher_id: user?.id,
       scheduled_date: new Date().toISOString().split('T')[0],
     });
-    setEditingId('new');
   };
 
-  const handleSave = async (data: any) => {
-    try {
-      if (editingId === 'new') {
-        await workLogsApi.create(data);
-      } else {
-        await workLogsApi.update(Number(editingId), data);
+  const setNewRowField = (field: string, value: any) => {
+    setNewRow((prev: any) => {
+      if (!prev) return prev;
+      const next = { ...prev, [field]: value };
+      if (field === 'employee_id' && typeof value === 'string' && value.startsWith('part_')) {
+        next.client_id = Number(value.replace('part_', ''));
       }
-      setEditingId(null);
+      if (field === 'client_id') {
+        next.quotation_id = null;
+        next.contract_id = null;
+      }
+      return next;
+    });
+  };
+
+  const handleSaveNew = async () => {
+    if (!newRow) return;
+    setSavingNew(true);
+    try {
+      const payload = { ...newRow };
+      if (typeof payload.employee_id === 'string') {
+        if (payload.employee_id.startsWith('emp_')) {
+          payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+        } else if (payload.employee_id.startsWith('part_')) {
+          payload.employee_id = null;
+        }
+      }
+      await workLogsApi.create(payload);
       setNewRow(null);
       await fetchLogs();
     } catch (e: any) {
-      alert('儲存失敗：' + (e.response?.data?.message || e.message));
+      alert('新增失敗：' + (e.response?.data?.message || e.message));
+    } finally {
+      setSavingNew(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditingId(null);
-    setNewRow(null);
-  };
-
+  // ── Actions ─────────────────────────────────────────────────
   const handleDelete = async (id: number) => {
     if (!confirm('確定刪除此記錄？')) return;
     try {
       await workLogsApi.remove(id);
+      // Remove from dirty if present
+      setDirtyRows(prev => { const n = new Map(prev); n.delete(id); return n; });
       await fetchLogs();
     } catch (e: any) {
       alert('刪除失敗：' + (e.response?.data?.message || e.message));
@@ -229,9 +445,6 @@ export default function WorkLogsPage() {
   const handleDuplicate = async (id: number) => {
     const res = await workLogsApi.duplicate(id);
     await fetchLogs();
-    // Auto-open the duplicated row in edit mode
-    const newId = res.data?.id;
-    if (newId) setEditingId(newId);
   };
 
   const handleBulkDelete = async () => {
@@ -276,6 +489,8 @@ export default function WorkLogsPage() {
   };
 
   const resetFilters = () => {
+    if (hasDirty && !confirm('有未儲存的修改，重設篩選將會丟失。確定要繼續嗎？')) return;
+    setDirtyRows(new Map());
     setFilterPublisher(null); setFilterStatus(null);  setFilterCompany(null);
     setFilterClient(null);    setFilterQuotation(null); setFilterContract(null); setFilterEmployee(null);
     setFilterEquipment('');   setFilterDateFrom('');   setFilterDateTo('');
@@ -285,16 +500,198 @@ export default function WorkLogsPage() {
   const hasFilters = !!(filterPublisher || filterStatus || filterCompany || filterClient ||
     filterQuotation || filterContract || filterEmployee || filterEquipment || filterDateFrom || filterDateTo);
 
-  // shared props for WorkLogRow
-  const rowProps = {
-    companies,
-    clients,
-    quotations,
-    contracts,
-    employees,
-    users,
-    fieldOptions,
-    allEquipment,
+  // ── Helper: get display value for relation fields ───────────
+  const getDisplayValue = (row: any, field: string): string => {
+    const dirty = dirtyRows.get(row.id);
+    // If dirty, resolve display from options
+    if (dirty && field in dirty) {
+      const val = dirty[field];
+      if (field === 'status') return getStatusLabel(val) || val || '—';
+      if (field === 'company_id') return companies.find(o => o.value === val)?.label || '—';
+      if (field === 'client_id') return clients.find(o => o.value === val)?.label || '—';
+      if (field === 'quotation_id') return quotations.find(o => o.value === val)?.label || '—';
+      if (field === 'contract_id') return contracts.find(o => o.value === val)?.label || '—';
+      if (field === 'employee_id') return employees.find(o => String(o.value) === String(val))?.label || '—';
+      if (field === 'scheduled_date') return val ? fmtDate(val) : '—';
+      if (field === 'is_mid_shift' || field === 'is_confirmed' || field === 'is_paid') return val ? '✓' : '—';
+      return val != null && val !== '' ? String(val) : '—';
+    }
+    // Original value display
+    if (field === 'status') return getStatusLabel(row.status) || '—';
+    if (field === 'company_id') return row.company?.name || row.company_profile?.code || '—';
+    if (field === 'client_id') return row.unverified_client_name || row.client?.name || '—';
+    if (field === 'quotation_id') return row.quotation?.quotation_no || '—';
+    if (field === 'contract_id') return row.contract?.contract_no || '—';
+    if (field === 'employee_id') return row.employee?.name_zh || '—';
+    if (field === 'scheduled_date') return row.scheduled_date ? fmtDate(row.scheduled_date) : '—';
+    if (field === 'is_mid_shift' || field === 'is_confirmed' || field === 'is_paid') return row[field] ? '✓' : '—';
+    return row[field] != null && row[field] !== '' ? String(row[field]) : '—';
+  };
+
+  // ── Filtered quotations/contracts by client ─────────────────
+  const getFilteredQuotations = (row: any): Option[] => {
+    const clientId = getCellValue(row, 'client_id');
+    if (!clientId) return quotations;
+    return quotations.filter((q: any) => {
+      const qData = q._raw;
+      return !qData || qData.client_id === clientId || qData.client_id === Number(clientId);
+    });
+  };
+
+  const getFilteredContracts = (row: any): Option[] => {
+    const clientId = getCellValue(row, 'client_id');
+    if (!clientId) return contracts;
+    return contracts.filter((c: any) => {
+      const cData = c._raw;
+      return !cData || cData.client_id === clientId || cData.client_id === Number(clientId);
+    });
+  };
+
+  // ── Render editable cell ────────────────────────────────────
+  const renderCell = (row: any, field: string) => {
+    const val = getCellValue(row, field);
+    const dirty = isCellDirty(row.id, field);
+    const display = getDisplayValue(row, field);
+    const isLocked = lockInfo?.locked && !lockInfo?.isMe;
+
+    const onChange = (v: any) => {
+      // When client changes, also clear quotation and contract
+      if (field === 'client_id') {
+        setCellValue(row.id, 'client_id', v);
+        setCellValue(row.id, 'quotation_id', null);
+        setCellValue(row.id, 'contract_id', null);
+      } else if (field === 'employee_id' && typeof v === 'string' && v.startsWith('part_')) {
+        setCellValue(row.id, 'employee_id', v);
+        setCellValue(row.id, 'client_id', Number(v.replace('part_', '')));
+      } else {
+        setCellValue(row.id, field, v);
+      }
+    };
+
+    switch (field) {
+      case 'status':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={STATUS_OPTIONS} isDirty={dirty} disabled={!!isLocked} />;
+      case 'scheduled_date':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="date" isDirty={dirty} disabled={!!isLocked} />;
+      case 'service_type':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['service_type'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'company_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={companies} isDirty={dirty} disabled={!!isLocked} />;
+      case 'client_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={clients} isDirty={dirty} disabled={!!isLocked} />;
+      case 'quotation_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={getFilteredQuotations(row)} isDirty={dirty} disabled={!!isLocked} />;
+      case 'contract_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={getFilteredContracts(row)} isDirty={dirty} disabled={!!isLocked} />;
+      case 'client_contract_no':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['client_contract_no'] || []} createCategory="client_contract_no" isDirty={dirty} disabled={!!isLocked} />;
+      case 'employee_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={employees} isDirty={dirty} disabled={!!isLocked} />;
+      case 'machine_type':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['machine_type'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'equipment_number':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={allEquipment} isDirty={dirty} disabled={!!isLocked} />;
+      case 'tonnage':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['tonnage'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'day_night':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['day_night'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'start_location':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />;
+      case 'end_location':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />;
+      case 'start_time':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="time" isDirty={dirty} disabled={!!isLocked} />;
+      case 'end_time':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="time" isDirty={dirty} disabled={!!isLocked} />;
+      case 'quantity':
+      case 'ot_quantity':
+      case 'goods_quantity':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="number" isDirty={dirty} disabled={!!isLocked} />;
+      case 'unit':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['wage_unit'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'ot_unit':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['wage_unit'] || []} isDirty={dirty} disabled={!!isLocked} />;
+      case 'is_mid_shift':
+      case 'is_confirmed':
+      case 'is_paid':
+        return <EditableCell value={val} onChange={onChange} type="checkbox" isDirty={dirty} disabled={!!isLocked} />;
+      case 'receipt_no':
+      case 'work_order_no':
+      case 'remarks':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
+      default:
+        return <EditableCell value={val} displayValue={display} onChange={() => {}} type="readonly" />;
+    }
+  };
+
+  // ── Render new row cell ─────────────────────────────────────
+  const renderNewCell = (field: string) => {
+    if (!newRow) return null;
+    const val = newRow[field] ?? null;
+    const onChange = (v: any) => setNewRowField(field, v);
+
+    switch (field) {
+      case 'status':
+        return <EditableCell value={val} onChange={onChange} type="select" options={STATUS_OPTIONS} />;
+      case 'scheduled_date':
+        return <EditableCell value={val} onChange={onChange} type="date" />;
+      case 'service_type':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['service_type'] || []} />;
+      case 'company_id':
+        return <EditableCell value={val} onChange={onChange} type="select" options={companies} />;
+      case 'client_id':
+        return <EditableCell value={val} onChange={onChange} type="select" options={clients} />;
+      case 'quotation_id':
+        return <EditableCell value={val} onChange={onChange} type="select" options={quotations} />;
+      case 'contract_id':
+        return <EditableCell value={val} onChange={onChange} type="select" options={contracts} />;
+      case 'client_contract_no':
+        return <EditableCell value={val} onChange={onChange} type="combobox_create" options={fieldOptions['client_contract_no'] || []} createCategory="client_contract_no" />;
+      case 'employee_id':
+        return <EditableCell value={val} onChange={onChange} type="select" options={employees} />;
+      case 'machine_type':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['machine_type'] || []} />;
+      case 'equipment_number':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={allEquipment} />;
+      case 'tonnage':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['tonnage'] || []} />;
+      case 'day_night':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['day_night'] || []} />;
+      case 'start_location':
+        return <EditableCell value={val} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" />;
+      case 'end_location':
+        return <EditableCell value={val} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" />;
+      case 'start_time':
+      case 'end_time':
+        return <EditableCell value={val} onChange={onChange} type="time" />;
+      case 'quantity':
+      case 'ot_quantity':
+      case 'goods_quantity':
+        return <EditableCell value={val} onChange={onChange} type="number" />;
+      case 'unit':
+      case 'ot_unit':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['wage_unit'] || []} />;
+      case 'is_mid_shift':
+      case 'is_confirmed':
+      case 'is_paid':
+        return <EditableCell value={val} onChange={onChange} type="checkbox" />;
+      case 'receipt_no':
+      case 'work_order_no':
+      case 'remarks':
+        return <EditableCell value={val} onChange={onChange} type="text" />;
+      default:
+        return <EditableCell value={val} onChange={() => {}} type="readonly" />;
+    }
+  };
+
+  // Map column keys to data field keys
+  const colKeyToField: Record<string, string> = {
+    company: 'company_id',
+    client: 'client_id',
+    quotation: 'quotation_id',
+    contract: 'contract_id',
+    employee: 'employee_id',
+    publisher: 'publisher_id',
   };
 
   return (
@@ -306,6 +703,22 @@ export default function WorkLogsPage() {
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">共 {total} 筆記錄</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+          {/* Dirty indicator + save */}
+          {hasDirty && (
+            <>
+              <span className="text-sm text-amber-600 font-medium">
+                {dirtyRows.size} 筆未儲存
+              </span>
+              <button onClick={handleSaveAll} disabled={saving}
+                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 font-medium">
+                {saving ? '儲存中…' : '💾 全部儲存'}
+              </button>
+              <button onClick={handleDiscardChanges}
+                className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                放棄修改
+              </button>
+            </>
+          )}
           {selected.size > 0 && (
             <>
               <span className="text-sm text-gray-600">已選 {selected.size} 筆</span>
@@ -349,7 +762,7 @@ export default function WorkLogsPage() {
           />
           <button
             onClick={handleAddNew}
-            disabled={editingId !== null}
+            disabled={!!newRow}
             className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             ＋ 新增記錄
@@ -372,6 +785,16 @@ export default function WorkLogsPage() {
         fieldOptions={fieldOptions}
         allEquipment={allEquipment}
       />
+
+      {/* ── Edit Lock Banner ── */}
+      {lockInfo?.locked && !lockInfo?.isMe && (
+        <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
+          <span className="text-red-500 text-lg">🔒</span>
+          <p className="text-sm text-red-800 font-medium">
+            <span className="font-bold">{lockInfo.lockedBy}</span> 正在編輯此頁，您目前只能檢視。
+          </p>
+        </div>
+      )}
 
       {/* ── Unverified Client Banner ── */}
       {(() => {
@@ -511,28 +934,47 @@ export default function WorkLogsPage() {
                 </th>
               ))}
               {/* 操作 – sticky right */}
-              <th className="sticky right-0 z-30 bg-gray-100 px-2 py-2 border-l border-gray-300 w-28 text-left font-semibold text-gray-600">
+              <th className="sticky right-0 z-30 bg-gray-100 px-2 py-2 border-l border-gray-300 w-20 text-left font-semibold text-gray-600">
                 操作
               </th>
             </tr>
           </thead>
           <tbody>
             {/* New row at top */}
-            {editingId === 'new' && newRow && (
-              <WorkLogRow
-                key="new"
-                row={newRow}
-                isEditing={true}
-                isNew={true}
-                isSelected={false}
-                onSelect={() => {}}
-                onEdit={() => {}}
-                onSave={handleSave}
-                onCancel={handleCancel}
-                onDuplicate={() => {}}
-                onDelete={() => {}}
-                {...rowProps}
-              />
+            {newRow && (
+              <tr className="bg-green-50 border-b-2 border-green-300 text-xs">
+                <td className="sticky left-0 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-8" />
+                <td className="sticky left-8 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-12 text-green-600 font-bold">NEW</td>
+                <td className="sticky left-20 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-20 text-gray-500 text-xs">
+                  {user?.displayName || user?.username || '—'}
+                </td>
+                {/* Status */}
+                <td className="sticky left-40 z-10 bg-green-50 border-r border-green-200 w-20">
+                  {renderNewCell('status')}
+                </td>
+                {/* Scrollable columns */}
+                {COLUMNS.slice(3).map(col => {
+                  const field = colKeyToField[col.key] || col.key;
+                  return (
+                    <td key={col.key} className={col.width}>
+                      {renderNewCell(field)}
+                    </td>
+                  );
+                })}
+                {/* Actions */}
+                <td className="sticky right-0 z-10 bg-green-50 px-2 py-1.5 border-l border-green-200 w-20">
+                  <div className="flex flex-col gap-1">
+                    <button onClick={handleSaveNew} disabled={savingNew}
+                      className="px-2 py-0.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                      {savingNew ? '…' : '💾'}
+                    </button>
+                    <button onClick={() => setNewRow(null)}
+                      className="px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                      ✕
+                    </button>
+                  </div>
+                </td>
+              </tr>
             )}
 
             {loading ? (
@@ -544,41 +986,77 @@ export default function WorkLogsPage() {
                   </div>
                 </td>
               </tr>
-            ) : rows.length === 0 && editingId !== 'new' ? (
+            ) : rows.length === 0 && !newRow ? (
               <tr>
                 <td colSpan={COLUMNS.length + 3} className="text-center py-12 text-gray-400">
                   {hasFilters ? '沒有符合篩選條件的記錄' : '尚無工作記錄，點擊「新增記錄」開始'}
                 </td>
               </tr>
             ) : (
-              rows.map(row => (
-                <WorkLogRow
-                  key={row.id}
-                  row={row}
-                  isEditing={editingId === row.id}
-                  isNew={false}
-                  isSelected={selected.has(row.id)}
-                  onSelect={checked => toggleSelect(row.id, checked)}
-                  onEdit={() => { if (editingId !== row.id) setEditingId(row.id); }}
-                  onSave={handleSave}
-                  onCancel={handleCancel}
-                  onDuplicate={() => handleDuplicate(row.id)}
-                  onDelete={() => handleDelete(row.id)}
-                  {...rowProps}
-                />
-              ))
+              rows.map(row => {
+                const rowDirty = dirtyRows.has(row.id);
+                const hasUnverifiedClient = !!row.unverified_client_name;
+                const statusColor = STATUS_COLORS[getCellValue(row, 'status')] || 'bg-gray-100 text-gray-600';
+
+                return (
+                  <tr key={row.id}
+                    className={`border-b border-gray-100 text-xs ${
+                      rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-50/30'
+                    }`}
+                  >
+                    {/* Checkbox - sticky */}
+                    <td className={`sticky left-0 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-8`}>
+                      <input type="checkbox" checked={selected.has(row.id)} onChange={e => toggleSelect(row.id, e.target.checked)} className="cursor-pointer" />
+                    </td>
+                    {/* ID - sticky */}
+                    <td className={`sticky left-8 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-12 text-gray-400 font-mono`}>
+                      {row.id}
+                    </td>
+                    {/* 發佈人 - sticky (readonly) */}
+                    <td className={`sticky left-20 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-20 text-xs`}>
+                      {row.publisher?.displayName || row.publisher?.username || '—'}
+                    </td>
+                    {/* 狀態 - sticky */}
+                    <td className={`sticky left-40 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} border-r border-gray-200 w-20`}>
+                      {renderCell(row, 'status')}
+                    </td>
+                    {/* Scrollable columns */}
+                    {COLUMNS.slice(3).map(col => {
+                      const field = colKeyToField[col.key] || col.key;
+                      return (
+                        <td key={col.key} className={col.width}>
+                          {renderCell(row, field)}
+                        </td>
+                      );
+                    })}
+                    {/* 操作 - sticky right */}
+                    <td className={`sticky right-0 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-1 py-0 border-l border-gray-200 w-20`}>
+                      <div className="flex gap-0.5">
+                        <button onClick={() => handleDuplicate(row.id)} className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
+                        <button onClick={() => handleDelete(row.id)} className="px-1 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* ── Pagination ───────────────────────────────────────── */}
+      {/* ── Bottom bar: Save + Pagination ────────────────────── */}
       <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
+          {hasDirty && (
+            <button onClick={handleSaveAll} disabled={saving}
+              className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 font-medium">
+              {saving ? '儲存中…' : `💾 儲存 ${dirtyRows.size} 筆修改`}
+            </button>
+          )}
           <span className="text-sm text-gray-600">每頁顯示</span>
           <select
             value={limit}
-            onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}
+            onChange={e => changeLimit(Number(e.target.value))}
             className="px-2 py-1 text-sm border border-gray-300 rounded"
           >
             {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l} 筆</option>)}
@@ -588,9 +1066,9 @@ export default function WorkLogsPage() {
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setPage(1)} disabled={page === 1}
+          <button onClick={() => changePage(1)} disabled={page === 1}
             className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">«</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+          <button onClick={() => changePage(Math.max(1, page - 1))} disabled={page === 1}
             className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">‹ 上一頁</button>
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
             let p: number;
@@ -599,15 +1077,15 @@ export default function WorkLogsPage() {
             else if (page >= totalPages - 2) p = totalPages - 4 + i;
             else                       p = page - 2 + i;
             return (
-              <button key={p} onClick={() => setPage(p)}
+              <button key={p} onClick={() => changePage(p)}
                 className={`px-3 py-1 text-sm border rounded ${p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}>
                 {p}
               </button>
             );
           })}
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+          <button onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
             className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">下一頁 ›</button>
-          <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+          <button onClick={() => changePage(totalPages)} disabled={page >= totalPages}
             className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">»</button>
         </div>
       </div>

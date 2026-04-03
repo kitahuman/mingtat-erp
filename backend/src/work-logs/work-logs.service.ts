@@ -418,6 +418,66 @@ export class WorkLogsService {
 
   // tryMatchRateCard 和 resolveRate 已移至 PricingService
 
+  // ── 批量儲存 (Airtable 風格) ───────────────────────────
+
+  async bulkSave(changes: Array<{ id: number; data: any }>) {
+    const results: any[] = [];
+    for (const { id, data } of changes) {
+      try {
+        const updated = await this.update(id, data);
+        results.push({ id, success: true, data: updated });
+      } catch (e: any) {
+        results.push({ id, success: false, error: e.message });
+      }
+    }
+    return { results, saved: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  // ── 編輯鎖定 (簡易在記憶體實作) ─────────────────────
+
+  private static editLocks = new Map<string, { userId: number; userName: string; timestamp: number }>();
+
+  acquireEditLock(lockKey: string, userId: number, userName: string) {
+    const existing = WorkLogsService.editLocks.get(lockKey);
+    const now = Date.now();
+    // Lock expires after 5 minutes of no heartbeat
+    if (existing && existing.userId !== userId && (now - existing.timestamp) < 5 * 60 * 1000) {
+      return { acquired: false, lockedBy: existing.userName, lockedAt: existing.timestamp };
+    }
+    WorkLogsService.editLocks.set(lockKey, { userId, userName, timestamp: now });
+    return { acquired: true };
+  }
+
+  heartbeatEditLock(lockKey: string, userId: number) {
+    const existing = WorkLogsService.editLocks.get(lockKey);
+    if (existing && existing.userId === userId) {
+      existing.timestamp = Date.now();
+      return { ok: true };
+    }
+    return { ok: false };
+  }
+
+  releaseEditLock(lockKey: string, userId: number) {
+    const existing = WorkLogsService.editLocks.get(lockKey);
+    if (existing && existing.userId === userId) {
+      WorkLogsService.editLocks.delete(lockKey);
+    }
+    return { ok: true };
+  }
+
+  getEditLockStatus(lockKey: string, userId: number) {
+    const existing = WorkLogsService.editLocks.get(lockKey);
+    const now = Date.now();
+    if (!existing || (now - existing.timestamp) >= 5 * 60 * 1000) {
+      return { locked: false };
+    }
+    return {
+      locked: true,
+      lockedBy: existing.userName,
+      isMe: existing.userId === userId,
+    };
+  }
+
   // ── 輔助方法 ─────────────────────────────────────────────
 
   private resolveEquipmentSource(machineType: string | null | undefined): 'vehicle' | 'machinery' | null {
