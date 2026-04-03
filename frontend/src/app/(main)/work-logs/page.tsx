@@ -21,7 +21,6 @@ interface Option { value: string | number; label: string; _raw?: any; shortLabel
 const LIMIT_OPTIONS = [25, 50, 100];
 
 const COLUMNS = [
-  { key: 'id',               label: 'ID',       width: 'w-14' },
   { key: 'publisher',        label: '發佈人',    width: 'w-24' },
   { key: 'status',           label: '狀態',      width: 'w-20' },
   { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },

@@ -70,7 +70,7 @@ export default function ColumnCustomizer({ columns, onChange, onReset }: Props) 
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+        <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-[200]">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <h3 className="text-sm font-bold text-gray-900">自訂欄位</h3>
             <button onClick={onReset} className="text-xs text-blue-600 hover:text-blue-800">
