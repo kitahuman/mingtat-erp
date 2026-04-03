@@ -905,8 +905,12 @@ export default function WorkLogsPage() {
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>
-              {/* Checkbox – sticky left */}
-              <th className="sticky left-0 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-8">
+              {/* 行數編號 – sticky left */}
+              <th className="sticky left-0 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-10 text-center font-semibold text-gray-500">
+                #
+              </th>
+              {/* Checkbox – sticky left (after row number) */}
+              <th className="sticky left-10 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-8">
                 <input
                   type="checkbox"
                   checked={rows.length > 0 && rows.every(r => selected.has(r.id))}
@@ -914,20 +918,12 @@ export default function WorkLogsPage() {
                   className="cursor-pointer"
                 />
               </th>
-              {/* ID – sticky */}
-              <th className="sticky left-8 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-12 text-left font-semibold text-gray-600">
+              {/* ID – scrollable */}
+              <th className="px-2 py-2 border-r border-gray-300 w-12 text-left font-semibold text-gray-600">
                 ID
               </th>
-              {/* 發佈人 – sticky */}
-              <th className="sticky left-20 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-20 text-left font-semibold text-gray-600">
-                發佈人
-              </th>
-              {/* 狀態 – sticky */}
-              <th className="sticky left-40 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-20 text-left font-semibold text-gray-600">
-                狀態
-              </th>
-              {/* Scrollable columns */}
-              {COLUMNS.slice(3).map(col => (
+              {/* All COLUMNS – scrollable */}
+              {COLUMNS.map(col => (
                 <th key={col.key}
                   className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width}`}>
                   {col.label}
@@ -943,18 +939,23 @@ export default function WorkLogsPage() {
             {/* New row at top */}
             {newRow && (
               <tr className="bg-green-50 border-b-2 border-green-300 text-xs">
-                <td className="sticky left-0 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-8" />
-                <td className="sticky left-8 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-12 text-green-600 font-bold">NEW</td>
-                <td className="sticky left-20 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-20 text-gray-500 text-xs">
-                  {user?.displayName || user?.username || '—'}
-                </td>
-                {/* Status */}
-                <td className="sticky left-40 z-10 bg-green-50 border-r border-green-200 w-20">
-                  {renderNewCell('status')}
-                </td>
-                {/* Scrollable columns */}
-                {COLUMNS.slice(3).map(col => {
+                {/* 行數編號 */}
+                <td className="sticky left-0 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-10 text-center text-green-600 font-bold text-xs">★</td>
+                {/* Checkbox */}
+                <td className="sticky left-10 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-8" />
+                {/* ID */}
+                <td className="px-2 py-1.5 border-r border-green-200 w-12 text-green-600 font-bold">NEW</td>
+                {/* All COLUMNS */}
+                {COLUMNS.map(col => {
                   const field = colKeyToField[col.key] || col.key;
+                  // publisher is readonly
+                  if (col.key === 'publisher') {
+                    return (
+                      <td key={col.key} className={`${col.width} px-2 py-1.5 text-gray-500 text-xs`}>
+                        {user?.displayName || user?.username || '—'}
+                      </td>
+                    );
+                  }
                   return (
                     <td key={col.key} className={col.width}>
                       {renderNewCell(field)}
@@ -993,10 +994,11 @@ export default function WorkLogsPage() {
                 </td>
               </tr>
             ) : (
-              rows.map(row => {
+              rows.map((row, rowIndex) => {
                 const rowDirty = dirtyRows.has(row.id);
                 const hasUnverifiedClient = !!row.unverified_client_name;
-                const statusColor = STATUS_COLORS[getCellValue(row, 'status')] || 'bg-gray-100 text-gray-600';
+                const rowBg = rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'bg-white';
+                const rowNum = (page - 1) * limit + rowIndex + 1;
 
                 return (
                   <tr key={row.id}
@@ -1004,25 +1006,29 @@ export default function WorkLogsPage() {
                       rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-50/30'
                     }`}
                   >
+                    {/* 行數編號 - sticky left */}
+                    <td className={`sticky left-0 z-10 ${rowBg} px-2 py-0 border-r border-gray-200 w-10 text-center text-gray-400 font-mono select-none`}>
+                      {rowNum}
+                    </td>
                     {/* Checkbox - sticky */}
-                    <td className={`sticky left-0 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-8`}>
+                    <td className={`sticky left-10 z-10 ${rowBg} px-2 py-0 border-r border-gray-200 w-8`}>
                       <input type="checkbox" checked={selected.has(row.id)} onChange={e => toggleSelect(row.id, e.target.checked)} className="cursor-pointer" />
                     </td>
-                    {/* ID - sticky */}
-                    <td className={`sticky left-8 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-12 text-gray-400 font-mono`}>
+                    {/* ID - scrollable */}
+                    <td className="px-2 py-0 border-r border-gray-200 w-12 text-gray-400 font-mono">
                       {row.id}
                     </td>
-                    {/* 發佈人 - sticky (readonly) */}
-                    <td className={`sticky left-20 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-2 py-0 border-r border-gray-200 w-20 text-xs`}>
-                      {row.publisher?.displayName || row.publisher?.username || '—'}
-                    </td>
-                    {/* 狀態 - sticky */}
-                    <td className={`sticky left-40 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} border-r border-gray-200 w-20`}>
-                      {renderCell(row, 'status')}
-                    </td>
-                    {/* Scrollable columns */}
-                    {COLUMNS.slice(3).map(col => {
+                    {/* All COLUMNS - scrollable */}
+                    {COLUMNS.map(col => {
                       const field = colKeyToField[col.key] || col.key;
+                      // publisher is readonly display
+                      if (col.key === 'publisher') {
+                        return (
+                          <td key={col.key} className={`${col.width} px-2 py-0 text-gray-600 text-xs`}>
+                            {row.publisher?.displayName || row.publisher?.username || '—'}
+                          </td>
+                        );
+                      }
                       return (
                         <td key={col.key} className={col.width}>
                           {renderCell(row, field)}
@@ -1030,7 +1036,7 @@ export default function WorkLogsPage() {
                       );
                     })}
                     {/* 操作 - sticky right */}
-                    <td className={`sticky right-0 z-10 ${rowDirty ? 'bg-amber-50' : 'bg-white'} px-1 py-0 border-l border-gray-200 w-20`}>
+                    <td className={`sticky right-0 z-10 ${rowBg} px-1 py-0 border-l border-gray-200 w-20`}>
                       <div className="flex gap-0.5">
                         <button onClick={() => handleDuplicate(row.id)} className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
                         <button onClick={() => handleDelete(row.id)} className="px-1 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
