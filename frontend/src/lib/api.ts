@@ -291,6 +291,7 @@ export const workLogsApi = {
   bulkDelete: (ids: number[]) => api.post('/work-logs/bulk/delete', { ids }),
   bulkConfirm: (ids: number[]) => api.post('/work-logs/bulk/confirm', { ids }),
   bulkUnconfirm: (ids: number[]) => api.post('/work-logs/bulk/unconfirm', { ids }),
+  bulkUpdate: (ids: number[], field: string, value: any) => api.post('/work-logs/bulk/update', { ids, field, value }),
   equipmentOptions: (machineType: string, tonnage?: string) =>
     api.get('/work-logs/equipment-options', { params: { machine_type: machineType, tonnage } }),
   locationSuggestions: (type: 'start' | 'end', q: string) =>

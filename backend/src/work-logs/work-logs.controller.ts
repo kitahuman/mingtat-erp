@@ -62,6 +62,11 @@ export class WorkLogsController {
     return this.service.bulkDelete(ids);
   }
 
+  @Post('bulk/update')
+  bulkUpdate(@Body() body: { ids: number[]; field: string; value: any }) {
+    return this.service.bulkUpdate(body.ids, body.field, body.value);
+  }
+
   @Post('bulk/confirm')
   bulkConfirm(@Body('ids') ids: number[]) {
     return this.service.bulkConfirm(ids);

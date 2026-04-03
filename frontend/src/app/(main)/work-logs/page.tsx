@@ -13,6 +13,7 @@ import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
+import BatchEditToolbar from './BatchEditToolbar';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -237,6 +238,11 @@ export default function WorkLogsPage() {
     await fetchLogs();
   };
 
+  const handleBulkUpdateSuccess = async () => {
+    setSelected(new Set());
+    await fetchLogs();
+  };
+
   const handleBulkConfirm = async () => {
     if (selected.size === 0) return;
     await workLogsApi.bulkConfirm(Array.from(selected));
@@ -289,7 +295,7 @@ export default function WorkLogsPage() {
 
   return (
     <div className="flex flex-col h-full bg-gray-50 -m-4 sm:-m-6">
-      {/* ── Page Header ──────────────────────────────────────── */}
+      {/* ── Page Header ────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 gap-2">
         <div className="shrink-0">
           <h1 className="text-lg sm:text-xl font-bold text-gray-900">工作記錄</h1>
@@ -298,7 +304,6 @@ export default function WorkLogsPage() {
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
           {selected.size > 0 && (
             <>
-              <span className="text-sm text-gray-600">已選 {selected.size} 筆</span>
               <button onClick={handleBulkConfirm}
                 className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
                 批量確認
@@ -343,6 +348,24 @@ export default function WorkLogsPage() {
           <CsvImportModal module="work-logs" onImportComplete={fetchLogs} />
         </div>
       </div>
+
+      {/* ── Batch Edit Toolbar ──────────────────────────────────── */}
+      {selected.size > 0 && (
+        <div className="bg-white border-b border-blue-200 px-4 sm:px-6 py-2 shrink-0">
+          <BatchEditToolbar
+            selectedIds={Array.from(selected)}
+            onSuccess={handleBulkUpdateSuccess}
+            onClear={() => setSelected(new Set())}
+            companies={companies}
+            clients={clients}
+            quotations={quotations}
+            contracts={contracts}
+            employees={employees}
+            fieldOptions={fieldOptions}
+            allEquipment={allEquipment}
+          />
+        </div>
+      )}
 
       {/* ── Unverified Client Banner ── */}
       {(() => {

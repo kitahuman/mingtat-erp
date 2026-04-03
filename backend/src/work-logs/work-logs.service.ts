@@ -160,6 +160,69 @@ export class WorkLogsService {
     return { success: true, deleted: ids.length };
   }
 
+  async bulkUpdate(ids: number[], field: string, value: any) {
+    // Whitelist of fields that can be batch-updated
+    const ALLOWED_FIELDS = [
+      'status', 'scheduled_date', 'service_type',
+      'company_profile_id', 'company_id', 'client_id',
+      'quotation_id', 'contract_id', 'client_contract_no',
+      'employee_id', 'machine_type', 'equipment_number', 'tonnage',
+      'day_night', 'start_location', 'start_time',
+      'end_location', 'end_time',
+      'quantity', 'unit', 'ot_quantity', 'ot_unit',
+      'is_mid_shift', 'goods_quantity',
+      'receipt_no', 'work_order_no',
+      'is_confirmed', 'is_paid', 'remarks',
+    ];
+    if (!ALLOWED_FIELDS.includes(field)) {
+      throw new Error(`Field "${field}" is not allowed for batch update`);
+    }
+
+    let processedValue = value;
+    // Type coercions
+    if (field === 'scheduled_date' && processedValue) {
+      processedValue = new Date(processedValue);
+    }
+    if (['company_profile_id', 'company_id', 'client_id', 'quotation_id', 'contract_id', 'employee_id'].includes(field)) {
+      processedValue = processedValue !== null && processedValue !== '' ? Number(processedValue) : null;
+    }
+    if (['quantity', 'ot_quantity', 'goods_quantity'].includes(field)) {
+      processedValue = processedValue !== null && processedValue !== '' ? Number(processedValue) : null;
+    }
+    if (['is_mid_shift', 'is_confirmed', 'is_paid'].includes(field)) {
+      processedValue = Boolean(processedValue);
+    }
+    if (field === 'machine_type') {
+      // Also update equipment_source
+      const equipmentSource = this.resolveEquipmentSource(processedValue);
+      await this.prisma.workLog.updateMany({
+        where: { id: { in: ids } },
+        data: { machine_type: processedValue, equipment_source: equipmentSource },
+      });
+      // Re-match prices for affected records
+      const priceRelatedFields = ['machine_type'];
+      if (priceRelatedFields.includes(field)) {
+        const updatedLogs = await this.prisma.workLog.findMany({ where: { id: { in: ids } }, include: { company: true, client: true } });
+        await Promise.all(updatedLogs.map(log => this.matchAndSavePrice(log)));
+      }
+      return { success: true, updated: ids.length };
+    }
+
+    await this.prisma.workLog.updateMany({
+      where: { id: { in: ids } },
+      data: { [field]: processedValue },
+    });
+
+    // Re-match prices if price-related field changed
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    if (priceRelatedFields.includes(field)) {
+      const updatedLogs = await this.prisma.workLog.findMany({ where: { id: { in: ids } }, include: { company: true, client: true } });
+      await Promise.all(updatedLogs.map(log => this.matchAndSavePrice(log)));
+    }
+
+    return { success: true, updated: ids.length };
+  }
+
   async bulkConfirm(ids: number[]) {
     await this.prisma.workLog.updateMany({ where: { id: { in: ids } }, data: { is_confirmed: true } });
     return { success: true, confirmed: ids.length };
