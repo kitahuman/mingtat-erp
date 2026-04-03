@@ -303,23 +303,22 @@ export class WorkLogsService {
       return;
     }
 
-    // 從 CompanyProfile 找對應的 Company ID
-    let companyId: number | null = null;
-    if (workLog.company_profile_id) {
-      const cp = await this.prisma.companyProfile.findUnique({ where: { id: workLog.company_profile_id } });
-      if (cp && (cp as any).company_id) {
-        companyId = (cp as any).company_id;
-      }
+    // 根據業務邏輯：工作記錄配對費率查 FleetRateCard（租賃價目表），用於計算員工薪酬/機械成本
+    // RateCard（客戶價目表）用於開發票，SubconRateCard（供應商價目表）用於付款給供應商
+    const tonnageNum = workLog.tonnage ? workLog.tonnage.replace('噸', '') : null;
+    // 合約編號：從已載入的 quotation 關聯取得；若未載入（如 create 後直接傳入原始記錄）則從 DB 查詢
+    let contractNo: string | null = workLog.quotation?.quotation_no || null;
+    if (!contractNo && workLog.quotation_id) {
+      const q = await this.prisma.quotation.findUnique({ where: { id: workLog.quotation_id }, select: { quotation_no: true } });
+      contractNo = q?.quotation_no || null;
     }
 
-    const tonnageNum = workLog.tonnage ? workLog.tonnage.replace('噸', '') : null;
-
-    const { card, unmatchedReason } = await this.pricingService.matchRateCardFromDb(
+    const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       workLog.client_id,
-      companyId,
-      workLog.quotation_id,
-      workLog.machine_type,
+      contractNo,
+      workLog.day_night,
       tonnageNum,
+      workLog.machine_type,
       workLog.start_location,
       workLog.end_location,
     );
@@ -329,7 +328,7 @@ export class WorkLogsService {
         where: { id: workLog.id },
         data: {
           price_match_status: 'unmatched',
-          price_match_note: unmatchedReason || '找不到對應的價目表，請人工處理',
+          price_match_note: unmatchedReason || '找不到對應的租賃價目表，請人工處理',
           matched_rate_card_id: null,
           matched_rate: null,
           matched_unit: null,
@@ -345,7 +344,7 @@ export class WorkLogsService {
       where: { id: workLog.id },
       data: {
         price_match_status: 'matched',
-        price_match_note: `匹配到：${card.name || card.contract_no || `RateCard#${card.id}`}`,
+        price_match_note: `匹配到：${card.name || card.contract_no || `FleetRC#${card.id}`}`,
         matched_rate_card_id: card.id,
         matched_rate: rate,
         matched_unit: unit,
