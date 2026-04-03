@@ -1,8 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { payrollApi, companyProfilesApi, employeesApi } from '@/lib/api';
+import { payrollApi, companyProfilesApi, employeesApi, fleetRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi } from '@/lib/api';
 import Modal from '@/components/Modal';
+import Combobox from '@/components/Combobox';
+import SearchableSelect from '@/components/SearchableSelect';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+
+const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
+const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
 
 // ─── Step indicator ───────────────────────────────────────────
 const STEPS = ['選擇公司', '選擇員工', '選擇日期範圍', '核對工作記錄', '確認生成'];
@@ -222,6 +229,63 @@ const WIZARD_TAB_LABELS: Record<WizardTab, string> = {
   daily: '逐日計算',
 };
 
+// ─── Unmatched group type ─────────────────────────────────────
+interface UnmatchedGroup {
+  key: string;
+  company_id?: number | null;
+  client_id?: number | null;
+  client_name?: string;
+  contract_no?: string;
+  service_type?: string;
+  day_night?: string;
+  tonnage?: string;
+  machine_type?: string;
+  origin?: string;
+  destination?: string;
+  count: number;
+  sample_note: string;
+}
+
+function buildUnmatchedGroups(workLogs: any[]): UnmatchedGroup[] {
+  const map = new Map<string, UnmatchedGroup>();
+  for (const wl of workLogs) {
+    const status = wl._price_match_status ?? wl.price_match_status;
+    if (status === 'matched') continue;
+    const key = [
+      wl.company_id ?? '',
+      wl.client_id ?? '',
+      wl.contract_no ?? '',
+      wl.service_type ?? '',
+      wl.day_night ?? '',
+      wl.tonnage ?? '',
+      wl.machine_type ?? '',
+      wl.start_location ?? '',
+      wl.end_location ?? '',
+    ].join('|');
+    if (map.has(key)) {
+      map.get(key)!.count++;
+    } else {
+      const note = wl._price_match_note ?? wl.price_match_note ?? '';
+      map.set(key, {
+        key,
+        company_id: wl.company_id,
+        client_id: wl.client_id,
+        client_name: wl.client_name || wl.client?.name || '',
+        contract_no: wl.contract_no || '',
+        service_type: wl.service_type || '',
+        day_night: wl.day_night || '',
+        tonnage: wl.tonnage || '',
+        machine_type: wl.machine_type || '',
+        origin: wl.start_location || '',
+        destination: wl.end_location || '',
+        count: 1,
+        sample_note: note,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function PayrollPage() {
   const router = useRouter();
@@ -250,6 +314,39 @@ export default function PayrollPage() {
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<any>(null);
   const [generateError, setGenerateError] = useState('');
+
+  // Add Rate Modal (for unmatched work logs)
+  const [showAddRateModal, setShowAddRateModal] = useState(false);
+  const [addRateForm, setAddRateForm] = useState<any>({
+    company_id: '', client_id: '', contract_no: '', service_type: '',
+    name: '', day_night: '',
+    tonnage: '', machine_type: '', equipment_number: '',
+    origin: '', destination: '',
+    rate: 0, mid_shift_rate: 0, ot_rate: 0,
+    unit: '車', remarks: '', status: 'active',
+  });
+  const [addRateSubmitting, setAddRateSubmitting] = useState(false);
+  const [addRateError, setAddRateError] = useState('');
+  const [partners, setPartners] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const tonnageOptions = optionsMap['tonnage'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
+
+  // Load partners, companies, equipment for add-rate modal
+  useEffect(() => {
+    partnersApi.simple().then(res => setPartners(res.data)).catch(() => {});
+    companiesApi.list().then(res => setCompanies(res.data?.data || res.data || [])).catch(() => {});
+    Promise.all([
+      vehiclesApi.simple().then(res => res.data),
+      machineryApi.simple().then(res => res.data),
+    ]).then(([vehicles, machinery]) => {
+      const vPlates = vehicles.map((v: any) => v.plate_number).filter(Boolean);
+      const mCodes = machinery.map((m: any) => m.machine_code).filter(Boolean);
+      setAllEquipment([...vPlates, ...mCodes].map(s => ({ value: s, label: s })));
+    }).catch(() => {});
+  }, []);
 
   // Load company profiles
   useEffect(() => {
@@ -281,7 +378,6 @@ export default function PayrollPage() {
   const handlePreview = async () => {
     setPreviewing(true);
     setPreviewError('');
-    setPreview(null);
     try {
       const res = await payrollApi.preview({
         employee_id: selectedEmployee.id,
@@ -290,7 +386,7 @@ export default function PayrollPage() {
         company_profile_id: selectedCompany?.id,
       });
       setPreview(res.data);
-      setStep(3);
+      if (step !== 3) setStep(3);
     } catch (err: any) {
       setPreviewError(err.response?.data?.message || '預覽失敗，請重試');
     }
@@ -327,6 +423,48 @@ export default function PayrollPage() {
     setGenerateError('');
     setEmpSearch('');
     setWizardTab('daily');
+  };
+
+  const openAddRateModal = (group: UnmatchedGroup) => {
+    setAddRateForm({
+      company_id: group.company_id || '',
+      client_id: group.client_id || '',
+      contract_no: group.contract_no || '',
+      service_type: group.service_type || '',
+      name: [group.tonnage, group.machine_type, group.origin && group.destination ? `${group.origin}→${group.destination}` : ''].filter(Boolean).join(' '),
+      day_night: group.day_night || '',
+      tonnage: group.tonnage || '',
+      machine_type: group.machine_type || '',
+      equipment_number: '',
+      origin: group.origin || '',
+      destination: group.destination || '',
+      rate: 0, mid_shift_rate: 0, ot_rate: 0,
+      unit: '車', remarks: '', status: 'active',
+    });
+    setAddRateError('');
+    setShowAddRateModal(true);
+  };
+
+  const handleAddRateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddRateSubmitting(true);
+    setAddRateError('');
+    try {
+      await fleetRateCardsApi.create({
+        ...addRateForm,
+        company_id: addRateForm.company_id ? Number(addRateForm.company_id) : null,
+        client_id: addRateForm.client_id ? Number(addRateForm.client_id) : null,
+        rate: Number(addRateForm.rate) || 0,
+        mid_shift_rate: Number(addRateForm.mid_shift_rate) || 0,
+        ot_rate: Number(addRateForm.ot_rate) || 0,
+      });
+      setShowAddRateModal(false);
+      // Auto re-preview to re-match
+      await handlePreview();
+    } catch (err: any) {
+      setAddRateError(err.response?.data?.message || '新增失敗，請重試');
+    }
+    setAddRateSubmitting(false);
   };
 
   const filteredEmployees = employees.filter(emp =>
@@ -539,6 +677,49 @@ export default function PayrollPage() {
               </div>
             )}
 
+            {/* Unmatched summary */}
+            {(() => {
+              const unmatchedGroups = buildUnmatchedGroups(preview.work_logs || []);
+              if (unmatchedGroups.length === 0) return null;
+              return (
+                <div className="mb-5 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-orange-600 font-bold text-sm">⚠️ {unmatchedGroups.length} 組條件未匹配價目</span>
+                    <span className="text-xs text-orange-500">請為每組新增對應的租賃價目，新增後會自動重新匹配</span>
+                  </div>
+                  <div className="space-y-2">
+                    {unmatchedGroups.map((group, idx) => {
+                      const parts = [
+                        group.client_name,
+                        group.contract_no,
+                        group.day_night,
+                        group.tonnage,
+                        group.machine_type,
+                        group.origin && group.destination ? `${group.origin}→${group.destination}` : (group.origin || group.destination),
+                      ].filter(Boolean);
+                      return (
+                        <div key={idx} className="flex items-center justify-between bg-white border border-orange-100 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-800">{parts.join(' / ') || '未知條件'}</span>
+                            <span className="ml-2 text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">{group.count}筆</span>
+                            {group.sample_note && (
+                              <p className="text-xs text-gray-400 mt-0.5 truncate">{group.sample_note}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => openAddRateModal(group)}
+                            className="ml-3 text-xs px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 whitespace-nowrap"
+                          >
+                            新增價目
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Tabs */}
             {preview.work_logs?.length > 0 && (
               <div className="mb-5">
@@ -736,6 +917,167 @@ export default function PayrollPage() {
           </div>
         )}
       </div>
+
+      {/* Add Fleet Rate Card Modal */}
+      <Modal isOpen={showAddRateModal} onClose={() => setShowAddRateModal(false)} title="新增租賃價目" size="lg">
+        <form onSubmit={handleAddRateSubmit} className="space-y-4">
+          {addRateError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{addRateError}</div>}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">公司</label>
+              <select
+                className="input w-full"
+                value={addRateForm.company_id || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, company_id: e.target.value }))}
+              >
+                <option value="">不限</option>
+                {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name || c.chinese_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
+              <select
+                className="input w-full"
+                value={addRateForm.client_id || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, client_id: e.target.value }))}
+              >
+                <option value="">不限</option>
+                {partners.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
+              <input
+                type="text" className="input w-full"
+                value={addRateForm.contract_no || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, contract_no: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">服務類型</label>
+              <select
+                className="input w-full"
+                value={addRateForm.service_type || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, service_type: e.target.value }))}
+              >
+                <option value="">不限</option>
+                {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">日/夜</label>
+              <select
+                className="input w-full"
+                value={addRateForm.day_night || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, day_night: e.target.value }))}
+              >
+                <option value="">不限</option>
+                <option value="日">日</option>
+                <option value="夜">夜</option>
+                <option value="中直">中直</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
+              <Combobox
+                value={addRateForm.tonnage || ''}
+                onChange={v => setAddRateForm((f: any) => ({ ...f, tonnage: v }))}
+                options={tonnageOptions}
+                placeholder="噸數"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
+              <Combobox
+                value={addRateForm.machine_type || ''}
+                onChange={v => setAddRateForm((f: any) => ({ ...f, machine_type: v }))}
+                options={vehicleTypeOptions}
+                placeholder="機種"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>
+              <input
+                type="text" className="input w-full"
+                value={addRateForm.origin || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, origin: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">終點</label>
+              <input
+                type="text" className="input w-full"
+                value={addRateForm.destination || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, destination: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">費率</label>
+              <div className="flex gap-1">
+                <input
+                  type="number" step="0.01" className="input flex-1"
+                  value={addRateForm.rate || ''}
+                  onChange={e => setAddRateForm((f: any) => ({ ...f, rate: e.target.value }))}
+                />
+                <select
+                  className="input w-20"
+                  value={addRateForm.unit || '車'}
+                  onChange={e => setAddRateForm((f: any) => ({ ...f, unit: e.target.value }))}
+                >
+                  {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">中直費率</label>
+              <input
+                type="number" step="0.01" className="input w-full"
+                value={addRateForm.mid_shift_rate || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, mid_shift_rate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">OT 費率</label>
+              <input
+                type="number" step="0.01" className="input w-full"
+                value={addRateForm.ot_rate || ''}
+                onChange={e => setAddRateForm((f: any) => ({ ...f, ot_rate: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">名稱（備註）</label>
+            <input
+              type="text" className="input w-full"
+              value={addRateForm.name || ''}
+              onChange={e => setAddRateForm((f: any) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowAddRateModal(false)} className="btn-secondary">
+              取消
+            </button>
+            <button type="submit" disabled={addRateSubmitting} className="btn-primary">
+              {addRateSubmitting ? '新增中...' : '新增並重新匹配'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

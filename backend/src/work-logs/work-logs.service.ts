@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PricingService } from '../common/pricing.service';
 
 // 車輛類機種
 const VEHICLE_TYPES = ['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車'];
@@ -8,7 +9,10 @@ const MACHINERY_TYPES = ['挖掘機', '火轆'];
 
 @Injectable()
 export class WorkLogsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pricingService: PricingService,
+  ) {}
 
   // ── 工作記錄 CRUD ─────────────────────────────────────────
 
@@ -310,7 +314,7 @@ export class WorkLogsService {
 
     const tonnageNum = workLog.tonnage ? workLog.tonnage.replace('噸', '') : null;
 
-    const card = await this.tryMatchRateCard(
+    const { card, unmatchedReason } = await this.pricingService.matchRateCardFromDb(
       workLog.client_id,
       companyId,
       workLog.quotation_id,
@@ -325,7 +329,7 @@ export class WorkLogsService {
         where: { id: workLog.id },
         data: {
           price_match_status: 'unmatched',
-          price_match_note: '找不到對應的價目表，請人工處理',
+          price_match_note: unmatchedReason || '找不到對應的價目表，請人工處理',
           matched_rate_card_id: null,
           matched_rate: null,
           matched_unit: null,
@@ -335,7 +339,7 @@ export class WorkLogsService {
       return;
     }
 
-    const { rate, unit } = this.resolveRate(card, workLog.day_night);
+    const { rate, unit } = this.pricingService.resolveRate(card, workLog.day_night);
 
     await this.prisma.workLog.update({
       where: { id: workLog.id },
@@ -350,62 +354,7 @@ export class WorkLogsService {
     });
   }
 
-  /**
-   * 多層次模糊匹配，由精確到寬鬆
-   */
-  private async tryMatchRateCard(
-    clientId: number,
-    companyId: number | null,
-    quotationId: number | null,
-    vehicleType: string | null,
-    tonnage: string | null,
-    origin: string | null,
-    destination: string | null,
-  ): Promise<any | null> {
-    const attempts = [
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: true, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: true, useQuotation: true, useVehicle: false, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: true, useRoute: true },
-      { useCompany: false, useQuotation: false, useVehicle: true, useTonnage: false, useRoute: false },
-      { useCompany: false, useQuotation: false, useVehicle: false, useTonnage: false, useRoute: false },
-    ];
-
-    for (const attempt of attempts) {
-      const where: any = { status: 'active', client_id: clientId };
-
-      if (attempt.useCompany && companyId) where.company_id = companyId;
-      if (attempt.useQuotation && quotationId) where.source_quotation_id = quotationId;
-      if (attempt.useVehicle && vehicleType) where.machine_type = vehicleType;
-      if (attempt.useTonnage && tonnage) where.tonnage = tonnage;
-      if (attempt.useRoute) {
-        if (origin) where.origin = { contains: origin, mode: 'insensitive' };
-        if (destination) where.destination = { contains: destination, mode: 'insensitive' };
-      }
-
-      const card = await this.prisma.rateCard.findFirst({
-        where,
-        orderBy: { effective_date: 'desc' },
-      });
-      if (card) return card;
-    }
-
-    return null;
-  }
-
-  /**
-   * 根據日/夜/中直取對應費率
-   */
-  private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
-    if (dayNight === '夜') {
-      return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.day_unit || '' };
-    }
-    if (dayNight === '中直') {
-      return { rate: Number(card.mid_shift_rate) || 0, unit: card.mid_shift_unit || card.day_unit || '' };
-    }
-    return { rate: Number(card.day_rate) || 0, unit: card.day_unit || '' };
-  }
+  // tryMatchRateCard 和 resolveRate 已移至 PricingService
 
   // ── 輔助方法 ─────────────────────────────────────────────
 

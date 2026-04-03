@@ -32,8 +32,8 @@ export class SubconRateCardsService {
         { destination: { contains: query.search, mode: 'insensitive' } },
         { contract_no: { contains: query.search, mode: 'insensitive' } },
         { remarks: { contains: query.search, mode: 'insensitive' } },
-        { subcontractor: { name: { contains: query.search, mode: 'insensitive' } } },
-        { client: { name: { contains: query.search, mode: 'insensitive' } } },
+        { subcontractor: { is: { name: { contains: query.search, mode: 'insensitive' } } } },
+        { client: { is: { name: { contains: query.search, mode: 'insensitive' } } } },
       ];
     }
 

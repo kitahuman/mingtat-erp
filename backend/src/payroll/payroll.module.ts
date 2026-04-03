@@ -4,9 +4,10 @@ import { PayrollService } from './payroll.service';
 import { PayrollController } from './payroll.controller';
 import { ExpensesModule } from '../expenses/expenses.module';
 import { ExpenseCategoriesModule } from '../expense-categories/expense-categories.module';
+import { PricingModule } from '../common/pricing.module';
 
 @Module({
-  imports: [PrismaModule, ExpensesModule, ExpenseCategoriesModule],
+  imports: [PrismaModule, ExpensesModule, ExpenseCategoriesModule, PricingModule],
   providers: [PayrollService],
   controllers: [PayrollController],
   exports: [PayrollService],
