@@ -13,7 +13,7 @@ import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
-import BatchEditToolbar from './BatchEditToolbar';
+import BatchEditDialog from './BatchEditDialog';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -87,8 +87,9 @@ export default function WorkLogsPage() {
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [newRow, setNewRow]       = useState<any | null>(null);
 
-  // ── Selection ───────────────────────────────────────────────
+  // ── Selection ───────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [batchEditOpen, setBatchEditOpen] = useState(false);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -304,6 +305,11 @@ export default function WorkLogsPage() {
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
           {selected.size > 0 && (
             <>
+              <span className="text-sm text-gray-600">已選 {selected.size} 筆</span>
+              <button onClick={() => setBatchEditOpen(true)}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">
+                批量編輯
+              </button>
               <button onClick={handleBulkConfirm}
                 className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
                 批量確認
@@ -349,23 +355,20 @@ export default function WorkLogsPage() {
         </div>
       </div>
 
-      {/* ── Batch Edit Toolbar ──────────────────────────────────── */}
-      {selected.size > 0 && (
-        <div className="bg-white border-b border-blue-200 px-4 sm:px-6 py-2 shrink-0">
-          <BatchEditToolbar
-            selectedIds={Array.from(selected)}
-            onSuccess={handleBulkUpdateSuccess}
-            onClear={() => setSelected(new Set())}
-            companies={companies}
-            clients={clients}
-            quotations={quotations}
-            contracts={contracts}
-            employees={employees}
-            fieldOptions={fieldOptions}
-            allEquipment={allEquipment}
-          />
-        </div>
-      )}
+      {/* ── Batch Edit Dialog ──────────────────────────────────── */}
+      <BatchEditDialog
+        open={batchEditOpen}
+        onClose={() => setBatchEditOpen(false)}
+        selectedRows={rows.filter(r => selected.has(r.id))}
+        onSuccess={handleBulkUpdateSuccess}
+        companies={companies}
+        clients={clients}
+        quotations={quotations}
+        contracts={contracts}
+        employees={employees}
+        fieldOptions={fieldOptions}
+        allEquipment={allEquipment}
+      />
 
       {/* ── Unverified Client Banner ── */}
       {(() => {
