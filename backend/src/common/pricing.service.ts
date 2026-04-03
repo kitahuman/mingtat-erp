@@ -34,12 +34,12 @@ export class PricingService {
     origin: string | null,
     destination: string | null,
   ): MatchResult {
-    const tonnageNum = tonnage ? tonnage.replace('噸', '') : null;
-
+    // 直接用原始噸數字串比較（如 "30噸"），不做格式轉換。
+    // field_options 中噸數格式統一為帶噸字，工作記錄和價目表均使用相同格式。
     const matched = clientCards.filter(rc => {
       if (contractNo && rc.contract_no !== contractNo) return false;
       if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
-      if (tonnageNum && rc.tonnage !== tonnageNum) return false;
+      if (tonnage && rc.tonnage && rc.tonnage !== tonnage) return false;
       if (machineType && rc.machine_type !== machineType) return false;
       if (origin && rc.origin && !rc.origin.toLowerCase().includes(origin.toLowerCase())) return false;
       if (destination && rc.destination && !rc.destination.toLowerCase().includes(destination.toLowerCase())) return false;
@@ -50,7 +50,7 @@ export class PricingService {
       return { card: matched[0], unmatchedReason: '' };
     }
 
-    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnageNum, machineType, origin, destination);
+    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnage, machineType, origin, destination);
     return { card: null, unmatchedReason: reason };
   }
 
@@ -67,12 +67,12 @@ export class PricingService {
     origin: string | null,
     destination: string | null,
   ): Promise<MatchResult> {
-    const tonnageNum = tonnage ? tonnage.replace('噸', '') : null;
-
+    // 直接用原始噸數字串比較（如 "30噸"），不做格式轉換。
+    // field_options 中噸數格式統一為帶噸字，工作記錄和價目表均使用相同格式。
     const where: any = { status: 'active', client_id: clientId };
     if (contractNo) where.contract_no = contractNo;
     if (dayNight) where.day_night = dayNight;
-    if (tonnageNum) where.tonnage = tonnageNum;
+    if (tonnage) where.tonnage = tonnage;
     if (machineType) where.machine_type = machineType;
     if (origin) where.origin = { contains: origin, mode: 'insensitive' };
     if (destination) where.destination = { contains: destination, mode: 'insensitive' };
@@ -80,7 +80,7 @@ export class PricingService {
     const card = await this.prisma.fleetRateCard.findFirst({ where });
     if (card) return { card, unmatchedReason: '' };
 
-    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnageNum, machineType, origin, destination);
+    const reason = this.buildUnmatchedReason('租賃價目', contractNo, dayNight, tonnage, machineType, origin, destination);
     return { card: null, unmatchedReason: reason };
   }
 
