@@ -925,8 +925,8 @@ export default function WorkLogsPage() {
               <th className="px-2 py-2 border-r border-gray-300 w-12 text-left font-semibold text-gray-600">
                 ID
               </th>
-              {/* All COLUMNS – scrollable */}
-              {COLUMNS.map(col => (
+              {/* Visible COLUMNS in user-defined order */}
+              {(visibleColumns as any[]).map((col: any) => (
                 <th key={col.key}
                   className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width}`}>
                   {col.label}
@@ -948,8 +948,8 @@ export default function WorkLogsPage() {
                 <td className="sticky left-10 z-10 bg-green-50 px-2 py-1.5 border-r border-green-200 w-8" />
                 {/* ID */}
                 <td className="px-2 py-1.5 border-r border-green-200 w-12 text-green-600 font-bold">NEW</td>
-                {/* All COLUMNS */}
-                {COLUMNS.map(col => {
+                {/* Visible COLUMNS in user-defined order */}
+                {(visibleColumns as any[]).map((col: any) => {
                   const field = colKeyToField[col.key] || col.key;
                   // publisher is readonly
                   if (col.key === 'publisher') {
@@ -983,7 +983,7 @@ export default function WorkLogsPage() {
 
             {loading ? (
               <tr>
-                <td colSpan={COLUMNS.length + 3} className="text-center py-12 text-gray-400">
+                <td colSpan={(visibleColumns as any[]).length + 3} className="text-center py-12 text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     載入中…
@@ -992,7 +992,7 @@ export default function WorkLogsPage() {
               </tr>
             ) : rows.length === 0 && !newRow ? (
               <tr>
-                <td colSpan={COLUMNS.length + 3} className="text-center py-12 text-gray-400">
+                <td colSpan={(visibleColumns as any[]).length + 3} className="text-center py-12 text-gray-400">
                   {hasFilters ? '沒有符合篩選條件的記錄' : '尚無工作記錄，點擊「新增記錄」開始'}
                 </td>
               </tr>
@@ -1021,8 +1021,8 @@ export default function WorkLogsPage() {
                     <td className="px-2 py-0 border-r border-gray-200 w-12 text-gray-400 font-mono">
                       {row.id}
                     </td>
-                    {/* All COLUMNS - scrollable */}
-                    {COLUMNS.map(col => {
+                    {/* Visible COLUMNS in user-defined order */}
+                    {(visibleColumns as any[]).map((col: any) => {
                       const field = colKeyToField[col.key] || col.key;
                       // publisher is readonly display
                       if (col.key === 'publisher') {
