@@ -85,7 +85,7 @@ export class PayrollService {
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
       where: {
         employee_id: payroll.employee_id,
-        effective_date: { lte: payroll.date_to || payroll.period + '-28' },
+        effective_date: { lte: payroll.date_to || new Date(payroll.period + '-28') },
       },
       orderBy: { effective_date: 'desc' },
     });
@@ -206,7 +206,7 @@ export class PayrollService {
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
       where: {
         employee_id: emp.id,
-        effective_date: { lte: date_to },
+        effective_date: { lte: new Date(date_to) },
       },
       orderBy: { effective_date: 'desc' },
     });
@@ -296,7 +296,7 @@ export class PayrollService {
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
       where: {
         employee_id: emp.id,
-        effective_date: { lte: date_to },
+        effective_date: { lte: new Date(date_to) },
       },
       orderBy: { effective_date: 'desc' },
     });
@@ -813,7 +813,7 @@ export class PayrollService {
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
       where: {
         employee_id: emp.id,
-        effective_date: { lte: dateTo },
+        effective_date: { lte: new Date(dateTo) },
       },
       orderBy: { effective_date: 'desc' },
     });
@@ -1191,7 +1191,7 @@ export class PayrollService {
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
       where: {
         employee_id: employeeId,
-        effective_date: { lte: dateTo },
+        effective_date: { lte: new Date(dateTo) },
       },
       orderBy: { effective_date: 'desc' },
     });
