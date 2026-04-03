@@ -39,7 +39,7 @@ export class FleetRateCardsService {
     const [data, total] = await Promise.all([
       this.prisma.fleetRateCard.findMany({
         where,
-        include: { client: true, source_quotation: true },
+        include: { company: true, client: true, source_quotation: true },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -53,14 +53,14 @@ export class FleetRateCardsService {
   async findOne(id: number) {
     const frc = await this.prisma.fleetRateCard.findUnique({
       where: { id },
-      include: { client: true, source_quotation: true },
+      include: { company: true, client: true, source_quotation: true },
     });
     if (!frc) throw new NotFoundException('租賃價目表不存在');
     return frc;
   }
 
   async create(dto: any) {
-    const { client, source_quotation, ...data } = dto;
+    const { client, company, source_quotation, ...data } = dto;
     const saved = await this.prisma.fleetRateCard.create({ data });
     return this.findOne(saved.id);
   }
@@ -68,7 +68,7 @@ export class FleetRateCardsService {
   async update(id: number, dto: any) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('租賃價目表不存在');
-    const { created_at, updated_at, id: _id, client, source_quotation, ...updateData } = dto;
+    const { created_at, updated_at, id: _id, client, company, source_quotation, ...updateData } = dto;
     await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
@@ -82,7 +82,7 @@ export class FleetRateCardsService {
           { remarks: { contains: `由客戶價目 #${rateCardId} 自動建立` } },
         ],
       },
-      include: { client: true, source_quotation: true },
+      include: { company: true, client: true, source_quotation: true },
       orderBy: { id: 'asc' },
     });
     return cards;

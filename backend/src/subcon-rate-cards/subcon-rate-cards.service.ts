@@ -43,7 +43,7 @@ export class SubconRateCardsService {
     const [data, total] = await Promise.all([
       this.prisma.subconRateCard.findMany({
         where,
-        include: { subcontractor: true, client: true, source_quotation: true },
+        include: { company: true, subcontractor: true, client: true, source_quotation: true },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -57,14 +57,14 @@ export class SubconRateCardsService {
   async findOne(id: number) {
     const src = await this.prisma.subconRateCard.findUnique({
       where: { id },
-      include: { subcontractor: true, client: true, source_quotation: true },
+      include: { company: true, subcontractor: true, client: true, source_quotation: true },
     });
     if (!src) throw new NotFoundException('供應商價目表不存在');
     return src;
   }
 
   async create(dto: any) {
-    const { subcontractor, client, source_quotation, ...data } = dto;
+    const { subcontractor, client, company, source_quotation, ...data } = dto;
     const saved = await this.prisma.subconRateCard.create({ data });
     return this.findOne(saved.id);
   }
@@ -72,7 +72,7 @@ export class SubconRateCardsService {
   async update(id: number, dto: any) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
-    const { created_at, updated_at, id: _id, subcontractor, client, source_quotation, ...updateData } = dto;
+    const { created_at, updated_at, id: _id, subcontractor, client, company, source_quotation, ...updateData } = dto;
     await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }

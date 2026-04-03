@@ -66,6 +66,8 @@ model Company {
   expenses                 Expense[]
   profiles                 CompanyProfile[]
   invoices                 Invoice[]
+  fleet_rate_cards          FleetRateCard[]
+  subcon_rate_cards         SubconRateCard[]
 
   @@map("companies")
 }
@@ -735,26 +737,33 @@ model RateCardOtRate {
 // ══════════════════════════════════════════════════════════════
 
 model FleetRateCard {
-  id                  Int      @id @default(autoincrement())
+  id                  Int       @id @default(autoincrement())
+  company_id          Int?
   client_id           Int?
   contract_no         String?
+  service_type        String?
+  name                String?
+  description         String?   @db.Text
   day_night           String?
   vehicle_tonnage     String?
   vehicle_type        String?
   origin              String?
   destination         String?
-  rate                Decimal  @default(0) @db.Decimal(12, 2)
-  day_rate            Decimal  @default(0) @db.Decimal(12, 2)
-  night_rate          Decimal  @default(0) @db.Decimal(12, 2)
-  mid_shift_rate      Decimal  @default(0) @db.Decimal(12, 2)
-  ot_rate             Decimal  @default(0) @db.Decimal(12, 2)
+  rate                Decimal   @default(0) @db.Decimal(12, 2)
+  day_rate            Decimal   @default(0) @db.Decimal(12, 2)
+  night_rate          Decimal   @default(0) @db.Decimal(12, 2)
+  mid_shift_rate      Decimal   @default(0) @db.Decimal(12, 2)
+  ot_rate             Decimal   @default(0) @db.Decimal(12, 2)
   unit                String?
-  remarks             String?  @db.Text
+  effective_date      DateTime? @db.Date
+  expiry_date         DateTime? @db.Date
+  remarks             String?   @db.Text
   source_quotation_id Int?
-  status              String   @default("active")
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now()) @updatedAt
+  status              String    @default("active")
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
 
+  company          Company?   @relation(fields: [company_id], references: [id])
   client           Partner?   @relation(fields: [client_id], references: [id])
   source_quotation Quotation? @relation(fields: [source_quotation_id], references: [id])
 
@@ -766,24 +775,33 @@ model FleetRateCard {
 // ══════════════════════════════════════════════════════════════
 
 model SubconRateCard {
-  id                  Int      @id @default(autoincrement())
+  id                  Int       @id @default(autoincrement())
+  company_id          Int?
   subcon_id           Int?
   plate_no            String?
-  vehicle_tonnage     String?
   client_id           Int?
   contract_no         String?
+  service_type        String?
+  name                String?
+  description         String?   @db.Text
   day_night           String?
+  vehicle_tonnage     String?
+  vehicle_type        String?
   origin              String?
   destination         String?
-  unit_price          Decimal  @default(0) @db.Decimal(12, 2)
+  unit_price          Decimal   @default(0) @db.Decimal(12, 2)
+  ot_rate             Decimal   @default(0) @db.Decimal(12, 2)
   unit                String?
-  exclude_fuel        Boolean  @default(false)
-  remarks             String?  @db.Text
+  exclude_fuel        Boolean   @default(false)
+  effective_date      DateTime? @db.Date
+  expiry_date         DateTime? @db.Date
+  remarks             String?   @db.Text
   source_quotation_id Int?
-  status              String   @default("active")
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now()) @updatedAt
+  status              String    @default("active")
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
 
+  company          Company?   @relation(fields: [company_id], references: [id])
   subcontractor    Partner?   @relation("subcon_partner", fields: [subcon_id], references: [id])
   client           Partner?   @relation("subcon_client", fields: [client_id], references: [id])
   source_quotation Quotation? @relation(fields: [source_quotation_id], references: [id])
