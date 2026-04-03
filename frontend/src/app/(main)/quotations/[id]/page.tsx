@@ -1,7 +1,9 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { quotationsApi, companiesApi, partnersApi, invoicesApi } from '@/lib/api';
+import { quotationsApi, companiesApi, partnersApi, invoicesApi, fieldOptionsApi } from '@/lib/api';
+import Combobox from '@/components/Combobox';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -11,6 +13,7 @@ const typeLabels: Record<string, string> = { project: '工程報價', rental: '�
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
+const FIELD_OPTION_CATEGORIES = ['client_contract_no'];
 
 // Searchable client dropdown
 function ClientSearchSelect({ value, onChange, partners }: { value: any; onChange: (v: any) => void; partners: any[] }) {
@@ -75,6 +78,8 @@ export default function QuotationDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const contractNoOptions = optionsMap['client_contract_no'] || [];
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [acceptForm, setAcceptForm] = useState<any>({
@@ -355,8 +360,14 @@ export default function QuotationDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">日期</label>
                 <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" />
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">合約</label>
-                <input value={form.contract_name || ''} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field font-mono" placeholder="例如 T23W021" />
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label>
+                <Combobox
+                  value={form.contract_name || ''}
+                  onChange={(val) => setForm({...form, contract_name: val || ''})}
+                  options={contractNoOptions}
+                  placeholder="選擇或輸入客戶合約"
+                  onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
+                />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">{form.quotation_type === 'project' ? '工程名稱' : '服務說明'}</label>
                 <input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" />
@@ -369,7 +380,7 @@ export default function QuotationDetailPage() {
               <div><p className="text-sm text-gray-500">開立公司</p><p className="font-medium">{quotation?.company?.internal_prefix} - {quotation?.company?.name}</p></div>
               <div><p className="text-sm text-gray-500">客戶</p><p className="font-medium">{quotation?.client?.name || '-'}</p></div>
               <div><p className="text-sm text-gray-500">日期</p><p>{quotation?.quotation_date}</p></div>
-              {quotation?.contract_name && <div><p className="text-sm text-gray-500">合約</p><p className="font-medium font-mono">{quotation.contract_name}</p></div>}
+              {quotation?.contract_name && <div><p className="text-sm text-gray-500">客戶合約</p><p className="font-medium font-mono">{quotation.contract_name}</p></div>}
               <div><p className="text-sm text-gray-500">{quotation?.quotation_type === 'project' ? '工程名稱' : '服務說明'}</p><p>{quotation?.project_name || '-'}</p></div>
               {quotation?.project && (
                 <div><p className="text-sm text-gray-500">關聯工程項目</p><p><Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no} - {quotation.project.project_name}</Link></p></div>

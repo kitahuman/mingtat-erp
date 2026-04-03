@@ -1,7 +1,9 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
+import { quotationsApi, companiesApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import Combobox from '@/components/Combobox';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -20,6 +22,7 @@ const typeLabels: Record<string, string> = {
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
+const FIELD_OPTION_CATEGORIES = ['client_contract_no'];
 
 // Searchable client dropdown component
 function ClientSearchSelect({ value, onChange, partners }: { value: string; onChange: (v: string) => void; partners: any[] }) {
@@ -89,6 +92,8 @@ export default function QuotationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const contractNoOptions = optionsMap['client_contract_no'] || [];
 
   // Create form
   const defaultForm = {
@@ -179,7 +184,7 @@ export default function QuotationsPage() {
     ), filterRender: (v: any) => typeLabels[v] || v },
     { key: 'company', label: '開立公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'contract_name', label: '合約', sortable: true, render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
+    { key: 'contract_name', label: '客戶合約', sortable: true, render: (v: any) => <span className="max-w-[150px] truncate block font-mono">{v || '-'}</span> },
     { key: 'quotation_date', label: '日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'project_name', label: '工程/服務名稱', sortable: true, render: (v: any) => <span className="max-w-[200px] truncate block">{v || '-'}</span> },
     { key: 'project', label: '工程項目', sortable: true, render: (_: any, row: any) => row.project ? (
@@ -274,8 +279,14 @@ export default function QuotationsPage() {
               <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約</label>
-              <input value={form.contract_name} onChange={e => setForm({...form, contract_name: e.target.value})} className="input-field font-mono" placeholder="例如 T23W021" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
+              <Combobox
+                value={form.contract_name}
+                onChange={(val) => setForm({...form, contract_name: val || ''})}
+                options={contractNoOptions}
+                placeholder="選擇或輸入客戶合約"
+                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
+              />
             </div>
             {form.quotation_type === 'project' && (
               <div className="md:col-span-2">
