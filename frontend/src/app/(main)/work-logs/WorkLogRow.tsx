@@ -188,7 +188,7 @@ export default function WorkLogRow({
           )}
         </td>
         {/* 合約 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.quotation?.quotation_no || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.quotation?.quotation_no || '—'}</td>  {/* 合約欄位 */}
         {/* 員工 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.employee?.name_zh || '—'}</td>
         {/* 機種 */}
@@ -196,37 +196,37 @@ export default function WorkLogRow({
         {/* 機號 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.equipment_number || '—'}</td>
         {/* 噸數 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.tonnage || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.tonnage || '—'}</td>
         {/* 日夜班 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-14">{row.day_night || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.day_night || '—'}</td>
         {/* 起點 */}
         <td className="px-2 py-1.5 w-28 max-w-[112px] truncate">{row.start_location || '—'}</td>
         {/* 起點時間 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.start_time || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.start_time || '—'}</td>
         {/* 終點 */}
         <td className="px-2 py-1.5 w-28 max-w-[112px] truncate">{row.end_location || '—'}</td>
         {/* 終點時間 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.end_time || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.end_time || '—'}</td>
         {/* 數量 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16 text-right">{row.quantity ?? '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20 text-right">{row.quantity ?? '—'}</td>
         {/* 工資單位 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.unit || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.unit || '—'}</td>
         {/* OT 數量 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16 text-right">{row.ot_quantity ?? '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20 text-right">{row.ot_quantity ?? '—'}</td>
         {/* OT 單位 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16">{row.ot_unit || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.ot_unit || '—'}</td>
         {/* 商品數量 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-16 text-right">{row.goods_quantity ?? '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-20 text-right">{row.goods_quantity ?? '—'}</td>
         {/* 入帳票編號 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.receipt_no || '—'}</td>
         {/* 單號 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.work_order_no || '—'}</td>
         {/* 已確認 */}
-        <td className="px-2 py-1.5 w-14 text-center">
+        <td className="px-2 py-1.5 w-16 text-center">
           {row.is_confirmed ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}
         </td>
         {/* 已付款 */}
-        <td className="px-2 py-1.5 w-14 text-center">
+        <td className="px-2 py-1.5 w-16 text-center">
           {row.is_paid ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}
         </td>
         {/* 備註 */}
@@ -344,17 +344,17 @@ export default function WorkLogRow({
           disabled={!form.machine_type}
         />
       </td>
-      {/* 吨數 */}
-      <td className={`${cellCls} w-16`}>
+      {/* 噸數 */}
+      <td className={`${cellCls} w-20`}>
         <Combobox
           value={form.tonnage}
           onChange={v => set('tonnage', v ? String(v) : null)}
           options={fieldOptions['tonnage']?.length ? fieldOptions['tonnage'] : TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
-          placeholder="吨數"
+          placeholder="噸數"
         />
       </td>
       {/* 日夜班 */}
-      <td className={`${cellCls} w-14`}>
+      <td className={`${cellCls} w-16`}>
         <Combobox
           value={form.day_night}
           onChange={v => set('day_night', v ? String(v) : null)}
@@ -367,7 +367,7 @@ export default function WorkLogRow({
         <LocationAutocomplete value={form.start_location || ''} onChange={v => set('start_location', v)} type="start" placeholder="起點" />
       </td>
       {/* 起點時間 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <input type="time" value={form.start_time || ''} onChange={e => set('start_time', e.target.value)} className={inputCls} />
       </td>
       {/* 終點 */}
@@ -375,27 +375,27 @@ export default function WorkLogRow({
         <LocationAutocomplete value={form.end_location || ''} onChange={v => set('end_location', v)} type="end" placeholder="終點" />
       </td>
       {/* 終點時間 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <input type="time" value={form.end_time || ''} onChange={e => set('end_time', e.target.value)} className={inputCls} />
       </td>
       {/* 數量 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <input type="number" step="0.01" value={form.quantity ?? ''} onChange={e => set('quantity', e.target.value)} className={`${inputCls} text-right`} placeholder="0" />
       </td>
       {/* 工資單位 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <Combobox value={form.unit} onChange={v => set('unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="單位" />
       </td>
       {/* OT 數量 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <input type="number" step="0.01" value={form.ot_quantity ?? ''} onChange={e => set('ot_quantity', e.target.value)} className={`${inputCls} text-right`} placeholder="0" />
       </td>
       {/* OT 單位 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <Combobox value={form.ot_unit} onChange={v => set('ot_unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="OT單位" />
       </td>
       {/* 商品數量 */}
-      <td className={`${cellCls} w-16`}>
+      <td className={`${cellCls} w-20`}>
         <input type="number" step="0.01" value={form.goods_quantity ?? ''} onChange={e => set('goods_quantity', e.target.value)} className={`${inputCls} text-right`} placeholder="0" />
       </td>
       {/* 入帳票編號 */}
@@ -407,11 +407,11 @@ export default function WorkLogRow({
         <input type="text" value={form.work_order_no || ''} onChange={e => set('work_order_no', e.target.value)} className={inputCls} placeholder="單號" />
       </td>
       {/* 已確認 */}
-      <td className={`${cellCls} w-14 text-center`}>
+      <td className={`${cellCls} w-16 text-center`}>
         <input type="checkbox" checked={!!form.is_confirmed} onChange={e => set('is_confirmed', e.target.checked)} className="w-4 h-4 cursor-pointer" />
       </td>
       {/* 已付款 */}
-      <td className={`${cellCls} w-14 text-center`}>
+      <td className={`${cellCls} w-16 text-center`}>
         <input type="checkbox" checked={!!form.is_paid} onChange={e => set('is_paid', e.target.checked)} className="w-4 h-4 cursor-pointer" />
       </td>
       {/* 備註 */}

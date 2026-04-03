@@ -90,7 +90,7 @@ export class WorkLogsService {
   }
 
   async create(dto: any, userId: number) {
-    const { publisher, company_profile, client, quotation, employee, ...data } = dto;
+    const { publisher, company_profile, client, quotation, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
@@ -105,19 +105,35 @@ export class WorkLogsService {
   }
 
   async update(id: number, dto: any) {
-    const { id: _id, created_at, updated_at, publisher, company_profile, client, quotation, employee, ...rest } = dto;
+    // Strip all relation objects and metadata to avoid Prisma errors
+    const {
+      id: _id, created_at, updated_at,
+      publisher, company_profile, client, quotation, employee,
+      project, payroll_work_logs,
+      matched_rate_card, rate_card,
+      ...rest
+    } = dto;
     if (rest.machine_type !== undefined) {
       rest.equipment_source = this.resolveEquipmentSource(rest.machine_type);
     }
     if (rest.scheduled_date) rest.scheduled_date = new Date(rest.scheduled_date);
 
+    // Remove any remaining nested objects that Prisma cannot handle
+    for (const key of Object.keys(rest)) {
+      if (rest[key] !== null && typeof rest[key] === 'object' && !(rest[key] instanceof Date) && !Array.isArray(rest[key])) {
+        delete rest[key];
+      }
+    }
+
     await this.prisma.workLog.update({ where: { id }, data: rest });
-    const updated = await this.findOne(id);
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
-    if (hasPriceChange && updated) {
-      await this.matchAndSavePrice(updated as any);
+    if (hasPriceChange) {
+      const updated = await this.findOne(id);
+      if (updated) {
+        await this.matchAndSavePrice(updated as any);
+      }
     }
     return this.findOne(id);
   }

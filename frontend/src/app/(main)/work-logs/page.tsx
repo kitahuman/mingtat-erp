@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   workLogsApi, companyProfilesApi, partnersApi,
-  quotationsApi, employeesApi, usersApi, fieldOptionsApi,
+  contractsApi, employeesApi, usersApi, fieldOptionsApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import WorkLogRow from './WorkLogRow';
@@ -29,21 +29,21 @@ const COLUMNS = [
   { key: 'employee',         label: '員工',      width: 'w-20' },
   { key: 'machine_type',     label: '機種',      width: 'w-20' },
   { key: 'equipment_number', label: '機號',      width: 'w-24' },
-  { key: 'tonnage',          label: '噸數',      width: 'w-16' },
-  { key: 'day_night',        label: '日夜班',    width: 'w-14' },
+  { key: 'tonnage',          label: '噸數',      width: 'w-20' },
+  { key: 'day_night',        label: '日夜班',    width: 'w-16' },
   { key: 'start_location',   label: '起點',      width: 'w-28' },
-  { key: 'start_time',       label: '起點時間',  width: 'w-16' },
+  { key: 'start_time',       label: '起點時間',  width: 'w-20' },
   { key: 'end_location',     label: '終點',      width: 'w-28' },
-  { key: 'end_time',         label: '終點時間',  width: 'w-16' },
-  { key: 'quantity',         label: '數量',      width: 'w-16' },
-  { key: 'unit',             label: '工資單位',  width: 'w-16' },
-  { key: 'ot_quantity',      label: 'OT數量',    width: 'w-16' },
-  { key: 'ot_unit',          label: 'OT單位',    width: 'w-16' },
-  { key: 'goods_quantity',   label: '商品數量',  width: 'w-16' },
+  { key: 'end_time',         label: '終點時間',  width: 'w-20' },
+  { key: 'quantity',         label: '數量',      width: 'w-20' },
+  { key: 'unit',             label: '工資單位',  width: 'w-20' },
+  { key: 'ot_quantity',      label: 'OT數量',    width: 'w-20' },
+  { key: 'ot_unit',          label: 'OT單位',    width: 'w-20' },
+  { key: 'goods_quantity',   label: '商品數量',  width: 'w-20' },
   { key: 'receipt_no',       label: '入帳票編號', width: 'w-24' },
   { key: 'work_order_no',    label: '單號',      width: 'w-24' },
-  { key: 'is_confirmed',     label: '已確認',    width: 'w-14' },
-  { key: 'is_paid',          label: '已付款',    width: 'w-14' },
+  { key: 'is_confirmed',     label: '已確認',    width: 'w-16' },
+  { key: 'is_paid',          label: '已付款',    width: 'w-16' },
   { key: 'remarks',          label: '備註',      width: 'w-32' },
 ];
 
@@ -100,14 +100,14 @@ export default function WorkLogsPage() {
     Promise.all([
       companyProfilesApi.simple(),
       partnersApi.simple(),
-      quotationsApi.list({ limit: 500 }),
+      contractsApi.simple(),
       employeesApi.list({ limit: 500, status: 'active' }),
       usersApi.list({ limit: 200 }),
       fieldOptionsApi.getAll(),
     ]).then(([cp, pt, qt, em, us, fo]) => {
       setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
-      setContracts(((qt.data?.data) || []).map((q: any) => ({ value: q.id, label: q.quotation_no, _raw: q })));
+      setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
       const employeeList = (em.data?.data || []).map((e: any) => ({
         value: `emp_${e.id}`,
         label: e.name_zh,
@@ -303,7 +303,7 @@ export default function WorkLogsPage() {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
               if (col.key === 'company') return row.company_profile?.code || '';
               if (col.key === 'client') return row.client?.name || '';
-              if (col.key === 'quotation') return row.quotation?.quotation_no || '';
+              if (col.key === 'quotation') return row.quotation?.quotation_no || '';  // export still uses quotation_no for backward compat
               if (col.key === 'employee') return row.employee?.name_zh || '';
               if (col.key === 'is_confirmed') return val ? '是' : '否';
               if (col.key === 'is_paid') return val ? '是' : '否';
