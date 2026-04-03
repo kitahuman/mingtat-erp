@@ -12,7 +12,7 @@ import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const UNIT_OPTIONS = ['天','晚','車','噸','小時','次'];
 const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
 
 export default function SubconRateCardsPage() {
   const router = useRouter();
@@ -31,13 +31,13 @@ export default function SubconRateCardsPage() {
   const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
-  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
 
   const [form, setForm] = useState<any>({
     company_id: '', subcon_id: '', plate_no: '',
     client_id: '', contract_no: '', service_type: '',
     name: '', day_night: '日',
-    vehicle_tonnage: '', vehicle_type: '', equipment_number: '',
+    tonnage: '', machine_type: '', equipment_number: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '天', exclude_fuel: false,
@@ -73,7 +73,7 @@ export default function SubconRateCardsPage() {
     company_id: '', subcon_id: '', plate_no: '',
     client_id: '', contract_no: '', service_type: '',
     name: '', day_night: '日',
-    vehicle_tonnage: '', vehicle_type: '', equipment_number: '',
+    tonnage: '', machine_type: '', equipment_number: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '天', exclude_fuel: false,
@@ -101,8 +101,8 @@ export default function SubconRateCardsPage() {
   const handleInlineSave = async (id: number, formData: any) => {
     await subconRateCardsApi.update(id, {
       plate_no: formData.plate_no,
-      vehicle_tonnage: formData.vehicle_tonnage,
-      vehicle_type: formData.vehicle_type,
+      tonnage: formData.tonnage,
+      machine_type: formData.machine_type,
       contract_no: formData.contract_no,
       day_night: formData.day_night,
       origin: formData.origin,
@@ -138,8 +138,8 @@ export default function SubconRateCardsPage() {
     { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions },
-    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'vehicle_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => {
@@ -297,8 +297,8 @@ export default function SubconRateCardsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
                 <Combobox
-                  value={form.vehicle_tonnage}
-                  onChange={(v) => setForm({...form, vehicle_tonnage: v})}
+                  value={form.tonnage}
+                  onChange={(v) => setForm({...form, tonnage: v})}
                   options={tonnageOptions}
                   placeholder="選擇或輸入噸數"
                 />
@@ -306,8 +306,8 @@ export default function SubconRateCardsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
                 <Combobox
-                  value={form.vehicle_type}
-                  onChange={(v) => setForm({...form, vehicle_type: v})}
+                  value={form.machine_type}
+                  onChange={(v) => setForm({...form, machine_type: v})}
                   options={vehicleTypeOptions}
                   placeholder="選擇或輸入機種"
                 />

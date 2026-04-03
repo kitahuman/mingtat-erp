@@ -6,13 +6,13 @@ export class FleetRateCardsService {
   constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
-    'id', 'vehicle_tonnage', 'vehicle_type', 'origin', 'destination',
+    'id', 'tonnage', 'machine_type', 'origin', 'destination',
     'rate', 'day_rate', 'night_rate', 'day_night', 'unit', 'status', 'created_at',
   ];
 
   async findAll(query: {
     page?: number; limit?: number; search?: string;
-    client_id?: number; vehicle_tonnage?: string; vehicle_type?: string;
+    client_id?: number; tonnage?: string; machine_type?: string;
     status?: string; sortBy?: string; sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
@@ -20,8 +20,8 @@ export class FleetRateCardsService {
     const where: any = {};
 
     if (query.client_id) where.client_id = Number(query.client_id);
-    if (query.vehicle_tonnage) where.vehicle_tonnage = query.vehicle_tonnage;
-    if (query.vehicle_type) where.vehicle_type = query.vehicle_type;
+    if (query.tonnage) where.tonnage = query.tonnage;
+    if (query.machine_type) where.machine_type = query.machine_type;
     if (query.status) where.status = query.status;
     if (query.search) {
       where.OR = [
@@ -119,8 +119,8 @@ export class FleetRateCardsService {
               client_id: rc.client_id || null,
               contract_no: rc.contract_no || null,
               day_night: dayNightOptions[i],
-              vehicle_tonnage: rc.vehicle_tonnage || null,
-              vehicle_type: rc.vehicle_type || null,
+              tonnage: rc.tonnage || null,
+              machine_type: rc.machine_type || null,
               origin: rc.origin || null,
               destination: rc.destination || null,
               rate: 0,

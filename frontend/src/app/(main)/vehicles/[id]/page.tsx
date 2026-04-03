@@ -41,7 +41,7 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     loadData();
     companiesApi.simple().then(res => setCompanies(res.data));
-    fieldOptionsApi.getByCategory('vehicle_type').then(res => {
+    fieldOptionsApi.getByCategory('machine_type').then(res => {
       const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => o.label);
       if (opts.length > 0) setVehicleTypes(opts);
     }).catch(() => {});
@@ -94,7 +94,7 @@ export default function VehicleDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-mono">{vehicle?.plate_number}</h1>
-          <p className="text-gray-500">{vehicle?.vehicle_type} | {vehicle?.owner_company?.internal_prefix || vehicle?.owner_company?.name}</p>
+          <p className="text-gray-500">{vehicle?.machine_type} | {vehicle?.owner_company?.internal_prefix || vehicle?.owner_company?.name}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setShowPlateModal(true)} className="btn-secondary">更換車牌</button>
@@ -114,7 +114,7 @@ export default function VehicleDetailPage() {
           {editing ? (
             <>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">車牌</label><input value={form.plate_number || ''} className="input-field bg-gray-50" disabled /><p className="text-xs text-gray-400 mt-1">請使用「更換車牌」功能</p></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">車型</label><select value={form.vehicle_type || ''} onChange={e => setForm({...form, vehicle_type: e.target.value})} className="input-field">{vehicleTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">車型</label><select value={form.machine_type || ''} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field">{vehicleTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage || ''} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">品牌</label><input value={form.brand || ''} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
@@ -127,7 +127,7 @@ export default function VehicleDetailPage() {
           ) : (
             <>
               <div><p className="text-sm text-gray-500">車牌</p><p className="font-mono font-bold text-lg">{vehicle?.plate_number}</p></div>
-              <div><p className="text-sm text-gray-500">車型</p><p>{vehicle?.vehicle_type || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">車型</p><p>{vehicle?.machine_type || '-'}</p></div>
               <div><p className="text-sm text-gray-500">噸數</p><p>{vehicle?.tonnage ? `${vehicle.tonnage}T` : '-'}</p></div>
               <div><p className="text-sm text-gray-500">品牌</p><p>{vehicle?.brand || '-'}</p></div>
               <div><p className="text-sm text-gray-500">型號</p><p>{vehicle?.model || '-'}</p></div>

@@ -139,7 +139,7 @@ export default function CompanyDetailPage() {
                 {company.vehicles.slice(0, 10).map((v: any) => (
                   <tr key={v.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/vehicles/${v.id}`)}>
                     <td className="px-3 py-2 font-mono font-bold">{v.plate_number}</td>
-                    <td className="px-3 py-2">{v.vehicle_type || '-'}</td>
+                    <td className="px-3 py-2">{v.machine_type || '-'}</td>
                     <td className="px-3 py-2">{v.tonnage ? `${v.tonnage}T` : '-'}</td>
                     <td className="px-3 py-2"><span className={v.status === 'active' ? 'badge-green' : 'badge-red'}>{v.status === 'active' ? '使用中' : '停用'}</span></td>
                   </tr>

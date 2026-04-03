@@ -89,9 +89,9 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
 
   // ── 類型 / 狀態 / 標籤類 ──────────────────────────────────
   if (k === 'status') return 90;
-  if (k === 'role' || k === 'salary_type' || k === 'vehicle_type' || k === 'machine_type' || k === 'partner_type' || k === 'quotation_type') return 100;
+  if (k === 'role' || k === 'salary_type' || k === 'machine_type' || k === 'machine_type' || k === 'partner_type' || k === 'quotation_type') return 100;
   if (k === 'day_night' || k === 'service_type') return 90;
-  if (k === 'tonnage' || k === 'vehicle_tonnage') return 80;
+  if (k === 'tonnage' || k === 'tonnage') return 80;
 
   // ── 布林值（Y/N）類 ──────────────────────────────────────
   if (k === 'is_confirmed' || k === 'is_paid' || k === 'is_piece_rate' || k === 'exclude_fuel' || k === 'has_d_cert' || k === 'is_cert_returned') return 80;

@@ -274,7 +274,7 @@ model EmployeeTransfer {
 model Vehicle {
   id                Int       @id @default(autoincrement())
   plate_number      String
-  vehicle_type      String?
+  machine_type      String?
   tonnage           Decimal?  @db.Decimal(5, 1)
   owner_company_id  Int
   insurance_expiry  DateTime? @db.Date
@@ -690,8 +690,8 @@ model RateCard {
   name                String?
   description         String?   @db.Text
   day_night           String?
-  vehicle_tonnage     String?
-  vehicle_type        String?
+  tonnage     String?
+  machine_type        String?
   equipment_number    String?
   origin              String?
   destination         String?
@@ -749,8 +749,8 @@ model FleetRateCard {
   name                String?
   description         String?   @db.Text
   day_night           String?
-  vehicle_tonnage     String?
-  vehicle_type        String?
+  tonnage     String?
+  machine_type        String?
   equipment_number    String?
   origin              String?
   destination         String?
@@ -791,8 +791,8 @@ model SubconRateCard {
   name                String?
   description         String?   @db.Text
   day_night           String?
-  vehicle_tonnage     String?
-  vehicle_type        String?
+  tonnage     String?
+  machine_type        String?
   equipment_number    String?
   origin              String?
   destination         String?
@@ -1121,7 +1121,7 @@ model SubcontractorFleetDriver {
   name_zh              String
   name_en              String?
   id_number            String?
-  vehicle_type         String?
+  machine_type         String?
   plate_no             String?
   phone                String?
   date_of_birth        DateTime? @db.Date

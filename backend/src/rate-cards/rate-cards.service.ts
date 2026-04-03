@@ -6,7 +6,7 @@ export class RateCardsService {
   constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
-    'id', 'name', 'service_type', 'vehicle_tonnage', 'vehicle_type',
+    'id', 'name', 'service_type', 'tonnage', 'machine_type',
     'origin', 'destination', 'rate', 'day_rate', 'night_rate', 'day_night', 'status',
     'effective_date', 'expiry_date', 'created_at',
   ];
@@ -14,7 +14,7 @@ export class RateCardsService {
   async findAll(query: {
     page?: number; limit?: number; search?: string;
     company_id?: number; client_id?: number; service_type?: string;
-    vehicle_tonnage?: string; vehicle_type?: string; status?: string;
+    tonnage?: string; machine_type?: string; status?: string;
     rate_card_type?: string;
     project_id?: number; source_quotation_id?: number;
     sortBy?: string; sortOrder?: string;
@@ -26,8 +26,8 @@ export class RateCardsService {
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.client_id) where.client_id = Number(query.client_id);
     if (query.service_type) where.service_type = query.service_type;
-    if (query.vehicle_tonnage) where.vehicle_tonnage = query.vehicle_tonnage;
-    if (query.vehicle_type) where.vehicle_type = query.vehicle_type;
+    if (query.tonnage) where.tonnage = query.tonnage;
+    if (query.machine_type) where.machine_type = query.machine_type;
     if (query.status) where.status = query.status;
     if (query.rate_card_type) where.rate_card_type = query.rate_card_type;
     if (query.project_id) where.project_id = Number(query.project_id);
@@ -104,8 +104,8 @@ export class RateCardsService {
             client_id: data.client_id || null,
             contract_no: data.contract_no || null,
             day_night: data.day_night || null,
-            vehicle_tonnage: data.vehicle_tonnage || null,
-            vehicle_type: data.vehicle_type || null,
+            tonnage: data.tonnage || null,
+            machine_type: data.machine_type || null,
             origin: data.origin || null,
             destination: data.destination || null,
             rate: 0,
@@ -123,7 +123,7 @@ export class RateCardsService {
             client_id: data.client_id || null,
             contract_no: data.contract_no || null,
             day_night: data.day_night || null,
-            vehicle_tonnage: data.vehicle_tonnage || null,
+            tonnage: data.tonnage || null,
             origin: data.origin || null,
             destination: data.destination || null,
             rate: 0,

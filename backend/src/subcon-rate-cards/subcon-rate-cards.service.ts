@@ -6,13 +6,13 @@ export class SubconRateCardsService {
   constructor(private prisma: PrismaService) {}
 
   private readonly allowedSortFields = [
-    'id', 'plate_no', 'vehicle_tonnage', 'day_night', 'origin', 'destination',
+    'id', 'plate_no', 'tonnage', 'day_night', 'origin', 'destination',
     'rate', 'day_rate', 'unit', 'status', 'created_at',
   ];
 
   async findAll(query: {
     page?: number; limit?: number; search?: string;
-    subcon_id?: number; client_id?: number; vehicle_tonnage?: string;
+    subcon_id?: number; client_id?: number; tonnage?: string;
     day_night?: string; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
@@ -22,7 +22,7 @@ export class SubconRateCardsService {
 
     if (query.subcon_id) where.subcon_id = Number(query.subcon_id);
     if (query.client_id) where.client_id = Number(query.client_id);
-    if (query.vehicle_tonnage) where.vehicle_tonnage = query.vehicle_tonnage;
+    if (query.tonnage) where.tonnage = query.tonnage;
     if (query.day_night) where.day_night = query.day_night;
     if (query.status) where.status = query.status;
     if (query.search) {

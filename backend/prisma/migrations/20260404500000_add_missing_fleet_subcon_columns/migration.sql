@@ -24,7 +24,7 @@ ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "company_id" INTEGER;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "service_type" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "name" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "description" TEXT;
-ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "effective_date" DATE;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "expiry_date" DATE;
 

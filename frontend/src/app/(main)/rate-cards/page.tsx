@@ -14,7 +14,7 @@ import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
 
 export default function RateCardsPage() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function RateCardsPage() {
   const [equipmentOptions, setEquipmentOptions] = useState<any[]>([]);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
-  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
 
   // Fleet rate card editing popup state
   const [showFleetModal, setShowFleetModal] = useState(false);
@@ -114,7 +114,7 @@ export default function RateCardsPage() {
 
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', contract_no: '', service_type: '運輸',
-    name: '', description: '', day_night: '', vehicle_tonnage: '', vehicle_type: '', equipment_number: '',
+    name: '', description: '', day_night: '', tonnage: '', machine_type: '', equipment_number: '',
     origin: '', destination: '',
     rate: 0, unit: '車', ot_rate: 0, ot_unit: '小時',
     mid_shift_rate: 0,
@@ -171,7 +171,7 @@ export default function RateCardsPage() {
       service_type: formData.service_type,
       name: formData.name,
       day_night: formData.day_night || null,
-      vehicle_tonnage: formData.vehicle_tonnage,
+      tonnage: formData.tonnage,
       origin: formData.origin,
       destination: formData.destination,
       rate: formData.rate ? Number(formData.rate) : 0,
@@ -201,8 +201,8 @@ export default function RateCardsPage() {
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'vehicle_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }], render: (v: any) => v || '-' },
@@ -328,8 +328,8 @@ export default function RateCardsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
               <Combobox
-                value={form.vehicle_tonnage}
-                onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
+                value={form.tonnage}
+                onChange={(val) => setForm({...form, tonnage: val || ''})}
                 options={tonnageOptions}
                 placeholder="選擇或輸入噸數"
               />
@@ -337,8 +337,8 @@ export default function RateCardsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
               <Combobox
-                value={form.vehicle_type}
-                onChange={(val) => setForm({...form, vehicle_type: val || ''})}
+                value={form.machine_type}
+                onChange={(val) => setForm({...form, machine_type: val || ''})}
                 options={vehicleTypeOptions}
                 placeholder="選擇或輸入機種"
               />
@@ -454,8 +454,8 @@ export default function RateCardsPage() {
                   <div className="flex items-center gap-3 text-sm">
                     <span className="font-medium text-gray-700">#{idx + 1}</span>
                     {card.day_night && <span className="badge-blue">{card.day_night}</span>}
-                    {card.vehicle_tonnage && <span className="text-gray-600">{card.vehicle_tonnage}</span>}
-                    {card.vehicle_type && <span className="text-gray-600">{card.vehicle_type}</span>}
+                    {card.tonnage && <span className="text-gray-600">{card.tonnage}</span>}
+                    {card.machine_type && <span className="text-gray-600">{card.machine_type}</span>}
                     {card.equipment_number && <span className="text-gray-500 font-mono">{card.equipment_number}</span>}
                     {(card.rate > 0 || card.day_rate > 0) && (
                       <span className="text-primary-600 font-mono">
@@ -498,8 +498,8 @@ export default function RateCardsPage() {
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">噸數</label>
                         <Combobox
-                          value={card.vehicle_tonnage || ''}
-                          onChange={(val) => updateFleetCard(idx, 'vehicle_tonnage', val || '')}
+                          value={card.tonnage || ''}
+                          onChange={(val) => updateFleetCard(idx, 'tonnage', val || '')}
                           options={tonnageOptions}
                           placeholder="選擇或輸入噸數"
                         />
@@ -507,8 +507,8 @@ export default function RateCardsPage() {
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">機種</label>
                         <Combobox
-                          value={card.vehicle_type || ''}
-                          onChange={(val) => updateFleetCard(idx, 'vehicle_type', val || '')}
+                          value={card.machine_type || ''}
+                          onChange={(val) => updateFleetCard(idx, 'machine_type', val || '')}
                           options={vehicleTypeOptions}
                           placeholder="選擇或輸入機種"
                         />

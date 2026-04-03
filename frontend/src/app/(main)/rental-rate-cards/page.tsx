@@ -13,7 +13,7 @@ import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '生效中' },
@@ -37,11 +37,11 @@ export default function RentalRateCardsPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
-  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
 
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', contract_no: '', service_type: '運輸',
-    name: '', description: '', day_night: '', vehicle_tonnage: '', vehicle_type: '',
+    name: '', description: '', day_night: '', tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, unit: '車', mid_shift_rate: 0, ot_rate: 0,
     effective_date: '', expiry_date: '',
@@ -91,7 +91,7 @@ export default function RentalRateCardsPage() {
 
   const handleInlineSave = async (id: number, formData: any) => {
     const payload: any = {};
-    const textFields = ['service_type', 'name', 'vehicle_tonnage', 'vehicle_type', 'origin', 'destination', 'contract_no', 'remarks', 'status', 'day_night', 'unit'];
+    const textFields = ['service_type', 'name', 'tonnage', 'machine_type', 'origin', 'destination', 'contract_no', 'remarks', 'status', 'day_night', 'unit'];
     const numFields = ['rate', 'mid_shift_rate', 'ot_rate'];
     const dateFields = ['effective_date', 'expiry_date'];
     textFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
@@ -113,8 +113,8 @@ export default function RentalRateCardsPage() {
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'vehicle_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }], render: (v: any) => v || '-' },
@@ -241,8 +241,8 @@ export default function RentalRateCardsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
               <Combobox
-                value={form.vehicle_tonnage}
-                onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
+                value={form.tonnage}
+                onChange={(val) => setForm({...form, tonnage: val || ''})}
                 options={tonnageOptions}
                 placeholder="選擇或輸入噸數"
               />
@@ -250,8 +250,8 @@ export default function RentalRateCardsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
               <Combobox
-                value={form.vehicle_type}
-                onChange={(val) => setForm({...form, vehicle_type: val || ''})}
+                value={form.machine_type}
+                onChange={(val) => setForm({...form, machine_type: val || ''})}
                 options={vehicleTypeOptions}
                 placeholder="選擇或輸入機種"
               />

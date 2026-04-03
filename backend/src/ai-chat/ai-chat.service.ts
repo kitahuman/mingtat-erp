@@ -556,7 +556,7 @@ export class AiChatService {
       select: {
         id: true,
         plate_number: true,
-        vehicle_type: true,
+        machine_type: true,
         tonnage: true,
         status: true,
         insurance_expiry: true,
@@ -578,7 +578,7 @@ export class AiChatService {
       shown: vehicles.length,
       vehicles: vehicles.map(v => ({
         plate: v.plate_number,
-        type: v.vehicle_type,
+        type: v.machine_type,
         tonnage: v.tonnage,
         brand: v.brand,
         model: v.model,

@@ -32,7 +32,7 @@ export class SubconFleetDriversService {
 
     const allowedSortFields = [
       'id', 'short_name', 'name_zh', 'name_en', 'id_number', 
-      'vehicle_type', 'plate_no', 'phone', 'date_of_birth', 
+      'machine_type', 'plate_no', 'phone', 'date_of_birth', 
       'yellow_cert_no', 'red_cert_no', 'status', 'created_at'
     ];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'created_at';

@@ -226,12 +226,12 @@ export class WorkLogsService {
       const [vehicles, subconDrivers] = await Promise.all([
         this.prisma.vehicle.findMany({
           where,
-          select: { id: true, plate_number: true, vehicle_type: true, tonnage: true },
+          select: { id: true, plate_number: true, machine_type: true, tonnage: true },
           orderBy: { plate_number: 'asc' },
         }),
         this.prisma.subcontractorFleetDriver.findMany({
           where: { status: 'active', plate_no: { not: null } },
-          select: { id: true, plate_no: true, vehicle_type: true, subcontractor: { select: { name: true } } },
+          select: { id: true, plate_no: true, machine_type: true, subcontractor: { select: { name: true } } },
           orderBy: { plate_no: 'asc' },
         }),
       ]);
@@ -241,7 +241,7 @@ export class WorkLogsService {
         value: v.plate_number,
         label: v.plate_number,
         tonnage: v.tonnage,
-        type: v.vehicle_type,
+        type: v.machine_type,
         source: 'vehicle',
       }));
 
@@ -249,7 +249,7 @@ export class WorkLogsService {
         id: d.id,
         value: d.plate_no!,
         label: `${d.plate_no} (${d.subcontractor.name})`,
-        type: d.vehicle_type,
+        type: d.machine_type,
         source: 'subcon_fleet',
       }));
 
@@ -377,8 +377,8 @@ export class WorkLogsService {
 
       if (attempt.useCompany && companyId) where.company_id = companyId;
       if (attempt.useQuotation && quotationId) where.source_quotation_id = quotationId;
-      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
-      if (attempt.useTonnage && tonnage) where.vehicle_tonnage = tonnage;
+      if (attempt.useVehicle && vehicleType) where.machine_type = vehicleType;
+      if (attempt.useTonnage && tonnage) where.tonnage = tonnage;
       if (attempt.useRoute) {
         if (origin) where.origin = { contains: origin, mode: 'insensitive' };
         if (destination) where.destination = { contains: destination, mode: 'insensitive' };

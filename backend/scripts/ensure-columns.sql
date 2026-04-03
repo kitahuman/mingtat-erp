@@ -3,6 +3,15 @@
 -- Safe to run multiple times (uses ADD COLUMN IF NOT EXISTS).
 -- Generated from Prisma schema.
 
+-- Also handle column renames from vehicle_type/vehicle_tonnage
+DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "fleet_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_type" TO "machine_type"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "subcon_rate_cards" RENAME COLUMN "vehicle_tonnage" TO "tonnage"; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+UPDATE "field_options" SET "category" = 'machine_type' WHERE "category" = 'vehicle_type';
+
 -- Table: users
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" TEXT NOT NULL;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password" TEXT NOT NULL;
@@ -183,7 +192,7 @@ ALTER TABLE "employee_transfers" ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP
 
 -- Table: vehicles
 ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "plate_number" TEXT NOT NULL;
-ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "tonnage" DECIMAL(5,1);
 ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "owner_company_id" INTEGER NOT NULL;
 ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "insurance_expiry" DATE;
@@ -391,8 +400,8 @@ ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "service_type" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "name" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "description" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "day_night" TEXT;
-ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_tonnage" TEXT;
-ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "tonnage" TEXT;
+ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "equipment_number" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "origin" TEXT;
 ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "destination" TEXT;
@@ -430,8 +439,8 @@ ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "service_type" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "name" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "description" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "day_night" TEXT;
-ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_tonnage" TEXT;
-ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "tonnage" TEXT;
+ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "equipment_number" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "origin" TEXT;
 ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "destination" TEXT;
@@ -459,8 +468,8 @@ ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "service_type" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "name" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "description" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "day_night" TEXT;
-ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_tonnage" TEXT;
-ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "tonnage" TEXT;
+ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "equipment_number" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "origin" TEXT;
 ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "destination" TEXT;
@@ -677,7 +686,7 @@ ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "short_name" 
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "name_zh" TEXT NOT NULL;
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "name_en" TEXT;
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "id_number" TEXT;
-ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "vehicle_type" TEXT;
+ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "machine_type" TEXT;
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "plate_no" TEXT;
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "phone" TEXT;
 ALTER TABLE "subcontractor_fleet_drivers" ADD COLUMN IF NOT EXISTS "date_of_birth" DATE;

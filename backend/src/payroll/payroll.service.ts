@@ -1539,8 +1539,8 @@ export class PayrollService {
       const matched = clientCards.filter(rc => {
         if (attempt.useContract && contractNo && rc.contract_no !== contractNo) return false;
         if (attempt.useDayNight && dayNight && rc.day_night && rc.day_night !== dayNight) return false;
-        if (attempt.useTonnage && tonnageNum && rc.vehicle_tonnage !== tonnageNum) return false;
-        if (attempt.useVehicle && vehicleType && rc.vehicle_type !== vehicleType) return false;
+        if (attempt.useTonnage && tonnageNum && rc.tonnage !== tonnageNum) return false;
+        if (attempt.useVehicle && vehicleType && rc.machine_type !== vehicleType) return false;
         if (attempt.useRoute) {
           if (origin && rc.origin && !rc.origin.toLowerCase().includes(origin.toLowerCase())) return false;
           if (destination && rc.destination && !rc.destination.toLowerCase().includes(destination.toLowerCase())) return false;
@@ -1606,8 +1606,8 @@ export class PayrollService {
 
       if (attempt.useContract && contractNo) where.contract_no = contractNo;
       if (attempt.useDayNight && dayNight) where.day_night = dayNight;
-      if (attempt.useTonnage && tonnage) where.vehicle_tonnage = tonnage;
-      if (attempt.useVehicle && vehicleType) where.vehicle_type = vehicleType;
+      if (attempt.useTonnage && tonnage) where.tonnage = tonnage;
+      if (attempt.useVehicle && vehicleType) where.machine_type = vehicleType;
       if (attempt.useRoute) {
         if (origin) where.origin = { contains: origin, mode: 'insensitive' };
         if (destination) where.destination = { contains: destination, mode: 'insensitive' };

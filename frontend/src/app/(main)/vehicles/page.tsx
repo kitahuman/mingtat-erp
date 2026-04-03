@@ -29,17 +29,17 @@ export default function VehiclesPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({
-    plate_number: '', vehicle_type: '', tonnage: '', owner_company_id: '',
+    plate_number: '', machine_type: '', tonnage: '', owner_company_id: '',
     brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
   });
 
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
-    fieldOptionsApi.getByCategory('vehicle_type').then(res => {
+    fieldOptionsApi.getByCategory('machine_type').then(res => {
       const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => o.label);
       if (opts.length > 0) {
         setVehicleTypes(opts);
-        setForm((prev: any) => ({ ...prev, vehicle_type: prev.vehicle_type || opts[0] }));
+        setForm((prev: any) => ({ ...prev, machine_type: prev.machine_type || opts[0] }));
       }
     }).catch(() => {});
   }, []);
@@ -49,7 +49,7 @@ export default function VehiclesPage() {
     try {
       const res = await vehiclesApi.list({
         page, limit: 20, search,
-        vehicle_type: typeFilter || undefined,
+        machine_type: typeFilter || undefined,
         owner_company_id: companyFilter || undefined,
         sortBy, sortOrder
       });
@@ -66,7 +66,7 @@ export default function VehiclesPage() {
     try {
       await vehiclesApi.create({ ...form, owner_company_id: Number(form.owner_company_id), tonnage: form.tonnage ? Number(form.tonnage) : null });
       setShowModal(false);
-      setForm({ plate_number: '', vehicle_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
+      setForm({ plate_number: '', machine_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
@@ -76,7 +76,7 @@ export default function VehiclesPage() {
   const handleInlineSave = async (id: number, formData: any) => {
     await vehiclesApi.update(id, {
       plate_number: formData.plate_number,
-      vehicle_type: formData.vehicle_type,
+      machine_type: formData.machine_type,
       tonnage: formData.tonnage ? Number(formData.tonnage) : null,
       brand: formData.brand,
       model: formData.model,
@@ -100,7 +100,7 @@ export default function VehiclesPage() {
 
   const columns = [
     { key: 'plate_number', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
-    { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
+    { key: 'machine_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
     { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
@@ -136,7 +136,7 @@ export default function VehiclesPage() {
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
             <CsvImportModal module="vehicles" onImportComplete={load} />
-            <button onClick={() => { setForm({ ...form, vehicle_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
+            <button onClick={() => { setForm({ ...form, machine_type: vehicleTypes[0] || '' }); setShowModal(true); }} className="btn-primary">新增車輛</button>
           </div>
         )}
       </div>
@@ -184,7 +184,7 @@ export default function VehiclesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-gray-700 mb-1">車牌 *</label><input value={form.plate_number} onChange={e => setForm({...form, plate_number: e.target.value})} className="input-field" required /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">車型 *</label>
-              <select value={form.vehicle_type} onChange={e => setForm({...form, vehicle_type: e.target.value})} className="input-field">
+              <select value={form.machine_type} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field">
                 {vehicleTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>

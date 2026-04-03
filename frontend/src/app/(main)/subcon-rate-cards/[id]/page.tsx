@@ -10,7 +10,7 @@ import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type'];
 
 export default function SubconRateCardDetailPage() {
   const params = useParams();
@@ -24,7 +24,7 @@ export default function SubconRateCardDetailPage() {
   const [loading, setLoading] = useState(true);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
-  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
 
   const loadData = () => {
     subconRateCardsApi.get(Number(params.id)).then(res => {
@@ -176,8 +176,8 @@ export default function SubconRateCardDetailPage() {
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">噸數</label>
               <Combobox
-                value={form.vehicle_tonnage || ''}
-                onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
+                value={form.tonnage || ''}
+                onChange={(val) => setForm({...form, tonnage: val || ''})}
                 options={tonnageOptions}
                 placeholder="選擇或輸入噸數"
               />
@@ -185,8 +185,8 @@ export default function SubconRateCardDetailPage() {
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">機種</label>
               <Combobox
-                value={form.vehicle_type || ''}
-                onChange={(val) => setForm({...form, vehicle_type: val || ''})}
+                value={form.machine_type || ''}
+                onChange={(val) => setForm({...form, machine_type: val || ''})}
                 options={vehicleTypeOptions}
                 placeholder="選擇或輸入機種"
               />
@@ -226,8 +226,8 @@ export default function SubconRateCardDetailPage() {
             <div><p className="text-sm text-gray-500">服務類型</p><p>{record?.service_type || '-'}</p></div>
             <div><p className="text-sm text-gray-500">名稱</p><p>{record?.name || '-'}</p></div>
             <div><p className="text-sm text-gray-500">日/夜</p><p>{record?.day_night || '-'}</p></div>
-            <div><p className="text-sm text-gray-500">噸數</p><p>{record?.vehicle_tonnage || '-'}</p></div>
-            <div><p className="text-sm text-gray-500">機種</p><p>{record?.vehicle_type || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">噸數</p><p>{record?.tonnage || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">機種</p><p>{record?.machine_type || '-'}</p></div>
             <div><p className="text-sm text-gray-500">機號</p><p>{record?.equipment_number || '-'}</p></div>
             <div><p className="text-sm text-gray-500">起點</p><p>{record?.origin || '-'}</p></div>
             <div><p className="text-sm text-gray-500">終點</p><p>{record?.destination || '-'}</p></div>

@@ -8,13 +8,13 @@ export class VehiclesService {
   async simple() {
     const vehicles = await this.prisma.vehicle.findMany({
       where: { status: 'active' },
-      select: { id: true, plate_number: true, vehicle_type: true, tonnage: true },
+      select: { id: true, plate_number: true, machine_type: true, tonnage: true },
       orderBy: { plate_number: 'asc' },
     });
     return vehicles.map(v => ({
       value: v.plate_number,
       label: v.plate_number,
-      type: v.vehicle_type,
+      type: v.machine_type,
       tonnage: v.tonnage ? String(v.tonnage) : null,
       category: 'vehicle',
     }));
@@ -22,14 +22,14 @@ export class VehiclesService {
 
   async findAll(query: {
     page?: number; limit?: number; search?: string;
-    vehicle_type?: string; owner_company_id?: number; status?: string;
+    machine_type?: string; owner_company_id?: number; status?: string;
     sortBy?: string; sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where: any = {};
 
-    if (query.vehicle_type) where.vehicle_type = query.vehicle_type;
+    if (query.machine_type) where.machine_type = query.machine_type;
     if (query.owner_company_id) where.owner_company_id = Number(query.owner_company_id);
     if (query.status) where.status = query.status;
     if (query.search) {
@@ -40,7 +40,7 @@ export class VehiclesService {
       ];
     }
 
-    const allowedSortFields = ['plate_number', 'vehicle_type', 'tonnage', 'brand', 'model', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id', 'created_at'];
+    const allowedSortFields = ['plate_number', 'machine_type', 'tonnage', 'brand', 'model', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id', 'created_at'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 

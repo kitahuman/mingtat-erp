@@ -12,10 +12,10 @@ export class EnumsController {
 
   @Get()
   async getAll() {
-    // Try to get vehicle_types from configurable field options first
+    // Try to get machine_types from configurable field options first
     let vehicleTypes = VEHICLE_TYPE_OPTIONS;
     try {
-      const opts = await this.fieldOptionsService.findByCategory('vehicle_type');
+      const opts = await this.fieldOptionsService.findByCategory('machine_type');
       if (opts && opts.length > 0) {
         vehicleTypes = opts.filter(o => o.is_active).map(o => o.label);
       }
@@ -24,8 +24,8 @@ export class EnumsController {
     return {
       units: UNIT_OPTIONS,
       service_types: SERVICE_TYPE_OPTIONS,
-      vehicle_tonnages: VEHICLE_TONNAGE_OPTIONS,
-      vehicle_types: vehicleTypes,
+      tonnages: VEHICLE_TONNAGE_OPTIONS,
+      machine_types: vehicleTypes,
       quotation_statuses: [
         { value: 'draft', label: '草稿' },
         { value: 'sent', label: '已發送' },

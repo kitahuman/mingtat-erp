@@ -27,7 +27,6 @@ interface FormData {
   work_content: string;
   eng_quantity: string;          // engineering quantity in days
   // Transport
-  vehicle_type: string;
   plate_no: string;
   goods: string;
   origin: string;
@@ -61,7 +60,6 @@ const defaultForm: FormData = {
   start_location: '',
   work_content: '',
   eng_quantity: '',
-  vehicle_type: '',
   plate_no: '',
   goods: '',
   origin: '',
@@ -402,7 +400,7 @@ export default function WorkReportPage() {
         // Engineering quantity in days
         payload.eng_quantity = form.eng_quantity || undefined;
       } else {
-        payload.machine_type = form.vehicle_type || undefined;
+        payload.machine_type = form.machine_type || undefined;
         payload.equipment_number = form.plate_no || undefined;
         payload.start_location = form.origin || undefined;
         payload.end_location = form.destination || undefined;
@@ -596,7 +594,7 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('vehicleType')}</label>
-              <select value={form.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} className={selectClass}>
+              <select value={form.machine_type} onChange={(e) => set('machine_type', e.target.value)} className={selectClass}>
                 <option value="">{t('selectVehicleType')}</option>
                 {VEHICLE_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
