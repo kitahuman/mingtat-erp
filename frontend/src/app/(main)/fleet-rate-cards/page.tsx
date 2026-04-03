@@ -37,7 +37,7 @@ export default function FleetRateCardsPage() {
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', contract_no: '', service_type: '',
     name: '', day_night: '',
-    tonnage: '', machine_type: '', equipment_number: '',
+    tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
@@ -67,7 +67,7 @@ export default function FleetRateCardsPage() {
   const resetForm = () => setForm({
     company_id: '', client_id: '', contract_no: '', service_type: '',
     name: '', day_night: '',
-    tonnage: '', machine_type: '', equipment_number: '',
+    tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
@@ -122,22 +122,7 @@ export default function FleetRateCardsPage() {
   ];
 
   const columns = [
-    { key: 'company', label: '開票公司', sortable: false, editable: false, render: (_: any, row: any) => row.company?.name || '-' },
-    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'name', label: '名稱', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions, render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'equipment_number', label: '機號', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_rate', label: 'OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
-    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
-      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
-    ) : '-' },
+    // 欄位順序：狀態、來源報價單、客戶、公司、合約、服務類型、日/夜、名稱、噸數、機種、起點、終點、費率、單位、OT費率、中直費率
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => {
       const map: Record<string, { label: string; cls: string }> = {
         active: { label: '生效中', cls: 'badge-green' },
@@ -148,6 +133,23 @@ export default function FleetRateCardsPage() {
       const s = map[v] || { label: v, cls: 'badge-gray' };
       return <span className={s.cls}>{s.label}</span>;
     }, filterRender: (v: any) => ({ active: '生效中', cancelled: '取消', deleted: '已刪除', inactive: '停用' }[v] || v) },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
+      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
+    ) : '-' },
+    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
+    { key: 'company', label: '公司', sortable: false, editable: false, render: (_: any, row: any) => row.company?.name || '-' },
+    { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })), render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions, render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
+    { key: 'name', label: '名稱', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
+    { key: 'ot_rate', label: 'OT費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'mid_shift_rate', label: '中直費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
   ];
 
   const {
@@ -279,15 +281,6 @@ export default function FleetRateCardsPage() {
                   onChange={(v) => setForm({...form, machine_type: v})}
                   options={vehicleTypeOptions}
                   placeholder="選擇或輸入機種"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">機號</label>
-                <Combobox
-                  value={form.equipment_number}
-                  onChange={(v) => setForm({...form, equipment_number: v})}
-                  options={allEquipment}
-                  placeholder="選擇或輸入機號"
                 />
               </div>
               <div>

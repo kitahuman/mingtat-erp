@@ -114,7 +114,7 @@ export default function RateCardsPage() {
 
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', contract_no: '', service_type: '運輸',
-    name: '', description: '', day_night: '', tonnage: '', machine_type: '', equipment_number: '',
+    name: '', description: '', day_night: '', tonnage: '', machine_type: '',
     origin: '', destination: '',
     rate: 0, unit: '車', ot_rate: 0, ot_unit: '小時',
     mid_shift_rate: 0,
@@ -197,29 +197,29 @@ export default function RateCardsPage() {
     .map((p: any) => ({ value: p.id, label: p.code ? `${p.code} - ${p.name}` : p.name }));
 
   const columns = [
+    // 欄位順序：狀態、來源報價單、客戶、公司、合約、服務類型、日/夜、名稱、噸數、機種、起點、終點、費率、單位、OT費率、中直費率
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
+    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
+      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
+    ) : '-' },
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
+    { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
+    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })), render: (v: any) => v || '-' },
+    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }], render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
     { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }], render: (v: any) => v || '-' },
     { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => {
       const r = Number(v) || Number(row.day_rate) || 0;
-      return r > 0 ? <span className="font-mono">${r.toLocaleString()}/{row.unit || '車'}</span> : '-';
+      return r > 0 ? <span className="font-mono">${r.toLocaleString()}</span> : '-';
     } },
-    { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => fmtDate(v) },
-    { key: 'expiry_date', label: '到期日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => fmtDate(v) },
-    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
-      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
-    ) : '-' },
-    { key: 'project', label: '工程項目', sortable: true, editable: false, render: (_: any, row: any) => row.project ? (
-      <span className="font-mono text-xs text-primary-600">{row.project.project_no}</span>
-    ) : '-' },
-    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: any) => <span className={v === 'active' ? 'badge-green' : 'badge-gray'}>{v === 'active' ? '啟用' : '停用'}</span>, filterRender: (v: any) => v === 'active' ? '啟用' : '停用' },
-    { key: '_fleet', label: '租賃價目', sortable: false, editable: false, render: (_: any, row: any) => (
+    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
+    { key: 'ot_rate', label: 'OT費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'mid_shift_rate', label: '中直費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: '_fleet', label: '租貼價目', sortable: false, editable: false, render: (_: any, row: any) => (
       <button
         onClick={(e) => { e.stopPropagation(); openFleetModal(row.id); }}
         className="text-xs text-primary-600 hover:text-primary-800 hover:underline whitespace-nowrap"
@@ -344,15 +344,6 @@ export default function RateCardsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">機號</label>
-              <Combobox
-                value={form.equipment_number}
-                onChange={(val) => setForm({...form, equipment_number: val || ''})}
-                options={equipmentOptions}
-                placeholder="選擇或輸入機號"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>
               <input value={form.origin} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" />
             </div>
@@ -456,7 +447,7 @@ export default function RateCardsPage() {
                     {card.day_night && <span className="badge-blue">{card.day_night}</span>}
                     {card.tonnage && <span className="text-gray-600">{card.tonnage}</span>}
                     {card.machine_type && <span className="text-gray-600">{card.machine_type}</span>}
-                    {card.equipment_number && <span className="text-gray-500 font-mono">{card.equipment_number}</span>}
+
                     {(card.rate > 0 || card.day_rate > 0) && (
                       <span className="text-primary-600 font-mono">
                         ${Number(card.rate || card.day_rate || 0).toLocaleString()}
@@ -511,15 +502,6 @@ export default function RateCardsPage() {
                           onChange={(val) => updateFleetCard(idx, 'machine_type', val || '')}
                           options={vehicleTypeOptions}
                           placeholder="選擇或輸入機種"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">機號</label>
-                        <Combobox
-                          value={card.equipment_number || ''}
-                          onChange={(val) => updateFleetCard(idx, 'equipment_number', val || '')}
-                          options={equipmentOptions}
-                          placeholder="選擇或輸入機號"
                         />
                       </div>
                       <div>

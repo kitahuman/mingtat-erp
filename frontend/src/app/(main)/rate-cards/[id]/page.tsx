@@ -152,14 +152,6 @@ export default function RateCardDetailPage() {
                 placeholder="選擇或輸入機種"
               />
             </div>
-            <div><label className="block text-sm font-medium text-gray-500 mb-1">機號</label>
-              <Combobox
-                value={form.equipment_number || ''}
-                onChange={(val) => setForm({...form, equipment_number: val || ''})}
-                options={equipmentOptions}
-                placeholder="選擇或輸入機號"
-              />
-            </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">起點</label><input value={form.origin || ''} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">終點</label><input value={form.destination || ''} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label>
@@ -179,7 +171,6 @@ export default function RateCardDetailPage() {
             <div><p className="text-sm text-gray-500">日/夜</p><p>{record?.day_night || '-'}</p></div>
             <div><p className="text-sm text-gray-500">噸數</p><p>{record?.tonnage || '-'}</p></div>
             <div><p className="text-sm text-gray-500">機種</p><p>{record?.machine_type || '-'}</p></div>
-            <div><p className="text-sm text-gray-500">機號</p><p>{record?.equipment_number || '-'}</p></div>
             <div><p className="text-sm text-gray-500">起點</p><p>{record?.origin || '-'}</p></div>
             <div><p className="text-sm text-gray-500">終點</p><p>{record?.destination || '-'}</p></div>
             <div><p className="text-sm text-gray-500">備註</p><p>{record?.remarks || '-'}</p></div>
