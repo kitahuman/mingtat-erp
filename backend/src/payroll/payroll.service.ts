@@ -292,8 +292,8 @@ export class PayrollService {
     // Check for existing payroll
     const existingWhere: any = {
       employee_id: emp.id,
-      date_from,
-      date_to,
+      date_from: new Date(date_from),
+      date_to: new Date(date_to),
     };
     if (company_profile_id) {
       existingWhere.company_profile_id = Number(company_profile_id);
@@ -338,8 +338,8 @@ export class PayrollService {
     const saved = await this.prisma.payroll.create({
       data: {
         period,
-        date_from,
-        date_to,
+        date_from: new Date(date_from),
+        date_to: new Date(date_to),
         employee_id: emp.id,
         company_profile_id: actualCpId ?? undefined,
         salary_type: calc.salary_type,
@@ -682,7 +682,7 @@ export class PayrollService {
     if (!payroll) throw new NotFoundException('Payroll not found');
 
     const updateData: any = {};
-    if (body.payment_date !== undefined) updateData.payment_date = body.payment_date;
+    if (body.payment_date !== undefined) updateData.payment_date = body.payment_date ? new Date(body.payment_date) : null;
     if (body.cheque_number !== undefined) updateData.cheque_number = body.cheque_number;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.status !== undefined) updateData.status = body.status;
@@ -759,7 +759,7 @@ export class PayrollService {
   // ── 批量標記已付款 ────────────────────────────────────────────
   async bulkMarkPaid(ids: number[], paymentDate?: string, chequeNumber?: string) {
     const updateData: any = { status: 'paid' };
-    if (paymentDate) updateData.payment_date = paymentDate;
+    if (paymentDate) updateData.payment_date = new Date(paymentDate);
     if (chequeNumber) updateData.cheque_number = chequeNumber;
 
     await this.prisma.payroll.updateMany({
@@ -803,12 +803,12 @@ export class PayrollService {
     }
 
     const empId = payroll.employee_id;
-    const dateFrom = String(payroll.date_from || `${payroll.period}-01`);
-    const dateTo = String(payroll.date_to || (() => {
+    const dateFrom = toDateStr(payroll.date_from) || `${payroll.period}-01`;
+    const dateTo = toDateStr(payroll.date_to) || (() => {
       const [y, m] = payroll.period.split('-');
       const lastDay = new Date(Number(y), Number(m), 0).getDate();
       return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
-    })());
+    })();
     const cpId = payroll.company_profile_id;
 
     const emp = await this.prisma.employee.findUnique({
@@ -1120,7 +1120,7 @@ export class PayrollService {
 
     // Check if same allowance already exists for this date
     const existing = await this.prisma.payrollDailyAllowance.findFirst({
-      where: { payroll_id: payrollId, date: body.date, allowance_key: body.allowance_key },
+      where: { payroll_id: payrollId, date: new Date(body.date), allowance_key: body.allowance_key },
     });
     if (existing) {
       throw new BadRequestException(`此日期已有「${body.allowance_name}」津貼`);
@@ -1129,7 +1129,7 @@ export class PayrollService {
     const saved = await this.prisma.payrollDailyAllowance.create({
       data: {
         payroll_id: payrollId,
-        date: body.date,
+        date: new Date(body.date),
         allowance_key: body.allowance_key,
         allowance_name: body.allowance_name,
         amount: body.amount,
@@ -1171,7 +1171,7 @@ export class PayrollService {
 
     // Delete existing allowances for this date
     await this.prisma.payrollDailyAllowance.deleteMany({
-      where: { payroll_id: payrollId, date: body.date },
+      where: { payroll_id: payrollId, date: new Date(body.date) },
     });
 
     // Create new ones
@@ -1180,7 +1180,7 @@ export class PayrollService {
       const da = await this.prisma.payrollDailyAllowance.create({
         data: {
           payroll_id: payrollId,
-          date: body.date,
+          date: new Date(body.date),
           allowance_key: a.allowance_key,
           allowance_name: a.allowance_name,
           amount: a.amount,
