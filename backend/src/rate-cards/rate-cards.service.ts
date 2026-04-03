@@ -86,6 +86,50 @@ export class RateCardsService {
         } : undefined,
       },
     });
+
+    // Three-table linkage: when creating a customer rate card (rental type),
+    // auto-create corresponding items in fleet and subcon rate cards with empty prices
+    if (!data.rate_card_type || data.rate_card_type === 'rental') {
+      try {
+        // Create fleet rate card (rental/internal cost) with same item info but zero prices
+        await this.prisma.fleetRateCard.create({
+          data: {
+            client_id: data.client_id || null,
+            contract_no: data.contract_no || null,
+            vehicle_tonnage: data.vehicle_tonnage || null,
+            vehicle_type: data.vehicle_type || null,
+            origin: data.origin || null,
+            destination: data.destination || null,
+            day_rate: 0,
+            night_rate: 0,
+            mid_shift_rate: 0,
+            ot_rate: 0,
+            unit: data.day_unit || null,
+            remarks: `由客戶價目 #${saved.id} 自動建立`,
+            status: 'active',
+          },
+        });
+
+        // Create subcon rate card (supplier cost) with same item info but zero prices
+        await this.prisma.subconRateCard.create({
+          data: {
+            client_id: data.client_id || null,
+            contract_no: data.contract_no || null,
+            vehicle_tonnage: data.vehicle_tonnage || null,
+            origin: data.origin || null,
+            destination: data.destination || null,
+            unit_price: 0,
+            unit: data.day_unit || null,
+            remarks: `由客戶價目 #${saved.id} 自動建立`,
+            status: 'active',
+          },
+        });
+      } catch (linkErr) {
+        // Log but don't fail the main creation
+        console.error('Three-table linkage error:', linkErr);
+      }
+    }
+
     return this.findOne(saved.id);
   }
 

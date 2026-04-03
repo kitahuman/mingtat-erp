@@ -603,7 +603,7 @@ export class PayrollService {
             unit_price: 0,
             quantity: workLogs.length,
             amount: commissionTotal,
-            remarks: `車隊價目表 #${fleetRateCard.id}`,
+            remarks: `租賃價目表 #${fleetRateCard.id}`,
             sort_order: sortOrder++,
           });
         }

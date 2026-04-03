@@ -55,7 +55,7 @@ export class FleetRateCardsService {
       where: { id },
       include: { client: true, source_quotation: true },
     });
-    if (!frc) throw new NotFoundException('車隊價目表不存在');
+    if (!frc) throw new NotFoundException('租賃價目表不存在');
     return frc;
   }
 
@@ -67,7 +67,7 @@ export class FleetRateCardsService {
 
   async update(id: number, dto: any) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('車隊價目表不存在');
+    if (!existing) throw new NotFoundException('租賃價目表不存在');
     const { created_at, updated_at, id: _id, client, source_quotation, ...updateData } = dto;
     await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
@@ -75,7 +75,7 @@ export class FleetRateCardsService {
 
   async remove(id: number) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('車隊價目表不存在');
+    if (!existing) throw new NotFoundException('租賃價目表不存在');
     await this.prisma.fleetRateCard.delete({ where: { id } });
     return { message: '刪除成功' };
   }

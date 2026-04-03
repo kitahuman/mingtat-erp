@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
 import Link from 'next/link';
+import SearchableSelect from '@/components/SearchableSelect';
+import Combobox from '@/components/Combobox';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
+const VEHICLE_TYPE_OPTIONS = ['泥頭車', '拖頭', '吊臂車', '吊雞車', '平板車', '密斗車', '油壓車', '鈎臂車', '炮車'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
 
 export default function RentalRateCardDetailPage() {
@@ -61,12 +64,16 @@ export default function RentalRateCardDetailPage() {
     setForm({ ...form, ot_rates: form.ot_rates.filter((_: any, i: number) => i !== idx) });
   };
 
+  const clientOptions = partners
+    .filter((p: any) => p.partner_type === 'client')
+    .map((p: any) => ({ value: p.id, label: p.name }));
+
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/rental-rate-cards" className="hover:text-primary-600">租賃價目表</Link><span>/</span><span className="text-gray-900">{record?.client?.name} - {record?.name || record?.service_type}</span>
+        <Link href="/rental-rate-cards" className="hover:text-primary-600">客戶價目表</Link><span>/</span><span className="text-gray-900">{record?.client?.name} - {record?.name || record?.service_type}</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
@@ -97,9 +104,12 @@ export default function RentalRateCardDetailPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: Number(e.target.value)})} className="input-field">
-                {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.client_id}
+                onChange={(val) => setForm({...form, client_id: val ? Number(val) : null})}
+                options={clientOptions}
+                placeholder="搜尋客戶..."
+              />
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">合約編號</label><input value={form.contract_no || ''} onChange={e => setForm({...form, contract_no: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">服務類型</label>
@@ -108,11 +118,21 @@ export default function RentalRateCardDetailPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">名稱</label><input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-500 mb-1">車輛噸數</label>
-              <select value={form.vehicle_tonnage || ''} onChange={e => setForm({...form, vehicle_tonnage: e.target.value})} className="input-field">
-                <option value="">不適用</option>
-                {TONNAGE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label>
+              <Combobox
+                value={form.vehicle_tonnage || ''}
+                onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
+                options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+                placeholder="選擇或輸入噸數"
+              />
+            </div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">機種</label>
+              <Combobox
+                value={form.vehicle_type || ''}
+                onChange={(val) => setForm({...form, vehicle_type: val || ''})}
+                options={VEHICLE_TYPE_OPTIONS.map(t => ({ value: t, label: t }))}
+                placeholder="選擇或輸入機種"
+              />
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">起點</label><input value={form.origin || ''} onChange={e => setForm({...form, origin: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">終點</label><input value={form.destination || ''} onChange={e => setForm({...form, destination: e.target.value})} className="input-field" /></div>
@@ -130,7 +150,8 @@ export default function RentalRateCardDetailPage() {
             <div><p className="text-sm text-gray-500">合約編號</p><p>{record?.contract_no || '-'}</p></div>
             <div><p className="text-sm text-gray-500">服務類型</p><p>{record?.service_type}</p></div>
             <div><p className="text-sm text-gray-500">名稱</p><p>{record?.name || '-'}</p></div>
-            <div><p className="text-sm text-gray-500">車輛噸數</p><p>{record?.vehicle_tonnage || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">噸數</p><p>{record?.vehicle_tonnage || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">機種</p><p>{record?.vehicle_type || '-'}</p></div>
             <div><p className="text-sm text-gray-500">起點</p><p>{record?.origin || '-'}</p></div>
             <div><p className="text-sm text-gray-500">終點</p><p>{record?.destination || '-'}</p></div>
             <div><p className="text-sm text-gray-500">備註</p><p>{record?.remarks || '-'}</p></div>

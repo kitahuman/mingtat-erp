@@ -87,10 +87,10 @@ export default function FleetRateCardsPage() {
     { key: 'vehicle_type', label: '車型', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'day_rate', label: '日間分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'night_rate', label: '夜間分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'mid_shift_rate', label: '中直分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'ot_rate', label: 'OT分傭', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'night_rate', label: '夜間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'mid_shift_rate', label: '中直', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    { key: 'ot_rate', label: 'OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: UNIT_OPTIONS.map(u => ({ value: u, label: u })) },
     { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
       <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
@@ -122,8 +122,8 @@ export default function FleetRateCardsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">車隊價目表</h1>
-          <p className="text-gray-500 text-sm mt-1">管理明達車隊司機分傭費率</p>
+          <h1 className="text-2xl font-bold text-gray-900">租賃價目表</h1>
+          <p className="text-gray-500 text-sm mt-1">管理自家成本價（車隊、機械、員工、服務等）</p>
         </div>
         <div className="flex gap-2">
           <CsvImportModal module="fleet-rate-cards" onImportComplete={load} />
@@ -133,7 +133,7 @@ export default function FleetRateCardsPage() {
 
       <div className="card">
         <InlineEditDataTable
-          exportFilename="車隊價目表"
+          exportFilename="租賃價目表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
@@ -166,7 +166,7 @@ export default function FleetRateCardsPage() {
         />
       </div>
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增車隊價目" size="lg">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增租賃價目" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -202,7 +202,7 @@ export default function FleetRateCardsPage() {
           </div>
 
           <div className="border-t pt-4">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">分傭費率</h3>
+            <h3 className="text-sm font-bold text-gray-700 mb-3">費率</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div><label className="block text-xs text-gray-500 mb-1">日間</label><input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" /></div>
               <div><label className="block text-xs text-gray-500 mb-1">夜間</label><input type="number" value={form.night_rate} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field" /></div>

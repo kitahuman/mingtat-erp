@@ -48,12 +48,12 @@ export default function FleetRateCardDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/fleet-rate-cards" className="hover:text-primary-600">車隊價目表</Link><span>/</span><span className="text-gray-900">{record?.client?.name || '詳情'}</span>
+        <Link href="/fleet-rate-cards" className="hover:text-primary-600">租賃價目表</Link><span>/</span><span className="text-gray-900">{record?.client?.name || '詳情'}</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{record?.client?.name || '車隊價目'}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{record?.client?.name || '租賃價目'}</h1>
           <p className="text-gray-500">{record?.vehicle_tonnage} {record?.vehicle_type} | {record?.origin} → {record?.destination}</p>
         </div>
         <div className="flex gap-2">
@@ -115,7 +115,7 @@ export default function FleetRateCardDetailPage() {
       </div>
 
       <div className="card mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">分傭費率</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-4">費率</h2>
         {editing ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div><label className="block text-xs text-gray-500 mb-1">日間</label><input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" /></div>

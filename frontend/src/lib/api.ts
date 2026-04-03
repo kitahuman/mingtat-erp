@@ -196,7 +196,7 @@ export const rateCardsApi = {
   delete: (id: number) => api.delete(`/rate-cards/${id}`),
 };
 
-// Fleet Rate Cards (車隊價目表)
+// Fleet Rate Cards (租賃價目表)
 export const fleetRateCardsApi = {
   list: (params?: any) => api.get('/fleet-rate-cards', { params }),
   get: (id: number) => api.get(`/fleet-rate-cards/${id}`),
@@ -205,7 +205,7 @@ export const fleetRateCardsApi = {
   delete: (id: number) => api.delete(`/fleet-rate-cards/${id}`),
 };
 
-// Subcontractor Vehicle Rate Cards (街車價目表)
+// Subcontractor Vehicle Rate Cards (供應商價目表)
 export const subconRateCardsApi = {
   list: (params?: any) => api.get('/subcon-rate-cards', { params }),
   get: (id: number) => api.get(`/subcon-rate-cards/${id}`),

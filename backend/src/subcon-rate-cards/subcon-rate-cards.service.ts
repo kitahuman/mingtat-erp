@@ -59,7 +59,7 @@ export class SubconRateCardsService {
       where: { id },
       include: { subcontractor: true, client: true, source_quotation: true },
     });
-    if (!src) throw new NotFoundException('街車價目表不存在');
+    if (!src) throw new NotFoundException('供應商價目表不存在');
     return src;
   }
 
@@ -71,7 +71,7 @@ export class SubconRateCardsService {
 
   async update(id: number, dto: any) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('街車價目表不存在');
+    if (!existing) throw new NotFoundException('供應商價目表不存在');
     const { created_at, updated_at, id: _id, subcontractor, client, source_quotation, ...updateData } = dto;
     await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
     return this.findOne(id);
@@ -79,7 +79,7 @@ export class SubconRateCardsService {
 
   async remove(id: number) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('街車價目表不存在');
+    if (!existing) throw new NotFoundException('供應商價目表不存在');
     await this.prisma.subconRateCard.delete({ where: { id } });
     return { message: '刪除成功' };
   }

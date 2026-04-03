@@ -45,12 +45,12 @@ export default function SubconRateCardDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/subcon-rate-cards" className="hover:text-primary-600">街車價目表</Link><span>/</span><span className="text-gray-900">{record?.subcontractor?.name || record?.plate_no || '詳情'}</span>
+        <Link href="/subcon-rate-cards" className="hover:text-primary-600">供應商價目表</Link><span>/</span><span className="text-gray-900">{record?.subcontractor?.name || record?.plate_no || '詳情'}</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{record?.subcontractor?.name || '街車價目'}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{record?.subcontractor?.name || '供應商價目'}</h1>
           <p className="text-gray-500">{record?.plate_no} | {record?.vehicle_tonnage} | {record?.day_night} | {record?.origin} → {record?.destination}</p>
         </div>
         <div className="flex gap-2">
@@ -69,7 +69,7 @@ export default function SubconRateCardDetailPage() {
         <h2 className="text-lg font-bold text-gray-900 mb-4">基本資料</h2>
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label className="block text-sm font-medium text-gray-500 mb-1">街車公司/司機</label>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">供應商</label>
               <select value={form.subcon_id || ''} onChange={e => setForm({...form, subcon_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
                 <option value="">無</option>
                 {partners.filter((p: any) => p.partner_type === 'subcontractor' || p.partner_type === 'supplier').map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -116,7 +116,7 @@ export default function SubconRateCardDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><p className="text-sm text-gray-500">街車公司/司機</p><p className="font-medium">{record?.subcontractor?.name || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">供應商</p><p className="font-medium">{record?.subcontractor?.name || '-'}</p></div>
             <div><p className="text-sm text-gray-500">車牌</p><p>{record?.plate_no || '-'}</p></div>
             <div><p className="text-sm text-gray-500">噸數/類別</p><p>{record?.vehicle_tonnage || '-'}</p></div>
             <div><p className="text-sm text-gray-500">客戶</p><p>{record?.client?.name || '-'}</p></div>

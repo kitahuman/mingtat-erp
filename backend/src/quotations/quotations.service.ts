@@ -317,7 +317,7 @@ export class QuotationsService {
         const effectiveDate = options?.effective_date ? new Date(options.effective_date) : quotation.quotation_date;
         const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
-        // 1. 租賃價目表
+        // 1. 客戶價目表
         await this.prisma.rateCard.create({
           data: {
             company_id: quotation.company_id,
@@ -338,7 +338,7 @@ export class QuotationsService {
           },
         });
 
-        // 2. 車隊價目表
+        // 2. 租賃價目表
         await this.prisma.fleetRateCard.create({
           data: {
             client_id: quotation.client_id,
@@ -354,7 +354,7 @@ export class QuotationsService {
           },
         });
 
-        // 3. 街車價目表
+        // 3. 供應商價目表
         await this.prisma.subconRateCard.create({
           data: {
             client_id: quotation.client_id,
@@ -439,7 +439,7 @@ export class QuotationsService {
         results.created++;
       }
 
-      // 2. 車隊價目表
+      // 2. 租賃價目表
       const existingFleet = await this.prisma.fleetRateCard.findFirst({
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });
@@ -460,7 +460,7 @@ export class QuotationsService {
         }
       }
 
-      // 3. 街車價目表
+      // 3. 供應商價目表
       const existingSubcon = await this.prisma.subconRateCard.findFirst({
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });

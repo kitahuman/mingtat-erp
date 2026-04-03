@@ -7,10 +7,13 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import SearchableSelect from '@/components/SearchableSelect';
+import Combobox from '@/components/Combobox';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
+const VEHICLE_TYPE_OPTIONS = ['泥頭車', '拖頭', '吊臂車', '吊雞車', '平板車', '密斗車', '油壓車', '鈎臂車', '炮車'];
 
 export default function RateCardsPage() {
   const router = useRouter();
@@ -102,12 +105,17 @@ export default function RateCardsPage() {
     { value: 'inactive', label: '停用' },
   ];
 
+  const clientOptions = partners
+    .filter((p: any) => p.partner_type === 'client')
+    .map((p: any) => ({ value: p.id, label: p.code ? `${p.code} - ${p.name}` : p.name }));
+
   const columns = [
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: SERVICE_TYPES.map(t => ({ value: t, label: t })) },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'vehicle_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_rate', label: '日間', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}/{row.day_unit || '天'}</span> : '-' },
@@ -198,10 +206,14 @@ export default function RateCardsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶 *</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field" required>
-                <option value="">請選擇</option>
-                {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.client_id}
+                onChange={(val) => setForm({...form, client_id: val || ''})}
+                options={clientOptions}
+                placeholder="搜尋客戶..."
+                clearable={true}
+              />
+              {!form.client_id && <input tabIndex={-1} autoComplete="off" style={{ position: 'absolute', opacity: 0, height: 0, width: 0 }} value={form.client_id} onChange={() => {}} required />}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
@@ -218,11 +230,22 @@ export default function RateCardsPage() {
               <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="input-field" placeholder="例如 20噸泥頭車" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">車輛噸數</label>
-              <select value={form.vehicle_tonnage} onChange={e => setForm({...form, vehicle_tonnage: e.target.value})} className="input-field">
-                <option value="">不適用</option>
-                {TONNAGE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
+              <Combobox
+                value={form.vehicle_tonnage}
+                onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
+                options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+                placeholder="選擇或輸入噸數"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
+              <Combobox
+                value={form.vehicle_type}
+                onChange={(val) => setForm({...form, vehicle_type: val || ''})}
+                options={VEHICLE_TYPE_OPTIONS.map(t => ({ value: t, label: t }))}
+                placeholder="選擇或輸入機種"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>

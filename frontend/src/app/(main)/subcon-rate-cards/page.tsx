@@ -90,7 +90,7 @@ export default function SubconRateCardsPage() {
   ];
 
   const columns = [
-    { key: 'subcontractor', label: '街車公司/司機', sortable: true, editable: false, render: (_: any, row: any) => row.subcontractor?.name || '-', filterRender: (_: any, row: any) => row.subcontractor?.name || '-' },
+    { key: 'subcontractor', label: '供應商', sortable: true, editable: false, render: (_: any, row: any) => row.subcontractor?.name || '-', filterRender: (_: any, row: any) => row.subcontractor?.name || '-' },
     { key: 'plate_no', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'vehicle_tonnage', label: '噸數/類別', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
     { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
@@ -131,8 +131,8 @@ export default function SubconRateCardsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">街車價目表</h1>
-          <p className="text-gray-500 text-sm mt-1">管理外判車輛（街車）費用</p>
+          <h1 className="text-2xl font-bold text-gray-900">供應商價目表</h1>
+          <p className="text-gray-500 text-sm mt-1">管理外判成本價（街車、外判服務等）</p>
         </div>
         <div className="flex gap-2">
           <CsvImportModal module="subcon-rate-cards" onImportComplete={load} />
@@ -142,7 +142,7 @@ export default function SubconRateCardsPage() {
 
       <div className="card">
         <InlineEditDataTable
-          exportFilename="街車價目表"
+          exportFilename="供應商價目表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
@@ -155,7 +155,7 @@ export default function SubconRateCardsPage() {
           limit={20}
           onPageChange={setPage}
           onSearch={setSearch}
-          searchPlaceholder="搜尋街車公司、車牌、客戶、起終點..."
+          searchPlaceholder="搜尋供應商、車牌、客戶、起終點..."
           onRowClick={(row) => router.push(`/subcon-rate-cards/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
@@ -182,11 +182,11 @@ export default function SubconRateCardsPage() {
         />
       </div>
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增街車價目" size="lg">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增供應商價目" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">街車公司/司機</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">供應商</label>
               <select value={form.subcon_id} onChange={e => setForm({...form, subcon_id: e.target.value})} className="input-field">
                 <option value="">請選擇</option>
                 {partners.filter((p: any) => p.partner_type === 'subcontractor' || p.partner_type === 'supplier').map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
