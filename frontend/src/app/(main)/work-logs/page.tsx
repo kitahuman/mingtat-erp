@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import {
-  workLogsApi, companyProfilesApi, partnersApi,
+  workLogsApi, companiesApi, partnersApi,
   contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
   vehiclesApi, machineryApi,
 } from '@/lib/api';
@@ -54,7 +54,7 @@ export default function WorkLogsPage() {
   const { user } = useAuth();
 
   // ── Reference data ──────────────────────────────────────────
-  const [companyProfiles, setCompanyProfiles] = useState<Option[]>([]);
+  const [companies, setCompanies] = useState<Option[]>([]);
   const [clients, setClients]                 = useState<Option[]>([]);
   const [contracts, setContracts]             = useState<Option[]>([]);
   const [quotations, setQuotations]           = useState<Option[]>([]);
@@ -104,7 +104,7 @@ export default function WorkLogsPage() {
   // ── Load reference data ─────────────────────────────────────
   useEffect(() => {
     Promise.all([
-      companyProfilesApi.simple(),
+      companiesApi.simple(),
       partnersApi.simple(),
       contractsApi.simple(),
       quotationsApi.list({ limit: 500 }),
@@ -114,7 +114,7 @@ export default function WorkLogsPage() {
       vehiclesApi.simple().catch(() => ({ data: [] })),
       machineryApi.simple().catch(() => ({ data: [] })),
     ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach]) => {
-      setCompanyProfiles((cp.data || []).map((c: any) => ({ value: c.id, label: c.code + ' ' + c.chinese_name })));
+      setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
       const qoData = qo.data?.data || qo.data || [];
@@ -156,7 +156,7 @@ export default function WorkLogsPage() {
       };
       if (filterPublisher) params.publisher_id     = filterPublisher;
       if (filterStatus)    params.status           = filterStatus;
-      if (filterCompany)   params.company_profile_id = filterCompany;
+      if (filterCompany)   params.company_id = filterCompany;
       if (filterClient)    params.client_id        = filterClient;
       if (filterQuotation) params.quotation_id     = filterQuotation;
       if (filterContract)  params.contract_id      = filterContract;
@@ -277,7 +277,7 @@ export default function WorkLogsPage() {
 
   // shared props for WorkLogRow
   const rowProps = {
-    companyProfiles,
+    companies,
     clients,
     quotations,
     contracts,
@@ -321,7 +321,7 @@ export default function WorkLogsPage() {
           <ExportButton
             columns={COLUMNS.map(col => ({ key: col.key, label: col.label, exportRender: (val: any, row: any) => {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
-              if (col.key === 'company') return row.company_profile?.code || '';
+              if (col.key === 'company') return row.company?.name || row.company_profile?.code || '';
               if (col.key === 'client') return row.client?.name || '';
               if (col.key === 'quotation') return row.quotation?.quotation_no || '';
               if (col.key === 'contract') return row.contract?.contract_no || '';
@@ -382,7 +382,7 @@ export default function WorkLogsPage() {
             <div className="w-28">
               <SearchableSelect value={filterCompany}
                 onChange={v => { setFilterCompany(v); setPage(1); }}
-                options={companyProfiles} placeholder="全部" />
+                options={companies} placeholder="全部" />
             </div>
           </div>
           <div className="flex flex-col gap-0.5">

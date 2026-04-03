@@ -23,6 +23,7 @@ export class WorkLogsService {
       publisher_id,
       status,
       company_profile_id,
+      company_id,
       client_id,
       quotation_id,
       contract_id,
@@ -38,6 +39,7 @@ export class WorkLogsService {
     if (publisher_id) where.publisher_id = Number(publisher_id);
     if (status) where.status = status;
     if (company_profile_id) where.company_profile_id = Number(company_profile_id);
+    if (company_id) where.company_id = Number(company_id);
     if (client_id) where.client_id = Number(client_id);
     if (quotation_id) where.quotation_id = Number(quotation_id);
     if (contract_id) where.contract_id = Number(contract_id);
@@ -66,6 +68,7 @@ export class WorkLogsService {
         include: {
           publisher: true,
           company_profile: true,
+          company: true,
           client: true,
           quotation: true,
           contract: true,
@@ -88,6 +91,7 @@ export class WorkLogsService {
       include: {
         publisher: true,
         company_profile: true,
+        company: true,
         client: true,
         quotation: true,
         contract: true,
@@ -98,7 +102,7 @@ export class WorkLogsService {
   }
 
   async create(dto: any, userId: number) {
-    const { publisher, company_profile, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
+    const { publisher, company_profile, company, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
@@ -116,7 +120,7 @@ export class WorkLogsService {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
       id: _id, created_at, updated_at,
-      publisher, company_profile, client, quotation, contract, employee,
+      publisher, company_profile, company, client, quotation, contract, employee,
       project, payroll_work_logs,
       matched_rate_card, rate_card,
       ...rest
@@ -135,7 +139,7 @@ export class WorkLogsService {
 
     await this.prisma.workLog.update({ where: { id }, data: rest });
     // 自動匹配價格（如果關鍵欄位有變動）
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
     if (hasPriceChange) {
       const updated = await this.findOne(id);
@@ -175,6 +179,7 @@ export class WorkLogsService {
         service_type: original.service_type,
         scheduled_date: original.scheduled_date,
         company_profile_id: original.company_profile_id,
+        company_id: original.company_id,
         client_id: original.client_id,
         quotation_id: original.quotation_id,
         contract_id: original.contract_id,
@@ -308,7 +313,7 @@ export class WorkLogsService {
     // RateCard（客戶價目表）用於開發票，SubconRateCard（供應商價目表）用於付款給供應商
     const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
       workLog.client_id,
-      workLog.company_profile_id,
+      workLog.company_id || workLog.company_profile_id,
       workLog.client_contract_no || null,
       workLog.service_type,
       workLog.day_night,

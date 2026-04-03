@@ -66,9 +66,10 @@ model Company {
   expenses                 Expense[]
   profiles                 CompanyProfile[]
   invoices                 Invoice[]
-  fleet_rate_cards          FleetRateCard[]
+   fleet_rate_cards          FleetRateCard[]
   subcon_rate_cards         SubconRateCard[]
-
+  work_logs                WorkLog[]
+  payrolls                 Payroll[]
   @@map("companies")
 }
 
@@ -935,6 +936,7 @@ model WorkLog {
   service_type         String?
   scheduled_date       DateTime? @db.Date
   company_profile_id   Int?
+  company_id           Int?
   client_id            Int?
   quotation_id         Int?
   contract_id          Int?
@@ -974,6 +976,7 @@ model WorkLog {
 
   publisher         User?           @relation(fields: [publisher_id], references: [id])
   company_profile   CompanyProfile? @relation(fields: [company_profile_id], references: [id])
+  company           Company?        @relation(fields: [company_id], references: [id])
   client            Partner?        @relation(fields: [client_id], references: [id])
   quotation         Quotation?      @relation(fields: [quotation_id], references: [id])
   contract          Contract?       @relation(fields: [contract_id], references: [id])
@@ -995,6 +998,7 @@ model Payroll {
   date_to            DateTime? @db.Date
   employee_id        Int
   company_profile_id Int?
+  company_id         Int?
   salary_type        String    @default("daily")
   base_rate          Decimal   @default(0) @db.Decimal(12, 2)
   work_days          Decimal   @default(0) @db.Decimal(10, 2)
@@ -1016,6 +1020,7 @@ model Payroll {
 
   employee          Employee               @relation(fields: [employee_id], references: [id])
   company_profile   CompanyProfile?         @relation(fields: [company_profile_id], references: [id])
+  company           Company?                @relation(fields: [company_id], references: [id])
   items             PayrollItem[]
   payroll_work_logs PayrollWorkLog[]
   adjustments       PayrollAdjustment[]
@@ -1073,6 +1078,8 @@ model PayrollWorkLog {
   client_name          String?
   company_profile_id   Int?
   company_profile_name String?
+  company_id           Int?
+  company_name         String?
   quotation_id         Int?
   contract_no          String?
   client_contract_no   String?

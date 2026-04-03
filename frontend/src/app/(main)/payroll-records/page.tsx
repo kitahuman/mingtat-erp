@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { payrollApi, companyProfilesApi, employeesApi } from '@/lib/api';
+import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -29,14 +29,14 @@ export default function PayrollRecordsPage() {
 
   // Filters
   const [period, setPeriod] = useState('');
-  const [companyProfileId, setCompanyProfileId] = useState('');
+  const [companyId, setCompanyId] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [employeeId, setEmployeeId] = useState('');
-  const [companyProfiles, setCompanyProfiles] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
   useEffect(() => {
-    companyProfilesApi.simple().then(res => setCompanyProfiles(res.data));
+    companiesApi.simple().then(res => setCompanies(res.data));
     employeesApi.list({ limit: 999 }).then(res => setEmployees(res.data.data || []));
   }, []);
 
@@ -45,7 +45,7 @@ export default function PayrollRecordsPage() {
     try {
       const params: any = { page, limit, sortBy, sortOrder };
       if (period) params.period = period;
-      if (companyProfileId) params.company_profile_id = companyProfileId;
+      if (companyId) params.company_id = companyId;
       if (statusFilter) params.status = statusFilter;
       if (employeeId) params.employee_id = employeeId;
       if (search) params.search = search;
@@ -59,7 +59,7 @@ export default function PayrollRecordsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [page, period, companyProfileId, statusFilter, employeeId, search, sortBy, sortOrder]);
+  useEffect(() => { loadData(); }, [page, period, companyId, statusFilter, employeeId, search, sortBy, sortOrder]);
 
   const columns = [
     { key: 'period', label: '月份', sortable: true },
@@ -109,13 +109,13 @@ export default function PayrollRecordsPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">公司</label>
             <select
-              value={companyProfileId}
-              onChange={e => { setCompanyProfileId(e.target.value); setPage(1); }}
+              value={companyId}
+              onChange={e => { setCompanyId(e.target.value); setPage(1); }}
               className="input-field w-48"
             >
               <option value="">全部公司</option>
-              {companyProfiles.map((cp: any) => (
-                <option key={cp.id} value={cp.id}>{cp.code} - {cp.chinese_name}</option>
+              {companies.map((cp: any) => (
+                <option key={cp.id} value={cp.id}>{cp.internal_prefix ? cp.internal_prefix + ' - ' : ''}{cp.name}</option>
               ))}
             </select>
           </div>
@@ -145,9 +145,9 @@ export default function PayrollRecordsPage() {
               <option value="paid">已付款</option>
             </select>
           </div>
-          {(period || companyProfileId || employeeId || statusFilter) && (
+          {(period || companyId || employeeId || statusFilter) && (
             <button
-              onClick={() => { setPeriod(''); setCompanyProfileId(''); setEmployeeId(''); setStatusFilter(''); setPage(1); }}
+              onClick={() => { setPeriod(''); setCompanyId(''); setEmployeeId(''); setStatusFilter(''); setPage(1); }}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
               清除篩選

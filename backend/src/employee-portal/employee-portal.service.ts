@@ -369,6 +369,7 @@ export class EmployeePortalService {
         service_type: data.service_type,
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : new Date(),
         company_profile_id: data.company_profile_id ? Number(data.company_profile_id) : undefined,
+        company_id: data.company_id ? Number(data.company_id) : undefined,
         client_id: clientId,
         unverified_client_name: unverifiedClientName,
         quotation_id: data.quotation_id ? Number(data.quotation_id) : undefined,

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { payrollApi, companyProfilesApi, employeesApi, fleetRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi } from '@/lib/api';
+import { payrollApi, employeesApi, fleetRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi } from '@/lib/api';
 import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -292,7 +292,7 @@ export default function PayrollPage() {
   const [step, setStep] = useState(0);
 
   // Step 0: Company
-  const [companyProfiles, setCompanyProfiles] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
 
   // Step 1: Employee
@@ -328,16 +328,14 @@ export default function PayrollPage() {
   const [addRateSubmitting, setAddRateSubmitting] = useState(false);
   const [addRateError, setAddRateError] = useState('');
   const [partners, setPartners] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
   const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
 
-  // Load partners, companies, equipment for add-rate modal
+  // Load partners, equipment for add-rate modal
   useEffect(() => {
     partnersApi.simple().then(res => setPartners(res.data)).catch(() => {});
-    companiesApi.list().then(res => setCompanies(res.data?.data || res.data || [])).catch(() => {});
     Promise.all([
       vehiclesApi.simple().then(res => res.data),
       machineryApi.simple().then(res => res.data),
@@ -348,15 +346,15 @@ export default function PayrollPage() {
     }).catch(() => {});
   }, []);
 
-  // Load company profiles
+  // Load companies
   useEffect(() => {
-    companyProfilesApi.simple().then(res => setCompanyProfiles(res.data));
+    companiesApi.simple().then(res => setCompanies(res.data));
   }, []);
 
   // Load employees when company changes
   useEffect(() => {
     if (!selectedCompany) { setEmployees([]); return; }
-    employeesApi.list({ limit: 500, status: 'active', company_profile_id: selectedCompany.id }).then(res => {
+    employeesApi.list({ limit: 500, status: 'active', company_id: selectedCompany.id }).then(res => {
       setEmployees(res.data.data || []);
     }).catch(() => {
       employeesApi.list({ limit: 500, status: 'active' }).then(res => setEmployees(res.data.data || []));
@@ -383,7 +381,7 @@ export default function PayrollPage() {
         employee_id: selectedEmployee.id,
         date_from: dateFrom,
         date_to: dateTo,
-        company_profile_id: selectedCompany?.id,
+        company_id: selectedCompany?.id,
       });
       setPreview(res.data);
       if (step !== 3) setStep(3);
@@ -401,7 +399,7 @@ export default function PayrollPage() {
         employee_id: selectedEmployee.id,
         date_from: dateFrom,
         date_to: dateTo,
-        company_profile_id: selectedCompany?.id,
+        company_id: selectedCompany?.id,
       });
       setGenerated(res.data);
       setStep(4);
@@ -501,18 +499,17 @@ export default function PayrollPage() {
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">選擇公司</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {companyProfiles.map(cp => (
+              {companies.map(cp => (
                 <button
                   key={cp.id}
                   onClick={() => { setSelectedCompany(cp); setSelectedEmployee(null); setStep(1); }}
                   className="p-4 text-left border-2 rounded-xl hover:border-primary-500 hover:bg-primary-50 transition-colors group"
                 >
-                  <div className="font-bold text-gray-900 group-hover:text-primary-700">{cp.chinese_name}</div>
-                  <div className="text-sm text-gray-500">{cp.english_name}</div>
-                  <div className="text-xs text-gray-400 mt-1">{cp.code}</div>
+                  <div className="font-bold text-gray-900 group-hover:text-primary-700">{cp.name}</div>
+                  <div className="text-sm text-gray-500">{cp.internal_prefix}</div>
                 </button>
               ))}
-              {companyProfiles.length === 0 && (
+              {companies.length === 0 && (
                 <p className="text-gray-400 text-sm col-span-3">沒有公司資料，請先在「公司資料」中新增。</p>
               )}
             </div>
@@ -525,7 +522,7 @@ export default function PayrollPage() {
             <div className="flex items-center gap-3 mb-4">
               <button onClick={() => setStep(0)} className="text-sm text-gray-500 hover:text-primary-600">← 返回</button>
               <h2 className="text-lg font-bold text-gray-800">選擇員工</h2>
-              <span className="text-sm text-gray-500">— {selectedCompany?.chinese_name}</span>
+              <span className="text-sm text-gray-500">— {selectedCompany?.name}</span>
             </div>
             <input
               type="text"
@@ -567,7 +564,7 @@ export default function PayrollPage() {
             <div className="flex gap-3 mb-6 p-4 bg-gray-50 rounded-xl">
               <div>
                 <p className="text-xs text-gray-500">公司</p>
-                <p className="font-medium">{selectedCompany?.chinese_name}</p>
+                <p className="font-medium">{selectedCompany?.name}</p>
               </div>
               <div className="border-l pl-3">
                 <p className="text-xs text-gray-500">員工</p>

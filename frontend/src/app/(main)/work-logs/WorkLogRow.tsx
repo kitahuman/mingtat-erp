@@ -30,7 +30,7 @@ interface Props {
   onDuplicate: () => void;
   onDelete: () => void;
   // reference data
-  companyProfiles: Option[];
+  companies: Option[];
   clients: Option[];
   quotations: Option[];
   contracts: Option[];
@@ -42,7 +42,7 @@ interface Props {
 
 export default function WorkLogRow({
   row, isEditing, isNew, isSelected, onSelect, onEdit, onSave, onCancel, onDuplicate, onDelete,
-  companyProfiles, clients, quotations, contracts, employees, users, fieldOptions = {}, allEquipment = [],
+  companies, clients, quotations, contracts, employees, users, fieldOptions = {}, allEquipment = [],
 }: Props) {
   const [form, setForm] = useState<any>({});
   const [equipmentOptions, setEquipmentOptions] = useState<Option[]>([]);
@@ -173,7 +173,7 @@ export default function WorkLogRow({
         {/* 服務類型 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.service_type || '—'}</td>
         {/* 公司 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.company_profile?.code || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.company?.name || row.company_profile?.code || '—'}</td>
         {/* 客戶公司 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-36 max-w-[144px] truncate">
           {row.unverified_client_name ? (
@@ -297,9 +297,9 @@ export default function WorkLogRow({
       {/* 公司 */}
       <td className={`${cellCls} w-24`}>
         <SearchableSelect
-          value={form.company_profile_id}
-          onChange={v => set('company_profile_id', v)}
-          options={companyProfiles}
+          value={form.company_id}
+          onChange={v => set('company_id', v)}
+          options={companies}
           placeholder="公司"
         />
       </td>

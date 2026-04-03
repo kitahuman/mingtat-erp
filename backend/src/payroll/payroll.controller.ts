@@ -33,6 +33,7 @@ export class PayrollController {
     date_from: string;
     date_to: string;
     company_profile_id?: number;
+    company_id?: number;
   }) {
     return this.payrollService.preview(body);
   }
@@ -44,6 +45,7 @@ export class PayrollController {
     date_from: string;
     date_to: string;
     company_profile_id?: number;
+    company_id?: number;
     period?: string;
   }) {
     return this.payrollService.generate(body);

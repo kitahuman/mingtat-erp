@@ -33,6 +33,7 @@ export class PayrollService {
     const where: any = {};
     if (query.period) where.period = query.period;
     if (query.company_profile_id) where.company_profile_id = Number(query.company_profile_id);
+    if (query.company_id) where.company_id = Number(query.company_id);
     if (query.employee_id) where.employee_id = Number(query.employee_id);
     if (query.status) where.status = query.status;
     if (query.search) {
@@ -56,6 +57,7 @@ export class PayrollService {
         include: {
           employee: { include: { company: true } },
           company_profile: true,
+          company: true,
         },
         orderBy,
         skip,
@@ -74,6 +76,7 @@ export class PayrollService {
       include: {
         employee: { include: { company: true } },
         company_profile: true,
+        company: true,
         items: { orderBy: { sort_order: 'asc' } },
         adjustments: { orderBy: { sort_order: 'asc' } },
         daily_allowances: true,
@@ -135,13 +138,15 @@ export class PayrollService {
         },
         service_type: { not: '請假/休息' },
       };
-      if (payroll.company_profile_id) {
+      if (payroll.company_id) {
+        wlWhere.company_id = payroll.company_id;
+      } else if (payroll.company_profile_id) {
         wlWhere.company_profile_id = payroll.company_profile_id;
       }
 
       const workLogs = await this.prisma.workLog.findMany({
         where: wlWhere,
-        include: { company_profile: true, client: true, quotation: true },
+        include: { company_profile: true, company: true, client: true, quotation: true },
         orderBy: { scheduled_date: 'asc' },
       });
 
@@ -182,6 +187,8 @@ export class PayrollService {
             client_name: wl.client?.name ?? wl.client_name ?? null,
             company_profile_id: wl.company_profile_id ?? null,
             company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+            company_id: wl.company_id ?? null,
+            company_name: wl.company?.name ?? null,
             quotation_id: wl.quotation_id ?? null,
             client_contract_no: wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
             is_modified: false,
@@ -204,8 +211,9 @@ export class PayrollService {
     date_from: string;
     date_to: string;
     company_profile_id?: number;
+    company_id?: number;
   }) {
-    const { employee_id, date_from, date_to, company_profile_id } = body;
+    const { employee_id, date_from, date_to, company_profile_id, company_id } = body;
 
     if (!employee_id) throw new BadRequestException('請選擇員工');
     if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
@@ -235,7 +243,7 @@ export class PayrollService {
 
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
-      include: { company_profile: true, client: true, quotation: true },
+      include: { company_profile: true, company: true, client: true, quotation: true },
       orderBy: { scheduled_date: 'asc' },
     });
 
@@ -253,7 +261,7 @@ export class PayrollService {
 
     // Calculate preview
     const calculation = salarySetting
-      ? await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null)
+      ? await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_id ?? company_profile_id ?? null)
       : null;
 
     return {
@@ -275,9 +283,10 @@ export class PayrollService {
     date_from: string;
     date_to: string;
     company_profile_id?: number;
+    company_id?: number;
     period?: string;
   }) {
-    const { employee_id, date_from, date_to, company_profile_id } = body;
+    const { employee_id, date_from, date_to, company_profile_id, company_id } = body;
 
     if (!employee_id) throw new BadRequestException('請選擇員工');
     if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
@@ -297,7 +306,9 @@ export class PayrollService {
       date_from: new Date(date_from),
       date_to: new Date(date_to),
     };
-    if (company_profile_id) {
+    if (company_id) {
+      existingWhere.company_id = Number(company_id);
+    } else if (company_profile_id) {
       existingWhere.company_profile_id = Number(company_profile_id);
     }
     const existing = await this.prisma.payroll.findFirst({ where: existingWhere });
@@ -325,15 +336,19 @@ export class PayrollService {
 
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
-      include: { company_profile: true, client: true, quotation: true },
+      include: { company_profile: true, company: true, client: true, quotation: true },
       orderBy: { scheduled_date: 'asc' },
     });
 
-    const calc = await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_profile_id ?? null);
+    const calc = await this.calculatePayroll(emp, salarySetting, workLogs, date_from, date_to, company_id ?? company_profile_id ?? null);
 
     let actualCpId = company_profile_id ?? null;
     if (!actualCpId && workLogs.length > 0) {
       actualCpId = workLogs[0].company_profile_id;
+    }
+    let actualCompanyId = company_id ?? null;
+    if (!actualCompanyId && workLogs.length > 0) {
+      actualCompanyId = workLogs[0].company_id;
     }
 
     // Create payroll record
@@ -344,6 +359,7 @@ export class PayrollService {
         date_to: new Date(date_to),
         employee_id: emp.id,
         company_profile_id: actualCpId ?? undefined,
+        company_id: actualCompanyId ?? undefined,
         salary_type: calc.salary_type,
         base_rate: calc.base_rate,
         work_days: calc.work_days,
@@ -406,6 +422,8 @@ export class PayrollService {
           client_name: wl.client?.name ?? wl.client_name ?? null,
           company_profile_id: wl.company_profile_id ?? null,
           company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+          company_id: wl.company_id ?? null,
+          company_name: wl.company?.name ?? null,
           quotation_id: wl.quotation_id ?? null,
           client_contract_no: wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
           is_modified: false,
@@ -810,6 +828,7 @@ export class PayrollService {
       return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
     })();
     const cpId = payroll.company_profile_id;
+    const companyId = payroll.company_id;
 
     const emp = await this.prisma.employee.findUnique({
       where: { id: empId },
@@ -852,6 +871,7 @@ export class PayrollService {
       ot_unit: pwl.ot_unit,
       remarks: pwl.remarks,
       company_profile_id: pwl.company_profile_id,
+      company_id: pwl.company_id,
       client_id: pwl.client_id,
       quotation_id: pwl.quotation_id,
       matched_rate_card_id: pwl.matched_rate_card_id,
@@ -862,7 +882,7 @@ export class PayrollService {
       price_match_note: pwl.price_match_note,
     }));
 
-    const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, cpId);
+    const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, companyId ?? cpId);
 
     // Calculate adjustment total
     const adjustments = payroll.adjustments || [];
@@ -929,7 +949,7 @@ export class PayrollService {
     }
 
     // Re-match price if relevant fields changed
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location', 'is_mid_shift'];
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location', 'is_mid_shift'];
     const hasPriceChange = priceRelatedFields.some(f => body[f] !== undefined);
 
     // Merge current data with updates for price matching
@@ -1211,6 +1231,7 @@ export class PayrollService {
     const where: any = {};
     if (query.period) where.period = query.period;
     if (query.company_profile_id) where.company_profile_id = Number(query.company_profile_id);
+    if (query.company_id) where.company_id = Number(query.company_id);
 
     const result = await this.prisma.payroll.aggregate({
       where,
@@ -1450,7 +1471,7 @@ export class PayrollService {
         // 使用共用 PricingService 進行嚴格匹配
         const { card, unmatchedReason } = this.pricingService.matchFleetRateCardInMemory(
           clientCards,
-          wl.company_profile_id,
+          wl.company_id || wl.company_profile_id,
           wl.client_contract_no || null,
           wl.service_type,
           wl.day_night,
