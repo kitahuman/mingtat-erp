@@ -2604,3 +2604,9 @@ DO $$ BEGIN
   ALTER TABLE "bank_transactions" ADD CONSTRAINT "bank_transactions_bank_account_id_fkey" FOREIGN KEY ("bank_account_id") REFERENCES "bank_accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+-- client_contract_no columns (added for rental business contract tracking)
+ALTER TABLE "rate_cards" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+ALTER TABLE "fleet_rate_cards" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+ALTER TABLE "subcon_rate_cards" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+ALTER TABLE "work_logs" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+ALTER TABLE "payroll_work_logs" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
