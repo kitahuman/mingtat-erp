@@ -387,14 +387,18 @@ export class PayrollService {
           unit: wl.unit,
           ot_quantity: wl.ot_quantity,
           ot_unit: wl.ot_unit,
+          is_mid_shift: wl.is_mid_shift || false,
           remarks: wl.remarks,
           matched_rate_card_id: wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
           matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
           matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
           matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+          matched_mid_shift_rate: wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate ?? null,
           price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
           price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
           line_amount: wl._line_amount ?? 0,
+          ot_line_amount: wl._ot_line_amount ?? 0,
+          mid_shift_line_amount: wl._mid_shift_line_amount ?? 0,
           group_key: wl._group_key ?? '',
           client_id: wl.client_id ?? null,
           client_name: wl.client?.name ?? wl.client_name ?? null,
@@ -470,7 +474,7 @@ export class PayrollService {
       { field: 'allowance_crane', label: '吊/挾車津貼' },
       { field: 'allowance_move_machine', label: '搬機津貼' },
       { field: 'allowance_kwh_night', label: '嘉華-夜間津貼', condition: (wl) => wl.day_night === '夜' },
-      { field: 'allowance_mid_shift', label: '中直津貼', condition: (wl) => wl.day_night === '中直' },
+      { field: 'allowance_mid_shift', label: '中直津貼', condition: (wl) => wl.is_mid_shift === true },
     ];
 
     for (const af of allowanceFields) {
@@ -551,7 +555,7 @@ export class PayrollService {
       { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
       { field: 'ot_0600_0700', label: 'OT 06:00-07:00' },
       { field: 'ot_0700_0800', label: 'OT 07:00-08:00' },
-      { field: 'ot_mid_shift', label: '中直OT津貼', condition: (wl) => wl.day_night === '中直' },
+      { field: 'ot_mid_shift', label: '中直OT津貼', condition: (wl) => wl.is_mid_shift === true },
     ];
 
     for (const os of otSlots) {
@@ -918,7 +922,7 @@ export class PayrollService {
     const editableFields = [
       'service_type', 'scheduled_date', 'day_night', 'start_location', 'end_location',
       'machine_type', 'tonnage', 'equipment_number', 'quantity', 'unit',
-      'ot_quantity', 'ot_unit', 'remarks', 'client_name', 'contract_no',
+      'ot_quantity', 'ot_unit', 'is_mid_shift', 'remarks', 'client_name', 'contract_no',
     ];
 
     const updateData: any = { is_modified: true };
@@ -929,7 +933,7 @@ export class PayrollService {
     }
 
     // Re-match price if relevant fields changed
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    const priceRelatedFields = ['client_id', 'company_profile_id', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location', 'is_mid_shift'];
     const hasPriceChange = priceRelatedFields.some(f => body[f] !== undefined);
 
     // Merge current data with updates for price matching
@@ -1459,23 +1463,37 @@ export class PayrollService {
         );
 
         if (card) {
-          const rate = Number(card.rate) || 0;
+          const resolved = this.resolveRate(card, wl.day_night);
+          const rate = resolved.rate;
           const qty = Number(wl.quantity) || 1;
+          const otRate = Number(card.ot_rate) || 0;
+          const otQty = Number(wl.ot_quantity) || 0;
+          const midShiftRate = Number(card.mid_shift_rate) || 0;
+          const isMidShift = wl.is_mid_shift || false;
+          const baseAmount = rate * qty;
+          const otAmount = otRate * otQty;
+          const midShiftAmount = isMidShift ? midShiftRate * 1 : 0;
           enriched._matched_rate_card_id = card.id;
           enriched._matched_rate = rate;
-          enriched._matched_unit = card.unit || '';
-          enriched._matched_ot_rate = card.ot_rate;
+          enriched._matched_unit = resolved.unit || card.unit || '';
+          enriched._matched_ot_rate = otRate;
+          enriched._matched_mid_shift_rate = midShiftRate;
           enriched._price_match_status = 'matched';
           enriched._price_match_note = `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`;
-          enriched._line_amount = rate * qty;
+          enriched._line_amount = baseAmount;
+          enriched._ot_line_amount = otAmount;
+          enriched._mid_shift_line_amount = midShiftAmount;
         } else {
           enriched._matched_rate_card_id = null;
           enriched._matched_rate = null;
           enriched._matched_unit = null;
           enriched._matched_ot_rate = null;
+          enriched._matched_mid_shift_rate = null;
           enriched._price_match_status = 'unmatched';
           enriched._price_match_note = '未設定';
           enriched._line_amount = 0;
+          enriched._ot_line_amount = 0;
+          enriched._mid_shift_line_amount = 0;
         }
         enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
       } else {
@@ -1483,9 +1501,12 @@ export class PayrollService {
         enriched._matched_rate = null;
         enriched._matched_unit = null;
         enriched._matched_ot_rate = null;
+        enriched._matched_mid_shift_rate = null;
         enriched._price_match_status = 'unmatched';
         enriched._price_match_note = '未設定（無客戶）';
         enriched._line_amount = 0;
+        enriched._ot_line_amount = 0;
+        enriched._mid_shift_line_amount = 0;
         enriched._group_key = this.buildGroupKeyFromWorkLog(wl);
       }
 
@@ -1607,18 +1628,13 @@ export class PayrollService {
 
   // 保留舊的 resolveRate 以供 findOne 中的現有 PayrollWorkLog 使用
   private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
-    // 如果有新的統一 rate 欄位，優先使用
-    if (card.rate !== undefined && card.rate !== null && Number(card.rate) > 0) {
-      return { rate: Number(card.rate), unit: card.unit || '' };
-    }
-    // 否則回退到舊的 day_rate/night_rate
     if (dayNight === '夜') {
-      return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.day_unit || '' };
+      return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.unit || '' };
     }
     if (dayNight === '中直') {
-      return { rate: Number(card.mid_shift_rate) || 0, unit: card.mid_shift_unit || card.day_unit || '' };
+      return { rate: Number(card.mid_shift_rate) || 0, unit: card.mid_shift_unit || card.unit || '' };
     }
-    return { rate: Number(card.day_rate) || 0, unit: card.day_unit || '' };
+    return { rate: Number(card.day_rate) || Number(card.rate) || 0, unit: card.day_unit || card.unit || '' };
   }
 
   private buildGroupKeyFromWorkLog(wl: any): string {
@@ -1724,10 +1740,19 @@ export class PayrollService {
   }
 
   private calculateLineAmount(pwl: any): number {
-    if (!pwl.matched_rate || pwl.price_match_status !== 'matched') return 0;
+    if (pwl.price_match_status !== 'matched') return 0;
     const rate = Number(pwl.matched_rate) || 0;
     const qty = Number(pwl.quantity) || 1;
-    return rate * qty;
+    const otRate = Number(pwl.matched_ot_rate) || 0;
+    const otQty = Number(pwl.ot_quantity) || 0;
+    const midShiftRate = Number(pwl.matched_mid_shift_rate) || 0;
+    const isMidShift = pwl.is_mid_shift === true;
+
+    const baseAmount = rate * qty;
+    const otAmount = otRate * otQty;
+    const midShiftAmount = isMidShift ? midShiftRate * 1 : 0;
+
+    return baseAmount + otAmount + midShiftAmount;
   }
 
   private async rematchPayrollWorkLogPrice(pwl: any): Promise<any> {
@@ -1762,15 +1787,26 @@ export class PayrollService {
         matched_rate: null,
         matched_unit: null,
         matched_ot_rate: null,
+        matched_mid_shift_rate: null,
+        ot_line_amount: 0,
+        mid_shift_line_amount: 0,
       };
     }
 
-    const rate = Number(card.rate) || 0;
+    const resolved = this.resolveRate(card, pwl.day_night);
+    const otRate = Number(card.ot_rate) || 0;
+    const otQty = Number(pwl.ot_quantity) || 0;
+    const midShiftRate = Number(card.mid_shift_rate) || 0;
+    const isMidShift = pwl.is_mid_shift || false;
+
     return {
       matched_rate_card_id: card.id,
-      matched_rate: rate,
-      matched_unit: card.unit || '',
-      matched_ot_rate: card.ot_rate ?? null,
+      matched_rate: resolved.rate,
+      matched_unit: resolved.unit,
+      matched_ot_rate: otRate,
+      matched_mid_shift_rate: midShiftRate,
+      ot_line_amount: otRate * otQty,
+      mid_shift_line_amount: isMidShift ? midShiftRate * 1 : 0,
       price_match_status: 'matched',
       price_match_note: `匹配到：${card.contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`,
     };

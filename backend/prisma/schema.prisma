@@ -942,6 +942,7 @@ model WorkLog {
   unit                 String?
   ot_quantity          Decimal?  @db.Decimal(10, 2)
   ot_unit              String?
+  is_mid_shift         Boolean   @default(false)
   goods_quantity       Decimal?  @db.Decimal(10, 2)
   matched_rate_card_id Int?
   matched_rate         Decimal?  @db.Decimal(12, 2)
@@ -1044,14 +1045,18 @@ model PayrollWorkLog {
   unit                 String?
   ot_quantity          Decimal?  @db.Decimal(10, 2)
   ot_unit              String?
+  is_mid_shift         Boolean   @default(false)
   remarks              String?   @db.Text
   matched_rate_card_id Int?
   matched_rate         Decimal?  @db.Decimal(12, 2)
   matched_unit         String?
   matched_ot_rate      Decimal?  @db.Decimal(12, 2)
+  matched_mid_shift_rate Decimal? @db.Decimal(12, 2)
   price_match_status   String?
   price_match_note     String?   @db.Text
   line_amount          Decimal   @default(0) @db.Decimal(12, 2)
+  ot_line_amount       Decimal   @default(0) @db.Decimal(12, 2)
+  mid_shift_line_amount Decimal  @default(0) @db.Decimal(12, 2)
   group_key            String?   @db.Text
   client_id            Int?
   client_name          String?

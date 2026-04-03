@@ -216,8 +216,38 @@ function DailyCalculationView({
                       </td>
                     )}
                   </tr>
+                  {/* Add allowance row */}
+                  {isAdding && isDraft && (
+                    <tr key={`add-${day.date}`} className="bg-blue-50 border-b">
+                      <td colSpan={isDraft ? 8 : 7} className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">選擇津貼：</span>
+                          <select
+                            value={selectedAllowance}
+                            onChange={e => setSelectedAllowance(e.target.value)}
+                            className="input-field text-xs py-1 w-48"
+                          >
+                            <option value="">-- 請選擇 --</option>
+                            {allowanceOptions.map((opt: any) => (
+                              <option key={opt.key} value={opt.key}>
+                                {opt.label} (${Number(opt.default_amount).toLocaleString()})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleAddAllowance(day.date)}
+                            disabled={!selectedAllowance}
+                            className="btn-primary text-xs py-1 px-3"
+                          >
+                            新增
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {/* Expanded work log details */}
                   {isExpanded && (
-                    <tr className="bg-blue-50">
+                    <tr key={`exp-${day.date}`} className="bg-gray-50 border-b">
                       <td colSpan={isDraft ? 8 : 7} className="px-6 py-2">
                         <div className="text-xs space-y-1">
                           {day.work_logs.map((wl: any, wIdx: number) => (
@@ -235,31 +265,6 @@ function DailyCalculationView({
                               </span>
                             </div>
                           ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  {isAdding && (
-                    <tr className="bg-blue-50">
-                      <td colSpan={isDraft ? 8 : 7} className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={selectedAllowance}
-                            onChange={e => setSelectedAllowance(e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1"
-                          >
-                            <option value="">選擇津貼類型</option>
-                            {allowanceOptions.map((opt: any) => (
-                              <option key={opt.key} value={opt.key}>{opt.label}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => handleAddAllowance(day.date)}
-                            disabled={!selectedAllowance}
-                            className="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 disabled:opacity-50"
-                          >
-                            新增
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -701,98 +706,64 @@ export default function PayrollDetailPage() {
         {activeTab === 'detail' && (
           <div>
             {pwls.length > 0 ? (
-              <div className="space-y-4">
-                {pwls.map((pwl: any) => {
-                  const isExcluded = pwl.is_excluded;
-                  const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
-                  const route = [pwl.start_location, pwl.end_location].filter(Boolean).join(' → ') || '-';
-                  const equipment = [pwl.tonnage, pwl.machine_type, pwl.equipment_number].filter(Boolean).join(' ');
-                  const clientShortName = pwl.client?.short_name || (pwl.client_name ? pwl.client_name.substring(0, 8) : '-');
-                  
-                  // Calculate line amounts for each component
-                  const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
-                  const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
-                  const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * Number(pwl.quantity || 1)) : 0;
-                  
-                  return (
-                    <div key={pwl.id} className={`border rounded-lg p-3 ${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'bg-gray-50'}`}>
-                      {/* Header row */}
-                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{clientShortName}</span>
-                          <span className="text-xs text-gray-500">{route}</span>
-                          {equipment && <span className="text-xs text-gray-400">({equipment})</span>}
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            pwl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
-                            pwl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>{pwl.day_night || '日'}</span>
-                        </div>
-                        {isDraft && (
-                          <div className="flex gap-1">
-                            {isExcluded ? (
-                              <button onClick={() => handleRestoreWorkLog(pwl.id)} className="text-xs text-blue-500 hover:underline">恢復</button>
-                            ) : (
-                              <>
-                                <button onClick={() => openEditWorkLog(pwl)} className="text-xs text-blue-500 hover:underline">編輯</button>
-                                <button onClick={() => handleExcludeWorkLog(pwl.id)} className="text-xs text-red-500 hover:underline">移除</button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Detail rows - up to 3 lines */}
-                      <div className="text-xs space-y-1">
-                        {/* Line 1: Base rate */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600">基本</span>
-                          <span className="font-mono text-gray-500">
-                            {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()} × ${pwl.quantity || 1}` : '未設定'}
-                          </span>
-                          <span className="font-mono font-bold w-24 text-right">
-                            {hasPrice ? `$${baseLineAmount.toLocaleString()}` : '-'}
-                          </span>
-                        </div>
-                        
-                        {/* Line 2: OT rate (only if ot_quantity > 0) */}
-                        {pwl.ot_quantity && Number(pwl.ot_quantity) > 0 && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">OT</span>
-                            <span className="font-mono text-gray-500">
-                              {pwl.matched_ot_rate ? `$${Number(pwl.matched_ot_rate).toLocaleString()} × ${pwl.ot_quantity}` : '未設定'}
-                            </span>
-                            <span className="font-mono font-bold w-24 text-right">
-                              {pwl.matched_ot_rate ? `$${otLineAmount.toLocaleString()}` : '-'}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {/* Line 3: Mid-shift rate (only if is_mid_shift is true) */}
-                        {pwl.is_mid_shift && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">中直</span>
-                            <span className="font-mono text-gray-500">
-                              {pwl.matched_mid_shift_rate ? `$${Number(pwl.matched_mid_shift_rate).toLocaleString()} × ${pwl.quantity || 1}` : '未設定'}
-                            </span>
-                            <span className="font-mono font-bold w-24 text-right">
-                              {pwl.matched_mid_shift_rate ? `$${midShiftLineAmount.toLocaleString()}` : '-'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Total line */}
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 font-bold">
-                        <span className="text-gray-700">小計</span>
-                        <span></span>
-                        <span className="font-mono w-24 text-right text-primary-600">
-                          ${(baseLineAmount + otLineAmount + midShiftLineAmount).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">日期</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">服務類型</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">日/夜</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">起點</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">終點</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">數量</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">OT</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">單價</th>
+                      <th className="px-2 py-2 text-right font-medium text-gray-600">金額</th>
+                      {isDraft && <th className="px-2 py-2 text-center font-medium text-gray-600">操作</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pwls.map((pwl: any) => {
+                      const isExcluded = pwl.is_excluded;
+                      const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
+                      return (
+                        <tr key={pwl.id} className={`border-b ${isExcluded ? 'bg-red-50 opacity-50 line-through' : ''}`}>
+                          <td className="px-2 py-1.5">{pwl.scheduled_date}</td>
+                          <td className="px-2 py-1.5">{pwl.service_type || '-'}</td>
+                          <td className="px-2 py-1.5">
+                            <span className={`px-1 py-0.5 rounded text-xs ${
+                              pwl.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                              pwl.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>{pwl.day_night || '日'}</span>
+                          </td>
+                          <td className="px-2 py-1.5">{pwl.start_location || '-'}</td>
+                          <td className="px-2 py-1.5">{pwl.end_location || '-'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">{pwl.quantity || 1}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">{pwl.ot_quantity || '-'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">
+                            {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono font-bold">
+                            {hasPrice ? `$${Number(pwl.line_amount).toLocaleString()}` : <span className="text-orange-500">-</span>}
+                          </td>
+                          {isDraft && (
+                            <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                              {isExcluded ? (
+                                <button onClick={() => handleRestoreWorkLog(pwl.id)} className="text-xs text-blue-500 hover:underline">恢復</button>
+                              ) : (
+                                <>
+                                  <button onClick={() => openEditWorkLog(pwl)} className="text-xs text-blue-500 hover:underline mr-2">編輯</button>
+                                  <button onClick={() => handleExcludeWorkLog(pwl.id)} className="text-xs text-red-500 hover:underline">移除</button>
+                                </>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <p className="text-sm text-gray-400 text-center py-8">此糧單暫無工作記錄</p>
@@ -929,64 +900,109 @@ export default function PayrollDetailPage() {
                       <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
                       <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
                       <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                        {Number(payroll.gross_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {Number(payroll.net_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   </tbody>
                 </table>
 
-                {/* Summary */}
-                <div style={{ margin: '15px 0', fontSize: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div>
-                      <div style={{ marginBottom: '5px' }}><strong>應收總額：</strong> ${Number(payroll.gross_amount).toLocaleString()}</div>
-                      <div style={{ marginBottom: '5px' }}><strong>扣款合計：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
-                      <div style={{ marginBottom: '5px' }}><strong>調整合計：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
-                        淨額：${Number(payroll.net_amount).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Signature */}
-                <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', fontSize: '12px' }}>
-                  <div>
-                    <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
-                    <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-                  </div>
-                  <div>
-                    <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
-                    <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-                  </div>
-                </div>
+                {/* Payment Info */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0' }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', width: '200px', fontSize: '13px' }}></td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>付款日期:</td>
+                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px', width: '200px' }}>
+                        {payroll.payment_date || ''}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 12px' }}></td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: '13px' }}>支票號碼:</td>
+                      <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                        {payroll.cheque_number || ''}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="card">
-          <p className="text-xs text-gray-500">應收總額</p>
-          <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
+      {/* ── Calculation Breakdown ── */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">計算明細</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">薪資類型</p>
+            <p className="font-bold">{payroll.salary_type === 'daily' ? '日薪' : '月薪'}</p>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">底薪單價</p>
+            <p className="font-bold font-mono">${Number(payroll.base_rate).toLocaleString()}</p>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">工作天數</p>
+            <p className="font-bold">{payroll.salary_type === 'daily' ? `${Number(payroll.work_days)}天` : '-'}</p>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">強積金計劃</p>
+            <p className="font-bold">{payroll.mpf_plan === 'industry' ? '行業計劃' : payroll.mpf_plan === 'manulife' ? 'Manulife' : payroll.mpf_plan === 'aia' ? 'AIA' : payroll.mpf_plan || '-'}</p>
+          </div>
         </div>
-        <div className="card">
-          <p className="text-xs text-gray-500">扣款合計</p>
-          <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500">調整合計</p>
-          <p className={`font-bold text-lg font-mono ${Number(payroll.adjustment_total) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {Number(payroll.adjustment_total) < 0 ? '-' : '+'}${Math.abs(Number(payroll.adjustment_total)).toLocaleString()}
-          </p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500">淨額</p>
-          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-3 py-2 text-left">項目</th>
+                <th className="px-3 py-2 text-right">單價</th>
+                <th className="px-3 py-2 text-right">數量</th>
+                <th className="px-3 py-2 text-right">金額</th>
+                <th className="px-3 py-2 text-left">備註</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item: any) => (
+                <tr key={item.id} className="border-b">
+                  <td className="px-3 py-2 font-medium">{item.item_name}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
+                      ? `${(Number(item.quantity) * 100).toFixed(0)}%`
+                      : `$${Number(item.unit_price).toLocaleString()}`}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-mono font-bold ${Number(item.amount) < 0 ? 'text-red-600' : ''}`}>
+                    {Number(item.amount) < 0 ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-gray-500 text-xs">{item.remarks || '-'}</td>
+                </tr>
+              ))}
+              {/* Adjustment items in breakdown */}
+              {adjustments.map((adj: any) => (
+                <tr key={`adj-${adj.id}`} className="border-b bg-blue-50">
+                  <td className="px-3 py-2 font-medium">{adj.item_name} <span className="text-xs text-blue-500">(自定義)</span></td>
+                  <td className="px-3 py-2 text-right font-mono">-</td>
+                  <td className="px-3 py-2 text-right font-mono">-</td>
+                  <td className={`px-3 py-2 text-right font-mono font-bold ${Number(adj.amount) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {Number(adj.amount) < 0 ? '-' : '+'}${Math.abs(Number(adj.amount)).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-gray-500 text-xs">{adj.remarks || '-'}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-gray-900 bg-gray-50">
+                <td colSpan={3} className="px-3 py-2 font-bold text-right">淨額</td>
+                <td className="px-3 py-2 text-right font-mono font-bold text-lg text-primary-600">
+                  ${Number(payroll.net_amount).toLocaleString()}
+                </td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

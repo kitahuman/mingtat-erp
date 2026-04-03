@@ -41,6 +41,7 @@ const COLUMNS = [
   { key: 'unit',             label: '工資單位',  width: 'w-24' },
   { key: 'ot_quantity',      label: 'OT數量',    width: 'w-24' },
   { key: 'ot_unit',          label: 'OT單位',    width: 'w-24' },
+  { key: 'is_mid_shift',     label: '中直',      width: 'w-16' },
   { key: 'goods_quantity',   label: '商品數量',  width: 'w-24' },
   { key: 'receipt_no',       label: '入帳票編號', width: 'w-28' },
   { key: 'work_order_no',    label: '單號',      width: 'w-28' },

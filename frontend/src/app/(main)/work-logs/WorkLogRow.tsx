@@ -217,6 +217,10 @@ export default function WorkLogRow({
         <td className="px-2 py-1.5 whitespace-nowrap w-24 text-right">{row.ot_quantity ?? '—'}</td>
         {/* OT 單位 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.ot_unit || '—'}</td>
+        {/* 中直 */}
+        <td className="px-2 py-1.5 w-16 text-center">
+          {row.is_mid_shift ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}
+        </td>
         {/* 商品數量 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24 text-right">{row.goods_quantity ?? '—'}</td>
         {/* 入帳票編號 */}
@@ -403,6 +407,15 @@ export default function WorkLogRow({
       {/* OT 單位 */}
       <td className={`${cellCls} w-24`}>
         <Combobox value={form.ot_unit} onChange={v => set('ot_unit', v ? String(v) : null)} options={fieldOptions['wage_unit']?.length ? fieldOptions['wage_unit'] : UNIT_OPTIONS.map(u => ({ value: u, label: u }))} placeholder="OT單位" />
+      </td>
+      {/* 中直 */}
+      <td className={`${cellCls} w-16 text-center`}>
+        <input
+          type="checkbox"
+          checked={!!form.is_mid_shift}
+          onChange={e => set('is_mid_shift', e.target.checked)}
+          className="mt-2 h-4 w-4 cursor-pointer"
+        />
       </td>
       {/* 商品數量 */}
       <td className={`${cellCls} w-24`}>
