@@ -8,10 +8,11 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
-const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
 const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
 
 export default function FleetRateCardsPage() {
   const router = useRouter();
@@ -27,6 +28,9 @@ export default function FleetRateCardsPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const tonnageOptions = optionsMap['tonnage'] || [];
+  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
 
   const [dayNightFilter, setDayNightFilter] = useState('');
 
@@ -35,7 +39,7 @@ export default function FleetRateCardsPage() {
     name: '', day_night: '',
     vehicle_tonnage: '', vehicle_type: '', equipment_number: '',
     origin: '', destination: '',
-    rate: 0, day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
+    rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
   });
 
@@ -65,7 +69,7 @@ export default function FleetRateCardsPage() {
     name: '', day_night: '',
     vehicle_tonnage: '', vehicle_type: '', equipment_number: '',
     origin: '', destination: '',
-    rate: 0, day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
+    rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
   });
 
@@ -77,8 +81,6 @@ export default function FleetRateCardsPage() {
         company_id: form.company_id ? Number(form.company_id) : null,
         client_id: form.client_id ? Number(form.client_id) : null,
         rate: Number(form.rate) || 0,
-        day_rate: Number(form.day_rate) || 0,
-        night_rate: Number(form.night_rate) || 0,
         mid_shift_rate: Number(form.mid_shift_rate) || 0,
         ot_rate: Number(form.ot_rate) || 0,
       });
@@ -97,8 +99,6 @@ export default function FleetRateCardsPage() {
       destination: formData.destination,
       day_night: formData.day_night || null,
       rate: formData.rate ? Number(formData.rate) : 0,
-      day_rate: formData.day_rate ? Number(formData.day_rate) : 0,
-      night_rate: formData.night_rate ? Number(formData.night_rate) : 0,
       mid_shift_rate: formData.mid_shift_rate ? Number(formData.mid_shift_rate) : 0,
       ot_rate: formData.ot_rate ? Number(formData.ot_rate) : 0,
       unit: formData.unit,
@@ -127,7 +127,7 @@ export default function FleetRateCardsPage() {
     { key: 'contract_no', label: '合約', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'name', label: '名稱', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: dayNightOptions, render: (v: any) => v || '-', filterRender: (v: any) => v || '-' },
-    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))], render: (v: any) => v || '-' },
+    { key: 'vehicle_tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, ...tonnageOptions], render: (v: any) => v || '-' },
     { key: 'vehicle_type', label: '機種', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'equipment_number', label: '機號', sortable: false, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
     { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
@@ -268,7 +268,7 @@ export default function FleetRateCardsPage() {
                 <Combobox
                   value={form.vehicle_tonnage}
                   onChange={(v) => setForm({...form, vehicle_tonnage: v})}
-                  options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+                  options={tonnageOptions}
                   placeholder="選擇或輸入噸數"
                 />
               </div>
@@ -277,7 +277,7 @@ export default function FleetRateCardsPage() {
                 <Combobox
                   value={form.vehicle_type}
                   onChange={(v) => setForm({...form, vehicle_type: v})}
-                  options={['泥頭車', '吊臂車', '拖頭', '平板車', '夾斗車', '油壓車', '吊雞車', '炮機', '挖掘機'].map(t => ({ value: t, label: t }))}
+                  options={vehicleTypeOptions}
                   placeholder="選擇或輸入機種"
                 />
               </div>
@@ -306,26 +306,21 @@ export default function FleetRateCardsPage() {
             <h3 className="text-sm font-bold text-gray-700 mb-3">費率</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">日間費率</label>
-                <input type="number" value={form.day_rate} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">夜間費率</label>
-                <input type="number" value={form.night_rate} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field" />
+                <label className="block text-xs text-gray-500 mb-1">費率</label>
+                <div className="flex gap-1">
+                  <input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" placeholder="0" />
+                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-20">
+                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">中直費率</label>
-                <input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" />
+                <input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" placeholder="0" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
-                <input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">單位</label>
-                <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
-                  {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" placeholder="0" />
               </div>
             </div>
           </div>

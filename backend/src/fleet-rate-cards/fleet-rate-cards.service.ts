@@ -7,7 +7,7 @@ export class FleetRateCardsService {
 
   private readonly allowedSortFields = [
     'id', 'vehicle_tonnage', 'vehicle_type', 'origin', 'destination',
-    'day_rate', 'night_rate', 'unit', 'status', 'created_at',
+    'rate', 'day_rate', 'night_rate', 'day_night', 'unit', 'status', 'created_at',
   ];
 
   async findAll(query: {
@@ -124,11 +124,9 @@ export class FleetRateCardsService {
               origin: rc.origin || null,
               destination: rc.destination || null,
               rate: 0,
-              day_rate: 0,
-              night_rate: 0,
               mid_shift_rate: 0,
               ot_rate: 0,
-              unit: rc.day_unit || null,
+              unit: rc.unit || rc.day_unit || null,
               remarks: `由客戶價目 #${rateCardId} 自動建立`,
               status: 'active',
             },

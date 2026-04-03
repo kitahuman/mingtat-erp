@@ -594,14 +594,8 @@ export class PayrollService {
 
       if (fleetRateCard) {
         for (const wl of workLogs) {
-          let rate = 0;
-          if (wl.day_night === '夜') {
-            rate = Number(fleetRateCard.night_rate) || 0;
-          } else if (wl.day_night === '中直') {
-            rate = Number(fleetRateCard.mid_shift_rate) || 0;
-          } else {
-            rate = Number(fleetRateCard.day_rate) || 0;
-          }
+          const resolved = this.resolveRate(fleetRateCard, wl.day_night);
+          const rate = resolved.rate;
 
           const qty = Number(wl.quantity) || 1;
           commissionTotal += rate * qty;
@@ -1626,15 +1620,21 @@ export class PayrollService {
     return null;
   }
 
-  // 保留舊的 resolveRate 以供 findOne 中的現有 PayrollWorkLog 使用
+  // resolveRate: use unified rate field, fallback to legacy day_rate/night_rate for old data
   private resolveRate(card: any, dayNight: string | null): { rate: number; unit: string } {
+    // New unified model: each card has a single rate + day_night selector
+    const unifiedRate = Number(card.rate) || 0;
+    if (unifiedRate > 0) {
+      return { rate: unifiedRate, unit: card.unit || '' };
+    }
+    // Fallback for legacy data that still uses day_rate/night_rate
     if (dayNight === '夜') {
       return { rate: Number(card.night_rate) || 0, unit: card.night_unit || card.unit || '' };
     }
     if (dayNight === '中直') {
       return { rate: Number(card.mid_shift_rate) || 0, unit: card.mid_shift_unit || card.unit || '' };
     }
-    return { rate: Number(card.day_rate) || Number(card.rate) || 0, unit: card.day_unit || card.unit || '' };
+    return { rate: Number(card.day_rate) || 0, unit: card.day_unit || card.unit || '' };
   }
 
   private buildGroupKeyFromWorkLog(wl: any): string {

@@ -689,11 +689,14 @@ model RateCard {
   service_type        String?
   name                String?
   description         String?   @db.Text
+  day_night           String?
   vehicle_tonnage     String?
   vehicle_type        String?
   equipment_number    String?
   origin              String?
   destination         String?
+  rate                Decimal   @default(0) @db.Decimal(12, 2)
+  unit                String?
   day_rate            Decimal   @default(0) @db.Decimal(12, 2)
   day_unit            String?
   night_rate          Decimal   @default(0) @db.Decimal(12, 2)
@@ -793,6 +796,7 @@ model SubconRateCard {
   equipment_number    String?
   origin              String?
   destination         String?
+  rate                Decimal   @default(0) @db.Decimal(12, 2)
   day_rate            Decimal   @default(0) @db.Decimal(12, 2)
   day_unit            String?
   night_rate          Decimal   @default(0) @db.Decimal(12, 2)

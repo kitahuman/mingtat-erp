@@ -7,7 +7,7 @@ export class SubconRateCardsService {
 
   private readonly allowedSortFields = [
     'id', 'plate_no', 'vehicle_tonnage', 'day_night', 'origin', 'destination',
-    'day_rate', 'unit', 'status', 'created_at',
+    'rate', 'day_rate', 'unit', 'status', 'created_at',
   ];
 
   async findAll(query: {

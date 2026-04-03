@@ -5,12 +5,12 @@ import { fleetRateCardsApi, companiesApi, partnersApi, vehiclesApi, machineryApi
 import Link from 'next/link';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
-const TONNAGE_OPTIONS = ['13噸', '20噸', '24噸', '30噸', '38噸'];
-const VEHICLE_TYPE_OPTIONS = ['泥頭車', '拖頭', '吊臂車', '吊雞車', '平板車', '密斗車', '油壓車', '鈎臂車', '炮車'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'vehicle_type'];
 
 export default function FleetRateCardDetailPage() {
   const params = useParams();
@@ -22,6 +22,9 @@ export default function FleetRateCardDetailPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [equipmentOptions, setEquipmentOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const tonnageOptions = optionsMap['tonnage'] || [];
+  const vehicleTypeOptions = optionsMap['vehicle_type'] || [];
 
   const loadData = () => {
     fleetRateCardsApi.get(Number(params.id)).then(res => {
@@ -43,8 +46,7 @@ export default function FleetRateCardDetailPage() {
   const handleSave = async () => {
     try {
       const { client, company, source_quotation, created_at, updated_at, ...updateData } = form;
-      updateData.day_rate = Number(updateData.day_rate) || 0;
-      updateData.night_rate = Number(updateData.night_rate) || 0;
+      updateData.rate = Number(updateData.rate) || 0;
       updateData.mid_shift_rate = Number(updateData.mid_shift_rate) || 0;
       updateData.ot_rate = Number(updateData.ot_rate) || 0;
       updateData.effective_date = updateData.effective_date || null;
@@ -153,7 +155,7 @@ export default function FleetRateCardDetailPage() {
               <Combobox
                 value={form.vehicle_tonnage || ''}
                 onChange={(val) => setForm({...form, vehicle_tonnage: val || ''})}
-                options={TONNAGE_OPTIONS.map(t => ({ value: t, label: t }))}
+                options={tonnageOptions}
                 placeholder="選擇或輸入噸數"
               />
             </div>
@@ -162,7 +164,7 @@ export default function FleetRateCardDetailPage() {
               <Combobox
                 value={form.vehicle_type || ''}
                 onChange={(val) => setForm({...form, vehicle_type: val || ''})}
-                options={VEHICLE_TYPE_OPTIONS.map(t => ({ value: t, label: t }))}
+                options={vehicleTypeOptions}
                 placeholder="選擇或輸入機種"
               />
             </div>
@@ -243,40 +245,26 @@ export default function FleetRateCardDetailPage() {
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">日間費率</label>
+              <label className="block text-xs text-gray-500 mb-1">費率</label>
               <div className="flex gap-1">
-                <input type="number" value={form.day_rate ?? 0} onChange={e => setForm({...form, day_rate: e.target.value})} className="input-field flex-1" />
-                <select value={form.day_unit || '天'} onChange={e => setForm({...form, day_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">夜間費率</label>
-              <div className="flex gap-1">
-                <input type="number" value={form.night_rate ?? 0} onChange={e => setForm({...form, night_rate: e.target.value})} className="input-field flex-1" />
-                <select value={form.night_unit || '晚'} onChange={e => setForm({...form, night_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
+                <input type="number" value={form.rate ?? 0} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" />
+                <select value={form.unit || '車'} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
               </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">中直費率</label>
-              <div className="flex gap-1">
-                <input type="number" value={form.mid_shift_rate ?? 0} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field flex-1" />
-                <select value={form.mid_shift_unit || '天'} onChange={e => setForm({...form, mid_shift_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
-              </div>
+              <input type="number" value={form.mid_shift_rate ?? 0} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
-              <div className="flex gap-1">
-                <input type="number" value={form.ot_rate ?? 0} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field flex-1" />
-                <select value={form.ot_unit || '小時'} onChange={e => setForm({...form, ot_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
-              </div>
+              <input type="number" value={form.ot_rate ?? 0} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" />
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">日間</p><p className="text-xl font-bold font-mono">${Number(record?.day_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.day_unit || '天'}</span></p></div>
-            <div className="bg-indigo-50 rounded-lg p-3"><p className="text-xs text-indigo-600 mb-1">夜間</p><p className="text-xl font-bold font-mono">${Number(record?.night_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.night_unit || '晚'}</span></p></div>
-            <div className="bg-purple-50 rounded-lg p-3"><p className="text-xs text-purple-600 mb-1">中直</p><p className="text-xl font-bold font-mono">${Number(record?.mid_shift_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.mid_shift_unit || '天'}</span></p></div>
-            <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.ot_unit || '小時'}</span></p></div>
+            <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-blue-600 mb-1">費率</p><p className="text-xl font-bold font-mono">${Number(record?.rate || record?.day_rate || 0).toLocaleString()}<span className="text-sm font-normal text-gray-500">/{record?.unit || '車'}</span></p></div>
+            <div className="bg-purple-50 rounded-lg p-3"><p className="text-xs text-purple-600 mb-1">中直</p><p className="text-xl font-bold font-mono">${Number(record?.mid_shift_rate || 0).toLocaleString()}</p></div>
+            <div className="bg-orange-50 rounded-lg p-3"><p className="text-xs text-orange-600 mb-1">OT</p><p className="text-xl font-bold font-mono">${Number(record?.ot_rate || 0).toLocaleString()}</p></div>
           </div>
         )}
       </div>

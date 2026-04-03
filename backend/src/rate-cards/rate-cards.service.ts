@@ -7,7 +7,7 @@ export class RateCardsService {
 
   private readonly allowedSortFields = [
     'id', 'name', 'service_type', 'vehicle_tonnage', 'vehicle_type',
-    'origin', 'destination', 'day_rate', 'night_rate', 'status',
+    'origin', 'destination', 'rate', 'day_rate', 'night_rate', 'day_night', 'status',
     'effective_date', 'expiry_date', 'created_at',
   ];
 
@@ -96,15 +96,15 @@ export class RateCardsService {
           data: {
             client_id: data.client_id || null,
             contract_no: data.contract_no || null,
+            day_night: data.day_night || null,
             vehicle_tonnage: data.vehicle_tonnage || null,
             vehicle_type: data.vehicle_type || null,
             origin: data.origin || null,
             destination: data.destination || null,
-            day_rate: 0,
-            night_rate: 0,
+            rate: 0,
             mid_shift_rate: 0,
             ot_rate: 0,
-            unit: data.day_unit || null,
+            unit: data.unit || null,
             remarks: `由客戶價目 #${saved.id} 自動建立`,
             status: 'active',
           },
@@ -115,11 +115,12 @@ export class RateCardsService {
           data: {
             client_id: data.client_id || null,
             contract_no: data.contract_no || null,
+            day_night: data.day_night || null,
             vehicle_tonnage: data.vehicle_tonnage || null,
             origin: data.origin || null,
             destination: data.destination || null,
-            day_rate: 0,
-            unit: data.day_unit || null,
+            rate: 0,
+            unit: data.unit || null,
             remarks: `由客戶價目 #${saved.id} 自動建立`,
             status: 'active',
           },
