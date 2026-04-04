@@ -138,11 +138,13 @@ export default function WorkLogsPage() {
         label: e.name_zh,
         _raw: e
       }));
-      const partnerList = (pt.data || []).map((p: any) => ({
-        value: `part_${p.id}`,
-        label: `(街車) ${p.name}`,
-        _raw: p
-      }));
+      const partnerList = (pt.data || [])
+        .filter((p: any) => p.partner_type === 'subcontractor')
+        .map((p: any) => ({
+          value: `part_${p.id}`,
+          label: `(街車) ${p.name}`,
+          _raw: p
+        }));
       setEmployees([...employeeList, ...partnerList]);
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
       const grouped: Record<string, Option[]> = {};

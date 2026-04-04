@@ -7,12 +7,33 @@ export class SubconFleetDriversService {
 
   async simple() {
     const drivers = await this.prisma.subcontractorFleetDriver.findMany({
-      where: { status: 'active', plate_no: { not: null } },
-      select: { id: true, plate_no: true, machine_type: true, name_zh: true, subcontractor: { select: { id: true, name: true, code: true } } },
+      where: {
+        status: 'active',
+        plate_no: { not: null },
+        subcontractor: {
+          partner_type: 'subcontractor',
+          status: 'active',
+        },
+      },
+      select: {
+        id: true,
+        plate_no: true,
+        machine_type: true,
+        name_zh: true,
+        subcontractor: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            partner_type: true,
+          },
+        },
+      },
       orderBy: { plate_no: 'asc' },
     });
+
     return drivers
-      .filter(d => d.plate_no)
+      .filter(d => d.plate_no && d.subcontractor?.partner_type === 'subcontractor')
       .map(d => ({
         value: d.plate_no!,
         label: `${d.plate_no} (${d.subcontractor?.name || '街車'})`,
