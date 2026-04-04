@@ -63,13 +63,70 @@ export class SubconRateCardsService {
     return src;
   }
 
+  private sanitizeForCreate(dto: any) {
+    // Strip relation objects and read-only fields
+    const { subcontractor, client, company, source_quotation, ot_rates, id, created_at, updated_at, ...data } = dto;
+
+    // Int? fields: convert empty string / falsy to null
+    const intFields = ['company_id', 'subcon_id', 'client_id', 'source_quotation_id'];
+    for (const f of intFields) {
+      data[f] = data[f] !== undefined && data[f] !== '' && data[f] !== null ? Number(data[f]) : null;
+      if (data[f] !== null && isNaN(data[f])) data[f] = null;
+    }
+
+    // Decimal fields: convert to number, default 0
+    const decimalFields = ['rate', 'day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate'];
+    for (const f of decimalFields) {
+      data[f] = data[f] !== undefined && data[f] !== '' ? Number(data[f]) : 0;
+      if (isNaN(data[f])) data[f] = 0;
+    }
+
+    // DateTime? fields: convert empty string to null
+    const dateFields = ['effective_date', 'expiry_date'];
+    for (const f of dateFields) {
+      data[f] = data[f] && data[f] !== '' ? new Date(data[f]) : null;
+    }
+
+    // Boolean fields
+    if (typeof data.exclude_fuel !== 'boolean') {
+      data.exclude_fuel = data.exclude_fuel === 'true' || data.exclude_fuel === true || data.exclude_fuel === 1;
+    }
+
+    // String? fields: convert empty string to null
+    const strOptionals = [
+      'plate_no', 'contract_no', 'client_contract_no', 'service_type', 'name',
+      'description', 'day_night', 'tonnage', 'machine_type', 'equipment_number',
+      'origin', 'destination', 'unit', 'day_unit', 'night_unit', 'mid_shift_unit',
+      'ot_unit', 'remarks',
+    ];
+    for (const f of strOptionals) {
+      if (data[f] === '') data[f] = null;
+    }
+
+    // Remove any unknown extra fields that may cause Prisma errors
+    const allowedFields = new Set([
+      'company_id', 'subcon_id', 'plate_no', 'client_id', 'contract_no',
+      'client_contract_no', 'service_type', 'name', 'description', 'day_night',
+      'tonnage', 'machine_type', 'equipment_number', 'origin', 'destination',
+      'rate', 'day_rate', 'day_unit', 'night_rate', 'night_unit',
+      'mid_shift_rate', 'mid_shift_unit', 'ot_rate', 'ot_unit', 'unit',
+      'exclude_fuel', 'effective_date', 'expiry_date', 'remarks',
+      'source_quotation_id', 'status',
+    ]);
+    for (const key of Object.keys(data)) {
+      if (!allowedFields.has(key)) delete data[key];
+    }
+
+    return { data, ot_rates };
+  }
+
   async create(dto: any) {
-    const { subcontractor, client, company, source_quotation, ot_rates, ...data } = dto;
+    const { data, ot_rates } = this.sanitizeForCreate(dto);
     const saved = await this.prisma.subconRateCard.create({ data });
     if (ot_rates && Array.isArray(ot_rates) && ot_rates.length > 0) {
       for (const otr of ot_rates) {
         await this.prisma.subconRateCardOtRate.create({
-          data: { subcon_rate_card_id: saved.id, time_slot: otr.time_slot, rate: otr.rate, unit: otr.unit },
+          data: { subcon_rate_card_id: saved.id, time_slot: otr.time_slot, rate: Number(otr.rate) || 0, unit: otr.unit || null },
         });
       }
     }
