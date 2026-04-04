@@ -76,6 +76,12 @@ export class PartnersService {
   }
 
   async create(dto: any) {
+    if (dto.name) {
+      const existing = await this.prisma.partner.findFirst({
+        where: { name: { equals: dto.name, mode: 'insensitive' } },
+      });
+      if (existing) throw new BadRequestException(`合作單位名稱「${dto.name}」已存在，請使用其他名稱`);
+    }
     return this.prisma.partner.create({ data: this.serializeDto(dto) });
   }
 
