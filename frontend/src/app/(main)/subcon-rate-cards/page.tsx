@@ -26,7 +26,7 @@ export default function SubconRateCardsPage() {
   const [showModal, setShowModal] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
-  const [allEquipment, setAllEquipment] = useState<{value: string; label: string}[]>([]);
+  const [allSubconFleet, setAllSubconFleet] = useState<{value: string; label: string; subcontractor_id?: number}[]>([]);
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
@@ -61,15 +61,16 @@ export default function SubconRateCardsPage() {
   useEffect(() => {
     partnersApi.simple().then(res => setPartners(res.data));
     companiesApi.list().then(res => setCompanies(res.data?.data || res.data || []));
-    Promise.all([
-      vehiclesApi.simple().then(res => res.data).catch(() => []),
-      machineryApi.simple().then(res => res.data).catch(() => []),
-      subconFleetDriversApi.simple().then(res => res.data).catch(() => []),
-    ]).then(([vehicles, machinery, subconFleet]) => {
-      const vPlates = vehicles.map((v: any) => ({ value: v.plate_number || v.value, label: v.plate_number || v.label })).filter((x: any) => x.value);
-      const mCodes = machinery.map((m: any) => ({ value: m.machine_code || m.value, label: m.machine_code || m.label })).filter((x: any) => x.value);
-      const sPlates = (subconFleet || []).map((s: any) => ({ value: s.value, label: s.label })).filter((x: any) => x.value);
-      setAllEquipment([...vPlates, ...mCodes, ...sPlates]);
+    subconFleetDriversApi.list({ limit: 1000 }).then(res => {
+      const drivers = res.data?.data || res.data || [];
+      const plates = drivers
+        .filter((d: any) => d.plate_no && d.status === 'active')
+        .map((d: any) => ({
+          value: d.plate_no,
+          label: `${d.plate_no}${d.subcontractor?.name ? ` (${d.subcontractor.name})` : ''}`,
+          subcontractor_id: d.subcontractor_id,
+        }));
+      setAllSubconFleet(plates);
     }).catch(() => {});
   }, []);
 
@@ -276,19 +277,23 @@ export default function SubconRateCardsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">供應商</label>
                 <SearchableSelect
                   value={form.subcon_id}
-                  onChange={(v) => setForm({...form, subcon_id: v})}
+                  onChange={(v) => setForm({...form, subcon_id: v, plate_no: ''})}
                   options={partners.filter((p: any) => p.partner_type === 'subcontractor' || p.partner_type === 'supplier').map((p: any) => ({ value: p.id, label: p.name }))}
                   placeholder="選擇供應商"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">車牌</label>
-                <Combobox
-                  value={form.plate_no}
-                  onChange={(v) => setForm({...form, plate_no: v})}
-                  options={allEquipment}
-                  placeholder="選擇或輸入車牌"
-                />
+                {form.subcon_id ? (
+                  <Combobox
+                    value={form.plate_no}
+                    onChange={(v) => setForm({...form, plate_no: v})}
+                    options={allSubconFleet.filter(s => s.subcontractor_id === Number(form.subcon_id))}
+                    placeholder="選擇或輸入車牌"
+                  />
+                ) : (
+                  <div className="input-field bg-gray-50 text-gray-400 cursor-not-allowed">請先選擇供應商</div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
