@@ -102,7 +102,7 @@ export default function SubconFleetDriversPage() {
     { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const },
     { key: 'name_en', label: '英文姓名', sortable: true, editable: true, editType: 'text' as const },
     { key: 'id_number', label: '身份證號碼', sortable: true, editable: true, editType: 'text' as const },
-    { key: 'machine_type', label: '車類型', sortable: true, editable: true, editType: 'text' as const },
+    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'text' as const },
     { key: 'plate_no', label: '常用車牌', sortable: true, editable: true, editType: 'text' as const },
     { key: 'phone', label: '聯絡電話', sortable: true, editable: true, editType: 'text' as const },
     { key: 'date_of_birth', label: '出生日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => fmtDate(v) },
@@ -192,7 +192,7 @@ export default function SubconFleetDriversPage() {
               <input type="text" value={form.id_number} onChange={e => setForm({...form, id_number: e.target.value})} className="input-field" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">車類型</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
               <input type="text" value={form.machine_type} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field" />
             </div>
             <div>
