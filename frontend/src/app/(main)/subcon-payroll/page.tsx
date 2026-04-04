@@ -5,7 +5,143 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate } from '@/lib/dateUtils';
 
 type Option = { value: any; label: string };
+type ExtraItem = { name: string; amount: string };
 
+// ─── Build grouped summary from work_logs ────────────────────
+function buildGroups(workLogs: any[]): any[] {
+  const map = new Map<string, any>();
+  for (const wl of workLogs) {
+    const key = [
+      wl._matched_rate_card_id ?? 'unmatched',
+      wl.client?.name ?? '',
+      wl.client_contract_no ?? '',
+      wl.day_night ?? '',
+      wl.start_location ?? '',
+      wl.end_location ?? '',
+      wl.tonnage ?? '',
+      wl.machine_type ?? '',
+      wl._matched_rate ?? '',
+      wl._matched_unit ?? '',
+    ].join('|');
+
+    if (!map.has(key)) {
+      map.set(key, {
+        _matched_rate_card_id: wl._matched_rate_card_id,
+        client_name: wl.client?.name ?? '-',
+        client_contract_no: wl.client_contract_no ?? '-',
+        day_night: wl.day_night ?? '-',
+        start_location: wl.start_location ?? '',
+        end_location: wl.end_location ?? '',
+        tonnage: wl.tonnage ?? '',
+        machine_type: wl.machine_type ?? '',
+        matched_rate: wl._matched_rate,
+        matched_unit: wl._matched_unit,
+        price_match_status: wl._price_match_status,
+        count: 0,
+        total_quantity: 0,
+        total_amount: 0,
+      });
+    }
+    const g = map.get(key)!;
+    g.count += 1;
+    g.total_quantity += Number(wl.quantity) || 0;
+    g.total_amount += Number(wl._total_amount) || 0;
+  }
+  return Array.from(map.values());
+}
+
+// ─── Grouped Display Component ────────────────────────────────
+function GroupedView({ groups, extraItems }: { groups: any[]; extraItems: ExtraItem[] }) {
+  if (!groups || groups.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-4">沒有工作記錄</p>;
+  }
+  const workTotal = groups.reduce((s: number, g: any) => s + (Number(g.total_amount) || 0), 0);
+  const extraTotal = extraItems.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const grandTotal = workTotal + extraTotal;
+
+  return (
+    <div className="overflow-x-auto border rounded-lg">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">客戶合約</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">日/夜</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+            <th className="px-3 py-2 text-left font-medium text-gray-600">噸數/機種</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">數量</th>
+            <th className="px-3 py-2 text-right font-medium text-gray-600">小計</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g: any, idx: number) => {
+            const route = [g.start_location, g.end_location].filter(Boolean).join(' → ');
+            const hasPrice = g.price_match_status === 'matched' && g.matched_rate != null;
+            return (
+              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <td className="px-3 py-2 font-medium">{g.client_name}</td>
+                <td className="px-3 py-2 text-gray-600 text-xs">{g.client_contract_no}</td>
+                <td className="px-3 py-2">
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    g.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                    g.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>{g.day_night}</span>
+                </td>
+                <td className="px-3 py-2 text-gray-600 text-xs">{route || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 text-xs">
+                  {[g.tonnage, g.machine_type].filter(Boolean).join(' / ') || '-'}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {hasPrice
+                    ? `$${Number(g.matched_rate).toLocaleString()}/${g.matched_unit || '車'}`
+                    : <span className="text-orange-500 text-xs">未匹配</span>}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">{g.total_quantity > 0 ? g.total_quantity : g.count}車</td>
+                <td className="px-3 py-2 text-right font-mono font-bold">
+                  {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : <span className="text-orange-500">-</span>}
+                </td>
+              </tr>
+            );
+          })}
+          {/* Extra items */}
+          {extraItems.filter(e => e.name || e.amount).map((e, idx) => (
+            <tr key={`extra-${idx}`} className="bg-blue-50">
+              <td colSpan={7} className="px-3 py-2 text-blue-700 font-medium">
+                <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded mr-2">其他</span>
+                {e.name || '（未命名）'}
+              </td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-blue-700">
+                {e.amount ? `$${Number(e.amount).toLocaleString()}` : '-'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot className="border-t-2 border-gray-300">
+          <tr className="bg-gray-50">
+            <td colSpan={7} className="px-3 py-2 font-bold text-right text-gray-600">工作記錄小計</td>
+            <td className="px-3 py-2 text-right font-mono font-bold">${workTotal.toLocaleString()}</td>
+          </tr>
+          {extraTotal > 0 && (
+            <tr className="bg-gray-50">
+              <td colSpan={7} className="px-3 py-2 font-bold text-right text-blue-600">其他費用小計</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-blue-600">${extraTotal.toLocaleString()}</td>
+            </tr>
+          )}
+          <tr className="bg-primary-50">
+            <td colSpan={7} className="px-3 py-2 font-bold text-right text-primary-700">總計</td>
+            <td className="px-3 py-2 text-right font-mono font-bold text-primary-700 text-base">
+              ${grandTotal.toLocaleString()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────
 export default function SubconPayrollPage() {
   // ── Selection state ──
   const [subcons, setSubcons] = useState<Option[]>([]);
@@ -21,7 +157,10 @@ export default function SubconPayrollPage() {
   const [error, setError] = useState('');
 
   // ── Tab state ──
-  const [activeTab, setActiveTab] = useState<'detail' | 'unmatched'>('detail');
+  const [activeTab, setActiveTab] = useState<'grouped' | 'detail' | 'unmatched'>('grouped');
+
+  // ── Extra items state ──
+  const [extraItems, setExtraItems] = useState<ExtraItem[]>([{ name: '', amount: '' }]);
 
   // ── Load reference data ──
   useEffect(() => {
@@ -53,6 +192,7 @@ export default function SubconPayrollPage() {
         company_id: selectedCompany || undefined,
       });
       setResult(res.data);
+      setActiveTab('grouped');
     } catch (err: any) {
       setError(err.response?.data?.message || '計算失敗');
     } finally {
@@ -82,6 +222,19 @@ export default function SubconPayrollPage() {
       alert('新增失敗：' + (err.response?.data?.message || err.message));
     }
   };
+
+  // ── Extra items helpers ──
+  const updateExtraItem = (idx: number, field: keyof ExtraItem, value: string) => {
+    setExtraItems(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
+  };
+  const addExtraItem = () => setExtraItems(prev => [...prev, { name: '', amount: '' }]);
+  const removeExtraItem = (idx: number) => setExtraItems(prev => prev.filter((_, i) => i !== idx));
+
+  // ── Derived data ──
+  const groups = result ? buildGroups(result.work_logs || []) : [];
+  const extraTotal = extraItems.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const workTotal = result?.summary?.total_amount || 0;
+  const grandTotal = workTotal + extraTotal;
 
   return (
     <div className="p-6 max-w-full">
@@ -128,6 +281,49 @@ export default function SubconPayrollPage() {
         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
       </div>
 
+      {/* ── Extra Items Panel ── */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-700">其他項目費用</h2>
+          <button onClick={addExtraItem}
+            className="text-xs text-primary-600 hover:text-primary-700 border border-primary-300 rounded px-2 py-1 hover:bg-primary-50">
+            + 新增項目
+          </button>
+        </div>
+        <div className="space-y-2">
+          {extraItems.map((item, idx) => (
+            <div key={idx} className="flex gap-3 items-center">
+              <input
+                type="text"
+                value={item.name}
+                onChange={e => updateExtraItem(idx, 'name', e.target.value)}
+                placeholder="項目名稱（例如：油費、維修費）"
+                className="border rounded px-2 py-1.5 text-sm flex-1"
+              />
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={item.amount}
+                  onChange={e => updateExtraItem(idx, 'amount', e.target.value)}
+                  placeholder="金額"
+                  className="border rounded px-2 py-1.5 text-sm w-32"
+                />
+              </div>
+              {extraItems.length > 1 && (
+                <button onClick={() => removeExtraItem(idx)}
+                  className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+              )}
+            </div>
+          ))}
+        </div>
+        {extraTotal > 0 && (
+          <p className="text-sm text-right text-blue-600 mt-2 font-medium">
+            其他費用合計：${extraTotal.toLocaleString()}
+          </p>
+        )}
+      </div>
+
       {/* ── Results ── */}
       {result && (
         <>
@@ -154,9 +350,9 @@ export default function SubconPayrollPage() {
               </p>
             </div>
             <div className="bg-white rounded-lg shadow p-4 text-center">
-              <p className="text-sm text-gray-500">總金額</p>
+              <p className="text-sm text-gray-500">總金額（含其他費用）</p>
               <p className="text-lg font-bold text-primary-600">
-                ${(result.summary?.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
@@ -164,6 +360,14 @@ export default function SubconPayrollPage() {
           {/* Tabs */}
           <div className="bg-white rounded-lg shadow">
             <div className="border-b flex">
+              <button
+                onClick={() => setActiveTab('grouped')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'grouped' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                歸組結算 ({groups.length})
+              </button>
               <button
                 onClick={() => setActiveTab('detail')}
                 className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -182,6 +386,13 @@ export default function SubconPayrollPage() {
               </button>
             </div>
 
+            {/* Grouped Tab */}
+            {activeTab === 'grouped' && (
+              <div className="p-4">
+                <GroupedView groups={groups} extraItems={extraItems.filter(e => e.name || e.amount)} />
+              </div>
+            )}
+
             {/* Detail Tab */}
             {activeTab === 'detail' && (
               <div className="overflow-x-auto">
@@ -193,7 +404,7 @@ export default function SubconPayrollPage() {
                       <th className="px-3 py-2 text-left font-medium text-gray-600">車牌</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">司機</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-600">合約</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">客戶合約</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">服務</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">噸數</th>
