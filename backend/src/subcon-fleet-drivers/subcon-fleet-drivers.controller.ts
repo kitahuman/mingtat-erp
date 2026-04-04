@@ -7,6 +7,11 @@ import { AuthGuard } from '@nestjs/passport';
 export class SubconFleetDriversController {
   constructor(private readonly service: SubconFleetDriversService) {}
 
+  @Get('simple')
+  simple() {
+    return this.service.simple();
+  }
+
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);

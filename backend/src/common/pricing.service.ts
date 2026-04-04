@@ -191,6 +191,43 @@ export class PricingService {
   }
 
   /**
+   * 從已載入的 SubconRateCard 列表中嚴格匹配（記憶體內）。
+   * 匹配邏輯與 FleetRateCard 一致，額外支援 plate_no 匹配。
+   */
+  matchSubconRateCardInMemory(
+    subconCards: any[],
+    companyId: number | null,
+    clientContractNo: string | null,
+    serviceType: string | null,
+    dayNight: string | null,
+    tonnage: string | null,
+    machineType: string | null,
+    origin: string | null,
+    destination: string | null,
+    plateNo: string | null = null,
+  ): MatchResult {
+    const matched = subconCards.filter(rc => {
+      if (companyId && rc.company_id && rc.company_id !== companyId) return false;
+      if (clientContractNo && rc.client_contract_no && rc.client_contract_no !== clientContractNo) return false;
+      if (serviceType && rc.service_type && rc.service_type !== serviceType) return false;
+      if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
+      if (tonnage && rc.tonnage && rc.tonnage !== tonnage) return false;
+      if (machineType && rc.machine_type && rc.machine_type !== machineType) return false;
+      if (origin && rc.origin && rc.origin !== origin) return false;
+      if (destination && rc.destination && rc.destination !== destination) return false;
+      if (plateNo && rc.plate_no && rc.plate_no !== plateNo) return false;
+      return true;
+    });
+
+    if (matched.length > 0) {
+      return { card: matched[0], unmatchedReason: '' };
+    }
+
+    const reason = this.buildUnmatchedReason('供應商價目', clientContractNo, dayNight, tonnage, machineType, origin, destination);
+    return { card: null, unmatchedReason: reason };
+  }
+
+  /**
    * 生成未匹配原因文字。
    */
   buildUnmatchedReason(

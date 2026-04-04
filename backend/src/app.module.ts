@@ -44,6 +44,7 @@ import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { ProjectProfitLossModule } from './project-profit-loss/project-profit-loss.module';
 import { CompanyProfitLossModule } from './company-profit-loss/company-profit-loss.module';
+import { SubconPayrollModule } from './subcon-payroll/subcon-payroll.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 
 @Module({
@@ -96,6 +97,7 @@ import { AiChatModule } from './ai-chat/ai-chat.module';
     BankReconciliationModule,
     ProjectProfitLossModule,
     CompanyProfitLossModule,
+    SubconPayrollModule,
   ],
 })
 export class AppModule {}

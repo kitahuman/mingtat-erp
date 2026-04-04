@@ -5,6 +5,25 @@ import { PrismaService } from '../prisma/prisma.service';
 export class SubconFleetDriversService {
   constructor(private prisma: PrismaService) {}
 
+  async simple() {
+    const drivers = await this.prisma.subcontractorFleetDriver.findMany({
+      where: { status: 'active', plate_no: { not: null } },
+      select: { id: true, plate_no: true, machine_type: true, name_zh: true, subcontractor: { select: { id: true, name: true, code: true } } },
+      orderBy: { plate_no: 'asc' },
+    });
+    return drivers
+      .filter(d => d.plate_no)
+      .map(d => ({
+        value: d.plate_no!,
+        label: `${d.plate_no} (${d.subcontractor?.name || '街車'})`,
+        type: d.machine_type,
+        tonnage: null,
+        category: 'subcon_fleet',
+        subcontractor_name: d.subcontractor?.name || null,
+        driver_name: d.name_zh,
+      }));
+  }
+
   async findAll(query: {
     page?: number;
     limit?: number;

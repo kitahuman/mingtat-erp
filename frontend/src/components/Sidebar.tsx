@@ -62,6 +62,7 @@ const navEntries: NavEntry[] = [
       { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },
       { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
       { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
+      { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', minRole: 'clerk' },
       { href: '/attendances', label: '打卡紀錄', icon: '🕐', minRole: 'clerk' },
       { href: '/leaves', label: '請假紀錄', icon: '📅', minRole: 'clerk' },
     ],

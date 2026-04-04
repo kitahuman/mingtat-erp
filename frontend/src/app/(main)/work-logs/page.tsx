@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   workLogsApi, companiesApi, partnersApi,
   contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
-  vehiclesApi, machineryApi,
+  vehiclesApi, machineryApi, subconFleetDriversApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import EditableCell from './EditableCell';
@@ -126,7 +126,8 @@ export default function WorkLogsPage() {
       fieldOptionsApi.getAll(),
       vehiclesApi.simple().catch(() => ({ data: [] })),
       machineryApi.simple().catch(() => ({ data: [] })),
-    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach]) => {
+      subconFleetDriversApi.simple().catch(() => ({ data: [] })),
+    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet]) => {
       setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.short_name || p.code || p.name })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
@@ -152,6 +153,7 @@ export default function WorkLogsPage() {
       const equipList = [
         ...(veh.data || []),
         ...(mach.data || []),
+        ...(subconFleet.data || []),
       ];
       setAllEquipment(equipList);
     }).catch(console.error);

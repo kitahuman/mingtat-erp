@@ -346,6 +346,7 @@ export function getExpiryLabel(status: string): string {
 
 // Subcontractor Fleet Drivers (街車車隊管理)
 export const subconFleetDriversApi = {
+  simple: () => api.get('/subcon-fleet-drivers/simple'),
   list: (params?: any) => api.get('/subcon-fleet-drivers', { params }),
   get: (id: number) => api.get(`/subcon-fleet-drivers/${id}`),
   create: (data: any) => api.post('/subcon-fleet-drivers', data),
@@ -576,4 +577,13 @@ export const projectProfitLossApi = {
 export const companyProfitLossApi = {
   get: (params?: any) => api.get('/company-profit-loss', { params }),
   trend: (params?: any) => api.get('/company-profit-loss/trend', { params }),
+};
+
+// ══════════════════════════════════════════════════════════════
+// Subcon Payroll (供應商計糧)
+// ══════════════════════════════════════════════════════════════
+
+export const subconPayrollApi = {
+  preview: (data: { subcon_id: number; date_from: string; date_to: string; company_id?: number }) =>
+    api.post('/subcon-payroll/preview', data),
 };
