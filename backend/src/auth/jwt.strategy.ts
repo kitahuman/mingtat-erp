@@ -28,6 +28,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || !user.isActive) {
       throw new UnauthorizedException('帳號已被停用或不存在');
     }
-    return { sub: user.id, username: user.username, role: user.role };
+    return { sub: user.id, id: user.id, username: user.username, displayName: user.displayName, role: user.role };
   }
 }
