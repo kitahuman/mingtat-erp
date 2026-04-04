@@ -82,10 +82,14 @@ export class SubconFleetDriversService {
 
   async create(dto: any) {
     const { subcontractor, ...data } = dto;
-    // Handle date conversion
-    if (data.date_of_birth) data.date_of_birth = new Date(data.date_of_birth);
+    // Normalize date: empty string -> null
+    data.date_of_birth = data.date_of_birth ? new Date(data.date_of_birth) : null;
     if (data.subcontractor_id) data.subcontractor_id = Number(data.subcontractor_id);
-    
+    // Strip empty string optional fields to avoid type errors
+    const stringOptionals = ['short_name', 'name_en', 'id_number', 'machine_type', 'plate_no', 'phone', 'yellow_cert_no', 'red_cert_no', 'address'];
+    for (const field of stringOptionals) {
+      if (data[field] === '') data[field] = null;
+    }
     const saved = await this.prisma.subcontractorFleetDriver.create({ data });
     return this.findOne(saved.id);
   }

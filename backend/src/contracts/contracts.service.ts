@@ -94,15 +94,15 @@ export class ContractsService {
       if (!partner) throw new BadRequestException('客戶不存在');
     }
 
-    const { client, _count, ...data } = dto;
-
-    // Normalize dates
-    if (data.sign_date) data.sign_date = new Date(data.sign_date);
-    if (data.start_date) data.start_date = new Date(data.start_date);
-    if (data.end_date) data.end_date = new Date(data.end_date);
+     const { client, _count, ...data } = dto;
+    // Normalize dates: convert empty strings to null, valid strings to Date
+    data.sign_date = data.sign_date ? new Date(data.sign_date) : null;
+    data.start_date = data.start_date ? new Date(data.start_date) : null;
+    data.end_date = data.end_date ? new Date(data.end_date) : null;
     if (data.original_amount !== undefined) data.original_amount = Number(data.original_amount);
     if (data.client_id) data.client_id = Number(data.client_id);
-
+    // Remove empty string fields that would fail type validation
+    if (data.description === '') data.description = null;
     const saved = await this.prisma.contract.create({ data });
     return this.findOne(saved.id);
   }
