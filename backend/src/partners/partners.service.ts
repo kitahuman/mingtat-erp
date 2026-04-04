@@ -58,7 +58,7 @@ export class PartnersService {
   async simple() {
     return this.prisma.partner.findMany({
       where: { status: 'active' },
-      select: { id: true, name: true, code: true, english_code: true, partner_type: true, category: true },
+      select: { id: true, name: true, short_name: true, code: true, english_code: true, partner_type: true, category: true },
       orderBy: { code: 'asc' },
     });
   }

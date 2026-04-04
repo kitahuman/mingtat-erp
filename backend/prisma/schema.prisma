@@ -378,6 +378,7 @@ model Partner {
   code                String?
   english_code        String?
   name                String
+  short_name          String?
   name_en             String?
   partner_type        String
   category            String?
