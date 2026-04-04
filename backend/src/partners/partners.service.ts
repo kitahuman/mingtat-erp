@@ -63,21 +63,34 @@ export class PartnersService {
     });
   }
 
+  private serializeDto(dto: any) {
+    const { subsidiaries, ...rest } = dto;
+    const data: any = { ...rest };
+    // subsidiaries is stored as comma-separated string in DB
+    if (Array.isArray(subsidiaries)) {
+      data.subsidiaries = subsidiaries.length > 0 ? subsidiaries.join(',') : null;
+    } else if (typeof subsidiaries === 'string') {
+      data.subsidiaries = subsidiaries || null;
+    }
+    return data;
+  }
+
   async create(dto: any) {
-    return this.prisma.partner.create({ data: dto });
+    return this.prisma.partner.create({ data: this.serializeDto(dto) });
   }
 
   async update(id: number, dto: any) {
     const partner = await this.prisma.partner.findUnique({ where: { id } });
     if (!partner) throw new NotFoundException('合作單位不存在');
-    const { created_at, updated_at, id: _id, ...updateData } = dto;
+    const { created_at, updated_at, id: _id, ...rest } = dto;
+    const updateData = this.serializeDto(rest);
     return this.prisma.partner.update({ where: { id }, data: updateData });
   }
 
   async bulkCreate(dtos: any[]) {
     const results: any[] = [];
     for (const dto of dtos) {
-      const created = await this.prisma.partner.create({ data: dto });
+      const created = await this.prisma.partner.create({ data: this.serializeDto(dto) });
       results.push(created);
     }
     return results;
