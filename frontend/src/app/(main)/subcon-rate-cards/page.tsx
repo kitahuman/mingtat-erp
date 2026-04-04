@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { subconRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi, fieldOptionsApi } from '@/lib/api';
+import { subconRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi, subconFleetDriversApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
@@ -62,12 +62,14 @@ export default function SubconRateCardsPage() {
     partnersApi.simple().then(res => setPartners(res.data));
     companiesApi.list().then(res => setCompanies(res.data?.data || res.data || []));
     Promise.all([
-      vehiclesApi.simple().then(res => res.data),
-      machineryApi.simple().then(res => res.data),
-    ]).then(([vehicles, machinery]) => {
-      const vPlates = vehicles.map((v: any) => v.plate_number).filter(Boolean);
-      const mCodes = machinery.map((m: any) => m.machine_code).filter(Boolean);
-      setAllEquipment([...vPlates, ...mCodes].map(s => ({ value: s, label: s })));
+      vehiclesApi.simple().then(res => res.data).catch(() => []),
+      machineryApi.simple().then(res => res.data).catch(() => []),
+      subconFleetDriversApi.simple().then(res => res.data).catch(() => []),
+    ]).then(([vehicles, machinery, subconFleet]) => {
+      const vPlates = vehicles.map((v: any) => ({ value: v.plate_number || v.value, label: v.plate_number || v.label })).filter((x: any) => x.value);
+      const mCodes = machinery.map((m: any) => ({ value: m.machine_code || m.value, label: m.machine_code || m.label })).filter((x: any) => x.value);
+      const sPlates = (subconFleet || []).map((s: any) => ({ value: s.value, label: s.label })).filter((x: any) => x.value);
+      setAllEquipment([...vPlates, ...mCodes, ...sPlates]);
     }).catch(() => {});
   }, []);
 
@@ -87,15 +89,27 @@ export default function SubconRateCardsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await subconRateCardsApi.create({
-        ...form,
-        company_id: form.company_id ? Number(form.company_id) : null,
-        subcon_id: form.subcon_id ? Number(form.subcon_id) : null,
-        client_id: form.client_id ? Number(form.client_id) : null,
-        rate: Number(form.rate) || 0,
-        mid_shift_rate: Number(form.mid_shift_rate) || 0,
-        ot_rate: Number(form.ot_rate) || 0,
-      });
+      const payload: any = { ...form };
+      // Convert empty strings to null for Int? and Decimal fields
+      payload.company_id = form.company_id ? Number(form.company_id) : null;
+      payload.subcon_id = form.subcon_id ? Number(form.subcon_id) : null;
+      payload.client_id = form.client_id ? Number(form.client_id) : null;
+      payload.source_quotation_id = form.source_quotation_id ? Number(form.source_quotation_id) : null;
+      payload.rate = Number(form.rate) || 0;
+      payload.mid_shift_rate = Number(form.mid_shift_rate) || 0;
+      payload.ot_rate = Number(form.ot_rate) || 0;
+      payload.day_rate = Number(form.day_rate) || 0;
+      payload.night_rate = Number(form.night_rate) || 0;
+      payload.mid_shift_rate = Number(form.mid_shift_rate) || 0;
+      // Convert empty string dates to null
+      payload.effective_date = form.effective_date || null;
+      payload.expiry_date = form.expiry_date || null;
+      // Strip empty string optional string fields
+      const strOptionals = ['plate_no', 'contract_no', 'client_contract_no', 'service_type', 'name', 'description', 'day_night', 'tonnage', 'machine_type', 'equipment_number', 'origin', 'destination', 'unit', 'day_unit', 'night_unit', 'mid_shift_unit', 'ot_unit', 'remarks'];
+      for (const f of strOptionals) {
+        if (payload[f] === '') payload[f] = null;
+      }
+      await subconRateCardsApi.create(payload);
       setShowModal(false);
       resetForm();
       load();
