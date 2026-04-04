@@ -56,7 +56,9 @@ export default function SubconFleetDriversPage() {
 
   useEffect(() => {
     partnersApi.simple().then(res => {
-      setPartners(res.data || []);
+      // Only show subcontractor type partners as the fleet company options
+      const subconOnly = (res.data || []).filter((p: any) => p.partner_type === 'subcontractor');
+      setPartners(subconOnly);
     });
   }, []);
 
