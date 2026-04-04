@@ -92,16 +92,18 @@ export class SubconRateCardsService {
       data.exclude_fuel = data.exclude_fuel === 'true' || data.exclude_fuel === true || data.exclude_fuel === 1;
     }
 
-    // String? fields: convert empty string to null
+    // String? fields: convert empty string / undefined to null
     const strOptionals = [
       'plate_no', 'contract_no', 'client_contract_no', 'service_type', 'name',
       'description', 'day_night', 'tonnage', 'machine_type', 'equipment_number',
       'origin', 'destination', 'unit', 'day_unit', 'night_unit', 'mid_shift_unit',
-      'ot_unit', 'remarks',
+      'ot_unit', 'remarks', 'status',
     ];
     for (const f of strOptionals) {
-      if (data[f] === '') data[f] = null;
+      if (data[f] === '' || data[f] === undefined) data[f] = null;
     }
+    // status defaults to 'active' if null
+    if (!data.status) data.status = 'active';
 
     // Remove any unknown extra fields that may cause Prisma errors
     const allowedFields = new Set([
