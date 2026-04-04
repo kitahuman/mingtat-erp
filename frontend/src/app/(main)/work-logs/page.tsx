@@ -129,7 +129,7 @@ export default function WorkLogsPage() {
       subconFleetDriversApi.simple().catch(() => ({ data: [] })),
     ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet]) => {
       setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
-      setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.short_name || p.code || p.name })));
+      setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.code || p.name })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
       const qoData = qo.data?.data || qo.data || [];
       setQuotations(qoData.map((q: any) => ({ value: q.id, label: q.quotation_no + (q.contract_name ? ' ' + q.contract_name : ''), _raw: q })));
@@ -523,7 +523,7 @@ export default function WorkLogsPage() {
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
     if (field === 'company_id') return row.company?.name || row.company_profile?.code || '—';
-    if (field === 'client_id') return row.unverified_client_name || row.client?.short_name || row.client?.code || row.client?.name || '—';
+    if (field === 'client_id') return row.unverified_client_name || row.client?.code || row.client?.name || '—';
     if (field === 'quotation_id') return row.quotation?.quotation_no || '—';
     if (field === 'contract_id') return row.contract?.contract_no || '—';
     if (field === 'employee_id') return row.employee?.name_zh || '—';

@@ -25,7 +25,7 @@ const typeLabels: Record<string, string> = {
 const SUBSIDIARY_OPTIONS = ['DCL', 'DTC', 'DDL', 'DTL', 'MCL', '卓嵐'];
 
 const emptyForm = {
-  code: '', english_code: '', name: '', short_name: '', name_en: '', partner_type: 'client',
+  code: '', english_code: '', name: '', name_en: '', partner_type: 'client',
   contact_person: '', phone: '', mobile: '', email: '', fax: '',
   address: '', notes: '', bank_name: '', bank_account: '',
   invoice_title: '', invoice_description: '',
@@ -106,10 +106,9 @@ export default function PartnersPage() {
   };
 
   const columns = [
-    { key: 'code', label: '代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
+    { key: 'code', label: '簡稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v || '-'}</span> },
     { key: 'english_code', label: '英文代碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-primary-600">{v}</span> : '-' },
     { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-medium">{v}</span> },
-    { key: 'short_name', label: '簡稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'name_en', label: '英文名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'partner_type', label: '類型', sortable: true, editable: true, editType: 'select' as const, editOptions: partnerTypes, render: (v: string) => {
       const colors: Record<string, string> = {
@@ -181,14 +180,14 @@ export default function PartnersPage() {
           limit={20}
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
-          searchPlaceholder="搜尋代碼、英文代碼、名稱、聯絡人或電話..."
+          searchPlaceholder="搜尋簡稱、英文代碼、名稱、聯絡人或電話..."
           onRowClick={(row) => router.push(`/partners/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
-        onDelete={handleInlineDelete}
+          onDelete={handleInlineDelete}
           filters={
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>
@@ -203,7 +202,7 @@ export default function PartnersPage() {
           {/* Basic Info */}
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">基本資料</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">代碼</label><input value={form.code} onChange={e => setForm({...form, code: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">簡稱</label><input value={form.code} onChange={e => setForm({...form, code: e.target.value})} className="input-field" placeholder="用於糧單顯示" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">英文代碼</label><input value={form.english_code} onChange={e => setForm({...form, english_code: e.target.value})} className="input-field" placeholder="用於發票編號" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">類型 *</label>
               <select value={form.partner_type} onChange={e => setForm({...form, partner_type: e.target.value})} className="input-field">
@@ -211,7 +210,6 @@ export default function PartnersPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">名稱 *</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="input-field" required /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">簡稱</label><input value={form.short_name} onChange={e => setForm({...form, short_name: e.target.value})} className="input-field" placeholder="用於糧單顯示" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">英文名稱</label><input value={form.name_en} onChange={e => setForm({...form, name_en: e.target.value})} className="input-field" /></div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">

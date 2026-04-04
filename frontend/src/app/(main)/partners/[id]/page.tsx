@@ -102,7 +102,7 @@ export default function PartnerDetailPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{partner?.name}</h1>
-            {partner?.code && <span className="text-lg text-gray-500">({partner.code})</span>}
+            {partner?.code && <span className="text-sm bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{partner.code}</span>}
             {partner?.english_code && <span className="font-mono text-primary-600 bg-primary-50 px-2 py-0.5 rounded text-sm">{partner.english_code}</span>}
           </div>
           <p className="text-gray-500">{typeLabels[partner?.partner_type] || partner?.partner_type}</p>
@@ -122,7 +122,7 @@ export default function PartnerDetailPage() {
         {editing ? (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">代碼</label><input value={form.code || ''} onChange={e => setForm({...form, code: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">簡稱</label><input value={form.code || ''} onChange={e => setForm({...form, code: e.target.value})} className="input-field" placeholder="用於糧單顯示" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">英文代碼</label><input value={form.english_code || ''} onChange={e => setForm({...form, english_code: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">類型</label>
                 <select value={form.partner_type} onChange={e => setForm({...form, partner_type: e.target.value})} className="input-field">
@@ -130,7 +130,6 @@ export default function PartnerDetailPage() {
                 </select>
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">名稱</label><input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">簡稱</label><input value={form.short_name || ''} onChange={e => setForm({...form, short_name: e.target.value})} className="input-field" placeholder="用於糧單顯示" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">英文名稱</label><input value={form.name_en || ''} onChange={e => setForm({...form, name_en: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label>
                 <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field">
@@ -166,11 +165,10 @@ export default function PartnerDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <InfoField label="代碼" value={partner?.code} />
+            <InfoField label="簡稱" value={partner?.code} />
             <InfoField label="英文代碼" value={partner?.english_code ? <span className="font-mono text-primary-600">{partner.english_code}</span> : null} />
             <InfoField label="類型" value={<span className="badge-blue">{typeLabels[partner?.partner_type] || partner?.partner_type}</span>} />
             <InfoField label="名稱" value={<span className="font-medium text-lg">{partner?.name}</span>} />
-            <InfoField label="簡稱" value={partner?.short_name} />
             <InfoField label="英文名稱" value={partner?.name_en} />
             <InfoField label="狀態" value={<span className={partner?.status === 'active' ? 'badge-green' : 'badge-red'}>{partner?.status === 'active' ? '合作中' : '停用'}</span>} />
             <InfoField label="旗下公司" value={partner?.is_subsidiary ? <span className="badge-blue">是</span> : '否'} />

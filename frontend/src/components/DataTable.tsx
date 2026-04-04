@@ -70,7 +70,7 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
   // ── 姓名類 ──────────────────────────────────────────────
   if (k === 'name_zh' || k === 'chinese_name') return 110;
   if (k === 'name_en' || k === 'english_name') return 130;
-  if (k === 'name' || k === 'short_name') return 110;
+  if (k === 'name') return 110;
   if (k === 'display_name' || k === 'contact_person') return 110;
 
   // ── 公司 / 合作單位 / 員工 ────────────────────────────────

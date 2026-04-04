@@ -723,8 +723,8 @@ export default function PayrollDetailPage() {
                   const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
                   const route = [pwl.start_location, pwl.end_location].filter(Boolean).join(' → ');
                   const equipment = [pwl.tonnage, pwl.machine_type, pwl.equipment_number].filter(Boolean).join('');
-                  // Use short_name if available, else truncate client_name to 4 chars
-                  const clientShortName = pwl.client?.short_name || (pwl.client_name ? pwl.client_name.substring(0, 4) : '');
+                  // Use client_short_name (from code field) if available, else truncate client_name to 4 chars
+                  const clientShortName = pwl.client_short_name || pwl.client?.code || (pwl.client_name ? pwl.client_name.substring(0, 4) : '');
                   
                   // Calculate line amounts for each component
                   const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;

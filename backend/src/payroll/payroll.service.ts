@@ -1400,7 +1400,7 @@ export class PayrollService {
           tonnage: wl.tonnage,
           equipment_number: wl.equipment_number,
           client_name: wl.client?.name || wl.client_name || '',
-          client_short_name: wl.client?.short_name || null,
+          client_short_name: wl.client?.code || null,
           client_contract_no: wl.quotation?.quotation_no || wl.client_contract_no || '',
           quantity: Number(wl.quantity) || 1,
           ot_quantity: Number(wl.ot_quantity) || 0,
