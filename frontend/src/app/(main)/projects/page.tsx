@@ -30,7 +30,7 @@ export default function ProjectsPage() {
   const [contracts, setContracts] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', contract_id: '', project_name: '', description: '',
+    company_id: '', client_id: '', contract_id: '', client_contract_no: '', project_name: '', description: '',
     address: '', start_date: '', end_date: '', status: 'pending', remarks: ''
   });
 
@@ -91,7 +91,7 @@ export default function ProjectsPage() {
         contract_id: form.contract_id ? Number(form.contract_id) : null,
       });
       setShowModal(false);
-      setForm({ company_id: '', client_id: '', contract_id: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'pending', remarks: '' });
+      setForm({ company_id: '', client_id: '', contract_id: '', client_contract_no: '', project_name: '', description: '', address: '', start_date: '', end_date: '', status: 'pending', remarks: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
   };
@@ -102,6 +102,7 @@ export default function ProjectsPage() {
     { key: 'company', label: '公司', sortable: true, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client', label: '客戶', sortable: true, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
     { key: 'contract', label: '合約編號', sortable: false, render: (_: any, row: any) => row.contract?.contract_no ? <span className="font-mono text-xs text-blue-600">{row.contract.contract_no}</span> : <span className="text-gray-400">&mdash;</span>, filterRender: (_: any, row: any) => row.contract?.contract_no || '' },
+    { key: 'client_contract_no', label: '客戶合約', sortable: true, render: (v: any) => v ? <span className="font-mono text-xs text-indigo-600">{v}</span> : <span className="text-gray-400">&mdash;</span> },
     { key: 'start_date', label: '開始日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'end_date', label: '結束日期', sortable: true, render: (v: any) => fmtDate(v) },
     { key: 'status', label: '狀態', sortable: true, render: (v: any) => <span className={statusColors[v] || 'badge-gray'}>{statusLabels[v] || v}</span>, filterRender: (v: any) => statusLabels[v] || v },
@@ -198,6 +199,10 @@ export default function ProjectsPage() {
                   ))}
                 </select>
               )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
+              <input value={form.client_contract_no} onChange={e => setForm({...form, client_contract_no: e.target.value})} className="input-field" placeholder="例如 ABC-2024-001" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">工程名稱 *</label>

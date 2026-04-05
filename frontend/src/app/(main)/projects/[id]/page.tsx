@@ -184,6 +184,7 @@ export default function ProjectDetailPage() {
                   </select>
                 )}
               </div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label><input value={form.client_contract_no || ''} onChange={e => setForm({...form, client_contract_no: e.target.value})} className="input-field" placeholder="例如 ABC-2024-001" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><input type="date" value={toInputDate(form.start_date)} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>
@@ -207,6 +208,7 @@ export default function ProjectDetailPage() {
                   <p className="text-gray-400">無合約</p>
                 )}
               </div>
+              <div><p className="text-sm text-gray-500">客戶合約</p><p className="font-mono text-indigo-600">{project?.client_contract_no || '-'}</p></div>
               <div><p className="text-sm text-gray-500">工程地址</p><p>{project?.address || '-'}</p></div>
               <div><p className="text-sm text-gray-500">預計開始日期</p><p>{fmtDate(project?.start_date)}</p></div>
               <div><p className="text-sm text-gray-500">預計結束日期</p><p>{fmtDate(project?.end_date)}</p></div>
