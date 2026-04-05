@@ -54,6 +54,6 @@ export class InvoicesController {
 
   @Delete(':id')
   remove(@Param('id') id: number) {
-    return this.service.remove(Number(id));
+    return this.service.delete(Number(id));
   }
 }

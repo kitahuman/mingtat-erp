@@ -1499,10 +1499,15 @@ model Invoice {
   project_id       Int?
   quotation_id     Int?
   company_id       Int
-  status           String    @default("draft") @db.VarChar(30)  // draft | issued | partially_paid | paid | void
+  invoice_title      String?   // 發票名稱/標題
+  client_contract_no String?   // 客戶合約編號
+  status             String    @default("draft") @db.VarChar(30)  // draft | issued | partially_paid | paid | void
   subtotal         Decimal   @default(0) @db.Decimal(14, 2)
-  tax_rate         Decimal   @default(0) @db.Decimal(5, 2)
-  tax_amount       Decimal   @default(0) @db.Decimal(14, 2)
+  tax_rate         Decimal   @default(0) @db.Decimal(5, 2)     // kept for backward compat
+  tax_amount       Decimal   @default(0) @db.Decimal(14, 2)    // kept for backward compat
+  retention_rate   Decimal   @default(0) @db.Decimal(5, 2)     // 保留金百分比
+  retention_amount Decimal   @default(0) @db.Decimal(14, 2)    // 保留金金額
+  other_charges    Json?     @db.JsonB                          // [{name, amount}] 其他費用
   total_amount     Decimal   @default(0) @db.Decimal(14, 2)
   paid_amount      Decimal   @default(0) @db.Decimal(14, 2)
   outstanding      Decimal   @default(0) @db.Decimal(14, 2)
@@ -1524,7 +1529,8 @@ model InvoiceItem {
   id               Int     @id @default(autoincrement())
   invoice_id       Int
   sort_order       Int     @default(1)
-  description      String? @db.Text
+  item_name        String?           // 項目標題 (like QuotationItem.item_name)
+  description      String? @db.Text  // 項目描述
   quantity         Decimal @default(0) @db.Decimal(12, 4)
   unit             String?
   unit_price       Decimal @default(0) @db.Decimal(12, 2)

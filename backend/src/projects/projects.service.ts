@@ -135,19 +135,50 @@ export class ProjectsService {
     return { contract_id: contractId, client_id: clientId };
   }
 
+  /** Sanitize DTO before passing to Prisma */
+  private sanitizeDto(dto: any) {
+    // Allowed string fields (String?)
+    const strOptionals = ['project_name', 'description', 'address', 'remarks', 'client_contract_no', 'status'];
+    // Date fields (DateTime?)
+    const dateOptionals = ['start_date', 'end_date'];
+    // Int fields (Int?)
+    const intOptionals = ['client_id', 'contract_id'];
+
+    const out: any = {};
+
+    for (const f of strOptionals) {
+      if (f in dto) out[f] = (dto[f] === '' || dto[f] === undefined) ? null : dto[f];
+    }
+    for (const f of dateOptionals) {
+      if (f in dto) out[f] = (dto[f] === '' || dto[f] === null || dto[f] === undefined) ? null : new Date(dto[f]);
+    }
+    for (const f of intOptionals) {
+      if (f in dto) out[f] = (dto[f] === '' || dto[f] === null || dto[f] === undefined) ? null : Number(dto[f]);
+    }
+
+    return out;
+  }
+
   async create(dto: any) {
     const project_no = await this.generateProjectNo(dto.company_id);
     const { contract_id, client_id } = await this.resolveClientId(dto);
 
-    const { company, client, contract, ...data } = dto;
+    const sanitized = this.sanitizeDto(dto);
 
     const saved = await this.prisma.project.create({
       data: {
-        ...data,
         project_no,
-        contract_id,
-        client_id,
+        project_name: sanitized.project_name ?? dto.project_name,
         company_id: Number(dto.company_id),
+        client_id,
+        contract_id,
+        status: sanitized.status ?? dto.status ?? 'pending',
+        description: sanitized.description,
+        address: sanitized.address,
+        start_date: sanitized.start_date,
+        end_date: sanitized.end_date,
+        remarks: sanitized.remarks,
+        client_contract_no: sanitized.client_contract_no,
       },
     });
     return this.findOne(saved.id);
@@ -158,15 +189,21 @@ export class ProjectsService {
     if (!existing) throw new NotFoundException('工程項目不存在');
 
     const { contract_id, client_id } = await this.resolveClientId(dto);
-
-    const { company, client, contract, created_at, updated_at, id: _id, project_no, ...updateData } = dto;
+    const sanitized = this.sanitizeDto(dto);
 
     await this.prisma.project.update({
       where: { id },
       data: {
-        ...updateData,
-        contract_id,
+        project_name: sanitized.project_name ?? dto.project_name,
+        status: sanitized.status ?? dto.status ?? existing.status,
+        description: sanitized.description,
+        address: sanitized.address,
+        start_date: sanitized.start_date,
+        end_date: sanitized.end_date,
+        remarks: sanitized.remarks,
+        client_contract_no: sanitized.client_contract_no,
         client_id,
+        contract_id,
       },
     });
     return this.findOne(id);

@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class InvoicesService {
@@ -11,38 +10,61 @@ export class InvoicesService {
     client: { select: { id: true, name: true, code: true, address: true, contact_person: true, phone: true, fax: true, email: true } },
     project: { select: { id: true, project_no: true, project_name: true } },
     quotation: { select: { id: true, quotation_no: true, project_name: true } },
-    company: { select: { id: true, name: true, name_en: true, phone: true, address: true } },
+    company: { select: { id: true, name: true, name_en: true, phone: true, address: true, internal_prefix: true } },
     items: { orderBy: { sort_order: 'asc' as const } },
   };
 
   /**
-   * Generate invoice number: INV-YYYYMM-XXX
+   * Generate invoice number: {internal_prefix}S{YYYY}{SEQ:03d}
+   * e.g. DCLSWH2026001 where internal_prefix=DCLSWH, S=Sale, 2026=year, 001=seq
    */
-  private async generateInvoiceNo(date: Date): Promise<string> {
-    const prefix = 'INV';
-    const yearMonth = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  private async generateInvoiceNo(companyId: number, date: Date): Promise<string> {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    const prefix = company?.internal_prefix
+      ? `${company.internal_prefix}S`
+      : 'INVS';
 
-    const seq = await this.prisma.invoiceSequence.upsert({
-      where: { prefix_year_month: { prefix, year_month: yearMonth } },
-      update: { last_seq: { increment: 1 } },
-      create: { prefix, year_month: yearMonth, last_seq: 1 },
+    const year = String(date.getUTCFullYear());
+    const yearMonth = year; // use year only for the sequence key
+
+    return await this.prisma.$transaction(async (tx) => {
+      let seq = await tx.invoiceSequence.findFirst({
+        where: { prefix, year_month: yearMonth },
+      });
+
+      if (!seq) {
+        seq = await tx.invoiceSequence.create({
+          data: { prefix, year_month: yearMonth, last_seq: 0 },
+        });
+      }
+
+      const updated = await tx.invoiceSequence.update({
+        where: { id: seq.id },
+        data: { last_seq: seq.last_seq + 1 },
+      });
+
+      return `${prefix}${year}${String(updated.last_seq).padStart(3, '0')}`;
     });
-
-    return `${prefix}-${yearMonth}-${String(seq.last_seq).padStart(3, '0')}`;
   }
 
   /**
-   * Recalculate totals from items
+   * Recalculate totals from items + retention + other_charges
+   * total_amount = subtotal - retention_amount + sum(other_charges)
    */
-  private calcTotals(items: { quantity: number; unit_price: number }[], taxRate: number) {
+  private calcTotals(
+    items: { quantity: number | string | { toNumber?: () => number }; unit_price: number | string | { toNumber?: () => number } }[],
+    retentionRate: number,
+    otherCharges: { name: string; amount: number }[] = [],
+  ) {
     const subtotal = items.reduce((sum, item) => {
       return sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
     }, 0);
-    const taxAmount = subtotal * (taxRate / 100);
-    const totalAmount = subtotal + taxAmount;
+    const retentionAmount = subtotal * (retentionRate / 100);
+    const otherTotal = otherCharges.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    const totalAmount = subtotal - retentionAmount + otherTotal;
     return {
       subtotal: Math.round(subtotal * 100) / 100,
-      tax_amount: Math.round(taxAmount * 100) / 100,
+      retention_amount: Math.round(retentionAmount * 100) / 100,
       total_amount: Math.round(totalAmount * 100) / 100,
     };
   }
@@ -111,7 +133,9 @@ export class InvoicesService {
     if (query.search) {
       where.OR = [
         { invoice_no: { contains: query.search, mode: 'insensitive' } },
+        { invoice_title: { contains: query.search, mode: 'insensitive' } },
         { client: { name: { contains: query.search, mode: 'insensitive' } } },
+        { client_contract_no: { contains: query.search, mode: 'insensitive' } },
         { remarks: { contains: query.search, mode: 'insensitive' } },
       ];
     }
@@ -142,13 +166,18 @@ export class InvoicesService {
   async create(dto: {
     date: string;
     due_date?: string;
-    client_id?: number;
-    project_id?: number;
-    company_id: number;
-    tax_rate?: number;
+    client_id?: number | string;
+    project_id?: number | string;
+    quotation_id?: number | string;
+    company_id: number | string;
+    invoice_title?: string;
+    client_contract_no?: string;
+    retention_rate?: number | string;
+    other_charges?: { name: string; amount: number }[];
     payment_terms?: string;
     remarks?: string;
     items?: {
+      item_name?: string;
       description?: string;
       quantity: number;
       unit?: string;
@@ -156,29 +185,40 @@ export class InvoicesService {
       sort_order?: number;
     }[];
   }) {
+    const companyId = Number(dto.company_id);
+    if (!companyId) throw new BadRequestException('請選擇公司');
+
     const invoiceDate = new Date(dto.date);
-    const invoiceNo = await this.generateInvoiceNo(invoiceDate);
-    const taxRate = dto.tax_rate || 0;
+    const invoiceNo = await this.generateInvoiceNo(companyId, invoiceDate);
+    const retentionRate = Number(dto.retention_rate) || 0;
+    const otherCharges: { name: string; amount: number }[] = Array.isArray(dto.other_charges) ? dto.other_charges : [];
     const items = dto.items || [];
-    const { subtotal, tax_amount, total_amount } = this.calcTotals(items, taxRate);
+    const { subtotal, retention_amount, total_amount } = this.calcTotals(items, retentionRate, otherCharges);
 
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
+        invoice_title: dto.invoice_title || null,
+        client_contract_no: dto.client_contract_no || null,
         date: invoiceDate,
         due_date: dto.due_date ? new Date(dto.due_date) : null,
-        client_id: dto.client_id || null,
-        project_id: dto.project_id || null,
-        company_id: dto.company_id,
-        tax_rate: taxRate,
+        client_id: dto.client_id ? Number(dto.client_id) : null,
+        project_id: dto.project_id ? Number(dto.project_id) : null,
+        quotation_id: dto.quotation_id ? Number(dto.quotation_id) : null,
+        company_id: companyId,
+        retention_rate: retentionRate,
+        retention_amount,
+        other_charges: otherCharges.length > 0 ? (otherCharges as any) : null,
         subtotal,
-        tax_amount,
+        tax_rate: 0,
+        tax_amount: 0,
         total_amount,
         outstanding: total_amount,
         payment_terms: dto.payment_terms || null,
         remarks: dto.remarks || null,
         items: {
           create: items.map((item, idx) => ({
+            item_name: item.item_name || null,
             description: item.description || null,
             quantity: item.quantity || 0,
             unit: item.unit || null,
@@ -200,7 +240,7 @@ export class InvoicesService {
   async createFromQuotation(quotationId: number, dto?: {
     date?: string;
     due_date?: string;
-    tax_rate?: number;
+    retention_rate?: number;
     payment_terms?: string;
     remarks?: string;
   }) {
@@ -220,11 +260,12 @@ export class InvoicesService {
     }
 
     const invoiceDate = dto?.date ? new Date(dto.date) : new Date();
-    const invoiceNo = await this.generateInvoiceNo(invoiceDate);
-    const taxRate = dto?.tax_rate || 0;
+    const invoiceNo = await this.generateInvoiceNo(quotation.company_id, invoiceDate);
+    const retentionRate = dto?.retention_rate || 0;
 
     const items = (quotation.items || []).map((item, idx) => ({
-      description: [item.item_name, item.item_description].filter(Boolean).join(' - ') || null,
+      item_name: item.item_name || null,
+      description: item.item_description || null,
       quantity: Number(item.quantity) || 0,
       unit: item.unit || null,
       unit_price: Number(item.unit_price) || 0,
@@ -232,9 +273,10 @@ export class InvoicesService {
       sort_order: idx + 1,
     }));
 
-    const { subtotal, tax_amount, total_amount } = this.calcTotals(
+    const { subtotal, retention_amount, total_amount } = this.calcTotals(
       items.map(i => ({ quantity: i.quantity, unit_price: i.unit_price })),
-      taxRate,
+      retentionRate,
+      [],
     );
 
     const invoice = await this.prisma.invoice.create({
@@ -246,9 +288,11 @@ export class InvoicesService {
         project_id: quotation.project_id,
         quotation_id: quotationId,
         company_id: quotation.company_id,
-        tax_rate: taxRate,
+        retention_rate: retentionRate,
+        retention_amount,
+        tax_rate: 0,
+        tax_amount: 0,
         subtotal,
-        tax_amount,
         total_amount,
         outstanding: total_amount,
         payment_terms: dto?.payment_terms || quotation.payment_terms || null,
@@ -276,27 +320,32 @@ export class InvoicesService {
     const data: any = {};
     if (dto.date !== undefined) data.date = new Date(dto.date);
     if (dto.due_date !== undefined) data.due_date = dto.due_date ? new Date(dto.due_date) : null;
-    if (dto.client_id !== undefined) data.client_id = dto.client_id || null;
-    if (dto.project_id !== undefined) data.project_id = dto.project_id || null;
-    if (dto.tax_rate !== undefined) data.tax_rate = dto.tax_rate;
+    if (dto.client_id !== undefined) data.client_id = dto.client_id ? Number(dto.client_id) : null;
+    if (dto.project_id !== undefined) data.project_id = dto.project_id ? Number(dto.project_id) : null;
+    if (dto.quotation_id !== undefined) data.quotation_id = dto.quotation_id ? Number(dto.quotation_id) : null;
+    if (dto.invoice_title !== undefined) data.invoice_title = dto.invoice_title || null;
+    if (dto.client_contract_no !== undefined) data.client_contract_no = dto.client_contract_no || null;
+    if (dto.retention_rate !== undefined) data.retention_rate = Number(dto.retention_rate) || 0;
     if (dto.payment_terms !== undefined) data.payment_terms = dto.payment_terms;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
     // Update items if provided
     if (dto.items) {
-      // Delete existing items and recreate
       await this.prisma.invoiceItem.deleteMany({ where: { invoice_id: id } });
-      const taxRate = dto.tax_rate !== undefined ? dto.tax_rate : Number(existing.tax_rate);
-      const { subtotal, tax_amount, total_amount } = this.calcTotals(dto.items, taxRate);
+      const retentionRate = dto.retention_rate !== undefined ? Number(dto.retention_rate) : Number(existing.retention_rate);
+      const otherCharges: { name: string; amount: number }[] = Array.isArray(dto.other_charges) ? dto.other_charges : [];
+      const { subtotal, retention_amount, total_amount } = this.calcTotals(dto.items, retentionRate, otherCharges);
       data.subtotal = subtotal;
-      data.tax_amount = tax_amount;
+      data.retention_amount = retention_amount;
       data.total_amount = total_amount;
       data.outstanding = Math.round((total_amount - Number(existing.paid_amount)) * 100) / 100;
       if (data.outstanding < 0) data.outstanding = 0;
+      if (dto.other_charges !== undefined) data.other_charges = otherCharges.length > 0 ? otherCharges : null;
 
       await this.prisma.invoiceItem.createMany({
         data: dto.items.map((item: any, idx: number) => ({
           invoice_id: id,
+          item_name: item.item_name || null,
           description: item.description || null,
           quantity: item.quantity || 0,
           unit: item.unit || null,
@@ -305,6 +354,18 @@ export class InvoicesService {
           sort_order: item.sort_order || idx + 1,
         })),
       });
+    } else if (dto.other_charges !== undefined || dto.retention_rate !== undefined) {
+      // Recalculate totals even if items not changed
+      const currentItems = await this.prisma.invoiceItem.findMany({ where: { invoice_id: id } });
+      const retentionRate = dto.retention_rate !== undefined ? Number(dto.retention_rate) : Number(existing.retention_rate);
+      const otherCharges: { name: string; amount: number }[] = Array.isArray(dto.other_charges) ? dto.other_charges : (existing.other_charges as any || []);
+      const { subtotal, retention_amount, total_amount } = this.calcTotals(currentItems, retentionRate, otherCharges);
+      data.subtotal = subtotal;
+      data.retention_amount = retention_amount;
+      data.total_amount = total_amount;
+      data.outstanding = Math.round((total_amount - Number(existing.paid_amount)) * 100) / 100;
+      if (data.outstanding < 0) data.outstanding = 0;
+      if (dto.other_charges !== undefined) data.other_charges = otherCharges.length > 0 ? otherCharges : null;
     }
 
     const invoice = await this.prisma.invoice.update({
@@ -353,7 +414,6 @@ export class InvoicesService {
       throw new BadRequestException('收款金額必須大於 0');
     }
 
-    // Create PaymentIn record
     const paymentIn = await this.prisma.paymentIn.create({
       data: {
         date: new Date(dto.date),
@@ -367,10 +427,7 @@ export class InvoicesService {
       },
     });
 
-    // Recalculate paid amounts and status
     await this.recalcPayments(invoiceId);
-
-    // Return updated invoice
     return this.findOne(invoiceId);
   }
 
@@ -400,27 +457,12 @@ export class InvoicesService {
     });
   }
 
-  async remove(id: number) {
+  async delete(id: number) {
     const existing = await this.prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('發票不存在');
-
-    // Check if there are payments
-    const payments = await this.prisma.paymentIn.count({
-      where: { source_type: 'invoice', source_ref_id: id },
-    });
-    if (payments > 0) {
-      throw new BadRequestException('此發票已有收款記錄，無法刪除。請先刪除所有收款記錄或將發票作廢。');
-    }
-
-    // If created from quotation, revert quotation status
-    if (existing.quotation_id) {
-      await this.prisma.quotation.update({
-        where: { id: existing.quotation_id },
-        data: { status: 'accepted' },
-      }).catch(() => {});
-    }
+    if (existing.status === 'paid') throw new BadRequestException('已付款的發票無法刪除');
 
     await this.prisma.invoice.delete({ where: { id } });
-    return { message: '已刪除' };
+    return { success: true };
   }
 }
