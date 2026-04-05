@@ -2650,3 +2650,16 @@ DO $$ BEGIN
   ALTER TABLE "payrolls" ADD CONSTRAINT "payrolls_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "companies"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- projects: client_contract_no (added for contract tracking)
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+
+-- invoices: new fields (invoice_title, retention, other_charges, client_contract_no)
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "invoice_title" TEXT;
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "retention_rate" DECIMAL(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "retention_amount" DECIMAL(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "other_charges" JSONB;
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "client_contract_no" TEXT;
+
+-- invoice_items: item_name (title field like quotation items)
+ALTER TABLE "invoice_items" ADD COLUMN IF NOT EXISTS "item_name" TEXT;
