@@ -97,6 +97,7 @@ export default function ProjectRateCardDetailPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">項目名稱</label><input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} className="input-field" /></div>
+            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">項目描述</label><textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} className="input-field" rows={2} placeholder="來自報價單的項目描述" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯工程項目</label>
               <select value={form.project_id || ''} onChange={e => setForm({...form, project_id: e.target.value ? Number(e.target.value) : null})} className="input-field">
                 <option value="">無</option>
@@ -116,7 +117,8 @@ export default function ProjectRateCardDetailPage() {
             <div><p className="text-sm text-gray-500">客戶</p><p className="font-medium">{record?.client?.name}</p></div>
             <div><p className="text-sm text-gray-500">合約編號</p><p>{record?.contract_no || '-'}</p></div>
             <div><p className="text-sm text-gray-500">服務類型</p><p>{record?.service_type}</p></div>
-            <div><p className="text-sm text-gray-500">項目名稱</p><p>{record?.name || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">項目名稱</p><p className="font-medium">{record?.name || '-'}</p></div>
+            {record?.description && <div className="md:col-span-2"><p className="text-sm text-gray-500">項目描述</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{record.description}</p></div>}
             <div><p className="text-sm text-gray-500">關聯工程項目</p>
               {record?.project ? (
                 <Link href={`/projects/${record.project.id}`} className="text-primary-600 hover:underline font-mono">{record.project.project_no} - {record.project.project_name}</Link>
