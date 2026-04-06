@@ -507,10 +507,7 @@ export default function WorkReportPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const [clientContractNoOptions, setClientContractNoOptions] = useState<{value: string; label: string}[]>([]);
-  useEffect(() => {
-    setClientContractNoOptions(optionsMap['client_contract_no'] || []);
-  }, [optionsMap]);
+  const clientContractNoOptions = optionsMap['client_contract_no'] || [];
 
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -715,7 +712,10 @@ export default function WorkReportPage() {
               onAddOption={async (val) => {
                 try {
                   await portalSharedApi.createFieldOption({ category: 'client_contract_no', label: val });
-                  setClientContractNoOptions(prev => [...prev, { value: val, label: val }]);
+                  setOptionsMap(prev => ({
+                    ...prev,
+                    client_contract_no: [...(prev['client_contract_no'] || []), { value: val, label: val }],
+                  }));
                 } catch {}
               }}
               placeholder="合約號碼"
