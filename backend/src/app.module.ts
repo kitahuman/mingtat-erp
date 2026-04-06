@@ -46,6 +46,7 @@ import { ProjectProfitLossModule } from './project-profit-loss/project-profit-lo
 import { CompanyProfitLossModule } from './company-profit-loss/company-profit-loss.module';
 import { SubconPayrollModule } from './subcon-payroll/subcon-payroll.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
+import { VerificationModule } from './verification/verification.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { AiChatModule } from './ai-chat/ai-chat.module';
     ProjectProfitLossModule,
     CompanyProfitLossModule,
     SubconPayrollModule,
+    VerificationModule,
   ],
 })
 export class AppModule {}

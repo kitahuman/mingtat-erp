@@ -32,6 +32,15 @@ const navEntries: NavEntry[] = [
   { href: '/chat', label: 'AI 助手', icon: '🤖', minRole: 'clerk' },
   { href: '/work-logs', label: '工作記錄', icon: '📝', minRole: 'clerk' },
   {
+    label: '工作紀錄核對',
+    icon: '🔍',
+    minRole: 'clerk',
+    items: [
+      { href: '/verification', label: '核對工作台', icon: '📋', minRole: 'clerk' },
+      { href: '/verification/upload', label: '上傳資料', icon: '📤', minRole: 'clerk' },
+    ],
+  },
+  {
     label: '公司內部資料',
     icon: '🏢',
     minRole: 'clerk',
@@ -206,6 +215,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    '工作紀錄核對': true,
     '公司內部資料': false,
     '工程管理': true,
     '人力資源': false,

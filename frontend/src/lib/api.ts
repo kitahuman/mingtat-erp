@@ -587,3 +587,40 @@ export const subconPayrollApi = {
   preview: (data: { subcon_id: number; date_from: string; date_to: string; company_id?: number }) =>
     api.post('/subcon-payroll/preview', data),
 };
+
+// ══════════════════════════════════════════════════════════════
+// Verification (工作紀錄核對)
+// ══════════════════════════════════════════════════════════════
+
+export const verificationApi = {
+  // 上傳檔案
+  upload: (formData: FormData) =>
+    api.post('/verification/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 min for large files
+    }),
+
+  // 確認匯入並開始配對
+  confirmBatch: (batchId: number) =>
+    api.post(`/verification/batch/${batchId}/confirm`),
+
+  // 核對工作台
+  getWorkbench: (params?: any) =>
+    api.get('/verification/workbench', { params }),
+
+  // 單筆配對詳情
+  getMatchDetail: (matchId: number) =>
+    api.get(`/verification/match/${matchId}`),
+
+  // 對配對結果進行操作
+  performMatchAction: (matchId: number, data: { action: string; override_data?: any; notes?: string }) =>
+    api.post(`/verification/match/${matchId}/action`, data),
+
+  // 批次列表
+  getBatches: (params?: any) =>
+    api.get('/verification/batches', { params }),
+
+  // 來源列表
+  getSources: () =>
+    api.get('/verification/sources'),
+};
