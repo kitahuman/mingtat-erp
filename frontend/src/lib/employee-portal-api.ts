@@ -126,4 +126,7 @@ export const portalSharedApi = {
     sharedApi.get(`/field-options/category/${category}`),
   createFieldOption: (data: { category: string; label: string }) =>
     sharedApi.post('/field-options', data),
+  getVehiclesSimple: () => sharedApi.get('/vehicles/simple'),
+  getMachinerySimple: () => sharedApi.get('/machinery/simple'),
+  getSubconFleetSimple: () => sharedApi.get('/subcon-fleet-drivers/simple'),
 };

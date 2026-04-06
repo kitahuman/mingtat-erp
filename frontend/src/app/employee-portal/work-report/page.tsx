@@ -483,6 +483,17 @@ export default function WorkReportPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [optionsMap, setOptionsMap] = useState<Record<string, {value: string, label: string}[]>>({});
+  const [allEquipment, setAllEquipment] = useState<{value: string; label: string; category?: string}[]>([]);
+
+  // Machine type classification (mirrors admin work-logs constants)
+  const VEHICLE_MACHINE_TYPES = new Set(['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車']);
+  const MACHINERY_MACHINE_TYPES = new Set(['挖掘機', '火轆']);
+  const getEquipmentSource = (mt: string | null | undefined): 'vehicle' | 'machinery' | null => {
+    if (!mt) return null;
+    if (VEHICLE_MACHINE_TYPES.has(mt)) return 'vehicle';
+    if (MACHINERY_MACHINE_TYPES.has(mt)) return 'machinery';
+    return null;
+  };
 
   useEffect(() => {
     portalSharedApi
@@ -499,6 +510,19 @@ export default function WorkReportPage() {
         newMap[r.cat] = r.data.map((o: any) => ({ value: o.value, label: o.label }));
       });
       setOptionsMap(newMap);
+    }).catch(() => {});
+
+    // Fetch equipment lists (vehicles + machinery + street fleet)
+    Promise.all([
+      portalSharedApi.getVehiclesSimple().catch(() => ({ data: [] })),
+      portalSharedApi.getMachinerySimple().catch(() => ({ data: [] })),
+      portalSharedApi.getSubconFleetSimple().catch(() => ({ data: [] })),
+    ]).then(([veh, mach, subcon]) => {
+      setAllEquipment([
+        ...(veh.data || []),
+        ...(mach.data || []),
+        ...(subcon.data || []),
+      ]);
     }).catch(() => {});
   }, []);
 
@@ -753,12 +777,17 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('machineNo')}</label>
-              <input
-                type="text"
+              <Combobox
                 value={form.equipment_number}
-                onChange={(e) => set('equipment_number', e.target.value)}
+                onChange={(val) => set('equipment_number', val)}
+                options={(() => {
+                  const src = getEquipmentSource(form.machine_type);
+                  if (src === 'vehicle') return allEquipment.filter(e => e.category === 'vehicle' || e.category === 'subcon_fleet');
+                  if (src === 'machinery') return allEquipment.filter(e => e.category === 'machinery');
+                  return allEquipment;
+                })()}
+                placeholder="選擇或輸入機號"
                 className={inputClass}
-                placeholder="機械編號"
               />
             </div>
 
@@ -821,12 +850,12 @@ export default function WorkReportPage() {
 
             <div>
               <label className={labelClass}>{t('plateNo')}</label>
-              <input
-                type="text"
+              <Combobox
                 value={form.plate_no}
-                onChange={(e) => set('plate_no', e.target.value)}
+                onChange={(val) => set('plate_no', val)}
+                options={allEquipment.filter(e => e.category === 'vehicle' || e.category === 'subcon_fleet')}
+                placeholder="選擇或輸入車牌"
                 className={inputClass}
-                placeholder="車牌號碼"
               />
             </div>
 
