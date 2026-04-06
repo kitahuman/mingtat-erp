@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
@@ -11,7 +12,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '生效中' },
@@ -39,8 +40,6 @@ export default function RentalRateCardsPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const contractNoOptions = optionsMap['client_contract_no'] || [];
-
   const [form, setForm] = useState<any>({
     company_id: '', client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
     name: '', tonnage: '', machine_type: '',
@@ -138,12 +137,10 @@ export default function RentalRateCardsPage() {
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
     { key: 'client_contract_no', label: '客戶合約', sortable: true, editable: true, render: (v: any) => v || '-',
       editRender: (value: any, onChange: any) => (
-        <Combobox
+        <ClientContractCombobox
           value={value || ''}
           onChange={v => onChange(v || '')}
-          options={contractNoOptions}
           placeholder="客戶合約"
-          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
         />
       )
     },
@@ -249,12 +246,10 @@ export default function RentalRateCardsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-              <Combobox
+              <ClientContractCombobox
                 value={form.client_contract_no}
                 onChange={(v) => setForm({...form, client_contract_no: v || ''})}
-                options={contractNoOptions}
                 placeholder="客戶合約"
-                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
               />
             </div>
             <div>

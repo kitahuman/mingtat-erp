@@ -5,13 +5,14 @@ import { subconRateCardsApi, companiesApi, partnersApi, vehiclesApi, machineryAp
 import Link from 'next/link';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'day_night', 'location', 'client_contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'day_night', 'location'];
 
 export default function SubconRateCardDetailPage() {
   const params = useParams();
@@ -28,8 +29,6 @@ export default function SubconRateCardDetailPage() {
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
   const dayNightOptions = optionsMap['day_night'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const clientContractNoOptions = optionsMap['client_contract_no'] || [];
-
   const loadData = () => {
     subconRateCardsApi.get(Number(params.id)).then(res => {
       setRecord(res.data);
@@ -155,11 +154,9 @@ export default function SubconRateCardDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label>
-              <Combobox
+              <ClientContractCombobox
                 value={form.client_contract_no || ''}
                 onChange={(val) => setForm({...form, client_contract_no: val || ''})}
-                options={clientContractNoOptions}
-                placeholder="選擇或輸入客戶合約"
               />
             </div>
             <div>

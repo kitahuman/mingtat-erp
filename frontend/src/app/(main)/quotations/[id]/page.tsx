@@ -1,9 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { quotationsApi, companiesApi, partnersApi, invoicesApi, fieldOptionsApi } from '@/lib/api';
-import Combobox from '@/components/Combobox';
-import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { quotationsApi, companiesApi, partnersApi, invoicesApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
@@ -14,7 +13,7 @@ const typeLabels: Record<string, string> = { project: '工程報價', rental: '�
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
-const FIELD_OPTION_CATEGORIES = ['client_contract_no'];
+
 
 // Searchable client dropdown
 function ClientSearchSelect({ value, onChange, partners }: { value: any; onChange: (v: any) => void; partners: any[] }) {
@@ -79,8 +78,7 @@ export default function QuotationDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
-  const contractNoOptions = optionsMap['client_contract_no'] || [];
+
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [acceptForm, setAcceptForm] = useState<any>({
@@ -362,12 +360,9 @@ export default function QuotationDetailPage() {
                 <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label>
-                <Combobox
+                <ClientContractCombobox
                   value={form.contract_name || ''}
                   onChange={(val) => setForm({...form, contract_name: val || ''})}
-                  options={contractNoOptions}
-                  placeholder="選擇或輸入客戶合約"
-                  onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
                 />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">{form.quotation_type === 'project' ? '工程名稱' : '服務說明'}</label>

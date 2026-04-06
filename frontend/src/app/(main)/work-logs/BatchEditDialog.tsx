@@ -4,6 +4,7 @@ import SearchableSelect from './SearchableSelect';
 import Combobox from './Combobox';
 import { STATUS_OPTIONS } from './constants';
 import { workLogsApi, fieldOptionsApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
 
 interface Option { value: string | number; label: string; _raw?: any; }
@@ -251,6 +252,18 @@ export default function BatchEditDialog({
           </div>
         );
       case 'field_option_create':
+        // Use dedicated ClientContractCombobox for client_contract_no
+        if (fieldDef.category === 'client_contract_no') {
+          return (
+            <div className="w-full">
+              <ClientContractCombobox
+                value={fieldValue || ''}
+                onChange={v => setFieldValue(v ? String(v) : null)}
+                placeholder={`選擇或輸入${fieldDef.label}`}
+              />
+            </div>
+          );
+        }
         return (
           <div className="w-full">
             <Combobox

@@ -1,20 +1,21 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { rateCardsApi, companiesApi, partnersApi, projectsApi, fleetRateCardsApi, vehiclesApi, machineryApi, fieldOptionsApi } from '@/lib/api';
+import { rateCardsApi, companiesApi, partnersApi, projectsApi, fleetRateCardsApi, vehiclesApi, machineryApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/components/SearchableSelect';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'location', 'client_contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'location'];
 
 export default function RateCardsPage() {
   const router = useRouter();
@@ -36,8 +37,6 @@ export default function RateCardsPage() {
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const contractNoOptions = optionsMap['client_contract_no'] || [];
-
   // Fleet rate card editing popup state
   const [showFleetModal, setShowFleetModal] = useState(false);
   const [fleetCards, setFleetCards] = useState<any[]>([]);
@@ -483,12 +482,10 @@ export default function RateCardsPage() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">客戶合約</label>
-                        <Combobox
+                        <ClientContractCombobox
                           value={card.client_contract_no || ''}
                           onChange={(val) => updateFleetCard(idx, 'client_contract_no', val || '')}
-                          options={contractNoOptions}
                           placeholder="客戶合約"
-                          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
                         />
                       </div>
                       <div>

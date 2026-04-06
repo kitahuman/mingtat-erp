@@ -8,6 +8,7 @@ import {
   STATUS_COLORS, getStatusLabel, getEquipmentSource,
 } from './constants';
 import { workLogsApi, fieldOptionsApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate as globalFmtDate } from '@/lib/dateUtils';
 
 // Format date as DD/MM/YYYY
@@ -323,14 +324,10 @@ export default function WorkLogRow({
       </td>
       {/* 客戶合約 */}
       <td className={`${cellCls} w-32`}>
-        <Combobox
+        <ClientContractCombobox
           value={form.client_contract_no || ''}
           onChange={v => set('client_contract_no', v ? String(v) : null)}
-          options={fieldOptions['client_contract_no'] || []}
           placeholder="客戶合約"
-          onCreateOption={async (val) => {
-            try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {}
-          }}
         />
       </td>
       {/* 員工 */}

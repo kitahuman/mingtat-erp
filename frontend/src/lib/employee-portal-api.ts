@@ -124,4 +124,6 @@ export const portalSharedApi = {
   getExpenseCategories: () => sharedApi.get('/expense-categories/tree'),
   getFieldOptions: (category: string) =>
     sharedApi.get(`/field-options/category/${category}`),
+  createFieldOption: (data: { category: string; label: string }) =>
+    sharedApi.post('/field-options', data),
 };

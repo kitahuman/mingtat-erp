@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { subconRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi, subconFleetDriversApi, fieldOptionsApi } from '@/lib/api';
+import { subconRateCardsApi, partnersApi, companiesApi, vehiclesApi, machineryApi, subconFleetDriversApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
@@ -10,7 +11,7 @@ import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
+const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
 export default function SubconRateCardsPage() {
   const router = useRouter();
@@ -33,10 +34,8 @@ export default function SubconRateCardsPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const contractNoOptions = optionsMap['client_contract_no'] || [];
-
   const [form, setForm] = useState<any>({
-    company_id: '', subcon_id: '', plate_no: '',
+    client_idd: '', subcon_id: '', plate_no: '',
     client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
     name: '', day_night: '日',
     tonnage: '', machine_type: '',
@@ -169,12 +168,10 @@ export default function SubconRateCardsPage() {
     { key: 'company', label: '公司', sortable: false, editable: false, render: (_: any, row: any) => row.company?.name || '-' },
     { key: 'client_contract_no', label: '客戶合約', sortable: true, editable: true, render: (v: any) => v || '-',
       editRender: (value: any, onChange: any) => (
-        <Combobox
+        <ClientContractCombobox
           value={value || ''}
           onChange={v => onChange(v || '')}
-          options={contractNoOptions}
           placeholder="客戶合約"
-          onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
         />
       )
     },
@@ -306,12 +303,10 @@ export default function SubconRateCardsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-                <Combobox
+                <ClientContractCombobox
                   value={form.client_contract_no}
                   onChange={(v) => setForm({...form, client_contract_no: v || ''})}
-                  options={contractNoOptions}
                   placeholder="客戶合約"
-                  onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
                 />
               </div>
               <div>

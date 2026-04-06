@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 
@@ -301,7 +302,10 @@ export default function InvoicesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-                <input type="text" value={form.client_contract_no} onChange={e => setForm({ ...form, client_contract_no: e.target.value })} className="input-field" placeholder="客戶合約編號" />
+                <ClientContractCombobox
+                  value={form.client_contract_no}
+                  onChange={(val) => setForm({ ...form, client_contract_no: val || '' })}
+                />
               </div>
             </div>
 

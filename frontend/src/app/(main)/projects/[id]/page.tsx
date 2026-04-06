@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 
@@ -184,7 +185,7 @@ export default function ProjectDetailPage() {
                   </select>
                 )}
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label><input value={form.client_contract_no || ''} onChange={e => setForm({...form, client_contract_no: e.target.value})} className="input-field" placeholder="例如 ABC-2024-001" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label><ClientContractCombobox value={form.client_contract_no || ''} onChange={(val) => setForm({...form, client_contract_no: val || ''})} /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><input type="date" value={toInputDate(form.start_date)} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>

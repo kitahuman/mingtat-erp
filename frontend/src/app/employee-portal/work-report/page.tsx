@@ -155,6 +155,107 @@ function Combobox({
   );
 }
 
+// ── Contract Combobox (with add-new-option) ─────────────────────────────────
+function ContractCombobox({
+  options,
+  value,
+  onChange,
+  onAddOption,
+  placeholder,
+  className,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
+  onAddOption?: (val: string) => Promise<void>;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const trimmed = query.trim();
+  const filtered = trimmed
+    ? options.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase()))
+    : options.slice(0, 30);
+  const exactMatch = options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
+  const showCreate = onAddOption && trimmed && !exactMatch;
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    setOpen(true);
+    onChange(val);
+  };
+
+  const handleSelect = (opt: { value: string; label: string }) => {
+    setQuery(opt.label);
+    setOpen(false);
+    onChange(opt.value);
+  };
+
+  const handleCreate = async () => {
+    if (!trimmed || !onAddOption) return;
+    onChange(trimmed);
+    setOpen(false);
+    await onAddOption(trimmed);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        className={className}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {showCreate && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors font-medium border-b border-gray-100"
+              onMouseDown={handleCreate}
+            >
+              + 新增「{trimmed}」到選項
+            </button>
+          )}
+          {filtered.length === 0 && !showCreate ? (
+            <div className="px-3 py-2 text-sm text-gray-400">無結果</div>
+          ) : (
+            filtered.map((o, i) => (
+              <button
+                key={i}
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                onMouseDown={() => handleSelect(o)}
+              >
+                {o.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Client Combobox ──────────────────────────────────────────────────────────
 function ClientCombobox({
   clients,
@@ -406,7 +507,10 @@ export default function WorkReportPage() {
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
-  const clientContractNoOptions = optionsMap['client_contract_no'] || [];
+  const [clientContractNoOptions, setClientContractNoOptions] = useState<{value: string; label: string}[]>([]);
+  useEffect(() => {
+    setClientContractNoOptions(optionsMap['client_contract_no'] || []);
+  }, [optionsMap]);
 
   const set = (field: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -604,10 +708,16 @@ export default function WorkReportPage() {
 
           <div>
             <label className={labelClass}>客戶合約</label>
-            <Combobox
+            <ContractCombobox
               value={form.client_contract_no}
               onChange={(val) => set('client_contract_no', val)}
               options={clientContractNoOptions}
+              onAddOption={async (val) => {
+                try {
+                  await portalSharedApi.createFieldOption({ category: 'client_contract_no', label: val });
+                  setClientContractNoOptions(prev => [...prev, { value: val, label: val }]);
+                } catch {}
+              }}
               placeholder="合約號碼"
               className={inputClass}
             />

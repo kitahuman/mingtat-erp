@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, contractsApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -202,7 +203,10 @@ export default function ProjectsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-              <input value={form.client_contract_no} onChange={e => setForm({...form, client_contract_no: e.target.value})} className="input-field" placeholder="例如 ABC-2024-001" />
+              <ClientContractCombobox
+                value={form.client_contract_no}
+                onChange={(val) => setForm({...form, client_contract_no: val || ''})}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">工程名稱 *</label>

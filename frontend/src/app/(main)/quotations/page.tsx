@@ -1,9 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { quotationsApi, companiesApi, partnersApi, fieldOptionsApi } from '@/lib/api';
-import Combobox from '@/components/Combobox';
-import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -22,7 +21,7 @@ const typeLabels: Record<string, string> = {
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
-const FIELD_OPTION_CATEGORIES = ['client_contract_no'];
+
 
 // Searchable client dropdown component
 function ClientSearchSelect({ value, onChange, partners }: { value: string; onChange: (v: string) => void; partners: any[] }) {
@@ -92,8 +91,7 @@ export default function QuotationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
-  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
-  const contractNoOptions = optionsMap['client_contract_no'] || [];
+
 
   // Create form
   const defaultForm = {
@@ -280,12 +278,9 @@ export default function QuotationsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-              <Combobox
+              <ClientContractCombobox
                 value={form.contract_name}
                 onChange={(val) => setForm({...form, contract_name: val || ''})}
-                options={contractNoOptions}
-                placeholder="選擇或輸入客戶合約"
-                onCreateOption={async (val) => { try { await fieldOptionsApi.create({ category: 'client_contract_no', label: val }); } catch {} }}
               />
             </div>
             {form.quotation_type === 'project' && (
