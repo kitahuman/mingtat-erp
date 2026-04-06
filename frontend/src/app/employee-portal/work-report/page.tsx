@@ -84,16 +84,16 @@ function Combobox({
   className,
 }: {
   options: { value: string; label: string }[];
-  value: string;
+  value?: string | null;
   onChange: (val: string) => void;
   placeholder?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value);
+  const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setQuery(value); }, [value]);
+  useEffect(() => { setQuery(value ?? ''); }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -105,8 +105,9 @@ function Combobox({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const filtered = query.trim()
-    ? options.filter((o) => o.label?.toLowerCase().includes(query.toLowerCase()))
+  const safeQuery = query ?? '';
+  const filtered = safeQuery.trim()
+    ? options.filter((o) => o.label?.toLowerCase().includes(safeQuery.toLowerCase()))
     : options.slice(0, 30);
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,16 +118,16 @@ function Combobox({
   };
 
   const handleSelect = (opt: { value: string; label: string }) => {
-    setQuery(opt.label);
+    setQuery(opt.label ?? '');
     setOpen(false);
-    onChange(opt.value);
+    onChange(opt.value ?? '');
   };
 
   return (
     <div ref={containerRef} className="relative">
       <input
         type="text"
-        value={query}
+        value={safeQuery}
         onChange={handleInput}
         onFocus={() => setOpen(true)}
         className={className}
@@ -165,17 +166,17 @@ function ContractCombobox({
   className,
 }: {
   options: { value: string; label: string }[];
-  value: string;
+  value?: string | null;
   onChange: (val: string) => void;
   onAddOption?: (val: string) => Promise<void>;
   placeholder?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value);
+  const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setQuery(value); }, [value]);
+  useEffect(() => { setQuery(value ?? ''); }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -187,7 +188,7 @@ function ContractCombobox({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const trimmed = query.trim();
+  const trimmed = (query ?? '').trim();
   const filtered = trimmed
     ? options.filter((o) => o.label?.toLowerCase().includes(trimmed.toLowerCase()))
     : options.slice(0, 30);
@@ -202,9 +203,9 @@ function ContractCombobox({
   };
 
   const handleSelect = (opt: { value: string; label: string }) => {
-    setQuery(opt.label);
+    setQuery(opt.label ?? '');
     setOpen(false);
-    onChange(opt.value);
+    onChange(opt.value ?? '');
   };
 
   const handleCreate = async () => {
@@ -218,7 +219,7 @@ function ContractCombobox({
     <div ref={containerRef} className="relative">
       <input
         type="text"
-        value={query}
+        value={query ?? ''}
         onChange={handleInput}
         onFocus={() => setOpen(true)}
         className={className}
@@ -272,11 +273,11 @@ function ClientCombobox({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(inputValue);
+  const [query, setQuery] = useState(inputValue ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync query when inputValue changes externally
-  useEffect(() => { setQuery(inputValue); }, [inputValue]);
+  useEffect(() => { setQuery(inputValue ?? ''); }, [inputValue]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -289,10 +290,11 @@ function ClientCombobox({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const filtered = query.trim()
+  const safeClientQuery = query ?? '';
+  const filtered = safeClientQuery.trim()
     ? clients.filter((c) =>
-        c.name?.toLowerCase().includes(query.toLowerCase()) ||
-        c.name_en?.toLowerCase().includes(query.toLowerCase())
+        c.name?.toLowerCase().includes(safeClientQuery.toLowerCase()) ||
+        c.name_en?.toLowerCase().includes(safeClientQuery.toLowerCase())
       )
     : clients.slice(0, 30);
 
@@ -316,7 +318,7 @@ function ClientCombobox({
     <div ref={containerRef} className="relative">
       <input
         type="text"
-        value={query}
+        value={query ?? ''}
         onChange={handleInput}
         onFocus={() => setOpen(true)}
         className={inputClass + (isNew && query ? ' border-amber-400' : '')}
