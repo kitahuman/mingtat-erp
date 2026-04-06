@@ -106,7 +106,7 @@ function Combobox({
   }, []);
 
   const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    ? options.filter((o) => o.label?.toLowerCase().includes(query.toLowerCase()))
     : options.slice(0, 30);
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,9 +189,9 @@ function ContractCombobox({
 
   const trimmed = query.trim();
   const filtered = trimmed
-    ? options.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase()))
+    ? options.filter((o) => o.label?.toLowerCase().includes(trimmed.toLowerCase()))
     : options.slice(0, 30);
-  const exactMatch = options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
+  const exactMatch = options.some((o) => o.label?.toLowerCase() === trimmed.toLowerCase());
   const showCreate = onAddOption && trimmed && !exactMatch;
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -518,11 +518,13 @@ export default function WorkReportPage() {
       portalSharedApi.getMachinerySimple().catch(() => ({ data: [] })),
       portalSharedApi.getSubconFleetSimple().catch(() => ({ data: [] })),
     ]).then(([veh, mach, subcon]) => {
-      setAllEquipment([
+      const combined = [
         ...(veh.data || []),
         ...(mach.data || []),
         ...(subcon.data || []),
-      ]);
+      ];
+      // Filter out entries with null/undefined value or label to prevent .trim()/.toLowerCase() errors
+      setAllEquipment(combined.filter(e => e && e.value != null && e.label != null));
     }).catch(() => {});
   }, []);
 
