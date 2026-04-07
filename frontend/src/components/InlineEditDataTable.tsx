@@ -48,6 +48,11 @@ interface InlineEditDataTableProps {
   onSave: (id: number, data: any) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
   idField?: string;
+  // Server-side column filter props (pass-through to DataTable)
+  serverSideFilter?: boolean;
+  columnFilters?: Record<string, Set<string>>;
+  onColumnFilterChange?: (filters: Record<string, Set<string>>) => void;
+  onFetchFilterOptions?: (columnKey: string) => Promise<string[]>;
 }
 
 /** Auto-detect if a field key looks like a date field */
@@ -67,6 +72,7 @@ export default function InlineEditDataTable({
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
   columnWidths, onColumnResize,
   onSave, onDelete, idField = 'id',
+  serverSideFilter, columnFilters, onColumnFilterChange, onFetchFilterOptions,
 }: InlineEditDataTableProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -272,6 +278,10 @@ export default function InlineEditDataTable({
       onColumnConfigReset={onColumnConfigReset}
       columnWidths={columnWidths}
       onColumnResize={onColumnResize}
+      serverSideFilter={serverSideFilter}
+      columnFilters={columnFilters}
+      onColumnFilterChange={onColumnFilterChange}
+      onFetchFilterOptions={onFetchFilterOptions}
     />
   );
 }

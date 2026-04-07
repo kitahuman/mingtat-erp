@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -56,6 +56,13 @@ export default function EmployeesPage() {
   const [roleOptions, setRoleOptions] = useState<{value: string; label: string}[]>([]);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(FALLBACK_ROLE_LABELS);
 
+  // Server-side column filters state
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+
+  // Ref to store roleLabels for use in callbacks without stale closures
+  const roleLabelsRef = useRef(roleLabels);
+  useEffect(() => { roleLabelsRef.current = roleLabels; }, [roleLabels]);
+
   useEffect(() => {
     companiesApi.simple().then(res => setCompanies(res.data));
     fieldOptionsApi.getByCategory('employee_role').then(res => {
@@ -74,21 +81,58 @@ export default function EmployeesPage() {
     });
   }, []);
 
+  /**
+   * Build the filter_* query params from columnFilters state.
+   * The backend expects: filter_role=value1,value2&filter_status=value1,...
+   * For display-label columns (role, status), we need to convert display labels back to raw values.
+   */
+  const buildColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
+    const params: Record<string, string> = {};
+    for (const [key, values] of Object.entries(filters)) {
+      if (values.size === 0) continue;
+      let rawValues: string[];
+
+      if (key === 'role') {
+        // Convert display labels back to raw role values
+        const currentLabels = roleLabelsRef.current;
+        const labelToRaw: Record<string, string> = {};
+        for (const [raw, label] of Object.entries(currentLabels)) {
+          labelToRaw[label] = raw;
+        }
+        rawValues = Array.from(values).map(v => labelToRaw[v] || v);
+      } else if (key === 'status') {
+        // Convert display labels back to raw status values
+        rawValues = Array.from(values).map(v => {
+          if (v === '在職') return 'active';
+          if (v === '離職') return 'inactive';
+          return v;
+        });
+      } else {
+        rawValues = Array.from(values);
+      }
+
+      params[`filter_${key}`] = rawValues.join(',');
+    }
+    return params;
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const filterParams = buildColumnFilterParams(columnFilters);
       const res = await employeesApi.list({
         page, limit: 20, search,
         role: roleFilter || undefined,
         company_id: companyFilter || undefined,
         status: activeTab,
-        sortBy, sortOrder
+        sortBy, sortOrder,
+        ...filterParams,
       });
       setData(res.data.data);
       setTotal(res.data.total);
     } catch {}
     setLoading(false);
-  }, [page, search, roleFilter, companyFilter, sortBy, sortOrder, activeTab]);
+  }, [page, search, roleFilter, companyFilter, sortBy, sortOrder, activeTab, columnFilters, buildColumnFilterParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -97,6 +141,7 @@ export default function EmployeesPage() {
     setPage(1);
     setSearch('');
     setRoleFilter('');
+    setColumnFilters({});
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -114,6 +159,46 @@ export default function EmployeesPage() {
     setSortOrder(order);
     setPage(1);
   };
+
+  const handleColumnFilterChange = useCallback((filters: Record<string, Set<string>>) => {
+    setColumnFilters(filters);
+    setPage(1);
+  }, []);
+
+  /**
+   * Fetch filter options from the backend for a given column.
+   * Passes current search/role/company/status context so options are contextual.
+   * Also converts raw values to display labels for role/status columns.
+   */
+  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
+    try {
+      const filterParams = buildColumnFilterParams(columnFilters);
+      const res = await employeesApi.filterOptions(columnKey, {
+        search: search || undefined,
+        role: roleFilter || undefined,
+        company_id: companyFilter || undefined,
+        status: activeTab,
+        ...filterParams,
+      });
+      let options: string[] = res.data;
+
+      // Convert raw values to display labels for certain columns
+      if (columnKey === 'role') {
+        const currentLabels = roleLabelsRef.current;
+        options = options.map(v => currentLabels[v] || v);
+      } else if (columnKey === 'status') {
+        options = options.map(v => {
+          if (v === 'active') return '在職';
+          if (v === 'inactive') return '離職';
+          return v;
+        });
+      }
+
+      return options;
+    } catch {
+      return [];
+    }
+  }, [search, roleFilter, companyFilter, activeTab, columnFilters, buildColumnFilterParams]);
 
   const handleInlineSave = async (id: number, formData: any) => {
     const payload: any = {
@@ -230,8 +315,7 @@ export default function EmployeesPage() {
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="font-semibold text-green-800 mb-1">手機帳號建立完成</h3>
-              <p className="text-sm text-green-700">
+              <p className="text-sm text-green-800 font-medium">
                 共 {bulkResult.total_employees} 位員工，
                 新建 {bulkResult.created_count} 個帳號，
                 跳過 {bulkResult.skipped_count} 個（已存在）
@@ -287,12 +371,14 @@ export default function EmployeesPage() {
         <InlineEditDataTable
           exportFilename={activeTab === 'active' ? '在職員工列表' : '已離職員工列表'}
           onExportFetchAll={async () => {
+            const filterParams = buildColumnFilterParams(columnFilters);
             const res = await employeesApi.list({
               limit: 10000, page: 1, search,
               role: roleFilter || undefined,
               company_id: companyFilter || undefined,
               status: activeTab,
-              sortBy, sortOrder
+              sortBy, sortOrder,
+              ...filterParams,
             });
             return res.data.data;
           }}
@@ -315,7 +401,11 @@ export default function EmployeesPage() {
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
-        onDelete={handleInlineDelete}
+          onDelete={handleInlineDelete}
+          serverSideFilter={true}
+          columnFilters={columnFilters}
+          onColumnFilterChange={handleColumnFilterChange}
+          onFetchFilterOptions={handleFetchFilterOptions}
           filters={
             <div className="flex gap-2">
               <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="input-field w-auto">

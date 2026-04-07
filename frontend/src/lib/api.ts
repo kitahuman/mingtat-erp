@@ -77,6 +77,7 @@ export const companyProfilesApi = {
 // Employees
 export const employeesApi = {
   list: (params?: any) => api.get('/employees', { params }),
+  filterOptions: (column: string, params?: any) => api.get(`/employees/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/employees/${id}`),
   create: (data: any) => api.post('/employees', data),
   update: (id: number, data: any) => api.put(`/employees/${id}`, data),

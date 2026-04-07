@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import ColumnFilter from './ColumnFilter';
 import ExportButton from './ExportButton';
 import ColumnCustomizer, { ColumnConfig } from './ColumnCustomizer';
@@ -41,6 +41,11 @@ interface DataTableProps {
   onColumnConfigReset?: () => void;
   columnWidths?: Record<string, number>;
   onColumnResize?: (key: string, width: number) => void;
+  // Server-side column filter props
+  serverSideFilter?: boolean;
+  columnFilters?: Record<string, Set<string>>;
+  onColumnFilterChange?: (filters: Record<string, Set<string>>) => void;
+  onFetchFilterOptions?: (columnKey: string) => Promise<string[]>;
 }
 
 /**
@@ -135,10 +140,17 @@ export default function DataTable({
   sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
   columnWidths, onColumnResize,
+  serverSideFilter, columnFilters: externalColumnFilters,
+  onColumnFilterChange, onFetchFilterOptions,
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  // Internal column filters state (used in client-side mode)
+  const [internalColumnFilters, setInternalColumnFilters] = useState<Record<string, Set<string>>>({});
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+  // Use external or internal column filters depending on mode
+  const isServerSide = !!(serverSideFilter && onColumnFilterChange);
+  const columnFilters = isServerSide ? (externalColumnFilters || {}) : internalColumnFilters;
 
   const handleSearch = () => {
     onSearch?.(searchTerm);
@@ -154,15 +166,27 @@ export default function DataTable({
   };
 
   const handleFilterChange = (columnKey: string, selectedValues: Set<string> | null) => {
-    setColumnFilters(prev => {
-      const next = { ...prev };
+    if (isServerSide) {
+      // Server-side mode: update external state and trigger re-fetch
+      const next = { ...columnFilters };
       if (selectedValues === null) {
         delete next[columnKey];
       } else {
         next[columnKey] = selectedValues;
       }
-      return next;
-    });
+      onColumnFilterChange!(next);
+    } else {
+      // Client-side mode: update internal state
+      setInternalColumnFilters(prev => {
+        const next = { ...prev };
+        if (selectedValues === null) {
+          delete next[columnKey];
+        } else {
+          next[columnKey] = selectedValues;
+        }
+        return next;
+      });
+    }
   };
 
   // Column resize handlers
@@ -194,8 +218,9 @@ export default function DataTable({
     document.body.style.userSelect = 'none';
   }, [onColumnResize]);
 
-  // Apply client-side column filters
+  // Apply client-side column filters (only in client-side mode)
   const filteredData = useMemo(() => {
+    if (isServerSide) return data; // Server-side mode: data is already filtered
     const activeFilterKeys = Object.keys(columnFilters);
     if (activeFilterKeys.length === 0) return data;
 
@@ -210,9 +235,9 @@ export default function DataTable({
         return allowed.has(display);
       });
     });
-  }, [data, columnFilters, columns]);
+  }, [data, columnFilters, columns, isServerSide]);
 
-  const filteredTotal = Object.keys(columnFilters).length > 0 ? filteredData.length : total;
+  const filteredTotal = isServerSide ? total : (Object.keys(columnFilters).length > 0 ? filteredData.length : total);
   const totalPages = Math.ceil(filteredTotal / limit);
 
   // Calculate display range
@@ -232,6 +257,15 @@ export default function DataTable({
       return sum + getColMinWidth(col.key, col.label, explicit || col.minWidth);
     }, 0);
   }, [columns, columnWidths]);
+
+  // Clear all filters handler
+  const handleClearAllFilters = () => {
+    if (isServerSide) {
+      onColumnFilterChange!({});
+    } else {
+      setInternalColumnFilters({});
+    }
+  };
 
   return (
     <div>
@@ -277,9 +311,14 @@ export default function DataTable({
       {/* Active filter indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2 mb-3 text-xs text-gray-500">
-          <span>已篩選 {filteredData.length} / {total} 筆</span>
+          <span>
+            {isServerSide
+              ? `已套用 ${Object.keys(columnFilters).length} 個欄位篩選，共 ${total} 筆結果`
+              : `已篩選 ${filteredData.length} / ${total} 筆`
+            }
+          </span>
           <button
-            onClick={() => setColumnFilters({})}
+            onClick={handleClearAllFilters}
             className="text-primary-600 hover:text-primary-800 font-medium"
           >
             清除所有篩選
@@ -326,6 +365,8 @@ export default function DataTable({
                           activeFilters={columnFilters}
                           onFilterChange={handleFilterChange}
                           renderValue={col.filterRender}
+                          serverSide={isServerSide}
+                          onFetchOptions={onFetchFilterOptions}
                         />
                       )}
                     </div>
@@ -386,7 +427,7 @@ export default function DataTable({
           {filteredTotal > 0 ? (
             <>
               顯示 {startRow}-{endRow} 筆，共 {filteredTotal} 筆
-              {hasActiveFilters && <span className="text-gray-400">（原始 {total} 筆）</span>}
+              {hasActiveFilters && !isServerSide && <span className="text-gray-400">（原始 {total} 筆）</span>}
               {totalPages > 1 ? `，第 ${page} / ${totalPages} 頁` : ''}
             </>
           ) : (
