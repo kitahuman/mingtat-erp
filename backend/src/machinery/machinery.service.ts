@@ -84,6 +84,19 @@ export class MachineryService {
     const existing = await this.prisma.machinery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('機械不存在');
     const { transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
+
+    // 日期欄位：字串轉 Date，空值轉 null
+    const dateFields = ['inspection_cert_expiry', 'insurance_expiry'];
+    for (const field of dateFields) {
+      if (field in updateData) {
+        updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
+      }
+    }
+    // tonnage: 轉數字
+    if ('tonnage' in updateData) {
+      updateData.tonnage = updateData.tonnage != null && updateData.tonnage !== '' ? Number(updateData.tonnage) : null;
+    }
+
     await this.prisma.machinery.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
