@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi } from '@/lib/employee-portal-api';
+
+// Lazy load MiniMap to avoid SSR issues
+const MiniMap = lazy(() => import('@/components/MiniMap'));
 
 interface AttendanceRecord {
   id: number;
@@ -14,6 +17,43 @@ interface AttendanceRecord {
   photo_url?: string | null;
 }
 
+/**
+ * Reverse geocode using Nominatim (client-side fallback)
+ * Used when the employee gets GPS before clock-in to show address preview
+ */
+async function reverseGeocodeClient(lat: number, lng: number): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=zh-TW,zh,en`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'MingtatERP/1.0' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+
+    const addr = data.address;
+    if (!addr) return data.display_name || null;
+
+    const parts: string[] = [];
+    if (addr.state) parts.push(addr.state);
+    if (addr.city && addr.city !== addr.state) parts.push(addr.city);
+    if (addr.county && addr.county !== addr.city) parts.push(addr.county);
+    if (addr.suburb) parts.push(addr.suburb);
+    if (addr.neighbourhood) parts.push(addr.neighbourhood);
+    if (addr.road) parts.push(addr.road);
+    if (addr.house_number) parts.push(addr.house_number);
+
+    const poi = addr.building || addr.amenity || addr.shop || addr.office || '';
+    let result = parts.join('');
+    if (poi && !result.includes(poi)) {
+      result = result ? `${result} (${poi})` : poi;
+    }
+    return result || data.display_name || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ClockPage() {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
@@ -23,8 +63,10 @@ export default function ClockPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [location, setLocation] = useState<{ lat: number; lng: number; address?: string } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [showMiniMap, setShowMiniMap] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -51,6 +93,20 @@ export default function ClockPage() {
         const { latitude: lat, longitude: lng } = pos.coords;
         setLocation({ lat, lng });
         setLocationLoading(false);
+        setShowMiniMap(true);
+
+        // Auto reverse-geocode to show address preview
+        setAddressLoading(true);
+        try {
+          const address = await reverseGeocodeClient(lat, lng);
+          if (address) {
+            setLocation((prev) => prev ? { ...prev, address } : prev);
+          }
+        } catch {
+          // Geocoding failure is non-blocking
+        } finally {
+          setAddressLoading(false);
+        }
       },
       () => {
         setError(t('locationFailed'));
@@ -142,6 +198,7 @@ export default function ClockPage() {
       setPhotoDataUrl(null);
       setPhotoFile(null);
       setLocation(null);
+      setShowMiniMap(false);
       await loadTodayRecords();
     } catch (err: any) {
       setError(err.response?.data?.message || t('error'));
@@ -224,11 +281,46 @@ export default function ClockPage() {
           <div>
             <p className="text-sm font-semibold text-gray-700 mb-2">GPS</p>
             {location ? (
-              <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700">
-                <p className="font-medium">✅ {t('locationObtained')}</p>
-                <p className="text-xs mt-1 text-green-600">
-                  {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
-                </p>
+              <div className="space-y-2">
+                <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700">
+                  <p className="font-medium">✅ {t('locationObtained')}</p>
+                  {/* Address display */}
+                  {addressLoading ? (
+                    <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      正在查詢地址...
+                    </p>
+                  ) : location.address ? (
+                    <p className="text-xs mt-1 text-green-800 font-medium">
+                      📍 {location.address}
+                    </p>
+                  ) : null}
+                  <p className="text-xs mt-1 text-green-600">
+                    {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                  </p>
+                </div>
+
+                {/* Mini map preview */}
+                {showMiniMap && (
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center bg-gray-100 rounded-xl" style={{ height: '150px' }}>
+                        <div className="text-gray-400 text-xs">載入地圖中...</div>
+                      </div>
+                    }
+                  >
+                    <MiniMap
+                      latitude={location.lat}
+                      longitude={location.lng}
+                      height="150px"
+                      zoom={16}
+                      className="rounded-xl"
+                    />
+                  </Suspense>
+                )}
               </div>
             ) : (
               <button
@@ -291,11 +383,16 @@ export default function ClockPage() {
                     {record.type === 'clock_in' ? t('clockIn') : t('clockOut')}
                   </p>
                   <p className="text-xs text-gray-500">{formatTime(record.timestamp)}</p>
-                  {record.latitude && (
+                  {/* Show address if available, otherwise show coordinates */}
+                  {record.address ? (
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      📍 {record.address}
+                    </p>
+                  ) : record.latitude ? (
                     <p className="text-xs text-gray-400">
                       📍 {record.latitude.toFixed(4)}, {record.longitude?.toFixed(4)}
                     </p>
-                  )}
+                  ) : null}
                 </div>
                 {record.photo_url && (
                   <img

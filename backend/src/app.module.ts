@@ -47,6 +47,7 @@ import { CompanyProfitLossModule } from './company-profit-loss/company-profit-lo
 import { SubconPayrollModule } from './subcon-payroll/subcon-payroll.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 import { VerificationModule } from './verification/verification.module';
+import { GeoModule } from './geo/geo.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { VerificationModule } from './verification/verification.module';
     CompanyProfitLossModule,
     SubconPayrollModule,
     VerificationModule,
+    GeoModule,
   ],
 })
 export class AppModule {}

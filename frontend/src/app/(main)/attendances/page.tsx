@@ -1,9 +1,13 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { attendancesApi, employeesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
+import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+
+// Lazy load MiniMap to avoid SSR issues
+const MiniMap = lazy(() => import('@/components/MiniMap'));
 
 const TYPE_LABELS: Record<string, string> = {
   clock_in: '開工',
@@ -41,6 +45,16 @@ export default function AttendancesPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [employees, setEmployees] = useState<any[]>([]);
+
+  // Map modal state
+  const [mapModal, setMapModal] = useState<{
+    open: boolean;
+    lat: number;
+    lng: number;
+    address?: string;
+    employeeName?: string;
+    time?: string;
+  }>({ open: false, lat: 0, lng: 0 });
 
   const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } =
     useColumnConfig('attendances', DEFAULT_COLUMNS);
@@ -80,6 +94,24 @@ export default function AttendancesPage() {
     setSortBy(field);
     setSortOrder(order);
     setPage(1);
+  };
+
+  const openMapModal = (row: any) => {
+    const employeeName = row.employee?.name_zh || row.employee?.name_en || '';
+    const time = row.timestamp
+      ? new Date(row.timestamp).toLocaleString('zh-HK', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        })
+      : '';
+    setMapModal({
+      open: true,
+      lat: Number(row.latitude),
+      lng: Number(row.longitude),
+      address: row.address || undefined,
+      employeeName,
+      time,
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -153,22 +185,33 @@ export default function AttendancesPage() {
       render: (_: any, row: any) => {
         if (row.latitude && row.longitude) {
           return (
-            <a
-              href={`https://maps.google.com/?q=${row.latitude},${row.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline text-xs"
-            >
-              {Number(row.latitude).toFixed(5)}, {Number(row.longitude).toFixed(5)}
-            </a>
+            <div className="space-y-1">
+              {row.address && (
+                <p className="text-xs text-gray-700 font-medium leading-tight max-w-[200px] truncate" title={row.address}>
+                  📍 {row.address}
+                </p>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); openMapModal(row); }}
+                className="text-blue-600 hover:text-blue-800 hover:underline text-xs flex items-center gap-1 transition-colors"
+                title="點擊查看地圖"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                {Number(row.latitude).toFixed(5)}, {Number(row.longitude).toFixed(5)}
+              </button>
+            </div>
           );
         }
-        if (row.address) return <span className="text-xs text-gray-600">{row.address}</span>;
+        if (row.address) return <span className="text-xs text-gray-600">📍 {row.address}</span>;
         return <span className="text-gray-400 text-xs">-</span>;
       },
       exportRender: (_: any, row: any) => {
-        if (row.latitude && row.longitude) return `${row.latitude}, ${row.longitude}`;
-        return row.address || '';
+        const parts: string[] = [];
+        if (row.address) parts.push(row.address);
+        if (row.latitude && row.longitude) parts.push(`${row.latitude}, ${row.longitude}`);
+        return parts.join(' | ') || '';
       },
     },
     {
@@ -296,6 +339,64 @@ export default function AttendancesPage() {
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
       />
+
+      {/* Map Modal */}
+      <Modal
+        isOpen={mapModal.open}
+        onClose={() => setMapModal({ ...mapModal, open: false })}
+        title="打卡位置地圖"
+        size="lg"
+      >
+        <div className="space-y-3">
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+            {mapModal.employeeName && (
+              <p className="text-sm font-medium text-gray-800">
+                👤 {mapModal.employeeName}
+              </p>
+            )}
+            {mapModal.time && (
+              <p className="text-xs text-gray-500">🕐 {mapModal.time}</p>
+            )}
+            {mapModal.address && (
+              <p className="text-sm text-gray-700">📍 {mapModal.address}</p>
+            )}
+            <p className="text-xs text-gray-400 font-mono">
+              {mapModal.lat.toFixed(6)}, {mapModal.lng.toFixed(6)}
+            </p>
+          </div>
+
+          {mapModal.open && (
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center bg-gray-100 rounded-lg" style={{ height: '350px' }}>
+                  <div className="text-gray-400 text-sm">載入地圖中...</div>
+                </div>
+              }
+            >
+              <MiniMap
+                latitude={mapModal.lat}
+                longitude={mapModal.lng}
+                height="350px"
+                zoom={16}
+              />
+            </Suspense>
+          )}
+
+          <div className="flex justify-end">
+            <a
+              href={`https://www.google.com/maps?q=${mapModal.lat},${mapModal.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+            >
+              在 Google Maps 中開啟
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

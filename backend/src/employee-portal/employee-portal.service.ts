@@ -6,12 +6,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeoService } from '../geo/geo.service';
 
 @Injectable()
 export class EmployeePortalService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private geoService: GeoService,
   ) {}
 
   // ── Employee Portal Login ──────────────────────────────────────
@@ -206,6 +208,17 @@ export class EmployeePortalService {
     const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) throw new BadRequestException('找不到對應的員工記錄，請聯絡管理員');
 
+    // Auto reverse-geocode if we have coordinates but no address
+    let address = data.address;
+    if (!address && data.latitude != null && data.longitude != null) {
+      try {
+        const geo = await this.geoService.reverseGeocode(data.latitude, data.longitude);
+        address = geo.address || undefined;
+      } catch {
+        // Geocoding failure should NOT block clock-in/out
+      }
+    }
+
     const record = await this.prisma.employeeAttendance.create({
       data: {
         employee_id: employeeId,
@@ -215,7 +228,7 @@ export class EmployeePortalService {
         photo_url: data.photo_url,
         latitude: data.latitude,
         longitude: data.longitude,
-        address: data.address,
+        address: address,
         remarks: data.remarks,
       },
     });
