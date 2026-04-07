@@ -837,6 +837,45 @@ export class OcrService {
   }
 
   // ══════════════════════════════════════════════════════════════
+  // 刪除 OCR 結果
+  // ══════════════════════════════════════════════════════════════
+  async deleteOcrResult(ocrId: number) {
+    const ocrResult = await this.prisma.verificationOcrResult.findUnique({
+      where: { id: ocrId },
+    });
+    if (!ocrResult) {
+      throw new BadRequestException('找不到 OCR 結果');
+    }
+
+    // 如果已確認並建立了 record，也一併刪除相關的 records 和 chits
+    if (ocrResult.ocr_user_confirmed) {
+      // 找到該批次和來源的 records
+      const records = await this.prisma.verificationRecord.findMany({
+        where: {
+          record_batch_id: ocrResult.ocr_batch_id,
+          record_source_id: ocrResult.ocr_source_id,
+        },
+        select: { id: true },
+      });
+      const recordIds = records.map(r => r.id);
+      if (recordIds.length > 0) {
+        await this.prisma.verificationRecordChit.deleteMany({
+          where: { chit_record_id: { in: recordIds } },
+        });
+        await this.prisma.verificationRecord.deleteMany({
+          where: { id: { in: recordIds } },
+        });
+      }
+    }
+
+    await this.prisma.verificationOcrResult.delete({
+      where: { id: ocrId },
+    });
+
+    return { deleted: true, ocr_id: ocrId };
+  }
+
+  // ══════════════════════════════════════════════════════════════
   // 工具方法
   // ══════════════════════════════════════════════════════════════
   private parseTimeToDate(timeStr: string): Date | null {

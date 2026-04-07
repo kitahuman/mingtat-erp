@@ -147,6 +147,12 @@ export class VerificationController {
     return this.ocrService.confirmOcrResult(+ocrId, corrections, req?.user?.id);
   }
 
+  // ── 刪除 OCR 結果 ────────────────────────────────────────
+  @Delete('ocr/:ocrId')
+  async deleteOcr(@Param('ocrId') ocrId: string) {
+    return this.ocrService.deleteOcrResult(+ocrId);
+  }
+
   // ── 取得待確認的 OCR 結果列表 ─────────────────────────────
   @Get('ocr/pending')
   async getPendingOcr(

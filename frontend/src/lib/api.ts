@@ -670,6 +670,10 @@ export const verificationApi = {
   ocrConfirm: (ocrId: number, corrections?: Record<string, any>) =>
     api.post(`/verification/ocr/${ocrId}/confirm`, { corrections }),
 
+  // 刪除 OCR 結果
+  ocrDelete: (ocrId: number) =>
+    api.delete(`/verification/ocr/${ocrId}`),
+
   // 取得待確認的 OCR 結果列表
   ocrPending: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/verification/ocr/pending', { params }),

@@ -198,6 +198,18 @@ export default function VerificationOcrPage() {
     setConfirming(false);
   };
 
+  // ── 刪除 OCR 結果 ──────────────────────────────────────────────
+  const handleDelete = async (item: OcrResultItem) => {
+    if (!confirm(`確定要刪除「${item.ocr_file_name}」的 OCR 結果嗎？${item.ocr_user_confirmed ? '\n❗ 此結果已確認，刪除後相關的工作紀錄也會一併刪除' : ''}`)) return;
+    try {
+      await verificationApi.ocrDelete(item.id);
+      fetchResults(pagination.page);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || '刪除失敗';
+      alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+  };
+
   // ── 跳過 ──────────────────────────────────────────────────
   const handleSkip = () => {
     if (!selectedResult) return;
@@ -264,6 +276,7 @@ export default function VerificationOcrPage() {
           loading={loading}
           pagination={pagination}
           onSelect={handleSelect}
+          onDelete={handleDelete}
           onPageChange={fetchResults}
         />
       )}
@@ -279,12 +292,14 @@ function OcrResultList({
   loading,
   pagination,
   onSelect,
+  onDelete,
   onPageChange,
 }: {
   results: OcrResultItem[];
   loading: boolean;
   pagination: Pagination;
   onSelect: (item: OcrResultItem) => void;
+  onDelete: (item: OcrResultItem) => void;
   onPageChange: (page: number) => void;
 }) {
   const formatDate = (dateStr: string) => {
@@ -378,6 +393,13 @@ function OcrResultList({
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(item); }}
+                        className="text-red-400 hover:text-red-600 text-xs ml-2"
+                        title="刪除"
+                      >
+                        🗑
+                      </button>
                     </td>
                   </tr>
                 );

@@ -199,7 +199,7 @@ export class EmployeesService {
       // Sort by company.internal_prefix (relation field)
       orderBy = { company: { internal_prefix: sortOrder } };
     } else {
-      const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
+      const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'name_en';
       orderBy = { [sortBy]: sortOrder };
     }
 
