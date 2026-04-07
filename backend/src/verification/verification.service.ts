@@ -115,7 +115,7 @@ export class VerificationService {
       data: {
         batch_code: batchCode,
         batch_source_id: source.id,
-        batch_file_name: file.originalname,
+        batch_file_name: Buffer.from(file.originalname, 'latin1').toString('utf8'),
         batch_file_size: BigInt(file.size),
         batch_file_hash: fileHash,
         batch_upload_user_id: options.userId,

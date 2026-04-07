@@ -50,7 +50,7 @@ export class DocumentsController {
       entity_type: entityType,
       entity_id: Number(entityId),
       doc_type: docType,
-      file_name: file.originalname,
+      file_name: Buffer.from(file.originalname, 'latin1').toString('utf8'),
       file_path: file.filename,
       file_size: file.size,
       mime_type: file.mimetype,

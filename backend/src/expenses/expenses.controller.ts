@@ -93,7 +93,7 @@ export class ExpensesController {
   ) {
     const fileUrl = `/uploads/expenses/${file.filename}`;
     return this.service.createAttachment(id, {
-      file_name: file.originalname,
+      file_name: Buffer.from(file.originalname, 'latin1').toString('utf8'),
       file_url: fileUrl,
       file_size: file.size,
       mime_type: file.mimetype,
