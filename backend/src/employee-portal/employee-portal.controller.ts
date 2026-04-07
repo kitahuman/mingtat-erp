@@ -122,7 +122,7 @@ export class EmployeePortalController {
     if (!file) {
       return { url: null };
     }
-    const baseUrl = process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`;
+    const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
     const url = `${baseUrl}/uploads/employee-portal/${file.filename}`;
     return { url, filename: file.filename };
   }
