@@ -1719,6 +1719,8 @@ model VerificationRecord {
   record_slip_no           String?   @db.VarChar(50)
   record_quantity          String?   @db.VarChar(50)
   record_weight_net        Decimal?  @db.Decimal(10, 2)
+  record_employee_id       Int?
+  record_employee_name     String?   @db.VarChar(100)
   record_raw_data          Json?
   record_ocr_confidence    Decimal?  @db.Decimal(5, 2)
   record_created_at        DateTime  @default(now())
@@ -1733,6 +1735,7 @@ model VerificationRecord {
   @@index([record_work_date])
   @@index([record_slip_no])
   @@index([record_driver_name])
+  @@index([record_employee_id])
   @@map("verification_records")
 }
 
@@ -1762,6 +1765,7 @@ model VerificationMatch {
   match_confidence      Decimal?  @db.Decimal(5, 2)
   match_diff_fields     Json?
   match_diff_count      Int       @default(0)
+  match_method          String?   @db.VarChar(30)
   match_notes           String?   @db.Text
   match_resolved_by     Int?
   match_resolved_at     DateTime?
@@ -1777,6 +1781,7 @@ model VerificationMatch {
   @@index([match_status])
   @@index([match_source_id])
   @@index([match_created_at])
+  @@index([match_method])
   @@map("verification_matches")
 }
 

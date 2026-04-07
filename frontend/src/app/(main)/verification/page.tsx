@@ -8,6 +8,7 @@ const STATUS_ICON: Record<string, string> = {
   matched: '✅',
   diff: '⚠️',
   missing: '❌',
+  source_missing: '🔍',
   unverified: '·',
   na: '—',
 };
@@ -15,7 +16,8 @@ const STATUS_ICON: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   matched: '已匹配',
   diff: '有差異',
-  missing: '缺失',
+  missing: '系統缺失',
+  source_missing: '來源缺失',
   unverified: '未核對',
   na: '不適用',
 };
@@ -24,8 +26,18 @@ const STATUS_COLOR: Record<string, string> = {
   matched: 'text-green-600',
   diff: 'text-amber-500',
   missing: 'text-red-500',
+  source_missing: 'text-orange-500',
   unverified: 'text-gray-400',
   na: 'text-gray-300',
+};
+
+const MATCH_METHOD_LABEL: Record<string, string> = {
+  chit_no: '入帳票號配對',
+  slip_no: '飛仔號配對',
+  date_vehicle: '日期+車牌配對',
+  date_employee: '日期+員工配對',
+  bidirectional_check: '雙向檢查',
+  none: '未配對',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -131,6 +143,11 @@ function DetailPopup({ matchId, sourceKey, onClose }: { matchId: number | null; 
                 <span className="font-medium">{STATUS_LABEL[detail.match?.match_status] || '未知'}</span>
                 {detail.match?.match_confidence != null && (
                   <span className="text-sm text-gray-500 ml-2">信心度: {Number(detail.match.match_confidence).toFixed(0)}%</span>
+                )}
+                {detail.match?.match_method && (
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded ml-2">
+                    {MATCH_METHOD_LABEL[detail.match.match_method] || detail.match.match_method}
+                  </span>
                 )}
               </div>
 
@@ -281,6 +298,7 @@ export default function VerificationWorkbenchPage() {
     const statusField = `status_${sourceKey}` as keyof WorkbenchRecord;
     const status = record[statusField] as string;
     if (status === 'unverified' || status === 'na') return;
+    if (status === 'source_missing') return; // 來源缺失無法查看詳情
 
     // 我們需要取得這個工作紀錄對應的 match
     // 先用 workbench 回傳的 work_record_id 去查

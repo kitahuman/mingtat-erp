@@ -72,6 +72,19 @@ export class VerificationController {
     return this.service.confirmBatchAndMatch(+batchId, req?.user?.id);
   }
 
+  // ── 同步打卡記錄 ──────────────────────────────────────────
+  @Post('sync-clock')
+  async syncClock(
+    @Body() body: { year: number; month: number },
+    @Request() req?: any,
+  ) {
+    return this.service.syncClockRecords({
+      year: body.year,
+      month: body.month,
+      userId: req?.user?.id,
+    });
+  }
+
   // ── 核對工作台資料 ────────────────────────────────────────
   @Get('workbench')
   async getWorkbench(

@@ -620,6 +620,10 @@ export const verificationApi = {
   getBatches: (params?: any) =>
     api.get('/verification/batches', { params }),
 
+  // 同步打卡記錄
+  syncClock: (data: { year: number; month: number }) =>
+    api.post('/verification/sync-clock', data),
+
   // 來源列表
   getSources: () =>
     api.get('/verification/sources'),
