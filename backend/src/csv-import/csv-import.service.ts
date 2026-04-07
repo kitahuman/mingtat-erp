@@ -144,23 +144,31 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'work-logs': [
-    { key: 'scheduled_date', label: '日期', required: true, type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'scheduled_date', label: '約定日期', required: true, type: 'date', description: 'DD/MM/YYYY' },
     { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
-    { key: 'company_name', label: '公司名稱', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
-    { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
-    { key: 'employee_code', label: '員工編號', type: 'string', description: '員工編號（系統自動匹配）' },
-    { key: 'machine_type', label: '機械類型', type: 'string' },
-    { key: 'equipment_number', label: '設備編號', type: 'string' },
+    { key: 'company_name', label: '公司', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
+    { key: 'client_name', label: '客戶公司', type: 'string', description: '合作單位名稱（系統自動匹配）' },
+    { key: 'client_contract_no', label: '客戶合約', type: 'string' },
+    { key: 'contract_name', label: '合約', type: 'string', description: '合約名稱（系統自動匹配）' },
+    { key: 'employee_code', label: '員工', type: 'string', description: '員工編號（系統自動匹配）' },
     { key: 'tonnage', label: '噸數', type: 'string' },
-    { key: 'day_night', label: '日/夜班', type: 'string', description: '日班/夜班/中直' },
+    { key: 'machine_type', label: '機種', type: 'string' },
+    { key: 'equipment_number', label: '機號', type: 'string' },
+    { key: 'day_night', label: '日夜班', type: 'string', description: '日/夜' },
     { key: 'start_location', label: '起點', type: 'string' },
-    { key: 'start_time', label: '開始時間', type: 'string' },
+    { key: 'start_time', label: '起點時間', type: 'string' },
     { key: 'end_location', label: '終點', type: 'string' },
-    { key: 'end_time', label: '結束時間', type: 'string' },
+    { key: 'end_time', label: '終點時間', type: 'string' },
+    { key: 'work_order_no', label: '單號', type: 'string' },
+    { key: 'receipt_no', label: '入帳票編號', type: 'string' },
     { key: 'quantity', label: '數量', type: 'number' },
-    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'unit', label: '工資單位', type: 'string' },
     { key: 'ot_quantity', label: 'OT數量', type: 'number' },
     { key: 'ot_unit', label: 'OT單位', type: 'string' },
+    { key: 'is_mid_shift', label: '中直', type: 'boolean', description: '是/否' },
+    { key: 'goods_quantity', label: '商品數量', type: 'number' },
+    { key: 'is_confirmed', label: '已確認', type: 'boolean', description: '是/否' },
+    { key: 'is_paid', label: '已付款', type: 'boolean', description: '是/否' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'projects': [
@@ -516,7 +524,7 @@ export class CsvImportService {
   }
 
   private async importWorkLog(data: any) {
-    const { company_name, client_name, employee_code, ...rest } = data;
+    const { company_name, client_name, employee_code, contract_name, ...rest } = data;
     const companyProfileId = company_name ? await this.resolveCompanyProfileId(company_name) : null;
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
     let employeeId: number | null = null;
@@ -524,10 +532,29 @@ export class CsvImportService {
       const emp = await this.prisma.employee.findFirst({ where: { emp_code: employee_code } });
       employeeId = emp?.id ?? null;
     }
+    let contractId: number | null = null;
+    if (contract_name) {
+      const contract = await this.prisma.contract.findFirst({
+        where: {
+          OR: [
+            { contract_no: { equals: contract_name, mode: 'insensitive' } },
+            { contract_name: { contains: contract_name, mode: 'insensitive' } },
+          ],
+        },
+      });
+      contractId = contract?.id ?? null;
+    }
 
     if (rest.scheduled_date) rest.scheduled_date = new Date(rest.scheduled_date);
-    for (const nf of ['quantity', 'ot_quantity']) {
+    for (const nf of ['quantity', 'ot_quantity', 'goods_quantity']) {
       if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
+    }
+    // Boolean fields
+    for (const bf of ['is_mid_shift', 'is_confirmed', 'is_paid']) {
+      if (rest[bf] !== undefined) {
+        const val = String(rest[bf]).toLowerCase();
+        rest[bf] = val === 'true' || val === '是' || val === 'yes' || val === '1';
+      }
     }
 
     const created = await this.prisma.workLog.create({
@@ -536,6 +563,7 @@ export class CsvImportService {
         company_profile_id: companyProfileId,
         client_id: clientId,
         employee_id: employeeId,
+        contract_id: contractId,
         status: 'editing',
       },
     });
