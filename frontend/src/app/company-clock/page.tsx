@@ -173,12 +173,20 @@ export default function CompanyClockPage() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Compress to max 800px for smaller payload
+    const maxSize = 800;
+    let w = video.videoWidth;
+    let h = video.videoHeight;
+    if (w > maxSize || h > maxSize) {
+      if (w > h) { h = Math.round((h * maxSize) / w); w = maxSize; }
+      else { w = Math.round((w * maxSize) / h); h = maxSize; }
+    }
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    ctx.drawImage(video, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
     setPhotoDataUrl(dataUrl);
     closeCamera();
   };

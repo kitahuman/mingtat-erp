@@ -3,6 +3,40 @@
 import { useState, useEffect, useRef } from 'react';
 import { employeesApi } from '@/lib/api';
 
+// Compress image using canvas
+function compressImage(file: File, maxSize: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas not supported')); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(base64);
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Props {
   employeeId: number;
 }
@@ -43,30 +77,21 @@ export default function EmployeePhotoSection({ employeeId }: Props) {
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setMessage('圖片大小不能超過 5MB');
-      return;
-    }
-
     setUploading(true);
     setMessage('');
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = ev.target?.result as string;
-        try {
-          await employeesApi.updatePhoto(employeeId, base64);
-          setMessage('標準照已更新');
-          await loadPhoto();
-        } catch (err: any) {
-          setMessage(err.response?.data?.message || '上傳失敗');
-        } finally {
-          setUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
+      // Compress image before upload
+      const compressed = await compressImage(file, 800, 0.8);
+      try {
+        await employeesApi.updatePhoto(employeeId, compressed);
+        setMessage('標準照已更新');
+        await loadPhoto();
+      } catch (err: any) {
+        setMessage(err.response?.data?.message || '上傳失敗');
+      } finally {
+        setUploading(false);
+      }
     } catch {
       setMessage('讀取檔案失敗');
       setUploading(false);
