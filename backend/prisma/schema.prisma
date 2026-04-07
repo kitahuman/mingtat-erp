@@ -1684,7 +1684,7 @@ model VerificationBatch {
   batch_period_month            Int?
   batch_total_rows              Int?
   batch_filtered_rows           Int?
-  batch_status                  String    @default("pending") @db.VarChar(20) // pending | processing | completed | failed
+  batch_status                  String    @default("pending") @db.VarChar(20) // pending | imported | processing | matched | completed | failed | cancelled
   batch_error_message           String?   @db.Text
   batch_processing_started_at   DateTime?
   batch_processing_completed_at DateTime?

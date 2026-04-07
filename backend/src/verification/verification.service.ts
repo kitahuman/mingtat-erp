@@ -123,7 +123,7 @@ export class VerificationService {
         batch_period_month: options.periodMonth,
         batch_total_rows: parseResult.totalRows,
         batch_filtered_rows: parseResult.previewData.length,
-        batch_status: 'pending',
+        batch_status: 'imported',
         batch_notes: options.notes,
       },
     });
@@ -295,8 +295,21 @@ export class VerificationService {
     if (!batch) {
       throw new NotFoundException('找不到批次');
     }
-    if (batch.batch_status !== 'pending') {
-      throw new BadRequestException(`批次狀態為 ${batch.batch_status}，無法確認`);
+    if (!['imported', 'pending', 'processing', 'failed'].includes(batch.batch_status)) {
+      throw new BadRequestException(`批次狀態為 ${batch.batch_status}，無法配對`);
+    }
+
+    // 如果是 processing/failed 狀態（上次可能卡住或失敗），先清除舊的 match 記錄再重新配對
+    if (batch.batch_status === 'processing' || batch.batch_status === 'failed') {
+      const recordIds = await this.prisma.verificationRecord.findMany({
+        where: { record_batch_id: batchId },
+        select: { id: true },
+      });
+      if (recordIds.length > 0) {
+        await this.prisma.verificationMatch.deleteMany({
+          where: { match_record_id: { in: recordIds.map(r => r.id) } },
+        });
+      }
     }
 
     // 更新批次狀態
@@ -361,29 +374,40 @@ export class VerificationService {
       await this.prisma.verificationBatch.update({
         where: { id: batchId },
         data: {
-          batch_status: 'completed',
+          batch_status: 'matched',
           batch_processing_completed_at: new Date(),
         },
       });
 
       return {
         batch_id: batchId,
-        status: 'completed',
+        status: 'matched',
         matched_count: matchedCount,
         diff_count: diffCount,
         missing_count: missingCount,
         total_records: records.length,
       };
     } catch (error) {
+      const errorMsg = error?.message || '配對過程發生未知錯誤';
+      const errorDetail = error?.stack ? `${errorMsg}\n\nStack: ${error.stack}` : errorMsg;
       await this.prisma.verificationBatch.update({
         where: { id: batchId },
         data: {
           batch_status: 'failed',
-          batch_error_message: error.message || '配對過程發生錯誤',
+          batch_error_message: errorDetail,
           batch_processing_completed_at: new Date(),
         },
       });
-      throw error;
+      // 不再 throw — 返回 failed 狀態讓前端顯示錯誤原因
+      return {
+        batch_id: batchId,
+        status: 'failed',
+        error: errorMsg,
+        matched_count: 0,
+        diff_count: 0,
+        missing_count: 0,
+        total_records: 0,
+      };
     }
   }
 
@@ -915,7 +939,7 @@ export class VerificationService {
       await this.prisma.verificationBatch.update({
         where: { id: batch.id },
         data: {
-          batch_status: 'completed',
+          batch_status: 'matched',
           batch_processing_completed_at: new Date(),
         },
       });
@@ -923,7 +947,7 @@ export class VerificationService {
       return {
         batch_id: batch.id,
         batch_code: batchCode,
-        status: 'completed',
+        status: 'matched',
         synced_count: groupMap.size,
         matched_count: matchedCount,
         diff_count: diffCount,
@@ -1282,7 +1306,7 @@ export class VerificationService {
     if (!batch) {
       throw new NotFoundException('找不到批次');
     }
-    const allowedStatuses = ['pending', 'cancelled', 'failed'];
+    const allowedStatuses = ['pending', 'imported', 'processing', 'cancelled', 'failed'];
     if (!allowedStatuses.includes(batch.batch_status)) {
       throw new BadRequestException(
         `批次狀態為 ${batch.batch_status}，只有 pending/cancelled/failed 狀態的批次可以刪除`,
@@ -1333,9 +1357,9 @@ export class VerificationService {
     if (!batch) {
       throw new NotFoundException('找不到批次');
     }
-    if (batch.batch_status !== 'completed') {
+    if (batch.batch_status !== 'matched' && batch.batch_status !== 'completed') {
       throw new BadRequestException(
-        `批次狀態為 ${batch.batch_status}，只有 completed 狀態的批次可以作廢`,
+        `批次狀態為 ${batch.batch_status}，只有已配對狀態的批次可以作廢`,
       );
     }
 

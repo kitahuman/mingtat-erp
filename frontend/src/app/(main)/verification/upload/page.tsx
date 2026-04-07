@@ -465,73 +465,30 @@ export default function VerificationUploadPage() {
                   </div>
                 )}
 
-                {/* 操作按鈕 */}
-                {!confirmResult ? (
+                {/* 匯入成功操作按鈕 */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-green-600 text-lg">&#9989;</span>
+                    <span className="font-medium text-green-800">匯入成功</span>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-3">
+                    已匯入 {uploadResult.imported_rows} 筆記錄到系統。可在「匯入紀錄」頁面查看或開始配對。
+                  </div>
                   <div className="flex gap-3">
-                    <button
-                      onClick={handleConfirm}
-                      disabled={confirming}
-                      className="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                    <Link
+                      href="/verification/batches"
+                      className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm"
                     >
-                      {confirming ? (
-                        <>
-                          <span className="animate-spin">&#9203;</span>
-                          <span>配對中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>&#9989;</span>
-                          <span>確認匯入並開始配對</span>
-                        </>
-                      )}
-                    </button>
+                      查看匯入紀錄
+                    </Link>
                     <button
                       onClick={handleReset}
-                      className="border border-gray-300 text-gray-600 px-4 py-2.5 rounded-lg hover:bg-gray-50"
+                      className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 text-sm"
                     >
-                      重新上傳
+                      繼續上傳
                     </button>
                   </div>
-                ) : (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-blue-600 text-lg">&#127881;</span>
-                      <span className="font-medium text-blue-800">配對完成</span>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <div className="text-gray-500">總記錄</div>
-                        <div className="font-medium">{confirmResult.total_records}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">已匹配</div>
-                        <div className="font-medium text-green-600">{confirmResult.matched_count}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">有差異</div>
-                        <div className="font-medium text-amber-500">{confirmResult.diff_count}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">缺失</div>
-                        <div className="font-medium text-red-500">{confirmResult.missing_count}</div>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 mt-4">
-                      <Link
-                        href="/verification"
-                        className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm"
-                      >
-                        前往核對工作台
-                      </Link>
-                      <button
-                        onClick={handleReset}
-                        className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 text-sm"
-                      >
-                        繼續上傳
-                      </button>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             )}
           </>

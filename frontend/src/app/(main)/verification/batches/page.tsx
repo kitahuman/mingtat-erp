@@ -32,9 +32,11 @@ interface Pagination {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   pending: { label: '待處理', color: 'bg-yellow-100 text-yellow-800' },
-  processing: { label: '處理中', color: 'bg-blue-100 text-blue-800' },
+  imported: { label: '已匯入', color: 'bg-indigo-100 text-indigo-800' },
+  processing: { label: '配對中', color: 'bg-blue-100 text-blue-800' },
+  matched: { label: '已配對', color: 'bg-green-100 text-green-800' },
   completed: { label: '已完成', color: 'bg-green-100 text-green-800' },
-  failed: { label: '失敗', color: 'bg-red-100 text-red-800' },
+  failed: { label: '配對失敗', color: 'bg-red-100 text-red-800' },
   cancelled: { label: '已作廢', color: 'bg-gray-100 text-gray-600' },
 };
 
@@ -69,6 +71,40 @@ export default function VerificationBatchesPage() {
       fetchBatches(pagination.page);
     } catch (err: any) {
       const msg = err?.response?.data?.message || '刪除失敗';
+      alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    setActionLoading(null);
+  };
+
+  const handleMatch = async (batch: BatchItem) => {
+    const confirmed = confirm(`確定要對批次「${batch.batch_code}」開始配對嗎？`);
+    if (!confirmed) return;
+    setActionLoading(batch.id);
+    try {
+      const res = await verificationApi.confirmBatch(batch.id);
+      if (res.data?.status === 'failed') {
+        alert(`配對失敗：${res.data.error || '未知錯誤'}`);
+      }
+      fetchBatches(pagination.page);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || '配對失敗';
+      alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    setActionLoading(null);
+  };
+
+  const handleRetry = async (batch: BatchItem) => {
+    const confirmed = confirm(`確定要重試批次「${batch.batch_code}」的配對嗎？`);
+    if (!confirmed) return;
+    setActionLoading(batch.id);
+    try {
+      const res = await verificationApi.confirmBatch(batch.id);
+      if (res.data?.status === 'failed') {
+        alert(`配對失敗：${res.data.error || '未知錯誤'}`);
+      }
+      fetchBatches(pagination.page);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || '重試失敗';
       alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     setActionLoading(null);
@@ -138,8 +174,10 @@ export default function VerificationBatchesPage() {
               <tbody>
                 {batches.map((batch) => {
                   const statusCfg = STATUS_CONFIG[batch.batch_status] || { label: batch.batch_status, color: 'bg-gray-100 text-gray-600' };
-                  const canDelete = ['pending', 'cancelled', 'failed'].includes(batch.batch_status);
-                  const canCancel = batch.batch_status === 'completed';
+                  const canDelete = ['pending', 'imported', 'processing', 'cancelled', 'failed'].includes(batch.batch_status);
+                  const canCancel = batch.batch_status === 'matched' || batch.batch_status === 'completed';
+                  const canRetry = ['processing', 'failed'].includes(batch.batch_status);
+                  const canMatch = batch.batch_status === 'imported';
                   const isActioning = actionLoading === batch.id;
 
                   return (
@@ -158,15 +196,41 @@ export default function VerificationBatchesPage() {
                       <td className="px-4 py-3 text-right">{batch.batch_total_rows ?? '—'}</td>
                       <td className="px-4 py-3 text-right">{batch.batch_filtered_rows ?? '—'}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusCfg.color}`}>
-                          {statusCfg.label}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusCfg.color}`}>
+                            {statusCfg.label}
+                          </span>
+                          {batch.batch_error_message && (batch.batch_status === 'failed' || batch.batch_status === 'processing') && (
+                            <span
+                              className="text-[10px] text-red-500 max-w-[200px] truncate cursor-help"
+                              title={batch.batch_error_message}
+                            >
+                              {batch.batch_error_message.split('\n')[0]}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {isActioning ? (
                           <span className="text-gray-400 text-xs">處理中...</span>
                         ) : (
                           <div className="flex items-center justify-center gap-2">
+                            {canMatch && (
+                              <button
+                                onClick={() => handleMatch(batch)}
+                                className="text-primary-600 hover:text-primary-800 text-xs font-medium"
+                              >
+                                開始配對
+                              </button>
+                            )}
+                            {canRetry && (
+                              <button
+                                onClick={() => handleRetry(batch)}
+                                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                              >
+                                重試
+                              </button>
+                            )}
                             {canCancel && (
                               <button
                                 onClick={() => handleCancel(batch)}
@@ -183,7 +247,7 @@ export default function VerificationBatchesPage() {
                                 刪除
                               </button>
                             )}
-                            {!canCancel && !canDelete && (
+                            {!canCancel && !canDelete && !canRetry && !canMatch && (
                               <span className="text-gray-300 text-xs">—</span>
                             )}
                           </div>
