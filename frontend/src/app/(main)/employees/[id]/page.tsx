@@ -10,26 +10,29 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 
 const roleLabels: Record<string, string> = {
-  admin: '管理', driver: '司機', operator: '機手', worker: '雜工',
-  subcontractor: '鴻輝代工', casual_operator: '散工機手',
-  foreman: '管工', safety_officer: '安全督導員', director: '董事', t1: 'T1',
+  '管理': '管理', '司機': '司機', '機手': '機手', '雜工': '雜工',
+  '鴻輝代工': '鴻輝代工', '散工機手': '散工機手', '散工司機': '散工司機',
+  '管工': '管工', '安全督導員': '安全督導員', '董事': '董事', 'T1': 'T1',
+  '文員': '文員', 'QS': 'QS',
 };
 const roleOptions = [
-  { value: 'admin', label: '管理' }, { value: 'driver', label: '司機' },
-  { value: 'operator', label: '機手' }, { value: 'worker', label: '雜工' },
-  { value: 'subcontractor', label: '鴻輝代工' }, { value: 'casual_operator', label: '散工機手' },
-  { value: 'foreman', label: '管工' }, { value: 'safety_officer', label: '安全督導員' },
-  { value: 'director', label: '董事' }, { value: 't1', label: 'T1' },
+  { value: '管理', label: '管理' }, { value: '司機', label: '司機' },
+  { value: '機手', label: '機手' }, { value: '雜工', label: '雜工' },
+  { value: '鴻輝代工', label: '鴻輝代工' }, { value: '散工機手', label: '散工機手' },
+  { value: '散工司機', label: '散工司機' }, { value: '管工', label: '管工' },
+  { value: '安全督導員', label: '安全督導員' }, { value: '董事', label: '董事' },
+  { value: 'T1', label: 'T1' }, { value: '文員', label: '文員' }, { value: 'QS', label: 'QS' },
 ];
 
 const roleBadgeClass = (v: string) => {
   switch (v) {
-    case 'admin': return 'badge-blue';
-    case 'driver': return 'badge-green';
-    case 'operator': return 'badge-yellow';
-    case 'subcontractor': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case 'casual_operator': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case 'director': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '管理': return 'badge-blue';
+    case '司機': return 'badge-green';
+    case '機手': return 'badge-yellow';
+    case '鴻輝代工': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '散工機手': case '散工司機': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '董事': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '文員': case 'QS': return 'bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-xs font-medium';
     default: return 'badge-gray';
   }
 };

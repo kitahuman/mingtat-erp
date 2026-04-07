@@ -13,19 +13,21 @@ import api from '@/lib/api';
 
 // Fallback role labels for display (used when API options not loaded yet)
 const FALLBACK_ROLE_LABELS: Record<string, string> = {
-  admin: '管理', driver: '司機', operator: '機手', worker: '雜工',
-  subcontractor: '鴻輝代工', casual_operator: '散工機手',
-  foreman: '管工', safety_officer: '安全督導員', director: '董事', t1: 'T1',
+  '管理': '管理', '司機': '司機', '機手': '機手', '雜工': '雜工',
+  '鴻輝代工': '鴻輝代工', '散工機手': '散工機手', '散工司機': '散工司機',
+  '管工': '管工', '安全督導員': '安全督導員', '董事': '董事', 'T1': 'T1',
+  '文員': '文員', 'QS': 'QS',
 };
 
 const roleBadgeClass = (v: string) => {
   switch (v) {
-    case 'admin': return 'badge-blue';
-    case 'driver': return 'badge-green';
-    case 'operator': return 'badge-yellow';
-    case 'subcontractor': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case 'casual_operator': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case 'director': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '管理': return 'badge-blue';
+    case '司機': return 'badge-green';
+    case '機手': return 'badge-yellow';
+    case '鴻輝代工': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '散工機手': case '散工司機': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '董事': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
+    case '文員': case 'QS': return 'bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-xs font-medium';
     default: return 'badge-gray';
   }
 };
@@ -48,7 +50,7 @@ export default function EmployeesPage() {
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
-  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
+  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '' });
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
@@ -93,13 +95,8 @@ export default function EmployeesPage() {
       let rawValues: string[];
 
       if (key === 'role') {
-        // Convert display labels back to raw role values
-        const currentLabels = roleLabelsRef.current;
-        const labelToRaw: Record<string, string> = {};
-        for (const [raw, label] of Object.entries(currentLabels)) {
-          labelToRaw[label] = raw;
-        }
-        rawValues = Array.from(values).map(v => labelToRaw[v] || v);
+        // Role values are now stored as Chinese labels directly
+        rawValues = Array.from(values);
       } else if (key === 'status') {
         // Convert display labels back to raw status values
         rawValues = Array.from(values).map(v => {
@@ -149,7 +146,7 @@ export default function EmployeesPage() {
     try {
       await employeesApi.create({ ...form, company_id: Number(form.company_id) });
       setShowModal(false);
-      setForm({ name_zh: '', name_en: '', role: 'worker', phone: '', company_id: '', emp_code: '', join_date: '' });
+      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
