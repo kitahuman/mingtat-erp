@@ -198,6 +198,8 @@ model Employee {
   clp_safety_cert_expiry              DateTime? @db.Date
   other_certificates                  Json?     @db.JsonB
   cert_photos                         Json?     @db.JsonB // { "driving_license": "url", "green_card": "url", ... }
+  employee_photo_base64               String?   @db.Text
+  employee_is_temporary               Boolean   @default(false)
   company_id                          Int
   status                              String    @default("active")
   notes                               String?   @db.Text
@@ -1164,18 +1166,22 @@ model SubcontractorFleetDriver {
 // ══════════════════════════════════════════════════════════════
 
 model EmployeeAttendance {
-  id          Int      @id @default(autoincrement())
-  employee_id Int
-  user_id     Int?
-  type        String // "clock_in" | "clock_out"
-  timestamp   DateTime @default(now())
-  photo_url   String?  @db.Text
-  latitude    Float?
-  longitude   Float?
-  address     String?  @db.Text
-  remarks     String?  @db.Text
-  created_at  DateTime @default(now())
-  updated_at  DateTime @default(now()) @updatedAt
+  id                              Int      @id @default(autoincrement())
+  employee_id                     Int
+  user_id                         Int?
+  type                            String // "clock_in" | "clock_out"
+  timestamp                       DateTime @default(now())
+  photo_url                       String?  @db.Text
+  attendance_photo_base64          String?  @db.Text
+  attendance_verification_method   String?  @db.VarChar(50) // "face_ai" | "first_time" | "manual"
+  attendance_verification_score    Float?
+  attendance_operator_user_id      Int?
+  latitude                        Float?
+  longitude                       Float?
+  address                         String?  @db.Text
+  remarks                         String?  @db.Text
+  created_at                      DateTime @default(now())
+  updated_at                      DateTime @default(now()) @updatedAt
 
   employee Employee @relation(fields: [employee_id], references: [id])
 

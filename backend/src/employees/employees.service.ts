@@ -398,6 +398,41 @@ export class EmployeesService {
     return this.findOne(employeeId);
   }
 
+  async getPhoto(id: number) {
+    const emp = await this.prisma.employee.findUnique({
+      where: { id },
+      select: { id: true, name_zh: true, name_en: true, employee_photo_base64: true },
+    });
+    if (!emp) throw new NotFoundException('員工不存在');
+    return {
+      id: emp.id,
+      name_zh: emp.name_zh,
+      name_en: emp.name_en,
+      hasPhoto: !!emp.employee_photo_base64,
+      photo_base64: emp.employee_photo_base64,
+    };
+  }
+
+  async updatePhoto(id: number, photoBase64: string) {
+    const emp = await this.prisma.employee.findUnique({ where: { id } });
+    if (!emp) throw new NotFoundException('員工不存在');
+    await this.prisma.employee.update({
+      where: { id },
+      data: { employee_photo_base64: photoBase64 },
+    });
+    return { success: true, message: '標準照已更新' };
+  }
+
+  async deletePhoto(id: number) {
+    const emp = await this.prisma.employee.findUnique({ where: { id } });
+    if (!emp) throw new NotFoundException('員工不存在');
+    await this.prisma.employee.update({
+      where: { id },
+      data: { employee_photo_base64: null },
+    });
+    return { success: true, message: '標準照已刪除' };
+  }
+
   async remove(id: number) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');

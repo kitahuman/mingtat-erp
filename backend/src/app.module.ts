@@ -48,6 +48,7 @@ import { SubconPayrollModule } from './subcon-payroll/subcon-payroll.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 import { VerificationModule } from './verification/verification.module';
 import { GeoModule } from './geo/geo.module';
+import { CompanyClockModule } from './company-clock/company-clock.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { GeoModule } from './geo/geo.module';
     SubconPayrollModule,
     VerificationModule,
     GeoModule,
+    CompanyClockModule,
   ],
 })
 export class AppModule {}

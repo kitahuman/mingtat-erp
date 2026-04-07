@@ -5,6 +5,7 @@ import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
+import EmployeePhotoSection from '@/components/EmployeePhotoSection';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
@@ -466,6 +467,9 @@ export default function EmployeeDetailPage() {
       <div className="card mb-6">
         <CustomFieldsBlock module="employee" entityId={emp?.id} />
       </div>
+
+      {/* Standard Photo (標準照) */}
+      <EmployeePhotoSection employeeId={emp?.id} />
 
       {/* Documents */}
       <div className="card mb-6">

@@ -57,6 +57,21 @@ export class EmployeesController {
     return this.service.transferEmployee(+id, dto);
   }
 
+  @Get(':id/photo')
+  getPhoto(@Param('id') id: number) {
+    return this.service.getPhoto(+id);
+  }
+
+  @Put(':id/photo')
+  updatePhoto(@Param('id') id: number, @Body() body: { photo_base64: string }) {
+    return this.service.updatePhoto(+id, body.photo_base64);
+  }
+
+  @Delete(':id/photo')
+  deletePhoto(@Param('id') id: number) {
+    return this.service.deletePhoto(+id);
+  }
+
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
   remove(@Param('id') id: string) {

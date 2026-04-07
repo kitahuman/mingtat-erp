@@ -87,6 +87,9 @@ export const employeesApi = {
   terminate: (id: number, data: { termination_date: string; termination_reason?: string }) => api.post(`/employees/${id}/terminate`, data),
   reinstate: (id: number) => api.post(`/employees/${id}/reinstate`),
   delete: (id: number) => api.delete(`/employees/${id}`),
+  getPhoto: (id: number) => api.get(`/employees/${id}/photo`),
+  updatePhoto: (id: number, photoBase64: string) => api.put(`/employees/${id}/photo`, { photo_base64: photoBase64 }),
+  deletePhoto: (id: number) => api.delete(`/employees/${id}/photo`),
 };
 
 // Vehicles
