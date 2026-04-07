@@ -72,6 +72,17 @@ export class EmployeesService {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
     const { salary_settings, transfers, company, created_at, updated_at, id: _id, ...updateData } = dto;
+    // Convert date string fields to Date objects for Prisma @db.Date columns
+    const dateFields = ['join_date', 'termination_date', 'date_of_birth', 'mpf_employment_date', 'mpf_old_employment_date',
+      'driving_license_expiry', 'approved_worker_cert_expiry', 'green_card_expiry', 'construction_card_expiry',
+      'earth_mover_cert_expiry', 'crane_cert_expiry', 'confined_space_cert_expiry', 'abrasive_wheel_cert_expiry',
+      'lifting_cert_expiry', 'gas_welding_cert_expiry', 'electric_welding_cert_expiry', 'first_aid_cert_expiry',
+      'signup_cert_expiry', 'silver_card_expiry', 'other_cert_expiry'];
+    for (const field of dateFields) {
+      if (field in updateData) {
+        updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
+      }
+    }
     await this.prisma.employee.update({ where: { id }, data: updateData });
     return this.findOne(id);
   }
