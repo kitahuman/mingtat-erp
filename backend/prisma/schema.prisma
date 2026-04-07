@@ -289,6 +289,18 @@ model Vehicle {
   model             String?
   status            String    @default("active")
   notes             String?   @db.Text
+  vehicle_first_reg_date    DateTime?  @db.Date
+  vehicle_chassis_no        String?
+  vehicle_electronic_comm   String?
+  vehicle_autotoll_collected String?
+  vehicle_autotoll          String?
+  vehicle_inspection_notes  String?    @db.Text
+  vehicle_insurance_agent   String?
+  vehicle_insurance_company String?
+  vehicle_has_gps           Boolean?
+  vehicle_mud_tail_expiry   DateTime?  @db.Date
+  vehicle_original_plate    String?
+  vehicle_owner_name        String?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @default(now()) @updatedAt
 

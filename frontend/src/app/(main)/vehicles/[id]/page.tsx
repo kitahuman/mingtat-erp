@@ -120,9 +120,28 @@ export default function VehicleDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">品牌</label><input value={form.brand || ''} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">使用中</option><option value="maintenance">維修中</option><option value="inactive">停用</option></select></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry || ''} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">檢查日期</label><input type="date" value={form.inspection_date || ''} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">牌照到期日</label><input type="date" value={form.license_expiry || ''} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">首次登記日期</label><input type="date" value={form.vehicle_first_reg_date?.slice(0, 10) || ''} onChange={e => setForm({...form, vehicle_first_reg_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">底盤號碼</label><input value={form.vehicle_chassis_no || ''} onChange={e => setForm({...form, vehicle_chassis_no: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">原身車牌</label><input value={form.vehicle_original_plate || ''} onChange={e => setForm({...form, vehicle_original_plate: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">車主名稱</label><input value={form.vehicle_owner_name || ''} onChange={e => setForm({...form, vehicle_owner_name: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">GPS</label>
+                <select value={form.vehicle_has_gps === true ? 'true' : form.vehicle_has_gps === false ? 'false' : ''} onChange={e => setForm({...form, vehicle_has_gps: e.target.value === 'true' ? true : e.target.value === 'false' ? false : null})} className="input-field">
+                  <option value="">未設定</option>
+                  <option value="true">有</option>
+                  <option value="false">無</option>
+                </select>
+              </div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">牌費到期日</label><input type="date" value={form.permit_fee_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, permit_fee_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">驗車到期日</label><input type="date" value={form.inspection_date?.slice(0, 10) || ''} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">行車證到期日</label><input type="date" value={form.license_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">泥尾到期日</label><input type="date" value={form.vehicle_mud_tail_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, vehicle_mud_tail_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">電子通訊</label><input value={form.vehicle_electronic_comm || ''} onChange={e => setForm({...form, vehicle_electronic_comm: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">易通行</label><input value={form.vehicle_autotoll || ''} onChange={e => setForm({...form, vehicle_autotoll: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">易通行已取</label><input value={form.vehicle_autotoll_collected || ''} onChange={e => setForm({...form, vehicle_autotoll_collected: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險代理公司</label><input value={form.vehicle_insurance_agent || ''} onChange={e => setForm({...form, vehicle_insurance_agent: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險公司</label><input value={form.vehicle_insurance_company || ''} onChange={e => setForm({...form, vehicle_insurance_company: e.target.value})} className="input-field" /></div>
+              <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">驗車備註</label><textarea value={form.vehicle_inspection_notes || ''} onChange={e => setForm({...form, vehicle_inspection_notes: e.target.value})} className="input-field" rows={2} /></div>
               <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">備註</label><textarea value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} className="input-field" rows={2} /></div>
             </>
           ) : (
@@ -134,6 +153,13 @@ export default function VehicleDetailPage() {
               <div><p className="text-sm text-gray-500">型號</p><p>{vehicle?.model || '-'}</p></div>
               <div><p className="text-sm text-gray-500">所屬公司</p><p className="font-medium">{vehicle?.owner_company?.internal_prefix} - {vehicle?.owner_company?.name}</p></div>
               <div><p className="text-sm text-gray-500">狀態</p><p><span className={vehicle?.status === 'active' ? 'badge-green' : vehicle?.status === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{vehicle?.status === 'active' ? '使用中' : vehicle?.status === 'maintenance' ? '維修中' : '停用'}</span></p></div>
+              <div><p className="text-sm text-gray-500">首次登記日期</p><p>{fmtDate(vehicle?.vehicle_first_reg_date) || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">底盤號碼</p><p className="font-mono text-sm">{vehicle?.vehicle_chassis_no || '-'}</p></div>
+              <div><p className="text-sm text-gray-500">原身車牌</p><p className="font-mono">{vehicle?.vehicle_original_plate || '-'}</p></div>
+              {vehicle?.vehicle_owner_name && (
+                <div><p className="text-sm text-gray-500">車主名稱</p><p>{vehicle.vehicle_owner_name}</p></div>
+              )}
+              <div><p className="text-sm text-gray-500">GPS</p><p>{vehicle?.vehicle_has_gps === true ? '有' : vehicle?.vehicle_has_gps === false ? '無' : '-'}</p></div>
             </>
           )}
         </div>
@@ -148,7 +174,34 @@ export default function VehicleDetailPage() {
             <div><p className="text-sm text-gray-500">牌費到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.permit_fee_expiry)}</p></div>
             <div><p className="text-sm text-gray-500">驗車到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.inspection_date)}</p></div>
             <div><p className="text-sm text-gray-500">行車證到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.license_expiry)}</p></div>
+            <div><p className="text-sm text-gray-500">泥尾到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.vehicle_mud_tail_expiry)}</p></div>
           </div>
+        </div>
+      )}
+
+      {/* Insurance & Autotoll Info */}
+      {!editing && (
+        <div className="card mb-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">保險及易通行</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div><p className="text-sm text-gray-500">保險代理公司</p><p>{vehicle?.vehicle_insurance_agent || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">保險公司</p><p>{vehicle?.vehicle_insurance_company || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">電子通訊</p><p>{vehicle?.vehicle_electronic_comm || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">易通行</p><p className="font-mono text-sm">{vehicle?.vehicle_autotoll || '-'}</p></div>
+            <div><p className="text-sm text-gray-500">易通行已取</p><p>{vehicle?.vehicle_autotoll_collected || '-'}</p></div>
+          </div>
+          {vehicle?.vehicle_inspection_notes && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-sm text-gray-500 mb-1">驗車備註</p>
+              <p className="text-sm whitespace-pre-wrap">{vehicle.vehicle_inspection_notes}</p>
+            </div>
+          )}
+          {vehicle?.notes && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-sm text-gray-500 mb-1">備註</p>
+              <p className="text-sm whitespace-pre-wrap">{vehicle.notes}</p>
+            </div>
+          )}
         </div>
       )}
 

@@ -86,11 +86,15 @@ export class VehiclesService {
     const { plate_history, transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
 
     // 日期欄位：字串轉 Date，空值轉 null
-    const dateFields = ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry'];
+    const dateFields = ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry'];
     for (const field of dateFields) {
       if (field in updateData) {
         updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
       }
+    }
+    // Boolean 欄位
+    if ('vehicle_has_gps' in updateData) {
+      updateData.vehicle_has_gps = updateData.vehicle_has_gps === true || updateData.vehicle_has_gps === 'true' ? true : updateData.vehicle_has_gps === false || updateData.vehicle_has_gps === 'false' ? false : null;
     }
     // tonnage: 轉數字
     if ('tonnage' in updateData) {

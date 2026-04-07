@@ -41,6 +41,18 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'inspection_date', label: '驗車日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'license_expiry', label: '行車證到期日', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'notes', label: '備註', type: 'string' },
+    { key: 'vehicle_first_reg_date', label: '首次登記日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'vehicle_chassis_no', label: '底盤號碼', type: 'string' },
+    { key: 'vehicle_electronic_comm', label: '電子通訊', type: 'string' },
+    { key: 'vehicle_autotoll_collected', label: '易通行已取', type: 'string' },
+    { key: 'vehicle_autotoll', label: '易通行', type: 'string' },
+    { key: 'vehicle_inspection_notes', label: '驗車備註', type: 'string' },
+    { key: 'vehicle_insurance_agent', label: '保險代理公司', type: 'string' },
+    { key: 'vehicle_insurance_company', label: '保險公司', type: 'string' },
+    { key: 'vehicle_has_gps', label: 'GPS', type: 'boolean' },
+    { key: 'vehicle_mud_tail_expiry', label: '泥尾到期日', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'vehicle_original_plate', label: '原身車牌', type: 'string' },
+    { key: 'vehicle_owner_name', label: '車主名稱', type: 'string' },
   ],
   machinery: [
     { key: 'machine_code', label: '機械編號', required: true, type: 'string' },
@@ -396,8 +408,12 @@ export class CsvImportService {
     const { company_name, ...rest } = data;
 
     // Convert dates
-    for (const df of ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry']) {
+    for (const df of ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry']) {
       if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+    // Boolean field
+    if ('vehicle_has_gps' in rest) {
+      rest.vehicle_has_gps = rest.vehicle_has_gps === true || rest.vehicle_has_gps === 'true' || rest.vehicle_has_gps === '有' ? true : rest.vehicle_has_gps === false || rest.vehicle_has_gps === 'false' || rest.vehicle_has_gps === '無' ? false : null;
     }
 
     // Check existing by plate_number
