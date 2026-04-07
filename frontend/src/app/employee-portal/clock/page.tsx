@@ -207,8 +207,12 @@ export default function ClockPage() {
     }
   };
 
-  const formatTime = (ts: string) =>
-    new Date(ts).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const formatDateTime = (ts: string) => {
+    const d = new Date(ts);
+    const date = d.toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const time = d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `${date} ${time}`;
+  };
 
   return (
     <div className="p-4 space-y-4">
@@ -382,7 +386,7 @@ export default function ClockPage() {
                   <p className={`font-semibold text-sm ${record.type === 'clock_in' ? 'text-green-700' : 'text-red-700'}`}>
                     {record.type === 'clock_in' ? t('clockIn') : t('clockOut')}
                   </p>
-                  <p className="text-xs text-gray-500">{formatTime(record.timestamp)}</p>
+                  <p className="text-xs text-gray-500">{formatDateTime(record.timestamp)}</p>
                   {/* Show address if available, otherwise show coordinates */}
                   {record.address ? (
                     <p className="text-xs text-gray-600 mt-0.5">
