@@ -10,16 +10,19 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { VerificationService } from './verification.service';
+import { OcrService } from './ocr.service';
+import { GpsService } from './gps.service';
 
 function getUploadDir() {
   const dir = path.join(process.cwd(), 'uploads', 'verification');
@@ -29,23 +32,29 @@ function getUploadDir() {
   return dir;
 }
 
+const verificationStorage = diskStorage({
+  destination: (_req: any, _file: any, cb: any) => cb(null, getUploadDir()),
+  filename: (_req: any, file: any, cb: any) => {
+    const ext = path.extname(file.originalname);
+    const name = uuidv4() + ext;
+    cb(null, name);
+  },
+});
+
 @Controller('verification')
 @UseGuards(AuthGuard('jwt'))
 export class VerificationController {
-  constructor(private readonly service: VerificationService) {}
+  constructor(
+    private readonly service: VerificationService,
+    private readonly ocrService: OcrService,
+    private readonly gpsService: GpsService,
+  ) {}
 
   // ── 上傳入帳票 Excel ──────────────────────────────────────
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => cb(null, getUploadDir()),
-        filename: (_req, file, cb) => {
-          const ext = path.extname(file.originalname);
-          const name = uuidv4() + ext;
-          cb(null, name);
-        },
-      }),
+      storage: verificationStorage,
       limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     }),
   )
@@ -101,6 +110,85 @@ export class VerificationController {
       userId: req?.user?.id,
     });
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // OCR 相關端點
+  // ══════════════════════════════════════════════════════════════
+
+  // ── 上傳掃描圖片進行 AI OCR 辨識 ─────────────────────────
+  @Post('ocr/process')
+  @UseInterceptors(
+    FilesInterceptor('files', 20, {
+      storage: verificationStorage,
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB per file
+    }),
+  )
+  async processOcr(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('source_type') sourceType: string,
+    @Body('period_year') periodYear?: string,
+    @Body('period_month') periodMonth?: string,
+    @Request() req?: any,
+  ) {
+    return this.ocrService.processMultipleImages(files, sourceType as any, {
+      periodYear: periodYear ? +periodYear : undefined,
+      periodMonth: periodMonth ? +periodMonth : undefined,
+      userId: req?.user?.id,
+    });
+  }
+
+  // ── 確認 OCR 辨識結果 ────────────────────────────────────
+  @Post('ocr/:ocrId/confirm')
+  async confirmOcr(
+    @Param('ocrId') ocrId: string,
+    @Body('corrections') corrections?: Record<string, any>,
+    @Request() req?: any,
+  ) {
+    return this.ocrService.confirmOcrResult(+ocrId, corrections, req?.user?.id);
+  }
+
+  // ── 取得待確認的 OCR 結果列表 ─────────────────────────────
+  @Get('ocr/pending')
+  async getPendingOcr(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.ocrService.getPendingOcrResults({
+      page: page ? +page : 1,
+      limit: limit ? +limit : 20,
+      status,
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // GPS 相關端點
+  // ══════════════════════════════════════════════════════════════
+
+  // ── 上傳 GPS 追蹤報表 Excel ───────────────────────────────
+  @Post('gps/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: verificationStorage,
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+    }),
+  )
+  async uploadGps(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('period_year') periodYear?: string,
+    @Body('period_month') periodMonth?: string,
+    @Request() req?: any,
+  ) {
+    return this.gpsService.uploadAndProcessGps(file, {
+      periodYear: periodYear ? +periodYear : undefined,
+      periodMonth: periodMonth ? +periodMonth : undefined,
+      userId: req?.user?.id,
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 核對工作台（原有端點）
+  // ══════════════════════════════════════════════════════════════
 
   // ── 核對工作台資料 ────────────────────────────────────────
   @Get('workbench')

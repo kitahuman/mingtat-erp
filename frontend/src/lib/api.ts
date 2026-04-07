@@ -643,4 +643,30 @@ export const verificationApi = {
   // 匯出 Excel（返回 blob）
   exportExcel: (params?: any) =>
     api.get('/verification/export', { params, responseType: 'blob' }),
+
+  // ── OCR 相關 ──────────────────────────────────────────────
+
+  // 上傳掃描圖片進行 AI OCR
+  ocrProcess: (formData: FormData) =>
+    api.post('/verification/ocr/process', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 10 min for OCR processing
+    }),
+
+  // 確認 OCR 結果
+  ocrConfirm: (ocrId: number, corrections?: Record<string, any>) =>
+    api.post(`/verification/ocr/${ocrId}/confirm`, { corrections }),
+
+  // 取得待確認的 OCR 結果列表
+  ocrPending: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/verification/ocr/pending', { params }),
+
+  // ── GPS 相關 ──────────────────────────────────────────────
+
+  // 上傳 GPS 追蹤報表
+  gpsUpload: (formData: FormData) =>
+    api.post('/verification/gps/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 10 min for GPS processing
+    }),
 };
