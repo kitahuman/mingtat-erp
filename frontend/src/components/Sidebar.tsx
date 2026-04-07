@@ -37,9 +37,11 @@ const navEntries: NavEntry[] = [
     minRole: 'clerk',
     items: [
       { href: '/verification', label: '核對工作台', icon: '📋', minRole: 'clerk' },
+      { href: '/verification/matching', label: '六來源比對', icon: '🔀', minRole: 'clerk' },
       { href: '/verification/upload', label: '上傳資料', icon: '📤', minRole: 'clerk' },
       { href: '/verification/batches', label: '匯入紀錄', icon: '📦', minRole: 'clerk' },
       { href: '/verification/records', label: '已匯入資料', icon: '📄', minRole: 'clerk' },
+      { href: '/verification/whatsapp', label: 'WhatsApp Order', icon: '💬', minRole: 'clerk' },
     ],
   },
   {

@@ -689,4 +689,41 @@ export const verificationApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 600000, // 10 min for GPS processing
     }),
+
+  // ── WhatsApp 相關 ──────────────────────────────────────────
+
+  // WhatsApp Orders 列表
+  getWhatsappOrders: (params?: {
+    page?: number;
+    limit?: number;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) =>
+    api.get('/verification/whatsapp-orders', { params }),
+
+  // WhatsApp Order 詳情
+  getWhatsappOrderDetail: (id: number) =>
+    api.get(`/verification/whatsapp-orders/${id}`),
+
+  // WhatsApp Messages 列表
+  getWhatsappMessages: (params?: {
+    page?: number;
+    limit?: number;
+    classification?: string;
+  }) =>
+    api.get('/verification/whatsapp-messages', { params }),
+
+  // ── 六來源交叉比對 ────────────────────────────────────────
+
+  // 交叉比對總覽
+  getMatchingOverview: (params: {
+    date_from: string;
+    date_to: string;
+    group_by?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get('/verification/matching', { params }),
 };
