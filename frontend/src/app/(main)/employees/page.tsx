@@ -151,6 +151,8 @@ export default function EmployeesPage() {
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
       <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
+    { key: 'id_number', label: '身份證號碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'phone', label: '電話', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
     { key: 'green_card_expiry', label: '平安卡到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
