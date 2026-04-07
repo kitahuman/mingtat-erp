@@ -1,18 +1,28 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import OpenAI from 'openai';
 import * as ExcelJS from 'exceljs';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 
 // ══════════════════════════════════════════════════════════════
-// GPS 追蹤報表匯入及 AI 行程摘要服務
+// GPS 追蹤報表匯入及每日摘要服務
 // ══════════════════════════════════════════════════════════════
 
+interface GpsMetadata {
+  company: string;
+  reportDate: string;
+  startTime: string;
+  endTime: string;
+  totalKm: number;
+}
+
 interface GpsRawRow {
-  vehicle_no: string;
   datetime: string;
+  company: string;
+  vehicle_no: string;
   latitude: string;
   longitude: string;
+  region: string;
   district: string;
   sub_district: string;
   street: string;
@@ -26,19 +36,19 @@ interface GpsRawRow {
   ic_card: string;
 }
 
-interface VehicleDayData {
+interface DaySummary {
   vehicle_no: string;
   date: string;
-  rows: GpsRawRow[];
+  first_engine_on: string | null;
+  last_engine_off: string | null;
+  total_km: number;
+  locations: string[];
+  raw_point_count: number;
 }
 
 @Injectable()
 export class GpsService {
-  private openai: OpenAI;
-
-  constructor(private readonly prisma: PrismaService) {
-    this.openai = new OpenAI();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════════════
   // 上傳並處理 GPS Excel
@@ -63,6 +73,25 @@ export class GpsService {
       throw new BadRequestException('找不到 GPS 來源設定');
     }
 
+    // 計算檔案 hash 檢查重複
+    const fileBuffer = fs.readFileSync(file.path);
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+    const existingBatch = await this.prisma.verificationBatch.findFirst({
+      where: { batch_file_hash: fileHash },
+    });
+    if (existingBatch) {
+      return {
+        duplicate: true,
+        existing_batch: {
+          batch_code: existingBatch.batch_code,
+          upload_time: existingBatch.batch_upload_time.toISOString().slice(0, 10),
+          status: existingBatch.batch_status,
+          total_rows: existingBatch.batch_total_rows,
+        },
+      };
+    }
+
     // 建立批次
     const today = new Date().toISOString().slice(0, 10);
     const existingCount = await this.prisma.verificationBatch.count({
@@ -76,7 +105,8 @@ export class GpsService {
         batch_code: batchCode,
         batch_source_id: source.id,
         batch_file_name: originalName,
-        batch_file_size: file.size,
+        batch_file_size: BigInt(file.size),
+        batch_file_hash: fileHash,
         batch_upload_user_id: options.userId,
         batch_period_year: options.periodYear,
         batch_period_month: options.periodMonth,
@@ -87,66 +117,99 @@ export class GpsService {
     });
 
     try {
-      // 解析 Excel
-      const rawRows = await this.parseGpsExcel(file.path);
+      // 1. 解析 Excel
+      const { metadata, rows: rawRows } = await this.parseGpsExcel(file.path);
 
-      // 按車牌+日期分組
-      const vehicleDayGroups = this.groupByVehicleDay(rawRows);
+      // 2. 按車牌+日期聚合為每日摘要
+      const dailySummaries = this.aggregateDailySummaries(rawRows);
 
+      // 3. 更新批次統計
       await this.prisma.verificationBatch.update({
         where: { id: batch.id },
         data: {
           batch_total_rows: rawRows.length,
-          batch_filtered_rows: vehicleDayGroups.length,
+          batch_filtered_rows: dailySummaries.length,
         },
       });
 
-      // 逐組使用 AI 生成行程摘要
+      // 4. 儲存每日摘要到 verification_gps_summaries 和 verification_records
       const summaries: any[] = [];
-      for (const group of vehicleDayGroups) {
+      for (const ds of dailySummaries) {
         try {
-          const summary = await this.generateDailySummary(group);
-          const record = await this.prisma.verificationGpsSummary.create({
+          // 建立 GPS summary
+          const gpsSummary = await this.prisma.verificationGpsSummary.create({
             data: {
               gps_summary_batch_id: batch.id,
-              gps_summary_vehicle_no: group.vehicle_no,
-              gps_summary_date: new Date(group.date),
-              gps_summary_start_time: summary.start_time ? new Date(summary.start_time) : null,
-              gps_summary_end_time: summary.end_time ? new Date(summary.end_time) : null,
-              gps_summary_total_distance: summary.total_distance,
-              gps_summary_trip_count: summary.trip_count,
-              gps_summary_locations: summary.locations,
-              gps_summary_raw_points: group.rows.length,
-              gps_summary_ai_model: 'gpt-4.1-mini',
+              gps_summary_vehicle_no: ds.vehicle_no,
+              gps_summary_date: new Date(ds.date),
+              gps_summary_start_time: ds.first_engine_on ? new Date(ds.first_engine_on) : null,
+              gps_summary_end_time: ds.last_engine_off ? new Date(ds.last_engine_off) : null,
+              gps_summary_total_distance: ds.total_km,
+              gps_summary_trip_count: null,
+              gps_summary_locations: ds.locations,
+              gps_summary_raw_points: ds.raw_point_count,
+              gps_summary_ai_model: null,
             },
           });
+
+          // 同時建立 verification_record 讓 GPS tab 能顯示
+          await this.prisma.verificationRecord.create({
+            data: {
+              record_batch_id: batch.id,
+              record_source_id: source.id,
+              record_work_date: new Date(ds.date),
+              record_vehicle_no: ds.vehicle_no,
+              record_location_from: ds.locations.length > 0 ? ds.locations.slice(0, 3).join(', ') : null,
+              record_location_to: ds.locations.length > 3 ? ds.locations.slice(3, 6).join(', ') : null,
+              record_time_in: ds.first_engine_on ? this.extractTimeAsDate(ds.first_engine_on) : null,
+              record_time_out: ds.last_engine_off ? this.extractTimeAsDate(ds.last_engine_off) : null,
+              record_quantity: ds.total_km > 0 ? `${ds.total_km.toFixed(1)} km` : null,
+              record_raw_data: {
+                gps_summary_id: gpsSummary.id,
+                gps_first_engine_on: ds.first_engine_on,
+                gps_last_engine_off: ds.last_engine_off,
+                gps_total_km: ds.total_km,
+                gps_locations: ds.locations,
+                gps_raw_point_count: ds.raw_point_count,
+                metadata: {
+                  company: metadata.company,
+                  report_date: metadata.reportDate,
+                  report_total_km: metadata.totalKm,
+                },
+              },
+            },
+          });
+
           summaries.push({
-            id: record.id,
-            vehicle_no: group.vehicle_no,
-            date: group.date,
-            trip_count: summary.trip_count,
-            total_distance: summary.total_distance,
+            id: gpsSummary.id,
+            vehicle_no: ds.vehicle_no,
+            date: ds.date,
+            first_engine_on: ds.first_engine_on,
+            last_engine_off: ds.last_engine_off,
+            total_distance: ds.total_km,
+            locations: ds.locations,
+            raw_point_count: ds.raw_point_count,
             status: 'completed',
           });
         } catch (error: any) {
-          console.error(`[GpsService] Failed to process ${group.vehicle_no} ${group.date}:`, error.message);
+          console.error(`[GpsService] Failed to save ${ds.vehicle_no} ${ds.date}:`, error.message);
           summaries.push({
-            vehicle_no: group.vehicle_no,
-            date: group.date,
+            vehicle_no: ds.vehicle_no,
+            date: ds.date,
             status: 'failed',
             error: error.message,
           });
         }
       }
 
-      // 更新批次狀態
+      // 5. 更新批次狀態
       const failedCount = summaries.filter((s) => s.status === 'failed').length;
       await this.prisma.verificationBatch.update({
         where: { id: batch.id },
         data: {
-          batch_status: failedCount === vehicleDayGroups.length ? 'failed' : 'imported',
+          batch_status: failedCount === dailySummaries.length ? 'failed' : 'imported',
           batch_processing_completed_at: new Date(),
-          batch_error_message: failedCount > 0 ? `${failedCount}/${vehicleDayGroups.length} 組摘要生成失敗` : null,
+          batch_error_message: failedCount > 0 ? `${failedCount}/${dailySummaries.length} 組摘要儲存失敗` : null,
         },
       });
 
@@ -154,9 +217,16 @@ export class GpsService {
         batch_id: batch.id,
         batch_code: batchCode,
         total_raw_rows: rawRows.length,
-        vehicle_day_groups: vehicleDayGroups.length,
+        vehicle_day_groups: dailySummaries.length,
         summaries_completed: summaries.filter((s) => s.status === 'completed').length,
         summaries_failed: failedCount,
+        metadata: {
+          company: metadata.company,
+          report_date: metadata.reportDate,
+          start_time: metadata.startTime,
+          end_time: metadata.endTime,
+          total_km: metadata.totalKm,
+        },
         summaries,
       };
     } catch (error: any) {
@@ -173,220 +243,191 @@ export class GpsService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 解析 GPS Excel（Autotoll 格式）
+  // 解析 GPS Excel（Autotoll 追蹤報表格式）
   // ══════════════════════════════════════════════════════════════
-  private async parseGpsExcel(filePath: string): Promise<GpsRawRow[]> {
+  private async parseGpsExcel(filePath: string): Promise<{ metadata: GpsMetadata; rows: GpsRawRow[] }> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
 
-    const rows: GpsRawRow[] = [];
     const sheet = workbook.worksheets[0];
     if (!sheet) {
       throw new BadRequestException('Excel 檔案沒有工作表');
     }
 
-    // 找到表頭行（尋找包含「車牌」或「日期」的行）
-    let headerRow = 0;
-    const headerMap: Record<string, number> = {};
-
-    sheet.eachRow((row, rowNumber) => {
-      if (headerRow > 0) return;
-      const values = row.values as any[];
-      for (let i = 1; i < values.length; i++) {
-        const cell = String(values[i] || '').trim();
-        if (cell === '車牌' || cell === '車牌號碼' || cell.toLowerCase() === 'vehicle') {
-          headerRow = rowNumber;
-          break;
-        }
-      }
-    });
-
-    if (headerRow === 0) {
-      // 假設第一行是表頭
-      headerRow = 1;
-    }
-
-    // 建立表頭映射
-    const headerRowValues = sheet.getRow(headerRow).values as any[];
-    const knownHeaders: Record<string, string> = {
-      '車牌': 'vehicle_no',
-      '車牌號碼': 'vehicle_no',
-      '日期時間': 'datetime',
-      '日期': 'datetime',
-      '緯度': 'latitude',
-      '經度': 'longitude',
-      '地區': 'district',
-      '分區': 'sub_district',
-      '街道': 'street',
-      '建築物': 'building',
-      '方向': 'direction',
-      '速度': 'speed',
-      '狀況': 'status',
-      '接收時間差(秒)': 'delay_seconds',
-      '事件': 'event',
-      '里程': 'mileage',
-      'IC卡號': 'ic_card',
+    // 解析 metadata (rows 1-6)
+    const metadata: GpsMetadata = {
+      company: '',
+      reportDate: '',
+      startTime: '',
+      endTime: '',
+      totalKm: 0,
     };
 
-    for (let i = 1; i < headerRowValues.length; i++) {
-      const cell = String(headerRowValues[i] || '').trim();
-      if (knownHeaders[cell]) {
-        headerMap[knownHeaders[cell]] = i;
-      }
-    }
+    // Row 2: 所在戶口
+    const row2 = sheet.getRow(2);
+    metadata.company = this.getCellString(row2, 2);
 
-    // 讀取資料行
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber <= headerRow) return;
-      const values = row.values as any[];
+    // Row 3: 報表日期
+    const row3 = sheet.getRow(3);
+    metadata.reportDate = this.getCellString(row3, 2);
 
-      const vehicleNo = headerMap.vehicle_no ? String(values[headerMap.vehicle_no] || '').trim() : '';
-      if (!vehicleNo) return;
+    // Row 4: 開始時間
+    const row4 = sheet.getRow(4);
+    metadata.startTime = this.getCellString(row4, 2);
+
+    // Row 5: 結束時間
+    const row5 = sheet.getRow(5);
+    metadata.endTime = this.getCellString(row5, 2);
+
+    // Row 6: 報表內總里程
+    const row6 = sheet.getRow(6);
+    const totalKmStr = this.getCellString(row6, 2);
+    metadata.totalKm = parseFloat(totalKmStr) || 0;
+
+    // Row 7 is header, Row 8+ is data
+    // Fixed column positions based on Autotoll format:
+    // 1:日期(時間) 2:所在戶口 3:車牌號碼 4:緯度 5:經度 6:區域 7:地區 8:分區 9:街道
+    // 10:建築物 11:方向 12:速度 13:狀況 14:接收時間差(秒) 15:事件 16:里程（公里）17:IC卡號
+
+    const rows: GpsRawRow[] = [];
+    const totalRows = sheet.rowCount;
+
+    for (let rowIdx = 8; rowIdx <= totalRows; rowIdx++) {
+      const row = sheet.getRow(rowIdx);
+      const datetime = this.getCellString(row, 1);
+      if (!datetime) continue;
+
+      const vehicleNo = this.getCellString(row, 3);
+      if (!vehicleNo) continue;
 
       rows.push({
+        datetime,
+        company: this.getCellString(row, 2),
         vehicle_no: vehicleNo,
-        datetime: headerMap.datetime ? String(values[headerMap.datetime] || '').trim() : '',
-        latitude: headerMap.latitude ? String(values[headerMap.latitude] || '').trim() : '',
-        longitude: headerMap.longitude ? String(values[headerMap.longitude] || '').trim() : '',
-        district: headerMap.district ? String(values[headerMap.district] || '').trim() : '',
-        sub_district: headerMap.sub_district ? String(values[headerMap.sub_district] || '').trim() : '',
-        street: headerMap.street ? String(values[headerMap.street] || '').trim() : '',
-        building: headerMap.building ? String(values[headerMap.building] || '').trim() : '',
-        direction: headerMap.direction ? String(values[headerMap.direction] || '').trim() : '',
-        speed: headerMap.speed ? Number(values[headerMap.speed] || 0) : 0,
-        status: headerMap.status ? String(values[headerMap.status] || '').trim() : '',
-        delay_seconds: headerMap.delay_seconds ? Number(values[headerMap.delay_seconds] || 0) : 0,
-        event: headerMap.event ? String(values[headerMap.event] || '').trim() : '',
-        mileage: headerMap.mileage ? Number(values[headerMap.mileage] || 0) : 0,
-        ic_card: headerMap.ic_card ? String(values[headerMap.ic_card] || '').trim() : '',
+        latitude: this.getCellString(row, 4),
+        longitude: this.getCellString(row, 5),
+        region: this.getCellString(row, 6),
+        district: this.getCellString(row, 7),
+        sub_district: this.getCellString(row, 8),
+        street: this.getCellString(row, 9),
+        building: this.getCellString(row, 10),
+        direction: this.getCellString(row, 11),
+        speed: parseFloat(this.getCellString(row, 12)) || 0,
+        status: this.getCellString(row, 13),
+        delay_seconds: parseInt(this.getCellString(row, 14)) || 0,
+        event: this.getCellString(row, 15),
+        mileage: parseFloat(this.getCellString(row, 16)) || 0,
+        ic_card: this.getCellString(row, 17),
       });
-    });
+    }
 
-    return rows;
+    return { metadata, rows };
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 按車牌+日期分組
+  // 按車牌+日期聚合為每日 GPS 摘要
   // ══════════════════════════════════════════════════════════════
-  private groupByVehicleDay(rows: GpsRawRow[]): VehicleDayData[] {
+  private aggregateDailySummaries(rows: GpsRawRow[]): DaySummary[] {
     const groups = new Map<string, GpsRawRow[]>();
 
     for (const row of rows) {
       // 從 datetime 提取日期部分
-      let dateStr = '';
-      if (row.datetime) {
-        const match = row.datetime.match(/(\d{4}[-/]\d{2}[-/]\d{2})/);
-        if (match) {
-          dateStr = match[1].replace(/\//g, '-');
-        }
-      }
-      if (!dateStr) continue;
+      const match = row.datetime.match(/(\d{4}[-/]\d{2}[-/]\d{2})/);
+      if (!match) continue;
 
+      const dateStr = match[1].replace(/\//g, '-');
       const key = `${row.vehicle_no}|${dateStr}`;
+
       if (!groups.has(key)) {
         groups.set(key, []);
       }
       groups.get(key)!.push(row);
     }
 
-    return Array.from(groups.entries()).map(([key, rows]) => {
-      const [vehicle_no, date] = key.split('|');
-      return { vehicle_no, date, rows };
-    });
+    const summaries: DaySummary[] = [];
+
+    for (const [key, dayRows] of groups.entries()) {
+      const [vehicleNo, dateStr] = key.split('|');
+
+      // 按時間排序
+      dayRows.sort((a, b) => a.datetime.localeCompare(b.datetime));
+
+      // 計算首次開引擎時間
+      let firstEngineOn: string | null = null;
+      let lastEngineOff: string | null = null;
+
+      for (const r of dayRows) {
+        if (r.status === '閒置-開引擎' || r.status === '行車-開引擎' || r.status === '無GPS訊號-開引擎') {
+          if (!firstEngineOn) {
+            firstEngineOn = r.datetime;
+          }
+        }
+      }
+
+      // 最後關引擎時間：從後往前找
+      for (let i = dayRows.length - 1; i >= 0; i--) {
+        if (dayRows[i].status === '關引擎') {
+          // 只有在有開引擎記錄的情況下才記錄最後關引擎
+          if (firstEngineOn) {
+            lastEngineOff = dayRows[i].datetime;
+          }
+          break;
+        }
+      }
+
+      // 計算當天總里程（累加所有里程增量）
+      let totalKm = 0;
+      for (const r of dayRows) {
+        totalKm += r.mileage;
+      }
+      totalKm = Math.round(totalKm * 100) / 100;
+
+      // 收集主要位置（去重，格式：分區-街道）
+      const locationSet = new Set<string>();
+      for (const r of dayRows) {
+        if (r.sub_district && r.sub_district !== '--' && r.street && r.street !== '--') {
+          locationSet.add(`${r.sub_district}-${r.street}`);
+        } else if (r.sub_district && r.sub_district !== '--') {
+          locationSet.add(r.sub_district);
+        }
+      }
+      const locations = Array.from(locationSet);
+
+      summaries.push({
+        vehicle_no: vehicleNo,
+        date: dateStr,
+        first_engine_on: firstEngineOn,
+        last_engine_off: lastEngineOff,
+        total_km: totalKm,
+        locations,
+        raw_point_count: dayRows.length,
+      });
+    }
+
+    // 按日期排序
+    summaries.sort((a, b) => a.date.localeCompare(b.date));
+
+    return summaries;
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 使用 AI 生成每日行程摘要
+  // 工具方法
   // ══════════════════════════════════════════════════════════════
-  private async generateDailySummary(group: VehicleDayData) {
-    // 準備 GPS 資料摘要（限制 token 數量）
-    const dataLines = group.rows.map((r) => {
-      return `${r.datetime} | ${r.district} ${r.sub_district} ${r.street} | ${r.status} | ${r.event || '--'} | 速度:${r.speed} | 里程:${r.mileage}`;
-    });
-
-    // 如果資料太多，取樣
-    let dataText: string;
-    if (dataLines.length > 200) {
-      // 取關鍵事件行 + 每 5 分鐘取樣
-      const keyEvents = dataLines.filter((_, i) => {
-        const row = group.rows[i];
-        return row.event && row.event !== '--' && row.event !== '';
-      });
-      const sampled = dataLines.filter((_, i) => i % 5 === 0);
-      const combined = [...new Set([...keyEvents, ...sampled])];
-      combined.sort();
-      dataText = combined.join('\n');
-    } else {
-      dataText = dataLines.join('\n');
+  private getCellString(row: ExcelJS.Row, colIndex: number): string {
+    const cell = row.getCell(colIndex);
+    if (!cell || cell.value == null) return '';
+    if (cell.value instanceof Date) {
+      return cell.value.toISOString();
     }
+    return String(cell.value).trim();
+  }
 
-    const prompt = `你是一個 GPS 行程分析助手。以下是車牌 ${group.vehicle_no} 在 ${group.date} 的 GPS 追蹤資料（Autotoll 格式）。
-
-請分析這些 GPS 資料，生成每日行程摘要。
-
-GPS 資料（格式：日期時間 | 地區 | 狀況 | 事件 | 速度 | 里程）：
-${dataText}
-
-請返回以下 JSON 格式（不要加 markdown 代碼塊標記）：
-{
-  "start_time": "完整日期時間（ISO 格式，如 2025-08-01T07:32:00）",
-  "end_time": "完整日期時間（ISO 格式）",
-  "total_distance": 0.0,
-  "trip_count": 0,
-  "locations": [
-    {
-      "segment": 1,
-      "depart_time": "HH:mm",
-      "arrive_time": "HH:mm",
-      "from": "起點地名",
-      "to": "終點地名",
-      "distance_km": 0.0,
-      "stay_minutes": 0
-    }
-  ]
-}
-
-注意：
-- start_time 是當日首次開引擎時間
-- end_time 是當日末次關引擎時間
-- total_distance 是當日總里程（公里）
-- trip_count 是行程段數
-- locations 是每個行程段的詳情
-- 行程段以引擎開關或長時間停留（>10分鐘）為分界
-- 地名盡量使用具體地名（如堆填區名稱、工地名稱）`;
-
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4.1-mini',
-      messages: [
-        {
-          role: 'system',
-          content: '你是一個專業的 GPS 行程分析助手，專門分析香港建築運輸公司的車輛 GPS 追蹤資料。請根據 GPS 資料生成準確的每日行程摘要。',
-        },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 4096,
-      temperature: 0.1,
-    });
-
-    const content = response.choices[0]?.message?.content || '';
-
-    try {
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
-      else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
-      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
-      jsonStr = jsonStr.trim();
-
-      return JSON.parse(jsonStr);
-    } catch {
-      console.warn('[GpsService] Failed to parse AI response, using defaults');
-      return {
-        start_time: null,
-        end_time: null,
-        total_distance: 0,
-        trip_count: 0,
-        locations: [],
-      };
-    }
+  private extractTimeAsDate(datetimeStr: string): Date | null {
+    if (!datetimeStr) return null;
+    const match = datetimeStr.match(/(\d{2}):(\d{2}):?(\d{2})?/);
+    if (!match) return null;
+    const d = new Date('1970-01-01T00:00:00Z');
+    d.setUTCHours(parseInt(match[1]), parseInt(match[2]), parseInt(match[3] || '0'), 0);
+    return d;
   }
 }

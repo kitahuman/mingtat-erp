@@ -769,7 +769,7 @@ function GpsUploadSection({
             <div className="space-y-2">
               <div className="text-4xl animate-spin inline-block">&#9203;</div>
               <div className="text-gray-600">正在解析 GPS 追蹤報表並生成行程摘要...</div>
-              <div className="text-xs text-gray-400">AI 正在分析 GPS 軌跡資料，這可能需要幾分鐘</div>
+              <div className="text-xs text-gray-400">系統正在解析 GPS 軌跡資料並生成每日摘要...</div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -807,33 +807,66 @@ function GpsUploadSection({
             </div>
           </div>
 
-          {/* GPS 摘要列表 */}
+          {/* GPS 每日摘要表格 */}
           {gpsResult.summaries && gpsResult.summaries.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600">
-                行程摘要明細
+                每日 GPS 摘要（{gpsResult.summaries.length} 天）
               </div>
-              <div className="divide-y max-h-[300px] overflow-y-auto">
-                {gpsResult.summaries.map((s: any, idx: number) => (
-                  <div key={idx} className="px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <span className="text-sm font-mono">{s.vehicle_no}</span>
-                      <span className="text-xs text-gray-400">{s.date}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs">
-                      {s.trip_count != null && (
-                        <span className="text-gray-500">{s.trip_count} 段行程</span>
-                      )}
-                      {s.total_distance != null && (
-                        <span className="text-gray-500">{Number(s.total_distance).toFixed(1)} km</span>
-                      )}
-                      <span className={s.status === 'completed' ? 'text-green-600' : 'text-red-500'}>
-                        {s.status === 'completed' ? '成功' : '失敗'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">狀態</th>
+                      <th className="text-left px-3 py-2">日期</th>
+                      <th className="text-left px-3 py-2">車牌</th>
+                      <th className="text-left px-3 py-2">首次開引擎</th>
+                      <th className="text-left px-3 py-2">最後關引擎</th>
+                      <th className="text-right px-3 py-2">里程</th>
+                      <th className="text-right px-3 py-2">GPS 點數</th>
+                      <th className="text-left px-3 py-2">主要位置</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gpsResult.summaries.map((s: any, idx: number) => (
+                      <tr key={idx} className="border-t hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <span className={`inline-block w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{s.date}</td>
+                        <td className="px-3 py-2 font-mono font-medium">{s.vehicle_no}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                          {s.first_engine_on ? s.first_engine_on.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                          {s.last_engine_off ? s.last_engine_off.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {s.total_distance != null && Number(s.total_distance) > 0
+                            ? `${Number(s.total_distance).toFixed(1)} km`
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-500">
+                          {s.raw_point_count || '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {s.locations && s.locations.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {s.locations.slice(0, 3).map((loc: string, i: number) => (
+                                <span key={i} className="inline-block px-1.5 py-0.5 bg-yellow-50 text-yellow-800 text-xs rounded">
+                                  {loc}
+                                </span>
+                              ))}
+                              {s.locations.length > 3 && (
+                                <span className="text-gray-400">+{s.locations.length - 3}</span>
+                              )}
+                            </div>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -841,8 +874,14 @@ function GpsUploadSection({
           {/* 操作按鈕 */}
           <div className="flex gap-3">
             <Link
-              href="/verification/batches"
+              href="/verification/records?tab=gps"
               className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm"
+            >
+              查看 GPS 記錄
+            </Link>
+            <Link
+              href="/verification/batches"
+              className="border border-primary-300 text-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 text-sm"
             >
               查看匯入紀錄
             </Link>

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { verificationApi } from '@/lib/api';
 
 // ══════════════════════════════════════════════════════════════
@@ -52,6 +53,7 @@ interface RecordItem {
   record_contract_no: string | null;
   record_quantity: string | null;
   record_weight_net: string | null;
+  record_raw_data: any;
   record_created_at: string;
   batch: BatchInfo;
   source: SourceInfo;
@@ -94,6 +96,18 @@ function formatTime(timeStr: string | null): string {
   }
 }
 
+function formatGpsTime(datetimeStr: string | null): string {
+  if (!datetimeStr) return '—';
+  try {
+    // GPS datetime format: "2026-04-01 07:10:59"
+    const match = datetimeStr.match(/(\d{2}:\d{2}:\d{2})/);
+    if (match) return match[1].slice(0, 5);
+    return datetimeStr;
+  } catch {
+    return datetimeStr;
+  }
+}
+
 function getSourceBadgeColor(sourceCode: string): string {
   const colors: Record<string, string> = {
     receipt: 'bg-blue-100 text-blue-800',
@@ -111,7 +125,9 @@ function getSourceBadgeColor(sourceCode: string): string {
 // 主頁面元件
 // ══════════════════════════════════════════════════════════════
 export default function VerificationRecordsPage() {
-  const [activeTab, setActiveTab] = useState('all');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'all';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -127,6 +143,8 @@ export default function VerificationRecordsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  const isGpsTab = activeTab === 'gps';
 
   const fetchRecords = useCallback(
     async (page = 1) => {
@@ -185,7 +203,7 @@ export default function VerificationRecordsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">已匯入資料</h1>
           <p className="text-sm text-gray-500 mt-1">
-            查看所有已匯入的核對記錄，包括入帳票、飛仔、功課表等
+            查看所有已匯入的核對記錄，包括入帳票、飛仔、功課表、GPS 等
           </p>
         </div>
         <div className="text-sm text-gray-500">
@@ -227,7 +245,7 @@ export default function VerificationRecordsPage() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="車牌、司機、客戶、地點..."
+                placeholder={isGpsTab ? '車牌、地點...' : '車牌、司機、客戶、地點...'}
                 className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
@@ -283,49 +301,81 @@ export default function VerificationRecordsPage() {
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  來源
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  日期
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  車牌
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  司機
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  客戶
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  出發地
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  目的地
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  進入時間
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  離開時間
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  入帳票號
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  重量
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                  批次編號
-                </th>
-              </tr>
+              {isGpsTab ? (
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    來源
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    日期
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    車牌
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    首次開引擎
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    最後關引擎
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    行駛里程
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    GPS 點數
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    主要位置
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    批次編號
+                  </th>
+                </tr>
+              ) : (
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    來源
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    日期
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    車牌
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    司機
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    客戶
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    出發地
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    目的地
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    進入時間
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    離開時間
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    入帳票號
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    重量
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    批次編號
+                  </th>
+                </tr>
+              )}
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={isGpsTab ? 9 : 12} className="px-4 py-12 text-center text-gray-400">
                     <div className="flex items-center justify-center gap-2">
                       <svg
                         className="animate-spin h-5 w-5 text-primary-500"
@@ -353,10 +403,75 @@ export default function VerificationRecordsPage() {
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={isGpsTab ? 9 : 12} className="px-4 py-12 text-center text-gray-400">
                     沒有符合條件的記錄
                   </td>
                 </tr>
+              ) : isGpsTab ? (
+                records.map((record) => {
+                  const raw = record.record_raw_data || {};
+                  const gpsLocations: string[] = raw.gps_locations || [];
+                  const gpsRawPointCount = raw.gps_raw_point_count || 0;
+                  const gpsTotalKm = raw.gps_total_km;
+                  const gpsFirstOn = raw.gps_first_engine_on;
+                  const gpsLastOff = raw.gps_last_engine_off;
+
+                  return (
+                    <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getSourceBadgeColor(record.source?.source_code)}`}
+                        >
+                          {record.source?.source_name || record.source?.source_code || '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-700">
+                        {formatDate(record.record_work_date)}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap font-medium text-gray-900">
+                        {record.record_vehicle_no || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
+                        {gpsFirstOn ? formatGpsTime(gpsFirstOn) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
+                        {gpsLastOff ? formatGpsTime(gpsLastOff) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-right text-gray-700">
+                        {gpsTotalKm != null && gpsTotalKm > 0
+                          ? `${Number(gpsTotalKm).toFixed(1)} km`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-right text-gray-500">
+                        {gpsRawPointCount || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700 max-w-[250px]">
+                        {gpsLocations.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {gpsLocations.slice(0, 5).map((loc, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-block px-1.5 py-0.5 bg-yellow-50 text-yellow-800 text-xs rounded"
+                              >
+                                {loc}
+                              </span>
+                            ))}
+                            {gpsLocations.length > 5 && (
+                              <span className="text-xs text-gray-400">
+                                +{gpsLocations.length - 5} 個
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-500">
+                        {record.batch?.batch_code || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 records.map((record) => (
                   <tr key={record.id} className="hover:bg-gray-50 transition-colors">
