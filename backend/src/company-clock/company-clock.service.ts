@@ -112,34 +112,70 @@ export class CompanyClockService {
       ];
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.employee.findMany({
-        where,
-        select: {
-          id: true,
-          emp_code: true,
-          name_zh: true,
-          name_en: true,
-          nickname: true,
-          role: true,
-          phone: true,
-          company_id: true,
-          employee_photo_base64: true,
-          employee_is_temporary: true,
-          status: true,
-          company: {
-            select: { id: true, name: true, internal_prefix: true },
-          },
+    const total = await this.prisma.employee.count({ where });
+
+    // Get recently clocked employees (last 30 unique employees who used company clock)
+    const recentAttendances = await this.prisma.employeeAttendance.findMany({
+      where: {
+        attendance_operator_user_id: { not: null }, // Only company clock records
+      },
+      select: { employee_id: true, timestamp: true },
+      orderBy: { timestamp: 'desc' },
+      take: 200, // Fetch more to find 30 unique
+    });
+
+    const recentEmployeeIds: number[] = [];
+    const seen = new Set<number>();
+    for (const att of recentAttendances) {
+      if (!seen.has(att.employee_id)) {
+        seen.add(att.employee_id);
+        recentEmployeeIds.push(att.employee_id);
+        if (recentEmployeeIds.length >= 30) break;
+      }
+    }
+
+    // Fetch all employees (no pagination for sorting, then paginate manually)
+    const allData = await this.prisma.employee.findMany({
+      where,
+      select: {
+        id: true,
+        emp_code: true,
+        name_zh: true,
+        name_en: true,
+        nickname: true,
+        role: true,
+        phone: true,
+        company_id: true,
+        employee_photo_base64: true,
+        employee_is_temporary: true,
+        status: true,
+        company: {
+          select: { id: true, name: true, internal_prefix: true },
         },
-        orderBy: { name_en: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.employee.count({ where }),
-    ]);
+      },
+      orderBy: { name_en: 'asc' },
+    });
+
+    // Sort: recent 30 first (in recency order), then rest by name_en
+    const recentSet = new Set(recentEmployeeIds);
+    const recentEmps: any[] = [];
+    const otherEmps: any[] = [];
+    for (const emp of allData) {
+      if (recentSet.has(emp.id)) {
+        recentEmps.push(emp);
+      } else {
+        otherEmps.push(emp);
+      }
+    }
+    // Sort recent employees by their recency order
+    recentEmps.sort((a, b) => recentEmployeeIds.indexOf(a.id) - recentEmployeeIds.indexOf(b.id));
+    const sorted = [...recentEmps, ...otherEmps];
+
+    // Paginate
+    const paginated = sorted.slice((page - 1) * limit, page * limit);
 
     // Map to include hasStandardPhoto flag (don't send full base64 in list)
-    const employees = data.map((emp: any) => ({
+    const employees = paginated.map((emp: any) => ({
       ...emp,
       hasStandardPhoto: !!emp.employee_photo_base64,
       employee_photo_base64: undefined, // Don't include full base64 in list
@@ -216,31 +252,43 @@ export class CompanyClockService {
     let verificationMethod: string;
     let verificationScore: number | null = null;
 
-    if (employee.employee_photo_base64) {
-      // Has standard photo → AI face comparison
-      const result = await this.faceRecognitionService.compareFaces(
-        employee.employee_photo_base64,
-        data.photo_base64,
-      );
+    // AI face recognition is currently disabled to save resources.
+    // Photos are still saved as attendance proof.
+    // To re-enable, uncomment the face_ai block below.
 
-      verificationScore = result.similarityScore;
-
-      if (!result.isSamePerson) {
-        throw new BadRequestException(
-          `人臉驗證未通過（相似度: ${result.similarityScore}%）。${result.explanation}`,
-        );
-      }
-
-      verificationMethod = 'face_ai';
-    } else {
+    if (!employee.employee_photo_base64) {
       // No standard photo → first time, save as standard photo
       await this.prisma.employee.update({
         where: { id: data.employee_id },
         data: { employee_photo_base64: data.photo_base64 },
       });
+      verificationMethod = 'first_time';
+    } else {
+      // Skip AI comparison, mark as manual verification
+      verificationMethod = 'manual';
+    }
 
+    /* --- AI Face Recognition (disabled) ---
+    if (employee.employee_photo_base64) {
+      const result = await this.faceRecognitionService.compareFaces(
+        employee.employee_photo_base64,
+        data.photo_base64,
+      );
+      verificationScore = result.similarityScore;
+      if (!result.isSamePerson) {
+        throw new BadRequestException(
+          `人臉驗證未通過（相似度: ${result.similarityScore}%）。${result.explanation}`,
+        );
+      }
+      verificationMethod = 'face_ai';
+    } else {
+      await this.prisma.employee.update({
+        where: { id: data.employee_id },
+        data: { employee_photo_base64: data.photo_base64 },
+      });
       verificationMethod = 'first_time';
     }
+    --- */
 
     // Create attendance record
     const attendance = await this.prisma.employeeAttendance.create({
