@@ -443,8 +443,10 @@ function OcrDetailView({
   const imgSrc = getImageSrc(result);
 
   // 判斷是否有巢狀陣列（功課表的 work_items 或客戶紀錄的 daily_records）
-  const arrayFields = Object.entries(editedData).filter(([, v]) => Array.isArray(v));
-  const simpleFields = Object.entries(editedData).filter(([, v]) => !Array.isArray(v));
+  // chit_no_list is string array, should be in simpleFields; work_items/daily_records are object arrays
+  const isObjArr = (v: unknown): boolean => Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null;
+  const arrayFields = Object.entries(editedData).filter(([, v]) => isObjArr(v));
+  const simpleFields = Object.entries(editedData).filter(([, v]) => !isObjArr(v));
 
   return (
     <div className="space-y-4">
