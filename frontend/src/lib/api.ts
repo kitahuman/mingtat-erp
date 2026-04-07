@@ -620,6 +620,14 @@ export const verificationApi = {
   getBatches: (params?: any) =>
     api.get('/verification/batches', { params }),
 
+  // 刪除批次
+  deleteBatch: (batchId: number) =>
+    api.delete(`/verification/batch/${batchId}`),
+
+  // 作廢批次
+  cancelBatch: (batchId: number) =>
+    api.post(`/verification/batch/${batchId}/cancel`),
+
   // 同步打卡記錄
   syncClock: (data: { year: number; month: number }) =>
     api.post('/verification/sync-clock', data),

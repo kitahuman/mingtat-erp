@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   Query,
@@ -52,6 +53,7 @@ export class VerificationController {
     @Body('period_year') periodYear?: string,
     @Body('period_month') periodMonth?: string,
     @Body('notes') notes?: string,
+    @Body('force_reimport') forceReimport?: string,
     @Request() req?: any,
   ) {
     return this.service.uploadAndParseFile(file, {
@@ -60,6 +62,7 @@ export class VerificationController {
       periodMonth: periodMonth ? +periodMonth : undefined,
       notes,
       userId: req?.user?.id,
+      forceReimport: forceReimport === 'true',
     });
   }
 
@@ -70,6 +73,18 @@ export class VerificationController {
     @Request() req?: any,
   ) {
     return this.service.confirmBatchAndMatch(+batchId, req?.user?.id);
+  }
+
+  // ── 刪除批次（只允許 pending/cancelled/failed 狀態）────────
+  @Delete('batch/:batchId')
+  async deleteBatch(@Param('batchId') batchId: string) {
+    return this.service.deleteBatch(+batchId);
+  }
+
+  // ── 作廢批次（只允許 completed 狀態）──────────────────────
+  @Post('batch/:batchId/cancel')
+  async cancelBatch(@Param('batchId') batchId: string) {
+    return this.service.cancelBatch(+batchId);
   }
 
   // ── 同步打卡記錄 ──────────────────────────────────────────

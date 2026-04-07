@@ -74,8 +74,8 @@ export default function VerificationUploadPage() {
   // 判斷是否為需要上傳的來源
   const isUploadSource = !isClockSource;
 
-  // ── 檔案處理 ──────────────────────────────────────────────
-  const handleFile = useCallback(async (f: File) => {
+  // ── 檔案處理 ──────────────────────────────────────────────────────
+  const doUpload = useCallback(async (f: File, forceReimport: boolean) => {
     setFile(f);
     setUploadResult(null);
     setConfirmResult(null);
@@ -87,8 +87,29 @@ export default function VerificationUploadPage() {
       formData.append('source_type', selectedSource);
       formData.append('period_year', periodYear);
       formData.append('period_month', periodMonth);
+      if (forceReimport) {
+        formData.append('force_reimport', 'true');
+      }
 
       const res = await verificationApi.upload(formData);
+
+      // 檢查是否為重複檔案警告
+      if (res.data?.duplicate) {
+        const eb = res.data.existing_batch;
+        const confirmed = confirm(
+          `此檔案已於 ${eb.upload_time} 上傳過（批次: ${eb.batch_code}，狀態: ${eb.status}，總行數: ${eb.total_rows}），是否確認重新匯入？`
+        );
+        if (confirmed) {
+          setUploading(false);
+          doUpload(f, true);
+          return;
+        } else {
+          setUploading(false);
+          setFile(null);
+          return;
+        }
+      }
+
       setUploadResult(res.data);
     } catch (err: any) {
       const msg = err?.response?.data?.message || '上傳失敗';
@@ -96,6 +117,10 @@ export default function VerificationUploadPage() {
     }
     setUploading(false);
   }, [selectedSource, periodYear, periodMonth]);
+
+  const handleFile = useCallback(async (f: File) => {
+    doUpload(f, false);
+  }, [doUpload]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

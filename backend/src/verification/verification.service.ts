@@ -10,6 +10,7 @@ interface UploadOptions {
   periodMonth?: number;
   notes?: string;
   userId?: number;
+  forceReimport?: boolean;
 }
 
 interface WorkbenchQuery {
@@ -73,13 +74,22 @@ export class VerificationService {
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     // 檢查重複上傳
-    const existingBatch = await this.prisma.verificationBatch.findFirst({
-      where: { batch_file_hash: fileHash },
-    });
-    if (existingBatch) {
-      throw new BadRequestException(
-        `此檔案已於 ${existingBatch.batch_upload_time.toISOString().slice(0, 10)} 上傳過（批次: ${existingBatch.batch_code}）`,
-      );
+    if (!options.forceReimport) {
+      const existingBatch = await this.prisma.verificationBatch.findFirst({
+        where: { batch_file_hash: fileHash },
+        include: { source: true },
+      });
+      if (existingBatch) {
+        return {
+          duplicate: true,
+          existing_batch: {
+            batch_code: existingBatch.batch_code,
+            upload_time: existingBatch.batch_upload_time.toISOString().slice(0, 10),
+            status: existingBatch.batch_status,
+            total_rows: existingBatch.batch_total_rows,
+          },
+        };
+      }
     }
 
     // 生成批次編號
@@ -1262,6 +1272,99 @@ export class VerificationService {
     return `${h}:${m}`;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 刪除批次（只允許 pending/cancelled/failed 狀態）
+  // ══════════════════════════════════════════════════════════════
+  async deleteBatch(batchId: number) {
+    const batch = await this.prisma.verificationBatch.findUnique({
+      where: { id: batchId },
+    });
+    if (!batch) {
+      throw new NotFoundException('找不到批次');
+    }
+    const allowedStatuses = ['pending', 'cancelled', 'failed'];
+    if (!allowedStatuses.includes(batch.batch_status)) {
+      throw new BadRequestException(
+        `批次狀態為 ${batch.batch_status}，只有 pending/cancelled/failed 狀態的批次可以刪除`,
+      );
+    }
+
+    // 取得此批次的所有 record IDs
+    const records = await this.prisma.verificationRecord.findMany({
+      where: { record_batch_id: batchId },
+      select: { id: true },
+    });
+    const recordIds = records.map((r) => r.id);
+
+    // 1. 刪除 verificationRecordChit（通過 record_id）
+    if (recordIds.length > 0) {
+      await this.prisma.verificationRecordChit.deleteMany({
+        where: { chit_record_id: { in: recordIds } },
+      });
+    }
+
+    // 2. 刪除 verificationMatch（通過 record_id）
+    if (recordIds.length > 0) {
+      await this.prisma.verificationMatch.deleteMany({
+        where: { match_record_id: { in: recordIds } },
+      });
+    }
+
+    // 3. 刪除 verificationRecord
+    await this.prisma.verificationRecord.deleteMany({
+      where: { record_batch_id: batchId },
+    });
+
+    // 4. 刪除 verificationBatch
+    await this.prisma.verificationBatch.delete({
+      where: { id: batchId },
+    });
+
+    return { success: true, deleted_batch_id: batchId };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 作廢批次（只允許 completed 狀態）
+  // ══════════════════════════════════════════════════════════════
+  async cancelBatch(batchId: number) {
+    const batch = await this.prisma.verificationBatch.findUnique({
+      where: { id: batchId },
+    });
+    if (!batch) {
+      throw new NotFoundException('找不到批次');
+    }
+    if (batch.batch_status !== 'completed') {
+      throw new BadRequestException(
+        `批次狀態為 ${batch.batch_status}，只有 completed 狀態的批次可以作廢`,
+      );
+    }
+
+    // 取得此批次的所有 record IDs
+    const records = await this.prisma.verificationRecord.findMany({
+      where: { record_batch_id: batchId },
+      select: { id: true },
+    });
+    const recordIds = records.map((r) => r.id);
+
+    // 刪除相關的 verificationMatch
+    if (recordIds.length > 0) {
+      await this.prisma.verificationMatch.deleteMany({
+        where: { match_record_id: { in: recordIds } },
+      });
+    }
+
+    // 將 batch_status 改為 cancelled
+    await this.prisma.verificationBatch.update({
+      where: { id: batchId },
+      data: { batch_status: 'cancelled' },
+    });
+
+    return { success: true, cancelled_batch_id: batchId };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 工具方法
+  // ══════════════════════════════════════════════════════════════
   private parseDateString(dateStr: string): string | null {
     if (!dateStr) return null;
     // Try DD/MM/YY format
