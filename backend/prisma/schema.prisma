@@ -1871,7 +1871,8 @@ model VerificationWaMessage {
   wa_msg_processed     Boolean   @default(false)
   wa_msg_created_at    DateTime  @default(now())
 
-  orders VerificationWaOrder[]
+  orders   VerificationWaOrder[]
+  mod_logs VerificationWaModLog[]
 
   @@index([wa_msg_group_id])
   @@index([wa_msg_timestamp])
@@ -1895,8 +1896,9 @@ model VerificationWaOrder {
   wa_order_ai_confidence Decimal? @db.Decimal(5, 2)
   wa_order_created_at    DateTime @default(now())
 
-  message VerificationWaMessage?    @relation(fields: [wa_order_msg_id], references: [id])
-  items   VerificationWaOrderItem[]
+  message  VerificationWaMessage?    @relation(fields: [wa_order_msg_id], references: [id])
+  items    VerificationWaOrderItem[]
+  mod_logs VerificationWaModLog[]
 
   @@index([wa_order_date])
   @@index([wa_order_status])
@@ -1921,15 +1923,41 @@ model VerificationWaOrderItem {
   wa_item_slip_write_as   String?  @db.VarChar(100)
   wa_item_is_suspended    Boolean  @default(false)
   wa_item_remarks         String?  @db.Text
+  wa_item_mod_status      String?  @db.VarChar(30) // cancelled | reassigned | suspended | added | null(unmodified)
+  wa_item_mod_prev_data   Json?    // snapshot of previous values before modification
   wa_item_created_at      DateTime @default(now())
 
-  order VerificationWaOrder @relation(fields: [wa_item_order_id], references: [id], onDelete: Cascade)
+  order          VerificationWaOrder          @relation(fields: [wa_item_order_id], references: [id], onDelete: Cascade)
+  mod_logs       VerificationWaModLog[]       @relation("ModLogItem")
 
   @@index([wa_item_order_id])
   @@index([wa_item_driver_nickname])
   @@index([wa_item_vehicle_no])
   @@index([wa_item_contract_no])
   @@map("verification_wa_order_items")
+}
+
+// 10b. verification_wa_mod_logs — WhatsApp Order 修改歷史
+model VerificationWaModLog {
+  id                  Int      @id @default(autoincrement())
+  mod_order_id        Int
+  mod_item_id         Int?
+  mod_msg_id          Int
+  mod_type            String   @db.VarChar(30) // cancel | reassign | suspend | resume | add | other
+  mod_description     String   @db.Text
+  mod_prev_value      Json?    // previous values snapshot
+  mod_new_value       Json?    // new values snapshot
+  mod_ai_confidence   Decimal? @db.Decimal(5, 2)
+  mod_created_at      DateTime @default(now())
+
+  order   VerificationWaOrder      @relation(fields: [mod_order_id], references: [id], onDelete: Cascade)
+  item    VerificationWaOrderItem? @relation("ModLogItem", fields: [mod_item_id], references: [id], onDelete: SetNull)
+  message VerificationWaMessage    @relation(fields: [mod_msg_id], references: [id], onDelete: Cascade)
+
+  @@index([mod_order_id])
+  @@index([mod_item_id])
+  @@index([mod_msg_id])
+  @@map("verification_wa_mod_logs")
 }
 
 // 11. verification_nickname_mapping — 花名對照表
