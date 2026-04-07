@@ -34,6 +34,7 @@ interface DataTableProps {
   sortOrder?: string;
   onSort?: (field: string, order: string) => void;
   exportFilename?: string;
+  onExportFetchAll?: () => Promise<any[]>;
   // Column customization props
   columnConfigs?: ColumnConfig[];
   onColumnConfigChange?: (configs: ColumnConfig[]) => void;
@@ -131,7 +132,7 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
 export default function DataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
   searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading,
-  sortBy, sortOrder, onSort, exportFilename,
+  sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
   columnWidths, onColumnResize,
 }: DataTableProps) {
@@ -261,6 +262,7 @@ export default function DataTable({
             columns={columns}
             data={filteredData}
             filename={exportFilename || 'export'}
+            onFetchAll={onExportFetchAll}
           />
           {hasColumnCustomization && (
             <ColumnCustomizer

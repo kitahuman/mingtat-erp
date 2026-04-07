@@ -37,6 +37,7 @@ interface InlineEditDataTableProps {
   sortOrder?: string;
   onSort?: (field: string, order: string) => void;
   exportFilename?: string;
+  onExportFetchAll?: () => Promise<any[]>;
   // Column customization
   columnConfigs?: ColumnConfig[];
   onColumnConfigChange?: (configs: ColumnConfig[]) => void;
@@ -62,7 +63,7 @@ function toDateInputValue(val: any): string {
 export default function InlineEditDataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
   searchPlaceholder, onRowClick, filters, actions, loading,
-  sortBy, sortOrder, onSort, exportFilename,
+  sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
   columnWidths, onColumnResize,
   onSave, onDelete, idField = 'id',
@@ -265,6 +266,7 @@ export default function InlineEditDataTable({
       sortOrder={sortOrder}
       onSort={onSort}
       exportFilename={exportFilename}
+      onExportFetchAll={onExportFetchAll}
       columnConfigs={columnConfigs}
       onColumnConfigChange={onColumnConfigChange}
       onColumnConfigReset={onColumnConfigReset}

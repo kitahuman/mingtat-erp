@@ -13,6 +13,7 @@ interface ExportButtonProps {
   columns: ExportColumn[];
   data: any[];
   filename?: string;
+  onFetchAll?: () => Promise<any[]>;
 }
 
 // Format ISO date string to DD/MM/YYYY
@@ -109,8 +110,9 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ExportButton({ columns, data, filename = 'export' }: ExportButtonProps) {
+export default function ExportButton({ columns, data, filename = 'export', onFetchAll }: ExportButtonProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -123,14 +125,28 @@ export default function ExportButton({ columns, data, filename = 'export' }: Exp
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showMenu]);
 
-  const handleExportCsv = () => {
-    const csv = generateCsv(columns, data);
+  const getExportData = async (): Promise<any[]> => {
+    if (onFetchAll) {
+      setExporting(true);
+      try {
+        return await onFetchAll();
+      } finally {
+        setExporting(false);
+      }
+    }
+    return data;
+  };
+
+  const handleExportCsv = async () => {
+    const exportData = await getExportData();
+    const csv = generateCsv(columns, exportData);
     downloadFile(csv, `${filename}.csv`, 'text/csv;charset=utf-8');
     setShowMenu(false);
   };
 
-  const handleExportExcel = () => {
-    const xml = generateExcelXml(columns, data);
+  const handleExportExcel = async () => {
+    const exportData = await getExportData();
+    const xml = generateExcelXml(columns, exportData);
     downloadFile(xml, `${filename}.xls`, 'application/vnd.ms-excel');
     setShowMenu(false);
   };
@@ -147,7 +163,7 @@ export default function ExportButton({ columns, data, filename = 'export' }: Exp
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        匯出
+        {exporting ? '匯出中...' : '匯出'}
       </button>
       {showMenu && (
         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px]">

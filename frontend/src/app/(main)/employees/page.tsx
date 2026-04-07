@@ -286,6 +286,16 @@ export default function EmployeesPage() {
       <div className="card">
         <InlineEditDataTable
           exportFilename={activeTab === 'active' ? '在職員工列表' : '已離職員工列表'}
+          onExportFetchAll={async () => {
+            const res = await employeesApi.list({
+              limit: 10000, page: 1, search,
+              role: roleFilter || undefined,
+              company_id: companyFilter || undefined,
+              status: activeTab,
+              sortBy, sortOrder
+            });
+            return res.data.data;
+          }}
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
