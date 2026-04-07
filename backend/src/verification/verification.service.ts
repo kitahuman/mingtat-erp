@@ -92,7 +92,7 @@ export class VerificationService {
     const batchCode = `BATCH-${today}-${options.sourceType}-${String(existingCount + 1).padStart(3, '0')}`;
 
     // 根據來源類型解析檔案
-    let parseResult: { totalRows: number; filteredRows: number; previewData: any[] };
+    let parseResult: { totalRows: number; matchedPlateRows: number; previewData: any[] };
 
     if (options.sourceType === 'receipt') {
       parseResult = await this.parseReceiptExcel(file.path);
@@ -112,7 +112,7 @@ export class VerificationService {
         batch_period_year: options.periodYear,
         batch_period_month: options.periodMonth,
         batch_total_rows: parseResult.totalRows,
-        batch_filtered_rows: parseResult.filteredRows,
+        batch_filtered_rows: parseResult.previewData.length,
         batch_status: 'pending',
         batch_notes: options.notes,
       },
@@ -165,7 +165,8 @@ export class VerificationService {
       batch_id: batch.id,
       batch_code: batch.batch_code,
       total_rows: parseResult.totalRows,
-      filtered_rows: parseResult.filteredRows,
+      imported_rows: parseResult.previewData.length,
+      matched_plate_rows: parseResult.matchedPlateRows,
       preview_data: parseResult.previewData.slice(0, 50), // 只返回前 50 筆預覽
     };
   }
@@ -254,16 +255,22 @@ export class VerificationService {
       });
     });
 
-    // 用公司車牌篩選
-    const filteredRows = allRows.filter((row) => {
+    // 標記公司車牌匹配（僅作參考，不做篩選，全部匯入）
+    let matchedPlateCount = 0;
+    for (const row of allRows) {
       const plateNorm = (row.vehicle_no || '').toUpperCase().replace(/\s+/g, '');
-      return companyPlates.has(plateNorm);
-    });
+      if (companyPlates.has(plateNorm)) {
+        row._is_company_plate = true;
+        matchedPlateCount++;
+      } else {
+        row._is_company_plate = false;
+      }
+    }
 
     return {
       totalRows: allRows.length,
-      filteredRows: filteredRows.length,
-      previewData: filteredRows,
+      matchedPlateRows: matchedPlateCount,
+      previewData: allRows, // 匯入全部記錄
     };
   }
 

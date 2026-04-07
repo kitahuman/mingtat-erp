@@ -41,7 +41,8 @@ export default function VerificationUploadPage() {
     batch_id: number;
     batch_code: string;
     total_rows: number;
-    filtered_rows: number;
+    imported_rows: number;
+    matched_plate_rows: number;
     preview_data: PreviewRow[];
   } | null>(null);
 
@@ -389,8 +390,12 @@ export default function VerificationUploadPage() {
                       <div className="font-medium">{uploadResult.total_rows}</div>
                     </div>
                     <div>
-                      <div className="text-gray-500">篩選後（公司車牌）</div>
-                      <div className="font-medium text-primary-600">{uploadResult.filtered_rows}</div>
+                      <div className="text-gray-500">匯入記錄數</div>
+                      <div className="font-medium text-primary-600">{uploadResult.imported_rows}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">公司車牌匹配</div>
+                      <div className="font-medium text-blue-600">{uploadResult.matched_plate_rows}</div>
                     </div>
                   </div>
                 </div>
@@ -400,7 +405,7 @@ export default function VerificationUploadPage() {
                   <div className="border rounded-lg overflow-hidden">
                     <div className="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600 flex items-center justify-between">
                       <span>預覽資料（前 {Math.min(50, uploadResult.preview_data.length)} 筆）</span>
-                      <span className="text-xs text-gray-400">共 {uploadResult.filtered_rows} 筆符合公司車牌</span>
+                      <span className="text-xs text-gray-400">共 {uploadResult.imported_rows} 筆匯入（{uploadResult.matched_plate_rows} 筆匹配公司車牌）</span>
                     </div>
                     <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                       <table className="w-full text-xs">
