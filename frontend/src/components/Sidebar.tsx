@@ -39,6 +39,7 @@ const navEntries: NavEntry[] = [
       { href: '/verification', label: '核對工作台', icon: '📋', minRole: 'clerk' },
       { href: '/verification/upload', label: '上傳資料', icon: '📤', minRole: 'clerk' },
       { href: '/verification/batches', label: '匯入紀錄', icon: '📦', minRole: 'clerk' },
+      { href: '/verification/records', label: '已匯入資料', icon: '📄', minRole: 'clerk' },
     ],
   },
   {

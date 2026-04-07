@@ -645,6 +645,18 @@ export const verificationApi = {
   exportExcel: (params?: any) =>
     api.get('/verification/export', { params, responseType: 'blob' }),
 
+
+  // 已匯入資料列表
+  getRecords: (params?: {
+    page?: number;
+    limit?: number;
+    source_type?: string;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) =>
+    api.get('/verification/records', { params }),
+
   // ── OCR 相關 ──────────────────────────────────────────────
 
   // 上傳掃描圖片進行 AI OCR

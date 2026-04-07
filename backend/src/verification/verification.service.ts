@@ -1458,6 +1458,90 @@ export class VerificationService {
     };
   }
 
+
+  // ══════════════════════════════════════════════════════════════
+  // 已匯入資料列表
+  // ══════════════════════════════════════════════════════════════
+  async getRecords(query: {
+    page: number;
+    limit: number;
+    source_type?: string;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) {
+    const { page, limit, source_type, date_from, date_to, search } = query;
+
+    const where: any = {};
+
+    // 按 source_type 篩選（透過 source 關聯）
+    if (source_type && source_type !== 'all') {
+      where.source = { source_code: source_type };
+    }
+
+    // 按日期範圍篩選
+    if (date_from || date_to) {
+      where.record_work_date = {};
+      if (date_from) where.record_work_date.gte = new Date(date_from);
+      if (date_to) where.record_work_date.lte = new Date(date_to);
+    }
+
+    // 搜尋（車牌、司機名、客戶、地點）
+    if (search) {
+      where.OR = [
+        { record_vehicle_no: { contains: search, mode: 'insensitive' } },
+        { record_driver_name: { contains: search, mode: 'insensitive' } },
+        { record_customer: { contains: search, mode: 'insensitive' } },
+        { record_location_from: { contains: search, mode: 'insensitive' } },
+        { record_location_to: { contains: search, mode: 'insensitive' } },
+        { record_slip_no: { contains: search, mode: 'insensitive' } },
+        { record_contract_no: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const total = await this.prisma.verificationRecord.count({ where });
+    const records = await this.prisma.verificationRecord.findMany({
+      where,
+      include: {
+        batch: {
+          select: {
+            batch_code: true,
+            batch_period_year: true,
+            batch_period_month: true,
+            batch_upload_time: true,
+          },
+        },
+        source: {
+          select: {
+            source_code: true,
+            source_name: true,
+            source_type: true,
+          },
+        },
+        chits: {
+          select: { chit_no: true, chit_seq: true },
+          orderBy: { chit_seq: 'asc' },
+        },
+      },
+      orderBy: [
+        { record_work_date: 'desc' },
+        { id: 'desc' },
+      ],
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return {
+      data: records,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   // ══════════════════════════════════════════════════════════════
   // 工具方法
   // ══════════════════════════════════════════════════════════════

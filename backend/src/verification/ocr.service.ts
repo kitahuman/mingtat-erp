@@ -328,17 +328,19 @@ export class OcrService {
       throw new BadRequestException(`不支援的 OCR 來源類型: ${sourceType}`);
     }
 
-    // 處理 PDF：先轉為圖片
+    // 處理 PDF：先轉為圖片（使用 pdf-to-img，純 Node.js 方案）
     const ext = imagePath.split('.').pop()?.toLowerCase() || 'jpeg';
     let actualImagePath = imagePath;
     if (ext === 'pdf') {
-      const { execSync } = require('child_process');
-      const pdfOutputPrefix = imagePath.replace(/\.pdf$/i, '_pdf_page');
+      const pdfOutputPath = imagePath.replace(/\.pdf$/i, '_pdf_page1.png');
       try {
-        execSync(`pdftoppm -png -r 300 -singlefile "${imagePath}" "${pdfOutputPrefix}"`, { timeout: 30000 });
-        actualImagePath = pdfOutputPrefix + '.png';
-      } catch (e) {
-        throw new BadRequestException('PDF 轉換失敗，請確認檔案是否正確');
+        const { pdf } = await import('pdf-to-img');
+        const document = await pdf(imagePath, { scale: 3 });
+        const firstPage = await document.getPage(1);
+        fs.writeFileSync(pdfOutputPath, firstPage);
+        actualImagePath = pdfOutputPath;
+      } catch (e: any) {
+        throw new BadRequestException(`PDF 轉換失敗，請確認檔案是否正確: ${e.message}`);
       }
     }
 

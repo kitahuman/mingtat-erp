@@ -291,6 +291,27 @@ export class VerificationController {
     });
   }
 
+
+  // ── 已匯入資料列表 ────────────────────────────────────────
+  @Get('records')
+  async getRecords(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('source_type') sourceType?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.service.getRecords({
+      page: page ? +page : 1,
+      limit: limit ? +limit : 20,
+      source_type: sourceType,
+      date_from: dateFrom,
+      date_to: dateTo,
+      search,
+    });
+  }
+
   // ── 來源列表 ──────────────────────────────────────────────
   @Get('sources')
   async getSources() {
