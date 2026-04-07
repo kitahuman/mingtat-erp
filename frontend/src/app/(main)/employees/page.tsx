@@ -121,6 +121,7 @@ export default function EmployeesPage() {
       name_en: formData.name_en,
       emp_code: formData.emp_code,
       role: formData.role,
+      id_number: formData.id_number || null,
       phone: formData.phone,
       company_id: formData.company_id ? Number(formData.company_id) : undefined,
       join_date: formData.join_date || null,

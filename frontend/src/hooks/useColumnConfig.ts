@@ -8,7 +8,7 @@ interface Column {
 }
 
 // 版本號：當欄位定義有重大變更時，遞增此版本號以強制重置所有用戶的 localStorage
-const COLUMN_CONFIG_VERSION = 3;
+const COLUMN_CONFIG_VERSION = 4;
 
 export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
   const storageKey = `column-config-${pageKey}`;
