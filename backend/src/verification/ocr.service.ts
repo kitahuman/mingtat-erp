@@ -13,6 +13,7 @@ export interface OcrResult {
   overallConfidence: number;
   rawOcrText?: string;
   ocrEngine: string;
+  imageBase64?: string;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -320,6 +321,41 @@ export class OcrService {
   }
 
   // ══════════════════════════════════════════════════════════════
+  // 查詢 few-shot examples（已確認的同類型 OCR 結果）
+  // ══════════════════════════════════════════════════════════════
+  private async getFewShotExamples(sourceType: OcrSourceType, limit = 5): Promise<string> {
+    try {
+      const confirmedResults = await this.prisma.verificationOcrResult.findMany({
+        where: {
+          ocr_user_confirmed: true,
+          ocr_confirmed_data: { not: Prisma.DbNull },
+          source: { source_code: sourceType },
+        },
+        select: {
+          ocr_confirmed_data: true,
+          ocr_file_name: true,
+        },
+        orderBy: { ocr_created_at: 'desc' },
+        take: limit,
+      });
+
+      if (confirmedResults.length === 0) {
+        return '';
+      }
+
+      const examples = confirmedResults.map((r, idx) => {
+        const data = r.ocr_confirmed_data as Record<string, any>;
+        return `範例 ${idx + 1}（${r.ocr_file_name || '未知檔案'}）：\n${JSON.stringify(data, null, 2)}`;
+      });
+
+      return `\n\n以下是之前類似文件的正確辨識結果供參考，請參考這些範例的格式和常見值來提高辨識準確度：\n\n${examples.join('\n\n')}`;
+    } catch (error) {
+      console.warn('[OcrService] Failed to fetch few-shot examples:', error);
+      return '';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
   // 處理單張圖片 OCR
   // ══════════════════════════════════════════════════════════════
   async processImage(imagePath: string, sourceType: OcrSourceType): Promise<OcrResult> {
@@ -350,6 +386,17 @@ export class OcrService {
     const base64Image = imageBuffer.toString('base64');
     const mimeType = ext === 'pdf' ? 'image/png' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
+    // 構建 base64 data URI 用於前端顯示
+    const imageBase64DataUri = `data:${mimeType};base64,${base64Image}`;
+
+    // 查詢 few-shot examples
+    const fewShotExamples = await this.getFewShotExamples(sourceType);
+
+    // 構建 user prompt（加入 few-shot examples）
+    const userPromptText = fewShotExamples
+      ? `${strategy.getUserPrompt()}${fewShotExamples}`
+      : strategy.getUserPrompt();
+
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4.1-mini',
@@ -363,7 +410,7 @@ export class OcrService {
             content: [
               {
                 type: 'text',
-                text: strategy.getUserPrompt(),
+                text: userPromptText,
               },
               {
                 type: 'image_url',
@@ -380,7 +427,10 @@ export class OcrService {
       });
 
       const content = response.choices[0]?.message?.content || '';
-      return this.parseOcrResponse(content);
+      const result = this.parseOcrResponse(content);
+      // 附加 base64 圖片
+      result.imageBase64 = imageBase64DataUri;
+      return result;
     } catch (error: any) {
       console.error('[OcrService] GPT Vision API error:', error.message);
       throw new BadRequestException(`OCR 辨識失敗: ${error.message}`);
@@ -476,8 +526,11 @@ export class OcrService {
 
     for (const file of files) {
       const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      // 構建圖片 URL（相對路徑）
-      const imageUrl = `/uploads/verification/${file.filename}`;
+      // 構建圖片 URL（相對路徑）— 如果是 PDF，改為指向轉換後的 PNG
+      const fileExt = file.originalname.split('.').pop()?.toLowerCase() || '';
+      const imageUrl = fileExt === 'pdf'
+        ? `/uploads/verification/${file.filename.replace(/\.pdf$/i, '_pdf_page1.png')}`
+        : `/uploads/verification/${file.filename}`;
 
       try {
         const result = await this.processImage(file.path, sourceType);
@@ -489,6 +542,7 @@ export class OcrService {
             ocr_source_id: source.id,
             ocr_file_name: originalName,
             ocr_image_url: imageUrl,
+            ocr_image_base64: result.imageBase64 || null,
             ocr_extracted_data: result.extractedData,
             ocr_confidence_overall: result.overallConfidence,
             ocr_field_confidence: result.fieldConfidence,
@@ -508,12 +562,34 @@ export class OcrService {
         });
       } catch (error: any) {
         failedCount++;
+
+        // 即使 OCR 失敗，也嘗試存儲圖片 base64（方便後續重試時查看）
+        let failedImageBase64: string | null = null;
+        try {
+          const failedExt = file.originalname.split('.').pop()?.toLowerCase() || '';
+          let failedImagePath = file.path;
+          if (failedExt === 'pdf') {
+            const pngPath = file.path.replace(/\.pdf$/i, '_pdf_page1.png');
+            if (fs.existsSync(pngPath)) {
+              failedImagePath = pngPath;
+            }
+          }
+          if (fs.existsSync(failedImagePath)) {
+            const buf = fs.readFileSync(failedImagePath);
+            const mime = failedExt === 'pdf' ? 'image/png' : failedExt === 'png' ? 'image/png' : failedExt === 'webp' ? 'image/webp' : 'image/jpeg';
+            failedImageBase64 = `data:${mime};base64,${buf.toString('base64')}`;
+          }
+        } catch {
+          // ignore base64 encoding errors for failed records
+        }
+
         const ocrRecord = await this.prisma.verificationOcrResult.create({
           data: {
             ocr_batch_id: batch.id,
             ocr_source_id: source.id,
             ocr_file_name: originalName,
             ocr_image_url: imageUrl,
+            ocr_image_base64: failedImageBase64,
             ocr_extracted_data: Prisma.DbNull,
             ocr_confidence_overall: 0,
             ocr_engine: 'gpt-vision',
@@ -617,13 +693,14 @@ export class OcrService {
     const extractedData = (ocrResult.ocr_extracted_data as Record<string, any>) || {};
     const finalData = corrections ? { ...extractedData, ...corrections } : extractedData;
 
-    // 更新 OCR 結果
+    // 更新 OCR 結果，同時存儲確認後的完整數據到 ocr_confirmed_data
     await this.prisma.verificationOcrResult.update({
       where: { id: ocrId },
       data: {
         ocr_user_confirmed: true,
         ocr_user_corrections: corrections || Prisma.DbNull,
         ocr_extracted_data: finalData,
+        ocr_confirmed_data: finalData,
       },
     });
 

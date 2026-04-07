@@ -1819,6 +1819,8 @@ model VerificationOcrResult {
   ocr_engine             String   @default("gpt-vision") @db.VarChar(50)
   ocr_raw_text           String?  @db.Text
   ocr_status             String   @default("pending") @db.VarChar(20) // pending | processing | completed | failed
+  ocr_image_base64       String?  @db.Text
+  ocr_confirmed_data     Json?    @db.JsonB
   ocr_user_confirmed     Boolean  @default(false)
   ocr_user_corrections   Json?
   ocr_created_at         DateTime @default(now())

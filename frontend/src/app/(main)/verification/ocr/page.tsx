@@ -10,6 +10,7 @@ interface OcrResultItem {
   id: number;
   ocr_file_name: string | null;
   ocr_image_url: string | null;
+  ocr_image_base64: string | null;
   ocr_extracted_data: Record<string, any> | null;
   ocr_confidence_overall: number | null;
   ocr_field_confidence: Record<string, number> | null;
@@ -92,15 +93,20 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 // ══════════════════════════════════════════════════════════════
-// 取得圖片完整 URL
+// 取得圖片顯示 URL（優先 base64，fallback 到 URL）
 // ══════════════════════════════════════════════════════════════
-function getImageUrl(imageUrl: string | null): string {
-  if (!imageUrl) return '';
-  // 如果已經是完整 URL，直接返回
-  if (imageUrl.startsWith('http')) return imageUrl;
-  // 否則拼接後端 URL
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
-  return `${backendUrl}${imageUrl}`;
+function getImageSrc(item: { ocr_image_base64?: string | null; ocr_image_url?: string | null }): string {
+  // 優先使用 base64（最可靠，不受 Render ephemeral 文件系統影響）
+  if (item.ocr_image_base64) {
+    return item.ocr_image_base64;
+  }
+  // Fallback 到 URL
+  if (item.ocr_image_url) {
+    if (item.ocr_image_url.startsWith('http')) return item.ocr_image_url;
+    // 拼接後端 URL（通過 next.config.js rewrite 代理）
+    return item.ocr_image_url;
+  }
+  return '';
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -317,14 +323,15 @@ function OcrResultList({
               {results.map((item) => {
                 const statusCfg = STATUS_CONFIG[item.ocr_status] || { label: item.ocr_status, color: 'bg-gray-100 text-gray-600' };
                 const confidence = item.ocr_confidence_overall ? Number(item.ocr_confidence_overall) : 0;
+                const imgSrc = getImageSrc(item);
                 return (
                   <tr key={item.id} className="border-t hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {item.ocr_image_url && (
+                        {imgSrc && (
                           <div className="w-10 h-10 rounded border overflow-hidden flex-shrink-0 bg-gray-100">
                             <img
-                              src={getImageUrl(item.ocr_image_url)}
+                              src={imgSrc}
                               alt=""
                               className="w-full h-full object-cover"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -433,6 +440,7 @@ function OcrDetailView({
   const fieldConfidence = result.ocr_field_confidence || {};
   const overallConfidence = result.ocr_confidence_overall ? Number(result.ocr_confidence_overall) : 0;
   const isConfirmed = result.ocr_user_confirmed;
+  const imgSrc = getImageSrc(result);
 
   // 判斷是否有巢狀陣列（功課表的 work_items 或客戶紀錄的 daily_records）
   const arrayFields = Object.entries(editedData).filter(([, v]) => Array.isArray(v));
@@ -468,16 +476,22 @@ function OcrDetailView({
             <h3 className="text-sm font-medium text-gray-700">原始掃描圖片</h3>
           </div>
           <div className="p-4">
-            {result.ocr_image_url ? (
+            {imgSrc ? (
               <div className="relative">
                 <img
-                  src={getImageUrl(result.ocr_image_url)}
+                  src={imgSrc}
                   alt={result.ocr_file_name || '掃描圖片'}
                   className="w-full rounded-lg border"
                   style={{ maxHeight: '70vh', objectFit: 'contain' }}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    const parent = (e.target as HTMLImageElement).parentElement;
+                    const target = e.target as HTMLImageElement;
+                    // 如果 base64 失敗，嘗試 fallback 到 URL
+                    if (result.ocr_image_base64 && target.src === result.ocr_image_base64 && result.ocr_image_url) {
+                      target.src = result.ocr_image_url;
+                      return;
+                    }
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
                     if (parent) {
                       parent.innerHTML = '<div class="p-8 text-center text-gray-400">圖片載入失敗</div>';
                     }
