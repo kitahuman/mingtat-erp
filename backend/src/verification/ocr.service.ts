@@ -328,11 +328,24 @@ export class OcrService {
       throw new BadRequestException(`不支援的 OCR 來源類型: ${sourceType}`);
     }
 
-    // 讀取圖片並轉為 base64
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString('base64');
+    // 處理 PDF：先轉為圖片
     const ext = imagePath.split('.').pop()?.toLowerCase() || 'jpeg';
-    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    let actualImagePath = imagePath;
+    if (ext === 'pdf') {
+      const { execSync } = require('child_process');
+      const pdfOutputPrefix = imagePath.replace(/\.pdf$/i, '_pdf_page');
+      try {
+        execSync(`pdftoppm -png -r 300 -singlefile "${imagePath}" "${pdfOutputPrefix}"`, { timeout: 30000 });
+        actualImagePath = pdfOutputPrefix + '.png';
+      } catch (e) {
+        throw new BadRequestException('PDF 轉換失敗，請確認檔案是否正確');
+      }
+    }
+
+    // 讀取圖片並轉為 base64
+    const imageBuffer = fs.readFileSync(actualImagePath);
+    const base64Image = imageBuffer.toString('base64');
+    const mimeType = ext === 'pdf' ? 'image/png' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
     try {
       const response = await this.openai.chat.completions.create({

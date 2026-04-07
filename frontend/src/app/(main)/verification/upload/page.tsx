@@ -609,7 +609,7 @@ function OcrUploadSection({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf"
             multiple
             className="hidden"
             onChange={e => e.target.files && onFilesSelect(e.target.files)}
@@ -617,13 +617,13 @@ function OcrUploadSection({
           {uploading ? (
             <div className="space-y-2">
               <div className="text-4xl animate-spin inline-block">&#9203;</div>
-              <div className="text-gray-600">AI 正在辨識圖片中...</div>
+              <div className="text-gray-600">AI 正在辨識檔案中...</div>
               <div className="text-xs text-gray-400">這可能需要幾秒到幾分鐘，取決於圖片數量</div>
             </div>
           ) : (
             <div className="space-y-2">
               <div className="text-4xl">&#128247;</div>
-              <div className="text-gray-600">拖放掃描圖片到此處，或點擊選擇圖片</div>
+              <div className="text-gray-600">拖放圖片或 PDF 到此處，或點擊選擇檔案</div>
               <div className="text-xs text-gray-400">
                 支援 JPG, PNG, PDF 格式，可多選（最多 20 張），每張最大 50MB
               </div>
