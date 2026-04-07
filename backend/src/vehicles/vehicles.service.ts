@@ -100,6 +100,13 @@ export class VehiclesService {
     if ('tonnage' in updateData) {
       updateData.tonnage = updateData.tonnage != null && updateData.tonnage !== '' ? Number(updateData.tonnage) : null;
     }
+    // 字串欄位：空字串轉 null
+    const stringFields = ['vehicle_chassis_no', 'vehicle_electronic_comm', 'vehicle_autotoll_collected', 'vehicle_autotoll', 'vehicle_inspection_notes', 'vehicle_insurance_agent', 'vehicle_insurance_company', 'vehicle_original_plate', 'vehicle_owner_name'];
+    for (const field of stringFields) {
+      if (field in updateData) {
+        updateData[field] = updateData[field] || null;
+      }
+    }
 
     await this.prisma.vehicle.update({ where: { id }, data: updateData });
     return this.findOne(id);

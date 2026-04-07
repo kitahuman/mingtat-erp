@@ -151,7 +151,7 @@ export default function VehicleDetailPage() {
               <div><p className="text-sm text-gray-500">噸數</p><p>{vehicle?.tonnage ? `${vehicle.tonnage}T` : '-'}</p></div>
               <div><p className="text-sm text-gray-500">品牌</p><p>{vehicle?.brand || '-'}</p></div>
               <div><p className="text-sm text-gray-500">型號</p><p>{vehicle?.model || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">所屬公司</p><p className="font-medium">{vehicle?.owner_company?.internal_prefix} - {vehicle?.owner_company?.name}</p></div>
+              <div><p className="text-sm text-gray-500">車主</p><p className="font-medium">{vehicle?.owner_company?.internal_prefix ? `${vehicle.owner_company.internal_prefix} - ${vehicle.owner_company.name}` : vehicle?.owner_company?.name || '-'}</p></div>
               <div><p className="text-sm text-gray-500">狀態</p><p><span className={vehicle?.status === 'active' ? 'badge-green' : vehicle?.status === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{vehicle?.status === 'active' ? '使用中' : vehicle?.status === 'maintenance' ? '維修中' : '停用'}</span></p></div>
               <div><p className="text-sm text-gray-500">首次登記日期</p><p>{fmtDate(vehicle?.vehicle_first_reg_date) || '-'}</p></div>
               <div><p className="text-sm text-gray-500">底盤號碼</p><p className="font-mono text-sm">{vehicle?.vehicle_chassis_no || '-'}</p></div>

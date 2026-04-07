@@ -101,7 +101,7 @@ export default function VehiclesPage() {
   const columns = [
     { key: 'plate_number', label: '車牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'machine_type', label: '車型', sortable: true, editable: true, editType: 'select' as const, editOptions: vehicleTypes.map(t => ({ value: t, label: t })) },
-    { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
+    { key: 'owner_company', label: '車主', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const },
     { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: false, render: (v: string) => v ? fmtDate(v) : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
@@ -197,7 +197,7 @@ export default function VehiclesPage() {
               </select>
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">車主 *</label>
               <select value={form.owner_company_id} onChange={e => setForm({...form, owner_company_id: e.target.value})} className="input-field" required>
                 <option value="">請選擇</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
