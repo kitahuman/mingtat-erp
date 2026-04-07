@@ -151,11 +151,21 @@ export class WorkLogsService {
   }
 
   async remove(id: number) {
+    // 先解除 PayrollWorkLog 的關聯
+    await this.prisma.payrollWorkLog.updateMany({
+      where: { work_log_id: id },
+      data: { work_log_id: null },
+    });
     await this.prisma.workLog.delete({ where: { id } });
     return { success: true };
   }
 
   async bulkDelete(ids: number[]) {
+    // 先解除 PayrollWorkLog 的關聯（設 work_log_id 為 null），避免外鍵約束錯誤
+    await this.prisma.payrollWorkLog.updateMany({
+      where: { work_log_id: { in: ids } },
+      data: { work_log_id: null },
+    });
     await this.prisma.workLog.deleteMany({ where: { id: { in: ids } } });
     return { success: true, deleted: ids.length };
   }
