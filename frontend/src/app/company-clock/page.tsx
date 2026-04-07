@@ -26,6 +26,9 @@ interface AttendanceRecord {
   timestamp: string;
   attendance_verification_method?: string | null;
   attendance_verification_score?: number | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   employee: {
     id: number;
     name_zh: string;
@@ -209,6 +212,29 @@ export default function CompanyClockPage() {
     setVerificationInfo(null);
   };
 
+  // ── Get current GPS location ──────────────────────────
+  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) { resolve(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+  };
+
+  // ── Reverse geocode to get address ────────────────────
+  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=zh-TW`);
+      const data = await res.json();
+      return data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    } catch {
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+  };
+
   // ── Submit Clock ──────────────────────────────────────
   const handleSubmitClock = async () => {
     if (!selectedEmployee || !photoDataUrl) return;
@@ -218,10 +244,20 @@ export default function CompanyClockPage() {
     setResultMessage('');
 
     try {
+      // Get GPS location
+      const location = await getCurrentLocation();
+      let address: string | undefined;
+      if (location) {
+        address = await reverseGeocode(location.latitude, location.longitude);
+      }
+
       const res = await companyClockApi.clock({
         employee_id: selectedEmployee.id,
         photo_base64: photoDataUrl,
         type: clockType,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        address,
       });
 
       setResultType('success');
@@ -362,31 +398,41 @@ export default function CompanyClockPage() {
             {todayRecords.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">今日尚無打卡記錄</p>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-80 overflow-y-auto">
                 {todayRecords.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        r.type === 'clock_in' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                      }`}>
-                        {r.type === 'clock_in' ? '上班' : '下班'}
-                      </span>
-                      <span className="font-medium text-gray-900">{r.employee.name_zh}</span>
-                      {r.employee.company?.internal_prefix && (
-                        <span className="text-gray-400 text-xs">{r.employee.company.internal_prefix}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {r.attendance_verification_method === 'face_ai' && (
-                        <span className="text-xs text-blue-500" title={`相似度: ${r.attendance_verification_score}%`}>
-                          AI {r.attendance_verification_score}%
+                  <div key={r.id} className="p-2.5 bg-gray-50 rounded-lg text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          r.type === 'clock_in' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                        }`}>
+                          {r.type === 'clock_in' ? '上班' : '下班'}
                         </span>
-                      )}
-                      {r.attendance_verification_method === 'first_time' && (
-                        <span className="text-xs text-amber-500">首次</span>
-                      )}
-                      <span className="text-gray-500">{formatTime(r.timestamp)}</span>
+                        <span className="font-medium text-gray-900">{r.employee.name_zh}</span>
+                        {r.employee.company?.internal_prefix && (
+                          <span className="text-gray-400 text-xs">{r.employee.company.internal_prefix}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {r.attendance_verification_method === 'face_ai' && (
+                          <span className="text-xs text-blue-500" title={`相似度: ${r.attendance_verification_score}%`}>
+                            AI {r.attendance_verification_score}%
+                          </span>
+                        )}
+                        {r.attendance_verification_method === 'first_time' && (
+                          <span className="text-xs text-amber-500">首次</span>
+                        )}
+                        <span className="text-gray-500">
+                          {new Date(r.timestamp).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' })}{' '}
+                          {formatTime(r.timestamp)}
+                        </span>
+                      </div>
                     </div>
+                    {r.address && (
+                      <div className="mt-1 text-xs text-gray-400 truncate" title={r.address}>
+                        📍 {r.address}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

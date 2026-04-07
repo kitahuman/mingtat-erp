@@ -50,6 +50,11 @@ export class CompanyClockService {
       throw new UnauthorizedException('帳號或密碼錯誤');
     }
 
+    // Check company clock permission (admin always allowed)
+    if (user.role !== 'admin' && !user.user_can_company_clock) {
+      throw new UnauthorizedException('此帳號沒有公司打卡權限，請聯繫管理員開通');
+    }
+
     // Update last login
     try {
       await this.prisma.user.update({

@@ -14,6 +14,7 @@ interface UserItem {
   phone: string | null;
   department: string | null;
   isActive: boolean;
+  user_can_company_clock: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -34,6 +35,7 @@ const emptyForm = {
   phone: '',
   department: '',
   isActive: true,
+  user_can_company_clock: false,
 };
 
 function UsersPageContent() {
@@ -87,6 +89,7 @@ function UsersPageContent() {
       phone: u.phone || '',
       department: u.department || '',
       isActive: u.isActive,
+      user_can_company_clock: u.user_can_company_clock,
     });
     setError('');
     setShowModal(true);
@@ -105,6 +108,7 @@ function UsersPageContent() {
           phone: form.phone || undefined,
           department: form.department || undefined,
           isActive: form.isActive,
+          user_can_company_clock: form.user_can_company_clock,
         };
         if (form.password) {
           payload.password = form.password;
@@ -125,6 +129,7 @@ function UsersPageContent() {
           phone: form.phone || undefined,
           department: form.department || undefined,
           isActive: form.isActive,
+          user_can_company_clock: form.user_can_company_clock,
         });
       }
 
@@ -227,6 +232,7 @@ function UsersPageContent() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">角色</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">部門</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">狀態</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">公司打卡</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">最後登入</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">操作</th>
                 </tr>
@@ -253,6 +259,13 @@ function UsersPageContent() {
                       }`}>
                         {u.isActive ? '啟用' : '停用'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(u.role === 'admin' || u.user_can_company_clock) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">✓</span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(u.lastLoginAt)}</td>
                     <td className="px-4 py-3">
@@ -390,6 +403,18 @@ function UsersPageContent() {
                 <label htmlFor="isActive" className="text-sm text-gray-700">帳號啟用</label>
               </div>
             )}
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="canCompanyClock"
+                checked={form.user_can_company_clock}
+                onChange={(e) => setForm({ ...form, user_can_company_clock: e.target.checked })}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="canCompanyClock" className="text-sm text-gray-700">公司打卡權限</label>
+              <span className="text-xs text-gray-400">(允許登入公司打卡頁面)</span>
+            </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t">
               <button

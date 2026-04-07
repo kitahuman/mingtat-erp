@@ -66,6 +66,7 @@ export class UsersService {
         phone: dto.phone ?? null,
         department: dto.department ?? null,
         isActive: dto.isActive !== undefined ? dto.isActive : true,
+        user_can_company_clock: dto.user_can_company_clock ?? false,
         createdBy: createdById,
       },
     });
@@ -87,6 +88,7 @@ export class UsersService {
     if (dto.department !== undefined) data.department = dto.department ?? null;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.employee_id !== undefined) data.employee_id = dto.employee_id;
+    if (dto.user_can_company_clock !== undefined) data.user_can_company_clock = dto.user_can_company_clock;
 
     const saved = await this.prisma.user.update({
       where: { id },

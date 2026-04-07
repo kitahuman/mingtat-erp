@@ -34,4 +34,8 @@ export class UpdateUserDto {
   @IsOptional()
   @IsNumber()
   employee_id?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  user_can_company_clock?: boolean;
 }
