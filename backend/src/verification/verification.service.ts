@@ -129,6 +129,7 @@ export class VerificationService {
           record_vehicle_no: row.vehicle_no || null,
           record_location_from: row.facility || null,
           record_location_to: null,
+          record_contract_no: row.account_no || null,
           record_time_in: row.time_in ? this.parseTimeToDate(row.time_in) : null,
           record_time_out: row.time_out ? this.parseTimeToDate(row.time_out) : null,
           record_weight_net: row.net_weight != null ? row.net_weight : null,
@@ -198,30 +199,34 @@ export class VerificationService {
       headers[colNumber] = String(cell.value || '').trim();
     });
 
-    // 找到各欄位的索引
+    // 找到各欄位的索引（header 可能含換行符，用 includes/startsWith 比對）
     const colMap: Record<string, number> = {};
     headers.forEach((h, idx) => {
+      if (!h) return;
+      // 取第一行做比對（去除換行後的中文部分）
+      const firstLine = h.split(/[\r\n]/)[0].trim().toLowerCase();
       const lower = h.toLowerCase();
-      if (lower.includes('facility')) colMap.facility = idx;
-      else if (lower.includes('date') && lower.includes('transaction')) colMap.date = idx;
-      else if (lower.includes('vehicle')) colMap.vehicle = idx;
-      else if (lower.includes('account')) colMap.account = idx;
-      else if (lower.includes('chit')) colMap.chit = idx;
-      else if (lower === 'time-in' || lower === 'time in') colMap.time_in = idx;
-      else if (lower === 'time-out' || lower === 'time out') colMap.time_out = idx;
-      else if (lower.includes('waste depth')) colMap.waste_depth = idx;
-      else if (lower.includes('weight-in') || lower.includes('weight in')) colMap.weight_in = idx;
-      else if (lower.includes('weight-out') || lower.includes('weight out')) colMap.weight_out = idx;
-      else if (lower.includes('net weight') || lower.includes('net_weight')) colMap.net_weight = idx;
+      if (firstLine.includes('facility') || lower.includes('facility')) colMap.facility = idx;
+      else if ((firstLine.includes('date') && firstLine.includes('transaction')) || (lower.includes('date') && lower.includes('transaction'))) colMap.date = idx;
+      else if (firstLine.includes('vehicle') || lower.includes('vehicle')) colMap.vehicle = idx;
+      else if (firstLine.includes('account') || lower.includes('account')) colMap.account = idx;
+      else if (firstLine.includes('chit') || lower.includes('chit')) colMap.chit = idx;
+      else if (firstLine.startsWith('time-in') || firstLine.startsWith('time in') || lower.includes('time-in') || lower.includes('進入時間')) colMap.time_in = idx;
+      else if (firstLine.startsWith('time-out') || firstLine.startsWith('time out') || lower.includes('time-out') || lower.includes('離開時間')) colMap.time_out = idx;
+      else if (firstLine.includes('waste depth') || lower.includes('waste depth')) colMap.waste_depth = idx;
+      else if (firstLine.includes('weight-in') || firstLine.includes('weight in') || lower.includes('weight-in') || lower.includes('入閘重量')) colMap.weight_in = idx;
+      else if (firstLine.includes('weight-out') || firstLine.includes('weight out') || lower.includes('weight-out') || lower.includes('出閘重量')) colMap.weight_out = idx;
+      else if (firstLine.includes('net weight') || firstLine.includes('net_weight') || lower.includes('net weight') || lower.includes('淨重量')) colMap.net_weight = idx;
     });
 
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return; // 跳過表頭
 
-      const vehicleNo = this.getCellString(row.getCell(colMap.vehicle));
+      const vehicleNo = colMap.vehicle ? this.getCellString(row.getCell(colMap.vehicle)) : '';
       if (!vehicleNo) return;
 
-      const rawDate = row.getCell(colMap.date).value;
+      const dateCell = colMap.date ? row.getCell(colMap.date) : null;
+      const rawDate = dateCell?.value;
       let workDate: string | null = null;
       if (rawDate instanceof Date) {
         workDate = rawDate.toISOString().slice(0, 10);
@@ -235,17 +240,17 @@ export class VerificationService {
 
       allRows.push({
         _rowNumber: rowNumber,
-        facility: this.getCellString(row.getCell(colMap.facility)),
+        facility: colMap.facility ? this.getCellString(row.getCell(colMap.facility)) : '',
         work_date: workDate,
         vehicle_no: vehicleNo,
-        account_no: this.getCellString(row.getCell(colMap.account)),
-        chit_no: this.getCellString(row.getCell(colMap.chit)),
-        time_in: this.getCellString(row.getCell(colMap.time_in)),
-        time_out: this.getCellString(row.getCell(colMap.time_out)),
-        waste_depth: this.getCellNumber(row.getCell(colMap.waste_depth)),
-        weight_in: this.getCellNumber(row.getCell(colMap.weight_in)),
-        weight_out: this.getCellNumber(row.getCell(colMap.weight_out)),
-        net_weight: this.getCellNumber(row.getCell(colMap.net_weight)),
+        account_no: colMap.account ? this.getCellString(row.getCell(colMap.account)) : '',
+        chit_no: colMap.chit ? this.getCellString(row.getCell(colMap.chit)) : '',
+        time_in: colMap.time_in ? this.getCellString(row.getCell(colMap.time_in)) : '',
+        time_out: colMap.time_out ? this.getCellString(row.getCell(colMap.time_out)) : '',
+        waste_depth: colMap.waste_depth ? this.getCellNumber(row.getCell(colMap.waste_depth)) : null,
+        weight_in: colMap.weight_in ? this.getCellNumber(row.getCell(colMap.weight_in)) : null,
+        weight_out: colMap.weight_out ? this.getCellNumber(row.getCell(colMap.weight_out)) : null,
+        net_weight: colMap.net_weight ? this.getCellNumber(row.getCell(colMap.net_weight)) : null,
       });
     });
 
@@ -1212,9 +1217,9 @@ export class VerificationService {
   private getCellString(cell: ExcelJS.Cell): string {
     if (!cell || cell.value == null) return '';
     if (cell.value instanceof Date) {
-      // 如果是時間格式，返回 HH:mm
-      const h = String(cell.value.getHours()).padStart(2, '0');
-      const m = String(cell.value.getMinutes()).padStart(2, '0');
+      // 如果是時間格式，使用 UTC 時間返回 HH:mm（ExcelJS 以 UTC 存儲時間值）
+      const h = String(cell.value.getUTCHours()).padStart(2, '0');
+      const m = String(cell.value.getUTCMinutes()).padStart(2, '0');
       return `${h}:${m}`;
     }
     return String(cell.value).trim();
