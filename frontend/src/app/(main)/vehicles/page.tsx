@@ -104,17 +104,17 @@ export default function VehiclesPage() {
     { key: 'owner_company', label: '車主', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const },
-    { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: false, render: (v: string) => v ? fmtDate(v) : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
-    { key: 'vehicle_chassis_no', label: '底盤號碼', sortable: false, editable: false, render: (v: string) => v ? <span className="font-mono text-xs">{v}</span> : '-' },
+    { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? fmtDate(v) : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
+    { key: 'vehicle_chassis_no', label: '底盤號碼', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-xs">{v}</span> : '-' },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'vehicle_mud_tail_expiry', label: '泥尾到期', sortable: true, editable: false, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'vehicle_insurance_agent', label: '保險代理', sortable: false, editable: false, render: (v: string) => v || '-' },
-    { key: 'vehicle_insurance_company', label: '保險公司', sortable: false, editable: false, render: (v: string) => v || '-' },
+    { key: 'vehicle_mud_tail_expiry', label: '泥尾到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'vehicle_insurance_agent', label: '保險代理', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'vehicle_insurance_company', label: '保險公司', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'vehicle_has_gps', label: 'GPS', sortable: false, editable: false, render: (v: boolean | null) => v === true ? '有' : v === false ? '無' : '-' },
-    { key: 'vehicle_original_plate', label: '原身車牌', sortable: false, editable: false, render: (v: string) => v ? <span className="font-mono">{v}</span> : '-' },
+    { key: 'vehicle_original_plate', label: '原身車牌', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono">{v}</span> : '-' },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
         {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
