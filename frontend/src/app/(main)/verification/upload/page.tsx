@@ -687,6 +687,11 @@ function OcrUploadSection({
                       <span className={`text-xs ${r.status === 'completed' ? 'text-green-600' : 'text-red-500'}`}>
                         {r.status === 'completed' ? '辨識成功' : '辨識失敗'}
                       </span>
+                      {r.error && (
+                        <span className="text-xs text-red-400" title={r.error}>
+                          ({r.error.length > 50 ? r.error.slice(0, 50) + '...' : r.error})
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

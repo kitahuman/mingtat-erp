@@ -334,6 +334,7 @@ export class OcrService {
     if (ext === 'pdf') {
       const pdfOutputPath = imagePath.replace(/\.pdf$/i, '_pdf_page1.png');
       try {
+        // @ts-ignore - pdf-to-img is ESM only, dynamic import works at runtime
         const { pdf } = await import('pdf-to-img');
         const document = await pdf(imagePath, { scale: 3 });
         const firstPage = await document.getPage(1);
