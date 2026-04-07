@@ -635,4 +635,12 @@ export const verificationApi = {
   // 來源列表
   getSources: () =>
     api.get('/verification/sources'),
+
+  // 批量操作
+  batchAction: (data: { match_ids: number[]; action: string; notes?: string }) =>
+    api.post('/verification/batch-action', data),
+
+  // 匯出 Excel（返回 blob）
+  exportExcel: (params?: any) =>
+    api.get('/verification/export', { params, responseType: 'blob' }),
 };

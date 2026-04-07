@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -17,6 +18,7 @@ import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import type { Response } from 'express';
 import { VerificationService } from './verification.service';
 
 function getUploadDir() {
@@ -126,6 +128,32 @@ export class VerificationController {
     });
   }
 
+  // ── 匯出工作台資料為 Excel ────────────────────────────────
+  @Get('export')
+  async exportWorkbench(
+    @Res() res: Response,
+    @Query('filter_status') filterStatus?: string,
+    @Query('filter_work_type') filterWorkType?: string,
+    @Query('search_keyword') searchKeyword?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+  ) {
+    const buffer = await this.service.exportWorkbench({
+      page: 1,
+      pageSize: 100000,
+      filterStatus,
+      filterWorkType,
+      searchKeyword,
+      dateFrom,
+      dateTo,
+    });
+
+    const filename = `verification_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.end(buffer);
+  }
+
   // ── 單筆配對詳情 ──────────────────────────────────────────
   @Get('match/:matchId')
   async getMatchDetail(@Param('matchId') matchId: string) {
@@ -142,6 +170,21 @@ export class VerificationController {
     return this.service.performMatchAction(+matchId, {
       action: body.action,
       overrideData: body.override_data,
+      notes: body.notes,
+      userId: req?.user?.id,
+      userName: req?.user?.displayName || req?.user?.username,
+    });
+  }
+
+  // ── 批量操作 ──────────────────────────────────────────────
+  @Post('batch-action')
+  async batchAction(
+    @Body() body: { match_ids: number[]; action: string; notes?: string },
+    @Request() req?: any,
+  ) {
+    return this.service.batchAction({
+      matchIds: body.match_ids,
+      action: body.action,
       notes: body.notes,
       userId: req?.user?.id,
       userName: req?.user?.displayName || req?.user?.username,

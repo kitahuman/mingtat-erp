@@ -465,7 +465,7 @@ export class VerificationService {
 
       const matched = workLogs.filter((wl) => {
         const wlPlate = (wl.equipment_number || '').toUpperCase().replace(/\s+/g, '');
-        return wlPlate === vehicleNorm;
+        return wlPlate === vehicleNorm || this.fuzzyPlateMatch(vehicleNorm, wlPlate);
       });
 
       if (matched.length > 0) {
@@ -592,11 +592,11 @@ export class VerificationService {
       }
     }
 
-    // ── 新增：比較車牌 ──
+    // ── 新增：比較車牌（支援 * 萬用字符模糊匹配）──
     if (record.record_vehicle_no && workLog.equipment_number) {
       const recPlate = (record.record_vehicle_no || '').toUpperCase().replace(/\s+/g, '');
       const wlPlate = (workLog.equipment_number || '').toUpperCase().replace(/\s+/g, '');
-      if (recPlate !== wlPlate) {
+      if (recPlate !== wlPlate && !this.fuzzyPlateMatch(recPlate, wlPlate)) {
         diffFields['vehicle'] = {
           sys: workLog.equipment_number,
           src: record.record_vehicle_no,
@@ -662,6 +662,29 @@ export class VerificationService {
     });
 
     return { status: matchStatus };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 車牌模糊匹配（支援 * 萬用字符）
+  // ══════════════════════════════════════════════════════════════
+  private fuzzyPlateMatch(plate1: string, plate2: string): boolean {
+    if (!plate1 || !plate2) return false;
+    const p1 = plate1.toUpperCase().replace(/\s+/g, '');
+    const p2 = plate2.toUpperCase().replace(/\s+/g, '');
+    if (p1 === p2) return true;
+    // Check if either plate contains * wildcard
+    if (p1.includes('*') || p2.includes('*')) {
+      const pattern = p1.includes('*') ? p1 : p2;
+      const target = p1.includes('*') ? p2 : p1;
+      // Convert * pattern to regex: each * matches exactly one character
+      const regexStr = '^' + pattern.replace(/\*/g, '.') + '$';
+      try {
+        return new RegExp(regexStr, 'i').test(target);
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1071,6 +1094,19 @@ export class VerificationService {
         else overallStatus = 'unverified';
       }
 
+      // Build match_id map per frontend source key
+      const matchIdBySource: Record<string, number | null> = {};
+      const sourceKeyToCode: Record<string, string> = {
+        receipt: 'receipt', slip: 'slip_chit', sheet: 'driver_sheet',
+        customer: 'customer_record', gps: 'gps', clock: 'clock', whatsapp: 'whatsapp_order',
+      };
+      for (const [feKey, beCode] of Object.entries(sourceKeyToCode)) {
+        const src = sourceMap.get(beCode);
+        if (!src) { matchIdBySource[feKey] = null; continue; }
+        const m = wlMatches.find((mm) => mm.match_source_id === src.id);
+        matchIdBySource[feKey] = m ? m.id : null;
+      }
+
       return {
         work_record_id: wl.id,
         date: wl.scheduled_date ? wl.scheduled_date.toISOString().slice(0, 10) : null,
@@ -1088,6 +1124,13 @@ export class VerificationService {
         status_gps: statusBySource['gps'],
         status_clock: statusBySource['clock'],
         status_whatsapp: statusBySource['whatsapp_order'],
+        match_id_receipt: matchIdBySource['receipt'],
+        match_id_slip: matchIdBySource['slip'],
+        match_id_sheet: matchIdBySource['sheet'],
+        match_id_customer: matchIdBySource['customer'],
+        match_id_gps: matchIdBySource['gps'],
+        match_id_clock: matchIdBySource['clock'],
+        match_id_whatsapp: matchIdBySource['whatsapp'],
         overall_status: overallStatus,
       };
     });
@@ -1187,7 +1230,23 @@ export class VerificationService {
         break;
       case 'override':
         newStatus = 'matched';
-        // TODO: 覆蓋系統資料
+        // 覆蓋系統資料：將來源資料寫入 WorkLog
+        if (options.overrideData && match.match_work_record_id) {
+          const updateData: any = {};
+          if (options.overrideData.date) updateData.scheduled_date = new Date(options.overrideData.date);
+          if (options.overrideData.vehicle) updateData.equipment_number = options.overrideData.vehicle;
+          if (options.overrideData.time_in) updateData.start_time = options.overrideData.time_in;
+          if (options.overrideData.time_out) updateData.end_time = options.overrideData.time_out;
+          if (options.overrideData.weight != null) updateData.quantity = Number(options.overrideData.weight);
+          if (options.overrideData.location_from) updateData.start_location = options.overrideData.location_from;
+          if (options.overrideData.location_to) updateData.end_location = options.overrideData.location_to;
+          if (Object.keys(updateData).length > 0) {
+            await this.prisma.workLog.update({
+              where: { id: match.match_work_record_id },
+              data: updateData,
+            });
+          }
+        }
         break;
       case 'ignore':
         newStatus = 'matched';
@@ -1223,6 +1282,153 @@ export class VerificationService {
     });
 
     return { success: true, match_id: matchId, old_status: oldStatus, new_status: newStatus };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 批量操作
+  // ══════════════════════════════════════════════════════════════
+  async batchAction(options: {
+    matchIds: number[];
+    action: string;
+    notes?: string;
+    userId?: number;
+    userName?: string;
+  }) {
+    const { matchIds, action, notes, userId, userName } = options;
+    const validActions = ['confirm', 'ignore'];
+    if (!validActions.includes(action)) {
+      throw new BadRequestException(`批量操作只支援: ${validActions.join(', ')}`);
+    }
+    if (!matchIds || matchIds.length === 0) {
+      throw new BadRequestException('請選擇至少一筆配對記錄');
+    }
+
+    const matches = await this.prisma.verificationMatch.findMany({
+      where: { id: { in: matchIds } },
+    });
+
+    const results: Array<{ match_id: number; old_status: string; new_status: string }> = [];
+
+    for (const match of matches) {
+      const oldStatus = match.match_status;
+      const newStatus = 'matched';
+
+      await this.prisma.verificationMatch.update({
+        where: { id: match.id },
+        data: {
+          match_status: newStatus,
+          match_resolved_by: userId,
+          match_resolved_at: new Date(),
+          match_resolved_action: action,
+          match_notes: notes || match.match_notes,
+        },
+      });
+
+      // 記錄操作日誌
+      await this.prisma.verificationActionLog.create({
+        data: {
+          log_user_id: userId || 0,
+          log_user_name: userName,
+          log_action_type: `batch_${action}`,
+          log_match_id: match.id,
+          log_old_status: oldStatus,
+          log_new_status: newStatus,
+          log_details: { batch_size: matchIds.length },
+        },
+      });
+
+      results.push({ match_id: match.id, old_status: oldStatus, new_status: newStatus });
+    }
+
+    return {
+      success: true,
+      action,
+      total: matchIds.length,
+      processed: results.length,
+      results,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 匯出工作台資料為 Excel
+  // ══════════════════════════════════════════════════════════════
+  async exportWorkbench(query: WorkbenchQuery): Promise<Buffer> {
+    // Fetch all records (no pagination for export)
+    const exportQuery = { ...query, page: 1, pageSize: 100000 };
+    const result = await this.getWorkbench(exportQuery);
+    const records = result.records;
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('核對工作台');
+
+    // Define columns
+    sheet.columns = [
+      { header: '日期', key: 'date', width: 12 },
+      { header: '司機', key: 'driver', width: 12 },
+      { header: '車牌', key: 'vehicle', width: 12 },
+      { header: '工作類型', key: 'work_type', width: 10 },
+      { header: '客戶', key: 'customer', width: 15 },
+      { header: '地點', key: 'location', width: 25 },
+      { header: '合約', key: 'contract', width: 12 },
+      { header: '入帳票號', key: 'chit_no', width: 14 },
+      { header: '入帳票', key: 'status_receipt', width: 10 },
+      { header: '飛仔', key: 'status_slip', width: 10 },
+      { header: '功課表', key: 'status_sheet', width: 10 },
+      { header: '客戶記錄', key: 'status_customer', width: 10 },
+      { header: 'GPS', key: 'status_gps', width: 10 },
+      { header: '打卡', key: 'status_clock', width: 10 },
+      { header: 'WhatsApp', key: 'status_whatsapp', width: 10 },
+      { header: '整體狀態', key: 'overall_status', width: 10 },
+    ];
+
+    // Style header row
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+    const statusLabel: Record<string, string> = {
+      matched: '已匹配', diff: '有差異', missing: '系統缺失',
+      source_missing: '來源缺失', unverified: '未核對', na: '不適用',
+    };
+
+    for (const rec of records) {
+      sheet.addRow({
+        date: rec.date || '',
+        driver: rec.driver,
+        vehicle: rec.vehicle,
+        work_type: rec.work_type,
+        customer: rec.customer,
+        location: rec.location,
+        contract: rec.contract,
+        chit_no: rec.chit_no,
+        status_receipt: statusLabel[rec.status_receipt] || rec.status_receipt,
+        status_slip: statusLabel[rec.status_slip] || rec.status_slip,
+        status_sheet: statusLabel[rec.status_sheet] || rec.status_sheet,
+        status_customer: statusLabel[rec.status_customer] || rec.status_customer,
+        status_gps: statusLabel[rec.status_gps] || rec.status_gps,
+        status_clock: statusLabel[rec.status_clock] || rec.status_clock,
+        status_whatsapp: statusLabel[rec.status_whatsapp] || rec.status_whatsapp,
+        overall_status: statusLabel[rec.overall_status] || rec.overall_status,
+      });
+    }
+
+    // Apply conditional formatting colors
+    const statusColors: Record<string, string> = {
+      '已匹配': 'FF22C55E', '有差異': 'FFF59E0B', '系統缺失': 'FFEF4444',
+      '來源缺失': 'FFF97316', '未核對': 'FF9CA3AF', '不適用': 'FFD1D5DB',
+    };
+    for (let rowIdx = 2; rowIdx <= records.length + 1; rowIdx++) {
+      for (let colIdx = 9; colIdx <= 15; colIdx++) {
+        const cell = sheet.getRow(rowIdx).getCell(colIdx);
+        const color = statusColors[String(cell.value)];
+        if (color) {
+          cell.font = { color: { argb: color }, bold: true };
+        }
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 
   // ══════════════════════════════════════════════════════════════
