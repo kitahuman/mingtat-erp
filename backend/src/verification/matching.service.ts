@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from './whatsapp.service';
 
 // ══════════════════════════════════════════════════════════════
 // 六來源交叉比對服務
@@ -33,7 +34,10 @@ export interface MatchingRow {
 export class MatchingService {
   private readonly logger = new Logger(MatchingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsappService: WhatsappService,
+  ) {}
 
   // ══════════════════════════════════════════════════════════════
   // 取得六來源交叉比對總覽
@@ -124,33 +128,8 @@ export class MatchingService {
       },
     });
 
-    // 6. 取得 WhatsApp Orders (verification_wa_order_items via orders)
-    const waOrders = await this.prisma.verificationWaOrder.findMany({
-      where: {
-        wa_order_date: { gte: dateFrom, lte: dateTo },
-      },
-      include: {
-        items: true,
-      },
-      orderBy: [{ wa_order_date: 'asc' }, { wa_order_version: 'desc' }],
-    });
-
-    // 只取每天最新版本的 order
-    const latestWaOrdersByDate = new Map<string, typeof waOrders[0]>();
-    for (const order of waOrders) {
-      const dateKey = order.wa_order_date.toISOString().slice(0, 10);
-      if (!latestWaOrdersByDate.has(dateKey) || order.wa_order_version > latestWaOrdersByDate.get(dateKey)!.wa_order_version) {
-        latestWaOrdersByDate.set(dateKey, order);
-      }
-    }
-    const waOrderItems = Array.from(latestWaOrdersByDate.values()).flatMap((o) =>
-      o.items.map((item) => ({
-        ...item,
-        order_date: o.wa_order_date.toISOString().slice(0, 10),
-        order_status: o.wa_order_status,
-        order_version: o.wa_order_version,
-      })),
-    );
+    // 6. 取得 WhatsApp 每日總結 items（已合併所有版本 + modification，排除已取消項目）
+    const waOrderItems = await this.whatsappService.getDailySummaryItemsForMatching(dateFrom, dateTo);
 
     // ── 組裝比對結果 ──────────────────────────────────────────
     const results: MatchingRow[] = [];
@@ -342,6 +321,7 @@ export class MatchingService {
           location: item.wa_item_location || '—',
           work_desc: item.wa_item_work_desc || '—',
           is_suspended: item.wa_item_is_suspended,
+          mod_status: item.wa_item_mod_status || null,
           order_status: item.order_status,
           order_version: item.order_version,
         })),
@@ -525,6 +505,7 @@ export class MatchingService {
           customer: item.wa_item_customer || '—',
           contract: item.wa_item_contract_no || '—',
           is_suspended: item.wa_item_is_suspended,
+          mod_status: item.wa_item_mod_status || null,
         })),
       };
 

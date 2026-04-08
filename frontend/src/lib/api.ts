@@ -692,7 +692,21 @@ export const verificationApi = {
 
   // ── WhatsApp 相關 ──────────────────────────────────────────
 
-  // WhatsApp Orders 列表
+  // 每日 Order 總結列表（主要 API）
+  getWhatsappDailySummaries: (params?: {
+    page?: number;
+    limit?: number;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }) =>
+    api.get('/verification/whatsapp-daily-summaries', { params }),
+
+  // 單日 Order 總結詳情
+  getWhatsappDailySummary: (date: string) =>
+    api.get(`/verification/whatsapp-daily-summary/${date}`),
+
+  // WhatsApp Orders 列表（向後兼容）
   getWhatsappOrders: (params?: {
     page?: number;
     limit?: number;
@@ -702,7 +716,7 @@ export const verificationApi = {
   }) =>
     api.get('/verification/whatsapp-orders', { params }),
 
-  // WhatsApp Order 詳情
+  // WhatsApp Order 詳情（向後兼容）
   getWhatsappOrderDetail: (id: number) =>
     api.get(`/verification/whatsapp-orders/${id}`),
 

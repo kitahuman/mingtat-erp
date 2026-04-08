@@ -31,7 +31,6 @@ export class WhatsappController {
     @Body() body: { chatId: string; sender: string; text: string; groupName?: string },
     @Headers('x-webhook-secret') webhookSecret?: string,
   ) {
-    // 驗證 webhook secret
     const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET || 'mingtat-wa-webhook-2026';
     if (webhookSecret !== expectedSecret) {
       throw new UnauthorizedException('Invalid webhook secret');
@@ -49,7 +48,33 @@ export class WhatsappController {
     });
   }
 
-  // ── WhatsApp Orders 列表（需要 JWT）─────────────────────────
+  // ── 每日 Order 總結列表（主要 API）─────────────────────────
+  @Get('whatsapp-daily-summaries')
+  @UseGuards(AuthGuard('jwt'))
+  async getDailySummaries(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.whatsappService.getDailySummaries({
+      page: page ? +page : 1,
+      limit: limit ? +limit : 20,
+      date_from: dateFrom,
+      date_to: dateTo,
+      search,
+    });
+  }
+
+  // ── 單日 Order 總結詳情 ────────────────────────────────────
+  @Get('whatsapp-daily-summary/:date')
+  @UseGuards(AuthGuard('jwt'))
+  async getDailySummary(@Param('date') date: string) {
+    return this.whatsappService.getDailySummary(date);
+  }
+
+  // ── WhatsApp Orders 列表（保留向後兼容）─────────────────────
   @Get('whatsapp-orders')
   @UseGuards(AuthGuard('jwt'))
   async getOrders(
@@ -68,7 +93,7 @@ export class WhatsappController {
     });
   }
 
-  // ── WhatsApp Order 詳情（需要 JWT）──────────────────────────
+  // ── WhatsApp Order 詳情（保留向後兼容）──────────────────────
   @Get('whatsapp-orders/:id')
   @UseGuards(AuthGuard('jwt'))
   async getOrderDetail(@Param('id') id: string) {

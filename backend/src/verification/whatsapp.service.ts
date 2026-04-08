@@ -38,17 +38,92 @@ interface AiClassification {
 
 interface AiModification {
   mod_type: 'cancel' | 'reassign' | 'suspend' | 'resume' | 'add' | 'other';
-  target_date?: string; // YYYY-MM-DD — which day's order to modify
+  target_date?: string;
   target_vehicle_no?: string;
   target_driver_nickname?: string;
   target_machine_code?: string;
   target_contract_no?: string;
-  target_description?: string; // free-text description of what to match
-  new_driver_nickname?: string; // for reassign
-  new_vehicle_no?: string; // for reassign
-  new_items?: ParsedOrderItem[]; // for add
-  description: string; // human-readable description of the modification
+  target_description?: string;
+  new_driver_nickname?: string;
+  new_vehicle_no?: string;
+  new_items?: ParsedOrderItem[];
+  description: string;
   confidence: number;
+}
+
+// ── Daily Summary 介面 ──────────────────────────────────────
+
+export interface DailySummaryItem {
+  id: number;
+  seq: number;
+  contract_no: string | null;
+  customer: string | null;
+  work_description: string | null;
+  location: string | null;
+  driver_nickname: string | null;
+  vehicle_no: string | null;
+  machine_code: string | null;
+  contact_person: string | null;
+  slip_write_as: string | null;
+  is_suspended: boolean;
+  remarks: string | null;
+  mod_status: string | null; // cancelled | reassigned | suspended | added | null
+  mod_prev_data: any | null;
+  mod_logs: Array<{
+    id: number;
+    mod_type: string;
+    mod_description: string;
+    mod_prev_value: any;
+    mod_new_value: any;
+    mod_ai_confidence: number | null;
+    mod_created_at: string;
+    message: {
+      wa_msg_body: string | null;
+      wa_msg_sender_name: string | null;
+      wa_msg_timestamp: string | null;
+    } | null;
+  }>;
+  source_order_id: number;
+  source_order_version: number;
+}
+
+export interface DailySummary {
+  date: string; // YYYY-MM-DD
+  latest_status: string; // tentative | confirmed
+  total_items: number;
+  active_items: number; // items not cancelled
+  cancelled_items: number;
+  suspended_items: number;
+  reassigned_items: number;
+  added_items: number;
+  versions: Array<{
+    version: number;
+    status: string;
+    sender: string | null;
+    item_count: number;
+    ai_confidence: number | null;
+    created_at: string;
+  }>;
+  items: DailySummaryItem[];
+  messages: Array<{
+    id: number;
+    sender: string | null;
+    body: string | null;
+    classification: string | null;
+    confidence: number | null;
+    timestamp: string | null;
+  }>;
+  order_mod_logs: Array<{
+    id: number;
+    mod_type: string;
+    mod_description: string;
+    mod_created_at: string;
+    message: {
+      wa_msg_body: string | null;
+      wa_msg_sender_name: string | null;
+      wa_msg_timestamp: string | null;
+    } | null;
+  }>;
 }
 
 @Injectable()
@@ -121,12 +196,15 @@ export class WhatsappService {
     });
 
     // 4. 根據分類結果處理
+    let result: any;
     switch (classification.message_type) {
       case 'order':
-        return this.handleOrder(waMessage.id, classification, sender, text);
+        result = await this.handleOrder(waMessage.id, classification, sender, text);
+        break;
 
       case 'modification':
-        return this.handleModification(waMessage.id, classification, sender, text);
+        result = await this.handleModification(waMessage.id, classification, sender, text);
+        break;
 
       case 'chat':
       default:
@@ -138,6 +216,14 @@ export class WhatsappService {
           confidence: classification.confidence,
         };
     }
+
+    // 5. 處理完 order 或 modification 後，同步每日總結到 verification_records
+    const targetDate = classification.order_date
+      || (classification.modifications?.[0]?.target_date)
+      || new Date().toISOString().slice(0, 10);
+    await this.syncDailySummaryToVerificationRecords(targetDate);
+
+    return result;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -154,10 +240,14 @@ export class WhatsappService {
       : new Date();
 
     // 版本管理：檢查同一天是否已有 order
+    const dateStart = new Date(orderDate);
+    dateStart.setHours(0, 0, 0, 0);
+    const dateEnd = new Date(orderDate);
+    dateEnd.setHours(23, 59, 59, 999);
+
     const existingOrders = await this.prisma.verificationWaOrder.findMany({
       where: {
-        wa_order_date: orderDate,
-        wa_order_msg_id: { not: null },
+        wa_order_date: { gte: dateStart, lte: dateEnd },
       },
       orderBy: { wa_order_version: 'desc' },
       take: 1,
@@ -206,9 +296,6 @@ export class WhatsappService {
       });
     }
 
-    // 同步到 verification_records
-    await this.syncToVerificationRecords(waOrder.id, classification, orderDate, sender);
-
     return {
       processed: true,
       message_type: 'order',
@@ -230,7 +317,7 @@ export class WhatsappService {
     messageId: number,
     classification: AiClassification,
     sender: string,
-    text: string,
+    _text: string,
   ) {
     const modifications = classification.modifications || [];
     if (modifications.length === 0) {
@@ -271,11 +358,9 @@ export class WhatsappService {
   private async applyModification(
     messageId: number,
     mod: AiModification,
-    sender: string,
+    _sender: string,
   ) {
-    // 1. 找到目標日期的最新版 order
     const targetDate = mod.target_date ? new Date(mod.target_date) : new Date();
-    // Set to start of day for comparison
     const dateStart = new Date(targetDate);
     dateStart.setHours(0, 0, 0, 0);
     const dateEnd = new Date(targetDate);
@@ -283,15 +368,10 @@ export class WhatsappService {
 
     const latestOrder = await this.prisma.verificationWaOrder.findFirst({
       where: {
-        wa_order_date: {
-          gte: dateStart,
-          lte: dateEnd,
-        },
+        wa_order_date: { gte: dateStart, lte: dateEnd },
       },
       orderBy: { wa_order_version: 'desc' },
-      include: {
-        items: true,
-      },
+      include: { items: true },
     });
 
     if (!latestOrder) {
@@ -303,16 +383,13 @@ export class WhatsappService {
       };
     }
 
-    // 2. 根據修改類型找到匹配的 order item(s)
     if (mod.mod_type === 'add') {
       return this.applyAddModification(messageId, latestOrder, mod);
     }
 
-    // 找匹配的 item
     const matchedItems = this.findMatchingItems(latestOrder.items, mod);
 
     if (matchedItems.length === 0) {
-      // 即使沒找到精確匹配，也記錄修改日誌（order 級別）
       await this.prisma.verificationWaModLog.create({
         data: {
           mod_order_id: latestOrder.id,
@@ -334,7 +411,6 @@ export class WhatsappService {
       };
     }
 
-    // 3. 對每個匹配的 item 套用修改
     const itemResults: any[] = [];
     for (const item of matchedItems) {
       const result = await this.applyModToItem(messageId, latestOrder.id, item, mod);
@@ -356,36 +432,26 @@ export class WhatsappService {
   // ══════════════════════════════════════════════════════════════
   private findMatchingItems(items: any[], mod: AiModification): any[] {
     return items.filter((item) => {
-      // 車牌匹配
       if (mod.target_vehicle_no && item.wa_item_vehicle_no) {
         const normalizedTarget = mod.target_vehicle_no.replace(/\s/g, '').toUpperCase();
         const normalizedItem = item.wa_item_vehicle_no.replace(/\s/g, '').toUpperCase();
         if (normalizedTarget === normalizedItem) return true;
       }
-
-      // 司機花名匹配
       if (mod.target_driver_nickname && item.wa_item_driver_nickname) {
         const targetNick = mod.target_driver_nickname.trim().toLowerCase();
         const itemNick = item.wa_item_driver_nickname.trim().toLowerCase();
-        if (targetNick === itemNick || itemNick.includes(targetNick) || targetNick.includes(itemNick)) {
-          return true;
-        }
+        if (targetNick === itemNick || itemNick.includes(targetNick) || targetNick.includes(itemNick)) return true;
       }
-
-      // 機械編號匹配
       if (mod.target_machine_code && item.wa_item_machine_code) {
         const normalizedTarget = mod.target_machine_code.replace(/\s/g, '').toUpperCase();
         const normalizedItem = item.wa_item_machine_code.replace(/\s/g, '').toUpperCase();
         if (normalizedTarget === normalizedItem) return true;
       }
-
-      // 合約號匹配
       if (mod.target_contract_no && item.wa_item_contract_no) {
         const normalizedTarget = mod.target_contract_no.replace(/\s/g, '').toUpperCase();
         const normalizedItem = item.wa_item_contract_no.replace(/\s/g, '').toUpperCase();
         if (normalizedTarget === normalizedItem) return true;
       }
-
       return false;
     });
   }
@@ -399,7 +465,6 @@ export class WhatsappService {
     item: any,
     mod: AiModification,
   ) {
-    // 保存修改前的快照
     const prevSnapshot: Record<string, any> = {
       wa_item_driver_nickname: item.wa_item_driver_nickname,
       wa_item_vehicle_no: item.wa_item_vehicle_no,
@@ -408,7 +473,6 @@ export class WhatsappService {
       wa_item_mod_status: item.wa_item_mod_status,
     };
 
-    // 根據修改類型更新 item
     const updateData: any = {};
     let modStatus: string;
     const newSnapshot: Record<string, any> = {};
@@ -420,7 +484,6 @@ export class WhatsappService {
         updateData.wa_item_mod_prev_data = prevSnapshot;
         newSnapshot.wa_item_mod_status = 'cancelled';
         break;
-
       case 'reassign':
         modStatus = 'reassigned';
         updateData.wa_item_mod_status = 'reassigned';
@@ -434,7 +497,6 @@ export class WhatsappService {
           newSnapshot.wa_item_vehicle_no = mod.new_vehicle_no;
         }
         break;
-
       case 'suspend':
         modStatus = 'suspended';
         updateData.wa_item_is_suspended = true;
@@ -443,15 +505,13 @@ export class WhatsappService {
         newSnapshot.wa_item_is_suspended = true;
         newSnapshot.wa_item_mod_status = 'suspended';
         break;
-
       case 'resume':
         modStatus = 'resumed';
         updateData.wa_item_is_suspended = false;
-        updateData.wa_item_mod_status = null; // clear mod status on resume
+        updateData.wa_item_mod_status = null;
         updateData.wa_item_mod_prev_data = prevSnapshot;
         newSnapshot.wa_item_is_suspended = false;
         break;
-
       default:
         modStatus = 'other';
         updateData.wa_item_mod_status = 'other';
@@ -460,13 +520,11 @@ export class WhatsappService {
         break;
     }
 
-    // 更新 order item
     await this.prisma.verificationWaOrderItem.update({
       where: { id: item.id },
       data: updateData,
     });
 
-    // 記錄修改日誌
     await this.prisma.verificationWaModLog.create({
       data: {
         mod_order_id: orderId,
@@ -499,7 +557,6 @@ export class WhatsappService {
   ) {
     const newItems = mod.new_items || [];
     if (newItems.length === 0) {
-      // 如果沒有具體新增項目，只記錄日誌
       await this.prisma.verificationWaModLog.create({
         data: {
           mod_order_id: order.id,
@@ -515,7 +572,6 @@ export class WhatsappService {
       return { success: true, reason: 'add_logged_no_items', order_id: order.id };
     }
 
-    // 計算新的 seq 起始值
     const maxSeq = order.items.reduce(
       (max: number, item: any) => Math.max(max, item.wa_item_seq),
       0,
@@ -546,7 +602,6 @@ export class WhatsappService {
       });
       createdItems.push(created.id);
 
-      // 記錄修改日誌
       await this.prisma.verificationWaModLog.create({
         data: {
           mod_order_id: order.id,
@@ -561,7 +616,6 @@ export class WhatsappService {
       });
     }
 
-    // 更新 order item count
     const totalItems = await this.prisma.verificationWaOrderItem.count({
       where: { wa_item_order_id: order.id },
     });
@@ -685,7 +739,7 @@ export class WhatsappService {
       "target_description": "目標描述（用於模糊匹配）或null",
       "new_driver_nickname": "新司機花名或null（reassign 時用）",
       "new_vehicle_no": "新車牌或null（reassign 時用）",
-      "new_items": [（add 時用，格式同 order items）],
+      "new_items": [],
       "description": "人類可讀的修改描述",
       "confidence": 0.0-1.0
     }
@@ -721,8 +775,6 @@ export class WhatsappService {
     });
 
     const content = response.choices[0]?.message?.content || '';
-
-    // 移除可能的 markdown 代碼塊標記
     const cleaned = content
       .replace(/```json\s*/gi, '')
       .replace(/```\s*/g, '')
@@ -730,12 +782,11 @@ export class WhatsappService {
 
     try {
       const parsed = JSON.parse(cleaned);
-      // Ensure backward compatibility: if AI returns is_order instead of message_type
       if (parsed.is_order !== undefined && !parsed.message_type) {
         parsed.message_type = parsed.is_order ? 'order' : 'chat';
       }
       return parsed;
-    } catch (parseError) {
+    } catch (_parseError) {
       this.logger.warn(`Failed to parse AI response: ${cleaned.substring(0, 200)}`);
       return {
         message_type: 'chat' as const,
@@ -750,68 +801,355 @@ export class WhatsappService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 同步到 verification_records 用於交叉比對
+  // 每日 Order 總結 — 核心方法
+  // 合併同一天所有 order 版本 + modification，產生最終版本
   // ══════════════════════════════════════════════════════════════
-  private async syncToVerificationRecords(
-    orderId: number,
-    classification: AiClassification,
-    orderDate: Date,
-    sender: string,
-  ) {
+  async getDailySummary(dateStr: string): Promise<DailySummary | null> {
+    const dateStart = new Date(dateStr);
+    dateStart.setHours(0, 0, 0, 0);
+    const dateEnd = new Date(dateStr);
+    dateEnd.setHours(23, 59, 59, 999);
+
+    // 取得該天所有 order（按版本排序）
+    const orders = await this.prisma.verificationWaOrder.findMany({
+      where: {
+        wa_order_date: { gte: dateStart, lte: dateEnd },
+      },
+      include: {
+        items: {
+          orderBy: { wa_item_seq: 'asc' },
+          include: {
+            mod_logs: {
+              orderBy: { mod_created_at: 'desc' },
+              include: {
+                message: {
+                  select: {
+                    wa_msg_body: true,
+                    wa_msg_sender_name: true,
+                    wa_msg_timestamp: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        mod_logs: {
+          where: { mod_item_id: null }, // order-level logs only
+          orderBy: { mod_created_at: 'desc' },
+          include: {
+            message: {
+              select: {
+                wa_msg_body: true,
+                wa_msg_sender_name: true,
+                wa_msg_timestamp: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { wa_order_version: 'asc' },
+    });
+
+    if (orders.length === 0) return null;
+
+    // 取最新版本的 order 作為基礎（它的 items 已經包含 modification 後的最新狀態）
+    const latestOrder = orders[orders.length - 1];
+
+    // 收集所有版本的 items（最新版為主，但也包含之前版本新增的 items）
+    // 策略：以最新版 order 的 items 為準，因為 modification 已經直接修改了 items
+    const summaryItems: DailySummaryItem[] = latestOrder.items.map((item) => ({
+      id: item.id,
+      seq: item.wa_item_seq,
+      contract_no: item.wa_item_contract_no,
+      customer: item.wa_item_customer,
+      work_description: item.wa_item_work_desc,
+      location: item.wa_item_location,
+      driver_nickname: item.wa_item_driver_nickname,
+      vehicle_no: item.wa_item_vehicle_no,
+      machine_code: item.wa_item_machine_code,
+      contact_person: item.wa_item_contact_person,
+      slip_write_as: item.wa_item_slip_write_as,
+      is_suspended: item.wa_item_is_suspended,
+      remarks: item.wa_item_remarks,
+      mod_status: item.wa_item_mod_status,
+      mod_prev_data: item.wa_item_mod_prev_data,
+      mod_logs: item.mod_logs.map((log) => ({
+        id: log.id,
+        mod_type: log.mod_type,
+        mod_description: log.mod_description,
+        mod_prev_value: log.mod_prev_value,
+        mod_new_value: log.mod_new_value,
+        mod_ai_confidence: log.mod_ai_confidence ? Number(log.mod_ai_confidence) : null,
+        mod_created_at: log.mod_created_at.toISOString(),
+        message: log.message
+          ? {
+              wa_msg_body: log.message.wa_msg_body,
+              wa_msg_sender_name: log.message.wa_msg_sender_name,
+              wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
+            }
+          : null,
+      })),
+      source_order_id: latestOrder.id,
+      source_order_version: latestOrder.wa_order_version,
+    }));
+
+    // 統計
+    const cancelledCount = summaryItems.filter((i) => i.mod_status === 'cancelled').length;
+    const suspendedCount = summaryItems.filter((i) => i.mod_status === 'suspended' || (i.is_suspended && i.mod_status !== 'cancelled')).length;
+    const reassignedCount = summaryItems.filter((i) => i.mod_status === 'reassigned').length;
+    const addedCount = summaryItems.filter((i) => i.mod_status === 'added').length;
+    const activeCount = summaryItems.filter((i) => i.mod_status !== 'cancelled').length;
+
+    // 取得該天所有相關訊息
+    const messageIds = orders.map((o) => o.wa_order_msg_id).filter((id): id is number => id !== null);
+    // Also get modification messages from mod_logs
+    const allModLogs = orders.flatMap((o) => o.mod_logs);
+    const modMsgIds = allModLogs.map((l) => l.mod_msg_id);
+    const allMsgIds = [...new Set([...messageIds, ...modMsgIds])];
+
+    const messages = allMsgIds.length > 0
+      ? await this.prisma.verificationWaMessage.findMany({
+          where: { id: { in: allMsgIds } },
+          orderBy: { wa_msg_timestamp: 'asc' },
+        })
+      : [];
+
+    // 收集 order-level 修改日誌
+    const orderModLogs = orders.flatMap((o) =>
+      o.mod_logs.map((log) => ({
+        id: log.id,
+        mod_type: log.mod_type,
+        mod_description: log.mod_description,
+        mod_created_at: log.mod_created_at.toISOString(),
+        message: log.message
+          ? {
+              wa_msg_body: log.message.wa_msg_body,
+              wa_msg_sender_name: log.message.wa_msg_sender_name,
+              wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
+            }
+          : null,
+      })),
+    );
+
+    return {
+      date: dateStr,
+      latest_status: latestOrder.wa_order_status,
+      total_items: summaryItems.length,
+      active_items: activeCount,
+      cancelled_items: cancelledCount,
+      suspended_items: suspendedCount,
+      reassigned_items: reassignedCount,
+      added_items: addedCount,
+      versions: orders.map((o) => ({
+        version: o.wa_order_version,
+        status: o.wa_order_status,
+        sender: o.wa_order_sender_name,
+        item_count: o.wa_order_item_count,
+        ai_confidence: o.wa_order_ai_confidence ? Number(o.wa_order_ai_confidence) : null,
+        created_at: o.wa_order_created_at.toISOString(),
+      })),
+      items: summaryItems,
+      messages: messages.map((m) => ({
+        id: m.id,
+        sender: m.wa_msg_sender_name,
+        body: m.wa_msg_body,
+        classification: m.wa_msg_ai_classified,
+        confidence: m.wa_msg_ai_confidence ? Number(m.wa_msg_ai_confidence) : null,
+        timestamp: m.wa_msg_timestamp?.toISOString() || null,
+      })),
+      order_mod_logs: orderModLogs,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 取得多天的每日 Order 總結列表
+  // ══════════════════════════════════════════════════════════════
+  async getDailySummaries(query: {
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { date_from, date_to, search, page = 1, limit = 20 } = query;
+
+    // 先找出有 order 的日期
+    const where: any = {};
+    if (date_from || date_to) {
+      where.wa_order_date = {};
+      if (date_from) where.wa_order_date.gte = new Date(date_from);
+      if (date_to) where.wa_order_date.lte = new Date(date_to);
+    }
+
+    const allOrders = await this.prisma.verificationWaOrder.findMany({
+      where,
+      select: { wa_order_date: true },
+      orderBy: { wa_order_date: 'desc' },
+    });
+
+    // 取得不重複的日期
+    const uniqueDates = [...new Set(
+      allOrders.map((o) => o.wa_order_date.toISOString().slice(0, 10)),
+    )].sort((a, b) => b.localeCompare(a)); // 最新日期在前
+
+    // 產生每天的總結
+    const summaries: DailySummary[] = [];
+    for (const dateStr of uniqueDates) {
+      const summary = await this.getDailySummary(dateStr);
+      if (!summary) continue;
+
+      // 搜尋過濾
+      if (search) {
+        const s = search.toLowerCase();
+        const matchesSearch = summary.items.some(
+          (item) =>
+            (item.vehicle_no && item.vehicle_no.toLowerCase().includes(s)) ||
+            (item.driver_nickname && item.driver_nickname.toLowerCase().includes(s)) ||
+            (item.customer && item.customer.toLowerCase().includes(s)) ||
+            (item.contract_no && item.contract_no.toLowerCase().includes(s)) ||
+            (item.machine_code && item.machine_code.toLowerCase().includes(s)) ||
+            (item.location && item.location.toLowerCase().includes(s)) ||
+            (item.work_description && item.work_description.toLowerCase().includes(s)),
+        );
+        if (!matchesSearch) continue;
+      }
+
+      summaries.push(summary);
+    }
+
+    const total = summaries.length;
+    const paged = summaries.slice((page - 1) * limit, page * limit);
+
+    return {
+      data: paged,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 同步每日總結到 verification_records（用於六來源交叉比對）
+  // 每次有新 order 或 modification 時調用
+  // ══════════════════════════════════════════════════════════════
+  private async syncDailySummaryToVerificationRecords(dateStr: string) {
     const source = await this.prisma.verificationSource.findUnique({
       where: { source_code: 'whatsapp_order' },
     });
     if (!source) {
-      this.logger.warn('whatsapp_order source not found, skipping sync to verification_records');
+      this.logger.warn('whatsapp_order source not found, skipping sync');
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const dateStr = classification.order_date || today;
-    const existingCount = await this.prisma.verificationBatch.count({
+    const summary = await this.getDailySummary(dateStr);
+    if (!summary) return;
+
+    // 刪除該日期的舊 verification_records（whatsapp_order 來源）
+    const existingBatches = await this.prisma.verificationBatch.findMany({
       where: {
-        batch_code: { startsWith: `BATCH-${today}-whatsapp_order` },
+        batch_source_id: source.id,
+        batch_code: { startsWith: `BATCH-${dateStr}-whatsapp_order-summary` },
       },
+      select: { id: true },
     });
-    const batchCode = `BATCH-${today}-whatsapp_order-${String(existingCount + 1).padStart(3, '0')}`;
+
+    if (existingBatches.length > 0) {
+      const batchIds = existingBatches.map((b) => b.id);
+      await this.prisma.verificationRecord.deleteMany({
+        where: { record_batch_id: { in: batchIds } },
+      });
+      await this.prisma.verificationBatch.deleteMany({
+        where: { id: { in: batchIds } },
+      });
+    }
+
+    // 只同步活躍的項目（非取消的）
+    const activeItems = summary.items.filter((item) => item.mod_status !== 'cancelled');
+    const transportItems = activeItems.filter(
+      (item) => item.vehicle_no || item.driver_nickname || item.machine_code,
+    );
+
+    if (transportItems.length === 0) return;
+
+    const orderDate = new Date(dateStr);
+    const batchCode = `BATCH-${dateStr}-whatsapp_order-summary`;
 
     const batch = await this.prisma.verificationBatch.create({
       data: {
         batch_code: batchCode,
         batch_source_id: source.id,
-        batch_file_name: `WhatsApp Order ${dateStr} from ${sender}`,
-        batch_total_rows: classification.items.length,
-        batch_filtered_rows: classification.items.length,
+        batch_file_name: `WhatsApp Daily Summary ${dateStr}`,
+        batch_total_rows: transportItems.length,
+        batch_filtered_rows: transportItems.length,
         batch_status: 'completed',
       },
     });
 
-    const transportItems = classification.items.filter(
-      (item) => item.vehicle_no || item.driver_nickname || item.machine_code,
-    );
-
-    if (transportItems.length > 0) {
-      await this.prisma.verificationRecord.createMany({
-        data: transportItems.map((item, idx) => ({
-          record_batch_id: batch.id,
-          record_source_id: source.id,
-          record_source_row_number: idx + 1,
-          record_work_date: orderDate,
-          record_vehicle_no: item.vehicle_no || null,
-          record_driver_name: item.driver_nickname || null,
-          record_customer: item.customer || null,
-          record_location_from: item.location || null,
-          record_location_to: null,
-          record_contract_no: item.contract_no || null,
-          record_employee_name: item.driver_nickname || null,
-          record_raw_data: item as any,
-        })),
-      });
-    }
+    await this.prisma.verificationRecord.createMany({
+      data: transportItems.map((item, idx) => ({
+        record_batch_id: batch.id,
+        record_source_id: source.id,
+        record_source_row_number: idx + 1,
+        record_work_date: orderDate,
+        record_vehicle_no: item.vehicle_no || null,
+        record_driver_name: item.driver_nickname || null,
+        record_customer: item.customer || null,
+        record_location_from: item.location || null,
+        record_location_to: null,
+        record_contract_no: item.contract_no || null,
+        record_employee_name: item.driver_nickname || null,
+        record_raw_data: item as any,
+      })),
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 取得 WhatsApp Orders 列表（含修改日誌）
+  // 取得每日總結的 items（供 matching service 使用）
+  // ══════════════════════════════════════════════════════════════
+  async getDailySummaryItemsForMatching(dateFrom: Date, dateTo: Date) {
+    const dateStart = new Date(dateFrom);
+    dateStart.setHours(0, 0, 0, 0);
+    const dateEnd = new Date(dateTo);
+    dateEnd.setHours(23, 59, 59, 999);
+
+    // 取得日期範圍內所有 order，按日期和版本排序
+    const orders = await this.prisma.verificationWaOrder.findMany({
+      where: {
+        wa_order_date: { gte: dateStart, lte: dateEnd },
+      },
+      include: {
+        items: true,
+      },
+      orderBy: [{ wa_order_date: 'asc' }, { wa_order_version: 'desc' }],
+    });
+
+    // 每天只取最新版本
+    const latestByDate = new Map<string, typeof orders[0]>();
+    for (const order of orders) {
+      const dateKey = order.wa_order_date.toISOString().slice(0, 10);
+      if (!latestByDate.has(dateKey) || order.wa_order_version > latestByDate.get(dateKey)!.wa_order_version) {
+        latestByDate.set(dateKey, order);
+      }
+    }
+
+    // 展平為 items，排除已取消的
+    return Array.from(latestByDate.values()).flatMap((o) =>
+      o.items
+        .filter((item) => item.wa_item_mod_status !== 'cancelled')
+        .map((item) => ({
+          ...item,
+          order_date: o.wa_order_date.toISOString().slice(0, 10),
+          order_status: o.wa_order_status,
+          order_version: o.wa_order_version,
+        })),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 保留的舊 API（向後兼容）
   // ══════════════════════════════════════════════════════════════
   async getWhatsappOrders(query: {
     page?: number;
@@ -823,13 +1161,11 @@ export class WhatsappService {
     const { page = 1, limit = 20, date_from, date_to, search } = query;
 
     const where: any = {};
-
     if (date_from || date_to) {
       where.wa_order_date = {};
       if (date_from) where.wa_order_date.gte = new Date(date_from);
       if (date_to) where.wa_order_date.lte = new Date(date_to);
     }
-
     if (search) {
       where.OR = [
         { wa_order_raw_text: { contains: search, mode: 'insensitive' } },
@@ -892,30 +1228,19 @@ export class WhatsappService {
           },
         },
       },
-      orderBy: [
-        { wa_order_date: 'desc' },
-        { wa_order_version: 'desc' },
-      ],
+      orderBy: [{ wa_order_date: 'desc' }, { wa_order_version: 'desc' }],
       skip: (page - 1) * limit,
       take: limit,
     });
 
     return {
       data: orders,
-      pagination: {
-        page,
-        limit,
-        total,
-        total_pages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 取得單筆 WhatsApp Order 詳情（含修改日誌）
-  // ══════════════════════════════════════════════════════════════
   async getWhatsappOrderDetail(orderId: number) {
-    const order = await this.prisma.verificationWaOrder.findUnique({
+    return this.prisma.verificationWaOrder.findUnique({
       where: { id: orderId },
       include: {
         message: true,
@@ -950,24 +1275,14 @@ export class WhatsappService {
         },
       },
     });
-
-    if (!order) {
-      return null;
-    }
-
-    return order;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 取得 WhatsApp Messages 列表（含分類結果）
-  // ══════════════════════════════════════════════════════════════
   async getWhatsappMessages(query: {
     page?: number;
     limit?: number;
     classification?: string;
   }) {
     const { page = 1, limit = 20, classification } = query;
-
     const where: any = {};
     if (classification && classification !== 'all') {
       where.wa_msg_ai_classified = classification;
@@ -994,12 +1309,7 @@ export class WhatsappService {
 
     return {
       data: messages,
-      pagination: {
-        page,
-        limit,
-        total,
-        total_pages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
   }
 }
