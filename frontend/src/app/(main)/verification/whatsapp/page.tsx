@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { verificationApi } from '@/lib/api';
 
 // ══════════════════════════════════════════════════════════════
@@ -25,6 +25,7 @@ interface ModLog {
 interface SummaryItem {
   id: number;
   seq: number;
+  order_type: string | null;
   contract_no: string | null;
   customer: string | null;
   work_description: string | null;
@@ -111,56 +112,76 @@ function formatDateTime(dateStr: string | null) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/** 從 remarks 中提取 staff_list */
+function extractStaffList(remarks: string | null): { staffList: string[]; teamLeader: string | null; cleanRemarks: string | null } {
+  if (!remarks) return { staffList: [], teamLeader: null, cleanRemarks: null };
+  let staffList: string[] = [];
+  let teamLeader: string | null = null;
+  const lines = remarks.split('\n');
+  const cleanLines: string[] = [];
+  for (const line of lines) {
+    const staffMatch = line.match(/^\[staff\]員工:\s*(.+)$/);
+    const leaderMatch = line.match(/^\[leader\]帶隊:\s*(.+)$/);
+    if (staffMatch) {
+      staffList = staffMatch[1].split(/[、,]/).map((s) => s.trim()).filter(Boolean);
+    } else if (leaderMatch) {
+      teamLeader = leaderMatch[1].trim();
+    } else {
+      cleanLines.push(line);
+    }
+  }
+  return { staffList, teamLeader, cleanRemarks: cleanLines.join('\n').trim() || null };
+}
+
+/** 按 order_type 分組 items */
+function groupItemsByType(items: SummaryItem[]) {
+  const machinery: SummaryItem[] = [];
+  const manpower: SummaryItem[] = [];
+  const transport: SummaryItem[] = [];
+  const other: SummaryItem[] = []; // notice, leave, idle, unknown
+  for (const item of items) {
+    switch (item.order_type) {
+      case 'machinery':
+      case 'idle':
+        machinery.push(item);
+        break;
+      case 'manpower':
+        manpower.push(item);
+        break;
+      case 'transport':
+        transport.push(item);
+        break;
+      default:
+        other.push(item);
+        break;
+    }
+  }
+  return { machinery, manpower, transport, other };
+}
+
 // ══════════════════════════════════════════════════════════════
-// 修改狀態標籤元件
+// 狀態標籤元件
 // ══════════════════════════════════════════════════════════════
 
 function ModStatusBadge({ status }: { status: string | null }) {
   if (!status) return null;
-  switch (status) {
-    case 'cancelled':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 font-medium">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-          已取消
-        </span>
-      );
-    case 'reassigned':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700 font-medium">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-          </svg>
-          已換人
-        </span>
-      );
-    case 'suspended':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          已暫停
-        </span>
-      );
-    case 'added':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          新增
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600 font-medium">
-          已修改
-        </span>
-      );
-  }
+  const config: Record<string, { label: string; icon: string; colors: string }> = {
+    cancelled: { label: '已取消', icon: 'M6 18L18 6M6 6l12 12', colors: 'bg-red-100 text-red-700' },
+    reassigned: { label: '已換人', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4', colors: 'bg-orange-100 text-orange-700' },
+    suspended: { label: '已暫停', icon: 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z', colors: 'bg-yellow-100 text-yellow-700' },
+    added: { label: '新增', icon: 'M12 4v16m8-8H4', colors: 'bg-green-100 text-green-700' },
+  };
+  const c = config[status] || { label: '已修改', icon: '', colors: 'bg-gray-100 text-gray-600' };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full font-medium ${c.colors}`}>
+      {c.icon && (
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={c.icon} />
+        </svg>
+      )}
+      {c.label}
+    </span>
+  );
 }
 
 function ModTypeBadge({ type }: { type: string }) {
@@ -192,6 +213,623 @@ function ClassificationBadge({ classification }: { classification: string | null
     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${c.bg} ${c.text}`}>
       {c.label}
     </span>
+  );
+}
+
+function OrderTypeBadge({ type }: { type: string | null }) {
+  const config: Record<string, { label: string; emoji: string; colors: string }> = {
+    machinery: { label: '機械', emoji: '', colors: 'bg-purple-100 text-purple-700 border-purple-200' },
+    manpower: { label: '人手', emoji: '', colors: 'bg-blue-100 text-blue-700 border-blue-200' },
+    transport: { label: '運輸', emoji: '', colors: 'bg-teal-100 text-teal-700 border-teal-200' },
+    idle: { label: '閒置', emoji: '', colors: 'bg-gray-100 text-gray-600 border-gray-200' },
+    notice: { label: '通知', emoji: '', colors: 'bg-amber-100 text-amber-700 border-amber-200' },
+    leave: { label: '請假', emoji: '', colors: 'bg-pink-100 text-pink-700 border-pink-200' },
+  };
+  const c = config[type || ''] || { label: type || '其他', emoji: '', colors: 'bg-gray-100 text-gray-600 border-gray-200' };
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 text-xs rounded-full font-medium border ${c.colors}`}>
+      {c.emoji} {c.label}
+    </span>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 修改歷史行（共用）
+// ══════════════════════════════════════════════════════════════
+
+function ModLogRow({ log }: { log: ModLog }) {
+  return (
+    <div className="flex items-start gap-2 mb-2 text-xs">
+      <ModTypeBadge type={log.mod_type} />
+      <div className="flex-1 min-w-0">
+        <div className="text-gray-700">{log.mod_description}</div>
+        {log.message && (
+          <div className="mt-0.5 bg-white rounded px-2 py-1 text-gray-500 border">
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="font-medium">{log.message.wa_msg_sender_name || '未知'}</span>
+              <span className="text-gray-300">|</span>
+              <span>{formatDateTime(log.message.wa_msg_timestamp)}</span>
+            </div>
+            <div className="mt-0.5 text-gray-600 whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
+              &ldquo;{(log.message.wa_msg_body || '').substring(0, 200)}{(log.message.wa_msg_body || '').length > 200 ? '...' : ''}&rdquo;
+            </div>
+          </div>
+        )}
+      </div>
+      <span className="text-gray-400 whitespace-nowrap flex-shrink-0">
+        {formatDateTime(log.mod_created_at)}
+      </span>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 行樣式和換人對比（共用）
+// ══════════════════════════════════════════════════════════════
+
+function getRowBg(item: SummaryItem) {
+  switch (item.mod_status) {
+    case 'cancelled': return 'bg-red-50 hover:bg-red-100/60';
+    case 'reassigned': return 'bg-orange-50 hover:bg-orange-100/60';
+    case 'suspended': return 'bg-yellow-50 hover:bg-yellow-100/60';
+    case 'added': return 'bg-green-50 hover:bg-green-100/60';
+    default: return item.is_suspended ? 'bg-yellow-50 hover:bg-yellow-100/60' : 'hover:bg-gray-50/60';
+  }
+}
+
+function ReassignInfo({ item }: { item: SummaryItem }) {
+  if (item.mod_status !== 'reassigned' || !item.mod_prev_data) return null;
+  const prev = item.mod_prev_data;
+  const changes: JSX.Element[] = [];
+  if (prev.wa_item_driver_nickname && prev.wa_item_driver_nickname !== item.driver_nickname) {
+    changes.push(
+      <span key="driver" className="inline-flex items-center gap-1 text-xs">
+        <span className="text-gray-400 line-through">{prev.wa_item_driver_nickname}</span>
+        <span className="text-orange-500">→</span>
+        <span className="font-medium text-orange-700">{item.driver_nickname}</span>
+      </span>
+    );
+  }
+  if (prev.wa_item_vehicle_no && prev.wa_item_vehicle_no !== item.vehicle_no) {
+    changes.push(
+      <span key="vehicle" className="inline-flex items-center gap-1 text-xs">
+        <span className="text-gray-400 line-through font-mono">{prev.wa_item_vehicle_no}</span>
+        <span className="text-orange-500">→</span>
+        <span className="font-medium text-orange-700 font-mono">{item.vehicle_no}</span>
+      </span>
+    );
+  }
+  if (changes.length === 0) return null;
+  return <div className="flex flex-col gap-0.5 mt-0.5">{changes}</div>;
+}
+
+function StatusCell({ item }: { item: SummaryItem }) {
+  return (
+    <div>
+      {item.mod_status ? (
+        <ModStatusBadge status={item.mod_status} />
+      ) : item.is_suspended ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">暫停</span>
+      ) : (
+        <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-400 font-medium">正常</span>
+      )}
+      <ReassignInfo item={item} />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 機械調配表格
+// ══════════════════════════════════════════════════════════════
+
+function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
+  items: SummaryItem[];
+  expandedItemLogs: Set<number>;
+  toggleItemLog: (id: number) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 border-b">
+        <OrderTypeBadge type="machinery" />
+        <span className="text-sm font-medium text-purple-800">機械調配</span>
+        <span className="text-xs text-purple-500">({items.length} 項)</span>
+      </div>
+      {/* 電腦版表格 */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs border-b">
+              <th className="px-3 py-2 text-left font-medium w-8">#</th>
+              <th className="px-3 py-2 text-left font-medium w-24">狀態</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">合約</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[120px]">地點</th>
+              <th className="px-3 py-2 text-left font-medium w-20">DC 編號</th>
+              <th className="px-3 py-2 text-left font-medium w-20">操作員</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[120px]">工作描述</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
+              <th className="px-3 py-2 w-6"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const isItemExpanded = expandedItemLogs.has(item.id);
+              const hasLogs = item.mod_logs.length > 0;
+              const isCancelled = item.mod_status === 'cancelled';
+              const textClass = isCancelled ? 'line-through text-gray-400' : '';
+              return (
+                <Fragment key={item.id}>
+                  <tr
+                    className={`border-b transition-colors ${getRowBg(item)} ${hasLogs ? 'cursor-pointer' : ''}`}
+                    onClick={() => hasLogs && toggleItemLog(item.id)}
+                  >
+                    <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
+                    <td className="px-3 py-2"><StatusCell item={item} /></td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.contract_no && <div className="font-mono font-medium">{item.contract_no}</div>}
+                      {item.customer && <div className="text-gray-500">{item.customer}</div>}
+                      {!item.contract_no && !item.customer && <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className={`px-3 py-2 text-xs max-w-[160px] ${textClass}`}>
+                      <div className="truncate" title={item.location || ''}>{item.location || '—'}</div>
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-mono font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-purple-700'}`}>
+                      {item.machine_code || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
+                      {item.driver_nickname || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs max-w-[150px] ${textClass}`}>
+                      <div className="truncate" title={item.work_description || ''}>{item.work_description || '—'}</div>
+                    </td>
+                    <td className={`px-3 py-2 text-xs text-gray-500 max-w-[120px] ${textClass}`}>
+                      <div className="truncate" title={item.remarks || ''}>{item.remarks || '—'}</div>
+                    </td>
+                    <td className="px-2 py-2 text-gray-400">
+                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    </td>
+                  </tr>
+                  {isItemExpanded && hasLogs && (
+                    <tr className="bg-orange-50/40">
+                      <td colSpan={9} className="px-4 py-3">
+                        <div className="border-l-2 border-orange-300 pl-3">
+                          <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
+                          {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* 手機版卡片 */}
+      <div className="md:hidden divide-y">
+        {items.map((item) => (
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 工程部員工表格
+// ══════════════════════════════════════════════════════════════
+
+function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
+  items: SummaryItem[];
+  expandedItemLogs: Set<number>;
+  toggleItemLog: (id: number) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-b">
+        <OrderTypeBadge type="manpower" />
+        <span className="text-sm font-medium text-blue-800">工程部員工</span>
+        <span className="text-xs text-blue-500">({items.length} 項)</span>
+      </div>
+      {/* 電腦版表格 */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs border-b">
+              <th className="px-3 py-2 text-left font-medium w-8">#</th>
+              <th className="px-3 py-2 text-left font-medium w-24">狀態</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">合約</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[140px]">工作描述</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">地點</th>
+              <th className="px-3 py-2 text-left font-medium w-20">帶隊人</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[200px]">員工列表</th>
+              <th className="px-3 py-2 text-left font-medium w-14">人數</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
+              <th className="px-3 py-2 w-6"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const isItemExpanded = expandedItemLogs.has(item.id);
+              const hasLogs = item.mod_logs.length > 0;
+              const isCancelled = item.mod_status === 'cancelled';
+              const textClass = isCancelled ? 'line-through text-gray-400' : '';
+              const { staffList, teamLeader, cleanRemarks } = extractStaffList(item.remarks);
+              // driver_nickname 可能存了 team_leader
+              const leader = teamLeader || item.driver_nickname;
+              const staffCount = staffList.length + (leader ? 1 : 0);
+
+              return (
+                <Fragment key={item.id}>
+                  <tr
+                    className={`border-b transition-colors ${getRowBg(item)} ${hasLogs ? 'cursor-pointer' : ''}`}
+                    onClick={() => hasLogs && toggleItemLog(item.id)}
+                  >
+                    <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
+                    <td className="px-3 py-2"><StatusCell item={item} /></td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.contract_no ? <span className="font-mono font-medium">{item.contract_no}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className={`px-3 py-2 text-xs max-w-[180px] ${textClass}`}>
+                      <div className="truncate" title={item.work_description || ''}>{item.work_description || '—'}</div>
+                    </td>
+                    <td className={`px-3 py-2 text-xs max-w-[140px] ${textClass}`}>
+                      <div className="truncate" title={item.location || ''}>{item.location || '—'}</div>
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${isCancelled ? 'line-through text-gray-400' : 'text-blue-700'}`}>
+                      {leader || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {staffList.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {staffList.map((s, i) => (
+                            <span key={i} className="inline-block bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 text-blue-700 text-[11px]">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 text-xs text-center ${textClass}`}>
+                      {staffCount > 0 ? (
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
+                          {staffCount}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs text-gray-500 max-w-[100px] ${textClass}`}>
+                      <div className="truncate" title={cleanRemarks || ''}>{cleanRemarks || '—'}</div>
+                    </td>
+                    <td className="px-2 py-2 text-gray-400">
+                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    </td>
+                  </tr>
+                  {isItemExpanded && hasLogs && (
+                    <tr className="bg-orange-50/40">
+                      <td colSpan={10} className="px-4 py-3">
+                        <div className="border-l-2 border-orange-300 pl-3">
+                          <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
+                          {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* 手機版卡片 */}
+      <div className="md:hidden divide-y">
+        {items.map((item) => (
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 泥車/運輸表格
+// ══════════════════════════════════════════════════════════════
+
+function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
+  items: SummaryItem[];
+  expandedItemLogs: Set<number>;
+  toggleItemLog: (id: number) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-4 py-2 bg-teal-50 border-b">
+        <OrderTypeBadge type="transport" />
+        <span className="text-sm font-medium text-teal-800">泥車/運輸</span>
+        <span className="text-xs text-teal-500">({items.length} 項)</span>
+      </div>
+      {/* 電腦版表格 */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs border-b">
+              <th className="px-3 py-2 text-left font-medium w-8">#</th>
+              <th className="px-3 py-2 text-left font-medium w-24">狀態</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">客戶</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[80px]">合約</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[160px]">路線/工作描述</th>
+              <th className="px-3 py-2 text-left font-medium w-20">司機</th>
+              <th className="px-3 py-2 text-left font-medium w-20">車牌</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">聯絡人</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
+              <th className="px-3 py-2 w-6"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const isItemExpanded = expandedItemLogs.has(item.id);
+              const hasLogs = item.mod_logs.length > 0;
+              const isCancelled = item.mod_status === 'cancelled';
+              const textClass = isCancelled ? 'line-through text-gray-400' : '';
+              return (
+                <Fragment key={item.id}>
+                  <tr
+                    className={`border-b transition-colors ${getRowBg(item)} ${hasLogs ? 'cursor-pointer' : ''}`}
+                    onClick={() => hasLogs && toggleItemLog(item.id)}
+                  >
+                    <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
+                    <td className="px-3 py-2"><StatusCell item={item} /></td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
+                      {item.customer || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.contract_no ? <span className="font-mono">{item.contract_no}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className={`px-3 py-2 text-xs max-w-[200px] ${textClass}`}>
+                      <div className="truncate" title={`${item.work_description || ''} ${item.location || ''}`}>
+                        {item.location || item.work_description || '—'}
+                      </div>
+                      {item.location && item.work_description && item.location !== item.work_description && (
+                        <div className="text-gray-400 truncate text-[10px]">{item.work_description}</div>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${isCancelled ? 'line-through text-gray-400' : 'text-teal-700'}`}>
+                      {item.driver_nickname || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-mono font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-teal-700'}`}>
+                      {item.vehicle_no || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.contact_person || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs text-gray-500 max-w-[100px] ${textClass}`}>
+                      <div className="truncate" title={item.remarks || ''}>{item.remarks || '—'}</div>
+                    </td>
+                    <td className="px-2 py-2 text-gray-400">
+                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    </td>
+                  </tr>
+                  {isItemExpanded && hasLogs && (
+                    <tr className="bg-orange-50/40">
+                      <td colSpan={10} className="px-4 py-3">
+                        <div className="border-l-2 border-orange-300 pl-3">
+                          <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
+                          {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* 手機版卡片 */}
+      <div className="md:hidden divide-y">
+        {items.map((item) => (
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 其他/雜項表格（通知、請假等）
+// ══════════════════════════════════════════════════════════════
+
+function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
+  items: SummaryItem[];
+  expandedItemLogs: Set<number>;
+  toggleItemLog: (id: number) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b">
+        <OrderTypeBadge type="notice" />
+        <span className="text-sm font-medium text-amber-800">其他/雜項</span>
+        <span className="text-xs text-amber-500">({items.length} 項)</span>
+      </div>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs border-b">
+              <th className="px-3 py-2 text-left font-medium w-8">#</th>
+              <th className="px-3 py-2 text-left font-medium w-24">類型</th>
+              <th className="px-3 py-2 text-left font-medium w-24">狀態</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[140px]">描述</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">人員</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[120px]">備註</th>
+              <th className="px-3 py-2 w-6"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const isItemExpanded = expandedItemLogs.has(item.id);
+              const hasLogs = item.mod_logs.length > 0;
+              const isCancelled = item.mod_status === 'cancelled';
+              const textClass = isCancelled ? 'line-through text-gray-400' : '';
+              return (
+                <Fragment key={item.id}>
+                  <tr
+                    className={`border-b transition-colors ${getRowBg(item)} ${hasLogs ? 'cursor-pointer' : ''}`}
+                    onClick={() => hasLogs && toggleItemLog(item.id)}
+                  >
+                    <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
+                    <td className="px-3 py-2"><OrderTypeBadge type={item.order_type} /></td>
+                    <td className="px-3 py-2"><StatusCell item={item} /></td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.work_description || item.location || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
+                      {item.driver_nickname || '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-xs text-gray-500 ${textClass}`}>
+                      {item.remarks || '—'}
+                    </td>
+                    <td className="px-2 py-2 text-gray-400">
+                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    </td>
+                  </tr>
+                  {isItemExpanded && hasLogs && (
+                    <tr className="bg-orange-50/40">
+                      <td colSpan={7} className="px-4 py-3">
+                        <div className="border-l-2 border-orange-300 pl-3">
+                          <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
+                          {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="md:hidden divide-y">
+        {items.map((item) => (
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 手機版卡片（共用）
+// ══════════════════════════════════════════════════════════════
+
+function MobileItemCard({ item, expandedItemLogs, toggleItemLog }: {
+  item: SummaryItem;
+  expandedItemLogs: Set<number>;
+  toggleItemLog: (id: number) => void;
+}) {
+  const isItemExpanded = expandedItemLogs.has(item.id);
+  const hasLogs = item.mod_logs.length > 0;
+  const isCancelled = item.mod_status === 'cancelled';
+  const cardBg = (() => {
+    switch (item.mod_status) {
+      case 'cancelled': return 'bg-red-50';
+      case 'reassigned': return 'bg-orange-50';
+      case 'suspended': return 'bg-yellow-50';
+      case 'added': return 'bg-green-50';
+      default: return item.is_suspended ? 'bg-yellow-50' : 'bg-white';
+    }
+  })();
+  const { staffList, teamLeader, cleanRemarks } = extractStaffList(item.remarks);
+
+  return (
+    <div className={`${cardBg} px-4 py-3`}>
+      <div
+        className={`flex items-center justify-between mb-2 ${hasLogs ? 'cursor-pointer' : ''}`}
+        onClick={() => hasLogs && toggleItemLog(item.id)}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-400 font-mono">#{item.seq}</span>
+          <OrderTypeBadge type={item.order_type} />
+          <StatusCell item={item} />
+        </div>
+        {hasLogs && (
+          <span className={`text-xs text-gray-400 transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>
+        )}
+      </div>
+
+      <div className={`grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mt-2 ${isCancelled ? 'line-through text-gray-400' : ''}`}>
+        {(item.customer || item.contract_no) && (
+          <div>
+            <div className="text-gray-400 text-[10px]">客戶/合約</div>
+            <div className="font-medium">{item.customer || '—'}</div>
+            {item.contract_no && <div className="text-gray-400 font-mono text-[10px]">{item.contract_no}</div>}
+          </div>
+        )}
+        {item.work_description && (
+          <div>
+            <div className="text-gray-400 text-[10px]">工作描述</div>
+            <div>{item.work_description}</div>
+          </div>
+        )}
+        {item.location && (
+          <div>
+            <div className="text-gray-400 text-[10px]">地點/路線</div>
+            <div>{item.location}</div>
+          </div>
+        )}
+        {item.driver_nickname && (
+          <div>
+            <div className="text-gray-400 text-[10px]">{item.order_type === 'manpower' ? '帶隊人' : item.order_type === 'machinery' ? '操作員' : '司機'}</div>
+            <div className="font-medium">{item.driver_nickname}</div>
+          </div>
+        )}
+        {item.vehicle_no && (
+          <div>
+            <div className="text-gray-400 text-[10px]">車牌</div>
+            <div className="font-mono">{item.vehicle_no}</div>
+          </div>
+        )}
+        {item.machine_code && (
+          <div>
+            <div className="text-gray-400 text-[10px]">DC 編號</div>
+            <div className="font-mono font-bold">{item.machine_code}</div>
+          </div>
+        )}
+        {staffList.length > 0 && (
+          <div className="col-span-2">
+            <div className="text-gray-400 text-[10px]">員工列表 ({staffList.length}人)</div>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {staffList.map((s, i) => (
+                <span key={i} className="inline-block bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 text-blue-700 text-[11px]">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {item.contact_person && (
+          <div>
+            <div className="text-gray-400 text-[10px]">聯絡人</div>
+            <div>{item.contact_person}</div>
+          </div>
+        )}
+        {(cleanRemarks || (!staffList.length && item.remarks)) && (
+          <div className="col-span-2">
+            <div className="text-gray-400 text-[10px]">備註</div>
+            <div className="text-gray-500">{cleanRemarks || item.remarks}</div>
+          </div>
+        )}
+      </div>
+
+      {isItemExpanded && hasLogs && (
+        <div className="mt-3 border-l-2 border-orange-300 pl-3">
+          <div className="text-xs font-medium text-gray-500 mb-1.5">修改歷史 ({item.mod_logs.length})</div>
+          {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -260,63 +898,13 @@ export default function WhatsAppDailySummaryPage() {
     });
   };
 
-  // ── 項目行樣式 ────────────────────────────────────────────
-  const getItemRowClass = (item: SummaryItem) => {
-    switch (item.mod_status) {
-      case 'cancelled':
-        return 'bg-red-50';
-      case 'reassigned':
-        return 'bg-orange-50';
-      case 'suspended':
-        return 'bg-yellow-50';
-      case 'added':
-        return 'bg-green-50';
-      default:
-        if (item.is_suspended) return 'bg-yellow-50';
-        return '';
-    }
-  };
-
-  // ── 換人前後對比 ──────────────────────────────────────────
-  const renderReassignInfo = (item: SummaryItem) => {
-    if (item.mod_status !== 'reassigned' || !item.mod_prev_data) return null;
-    const prev = item.mod_prev_data;
-    const changes: JSX.Element[] = [];
-
-    if (prev.wa_item_driver_nickname && prev.wa_item_driver_nickname !== item.driver_nickname) {
-      changes.push(
-        <span key="driver" className="inline-flex items-center gap-1 text-xs">
-          <span className="text-gray-400 line-through">{prev.wa_item_driver_nickname}</span>
-          <svg className="w-3 h-3 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-          <span className="font-medium text-orange-700">{item.driver_nickname}</span>
-        </span>
-      );
-    }
-    if (prev.wa_item_vehicle_no && prev.wa_item_vehicle_no !== item.vehicle_no) {
-      changes.push(
-        <span key="vehicle" className="inline-flex items-center gap-1 text-xs">
-          <span className="text-gray-400 line-through font-mono">{prev.wa_item_vehicle_no}</span>
-          <svg className="w-3 h-3 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-          <span className="font-medium text-orange-700 font-mono">{item.vehicle_no}</span>
-        </span>
-      );
-    }
-
-    if (changes.length === 0) return null;
-    return <div className="flex flex-col gap-0.5 mt-1">{changes}</div>;
-  };
-
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* ── 標題 ────────────────────────────────────────────── */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">每日 Order 總結</h1>
         <p className="text-sm text-gray-500 mt-1">
-          合併同一天所有 WhatsApp order 和修改指令，顯示最終版本。用於六來源交叉比對的基礎數據。
+          合併同一天所有 WhatsApp order 和修改指令，按機械調配、工程部員工、泥車/運輸三種類型分區顯示。
         </p>
       </div>
 
@@ -347,7 +935,7 @@ export default function WhatsAppDailySummaryPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="車牌、司機、客戶、合約號..."
+              placeholder="車牌、司機、DC編號、合約號、員工..."
               className="border rounded px-3 py-1.5 text-sm w-full"
             />
           </div>
@@ -381,7 +969,15 @@ export default function WhatsAppDailySummaryPage() {
         const isExpanded = expandedDates.has(summary.date);
         const showMessages = expandedMessages.has(summary.date);
         const latestVersion = summary.versions[summary.versions.length - 1];
-        const hasModifications = summary.cancelled_items + summary.suspended_items + summary.reassigned_items + summary.added_items > 0;
+        const grouped = groupItemsByType(summary.items);
+
+        // 各類型統計
+        const typeCounts = [
+          grouped.machinery.length > 0 ? `機械 ${grouped.machinery.length}` : '',
+          grouped.manpower.length > 0 ? `人手 ${grouped.manpower.length}` : '',
+          grouped.transport.length > 0 ? `運輸 ${grouped.transport.length}` : '',
+          grouped.other.length > 0 ? `其他 ${grouped.other.length}` : '',
+        ].filter(Boolean);
 
         return (
           <div key={summary.date} className="bg-white rounded-lg shadow-sm border mb-4 overflow-hidden">
@@ -390,7 +986,7 @@ export default function WhatsAppDailySummaryPage() {
               className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition"
               onClick={() => toggleDate(summary.date)}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-lg font-semibold text-gray-900">
                   {formatDate(summary.date)}
                 </span>
@@ -407,25 +1003,21 @@ export default function WhatsAppDailySummaryPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-gray-600">
-                  {summary.active_items} 項有效
-                  {summary.total_items !== summary.active_items && (
-                    <span className="text-gray-400"> / {summary.total_items} 總計</span>
-                  )}
-                </span>
-                {summary.cancelled_items > 0 && (
-                  <span className="text-red-500">{summary.cancelled_items} 取消</span>
-                )}
-                {summary.suspended_items > 0 && (
-                  <span className="text-yellow-600">{summary.suspended_items} 暫停</span>
-                )}
-                {summary.reassigned_items > 0 && (
-                  <span className="text-orange-500">{summary.reassigned_items} 換人</span>
-                )}
-                {summary.added_items > 0 && (
-                  <span className="text-green-600">{summary.added_items} 新增</span>
-                )}
+              <div className="flex items-center gap-3 text-sm flex-wrap">
+                {/* 類型統計 */}
+                <div className="flex gap-2 text-xs">
+                  {typeCounts.map((tc) => (
+                    <span key={tc} className="text-gray-500">{tc}</span>
+                  ))}
+                </div>
+
+                {/* 修改統計 */}
+                <div className="flex gap-2 text-xs">
+                  {summary.cancelled_items > 0 && <span className="text-red-500">{summary.cancelled_items} 取消</span>}
+                  {summary.suspended_items > 0 && <span className="text-yellow-600">{summary.suspended_items} 暫停</span>}
+                  {summary.reassigned_items > 0 && <span className="text-orange-500">{summary.reassigned_items} 換人</span>}
+                  {summary.added_items > 0 && <span className="text-green-600">{summary.added_items} 新增</span>}
+                </div>
 
                 <span className={`transition-transform text-gray-400 ${isExpanded ? 'rotate-180' : ''}`}>
                   ▼
@@ -436,290 +1028,11 @@ export default function WhatsAppDailySummaryPage() {
             {/* ── 展開的總結內容 ──────────────────────────── */}
             {isExpanded && (
               <div className="border-t">
-                {/* ══════════════════════════════════════════
-                    工作項目 — 電腦版表格 (md+)
-                ══════════════════════════════════════════ */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-600 text-xs border-b">
-                        <th className="px-3 py-2 text-left font-medium w-8">#</th>
-                        <th className="px-3 py-2 text-left font-medium w-28">狀態</th>
-                        <th className="px-3 py-2 text-left font-medium min-w-[110px]">客戶/合約</th>
-                        <th className="px-3 py-2 text-left font-medium min-w-[140px]">工作描述</th>
-                        <th className="px-3 py-2 text-left font-medium min-w-[100px]">地點/路線</th>
-                        <th className="px-3 py-2 text-left font-medium w-20">司機</th>
-                        <th className="px-3 py-2 text-left font-medium w-20">車牌</th>
-                        <th className="px-3 py-2 text-left font-medium w-16">機械</th>
-                        <th className="px-3 py-2 text-left font-medium w-20">飛仔窩</th>
-                        <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
-                        <th className="px-3 py-2 w-6"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {summary.items.map((item) => {
-                        const isItemExpanded = expandedItemLogs.has(item.id);
-                        const hasLogs = item.mod_logs.length > 0;
-                        const isCancelled = item.mod_status === 'cancelled';
-                        const rowBg = (() => {
-                          switch (item.mod_status) {
-                            case 'cancelled': return 'bg-red-50 hover:bg-red-100/60';
-                            case 'reassigned': return 'bg-orange-50 hover:bg-orange-100/60';
-                            case 'suspended': return 'bg-yellow-50 hover:bg-yellow-100/60';
-                            case 'added': return 'bg-green-50 hover:bg-green-100/60';
-                            default: return item.is_suspended ? 'bg-yellow-50 hover:bg-yellow-100/60' : 'hover:bg-gray-50/60';
-                          }
-                        })();
-                        const textClass = isCancelled ? 'line-through text-gray-400' : '';
-
-                        return (
-                          <>
-                            {/* ── 主資料行 ── */}
-                            <tr
-                              key={`row-${item.id}`}
-                              className={`border-b transition-colors ${rowBg} ${hasLogs ? 'cursor-pointer' : ''}`}
-                              onClick={() => hasLogs && toggleItemLog(item.id)}
-                            >
-                              {/* # */}
-                              <td className={`px-3 py-2 text-gray-400 text-xs align-middle ${isCancelled ? 'line-through' : ''}`}>
-                                {item.seq}
-                              </td>
-
-                              {/* 狀態 */}
-                              <td className="px-3 py-2 align-middle">
-                                {item.mod_status ? (
-                                  <ModStatusBadge status={item.mod_status} />
-                                ) : item.is_suspended ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">⏸ 暫停</span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-400 font-medium">正常</span>
-                                )}
-                                {renderReassignInfo(item)}
-                              </td>
-
-                              {/* 客戶/合約 */}
-                              <td className={`px-3 py-2 align-middle text-xs ${textClass}`}>
-                                <div className="font-medium text-gray-800">{item.customer || '—'}</div>
-                                {item.contract_no && <div className="text-gray-400 font-mono">{item.contract_no}</div>}
-                              </td>
-
-                              {/* 工作描述 */}
-                              <td className={`px-3 py-2 align-middle text-xs max-w-[180px] ${textClass}`}>
-                                <div className="truncate" title={item.work_description || ''}>
-                                  {item.work_description || '—'}
-                                </div>
-                              </td>
-
-                              {/* 地點/路線 */}
-                              <td className={`px-3 py-2 align-middle text-xs max-w-[140px] ${textClass}`}>
-                                <div className="truncate" title={item.location || ''}>
-                                  {item.location || '—'}
-                                </div>
-                              </td>
-
-                              {/* 司機 */}
-                              <td className={`px-3 py-2 align-middle text-xs font-medium ${textClass}`}>
-                                {item.driver_nickname || '—'}
-                              </td>
-
-                              {/* 車牌 */}
-                              <td className={`px-3 py-2 align-middle text-xs font-mono ${textClass}`}>
-                                {item.vehicle_no || '—'}
-                              </td>
-
-                              {/* 機械 */}
-                              <td className={`px-3 py-2 align-middle text-xs font-mono ${textClass}`}>
-                                {item.machine_code || '—'}
-                              </td>
-
-                              {/* 飛仔窩 */}
-                              <td className={`px-3 py-2 align-middle text-xs ${textClass}`}>
-                                {item.slip_write_as || '—'}
-                              </td>
-
-                              {/* 備註 */}
-                              <td className={`px-3 py-2 align-middle text-xs text-gray-500 max-w-[120px] ${textClass}`}>
-                                <div className="truncate" title={item.remarks || ''}>
-                                  {item.remarks || '—'}
-                                </div>
-                              </td>
-
-                              {/* 展開箭頭 */}
-                              <td className="px-2 py-2 align-middle text-gray-400">
-                                {hasLogs && (
-                                  <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>
-                                )}
-                              </td>
-                            </tr>
-
-                            {/* ── 修改歷史展開行 ── */}
-                            {isItemExpanded && hasLogs && (
-                              <tr key={`log-${item.id}`} className="bg-orange-50/40">
-                                <td colSpan={11} className="px-4 py-3">
-                                  <div className="border-l-2 border-orange-300 pl-3">
-                                    <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
-                                    {item.mod_logs.map((log) => (
-                                      <div key={log.id} className="flex items-start gap-2 mb-2 text-xs">
-                                        <ModTypeBadge type={log.mod_type} />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="text-gray-700">{log.mod_description}</div>
-                                          {log.message && (
-                                            <div className="mt-0.5 bg-white rounded px-2 py-1 text-gray-500 border">
-                                              <div className="flex items-center gap-1">
-                                                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                                </svg>
-                                                <span className="font-medium">{log.message.wa_msg_sender_name || '未知'}</span>
-                                                <span className="text-gray-300">|</span>
-                                                <span>{formatDateTime(log.message.wa_msg_timestamp)}</span>
-                                              </div>
-                                              <div className="mt-0.5 text-gray-600 whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
-                                                &ldquo;{(log.message.wa_msg_body || '').substring(0, 200)}{(log.message.wa_msg_body || '').length > 200 ? '...' : ''}&rdquo;
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <span className="text-gray-400 whitespace-nowrap flex-shrink-0">
-                                          {formatDateTime(log.mod_created_at)}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* ══════════════════════════════════════════
-                    工作項目 — 手機版卡片 (sm 以下)
-                ══════════════════════════════════════════ */}
-                <div className="md:hidden divide-y">
-                  {summary.items.map((item) => {
-                    const isItemExpanded = expandedItemLogs.has(item.id);
-                    const hasLogs = item.mod_logs.length > 0;
-                    const isCancelled = item.mod_status === 'cancelled';
-                    const cardBg = (() => {
-                      switch (item.mod_status) {
-                        case 'cancelled': return 'bg-red-50';
-                        case 'reassigned': return 'bg-orange-50';
-                        case 'suspended': return 'bg-yellow-50';
-                        case 'added': return 'bg-green-50';
-                        default: return item.is_suspended ? 'bg-yellow-50' : 'bg-white';
-                      }
-                    })();
-
-                    return (
-                      <div key={item.id} className={`${cardBg} px-4 py-3`}>
-                        {/* 卡片標題列 */}
-                        <div
-                          className={`flex items-center justify-between mb-2 ${hasLogs ? 'cursor-pointer' : ''}`}
-                          onClick={() => hasLogs && toggleItemLog(item.id)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-400 font-mono">#{item.seq}</span>
-                            {item.mod_status ? (
-                              <ModStatusBadge status={item.mod_status} />
-                            ) : item.is_suspended ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">⏸ 暫停</span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-400 font-medium">正常</span>
-                            )}
-                          </div>
-                          {hasLogs && (
-                            <span className={`text-xs text-gray-400 transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>
-                          )}
-                        </div>
-
-                        {/* 換人對比 */}
-                        {renderReassignInfo(item)}
-
-                        {/* 卡片欄位 */}
-                        <div className={`grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mt-2 ${isCancelled ? 'line-through text-gray-400' : ''}`}>
-                          {(item.customer || item.contract_no) && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">客戶/合約</div>
-                              <div className="font-medium">{item.customer || '—'}</div>
-                              {item.contract_no && <div className="text-gray-400 font-mono text-[10px]">{item.contract_no}</div>}
-                            </div>
-                          )}
-                          {item.work_description && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">工作描述</div>
-                              <div>{item.work_description}</div>
-                            </div>
-                          )}
-                          {item.location && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">地點/路線</div>
-                              <div>{item.location}</div>
-                            </div>
-                          )}
-                          {item.driver_nickname && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">司機</div>
-                              <div className="font-medium">{item.driver_nickname}</div>
-                            </div>
-                          )}
-                          {item.vehicle_no && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">車牌</div>
-                              <div className="font-mono">{item.vehicle_no}</div>
-                            </div>
-                          )}
-                          {item.machine_code && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">機械</div>
-                              <div className="font-mono">{item.machine_code}</div>
-                            </div>
-                          )}
-                          {item.slip_write_as && (
-                            <div>
-                              <div className="text-gray-400 text-[10px]">飛仔窩</div>
-                              <div>{item.slip_write_as}</div>
-                            </div>
-                          )}
-                          {item.remarks && (
-                            <div className="col-span-2">
-                              <div className="text-gray-400 text-[10px]">備註</div>
-                              <div className="text-gray-500">{item.remarks}</div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 修改歷史（手機版展開）*/}
-                        {isItemExpanded && hasLogs && (
-                          <div className="mt-3 border-l-2 border-orange-300 pl-3">
-                            <div className="text-xs font-medium text-gray-500 mb-1.5">修改歷史 ({item.mod_logs.length})</div>
-                            {item.mod_logs.map((log) => (
-                              <div key={log.id} className="flex items-start gap-2 mb-2 text-xs">
-                                <ModTypeBadge type={log.mod_type} />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-gray-700">{log.mod_description}</div>
-                                  {log.message && (
-                                    <div className="mt-0.5 bg-white rounded px-2 py-1 text-gray-500 border">
-                                      <div className="flex items-center gap-1 flex-wrap">
-                                        <span className="font-medium">{log.message.wa_msg_sender_name || '未知'}</span>
-                                        <span className="text-gray-400">{formatDateTime(log.message.wa_msg_timestamp)}</span>
-                                      </div>
-                                      <div className="mt-0.5 text-gray-600 whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
-                                        &ldquo;{(log.message.wa_msg_body || '').substring(0, 150)}{(log.message.wa_msg_body || '').length > 150 ? '...' : ''}&rdquo;
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* 三種類型分區顯示 */}
+                <MachineryTable items={grouped.machinery} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+                <ManpowerTable items={grouped.manpower} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+                <TransportTable items={grouped.transport} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+                <OtherTable items={grouped.other} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
 
                 {/* ── Order 級別修改日誌 ──────────────────── */}
                 {summary.order_mod_logs.length > 0 && (
@@ -739,8 +1052,8 @@ export default function WhatsAppDailySummaryPage() {
                             <div className="mt-0.5 text-gray-400">
                               {log.message.wa_msg_sender_name} — {formatDateTime(log.message.wa_msg_timestamp)}
                               {log.message.wa_msg_body && (
-                                <span className="ml-1 text-gray-500">
-                                  &ldquo;{(log.message.wa_msg_body).substring(0, 80)}{(log.message.wa_msg_body).length > 80 ? '...' : ''}&rdquo;
+                                <span className="ml-1">
+                                  &ldquo;{log.message.wa_msg_body.substring(0, 80)}{log.message.wa_msg_body.length > 80 ? '...' : ''}&rdquo;
                                 </span>
                               )}
                             </div>

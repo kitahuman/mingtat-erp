@@ -69,6 +69,7 @@ interface AiModification {
 export interface DailySummaryItem {
   id: number;
   seq: number;
+  order_type: string | null; // machinery | manpower | transport | notice | leave
   contract_no: string | null;
   customer: string | null;
   work_description: string | null;
@@ -421,30 +422,35 @@ export class WhatsappService {
     // 存入 order items
     if (classification.items.length > 0) {
       await this.prisma.verificationWaOrderItem.createMany({
-        data: classification.items.map((item, idx) => ({
-          wa_item_order_id: waOrder.id,
-          wa_item_seq: item.seq || idx + 1,
-          wa_item_contract_no: item.contract_no || null,
-          wa_item_customer: item.customer || null,
-          wa_item_work_desc: item.work_description || null,
-          wa_item_location: item.location || null,
-          // transport: 司機花名; manpower: 帶隊人
-          wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
-          wa_item_driver_id: null,
-          wa_item_vehicle_no: item.vehicle_no || null,
-          wa_item_machine_code: item.machine_code || null,
-          wa_item_contact_person: item.contact_person || null,
-          wa_item_slip_write_as: item.slip_write_as || null,
-          wa_item_is_suspended: item.is_suspended || false,
-          // manpower: staff_list 序列化存入 remarks（格式: "[staff]員工: 小明,小紅\n備註: xxx"）
-          wa_item_remarks: (
-            item.staff_list && item.staff_list.length > 0
-              ? `[staff]員工: ${item.staff_list.join(', ')}${item.remarks ? '\n' + item.remarks : ''}`
-              : item.remarks || null
-          ),
-          wa_item_mod_status: null,
-          wa_item_mod_prev_data: undefined,
-        })),
+        data: classification.items.map((item, idx) => {
+          // 組合 remarks：staff_list + team_leader + 原始 remarks
+          const remarkParts: string[] = [];
+          if (item.team_leader) remarkParts.push(`[leader]帶隊: ${item.team_leader}`);
+          if (item.staff_list && item.staff_list.length > 0) remarkParts.push(`[staff]員工: ${item.staff_list.join('、')}`);
+          if (item.remarks) remarkParts.push(item.remarks);
+          const combinedRemarks = remarkParts.length > 0 ? remarkParts.join('\n') : null;
+
+          return {
+            wa_item_order_id: waOrder.id,
+            wa_item_seq: item.seq || idx + 1,
+            wa_item_order_type: item.order_type || null,
+            wa_item_contract_no: item.contract_no || null,
+            wa_item_customer: item.customer || null,
+            wa_item_work_desc: item.work_description || null,
+            wa_item_location: item.location || null,
+            // transport/machinery: 司機/操作員花名; manpower: 帶隊人
+            wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
+            wa_item_driver_id: null,
+            wa_item_vehicle_no: item.vehicle_no || null,
+            wa_item_machine_code: item.machine_code || null,
+            wa_item_contact_person: item.contact_person || null,
+            wa_item_slip_write_as: item.slip_write_as || null,
+            wa_item_is_suspended: item.is_suspended || false,
+            wa_item_remarks: combinedRemarks,
+            wa_item_mod_status: null,
+            wa_item_mod_prev_data: undefined,
+          };
+        }),
       });
     }
 
@@ -798,37 +804,126 @@ export class WhatsappService {
 ## 訊息類型判斷
 
 ### order（完整工作分配）
-包含日期 + 多個工作分配項目，有三種子格式：
+包含日期 + 多個工作分配項目。一條 order 訊息只會是以下三種之一（不會混合）：
 
-**A. 機械 order**（以 DC 機械編號為主）
+**A. 機械 order（order_type: "machinery"）**
+特徵：以 DC 機械編號為主
+解析規則：
 - 以合約號分組（如 T24w022、PA13114、3802、3310WH-X451）
-- DC + 數字 = 機械編號，可能有空格（DC 14、D C13、DC06 都是同一種，統一為 DC14）
-- DC 編號後緊跟操作員花名（如 DC07泉、DC15強、DC10～平哥）
-- 「～暫停」或「暫停」= 該合約或機械暫停
-- 只有機械編號 + 停放位置（如「DC17 DC05 係3跑西架步」）= 閒置/待命機械
+- DC + 數字 = 機械編號，格式不規則（DC 14、D C13、DC06、D C 22），統一為 "DC" + 數字（如 DC14、DC03、DC22）
+- DC 編號後面可能緊跟操作員花名（如 DC07泉→機械:DC07 操作員:泉；DC15強→機械:DC15 操作員:強；DC10～平哥→機械:DC10 操作員:平哥）
+- ⚠️ 重要：每個 DC 編號必須拆成獨立的 item！即使在同一合約下有多個 DC，每個 DC 都是一筆獨立記錄
+- ⚠️ 重要：如果合約整體標記「暫停」，該合約下所有 DC 的 is_suspended 都為 true
+- ⚠️ 重要：如果個別 DC 標記「暫停」（如 DC04～暫停），只有該 DC 的 is_suspended 為 true，同合約其他 DC 不受影響
+- 只有機械編號 + 停放位置、沒有合約號和工作描述的（如「DC17 DC05 DC12 DC11 DC18 係3跑西架步」）= 閒置/待命機械，order_type 設為 "machinery"，work_description 設為 "閒置/待命"，location 設為停放位置
 - 客戶分組標題如「1:明達」表示後續項目屬於該客戶
-- 雜項：維修保養、安全機械、請假等
+- 「安全、機械～雜項～」= 雜項，order_type: "notice"
+- 「維修保養」= 維修，order_type: "notice"
+- 「請假～文傑～」= 請假，加入 leave_list
 
-**B. 工程部員工 order**（以員工花名列表為主）
-- 用中文/數字序號分組（一、二、三 或 1:、2:、3:）
-- 每組格式：序號：工作描述 + 員工花名（頓號「、」分隔）
-- 括號內可能是帶隊人（如「機場帮手什务(涛哥) 雄、區」→ 帶隊人:涛哥，員工:雄、區）
-- 可能有合約號（如 PA13114南落石矢）
-- 「暫停」= 該工作暫停
-- 這種 order 的 order_type 為 "manpower"
+範例解析：
+原文：T24w022 飛機扣X4位 DC 14 DC 20 DC 03 X 4位完工
+→ 3 個 items：
+  {seq:1, order_type:"machinery", contract_no:"T24w022", work_description:"飛機扣X4位", machine_code:"DC14", remarks:"X 4位完工"}
+  {seq:2, order_type:"machinery", contract_no:"T24w022", work_description:"飛機扣X4位", machine_code:"DC20", remarks:"X 4位完工"}
+  {seq:3, order_type:"machinery", contract_no:"T24w022", work_description:"飛機扣X4位", machine_code:"DC03", remarks:"X 4位完工"}
 
-**C. 泥車/運輸 order**（以司機+車牌為主）
+原文：PA13114新位剃頭 出草頭 DC06 DC04～暫停
+→ 2 個 items：
+  {seq:1, order_type:"machinery", contract_no:"PA13114", work_description:"新位剃頭 出草頭", machine_code:"DC06", is_suspended:false}
+  {seq:2, order_type:"machinery", contract_no:"PA13114", work_description:"新位剃頭 出草頭", machine_code:"DC04", is_suspended:true}
+
+原文：3802(3跑東面金門地盤) 租機 DC07泉 DC15強 DC08平 DC02肥仔麟
+→ 4 個 items：
+  {seq:1, order_type:"machinery", contract_no:"3802", customer:"金門", location:"3跑東面金門地盤", work_description:"租機", machine_code:"DC07", driver_nickname:"泉"}
+  {seq:2, order_type:"machinery", contract_no:"3802", customer:"金門", location:"3跑東面金門地盤", work_description:"租機", machine_code:"DC15", driver_nickname:"強"}
+  {seq:3, order_type:"machinery", contract_no:"3802", customer:"金門", location:"3跑東面金門地盤", work_description:"租機", machine_code:"DC08", driver_nickname:"平"}
+  {seq:4, order_type:"machinery", contract_no:"3802", customer:"金門", location:"3跑東面金門地盤", work_description:"租機", machine_code:"DC02", driver_nickname:"肥仔麟"}
+
+原文：DC17 DC05 DC12 DC11 DC18 係3跑西架步
+→ 5 個 items（閒置/待命）：
+  {seq:1, order_type:"machinery", work_description:"閒置/待命", machine_code:"DC17", location:"3跑西架步"}
+  ... 每個 DC 一筆
+
+**B. 工程部員工 order（order_type: "manpower"）**
+特徵：以員工花名列表為主，用中文/數字序號分組
+解析規則：
+- 用中文序號（一、二、三、四...）或數字序號（1:、2:、3:...）分組
+- 每組格式：序號：[合約號][工作描述] [員工花名列表]
+- 員工花名用頓號「、」分隔
+- 括號內的人名是帶隊人（如「機場帮手什务(涛哥) 雄、區」→ team_leader:"涛哥", staff_list:["雄","區"]）
+- ⚠️ 重要：staff_list 必須包含所有員工花名，一個都不能遺漏！
+- 合約號可能緊跟在工作描述前面（如 PA13114南落石矢 → contract_no:"PA13114", work_description:"南落石矢"）
+- 「暫停」= is_suspended: true
+- 每個序號組是一個 item
+
+範例解析：
+原文：
+一：潭尾vo 暫停
+二：機場帮手什务(涛哥) 雄、區
+三：PA13114南落石矢 宽、青、黃運、健、家善、高佬、大飛、ADil
+四：頂替司機 峰仔
+→ 4 個 items：
+  {seq:1, order_type:"manpower", work_description:"潭尾vo", is_suspended:true, staff_list:null}
+  {seq:2, order_type:"manpower", work_description:"機場帮手什务", location:"機場", team_leader:"涛哥", staff_list:["雄","區"], is_suspended:false}
+  {seq:3, order_type:"manpower", contract_no:"PA13114", work_description:"南落石矢", staff_list:["宽","青","黃運","健","家善","高佬","大飛","ADil"], is_suspended:false}
+  {seq:4, order_type:"manpower", work_description:"頂替司機", staff_list:["峰仔"], is_suspended:false}
+
+**C. 泥車/運輸 order（order_type: "transport"）**
+特徵：以司機花名 + 車牌號碼為主
+解析規則：
 - 客戶名-合約號在最前（如「金門 3802 月租車」「榮興-T22M241 [20噸]」「惠興-丹桂一期租車」）
-- 路線/工作描述在下面
-- 司機花名 + 車牌號碼一行一組（如「區 EM987」「峰 JR981」）
-- 車牌格式：2-3個英文字母 + 數字（EM987、XF2103、WY987、UH1883、JR981、YT6383 等）
-- 聯絡人電話在「聯絡人：」或「聯絡:」後面
-- emoji（⬅️➡️☎️⬅️）要忽略
-- 星號包圍的（*明達泥尾飛記得影相*）= 提醒/備註
-- 「休息：隆/沙曾」= 休息人員，加入 leave_list
-- 「暫停」= 該工作暫停
-- 同一客戶可能有多個不同路線，每條路線是一個獨立 item
-- 這種 order 的 order_type 為 "transport"
+- 路線/工作描述在客戶行下面
+- 司機花名 + 車牌號碼一行一組（如「區 EM987」「峰 JR981」「肥洪 UH1883」）
+- ⚠️ 重要：車牌格式是 2-3 個英文字母 + 3-4 個數字（如 EM987、XF2103、WY987、UH1883、JR981、YT6383、WP7366、ZY4778、ER991、WC987、WY440、TF3306、YE6679）
+- ⚠️ 重要：一個司機+車牌 = 一筆獨立 item！同一客戶下多個司機要拆成多筆
+- ⚠️ 重要：「聯絡人：」「聯絡:」後面的是聯絡人和電話，不是司機！存入 contact_person 欄位
+  例如「聯絡人：峰哥 60176557 做圍網」→ contact_person:"峰哥 60176557 做圍網"，不要當成司機
+  例如「聯絡: 勇仔 9279 4462」→ contact_person:"勇仔 9279 4462"
+- ⚠️ 重要：電話號碼（8位純數字如 60176557、92794462、94529852）不是車牌！
+- ⚠️ 重要：「台號：143800」是台號，不是車牌，存入 remarks
+- emoji（⬅️➡️☎️）要忽略
+- 星號包圍的（*明達泥尾飛記得影相*）= 提醒/備註，存入 remarks
+- 「休息：隆/沙曾」= 休息人員，加入 leave_list（不是 item）
+- 「暫停」= is_suspended: true
+- 同一客戶可能有多個不同路線/工作，每條路線下的每個司機+車牌是獨立 item
+- 聯絡人資訊附加到同一工作組的所有 items 的 contact_person 欄位
+
+範例解析：
+原文：
+金門 3802 月租車
+區 EM987
+→ 1 個 item：
+  {seq:1, order_type:"transport", customer:"金門", contract_no:"3802", work_description:"月租車", driver_nickname:"區", vehicle_no:"EM987"}
+
+原文：
+金門 3802租挾車
+聯絡人：峰哥 60176557 做圍網
+仁 WY987
+→ 1 個 item：
+  {seq:1, order_type:"transport", customer:"金門", contract_no:"3802", work_description:"租挾車", driver_nickname:"仁", vehicle_no:"WY987", contact_person:"峰哥 60176557 做圍網"}
+  注意：峰哥是聯絡人不是司機！
+
+原文：
+惠興-丹桂一期租車
+跟人規矩
+吾明問/聯絡：細昌 9095 5458
+棋 YE6679
+老泰 WC987
+文 WY440
+→ 3 個 items：
+  {seq:1, order_type:"transport", customer:"惠興", work_description:"丹桂一期租車", driver_nickname:"棋", vehicle_no:"YE6679", contact_person:"細昌 9095 5458", remarks:"跟人規矩"}
+  {seq:2, order_type:"transport", customer:"惠興", work_description:"丹桂一期租車", driver_nickname:"老泰", vehicle_no:"WC987", contact_person:"細昌 9095 5458", remarks:"跟人規矩"}
+  {seq:3, order_type:"transport", customer:"惠興", work_description:"丹桂一期租車", driver_nickname:"文", vehicle_no:"WY440", contact_person:"細昌 9095 5458", remarks:"跟人規矩"}
+
+原文：
+惠興-西九至TKO137
+台號： 143800
+聯絡人： 9160 金毛強
+電話： 9452 9852
+偉 WP7366
+→ 1 個 item：
+  {seq:1, order_type:"transport", customer:"惠興", work_description:"西九至TKO137", driver_nickname:"偉", vehicle_no:"WP7366", contact_person:"金毛強 9160 / 9452 9852", remarks:"台號: 143800"}
 
 ### modification（修改指令）
 針對已有 order 的局部修改（短訊息，包含動作詞）：
@@ -872,15 +967,15 @@ export class WhatsappService {
       "customer": "客戶名或null",
       "work_description": "工作描述或null",
       "location": "地點/路線或null",
-      "driver_nickname": "司機花名或null（transport 用）",
-      "vehicle_no": "車牌或null（transport 用，如 EM987）",
+      "driver_nickname": "司機/操作員花名或null（transport 和 machinery 用）",
+      "vehicle_no": "車牌或null（transport 用，格式如 EM987）",
       "machine_code": "DC機械編號或null（machinery 用，統一格式如 DC14）",
       "team_leader": "帶隊人花名或null（manpower 用，括號內的人）",
-      "staff_list": ["員工1", "員工2"] 或 null（manpower 用，頓號分隔的員工列表）,
-      "contact_person": "聯絡人資訊或null（含電話）",
+      "staff_list": ["員工1", "員工2"] 或 null（manpower 用，頓號分隔的完整員工列表）,
+      "contact_person": "聯絡人+電話或null（不是司機！）",
       "slip_write_as": "飛仔寫什麼或null",
       "is_suspended": true/false,
-      "remarks": "備註或null（星號提醒、跟人規矩等）"
+      "remarks": "備註或null"
     }
   ],
   "leave_list": ["請假/休息人員1", "請假/休息人員2"],
@@ -1023,6 +1118,7 @@ export class WhatsappService {
     const summaryItems: DailySummaryItem[] = latestOrder.items.map((item) => ({
       id: item.id,
       seq: item.wa_item_seq,
+      order_type: item.wa_item_order_type,
       contract_no: item.wa_item_contract_no,
       customer: item.wa_item_customer,
       work_description: item.wa_item_work_desc,

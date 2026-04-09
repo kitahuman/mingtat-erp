@@ -3088,3 +3088,10 @@ DO $$ BEGIN
   ALTER TABLE "verification_wa_mod_logs" ADD CONSTRAINT "verification_wa_mod_logs_mod_msg_id_fkey" FOREIGN KEY ("mod_msg_id") REFERENCES "verification_wa_messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- wa_item_order_type column (machinery | manpower | transport | notice | leave)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='verification_wa_order_items' AND column_name='wa_item_order_type') THEN
+    ALTER TABLE verification_wa_order_items ADD COLUMN wa_item_order_type VARCHAR(30);
+  END IF;
+END $$;

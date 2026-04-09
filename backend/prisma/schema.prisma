@@ -1911,6 +1911,7 @@ model VerificationWaOrderItem {
   id                      Int      @id @default(autoincrement())
   wa_item_order_id        Int
   wa_item_seq             Int      @default(1)
+  wa_item_order_type      String?  @db.VarChar(30) // machinery | manpower | transport | notice | leave
   wa_item_contract_no     String?  @db.VarChar(50)
   wa_item_customer        String?  @db.VarChar(100)
   wa_item_work_desc       String?  @db.VarChar(500)
