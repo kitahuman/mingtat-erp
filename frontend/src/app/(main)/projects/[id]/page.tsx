@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi } from '@/lib/api';
+import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
@@ -27,6 +27,8 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [linkedQuotations, setLinkedQuotations] = useState<any[]>([]);
   const [linkedRateCards, setLinkedRateCards] = useState<any[]>([]);
+  const [dailyReports, setDailyReports] = useState<any[]>([]);
+  const [acceptanceReports, setAcceptanceReports] = useState<any[]>([]);
 
   const loadData = () => {
     projectsApi.get(Number(params.id)).then(res => {
@@ -39,6 +41,8 @@ export default function ProjectDetailPage() {
   const loadLinked = () => {
     quotationsApi.byProject(Number(params.id)).then(res => setLinkedQuotations(res.data || [])).catch(() => {});
     rateCardsApi.list({ project_id: Number(params.id), limit: 100 }).then(res => setLinkedRateCards(res.data?.data || [])).catch(() => {});
+    dailyReportsApi.byProject(Number(params.id)).then(res => setDailyReports(res.data?.data || [])).catch(() => {});
+    acceptanceReportsApi.byProject(Number(params.id)).then(res => setAcceptanceReports(res.data?.data || [])).catch(() => {});
   };
 
   useEffect(() => {
@@ -289,6 +293,72 @@ export default function ProjectDetailPage() {
           </div>
         ) : (
           <p className="text-gray-400 text-sm">暫無價目記錄</p>
+        )}
+      </div>
+
+      {/* Daily Reports */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">工程日報</h2>
+        {dailyReports.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-3 py-2 text-left">日期</th>
+                  <th className="px-3 py-2 text-left">更次</th>
+                  <th className="px-3 py-2 text-left">工作摘要</th>
+                  <th className="px-3 py-2 text-left">建立人</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyReports.map((dr: any) => (
+                  <tr key={dr.id} className="border-b hover:bg-gray-50">
+                    <td className="px-3 py-2">{fmtDate(dr.daily_report_date)}</td>
+                    <td className="px-3 py-2">{dr.daily_report_shift_type === 'day' ? '日更' : '夜更'}</td>
+                    <td className="px-3 py-2 max-w-xs truncate">{dr.daily_report_work_summary || '-'}</td>
+                    <td className="px-3 py-2">{dr.creator?.displayName || '-'}</td>
+                    <td className="px-3 py-2"><span className={dr.daily_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{dr.daily_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">暫無工程日報</p>
+        )}
+      </div>
+
+      {/* Acceptance Reports */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">工程收貨報告</h2>
+        {acceptanceReports.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-3 py-2 text-left">報告日期</th>
+                  <th className="px-3 py-2 text-left">驗收日期</th>
+                  <th className="px-3 py-2 text-left">客戶</th>
+                  <th className="px-3 py-2 text-left">收貨項目</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acceptanceReports.map((ar: any) => (
+                  <tr key={ar.id} className="border-b hover:bg-gray-50">
+                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_date)}</td>
+                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_acceptance_date)}</td>
+                    <td className="px-3 py-2">{ar.acceptance_report_client_name || '-'}</td>
+                    <td className="px-3 py-2 max-w-xs truncate">{ar.acceptance_report_items || '-'}</td>
+                    <td className="px-3 py-2"><span className={ar.acceptance_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{ar.acceptance_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">暫無收貨報告</p>
         )}
       </div>
     </div>

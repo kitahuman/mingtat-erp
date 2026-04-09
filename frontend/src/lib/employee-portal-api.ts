@@ -105,6 +105,30 @@ export const employeePortalApi = {
   getMidShiftApprovalHistory: (params?: { page?: number; limit?: number }) =>
     portalApi.get('/employee-portal/mid-shift-approvals/history', { params }),
 
+  // Daily Reports
+  getMyDailyReports: (params?: any) =>
+    portalApi.get('/employee-portal/daily-reports', { params }),
+  getDailyReport: (id: number) =>
+    portalApi.get(`/employee-portal/daily-reports/${id}`),
+  createDailyReport: (data: any) =>
+    portalApi.post('/employee-portal/daily-reports', data),
+  updateDailyReport: (id: number, data: any) =>
+    portalApi.post(`/employee-portal/daily-reports/${id}`, data),
+  deleteDailyReport: (id: number) =>
+    portalApi.post(`/employee-portal/daily-reports/${id}/delete`),
+
+  // Acceptance Reports
+  getMyAcceptanceReports: (params?: any) =>
+    portalApi.get('/employee-portal/acceptance-reports', { params }),
+  getAcceptanceReport: (id: number) =>
+    portalApi.get(`/employee-portal/acceptance-reports/${id}`),
+  createAcceptanceReport: (data: any) =>
+    portalApi.post('/employee-portal/acceptance-reports', data),
+  updateAcceptanceReport: (id: number, data: any) =>
+    portalApi.post(`/employee-portal/acceptance-reports/${id}`, data),
+  deleteAcceptanceReport: (id: number) =>
+    portalApi.post(`/employee-portal/acceptance-reports/${id}/delete`),
+
   // Admin: Bulk create accounts for all employees with phone numbers
   bulkCreateAccounts: () =>
     portalApi.post('/employee-portal/bulk-create-accounts', {}),
@@ -137,4 +161,6 @@ export const portalSharedApi = {
   getVehiclesSimple: () => sharedApi.get('/vehicles/simple'),
   getMachinerySimple: () => sharedApi.get('/machinery/simple'),
   getSubconFleetSimple: () => sharedApi.get('/subcon-fleet-drivers/simple'),
+  getProjectsSimple: () => sharedApi.get('/projects/simple'),
+  getEmployeesSimple: () => sharedApi.get('/employees', { params: { limit: 500 } }),
 };

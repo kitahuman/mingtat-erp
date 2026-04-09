@@ -34,6 +34,9 @@ model User {
   can_daily_report       Boolean   @default(false)
   can_acceptance_report  Boolean   @default(false)
 
+  daily_reports_created      DailyReport[]      @relation("daily_report_creator")
+  acceptance_reports_created AcceptanceReport[]  @relation("acceptance_report_creator")
+
   @@map("users")
 }
 
@@ -222,6 +225,7 @@ model Employee {
   mid_shift_approvals   EmployeeAttendance[] @relation("mid_shift_approver")
   leaves                EmployeeLeave[]
   user                  User?
+  acceptance_reports_inspected AcceptanceReport[] @relation("acceptance_report_inspector")
 
   @@map("employees")
 }
@@ -435,6 +439,7 @@ model Partner {
   expenses_as_client   Expense[]                  @relation("expense_client")
   contracts_as_client  Contract[]                 @relation("contract_client")
   invoices_as_client   Invoice[]                  @relation("invoice_client")
+  acceptance_reports_client AcceptanceReport[]     @relation("acceptance_report_client")
 
   @@map("partners")
 }
@@ -624,6 +629,10 @@ model Project {
 
   // Phase 5
   invoices Invoice[]
+
+  // Supervisor module
+  daily_reports      DailyReport[]
+  acceptance_reports AcceptanceReport[]
 
   @@map("projects")
 }
@@ -2009,4 +2018,94 @@ model VerificationActionLog {
   @@index([log_match_id])
   @@index([log_created_at])
   @@map("verification_action_logs")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase C: Daily Reports (工程日報)
+// ══════════════════════════════════════════════════════════════
+
+model DailyReport {
+  id                    Int       @id @default(autoincrement())
+  daily_report_project_id Int
+  daily_report_date     DateTime  @db.Date
+  daily_report_shift_type String  @db.VarChar(20)
+  daily_report_work_summary String @db.Text
+  daily_report_memo     String?   @db.Text
+  daily_report_created_by Int
+  daily_report_status   String    @default("draft") @db.VarChar(20)
+  daily_report_submitted_at DateTime?
+  daily_report_created_at DateTime @default(now())
+  daily_report_updated_at DateTime @default(now()) @updatedAt
+
+  project Project  @relation(fields: [daily_report_project_id], references: [id])
+  creator User     @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
+  items   DailyReportItem[]
+
+  @@map("daily_reports")
+}
+
+model DailyReportItem {
+  id                          Int     @id @default(autoincrement())
+  daily_report_item_report_id Int
+  daily_report_item_category  String  @db.VarChar(30)
+  daily_report_item_content   String  @db.VarChar(200)
+  daily_report_item_quantity  Decimal? @db.Decimal(10, 2)
+  daily_report_item_ot_hours  Decimal? @db.Decimal(10, 2)
+  daily_report_item_name_or_plate String? @db.VarChar(200)
+  daily_report_item_sort_order Int    @default(0)
+
+  report DailyReport @relation(fields: [daily_report_item_report_id], references: [id], onDelete: Cascade)
+
+  @@map("daily_report_items")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Phase D: Acceptance Reports (工程收貨報告)
+// ══════════════════════════════════════════════════════════════
+
+model AcceptanceReport {
+  id                                    Int       @id @default(autoincrement())
+  acceptance_report_date                DateTime  @db.Date
+  acceptance_report_acceptance_date     DateTime  @db.Date
+  acceptance_report_client_id           Int?
+  acceptance_report_client_name         String    @db.VarChar(200)
+  acceptance_report_project_id          Int?
+  acceptance_report_project_name        String    @db.VarChar(200)
+  acceptance_report_contract_ref        String?   @db.VarChar(200)
+  acceptance_report_site_address        String    @db.Text
+  acceptance_report_items               String    @db.Text
+  acceptance_report_quantity_unit       String?   @db.VarChar(100)
+  acceptance_report_mingtat_inspector_id Int
+  acceptance_report_mingtat_inspector_title String @db.VarChar(100)
+  acceptance_report_client_inspector_name String  @db.VarChar(200)
+  acceptance_report_client_inspector_title String @db.VarChar(100)
+  acceptance_report_client_signature    String?   @db.Text
+  acceptance_report_mingtat_signature   String?   @db.Text
+  acceptance_report_supplementary_notes String?   @db.Text
+  acceptance_report_created_by          Int
+  acceptance_report_status              String    @default("draft") @db.VarChar(20)
+  acceptance_report_submitted_at        DateTime?
+  acceptance_report_created_at          DateTime  @default(now())
+  acceptance_report_updated_at          DateTime  @default(now()) @updatedAt
+
+  client    Partner?  @relation("acceptance_report_client", fields: [acceptance_report_client_id], references: [id])
+  project   Project?  @relation(fields: [acceptance_report_project_id], references: [id])
+  inspector Employee  @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
+  creator   User      @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id])
+  attachments AcceptanceReportAttachment[]
+
+  @@map("acceptance_reports")
+}
+
+model AcceptanceReportAttachment {
+  id                                      Int    @id @default(autoincrement())
+  acceptance_report_attachment_report_id   Int
+  acceptance_report_attachment_file_name   String @db.VarChar(255)
+  acceptance_report_attachment_file_url    String @db.Text
+  acceptance_report_attachment_file_type   String @db.VarChar(100)
+  acceptance_report_attachment_sort_order  Int    @default(0)
+
+  report AcceptanceReport @relation(fields: [acceptance_report_attachment_report_id], references: [id], onDelete: Cascade)
+
+  @@map("acceptance_report_attachments")
 }

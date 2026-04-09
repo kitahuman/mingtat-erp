@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Query,
+  Param,
   UseGuards,
   Request,
   UseInterceptors,
@@ -251,5 +252,67 @@ export class EmployeePortalController {
     @Query() query: { page?: number; limit?: number }
   ) {
     return this.service.getMidShiftApprovalHistory(req.user.sub, query);
+  }
+
+  // ── Daily Reports ──────────────────────────────────────────
+  @Get('daily-reports')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyDailyReports(@Request() req: any, @Query() query: any) {
+    return this.service.getMyDailyReports(req.user.sub, query);
+  }
+
+  @Get('daily-reports/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async getDailyReport(@Request() req: any, @Param('id') id: string) {
+    return this.service.getDailyReport(req.user.sub, +id);
+  }
+
+  @Post('daily-reports')
+  @UseGuards(AuthGuard('jwt'))
+  async createDailyReport(@Request() req: any, @Body() dto: any) {
+    return this.service.createDailyReport(req.user.sub, dto);
+  }
+
+  @Post('daily-reports/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateDailyReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+    return this.service.updateDailyReport(req.user.sub, +id, dto);
+  }
+
+  @Post('daily-reports/:id/delete')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteDailyReport(@Request() req: any, @Param('id') id: string) {
+    return this.service.deleteDailyReport(req.user.sub, +id);
+  }
+
+  // ── Acceptance Reports ─────────────────────────────────────
+  @Get('acceptance-reports')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyAcceptanceReports(@Request() req: any, @Query() query: any) {
+    return this.service.getMyAcceptanceReports(req.user.sub, query);
+  }
+
+  @Get('acceptance-reports/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async getAcceptanceReport(@Request() req: any, @Param('id') id: string) {
+    return this.service.getAcceptanceReport(req.user.sub, +id);
+  }
+
+  @Post('acceptance-reports')
+  @UseGuards(AuthGuard('jwt'))
+  async createAcceptanceReport(@Request() req: any, @Body() dto: any) {
+    return this.service.createAcceptanceReport(req.user.sub, dto);
+  }
+
+  @Post('acceptance-reports/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateAcceptanceReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+    return this.service.updateAcceptanceReport(req.user.sub, +id, dto);
+  }
+
+  @Post('acceptance-reports/:id/delete')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteAcceptanceReport(@Request() req: any, @Param('id') id: string) {
+    return this.service.deleteAcceptanceReport(req.user.sub, +id);
   }
 }

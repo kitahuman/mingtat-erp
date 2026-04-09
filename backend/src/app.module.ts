@@ -49,6 +49,8 @@ import { AiChatModule } from './ai-chat/ai-chat.module';
 import { VerificationModule } from './verification/verification.module';
 import { GeoModule } from './geo/geo.module';
 import { CompanyClockModule } from './company-clock/company-clock.module';
+import { DailyReportsModule } from './daily-reports/daily-reports.module';
+import { AcceptanceReportsModule } from './acceptance-reports/acceptance-reports.module';
 
 @Module({
   imports: [
@@ -104,6 +106,8 @@ import { CompanyClockModule } from './company-clock/company-clock.module';
     VerificationModule,
     GeoModule,
     CompanyClockModule,
+    DailyReportsModule,
+    AcceptanceReportsModule,
   ],
 })
 export class AppModule {}

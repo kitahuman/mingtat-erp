@@ -764,3 +764,25 @@ export const verificationApi = {
   }) =>
     api.get('/verification/matching', { params }),
 };
+
+// Daily Reports (工程日報) - Admin
+export const dailyReportsApi = {
+  list: (params?: any) => api.get('/daily-reports', { params }),
+  get: (id: number) => api.get(`/daily-reports/${id}`),
+  create: (data: any) => api.post('/daily-reports', data),
+  update: (id: number, data: any) => api.put(`/daily-reports/${id}`, data),
+  delete: (id: number) => api.delete(`/daily-reports/${id}`),
+  byProject: (projectId: number, params?: any) => api.get(`/daily-reports/by-project/${projectId}`, { params }),
+  exportPdf: (id: number) => api.get(`/daily-reports/${id}/pdf`, { responseType: 'blob' }),
+};
+
+// Acceptance Reports (工程收貨報告) - Admin
+export const acceptanceReportsApi = {
+  list: (params?: any) => api.get('/acceptance-reports', { params }),
+  get: (id: number) => api.get(`/acceptance-reports/${id}`),
+  create: (data: any) => api.post('/acceptance-reports', data),
+  update: (id: number, data: any) => api.put(`/acceptance-reports/${id}`, data),
+  delete: (id: number) => api.delete(`/acceptance-reports/${id}`),
+  byProject: (projectId: number, params?: any) => api.get(`/acceptance-reports/by-project/${projectId}`, { params }),
+  exportPdf: (id: number) => api.get(`/acceptance-reports/${id}/pdf`, { responseType: 'blob' }),
+};
