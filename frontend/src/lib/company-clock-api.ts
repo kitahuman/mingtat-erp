@@ -83,6 +83,10 @@ export const companyClockApi = {
     role_title?: string;
     work_notes?: string;
     is_mid_shift?: boolean;
+    type?: 'clock_in' | 'clock_out';
+    latitude?: number;
+    longitude?: number;
+    address?: string;
   }) => companyClockAxios.post('/company-clock/temporary-employee', data),
 
   // Today's attendance records

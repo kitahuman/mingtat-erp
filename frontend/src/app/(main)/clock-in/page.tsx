@@ -327,22 +327,32 @@ export default function CompanyClockPage() {
     try {
       const check = await mainClockApi.checkTemporaryEmployeeName(tempName);
       if (check.data.exists) {
-        setTempNameError('已有同名臨時員工，請更改名稱');
+        setTempNameError('已有同名活躍臨時員工，請更改名稱或從列表選擇');
         return;
       }
     } catch {}
 
     setProcessing(true);
     try {
+      const location = await getCurrentLocation();
+      let address: string | undefined;
+      if (location) {
+        address = await reverseGeocode(location.latitude, location.longitude);
+      }
+
       const res = await mainClockApi.createTemporaryEmployee({
         name_zh: tempName,
         name_en: tempNameEn || undefined,
         phone: tempPhone || undefined,
         photo_base64: photoDataUrl,
-        company_id: tempCompanyId ? Number(tempCompanyId) : undefined,
+        company_id: tempCompanyId || undefined,
         role_title: tempPosition || undefined,
         work_notes: workNotes,
-        is_mid_shift: isMidShift,
+        is_mid_shift: clockType === 'clock_out' ? isMidShift : false,
+        type: clockType,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        address,
       });
 
       setResultType('success');
@@ -374,7 +384,7 @@ export default function CompanyClockPage() {
         try {
           const res = await mainClockApi.checkTemporaryEmployeeName(tempName);
           if (res.data.exists) {
-            setTempNameError('已有同名臨時員工，請更改名稱');
+            setTempNameError('已有同名活躍臨時員工，請更改名稱或從列表選擇');
           } else {
             setTempNameError('');
           }
@@ -795,7 +805,27 @@ export default function CompanyClockPage() {
             </button>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
-              <h2 className="font-bold text-gray-900 text-lg">新增臨時員工</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-gray-900 text-lg">新增臨時員工</h2>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setClockType('clock_in')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
+                      clockType === 'clock_in' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    上班
+                  </button>
+                  <button
+                    onClick={() => setClockType('clock_out')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
+                      clockType === 'clock_out' ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    下班
+                  </button>
+                </div>
+              </div>
 
               <div className="space-y-3">
                 <div>
@@ -848,18 +878,20 @@ export default function CompanyClockPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
-                  <input
-                    type="checkbox"
-                    id="tempMidShift"
-                    checked={isMidShift}
-                    onChange={(e) => setIsMidShift(e.target.checked)}
-                    className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
-                  />
-                  <label htmlFor="tempMidShift" className="text-sm font-bold text-purple-700 cursor-pointer select-none">
-                    中直 (Mid-Shift)
-                  </label>
-                </div>
+                {clockType === 'clock_out' && (
+                  <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
+                    <input
+                      type="checkbox"
+                      id="tempMidShift"
+                      checked={isMidShift}
+                      onChange={(e) => setIsMidShift(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="tempMidShift" className="text-sm font-bold text-purple-700 cursor-pointer select-none">
+                      中直 (Mid-Shift)
+                    </label>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">拍照 *</label>
@@ -892,9 +924,11 @@ export default function CompanyClockPage() {
               <button
                 onClick={handleCreateTemp}
                 disabled={!tempName || !!tempNameError || !photoDataUrl || processing}
-                className="w-full py-3.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`w-full py-3.5 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  clockType === 'clock_in' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-orange-500 hover:bg-orange-600'
+                }`}
               >
-                {processing ? '建立中...' : '建立臨時員工並打卡'}
+                {processing ? '建立中...' : `建立臨時員工並${clockType === 'clock_in' ? '上班' : '下班'}打卡`}
               </button>
             </div>
           </div>

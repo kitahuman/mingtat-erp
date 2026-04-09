@@ -354,23 +354,28 @@ export class CompanyClockService {
     role_title?: string;
     work_notes?: string;
     is_mid_shift?: boolean;
+    type?: 'clock_in' | 'clock_out';
+    latitude?: number;
+    longitude?: number;
+    address?: string;
   }) {
-    // Check for duplicate name
+    // Check for duplicate name (case-insensitive and trimmed)
+    const trimmedName = data.name_zh.trim();
     const existing = await this.prisma.employee.findFirst({
       where: {
-        name_zh: { equals: data.name_zh, mode: 'insensitive' },
+        name_zh: { equals: trimmedName, mode: 'insensitive' },
         employee_is_temporary: true,
         status: 'active',
       },
     });
     if (existing) {
-      throw new BadRequestException(`已有同名臨時員工「${data.name_zh}」，請確認是否重複`);
+      throw new BadRequestException(`已有同名活躍臨時員工「${trimmedName}」，請更改名稱或從列表選擇`);
     }
 
     // Create the temporary employee
     const employee = await this.prisma.employee.create({
       data: {
-        name_zh: data.name_zh,
+        name_zh: trimmedName,
         name_en: data.name_en || '',
         phone: data.phone,
         company_id: data.company_id || null,
@@ -382,17 +387,22 @@ export class CompanyClockService {
       },
     });
 
-    // is_mid_shift only applies to clock_out; new temp employee auto clock_in so always false
-    // Auto clock-in for the new temporary employee
+    const clockType = data.type || 'clock_in';
+    const isMidShift = clockType === 'clock_out' ? (data.is_mid_shift ?? false) : false;
+
+    // Auto clock-in/out for the new temporary employee
     const attendance = await this.prisma.employeeAttendance.create({
       data: {
         employee_id: employee.id,
-        type: 'clock_in',
+        type: clockType,
         timestamp: new Date(),
         attendance_photo_base64: data.photo_base64,
         attendance_verification_method: 'first_time',
         attendance_operator_user_id: data.operator_user_id,
-        is_mid_shift: false,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        address: data.address,
+        is_mid_shift: isMidShift,
         work_notes: data.work_notes || null,
       },
     });

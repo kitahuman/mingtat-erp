@@ -109,6 +109,10 @@ export class CompanyClockController {
       role_title?: string;
       work_notes?: string;
       is_mid_shift?: boolean;
+      type?: 'clock_in' | 'clock_out';
+      latitude?: number;
+      longitude?: number;
+      address?: string;
     },
   ) {
     return this.service.createTemporaryEmployee({
