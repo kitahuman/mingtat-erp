@@ -1578,4 +1578,248 @@ export class WhatsappService {
       pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // CRUD: 手動編輯 Order Items
+  // ══════════════════════════════════════════════════════════════
+
+  /** 更新單筆 order item */
+  async updateOrderItem(
+    orderId: number,
+    itemId: number,
+    data: {
+      order_type?: string;
+      contract_no?: string;
+      customer?: string;
+      work_description?: string;
+      location?: string;
+      driver_nickname?: string;
+      vehicle_no?: string;
+      machine_code?: string;
+      contact_person?: string;
+      slip_write_as?: string;
+      is_suspended?: boolean;
+      remarks?: string;
+    },
+  ) {
+    // 確認 item 存在且屬於指定 order
+    const item = await this.prisma.verificationWaOrderItem.findFirst({
+      where: { id: itemId, wa_item_order_id: orderId },
+    });
+    if (!item) {
+      return { success: false, reason: 'item_not_found' };
+    }
+
+    // 記錄修改前的值（AI feedback 用）
+    const prevSnapshot: Record<string, any> = {};
+    const newSnapshot: Record<string, any> = {};
+    const fieldMap: Record<string, string> = {
+      order_type: 'wa_item_order_type',
+      contract_no: 'wa_item_contract_no',
+      customer: 'wa_item_customer',
+      work_description: 'wa_item_work_desc',
+      location: 'wa_item_location',
+      driver_nickname: 'wa_item_driver_nickname',
+      vehicle_no: 'wa_item_vehicle_no',
+      machine_code: 'wa_item_machine_code',
+      contact_person: 'wa_item_contact_person',
+      slip_write_as: 'wa_item_slip_write_as',
+      is_suspended: 'wa_item_is_suspended',
+      remarks: 'wa_item_remarks',
+    };
+
+    const updateData: Record<string, any> = {};
+    for (const [key, dbCol] of Object.entries(fieldMap)) {
+      if (data[key as keyof typeof data] !== undefined) {
+        const oldVal = (item as any)[dbCol];
+        const newVal = data[key as keyof typeof data];
+        if (oldVal !== newVal) {
+          prevSnapshot[key] = oldVal;
+          newSnapshot[key] = newVal;
+          updateData[dbCol] = newVal === '' ? null : newVal;
+        }
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return { success: true, reason: 'no_changes', item_id: itemId };
+    }
+
+    // 更新 item
+    await this.prisma.verificationWaOrderItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
+
+    // 記錄 AI feedback（修改歷史）
+    await this.prisma.verificationWaModLog.create({
+      data: {
+        mod_order_id: orderId,
+        mod_item_id: itemId,
+        mod_msg_id: item.wa_item_order_id, // 用 order_id 作為 msg_id 的替代
+        mod_type: 'manual_edit',
+        mod_description: `手動修改: ${Object.keys(prevSnapshot).join(', ')}`,
+        mod_prev_value: prevSnapshot,
+        mod_new_value: newSnapshot,
+        mod_ai_confidence: null,
+      },
+    });
+
+    return {
+      success: true,
+      item_id: itemId,
+      changes: newSnapshot,
+      prev_values: prevSnapshot,
+    };
+  }
+
+  /** 新增 order item */
+  async addOrderItem(
+    orderId: number,
+    data: {
+      order_type?: string;
+      contract_no?: string;
+      customer?: string;
+      work_description?: string;
+      location?: string;
+      driver_nickname?: string;
+      vehicle_no?: string;
+      machine_code?: string;
+      contact_person?: string;
+      slip_write_as?: string;
+      is_suspended?: boolean;
+      remarks?: string;
+    },
+  ) {
+    const order = await this.prisma.verificationWaOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) {
+      return { success: false, reason: 'order_not_found' };
+    }
+
+    // 取得目前最大 seq
+    const maxSeqItem = await this.prisma.verificationWaOrderItem.findFirst({
+      where: { wa_item_order_id: orderId },
+      orderBy: { wa_item_seq: 'desc' },
+    });
+    const nextSeq = (maxSeqItem?.wa_item_seq || 0) + 1;
+
+    const newItem = await this.prisma.verificationWaOrderItem.create({
+      data: {
+        wa_item_order_id: orderId,
+        wa_item_seq: nextSeq,
+        wa_item_order_type: data.order_type || null,
+        wa_item_contract_no: data.contract_no || null,
+        wa_item_customer: data.customer || null,
+        wa_item_work_desc: data.work_description || null,
+        wa_item_location: data.location || null,
+        wa_item_driver_nickname: data.driver_nickname || null,
+        wa_item_driver_id: null,
+        wa_item_vehicle_no: data.vehicle_no || null,
+        wa_item_machine_code: data.machine_code || null,
+        wa_item_contact_person: data.contact_person || null,
+        wa_item_slip_write_as: data.slip_write_as || null,
+        wa_item_is_suspended: data.is_suspended || false,
+        wa_item_remarks: data.remarks || null,
+        wa_item_mod_status: 'added',
+        wa_item_mod_prev_data: undefined,
+      },
+    });
+
+    // 記錄 AI feedback
+    await this.prisma.verificationWaModLog.create({
+      data: {
+        mod_order_id: orderId,
+        mod_item_id: newItem.id,
+        mod_msg_id: orderId, // 手動新增沒有 msg_id，用 order_id 替代
+        mod_type: 'manual_add',
+        mod_description: `手動新增 item #${nextSeq}`,
+        mod_prev_value: Prisma.DbNull,
+        mod_new_value: data as any,
+        mod_ai_confidence: null,
+      },
+    });
+
+    // 更新 order item_count
+    const totalItems = await this.prisma.verificationWaOrderItem.count({
+      where: { wa_item_order_id: orderId },
+    });
+    await this.prisma.verificationWaOrder.update({
+      where: { id: orderId },
+      data: { wa_order_item_count: totalItems },
+    });
+
+    return {
+      success: true,
+      item_id: newItem.id,
+      seq: nextSeq,
+      order_id: orderId,
+    };
+  }
+
+  /** 刪除 order item */
+  async deleteOrderItem(orderId: number, itemId: number) {
+    const item = await this.prisma.verificationWaOrderItem.findFirst({
+      where: { id: itemId, wa_item_order_id: orderId },
+    });
+    if (!item) {
+      return { success: false, reason: 'item_not_found' };
+    }
+
+    // 記錄刪除前的快照（AI feedback 用）
+    const prevSnapshot = {
+      order_type: item.wa_item_order_type,
+      contract_no: item.wa_item_contract_no,
+      customer: item.wa_item_customer,
+      work_description: item.wa_item_work_desc,
+      location: item.wa_item_location,
+      driver_nickname: item.wa_item_driver_nickname,
+      vehicle_no: item.wa_item_vehicle_no,
+      machine_code: item.wa_item_machine_code,
+      contact_person: item.wa_item_contact_person,
+      is_suspended: item.wa_item_is_suspended,
+      remarks: item.wa_item_remarks,
+    };
+
+    // 先刪除關聯的 mod_logs
+    await this.prisma.verificationWaModLog.deleteMany({
+      where: { mod_item_id: itemId },
+    });
+
+    // 刪除 item
+    await this.prisma.verificationWaOrderItem.delete({
+      where: { id: itemId },
+    });
+
+    // 記錄刪除歷史到 order 級別的 mod_log
+    await this.prisma.verificationWaModLog.create({
+      data: {
+        mod_order_id: orderId,
+        mod_item_id: null,
+        mod_msg_id: orderId,
+        mod_type: 'manual_delete',
+        mod_description: `手動刪除 item #${item.wa_item_seq}`,
+        mod_prev_value: prevSnapshot,
+        mod_new_value: Prisma.DbNull,
+        mod_ai_confidence: null,
+      },
+    });
+
+    // 更新 order item_count
+    const totalItems = await this.prisma.verificationWaOrderItem.count({
+      where: { wa_item_order_id: orderId },
+    });
+    await this.prisma.verificationWaOrder.update({
+      where: { id: orderId },
+      data: { wa_order_item_count: totalItems },
+    });
+
+    return {
+      success: true,
+      deleted_item_id: itemId,
+      order_id: orderId,
+      prev_values: prevSnapshot,
+    };
+  }
 }

@@ -737,6 +737,17 @@ export const verificationApi = {
   getWhatsappQrCode: () =>
     api.get('/verification/whatsapp-qrcode'),
 
+  // ── Order Item CRUD ────────────────────────────────────────
+
+  updateWhatsappOrderItem: (orderId: number, itemId: number, data: Record<string, any>) =>
+    api.put(`/verification/whatsapp-orders/${orderId}/items/${itemId}`, data),
+
+  addWhatsappOrderItem: (orderId: number, data: Record<string, any>) =>
+    api.post(`/verification/whatsapp-orders/${orderId}/items`, data),
+
+  deleteWhatsappOrderItem: (orderId: number, itemId: number) =>
+    api.delete(`/verification/whatsapp-orders/${orderId}/items/${itemId}`),
+
   // ── 六來源交叉比對 ────────────────────────────────────────
 
   // 交叉比對總覽

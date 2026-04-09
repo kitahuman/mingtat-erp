@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Put,
+  Delete,
   Param,
   Body,
   Query,
@@ -167,5 +169,63 @@ export class WhatsappController {
       limit: limit ? +limit : 20,
       classification,
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // CRUD: 手動編輯 Order Items（需要 JWT）
+  // ══════════════════════════════════════════════════════════════
+
+  @Put('whatsapp-orders/:orderId/items/:itemId')
+  @UseGuards(AuthGuard('jwt'))
+  async updateOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() body: {
+      order_type?: string;
+      contract_no?: string;
+      customer?: string;
+      work_description?: string;
+      location?: string;
+      driver_nickname?: string;
+      vehicle_no?: string;
+      machine_code?: string;
+      contact_person?: string;
+      slip_write_as?: string;
+      is_suspended?: boolean;
+      remarks?: string;
+    },
+  ) {
+    return this.whatsappService.updateOrderItem(+orderId, +itemId, body);
+  }
+
+  @Post('whatsapp-orders/:orderId/items')
+  @UseGuards(AuthGuard('jwt'))
+  async addOrderItem(
+    @Param('orderId') orderId: string,
+    @Body() body: {
+      order_type?: string;
+      contract_no?: string;
+      customer?: string;
+      work_description?: string;
+      location?: string;
+      driver_nickname?: string;
+      vehicle_no?: string;
+      machine_code?: string;
+      contact_person?: string;
+      slip_write_as?: string;
+      is_suspended?: boolean;
+      remarks?: string;
+    },
+  ) {
+    return this.whatsappService.addOrderItem(+orderId, body);
+  }
+
+  @Delete('whatsapp-orders/:orderId/items/:itemId')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.whatsappService.deleteOrderItem(+orderId, +itemId);
   }
 }

@@ -96,6 +96,21 @@ interface Pagination {
   total_pages: number;
 }
 
+interface EditingItem {
+  order_type: string;
+  contract_no: string;
+  customer: string;
+  work_description: string;
+  location: string;
+  driver_nickname: string;
+  vehicle_no: string;
+  machine_code: string;
+  contact_person: string;
+  slip_write_as: string;
+  is_suspended: boolean;
+  remarks: string;
+}
+
 // ══════════════════════════════════════════════════════════════
 // 工具函數
 // ══════════════════════════════════════════════════════════════
@@ -112,7 +127,6 @@ function formatDateTime(dateStr: string | null) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/** 從 remarks 中提取 staff_list */
 function extractStaffList(remarks: string | null): { staffList: string[]; teamLeader: string | null; cleanRemarks: string | null } {
   if (!remarks) return { staffList: [], teamLeader: null, cleanRemarks: null };
   let staffList: string[] = [];
@@ -133,12 +147,11 @@ function extractStaffList(remarks: string | null): { staffList: string[]; teamLe
   return { staffList, teamLeader, cleanRemarks: cleanLines.join('\n').trim() || null };
 }
 
-/** 按 order_type 分組 items */
 function groupItemsByType(items: SummaryItem[]) {
   const machinery: SummaryItem[] = [];
   const manpower: SummaryItem[] = [];
   const transport: SummaryItem[] = [];
-  const other: SummaryItem[] = []; // notice, leave, idle, unknown
+  const other: SummaryItem[] = [];
   for (const item of items) {
     switch (item.order_type) {
       case 'machinery':
@@ -157,6 +170,40 @@ function groupItemsByType(items: SummaryItem[]) {
     }
   }
   return { machinery, manpower, transport, other };
+}
+
+function itemToEditingItem(item: SummaryItem): EditingItem {
+  return {
+    order_type: item.order_type || '',
+    contract_no: item.contract_no || '',
+    customer: item.customer || '',
+    work_description: item.work_description || '',
+    location: item.location || '',
+    driver_nickname: item.driver_nickname || '',
+    vehicle_no: item.vehicle_no || '',
+    machine_code: item.machine_code || '',
+    contact_person: item.contact_person || '',
+    slip_write_as: item.slip_write_as || '',
+    is_suspended: item.is_suspended,
+    remarks: item.remarks || '',
+  };
+}
+
+function emptyEditingItem(orderType: string): EditingItem {
+  return {
+    order_type: orderType,
+    contract_no: '',
+    customer: '',
+    work_description: '',
+    location: '',
+    driver_nickname: '',
+    vehicle_no: '',
+    machine_code: '',
+    contact_person: '',
+    slip_write_as: '',
+    is_suspended: false,
+    remarks: '',
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -191,6 +238,9 @@ function ModTypeBadge({ type }: { type: string }) {
     suspend: { label: '暫停', color: 'bg-yellow-500' },
     resume: { label: '恢復', color: 'bg-green-500' },
     add: { label: '新增', color: 'bg-blue-500' },
+    manual_edit: { label: '手動修改', color: 'bg-indigo-500' },
+    manual_add: { label: '手動新增', color: 'bg-teal-500' },
+    manual_delete: { label: '手動刪除', color: 'bg-red-600' },
     other: { label: '其他', color: 'bg-gray-500' },
   };
   const c = config[type] || config.other;
@@ -217,24 +267,24 @@ function ClassificationBadge({ classification }: { classification: string | null
 }
 
 function OrderTypeBadge({ type }: { type: string | null }) {
-  const config: Record<string, { label: string; emoji: string; colors: string }> = {
-    machinery: { label: '機械', emoji: '', colors: 'bg-purple-100 text-purple-700 border-purple-200' },
-    manpower: { label: '人手', emoji: '', colors: 'bg-blue-100 text-blue-700 border-blue-200' },
-    transport: { label: '運輸', emoji: '', colors: 'bg-teal-100 text-teal-700 border-teal-200' },
-    idle: { label: '閒置', emoji: '', colors: 'bg-gray-100 text-gray-600 border-gray-200' },
-    notice: { label: '通知', emoji: '', colors: 'bg-amber-100 text-amber-700 border-amber-200' },
-    leave: { label: '請假', emoji: '', colors: 'bg-pink-100 text-pink-700 border-pink-200' },
+  const config: Record<string, { label: string; colors: string }> = {
+    machinery: { label: '機械', colors: 'bg-purple-100 text-purple-700 border-purple-200' },
+    manpower: { label: '人手', colors: 'bg-blue-100 text-blue-700 border-blue-200' },
+    transport: { label: '運輸', colors: 'bg-teal-100 text-teal-700 border-teal-200' },
+    idle: { label: '閒置', colors: 'bg-gray-100 text-gray-600 border-gray-200' },
+    notice: { label: '通知', colors: 'bg-amber-100 text-amber-700 border-amber-200' },
+    leave: { label: '請假', colors: 'bg-pink-100 text-pink-700 border-pink-200' },
   };
-  const c = config[type || ''] || { label: type || '其他', emoji: '', colors: 'bg-gray-100 text-gray-600 border-gray-200' };
+  const c = config[type || ''] || { label: type || '其他', colors: 'bg-gray-100 text-gray-600 border-gray-200' };
   return (
     <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 text-xs rounded-full font-medium border ${c.colors}`}>
-      {c.emoji} {c.label}
+      {c.label}
     </span>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-// 修改歷史行（共用）
+// 修改歷史行
 // ══════════════════════════════════════════════════════════════
 
 function ModLogRow({ log }: { log: ModLog }) {
@@ -264,7 +314,7 @@ function ModLogRow({ log }: { log: ModLog }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 行樣式和換人對比（共用）
+// 行樣式和換人對比
 // ══════════════════════════════════════════════════════════════
 
 function getRowBg(item: SummaryItem) {
@@ -293,9 +343,9 @@ function ReassignInfo({ item }: { item: SummaryItem }) {
   if (prev.wa_item_vehicle_no && prev.wa_item_vehicle_no !== item.vehicle_no) {
     changes.push(
       <span key="vehicle" className="inline-flex items-center gap-1 text-xs">
-        <span className="text-gray-400 line-through font-mono">{prev.wa_item_vehicle_no}</span>
+        <span className="text-gray-400 line-through">{prev.wa_item_vehicle_no}</span>
         <span className="text-orange-500">→</span>
-        <span className="font-medium text-orange-700 font-mono">{item.vehicle_no}</span>
+        <span className="font-medium text-orange-700">{item.vehicle_no}</span>
       </span>
     );
   }
@@ -319,13 +369,257 @@ function StatusCell({ item }: { item: SummaryItem }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 機械調配表格
+// 編輯用 Input 元件
 // ══════════════════════════════════════════════════════════════
 
-function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
+function EditInput({ value, onChange, placeholder, className = '' }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`border border-blue-300 rounded px-1.5 py-1 text-xs w-full bg-blue-50/30 focus:outline-none focus:ring-1 focus:ring-blue-400 ${className}`}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
+function EditCheckbox({ checked, onChange, label }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer" onClick={(e) => e.stopPropagation()}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 操作按鈕
+// ══════════════════════════════════════════════════════════════
+
+function ActionButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={onEdit}
+        className="p-1 rounded hover:bg-blue-100 text-blue-500 transition"
+        title="編輯"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </button>
+      <button
+        onClick={onDelete}
+        className="p-1 rounded hover:bg-red-100 text-red-400 transition"
+        title="刪除"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function SaveCancelButtons({ onSave, onCancel, saving }: { onSave: () => void; onCancel: () => void; saving: boolean }) {
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition"
+      >
+        {saving ? '...' : '儲存'}
+      </button>
+      <button
+        onClick={onCancel}
+        disabled={saving}
+        className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300 disabled:opacity-50 transition"
+      >
+        取消
+      </button>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 刪除確認 Modal
+// ══════════════════════════════════════════════════════════════
+
+function DeleteConfirmModal({ item, onConfirm, onCancel, deleting }: {
+  item: SummaryItem;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">確認刪除</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          確定要刪除以下項目嗎？此操作無法復原。
+        </p>
+        <div className="bg-gray-50 rounded p-3 mb-4 text-xs space-y-1">
+          <div><span className="text-gray-400">類型：</span><OrderTypeBadge type={item.order_type} /></div>
+          {item.contract_no && <div><span className="text-gray-400">合約：</span>{item.contract_no}</div>}
+          {item.machine_code && <div><span className="text-gray-400">DC 編號：</span>{item.machine_code}</div>}
+          {item.driver_nickname && <div><span className="text-gray-400">司機/操作員：</span>{item.driver_nickname}</div>}
+          {item.vehicle_no && <div><span className="text-gray-400">車牌：</span>{item.vehicle_no}</div>}
+          {item.work_description && <div><span className="text-gray-400">工作：</span>{item.work_description}</div>}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 transition"
+          >
+            {deleting ? '刪除中...' : '確認刪除'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 新增 Item Modal
+// ══════════════════════════════════════════════════════════════
+
+function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
+  orderType: string;
+  orderId: number;
+  onSave: (data: EditingItem) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState<EditingItem>(emptyEditingItem(orderType));
+  const update = (field: keyof EditingItem, value: any) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const fields = (() => {
+    switch (orderType) {
+      case 'machinery':
+        return [
+          { key: 'contract_no', label: '合約' },
+          { key: 'location', label: '地點' },
+          { key: 'machine_code', label: 'DC 編號' },
+          { key: 'driver_nickname', label: '操作員' },
+          { key: 'work_description', label: '工作描述' },
+          { key: 'customer', label: '客戶' },
+          { key: 'remarks', label: '備註' },
+        ];
+      case 'manpower':
+        return [
+          { key: 'contract_no', label: '合約' },
+          { key: 'work_description', label: '工作描述' },
+          { key: 'location', label: '地點' },
+          { key: 'driver_nickname', label: '帶隊人' },
+          { key: 'remarks', label: '員工列表（頓號分隔）' },
+          { key: 'customer', label: '客戶' },
+        ];
+      case 'transport':
+        return [
+          { key: 'customer', label: '客戶' },
+          { key: 'contract_no', label: '合約' },
+          { key: 'work_description', label: '路線/工作描述' },
+          { key: 'location', label: '地點' },
+          { key: 'driver_nickname', label: '司機' },
+          { key: 'vehicle_no', label: '車牌' },
+          { key: 'contact_person', label: '聯絡人' },
+          { key: 'remarks', label: '備註' },
+        ];
+      default:
+        return [
+          { key: 'work_description', label: '描述' },
+          { key: 'driver_nickname', label: '人員' },
+          { key: 'remarks', label: '備註' },
+        ];
+    }
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg mx-4 w-full" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">新增項目</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          <OrderTypeBadge type={orderType} /> Order #{orderId}
+        </p>
+        <div className="space-y-3">
+          {fields.map(({ key, label }) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+              <input
+                type="text"
+                value={(form as any)[key] || ''}
+                onChange={(e) => update(key as keyof EditingItem, e.target.value)}
+                className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+          ))}
+          <EditCheckbox
+            checked={form.is_suspended}
+            onChange={(v) => update('is_suspended', v)}
+            label="暫停"
+          />
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            onClick={onCancel}
+            disabled={saving}
+            className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onSave(form)}
+            disabled={saving}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition"
+          >
+            {saving ? '新增中...' : '新增'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 機械調配表格（含 CRUD）
+// ══════════════════════════════════════════════════════════════
+
+function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
+  editingId: number | null;
+  editForm: EditingItem | null;
+  onStartEdit: (item: SummaryItem) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: (item: SummaryItem) => void;
+  saving: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -335,7 +629,6 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
         <span className="text-sm font-medium text-purple-800">機械調配</span>
         <span className="text-xs text-purple-500">({items.length} 項)</span>
       </div>
-      {/* 電腦版表格 */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -348,15 +641,35 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
               <th className="px-3 py-2 text-left font-medium w-20">操作員</th>
               <th className="px-3 py-2 text-left font-medium min-w-[120px]">工作描述</th>
               <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
-              <th className="px-3 py-2 w-6"></th>
+              <th className="px-3 py-2 text-center font-medium w-20">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
+              const isEditing = editingId === item.id;
               const isItemExpanded = expandedItemLogs.has(item.id);
               const hasLogs = item.mod_logs.length > 0;
               const isCancelled = item.mod_status === 'cancelled';
               const textClass = isCancelled ? 'line-through text-gray-400' : '';
+
+              if (isEditing && editForm) {
+                return (
+                  <tr key={item.id} className="border-b bg-blue-50/50">
+                    <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
+                    <td className="px-3 py-2">
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                    </td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => { editForm.location = v; }} placeholder="地點" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.machine_code} onChange={(v) => { editForm.machine_code = v; }} placeholder="DC編號" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="操作員" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
+                  </tr>
+                );
+              }
+
               return (
                 <Fragment key={item.id}>
                   <tr
@@ -376,17 +689,15 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
                     <td className={`px-3 py-2 text-xs font-mono font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-purple-700'}`}>
                       {item.machine_code || '—'}
                     </td>
-                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
-                      {item.driver_nickname || '—'}
-                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>{item.driver_nickname || '—'}</td>
                     <td className={`px-3 py-2 text-xs max-w-[150px] ${textClass}`}>
                       <div className="truncate" title={item.work_description || ''}>{item.work_description || '—'}</div>
                     </td>
                     <td className={`px-3 py-2 text-xs text-gray-500 max-w-[120px] ${textClass}`}>
                       <div className="truncate" title={item.remarks || ''}>{item.remarks || '—'}</div>
                     </td>
-                    <td className="px-2 py-2 text-gray-400">
-                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    <td className="px-2 py-2 text-center">
+                      <ActionButtons onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
                     </td>
                   </tr>
                   {isItemExpanded && hasLogs && (
@@ -408,7 +719,7 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
       {/* 手機版卡片 */}
       <div className="md:hidden divide-y">
         {items.map((item) => (
-          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
         ))}
       </div>
     </div>
@@ -416,13 +727,20 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 工程部員工表格
+// 工程部員工表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
+function ManpowerTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
+  editingId: number | null;
+  editForm: EditingItem | null;
+  onStartEdit: (item: SummaryItem) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: (item: SummaryItem) => void;
+  saving: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -432,7 +750,6 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
         <span className="text-sm font-medium text-blue-800">工程部員工</span>
         <span className="text-xs text-blue-500">({items.length} 項)</span>
       </div>
-      {/* 電腦版表格 */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -445,20 +762,37 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
               <th className="px-3 py-2 text-left font-medium w-20">帶隊人</th>
               <th className="px-3 py-2 text-left font-medium min-w-[200px]">員工列表</th>
               <th className="px-3 py-2 text-left font-medium w-14">人數</th>
-              <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
-              <th className="px-3 py-2 w-6"></th>
+              <th className="px-3 py-2 text-center font-medium w-20">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
+              const isEditing = editingId === item.id;
               const isItemExpanded = expandedItemLogs.has(item.id);
               const hasLogs = item.mod_logs.length > 0;
               const isCancelled = item.mod_status === 'cancelled';
               const textClass = isCancelled ? 'line-through text-gray-400' : '';
               const { staffList, teamLeader, cleanRemarks } = extractStaffList(item.remarks);
-              // driver_nickname 可能存了 team_leader
               const leader = teamLeader || item.driver_nickname;
               const staffCount = staffList.length + (leader ? 1 : 0);
+
+              if (isEditing && editForm) {
+                return (
+                  <tr key={item.id} className="border-b bg-blue-50/50">
+                    <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
+                    <td className="px-3 py-2">
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                    </td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => { editForm.location = v; }} placeholder="地點" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="帶隊人" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="員工（頓號分隔）" /></td>
+                    <td className="px-3 py-2"></td>
+                    <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
+                  </tr>
+                );
+              }
 
               return (
                 <Fragment key={item.id}>
@@ -500,16 +834,13 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
                         </span>
                       ) : '—'}
                     </td>
-                    <td className={`px-3 py-2 text-xs text-gray-500 max-w-[100px] ${textClass}`}>
-                      <div className="truncate" title={cleanRemarks || ''}>{cleanRemarks || '—'}</div>
-                    </td>
-                    <td className="px-2 py-2 text-gray-400">
-                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    <td className="px-2 py-2 text-center">
+                      <ActionButtons onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
                     </td>
                   </tr>
                   {isItemExpanded && hasLogs && (
                     <tr className="bg-orange-50/40">
-                      <td colSpan={10} className="px-4 py-3">
+                      <td colSpan={9} className="px-4 py-3">
                         <div className="border-l-2 border-orange-300 pl-3">
                           <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
                           {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
@@ -523,10 +854,9 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
           </tbody>
         </table>
       </div>
-      {/* 手機版卡片 */}
       <div className="md:hidden divide-y">
         {items.map((item) => (
-          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
         ))}
       </div>
     </div>
@@ -534,13 +864,20 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 泥車/運輸表格
+// 泥車/運輸表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
+function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
+  editingId: number | null;
+  editForm: EditingItem | null;
+  onStartEdit: (item: SummaryItem) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: (item: SummaryItem) => void;
+  saving: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -550,29 +887,49 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
         <span className="text-sm font-medium text-teal-800">泥車/運輸</span>
         <span className="text-xs text-teal-500">({items.length} 項)</span>
       </div>
-      {/* 電腦版表格 */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 text-gray-600 text-xs border-b">
               <th className="px-3 py-2 text-left font-medium w-8">#</th>
               <th className="px-3 py-2 text-left font-medium w-24">狀態</th>
-              <th className="px-3 py-2 text-left font-medium min-w-[100px]">客戶</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[80px]">客戶</th>
               <th className="px-3 py-2 text-left font-medium min-w-[80px]">合約</th>
               <th className="px-3 py-2 text-left font-medium min-w-[160px]">路線/工作描述</th>
               <th className="px-3 py-2 text-left font-medium w-20">司機</th>
               <th className="px-3 py-2 text-left font-medium w-20">車牌</th>
               <th className="px-3 py-2 text-left font-medium min-w-[100px]">聯絡人</th>
               <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
-              <th className="px-3 py-2 w-6"></th>
+              <th className="px-3 py-2 text-center font-medium w-20">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
+              const isEditing = editingId === item.id;
               const isItemExpanded = expandedItemLogs.has(item.id);
               const hasLogs = item.mod_logs.length > 0;
               const isCancelled = item.mod_status === 'cancelled';
               const textClass = isCancelled ? 'line-through text-gray-400' : '';
+
+              if (isEditing && editForm) {
+                return (
+                  <tr key={item.id} className="border-b bg-blue-50/50">
+                    <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
+                    <td className="px-3 py-2">
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                    </td>
+                    <td className="px-3 py-2"><EditInput value={editForm.customer} onChange={(v) => { editForm.customer = v; }} placeholder="客戶" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="路線/工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="司機" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.vehicle_no} onChange={(v) => { editForm.vehicle_no = v; }} placeholder="車牌" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contact_person} onChange={(v) => { editForm.contact_person = v; }} placeholder="聯絡人" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
+                  </tr>
+                );
+              }
+
               return (
                 <Fragment key={item.id}>
                   <tr
@@ -581,9 +938,7 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
                   >
                     <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
                     <td className="px-3 py-2"><StatusCell item={item} /></td>
-                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
-                      {item.customer || '—'}
-                    </td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>{item.customer || '—'}</td>
                     <td className={`px-3 py-2 text-xs ${textClass}`}>
                       {item.contract_no ? <span className="font-mono">{item.contract_no}</span> : <span className="text-gray-300">—</span>}
                     </td>
@@ -601,14 +956,12 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
                     <td className={`px-3 py-2 text-xs font-mono font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-teal-700'}`}>
                       {item.vehicle_no || '—'}
                     </td>
-                    <td className={`px-3 py-2 text-xs ${textClass}`}>
-                      {item.contact_person || '—'}
-                    </td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>{item.contact_person || '—'}</td>
                     <td className={`px-3 py-2 text-xs text-gray-500 max-w-[100px] ${textClass}`}>
                       <div className="truncate" title={item.remarks || ''}>{item.remarks || '—'}</div>
                     </td>
-                    <td className="px-2 py-2 text-gray-400">
-                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    <td className="px-2 py-2 text-center">
+                      <ActionButtons onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
                     </td>
                   </tr>
                   {isItemExpanded && hasLogs && (
@@ -627,10 +980,9 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
           </tbody>
         </table>
       </div>
-      {/* 手機版卡片 */}
       <div className="md:hidden divide-y">
         {items.map((item) => (
-          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
         ))}
       </div>
     </div>
@@ -638,13 +990,20 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 其他/雜項表格（通知、請假等）
+// 其他/雜項表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
+function OtherTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
+  editingId: number | null;
+  editForm: EditingItem | null;
+  onStartEdit: (item: SummaryItem) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: (item: SummaryItem) => void;
+  saving: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -664,15 +1023,33 @@ function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
               <th className="px-3 py-2 text-left font-medium min-w-[140px]">描述</th>
               <th className="px-3 py-2 text-left font-medium min-w-[100px]">人員</th>
               <th className="px-3 py-2 text-left font-medium min-w-[120px]">備註</th>
-              <th className="px-3 py-2 w-6"></th>
+              <th className="px-3 py-2 text-center font-medium w-20">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
+              const isEditing = editingId === item.id;
               const isItemExpanded = expandedItemLogs.has(item.id);
               const hasLogs = item.mod_logs.length > 0;
               const isCancelled = item.mod_status === 'cancelled';
               const textClass = isCancelled ? 'line-through text-gray-400' : '';
+
+              if (isEditing && editForm) {
+                return (
+                  <tr key={item.id} className="border-b bg-blue-50/50">
+                    <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
+                    <td className="px-3 py-2"><OrderTypeBadge type={item.order_type} /></td>
+                    <td className="px-3 py-2">
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                    </td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="人員" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
+                  </tr>
+                );
+              }
+
               return (
                 <Fragment key={item.id}>
                   <tr
@@ -682,17 +1059,11 @@ function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
                     <td className={`px-3 py-2 text-gray-400 text-xs ${isCancelled ? 'line-through' : ''}`}>{item.seq}</td>
                     <td className="px-3 py-2"><OrderTypeBadge type={item.order_type} /></td>
                     <td className="px-3 py-2"><StatusCell item={item} /></td>
-                    <td className={`px-3 py-2 text-xs ${textClass}`}>
-                      {item.work_description || item.location || '—'}
-                    </td>
-                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>
-                      {item.driver_nickname || '—'}
-                    </td>
-                    <td className={`px-3 py-2 text-xs text-gray-500 ${textClass}`}>
-                      {item.remarks || '—'}
-                    </td>
-                    <td className="px-2 py-2 text-gray-400">
-                      {hasLogs && <span className={`text-xs transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>{item.work_description || item.location || '—'}</td>
+                    <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>{item.driver_nickname || '—'}</td>
+                    <td className={`px-3 py-2 text-xs text-gray-500 ${textClass}`}>{item.remarks || '—'}</td>
+                    <td className="px-2 py-2 text-center">
+                      <ActionButtons onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
                     </td>
                   </tr>
                   {isItemExpanded && hasLogs && (
@@ -713,7 +1084,7 @@ function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
       </div>
       <div className="md:hidden divide-y">
         {items.map((item) => (
-          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+          <MobileItemCard key={item.id} item={item} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} onEdit={() => onStartEdit(item)} onDelete={() => onDelete(item)} />
         ))}
       </div>
     </div>
@@ -721,13 +1092,15 @@ function OtherTable({ items, expandedItemLogs, toggleItemLog }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 手機版卡片（共用）
+// 手機版卡片（含編輯/刪除按鈕）
 // ══════════════════════════════════════════════════════════════
 
-function MobileItemCard({ item, expandedItemLogs, toggleItemLog }: {
+function MobileItemCard({ item, expandedItemLogs, toggleItemLog, onEdit, onDelete }: {
   item: SummaryItem;
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const isItemExpanded = expandedItemLogs.has(item.id);
   const hasLogs = item.mod_logs.length > 0;
@@ -745,18 +1118,30 @@ function MobileItemCard({ item, expandedItemLogs, toggleItemLog }: {
 
   return (
     <div className={`${cardBg} px-4 py-3`}>
-      <div
-        className={`flex items-center justify-between mb-2 ${hasLogs ? 'cursor-pointer' : ''}`}
-        onClick={() => hasLogs && toggleItemLog(item.id)}
-      >
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center justify-between mb-2">
+        <div
+          className={`flex items-center gap-2 flex-wrap flex-1 ${hasLogs ? 'cursor-pointer' : ''}`}
+          onClick={() => hasLogs && toggleItemLog(item.id)}
+        >
           <span className="text-xs text-gray-400 font-mono">#{item.seq}</span>
           <OrderTypeBadge type={item.order_type} />
           <StatusCell item={item} />
+          {hasLogs && (
+            <span className={`text-xs text-gray-400 transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>
+          )}
         </div>
-        {hasLogs && (
-          <span className={`text-xs text-gray-400 transition-transform inline-block ${isItemExpanded ? 'rotate-90' : ''}`}>▶</span>
-        )}
+        <div className="flex items-center gap-1 ml-2">
+          <button onClick={onEdit} className="p-1.5 rounded hover:bg-blue-100 text-blue-500 transition" title="編輯">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-100 text-red-400 transition" title="刪除">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className={`grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mt-2 ${isCancelled ? 'line-through text-gray-400' : ''}`}>
@@ -848,6 +1233,21 @@ export default function WhatsAppDailySummaryPage() {
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [expandedItemLogs, setExpandedItemLogs] = useState<Set<number>>(new Set());
 
+  // CRUD 狀態
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<EditingItem | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ item: SummaryItem; orderId: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [addingType, setAddingType] = useState<{ orderType: string; orderId: number } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const fetchData = useCallback(async (page = 1) => {
     setLoading(true);
     try {
@@ -898,13 +1298,135 @@ export default function WhatsAppDailySummaryPage() {
     });
   };
 
+  // ── CRUD 操作 ──────────────────────────────────────────────
+
+  const handleStartEdit = (item: SummaryItem) => {
+    setEditingId(item.id);
+    setEditForm(itemToEditingItem(item));
+    setEditingOrderId(item.source_order_id);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditForm(null);
+    setEditingOrderId(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editForm || !editingOrderId) return;
+    setSaving(true);
+    try {
+      const res = await verificationApi.updateWhatsappOrderItem(editingOrderId, editingId, editForm);
+      if (res.data.success) {
+        showToast('已儲存修改', 'success');
+        handleCancelEdit();
+        fetchData(pagination.page);
+      } else {
+        showToast(res.data.reason === 'no_changes' ? '沒有變更' : '儲存失敗', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to update item:', err);
+      showToast('儲存失敗', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = (item: SummaryItem) => {
+    setDeleteTarget({ item, orderId: item.source_order_id });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await verificationApi.deleteWhatsappOrderItem(deleteTarget.orderId, deleteTarget.item.id);
+      if (res.data.success) {
+        showToast('已刪除項目', 'success');
+        setDeleteTarget(null);
+        fetchData(pagination.page);
+      } else {
+        showToast('刪除失敗', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to delete item:', err);
+      showToast('刪除失敗', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleAddItem = async (data: EditingItem) => {
+    if (!addingType) return;
+    setSaving(true);
+    try {
+      const res = await verificationApi.addWhatsappOrderItem(addingType.orderId, data);
+      if (res.data.success) {
+        showToast('已新增項目', 'success');
+        setAddingType(null);
+        fetchData(pagination.page);
+      } else {
+        showToast('新增失敗', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to add item:', err);
+      showToast('新增失敗', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── 共用 table props ──────────────────────────────────────
+
+  const tableProps = {
+    expandedItemLogs,
+    toggleItemLog,
+    editingId,
+    editForm,
+    onStartEdit: handleStartEdit,
+    onCancelEdit: handleCancelEdit,
+    onSaveEdit: handleSaveEdit,
+    onDelete: handleDelete,
+    saving,
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* ── Toast 通知 ──────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium text-white transition-all ${
+          toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* ── 刪除確認 Modal ──────────────────────────────────── */}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          item={deleteTarget.item}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          deleting={deleting}
+        />
+      )}
+
+      {/* ── 新增 Item Modal ─────────────────────────────────── */}
+      {addingType && (
+        <AddItemModal
+          orderType={addingType.orderType}
+          orderId={addingType.orderId}
+          onSave={handleAddItem}
+          onCancel={() => setAddingType(null)}
+          saving={saving}
+        />
+      )}
+
       {/* ── 標題 ────────────────────────────────────────────── */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">每日 Order 總結</h1>
         <p className="text-sm text-gray-500 mt-1">
-          合併同一天所有 WhatsApp order 和修改指令，按機械調配、工程部員工、泥車/運輸三種類型分區顯示。
+          合併同一天所有 WhatsApp order 和修改指令，按機械調配、工程部員工、泥車/運輸三種類型分區顯示。點擊編輯按鈕可修改項目。
         </p>
       </div>
 
@@ -970,8 +1492,8 @@ export default function WhatsAppDailySummaryPage() {
         const showMessages = expandedMessages.has(summary.date);
         const latestVersion = summary.versions[summary.versions.length - 1];
         const grouped = groupItemsByType(summary.items);
+        const latestOrderId = summary.items[0]?.source_order_id;
 
-        // 各類型統計
         const typeCounts = [
           grouped.machinery.length > 0 ? `機械 ${grouped.machinery.length}` : '',
           grouped.manpower.length > 0 ? `人手 ${grouped.manpower.length}` : '',
@@ -1004,21 +1526,17 @@ export default function WhatsAppDailySummaryPage() {
               </div>
 
               <div className="flex items-center gap-3 text-sm flex-wrap">
-                {/* 類型統計 */}
                 <div className="flex gap-2 text-xs">
                   {typeCounts.map((tc) => (
                     <span key={tc} className="text-gray-500">{tc}</span>
                   ))}
                 </div>
-
-                {/* 修改統計 */}
                 <div className="flex gap-2 text-xs">
                   {summary.cancelled_items > 0 && <span className="text-red-500">{summary.cancelled_items} 取消</span>}
                   {summary.suspended_items > 0 && <span className="text-yellow-600">{summary.suspended_items} 暫停</span>}
                   {summary.reassigned_items > 0 && <span className="text-orange-500">{summary.reassigned_items} 換人</span>}
                   {summary.added_items > 0 && <span className="text-green-600">{summary.added_items} 新增</span>}
                 </div>
-
                 <span className={`transition-transform text-gray-400 ${isExpanded ? 'rotate-180' : ''}`}>
                   ▼
                 </span>
@@ -1028,11 +1546,42 @@ export default function WhatsAppDailySummaryPage() {
             {/* ── 展開的總結內容 ──────────────────────────── */}
             {isExpanded && (
               <div className="border-t">
-                {/* 三種類型分區顯示 */}
-                <MachineryTable items={grouped.machinery} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
-                <ManpowerTable items={grouped.manpower} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
-                <TransportTable items={grouped.transport} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
-                <OtherTable items={grouped.other} expandedItemLogs={expandedItemLogs} toggleItemLog={toggleItemLog} />
+                {/* 三種類型分區顯示（含 CRUD） */}
+                <MachineryTable items={grouped.machinery} {...tableProps} />
+                <ManpowerTable items={grouped.manpower} {...tableProps} />
+                <TransportTable items={grouped.transport} {...tableProps} />
+                <OtherTable items={grouped.other} {...tableProps} />
+
+                {/* ── 新增項目按鈕 ────────────────────────── */}
+                {latestOrderId && (
+                  <div className="border-t px-5 py-3 flex flex-wrap gap-2">
+                    <span className="text-xs text-gray-500 self-center mr-2">新增項目：</span>
+                    <button
+                      onClick={() => setAddingType({ orderType: 'machinery', orderId: latestOrderId })}
+                      className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 transition"
+                    >
+                      + 機械
+                    </button>
+                    <button
+                      onClick={() => setAddingType({ orderType: 'manpower', orderId: latestOrderId })}
+                      className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition"
+                    >
+                      + 人手
+                    </button>
+                    <button
+                      onClick={() => setAddingType({ orderType: 'transport', orderId: latestOrderId })}
+                      className="px-3 py-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition"
+                    >
+                      + 運輸
+                    </button>
+                    <button
+                      onClick={() => setAddingType({ orderType: 'notice', orderId: latestOrderId })}
+                      className="px-3 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 transition"
+                    >
+                      + 其他
+                    </button>
+                  </div>
+                )}
 
                 {/* ── Order 級別修改日誌 ──────────────────── */}
                 {summary.order_mod_logs.length > 0 && (
@@ -1087,7 +1636,7 @@ export default function WhatsAppDailySummaryPage() {
                   </div>
                 )}
 
-                {/* ── 原始訊息記錄（過程紀錄）─────────────── */}
+                {/* ── 原始訊息記錄 ────────────────────────── */}
                 <div className="border-t">
                   <div
                     className="flex items-center justify-between px-5 py-2.5 cursor-pointer hover:bg-gray-50 transition text-sm"
