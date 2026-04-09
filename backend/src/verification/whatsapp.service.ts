@@ -131,8 +131,141 @@ export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
   private readonly openai: OpenAI;
 
+  // ── Bot 狀態（記憶體快取，重啟後重置為 unknown）──────────────
+  private botStatus: 'connected' | 'disconnected' = 'disconnected';
+  private lastHeartbeatAt: Date | null = null;
+  private lastMessageAt: Date | null = null;
+  private botUptime: number | null = null;
+  private latestQrCode: string | null = null;
+  private latestQrCodeAt: Date | null = null;
+
+  // 心跳超時閾值（毫秒）
+  private readonly HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 分鐘
+  // QR code 有效期（毫秒）
+  private readonly QR_CODE_TTL_MS = 60 * 1000; // 60 秒
+
   constructor(private readonly prisma: PrismaService) {
     this.openai = new OpenAI();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Bot 狀態管理
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * 記錄心跳
+   * 由 WhatsApp bot 定期呼叫（建議每 60 秒一次）
+   */
+  async recordHeartbeat(payload: {
+    status: 'connected' | 'disconnected';
+    uptime?: number;
+    lastMessageAt?: string;
+  }) {
+    this.botStatus = payload.status;
+    this.lastHeartbeatAt = new Date();
+    this.botUptime = payload.uptime ?? null;
+
+    if (payload.lastMessageAt) {
+      this.lastMessageAt = new Date(payload.lastMessageAt);
+    }
+
+    // 連線成功後清除 QR code
+    if (payload.status === 'connected') {
+      this.latestQrCode = null;
+      this.latestQrCodeAt = null;
+    }
+
+    this.logger.log(`Heartbeat received: status=${payload.status}, uptime=${payload.uptime}`);
+
+    return {
+      received: true,
+      server_time: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * 儲存 QR Code
+   * 當 bot 斷線需要重新掃碼時，bot 會發送 QR code 數據
+   */
+  async saveQrCode(qrCode: string) {
+    this.latestQrCode = qrCode;
+    this.latestQrCodeAt = new Date();
+
+    this.logger.log(`QR code received (length=${qrCode.length})`);
+
+    return {
+      saved: true,
+      saved_at: this.latestQrCodeAt.toISOString(),
+    };
+  }
+
+  /**
+   * 取得 Bot 連線狀態
+   * 前端用來顯示連線指示器
+   */
+  async getBotStatus() {
+    const now = new Date();
+    let effectiveStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+    let offlineDurationMs: number | null = null;
+
+    if (this.lastHeartbeatAt) {
+      const msSinceLastHeartbeat = now.getTime() - this.lastHeartbeatAt.getTime();
+
+      if (this.botStatus === 'connected' && msSinceLastHeartbeat <= this.HEARTBEAT_TIMEOUT_MS) {
+        effectiveStatus = 'connected';
+      } else {
+        effectiveStatus = 'disconnected';
+        // 離線時長：從最後一次心跳開始計算
+        offlineDurationMs = msSinceLastHeartbeat;
+      }
+    }
+    // 如果從未收到心跳，保持 'unknown'
+
+    // 檢查是否有有效的 QR code
+    let hasQrCode = false;
+    if (this.latestQrCode && this.latestQrCodeAt) {
+      const qrAge = now.getTime() - this.latestQrCodeAt.getTime();
+      hasQrCode = qrAge <= this.QR_CODE_TTL_MS;
+    }
+
+    return {
+      status: effectiveStatus,
+      reported_status: this.botStatus,
+      last_heartbeat_at: this.lastHeartbeatAt?.toISOString() || null,
+      last_message_at: this.lastMessageAt?.toISOString() || null,
+      uptime: this.botUptime,
+      offline_duration_ms: offlineDurationMs,
+      has_qr_code: hasQrCode,
+      server_time: now.toISOString(),
+    };
+  }
+
+  /**
+   * 取得最新 QR Code
+   * 前端用來顯示掃碼重連介面
+   */
+  async getQrCode() {
+    const now = new Date();
+
+    if (!this.latestQrCode || !this.latestQrCodeAt) {
+      return {
+        available: false,
+        qr_code: null,
+        generated_at: null,
+        expired: false,
+      };
+    }
+
+    const qrAge = now.getTime() - this.latestQrCodeAt.getTime();
+    const expired = qrAge > this.QR_CODE_TTL_MS;
+
+    return {
+      available: !expired,
+      qr_code: expired ? null : this.latestQrCode,
+      generated_at: this.latestQrCodeAt.toISOString(),
+      expired,
+      age_ms: qrAge,
+    };
   }
 
   // ══════════════════════════════════════════════════════════════

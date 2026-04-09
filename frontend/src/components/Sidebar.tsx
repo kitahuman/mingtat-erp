@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
 import { useState, useRef, useEffect } from 'react';
+import WhatsAppBotStatus from './WhatsAppBotStatus';
 
 interface NavItem {
   href: string;
@@ -418,6 +419,11 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
             return renderNavItem(entry);
           })}
         </nav>
+
+        {/* WhatsApp Bot Status */}
+        <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
+          <WhatsAppBotStatus collapsed={collapsed} />
+        </div>
 
         {/* Employee Portal Quick Link */}
         <div className={`px-2 pb-2 ${collapsed ? 'text-center' : ''}`}>

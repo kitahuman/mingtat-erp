@@ -728,6 +728,14 @@ export const verificationApi = {
   }) =>
     api.get('/verification/whatsapp-messages', { params }),
 
+  // Bot 狀態查詢
+  getWhatsappBotStatus: () =>
+    api.get('/verification/whatsapp-bot-status'),
+
+  // QR Code 查詢
+  getWhatsappQrCode: () =>
+    api.get('/verification/whatsapp-qrcode'),
+
   // ── 六來源交叉比對 ────────────────────────────────────────
 
   // 交叉比對總覽

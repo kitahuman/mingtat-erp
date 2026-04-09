@@ -16,25 +16,76 @@ import { WhatsappService } from './whatsapp.service';
 
 // ══════════════════════════════════════════════════════════════
 // WhatsApp Webhook Controller
-// POST /api/verification/whatsapp-webhook — 不需要 JWT，用 webhook secret 驗證
-// GET/POST 其他端點 — 需要 JWT 認證
+// POST endpoints — 不需要 JWT，用 webhook secret 驗證
+// GET endpoints — 需要 JWT 認證
 // ══════════════════════════════════════════════════════════════
 
 @Controller('verification')
 export class WhatsappController {
   constructor(private readonly whatsappService: WhatsappService) {}
 
-  // ── Webhook 端點（不需要 JWT）──────────────────────────────
+  // ── 驗證 webhook secret 的共用方法 ────────────────────────────
+  private validateWebhookSecret(webhookSecret?: string) {
+    const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET || 'mingtat-wa-webhook-2026';
+    if (webhookSecret !== expectedSecret) {
+      throw new UnauthorizedException('Invalid webhook secret');
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Bot 狀態管理端點（Heartbeat + QR Code）
+  // ══════════════════════════════════════════════════════════════
+
+  // ── Heartbeat 端點（不需要 JWT）───────────────────────────────
+  @Post('whatsapp-heartbeat')
+  @HttpCode(HttpStatus.OK)
+  async handleHeartbeat(
+    @Body() body: { status: 'connected' | 'disconnected'; uptime?: number; lastMessageAt?: string },
+    @Headers('x-webhook-secret') webhookSecret?: string,
+  ) {
+    this.validateWebhookSecret(webhookSecret);
+    return this.whatsappService.recordHeartbeat(body);
+  }
+
+  // ── QR Code 接收端點（不需要 JWT）─────────────────────────────
+  @Post('whatsapp-qrcode')
+  @HttpCode(HttpStatus.OK)
+  async handleQrCode(
+    @Body() body: { qrCode: string },
+    @Headers('x-webhook-secret') webhookSecret?: string,
+  ) {
+    this.validateWebhookSecret(webhookSecret);
+    if (!body.qrCode) {
+      return { saved: false, reason: 'missing_qr_code' };
+    }
+    return this.whatsappService.saveQrCode(body.qrCode);
+  }
+
+  // ── Bot 狀態查詢端點（需要 JWT）───────────────────────────────
+  @Get('whatsapp-bot-status')
+  @UseGuards(AuthGuard('jwt'))
+  async getBotStatus() {
+    return this.whatsappService.getBotStatus();
+  }
+
+  // ── QR Code 查詢端點（需要 JWT）───────────────────────────────
+  @Get('whatsapp-qrcode')
+  @UseGuards(AuthGuard('jwt'))
+  async getQrCode() {
+    return this.whatsappService.getQrCode();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Webhook 端點（不需要 JWT）
+  // ══════════════════════════════════════════════════════════════
+
   @Post('whatsapp-webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
     @Body() body: { chatId: string; sender: string; text: string; groupName?: string },
     @Headers('x-webhook-secret') webhookSecret?: string,
   ) {
-    const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET || 'mingtat-wa-webhook-2026';
-    if (webhookSecret !== expectedSecret) {
-      throw new UnauthorizedException('Invalid webhook secret');
-    }
+    this.validateWebhookSecret(webhookSecret);
 
     if (!body.text || !body.sender) {
       return { processed: false, reason: 'missing_required_fields' };
@@ -48,7 +99,10 @@ export class WhatsappController {
     });
   }
 
-  // ── 每日 Order 總結列表（主要 API）─────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // 每日 Order 總結端點（需要 JWT）
+  // ══════════════════════════════════════════════════════════════
+
   @Get('whatsapp-daily-summaries')
   @UseGuards(AuthGuard('jwt'))
   async getDailySummaries(
@@ -67,14 +121,16 @@ export class WhatsappController {
     });
   }
 
-  // ── 單日 Order 總結詳情 ────────────────────────────────────
   @Get('whatsapp-daily-summary/:date')
   @UseGuards(AuthGuard('jwt'))
   async getDailySummary(@Param('date') date: string) {
     return this.whatsappService.getDailySummary(date);
   }
 
-  // ── WhatsApp Orders 列表（保留向後兼容）─────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // 向後兼容端點（需要 JWT）
+  // ══════════════════════════════════════════════════════════════
+
   @Get('whatsapp-orders')
   @UseGuards(AuthGuard('jwt'))
   async getOrders(
@@ -93,14 +149,12 @@ export class WhatsappController {
     });
   }
 
-  // ── WhatsApp Order 詳情（保留向後兼容）──────────────────────
   @Get('whatsapp-orders/:id')
   @UseGuards(AuthGuard('jwt'))
   async getOrderDetail(@Param('id') id: string) {
     return this.whatsappService.getWhatsappOrderDetail(+id);
   }
 
-  // ── WhatsApp Messages 列表（需要 JWT）───────────────────────
   @Get('whatsapp-messages')
   @UseGuards(AuthGuard('jwt'))
   async getMessages(
