@@ -245,18 +245,7 @@ export default function EmployeePortalHome() {
               <span className="font-semibold text-sm leading-tight">{action.label}</span>
             </Link>
           ))}
-          {/* Company Clock shortcut: only shown when user has company clock permission */}
-          {(user?.canCompanyClock || user?.isAdmin) && (
-            <Link
-              href="/company-clock"
-              className="flex items-center gap-3 p-4 rounded-2xl border-2 bg-emerald-50 border-emerald-200 text-emerald-700 transition-all active:scale-95"
-            >
-              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-                🏢
-              </div>
-              <span className="font-semibold text-sm leading-tight">公司打卡</span>
-            </Link>
-          )}
+
         </div>
       </div>
     </div>
