@@ -801,6 +801,12 @@ export class WhatsappService {
 1. 判斷訊息屬於哪種類型：order（完整工作分配）、modification（修改指令）、chat（一般對話）
 2. 根據類型解析出結構化數據
 
+## ⛔ 絕對不能違反的規則（最高優先級）
+1. 每個 item 的 JSON 必須包含 "order_type" 欄位（值為 "machinery"/"manpower"/"transport"/"notice"/"leave"），絕對不能省略！
+2. machinery 類型：每個 DC 編號 = 一筆獨立 item，絕對不能把多個 DC 合併成一筆！DC04暫停但DC06不暫停時，必須拆成兩筆，各自有不同的 is_suspended 值。
+3. manpower 類型：staff_list 陣列必須包含所有員工花名，一個都不能遺漏！例如「宽、青、黃運、健、家善、高佬、大飛、ADil」= staff_list:["宽","青","黃運","健","家善","高佬","大飛","ADil"]（8個人）。
+4. transport 類型：「聯絡人：」「聯絡:」「吾明問/聯絡：」後面的人名+電話是 contact_person，絕對不是 driver_nickname！電話號碼（8位數字）絕對不是 vehicle_no！
+
 ## 訊息類型判斷
 
 ### order（完整工作分配）
@@ -812,9 +818,9 @@ export class WhatsappService {
 - 以合約號分組（如 T24w022、PA13114、3802、3310WH-X451）
 - DC + 數字 = 機械編號，格式不規則（DC 14、D C13、DC06、D C 22），統一為 "DC" + 數字（如 DC14、DC03、DC22）
 - DC 編號後面可能緊跟操作員花名（如 DC07泉→機械:DC07 操作員:泉；DC15強→機械:DC15 操作員:強；DC10～平哥→機械:DC10 操作員:平哥）
-- ⚠️ 重要：每個 DC 編號必須拆成獨立的 item！即使在同一合約下有多個 DC，每個 DC 都是一筆獨立記錄
+- ⛔⛔⛔ 每個 DC 編號必須拆成獨立的 item！即使在同一合約下有多個 DC，每個 DC 都是一筆獨立記錄。例如「DC06 DC04～暫停」= 2筆：DC06(is_suspended:false) + DC04(is_suspended:true)
 - ⚠️ 重要：如果合約整體標記「暫停」，該合約下所有 DC 的 is_suspended 都為 true
-- ⚠️ 重要：如果個別 DC 標記「暫停」（如 DC04～暫停），只有該 DC 的 is_suspended 為 true，同合約其他 DC 不受影響
+- ⛔⛔⛔ 如果個別 DC 標記「暫停」（如 DC04～暫停），只有該 DC 的 is_suspended 為 true，同合約其他 DC 的 is_suspended 為 false
 - 只有機械編號 + 停放位置、沒有合約號和工作描述的（如「DC17 DC05 DC12 DC11 DC18 係3跑西架步」）= 閒置/待命機械，order_type 設為 "machinery"，work_description 設為 "閒置/待命"，location 設為停放位置
 - 客戶分組標題如「1:明達」表示後續項目屬於該客戶
 - 「安全、機械～雜項～」= 雜項，order_type: "notice"
@@ -852,7 +858,7 @@ export class WhatsappService {
 - 每組格式：序號：[合約號][工作描述] [員工花名列表]
 - 員工花名用頓號「、」分隔
 - 括號內的人名是帶隊人（如「機場帮手什务(涛哥) 雄、區」→ team_leader:"涛哥", staff_list:["雄","區"]）
-- ⚠️ 重要：staff_list 必須包含所有員工花名，一個都不能遺漏！
+- ⛔⛔⛔ staff_list 必須是完整的 JSON 陣列，包含所有用頓號「、」分隔的員工花名，一個都不能遺漏！例如「宽、青、黃運、健、家善、高佬、大飛、ADil」→ staff_list:["宽","青","黃運","健","家善","高佬","大飛","ADil"]
 - 合約號可能緊跟在工作描述前面（如 PA13114南落石矢 → contract_no:"PA13114", work_description:"南落石矢"）
 - 「暫停」= is_suspended: true
 - 每個序號組是一個 item
@@ -875,12 +881,13 @@ export class WhatsappService {
 - 客戶名-合約號在最前（如「金門 3802 月租車」「榮興-T22M241 [20噸]」「惠興-丹桂一期租車」）
 - 路線/工作描述在客戶行下面
 - 司機花名 + 車牌號碼一行一組（如「區 EM987」「峰 JR981」「肥洪 UH1883」）
-- ⚠️ 重要：車牌格式是 2-3 個英文字母 + 3-4 個數字（如 EM987、XF2103、WY987、UH1883、JR981、YT6383、WP7366、ZY4778、ER991、WC987、WY440、TF3306、YE6679）
-- ⚠️ 重要：一個司機+車牌 = 一筆獨立 item！同一客戶下多個司機要拆成多筆
-- ⚠️ 重要：「聯絡人：」「聯絡:」後面的是聯絡人和電話，不是司機！存入 contact_person 欄位
-  例如「聯絡人：峰哥 60176557 做圍網」→ contact_person:"峰哥 60176557 做圍網"，不要當成司機
-  例如「聯絡: 勇仔 9279 4462」→ contact_person:"勇仔 9279 4462"
-- ⚠️ 重要：電話號碼（8位純數字如 60176557、92794462、94529852）不是車牌！
+- ⛔⛔⛔ 車牌格式是 2-3 個英文字母 + 3-4 個數字（如 EM987、XF2103、WY987、UH1883、JR981、YT6383、WP7366、ZY4778、ER991、WC987、WY440、TF3306、YE6679）。只有符合此格式的才是車牌！
+- ⛔⛔⛔ 一個司機+車牌 = 一筆獨立 item！同一客戶下多個司機要拆成多筆
+- ⛔⛔⛔ 「聯絡人：」「聯絡:」「吾明問/聯絡：」後面的是聯絡人和電話，絕對不是司機！存入 contact_person 欄位，不要存入 driver_nickname！
+  例如「聯絡人：峰哥 60176557 做圍網」→ contact_person:"峰哥 60176557 做圍網"（峰哥不是司機！60176557不是車牌！）
+  例如「聯絡: 勇仔 9279 4462」→ contact_person:"勇仔 9279 4462"（勇仔不是司機！）
+  例如「吾明問/聯絡：細昌 9095 5458」→ contact_person:"細昌 9095 5458"（細昌不是司機！）
+- ⛔⛔⛔ 電話號碼（8位純數字如 60176557、92794462、94529852、91609160）絕對不是車牌！車牌格式是英文字母+數字（如 EM987、WY440），電話是純數字或有空格的數字（如 9279 4462）
 - ⚠️ 重要：「台號：143800」是台號，不是車牌，存入 remarks
 - emoji（⬅️➡️☎️）要忽略
 - 星號包圍的（*明達泥尾飛記得影相*）= 提醒/備註，存入 remarks
@@ -962,7 +969,7 @@ export class WhatsappService {
   "items": [
     {
       "seq": 1,
-      "order_type": "transport" 或 "manpower" 或 "machinery" 或 "notice" 或 "leave",
+      "order_type": "transport" 或 "manpower" 或 "machinery" 或 "notice" 或 "leave",  // ⛔ 必填！絕對不能省略！
       "contract_no": "合約號或null",
       "customer": "客戶名或null",
       "work_description": "工作描述或null",
