@@ -79,7 +79,7 @@ export default function CompanyClockPage() {
   const [tempName, setTempName] = useState('');
   const [tempNameEn, setTempNameEn] = useState('');
   const [tempPhone, setTempPhone] = useState('');
-  const [tempCompanyId, setTempCompanyId] = useState<number | ''>('');
+
 
   // Redirect if not logged in
   useEffect(() => {
@@ -88,14 +88,7 @@ export default function CompanyClockPage() {
     }
   }, [authLoading, user, router]);
 
-  // Load companies
-  useEffect(() => {
-    if (user) {
-      companyClockApi.getCompanies().then((res) => {
-        setCompanies(res.data);
-      }).catch(() => {});
-    }
-  }, [user]);
+
 
   // Load employees
   const loadEmployees = useCallback(async (page = 1) => {
@@ -287,7 +280,7 @@ export default function CompanyClockPage() {
 
   // ── Create Temporary Employee ─────────────────────────
   const handleCreateTemp = async () => {
-    if (!tempName || !tempCompanyId || !photoDataUrl) return;
+    if (!tempName || !photoDataUrl) return;
 
     setProcessing(true);
     try {
@@ -296,7 +289,7 @@ export default function CompanyClockPage() {
         name_en: tempNameEn || undefined,
         phone: tempPhone || undefined,
         photo_base64: photoDataUrl,
-        company_id: Number(tempCompanyId),
+
       });
 
       setResultType('success');
@@ -305,7 +298,7 @@ export default function CompanyClockPage() {
       setTempName('');
       setTempNameEn('');
       setTempPhone('');
-      setTempCompanyId('');
+
       await loadEmployees(1);
       await loadTodayRecords();
     } catch (err: any) {
@@ -791,22 +784,7 @@ export default function CompanyClockPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">所屬公司 *</label>
-                <select
-                  value={tempCompanyId}
-                  onChange={(e) => setTempCompanyId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm bg-white"
-                  required
-                >
-                  <option value="">選擇公司</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
 
               {/* Photo capture */}
               <div>
@@ -854,7 +832,7 @@ export default function CompanyClockPage() {
 
               <button
                 onClick={handleCreateTemp}
-                disabled={!tempName || !tempCompanyId || !photoDataUrl || processing}
+                disabled={!tempName || !photoDataUrl || processing}
                 className="w-full py-3.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? '建立中...' : '建立臨時員工並打卡'}

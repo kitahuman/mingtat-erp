@@ -86,7 +86,7 @@ export class CompanyClockService {
   // ── Get employee list for clock-in ──────────────────────────────
   async getEmployeeList(query: {
     search?: string;
-    company_id?: number;
+    company_id?: number | null;
     status?: string;
     page?: number;
     limit?: number;
@@ -329,7 +329,7 @@ export class CompanyClockService {
     name_en?: string;
     phone?: string;
     photo_base64: string;
-    company_id: number;
+    company_id?: number | null;
     operator_user_id: number;
   }) {
     // Create the temporary employee
@@ -338,7 +338,7 @@ export class CompanyClockService {
         name_zh: data.name_zh,
         name_en: data.name_en || '',
         phone: data.phone,
-        company_id: data.company_id,
+        company_id: data.company_id || null,
         employee_photo_base64: data.photo_base64,
         employee_is_temporary: true,
         role: 'worker',

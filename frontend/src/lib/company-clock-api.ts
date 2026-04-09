@@ -73,7 +73,7 @@ export const companyClockApi = {
     name_en?: string;
     phone?: string;
     photo_base64: string;
-    company_id: number;
+
   }) => companyClockAxios.post('/company-clock/temporary-employee', data),
 
   // Today's attendance records

@@ -96,10 +96,11 @@ export class CompanyClockController {
       name_en?: string;
       phone?: string;
       photo_base64: string;
-      company_id: number;
+      company_id?: number;
     },
   ) {
     return this.service.createTemporaryEmployee({
+      company_id: body.company_id || null,
       ...body,
       operator_user_id: req.user.sub,
     });
