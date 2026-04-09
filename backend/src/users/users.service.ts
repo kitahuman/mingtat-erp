@@ -33,8 +33,33 @@ export class UsersService {
       include: {
         employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true } },
       },
-      orderBy: { createdAt: 'desc' },
     });
+
+    // Sort by role priority first, then alphabetically by English name.
+    // Priority: admin/superadmin (0) > manager (1) > clerk (2) > driver/worker (3) > others (4)
+    const ROLE_PRIORITY: Record<string, number> = {
+      superadmin: 0,
+      admin: 0,
+      manager: 1,
+      clerk: 2,
+      driver: 3,
+      worker: 3,
+    };
+
+    const getRolePriority = (role: string): number =>
+      ROLE_PRIORITY[role] !== undefined ? ROLE_PRIORITY[role] : 4;
+
+    // Resolve the best English name for sorting:
+    // prefer the linked employee's name_en, fall back to displayName.
+    const getSortName = (u: any): string =>
+      (u.employee?.name_en || u.displayName || '').toLowerCase();
+
+    users.sort((a, b) => {
+      const roleDiff = getRolePriority(a.role) - getRolePriority(b.role);
+      if (roleDiff !== 0) return roleDiff;
+      return getSortName(a).localeCompare(getSortName(b), 'en', { sensitivity: 'base' });
+    });
+
     return users.map(u => this.sanitizeUser(u));
   }
 
