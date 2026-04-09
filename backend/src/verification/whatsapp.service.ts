@@ -9,14 +9,27 @@ import OpenAI from 'openai';
 
 interface ParsedOrderItem {
   seq: number;
+  // order_type: 分類
+  // - transport: 泥車/運輸（司機+車牌）
+  // - manpower: 工程部員工（員工花名列表）
+  // - machinery: 機械調配（DC 編號+操作員）
+  // - notice: 臨時通知
+  // - leave: 請假
   order_type: 'transport' | 'manpower' | 'machinery' | 'notice' | 'leave';
   contract_no?: string;
   customer?: string;
   work_description?: string;
   location?: string;
+  // transport 類型：司機花名
   driver_nickname?: string;
+  // transport 類型：車牌
   vehicle_no?: string;
+  // machinery 類型：DC 機械編號（統一格式 "DC14"）
   machine_code?: string;
+  // manpower 類型：帶隊人/負責人（括號內的人名）
+  team_leader?: string;
+  // manpower 類型：員工花名列表（頓號分隔）
+  staff_list?: string[];
   contact_person?: string;
   slip_write_as?: string;
   is_suspended: boolean;
@@ -415,14 +428,20 @@ export class WhatsappService {
           wa_item_customer: item.customer || null,
           wa_item_work_desc: item.work_description || null,
           wa_item_location: item.location || null,
-          wa_item_driver_nickname: item.driver_nickname || null,
+          // transport: 司機花名; manpower: 帶隊人
+          wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
           wa_item_driver_id: null,
           wa_item_vehicle_no: item.vehicle_no || null,
           wa_item_machine_code: item.machine_code || null,
           wa_item_contact_person: item.contact_person || null,
           wa_item_slip_write_as: item.slip_write_as || null,
           wa_item_is_suspended: item.is_suspended || false,
-          wa_item_remarks: item.remarks || null,
+          // manpower: staff_list 序列化存入 remarks（格式: "[staff]員工: 小明,小紅\n備註: xxx"）
+          wa_item_remarks: (
+            item.staff_list && item.staff_list.length > 0
+              ? `[staff]員工: ${item.staff_list.join(', ')}${item.remarks ? '\n' + item.remarks : ''}`
+              : item.remarks || null
+          ),
           wa_item_mod_status: null,
           wa_item_mod_prev_data: undefined,
         })),
@@ -770,44 +789,57 @@ export class WhatsappService {
   // AI 分類和解析（支援 order / modification / chat 三種類型）
   // ══════════════════════════════════════════════════════════════
   private async classifyAndParseMessage(text: string): Promise<AiClassification> {
+    const today = new Date().toISOString().slice(0, 10);
     const systemPrompt = `你是一個專門分析香港建築運輸公司 WhatsApp 群組訊息的 AI 助手。
 你的任務是：
 1. 判斷訊息屬於哪種類型：order（完整工作分配）、modification（修改指令）、chat（一般對話）
 2. 根據類型解析出結構化數據
 
-	## 三種訊息類型
-	
-	### order（完整工作分配）
-	- 包含日期（如 9-4-2026）和多個工作分配項目。
-	- 包含多種格式：
-	  - **合約分組**：以合約號開頭（如 T24w022, PA13114, 3802），後跟地點、描述及多個機械編號。
-	  - **機械+操作員**：DC 編號後緊跟花名（如 DC07泉、DC15強、DC10～平哥）。
-	  - **閒置/待命機械**：僅列出機械編號及停放位置（如「DC17 DC05 係3跑西架步」）。
-	  - **雜項分類**：維修保養、請假、安全機械等。
-	- 通常有多行，結構化的工作安排。
-	- 少於 3 行的短訊息通常不是完整 order。
+## 訊息類型判斷
+
+### order（完整工作分配）
+包含日期 + 多個工作分配項目，有三種子格式：
+
+**A. 機械 order**（以 DC 機械編號為主）
+- 以合約號分組（如 T24w022、PA13114、3802、3310WH-X451）
+- DC + 數字 = 機械編號，可能有空格（DC 14、D C13、DC06 都是同一種，統一為 DC14）
+- DC 編號後緊跟操作員花名（如 DC07泉、DC15強、DC10～平哥）
+- 「～暫停」或「暫停」= 該合約或機械暫停
+- 只有機械編號 + 停放位置（如「DC17 DC05 係3跑西架步」）= 閒置/待命機械
+- 客戶分組標題如「1:明達」表示後續項目屬於該客戶
+- 雜項：維修保養、安全機械、請假等
+
+**B. 工程部員工 order**（以員工花名列表為主）
+- 用中文/數字序號分組（一、二、三 或 1:、2:、3:）
+- 每組格式：序號：工作描述 + 員工花名（頓號「、」分隔）
+- 括號內可能是帶隊人（如「機場帮手什务(涛哥) 雄、區」→ 帶隊人:涛哥，員工:雄、區）
+- 可能有合約號（如 PA13114南落石矢）
+- 「暫停」= 該工作暫停
+- 這種 order 的 order_type 為 "manpower"
+
+**C. 泥車/運輸 order**（以司機+車牌為主）
+- 客戶名-合約號在最前（如「金門 3802 月租車」「榮興-T22M241 [20噸]」「惠興-丹桂一期租車」）
+- 路線/工作描述在下面
+- 司機花名 + 車牌號碼一行一組（如「區 EM987」「峰 JR981」）
+- 車牌格式：2-3個英文字母 + 數字（EM987、XF2103、WY987、UH1883、JR981、YT6383 等）
+- 聯絡人電話在「聯絡人：」或「聯絡:」後面
+- emoji（⬅️➡️☎️⬅️）要忽略
+- 星號包圍的（*明達泥尾飛記得影相*）= 提醒/備註
+- 「休息：隆/沙曾」= 休息人員，加入 leave_list
+- 「暫停」= 該工作暫停
+- 同一客戶可能有多個不同路線，每條路線是一個獨立 item
+- 這種 order 的 order_type 為 "transport"
 
 ### modification（修改指令）
-修改指令是針對已有 order 的局部修改，例如：
-- 取消某項工作：「明天 CJ591 取消」「XX車唔使去」
-- 換人/換車：「陳大文請假，改派李小明」「XX車改YY車」
-- 暫停某項工作：「三跑 DC18 暫停一日」「XX暫停」
-- 恢復暫停的工作：「DC18 照做」「XX恢復」
-- 新增工作項目：「加多一架車去觀塘」「再加XX」
-- 人員請假通知：「XX請假」（如果只是通知某人請假，需要從 order 中取消/替換該人的工作）
-- 特徵：短訊息、包含動作詞（取消、改、暫停、加、請假等）、提及具體車牌/人名/機械編號
+針對已有 order 的局部修改（短訊息，包含動作詞）：
+- 取消：「明天 CJ591 取消」「XX車唔使去」
+- 換人/換車：「陳大文請假，改派李小明」
+- 暫停：「三跑 DC18 暫停一日」
+- 恢復：「DC18 照做」
+- 新增：「加多一架車去觀塘」
 
 ### chat（一般對話）
-- 一般討論、確認回覆（「收到」「OK」「明白」）
-- emoji 反應
-- 與工作分配無關的閒聊
-
-## Order 類型
-- transport: 運輸工作（有車牌和司機）
-- manpower: 管工/雜項人員分配（有人員名字和工作地點）
-- machinery: 機械調配（有 DC 編號）
-- notice: 臨時通知
-- leave: 請假
+確認回覆（收到/OK）、emoji、閒聊等。
 
 ## 修改類型 (mod_type)
 - cancel: 取消某項工作
@@ -817,47 +849,41 @@ export class WhatsappService {
 - add: 新增工作項目
 - other: 其他修改
 
-	## 重要格式特徵
-	- **日期格式**：D-M-YYYY 或 D-M-YYYY(暫定)。
-	- **客戶分組標題**：如「1:明達」，表示後續項目屬於該客戶。
-	- **合約號格式多樣**：T24w022, PA13114, 3310WH-X451, 3802 等。
-	- **機械編號 (DC 編號)**：DC + 數字，可能包含空格（如 DC 14, D C13, DC06, D C 22），解析時應統一格式為 "DC" + 數字（如 "DC14"）。
-	- **操作員花名**：緊跟在 DC 編號後，有時用「～」連接（如 DC07泉、DC10～平哥）。
-	- **暫停標記**：「～暫停」或「暫停」表示該合約或機械停止工作。
-	- **閒置/待命辨識**：若只有機械編號 + 停放位置（如「DC19喺水澗石倉」），分類為 "machinery"，描述設為 "閒置/待命"，位置設為該停放點。
-	- **地點說明**：合約號後的括號內容（如 3802(3跑東面金門地盤)）。
-	- **車牌格式**：2-3個英文字母 + 數字（如 WY8724, CJ591）。
-	- **司機/人員**：花名（如 文傑、肥仔麟）。
-	- 「明天」「聽日」「今日」等相對日期要轉換為實際日期（基於今天 ${new Date().toISOString().slice(0, 10)}）。
+## 日期處理
+- 日期格式：D-M-YYYY 或 D-M-YYYY(暫定) 或 D-M-YYYY（星期X）暫定/更新
+- 全形數字（４）= 半形數字（4）
+- 「暫定」→ order_status: "tentative"；「更新」→ is_update: true, order_status: "confirmed"
+- 「明天」「聽日」「今日」等相對日期基於今天 ${today}
 
-## 回覆格式
-請以 JSON 格式回覆（不要加 markdown 代碼塊標記）：
+## 回覆格式（JSON，不加 markdown 代碼塊）
 
 如果是 order：
 {
   "message_type": "order",
   "confidence": 0.0-1.0,
-  "order_date": "YYYY-MM-DD" 或 null,
+  "order_date": "YYYY-MM-DD",
   "is_update": true/false,
   "order_status": "tentative" 或 "confirmed",
   "items": [
     {
       "seq": 1,
-      "order_type": "transport/manpower/machinery/notice/leave",
+      "order_type": "transport" 或 "manpower" 或 "machinery" 或 "notice" 或 "leave",
       "contract_no": "合約號或null",
       "customer": "客戶名或null",
       "work_description": "工作描述或null",
       "location": "地點/路線或null",
-      "driver_nickname": "司機花名或null",
-      "vehicle_no": "車牌或null",
-      "machine_code": "機械編號或null",
-      "contact_person": "聯絡人資訊或null",
+      "driver_nickname": "司機花名或null（transport 用）",
+      "vehicle_no": "車牌或null（transport 用，如 EM987）",
+      "machine_code": "DC機械編號或null（machinery 用，統一格式如 DC14）",
+      "team_leader": "帶隊人花名或null（manpower 用，括號內的人）",
+      "staff_list": ["員工1", "員工2"] 或 null（manpower 用，頓號分隔的員工列表）,
+      "contact_person": "聯絡人資訊或null（含電話）",
       "slip_write_as": "飛仔寫什麼或null",
       "is_suspended": true/false,
-      "remarks": "備註或null"
+      "remarks": "備註或null（星號提醒、跟人規矩等）"
     }
   ],
-  "leave_list": ["請假人員1", "請假人員2"],
+  "leave_list": ["請假/休息人員1", "請假/休息人員2"],
   "raw_summary": "簡短摘要"
 }
 
@@ -868,14 +894,14 @@ export class WhatsappService {
   "modifications": [
     {
       "mod_type": "cancel/reassign/suspend/resume/add/other",
-      "target_date": "YYYY-MM-DD 或 null（null 表示今天或最近的 order）",
+      "target_date": "YYYY-MM-DD 或 null",
       "target_vehicle_no": "目標車牌或null",
       "target_driver_nickname": "目標司機花名或null",
       "target_machine_code": "目標機械編號或null",
       "target_contract_no": "目標合約號或null",
-      "target_description": "目標描述（用於模糊匹配）或null",
-      "new_driver_nickname": "新司機花名或null（reassign 時用）",
-      "new_vehicle_no": "新車牌或null（reassign 時用）",
+      "target_description": "目標描述或null",
+      "new_driver_nickname": "新司機花名或null",
+      "new_vehicle_no": "新車牌或null",
       "new_items": [],
       "description": "人類可讀的修改描述",
       "confidence": 0.0-1.0
