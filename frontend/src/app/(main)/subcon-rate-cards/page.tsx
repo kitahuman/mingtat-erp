@@ -59,7 +59,7 @@ export default function SubconRateCardsPage() {
   useEffect(() => { load(); }, [page, search, statusFilter, dayNightFilter, sortBy, sortOrder]);
   useEffect(() => {
     partnersApi.simple().then(res => setPartners(res.data));
-    companiesApi.list().then(res => setCompanies(res.data?.data || res.data || []));
+    companiesApi.list({ exclude_external: 'true' }).then(res => setCompanies(res.data?.data || res.data || []));
     subconFleetDriversApi.list({ limit: 1000 }).then(res => {
       const drivers = res.data?.data || res.data || [];
       const plates = drivers

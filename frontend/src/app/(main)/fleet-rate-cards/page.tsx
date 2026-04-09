@@ -54,7 +54,7 @@ export default function FleetRateCardsPage() {
   useEffect(() => { load(); }, [page, search, statusFilter, sortBy, sortOrder]);
   useEffect(() => {
     partnersApi.simple().then(res => setPartners(res.data));
-    companiesApi.list().then(res => setCompanies(res.data?.data || res.data || []));
+    companiesApi.list({ exclude_external: 'true' }).then(res => setCompanies(res.data?.data || res.data || []));
     Promise.all([
       vehiclesApi.simple().then(res => res.data),
       machineryApi.simple().then(res => res.data),

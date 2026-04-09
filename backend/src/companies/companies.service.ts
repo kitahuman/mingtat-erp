@@ -5,13 +5,16 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CompaniesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string }) {
+  async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string; exclude_external?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where: any = {};
 
     if (query.company_type) where.company_type = query.company_type;
     if (query.status) where.status = query.status;
+    if (query.exclude_external === 'true') {
+      where.company_type = { not: 'external' };
+    }
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
@@ -56,7 +59,7 @@ export class CompaniesService {
 
   async findAllSimple() {
     return this.prisma.company.findMany({
-      where: { status: 'active' },
+      where: { status: 'active', company_type: { not: 'external' } },
       orderBy: { id: 'asc' },
     });
   }
