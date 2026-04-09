@@ -27,6 +27,7 @@ const DEFAULT_COLUMNS = [
   { key: 'date', label: '日期', sortable: true },
   { key: 'type', label: '打卡類型', sortable: true },
   { key: 'is_mid_shift', label: '中直' },
+  { key: 'mid_shift_status', label: '中直批核狀態' },
   { key: 'time', label: '時間', sortable: true },
   { key: 'gps', label: 'GPS 位置' },
   { key: 'photo', label: '相片' },
@@ -206,6 +207,27 @@ export default function AttendancesPage() {
         )
       ),
       exportRender: (_: any, row: any) => row.is_mid_shift ? '是' : '否',
+    },
+    {
+      key: 'mid_shift_status',
+      label: '中直批核狀態',
+      render: (_: any, row: any) => {
+        if (!row.is_mid_shift) return <span className="text-gray-300 text-xs">未申請</span>;
+        if (row.mid_shift_approved) {
+          return (
+            <div className="flex flex-col">
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold border border-green-200">已批核</span>
+              <span className="text-[10px] text-gray-500 mt-0.5">{row.mid_shift_approver?.name_zh || '系統'}</span>
+            </div>
+          );
+        }
+        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-bold border border-amber-200">待批核</span>;
+      },
+      exportRender: (_: any, row: any) => {
+        if (!row.is_mid_shift) return '未申請';
+        if (row.mid_shift_approved) return `已批核 (${row.mid_shift_approver?.name_zh || '系統'})`;
+        return '待批核';
+      },
     },
     {
       key: 'time',

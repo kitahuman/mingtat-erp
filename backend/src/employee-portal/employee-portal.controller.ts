@@ -227,4 +227,29 @@ export class EmployeePortalController {
   ) {
     return this.service.getExpiringCerts(req.user.sub, days ? Number(days) : 90);
   }
+
+  // ── Mid-Shift Approvals (中直批核) ─────────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Get('mid-shift-approvals')
+  async getPendingMidShiftApprovals(@Request() req: any) {
+    return this.service.getPendingMidShiftApprovals(req.user.sub);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('mid-shift-approvals')
+  async approveMidShift(
+    @Request() req: any,
+    @Body() data: { attendance_ids: number[], signature_base64: string }
+  ) {
+    return this.service.approveMidShift(req.user.sub, data);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('mid-shift-approvals/history')
+  async getMidShiftApprovalHistory(
+    @Request() req: any,
+    @Query() query: { page?: number; limit?: number }
+  ) {
+    return this.service.getMidShiftApprovalHistory(req.user.sub, query);
+  }
 }

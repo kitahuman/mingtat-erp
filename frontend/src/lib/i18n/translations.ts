@@ -216,6 +216,11 @@ export const translations = {
     draft: '草稿',
     finalized: '已確認',
     paid_status: '已出糧',
+    supervisor: '監工',
+    midShiftApproval: '中直批核',
+    dailyReport: '工程日報',
+    acceptanceReport: '工程收貨',
+    supervisorMenu: '監工功能',
   },
 
   en: {
@@ -433,6 +438,11 @@ export const translations = {
     draft: 'Draft',
     finalized: 'Finalized',
     paid_status: 'Paid',
+    supervisor: 'Supervisor',
+    midShiftApproval: 'Mid-shift Approval',
+    dailyReport: 'Daily Report',
+    acceptanceReport: 'Acceptance Report',
+    supervisorMenu: 'Supervisor Menu',
   },
 } as const;
 

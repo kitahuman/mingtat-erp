@@ -84,6 +84,13 @@ export default function EmployeePortalHome() {
       color: 'bg-purple-50 border-purple-200 text-purple-700',
       iconBg: 'bg-purple-100',
     },
+    ...(user?.employee?.can_approve_mid_shift || user?.employee?.can_daily_report || user?.employee?.can_acceptance_report ? [{
+      href: '/employee-portal/supervisor',
+      label: t('supervisor'),
+      icon: '👷',
+      color: 'bg-indigo-50 border-indigo-200 text-indigo-700',
+      iconBg: 'bg-indigo-100',
+    }] : []),
     {
       href: '/employee-portal/certificates',
       label: t('certificates'),

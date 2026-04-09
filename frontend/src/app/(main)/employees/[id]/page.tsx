@@ -289,6 +289,23 @@ export default function EmployeeDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">離職原因</label><input value={form.termination_reason || ''} onChange={e => setForm({...form, termination_reason: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">常用車牌</label><input value={form.frequent_vehicle || ''} onChange={e => setForm({...form, frequent_vehicle: e.target.value})} className="input-field" /></div>
               <div className="md:col-span-2 lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
+              <div className="md:col-span-2 lg:col-span-3 border-t pt-4 mt-2">
+                <label className="block text-sm font-bold text-gray-700 mb-3">監工權限設定</label>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!form.can_approve_mid_shift} onChange={e => setForm({...form, can_approve_mid_shift: e.target.checked})} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
+                    <span className="text-sm font-medium text-gray-700">可進行中直批核</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!form.can_daily_report} onChange={e => setForm({...form, can_daily_report: e.target.checked})} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
+                    <span className="text-sm font-medium text-gray-700">可填寫工程日報</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!form.can_acceptance_report} onChange={e => setForm({...form, can_acceptance_report: e.target.checked})} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
+                    <span className="text-sm font-medium text-gray-700">可填寫工程收貨報告</span>
+                  </label>
+                </div>
+              </div>
             </>
           ) : (
             <>
@@ -307,6 +324,15 @@ export default function EmployeeDetailPage() {
               {isTerminated && emp?.termination_reason && <div><p className="text-sm text-gray-500">離職原因</p><p className="text-red-600">{emp.termination_reason}</p></div>}
               <div><p className="text-sm text-gray-500">常用車牌</p><p>{emp?.frequent_vehicle || '-'}</p></div>
               <div className="md:col-span-2 lg:col-span-3"><p className="text-sm text-gray-500">地址</p><p>{emp?.address || '-'}</p></div>
+              <div className="md:col-span-2 lg:col-span-3 border-t pt-4 mt-2">
+                <p className="text-sm font-bold text-gray-700 mb-2">監工權限</p>
+                <div className="flex flex-wrap gap-4">
+                  {emp?.can_approve_mid_shift && <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">中直批核</span>}
+                  {emp?.can_daily_report && <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">工程日報</span>}
+                  {emp?.can_acceptance_report && <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">工程收貨</span>}
+                  {!emp?.can_approve_mid_shift && !emp?.can_daily_report && !emp?.can_acceptance_report && <span className="text-xs text-gray-400">無監工權限</span>}
+                </div>
+              </div>
             </>
           )}
         </div>

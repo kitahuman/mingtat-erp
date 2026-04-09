@@ -98,6 +98,13 @@ export const employeePortalApi = {
   getExpiringCerts: (days?: number) =>
     portalApi.get('/employee-portal/certificates/expiring', { params: days ? { days } : {} }),
 
+  // Mid-Shift Approval
+  getPendingMidShiftApprovals: () => portalApi.get('/employee-portal/mid-shift-approvals'),
+  approveMidShift: (data: { attendance_ids: number[]; signature_base64: string }) =>
+    portalApi.post('/employee-portal/mid-shift-approvals', data),
+  getMidShiftApprovalHistory: (params?: { page?: number; limit?: number }) =>
+    portalApi.get('/employee-portal/mid-shift-approvals/history', { params }),
+
   // Admin: Bulk create accounts for all employees with phone numbers
   bulkCreateAccounts: () =>
     portalApi.post('/employee-portal/bulk-create-accounts', {}),

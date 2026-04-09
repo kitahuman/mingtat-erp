@@ -63,6 +63,9 @@ export class AttendancesService {
           employee: {
             select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
           },
+          mid_shift_approver: {
+            select: { id: true, name_zh: true },
+          },
         },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
@@ -80,6 +83,9 @@ export class AttendancesService {
       include: {
         employee: {
           select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
+        },
+        mid_shift_approver: {
+          select: { id: true, name_zh: true },
         },
       },
     });

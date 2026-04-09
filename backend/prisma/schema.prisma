@@ -203,6 +203,9 @@ model Employee {
   employee_mpf_applied                Boolean   @default(false)
   employee_mpf_applied_date            DateTime? @db.Date
   employee_is_temporary               Boolean   @default(false)
+  can_approve_mid_shift               Boolean   @default(false)
+  can_daily_report                    Boolean   @default(false)
+  can_acceptance_report               Boolean   @default(false)
   role_title                          String?   @db.VarChar(100)
   company_id                          Int?
   status                              String    @default("active")
@@ -214,10 +217,11 @@ model Employee {
   transfers       EmployeeTransfer[]
   work_logs       WorkLog[]
   payrolls        Payroll[]
-  expenses        Expense[]
-  attendances     EmployeeAttendance[]
-  leaves          EmployeeLeave[]
-  user            User?
+  expenses              Expense[]
+  attendances           EmployeeAttendance[]
+  mid_shift_approvals   EmployeeAttendance[] @relation("mid_shift_approver")
+  leaves                EmployeeLeave[]
+  user                  User?
 
   @@map("employees")
 }
@@ -1197,10 +1201,15 @@ model EmployeeAttendance {
   remarks                         String?  @db.Text
   is_mid_shift                    Boolean  @default(false)
   work_notes                      String?  @db.Text
+  mid_shift_approved              Boolean  @default(false)
+  mid_shift_approved_by           Int?
+  mid_shift_approved_at           DateTime?
+  mid_shift_approval_signature    String?  @db.Text
   created_at                      DateTime @default(now())
   updated_at                      DateTime @default(now()) @updatedAt
 
-  employee Employee @relation(fields: [employee_id], references: [id])
+  employee             Employee  @relation(fields: [employee_id], references: [id])
+  mid_shift_approver   Employee? @relation("mid_shift_approver", fields: [mid_shift_approved_by], references: [id])
 
   @@map("employee_attendances")
 }
