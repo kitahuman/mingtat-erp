@@ -61,7 +61,7 @@ export default function EmployeesPage() {
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
-  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '' });
+  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', employee_is_temporary: false });
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
@@ -172,9 +172,13 @@ export default function EmployeesPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await employeesApi.create({ ...form, company_id: Number(form.company_id) });
+      const payload = {
+        ...form,
+        company_id: form.employee_is_temporary ? undefined : (form.company_id ? Number(form.company_id) : undefined),
+      };
+      await employeesApi.create(payload);
       setShowModal(false);
-      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '' });
+      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', employee_is_temporary: false });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
@@ -570,14 +574,28 @@ export default function EmployeesPage() {
                 {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label>
-              <select value={form.company_id} onChange={e => setForm({...form, company_id: e.target.value})} className="input-field" required>
-                <option value="">請選擇</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
-              </select>
-            </div>
+            {!form.employee_is_temporary && (
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label>
+                <select value={form.company_id} onChange={e => setForm({...form, company_id: e.target.value})} className="input-field" required={!form.employee_is_temporary}>
+                  <option value="">請選擇</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+                </select>
+              </div>
+            )}
             <div><label className="block text-sm font-medium text-gray-700 mb-1">電話</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label><input type="date" value={form.join_date} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.employee_is_temporary}
+                  onChange={e => setForm({...form, employee_is_temporary: e.target.checked, company_id: ''})}
+                  className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                />
+                <span className="text-sm font-medium text-gray-700">臨時員工</span>
+                <span className="text-xs text-gray-400">（臨時員工不需填寫公司，轉正式员工時再指定）</span>
+              </label>
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button>

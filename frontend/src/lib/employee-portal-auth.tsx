@@ -12,13 +12,14 @@ export interface EmployeeUser {
   phone?: string | null;
   isAdmin?: boolean;
   employeeId?: number | null;
+  canCompanyClock?: boolean;
   employee?: {
     id: number;
     name_zh: string;
     name_en?: string | null;
     emp_code?: string | null;
     role: string;
-    company_id: number;
+    company_id?: number | null;
   } | null;
 }
 

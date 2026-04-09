@@ -140,6 +140,7 @@ export class EmployeePortalService {
         isAdmin,
         employeeId: employee?.id ?? null,
         employee,
+        canCompanyClock: (user as any).user_can_company_clock ?? false,
       },
     };
   }
@@ -190,12 +191,13 @@ export class EmployeePortalService {
     return { user, employee };
   }
 
-  // ── Clock In / Out ─────────────────────────────────────────────
+  // ── Clock In / Out ────────────────────────────────────────────────────────────
   async clockInOut(
     userId: number,
     data: {
       type: 'clock_in' | 'clock_out';
       photo_url?: string;
+      attendance_photo_base64?: string;
       latitude?: number;
       longitude?: number;
       address?: string;
@@ -204,10 +206,8 @@ export class EmployeePortalService {
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-
     const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) throw new BadRequestException('找不到對應的員工記錄，請聯絡管理員');
-
     // Auto reverse-geocode if we have coordinates but no address
     let address = data.address;
     if (!address && data.latitude != null && data.longitude != null) {
@@ -218,7 +218,6 @@ export class EmployeePortalService {
         // Geocoding failure should NOT block clock-in/out
       }
     }
-
     const record = await this.prisma.employeeAttendance.create({
       data: {
         employee_id: employeeId,
@@ -226,13 +225,13 @@ export class EmployeePortalService {
         type: data.type,
         timestamp: new Date(),
         photo_url: data.photo_url,
+        attendance_photo_base64: data.attendance_photo_base64,
         latitude: data.latitude,
         longitude: data.longitude,
         address: address,
         remarks: data.remarks,
       },
     });
-
     return record;
   }
 

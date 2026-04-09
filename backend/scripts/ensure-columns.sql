@@ -3095,3 +3095,6 @@ DO $$ BEGIN
     ALTER TABLE verification_wa_order_items ADD COLUMN wa_item_order_type VARCHAR(30);
   END IF;
 END $$;
+
+-- employees: make company_id nullable (temporary employees do not need a company)
+ALTER TABLE "employees" ALTER COLUMN "company_id" DROP NOT NULL;

@@ -46,6 +46,9 @@ export default function AttendancesPage() {
   const [dateTo, setDateTo] = useState('');
   const [employees, setEmployees] = useState<any[]>([]);
 
+  // Photo modal state
+  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string }>({ open: false, src: '' });
+
   // Map modal state
   const [mapModal, setMapModal] = useState<{
     open: boolean;
@@ -218,18 +221,27 @@ export default function AttendancesPage() {
       key: 'photo',
       label: '相片',
       render: (_: any, row: any) => {
-        if (!row.photo_url) return <span className="text-gray-400 text-xs">-</span>;
+        // Prioritize attendance_photo_base64 (new records), fallback to photo_url (old records)
+        const photoSrc = row.attendance_photo_base64
+          ? (row.attendance_photo_base64.startsWith('data:') ? row.attendance_photo_base64 : `data:image/jpeg;base64,${row.attendance_photo_base64}`)
+          : (row.photo_url && !row.photo_url.includes('localhost') ? row.photo_url : null);
+        if (!photoSrc) return <span className="text-gray-400 text-xs">-</span>;
         return (
-          <a href={row.photo_url} target="_blank" rel="noopener noreferrer">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setPhotoModal({ open: true, src: photoSrc }); }}
+            className="focus:outline-none"
+            title="點擊放大查看"
+          >
             <img
-              src={row.photo_url}
+              src={photoSrc}
               alt="打卡相片"
-              className="w-10 h-10 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity"
+              className="w-10 h-10 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-pointer"
             />
-          </a>
+          </button>
         );
       },
-      exportRender: (_: any, row: any) => row.photo_url || '',
+      exportRender: (_: any, row: any) => row.attendance_photo_base64 ? '[base64 photo]' : (row.photo_url || ''),
     },
     {
       key: 'remarks',
@@ -339,6 +351,24 @@ export default function AttendancesPage() {
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
       />
+
+      {/* Photo Modal */}
+      <Modal
+        isOpen={photoModal.open}
+        onClose={() => setPhotoModal({ open: false, src: '' })}
+        title="打卡相片"
+        size="lg"
+      >
+        <div className="flex justify-center">
+          {photoModal.src && (
+            <img
+              src={photoModal.src}
+              alt="打卡相片"
+              className="max-w-full max-h-[70vh] object-contain rounded-lg shadow"
+            />
+          )}
+        </div>
+      </Modal>
 
       {/* Map Modal */}
       <Modal

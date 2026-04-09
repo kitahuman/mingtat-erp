@@ -200,14 +200,13 @@ model Employee {
   other_certificates                  Json?     @db.JsonB
   cert_photos                         Json?     @db.JsonB // { "driving_license": "url", "green_card": "url", ... }
   employee_photo_base64               String?   @db.Text
-  employee_is_temporary               Boolean   @default(false)
-  company_id                          Int
+   employee_is_temporary               Boolean   @default(false)
+  company_id                          Int?
   status                              String    @default("active")
   notes                               String?   @db.Text
   created_at                          DateTime  @default(now())
   updated_at                          DateTime  @default(now()) @updatedAt
-
-  company         Company                 @relation(fields: [company_id], references: [id])
+  company         Company?                @relation(fields: [company_id], references: [id])
   salary_settings EmployeeSalarySetting[]
   transfers       EmployeeTransfer[]
   work_logs       WorkLog[]
