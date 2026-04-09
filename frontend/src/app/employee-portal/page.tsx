@@ -56,6 +56,13 @@ export default function EmployeePortalHome() {
       color: 'bg-blue-50 border-blue-200 text-blue-700',
       iconBg: 'bg-blue-100',
     },
+    ...(user?.canCompanyClock ? [{
+      href: '/company-clock',
+      label: '公司打卡',
+      icon: '🏢',
+      color: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+      iconBg: 'bg-emerald-100',
+    }] : []),
     {
       href: '/employee-portal/work-report',
       label: t('workReport'),
@@ -80,7 +87,7 @@ export default function EmployeePortalHome() {
     {
       href: '/employee-portal/certificates',
       label: t('certificates'),
-      icon: '🪪',
+      icon: '🪴',
       color: 'bg-teal-50 border-teal-200 text-teal-700',
       iconBg: 'bg-teal-100',
     },

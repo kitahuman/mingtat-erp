@@ -3098,3 +3098,9 @@ END $$;
 
 -- employees: make company_id nullable (temporary employees do not need a company)
 ALTER TABLE "employees" ALTER COLUMN "company_id" DROP NOT NULL;
+
+-- Make employees.company_id nullable (temporary employees don't need a company)
+DO $$ BEGIN
+  ALTER TABLE "employees" ALTER COLUMN "company_id" DROP NOT NULL;
+EXCEPTION WHEN others THEN NULL;
+END $$;

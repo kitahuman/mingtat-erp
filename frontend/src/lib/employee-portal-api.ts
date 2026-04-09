@@ -42,6 +42,7 @@ export const employeePortalApi = {
   clockInOut: (data: {
     type: 'clock_in' | 'clock_out';
     photo_url?: string;
+    attendance_photo_base64?: string;
     latitude?: number;
     longitude?: number;
     address?: string;
