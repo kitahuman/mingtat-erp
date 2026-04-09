@@ -157,6 +157,7 @@ export class EmployeesService {
     page?: number; limit?: number; search?: string;
     role?: string; company_id?: number; status?: string;
     sortBy?: string; sortOrder?: string;
+    is_temporary?: string;
     [key: string]: any; // Allow filter_* params
   }) {
     const page = Number(query.page) || 1;
@@ -166,6 +167,8 @@ export class EmployeesService {
     if (query.role) where.role = query.role;
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.status) where.status = query.status;
+    if (query.is_temporary === 'true') where.employee_is_temporary = true;
+    else if (query.is_temporary === 'false') where.employee_is_temporary = false;
     if (query.search) {
       where.OR = [
         { name_zh: { contains: query.search, mode: 'insensitive' } },
@@ -203,7 +206,7 @@ export class EmployeesService {
       orderBy = { [sortBy]: sortOrder };
     }
 
-    const [data, total] = await Promise.all([
+    const [employees, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
         include: { company: true },
@@ -213,6 +216,17 @@ export class EmployeesService {
       }),
       this.prisma.employee.count({ where }),
     ]);
+
+    // For temporary employees, attach attendance count
+    const data = await Promise.all(employees.map(async (emp) => {
+      if (emp.employee_is_temporary) {
+        const attendance_count = await this.prisma.employeeAttendance.count({
+          where: { employee_id: emp.id },
+        });
+        return { ...emp, attendance_count };
+      }
+      return emp;
+    }));
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -431,6 +445,48 @@ export class EmployeesService {
       data: { employee_photo_base64: null },
     });
     return { success: true, message: '標準照已刪除' };
+  }
+
+  async convertToRegular(id: number, dto: {
+    role: string;
+    company_id: number;
+    emp_code?: string;
+    join_date?: string;
+    phone?: string;
+    name_en?: string;
+    base_salary?: number;
+    salary_type?: string;
+  }) {
+    const emp = await this.prisma.employee.findUnique({ where: { id } });
+    if (!emp) throw new NotFoundException('員工不存在');
+    if (!emp.employee_is_temporary) throw new Error('此員工已是正式員工');
+    const updateData: any = {
+      employee_is_temporary: false,
+      role: dto.role,
+      company_id: dto.company_id,
+      status: 'active',
+    };
+    if (dto.emp_code) updateData.emp_code = dto.emp_code;
+    if (dto.join_date) updateData.join_date = new Date(dto.join_date);
+    if (dto.phone) updateData.phone = dto.phone;
+    if (dto.name_en) updateData.name_en = dto.name_en;
+    await this.prisma.employee.update({ where: { id }, data: updateData });
+    // If salary provided, create a salary setting
+    if (dto.base_salary && dto.base_salary > 0) {
+      await this.prisma.employeeSalarySetting.create({
+        data: {
+          employee_id: id,
+          effective_date: dto.join_date ? new Date(dto.join_date) : new Date(),
+          base_salary: dto.base_salary,
+          salary_type: dto.salary_type || 'monthly',
+          allowance_night: 0,
+          allowance_rent: 0,
+          allowance_3runway: 0,
+          ot_rate_standard: 0,
+        },
+      });
+    }
+    return this.findOne(id);
   }
 
   async remove(id: number) {

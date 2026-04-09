@@ -86,6 +86,7 @@ export const employeesApi = {
   transfer: (id: number, data: any) => api.post(`/employees/${id}/transfer`, data),
   terminate: (id: number, data: { termination_date: string; termination_reason?: string }) => api.post(`/employees/${id}/terminate`, data),
   reinstate: (id: number) => api.post(`/employees/${id}/reinstate`),
+  convertToRegular: (id: number, data: any) => api.post(`/employees/${id}/convert-to-regular`, data),
   delete: (id: number) => api.delete(`/employees/${id}`),
   getPhoto: (id: number) => api.get(`/employees/${id}/photo`),
   updatePhoto: (id: number, photoBase64: string) => api.put(`/employees/${id}/photo`, { photo_base64: photoBase64 }),

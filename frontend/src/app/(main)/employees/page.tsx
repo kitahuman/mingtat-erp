@@ -32,7 +32,18 @@ const roleBadgeClass = (v: string) => {
   }
 };
 
-type TabType = 'active' | 'inactive';
+type TabType = 'active' | 'inactive' | 'temporary';
+
+const EMPTY_CONVERT_FORM = {
+  role: '雜工',
+  company_id: '',
+  emp_code: '',
+  join_date: '',
+  phone: '',
+  name_en: '',
+  base_salary: '',
+  salary_type: 'monthly',
+};
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -60,6 +71,12 @@ export default function EmployeesPage() {
 
   // Server-side column filters state
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+
+  // Convert to regular modal state
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertTarget, setConvertTarget] = useState<any>(null);
+  const [convertForm, setConvertForm] = useState<any>(EMPTY_CONVERT_FORM);
+  const [convertLoading, setConvertLoading] = useState(false);
 
   // Ref to store roleLabels for use in callbacks without stale closures
   const roleLabelsRef = useRef(roleLabels);
@@ -116,17 +133,28 @@ export default function EmployeesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const filterParams = buildColumnFilterParams(columnFilters);
-      const res = await employeesApi.list({
-        page, limit: 20, search,
-        role: roleFilter || undefined,
-        company_id: companyFilter || undefined,
-        status: activeTab,
-        sortBy, sortOrder,
-        ...filterParams,
-      });
-      setData(res.data.data);
-      setTotal(res.data.total);
+      if (activeTab === 'temporary') {
+        const res = await employeesApi.list({
+          page, limit: 50, search,
+          is_temporary: 'true',
+          sortBy: 'created_at', sortOrder: 'DESC',
+        });
+        setData(res.data.data);
+        setTotal(res.data.total);
+      } else {
+        const filterParams = buildColumnFilterParams(columnFilters);
+        const res = await employeesApi.list({
+          page, limit: 20, search,
+          role: roleFilter || undefined,
+          company_id: companyFilter || undefined,
+          status: activeTab,
+          is_temporary: 'false',
+          sortBy, sortOrder,
+          ...filterParams,
+        });
+        setData(res.data.data);
+        setTotal(res.data.total);
+      }
     } catch {}
     setLoading(false);
   }, [page, search, roleFilter, companyFilter, sortBy, sortOrder, activeTab, columnFilters, buildColumnFilterParams]);
@@ -217,6 +245,42 @@ export default function EmployeesPage() {
     load();
   };
 
+  const handleOpenConvert = (emp: any) => {
+    setConvertTarget(emp);
+    setConvertForm({
+      ...EMPTY_CONVERT_FORM,
+      phone: emp.phone || '',
+      name_en: emp.name_en || '',
+    });
+    setShowConvertModal(true);
+  };
+
+  const handleConvert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!convertTarget) return;
+    setConvertLoading(true);
+    try {
+      await employeesApi.convertToRegular(convertTarget.id, {
+        role: convertForm.role,
+        company_id: Number(convertForm.company_id),
+        emp_code: convertForm.emp_code || undefined,
+        join_date: convertForm.join_date || undefined,
+        phone: convertForm.phone || undefined,
+        name_en: convertForm.name_en || undefined,
+        base_salary: convertForm.base_salary ? Number(convertForm.base_salary) : undefined,
+        salary_type: convertForm.salary_type,
+      });
+      setShowConvertModal(false);
+      setConvertTarget(null);
+      setConvertForm(EMPTY_CONVERT_FORM);
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '轉正失敗');
+    } finally {
+      setConvertLoading(false);
+    }
+  };
+
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
   const filterExpiry = (v: string) => {
     if (!v) return '-';
@@ -260,7 +324,7 @@ export default function EmployeesPage() {
     { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
   ];
 
-  const defaultColumns = activeTab === 'active' ? activeColumns : inactiveColumns;
+  const defaultColumns = activeTab === 'active' ? activeColumns : (activeTab === 'inactive' ? inactiveColumns : activeColumns);
   const {
     columnConfigs, columnWidths, visibleColumns,
     handleColumnConfigChange, handleReset, handleColumnResize,
@@ -362,8 +426,84 @@ export default function EmployeesPage() {
         >
           已離職
         </button>
+        <button
+          onClick={() => handleTabChange('temporary')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'temporary' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          臨時員工
+        </button>
       </div>
 
+      {/* Temporary Employees Tab */}
+      {activeTab === 'temporary' ? (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-500">共 <span className="font-semibold text-gray-800">{total}</span> 名臨時員工</p>
+            <input
+              type="text"
+              placeholder="搜尋姓名..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className="input-field w-48"
+            />
+          </div>
+          {loading ? (
+            <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+          ) : data.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-4xl mb-3">👤</p>
+              <p className="font-medium">暫無臨時員工</p>
+              <p className="text-sm mt-1">臨時員工由打卡頁面的「新增臨時員工」功能建立</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {data.map((emp: any) => (
+                <div key={emp.id} className="border border-gray-200 rounded-xl p-4 hover:border-orange-300 hover:shadow-sm transition-all bg-white">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-100 flex-shrink-0 border-2 border-orange-200">
+                      {emp.employee_photo_base64 ? (
+                        <img src={`data:image/jpeg;base64,${emp.employee_photo_base64}`} alt={emp.name_zh} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl text-gray-400">👤</div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{emp.name_zh}</p>
+                      {emp.name_en && <p className="text-xs text-gray-500 truncate">{emp.name_en}</p>}
+                      <span className="inline-block mt-0.5 bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5 rounded-full">臨時員工</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 text-sm mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">建立日期</span>
+                      <span className="text-gray-700 font-medium">{fmtDate(emp.created_at)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">打卡次數</span>
+                      <span className={`font-semibold ${(emp.attendance_count ?? 0) > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                        {emp.attendance_count != null ? `${emp.attendance_count} 次` : '-'}
+                      </span>
+                    </div>
+                    {emp.phone && <div className="flex justify-between"><span className="text-gray-500">電話</span><span className="text-gray-700">{emp.phone}</span></div>}
+                    {emp.company && <div className="flex justify-between"><span className="text-gray-500">公司</span><span className="text-gray-700">{emp.company.internal_prefix || emp.company.name}</span></div>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => router.push(`/employees/${emp.id}`)} className="flex-1 btn-secondary text-xs py-1.5">查看資料</button>
+                    <button onClick={() => handleOpenConvert(emp)} className="flex-1 bg-orange-500 text-white text-xs py-1.5 px-3 rounded-lg font-medium hover:bg-orange-600 transition-colors">轉為正式</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {total > 50 && (
+            <div className="flex justify-center mt-4 gap-2">
+              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary text-sm">上一頁</button>
+              <span className="text-sm text-gray-500 self-center">第 {page} 頁</span>
+              <button disabled={data.length < 50} onClick={() => setPage(p => p + 1)} className="btn-secondary text-sm">下一頁</button>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="card">
         <InlineEditDataTable
           exportFilename={activeTab === 'active' ? '在職員工列表' : '已離職員工列表'}
@@ -417,6 +557,7 @@ export default function EmployeesPage() {
           }
         />
       </div>
+      )}
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
@@ -443,6 +584,84 @@ export default function EmployeesPage() {
             <button type="submit" className="btn-primary">建立</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Convert to Regular Modal */}
+      <Modal isOpen={showConvertModal} onClose={() => { setShowConvertModal(false); setConvertTarget(null); }} title="轉為正式員工" size="lg">
+        {convertTarget && (
+          <form onSubmit={handleConvert} className="space-y-4">
+            <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex-shrink-0 border-2 border-orange-300">
+                {convertTarget.employee_photo_base64 ? (
+                  <img src={`data:image/jpeg;base64,${convertTarget.employee_photo_base64}`} alt={convertTarget.name_zh} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xl text-gray-400">👤</div>
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">{convertTarget.name_zh}</p>
+                <p className="text-xs text-gray-500">
+                  建立於 {fmtDate(convertTarget.created_at)}
+                  {convertTarget.attendance_count != null && ` · 已打卡 ${convertTarget.attendance_count} 次`}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">請填寫以下正式員工資料，提交後此員工將從臨時員工移至在職員工列表。</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">職位 *</label>
+                <select value={convertForm.role} onChange={e => setConvertForm({...convertForm, role: e.target.value})} className="input-field" required>
+                  {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label>
+                <select value={convertForm.company_id} onChange={e => setConvertForm({...convertForm, company_id: e.target.value})} className="input-field" required>
+                  <option value="">請選擇</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">員工編號</label>
+                <input value={convertForm.emp_code} onChange={e => setConvertForm({...convertForm, emp_code: e.target.value})} className="input-field" placeholder="如 E001" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label>
+                <input type="date" value={convertForm.join_date} onChange={e => setConvertForm({...convertForm, join_date: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">電話</label>
+                <input value={convertForm.phone} onChange={e => setConvertForm({...convertForm, phone: e.target.value})} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">英文姓名</label>
+                <input value={convertForm.name_en} onChange={e => setConvertForm({...convertForm, name_en: e.target.value})} className="input-field" />
+              </div>
+            </div>
+            <div className="border-t pt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-3">薪資設定（選填）</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">薪資類型</label>
+                  <select value={convertForm.salary_type} onChange={e => setConvertForm({...convertForm, salary_type: e.target.value})} className="input-field">
+                    <option value="monthly">月薪</option>
+                    <option value="daily">日薪</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">底薪</label>
+                  <input type="number" value={convertForm.base_salary} onChange={e => setConvertForm({...convertForm, base_salary: e.target.value})} className="input-field" placeholder="0" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button type="button" onClick={() => { setShowConvertModal(false); setConvertTarget(null); }} className="btn-secondary" disabled={convertLoading}>取消</button>
+              <button type="submit" disabled={convertLoading} className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-50">
+                {convertLoading ? '處理中...' : '確認轉為正式員工'}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

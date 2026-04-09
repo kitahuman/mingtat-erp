@@ -57,6 +57,11 @@ export class EmployeesController {
     return this.service.transferEmployee(+id, dto);
   }
 
+  @Post(':id/convert-to-regular')
+  convertToRegular(@Param('id') id: number, @Body() dto: any) {
+    return this.service.convertToRegular(+id, dto);
+  }
+
   @Get(':id/photo')
   getPhoto(@Param('id') id: number) {
     return this.service.getPhoto(+id);
