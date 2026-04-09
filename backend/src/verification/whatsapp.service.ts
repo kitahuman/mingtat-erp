@@ -1117,47 +1117,86 @@ export class WhatsappService {
 
     if (orders.length === 0) return null;
 
-    // 取最新版本的 order 作為基礎（它的 items 已經包含 modification 後的最新狀態）
-    const latestOrder = orders[orders.length - 1];
+    // ── 核心修正：按 order_type 分組，每種類型取最新版本的 items ──
+    // 同一天可能有多種 order（machinery v26, manpower v27, transport v28）
+    // 不能只取最後一個 order，要合併所有類型
 
-    // 收集所有版本的 items（最新版為主，但也包含之前版本新增的 items）
-    // 策略：以最新版 order 的 items 為準，因為 modification 已經直接修改了 items
-    const summaryItems: DailySummaryItem[] = latestOrder.items.map((item) => ({
-      id: item.id,
-      seq: item.wa_item_seq,
-      order_type: item.wa_item_order_type,
-      contract_no: item.wa_item_contract_no,
-      customer: item.wa_item_customer,
-      work_description: item.wa_item_work_desc,
-      location: item.wa_item_location,
-      driver_nickname: item.wa_item_driver_nickname,
-      vehicle_no: item.wa_item_vehicle_no,
-      machine_code: item.wa_item_machine_code,
-      contact_person: item.wa_item_contact_person,
-      slip_write_as: item.wa_item_slip_write_as,
-      is_suspended: item.wa_item_is_suspended,
-      remarks: item.wa_item_remarks,
-      mod_status: item.wa_item_mod_status,
-      mod_prev_data: item.wa_item_mod_prev_data,
-      mod_logs: item.mod_logs.map((log) => ({
-        id: log.id,
-        mod_type: log.mod_type,
-        mod_description: log.mod_description,
-        mod_prev_value: log.mod_prev_value,
-        mod_new_value: log.mod_new_value,
-        mod_ai_confidence: log.mod_ai_confidence ? Number(log.mod_ai_confidence) : null,
-        mod_created_at: log.mod_created_at.toISOString(),
-        message: log.message
-          ? {
-              wa_msg_body: log.message.wa_msg_body,
-              wa_msg_sender_name: log.message.wa_msg_sender_name,
-              wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
-            }
-          : null,
-      })),
-      source_order_id: latestOrder.id,
-      source_order_version: latestOrder.wa_order_version,
-    }));
+    // 1. 判斷每個 order 的主要 order_type（根據其 items 的多數類型）
+    const getOrderPrimaryType = (order: typeof orders[0]): string => {
+      const typeCounts: Record<string, number> = {};
+      for (const item of order.items) {
+        const t = item.wa_item_order_type || 'unknown';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      }
+      // 返回出現最多次的類型
+      let maxType = 'unknown';
+      let maxCount = 0;
+      for (const [t, c] of Object.entries(typeCounts)) {
+        if (c > maxCount) { maxType = t; maxCount = c; }
+      }
+      return maxType;
+    };
+
+    // 2. 按 order_type 分組，每組取最新版本（版本號最大的）
+    const ordersByType: Record<string, typeof orders> = {};
+    for (const order of orders) {
+      const primaryType = getOrderPrimaryType(order);
+      if (!ordersByType[primaryType]) ordersByType[primaryType] = [];
+      ordersByType[primaryType].push(order);
+    }
+
+    // 3. 每組取最新版本的 items，合併成一個 summaryItems 列表
+    const summaryItems: DailySummaryItem[] = [];
+    const latestOrderPerType: typeof orders = [];
+
+    for (const [_type, typeOrders] of Object.entries(ordersByType)) {
+      // 按版本排序，取最新的
+      typeOrders.sort((a, b) => a.wa_order_version - b.wa_order_version);
+      const latestOrder = typeOrders[typeOrders.length - 1];
+      latestOrderPerType.push(latestOrder);
+
+      for (const item of latestOrder.items) {
+        summaryItems.push({
+          id: item.id,
+          seq: item.wa_item_seq,
+          order_type: item.wa_item_order_type,
+          contract_no: item.wa_item_contract_no,
+          customer: item.wa_item_customer,
+          work_description: item.wa_item_work_desc,
+          location: item.wa_item_location,
+          driver_nickname: item.wa_item_driver_nickname,
+          vehicle_no: item.wa_item_vehicle_no,
+          machine_code: item.wa_item_machine_code,
+          contact_person: item.wa_item_contact_person,
+          slip_write_as: item.wa_item_slip_write_as,
+          is_suspended: item.wa_item_is_suspended,
+          remarks: item.wa_item_remarks,
+          mod_status: item.wa_item_mod_status,
+          mod_prev_data: item.wa_item_mod_prev_data,
+          mod_logs: item.mod_logs.map((log) => ({
+            id: log.id,
+            mod_type: log.mod_type,
+            mod_description: log.mod_description,
+            mod_prev_value: log.mod_prev_value,
+            mod_new_value: log.mod_new_value,
+            mod_ai_confidence: log.mod_ai_confidence ? Number(log.mod_ai_confidence) : null,
+            mod_created_at: log.mod_created_at.toISOString(),
+            message: log.message
+              ? {
+                  wa_msg_body: log.message.wa_msg_body,
+                  wa_msg_sender_name: log.message.wa_msg_sender_name,
+                  wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
+                }
+              : null,
+          })),
+          source_order_id: latestOrder.id,
+          source_order_version: latestOrder.wa_order_version,
+        });
+      }
+    }
+
+    // 用最新的 order（按版本號）來決定整體狀態
+    const overallLatestOrder = orders[orders.length - 1];
 
     // 統計
     const cancelledCount = summaryItems.filter((i) => i.mod_status === 'cancelled').length;
@@ -1199,7 +1238,7 @@ export class WhatsappService {
 
     return {
       date: dateStr,
-      latest_status: latestOrder.wa_order_status,
+      latest_status: overallLatestOrder.wa_order_status,
       total_items: summaryItems.length,
       active_items: activeCount,
       cancelled_items: cancelledCount,
