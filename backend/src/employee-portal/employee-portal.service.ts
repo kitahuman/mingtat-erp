@@ -51,7 +51,9 @@ export class EmployeePortalService {
           const employee = await this.prisma.employee.findFirst({
             where: { phone: identifier },
           });
-          if (employee) {
+          // Only auto-create accounts for active (in-service) employees.
+          // Employees with status 'inactive' are terminated and must not get an account.
+          if (employee && employee.status === 'active') {
             // Verify the password matches the default pattern Aa-<phone>
             const defaultPassword = `Aa-${identifier}`;
             // Direct string comparison (password is plain text at this point)
@@ -600,6 +602,17 @@ export class EmployeePortalService {
 
   // ── Admin: Create employee user account ─────────────────────────────
   async createEmployeeUser(data: { phone: string; displayName: string; employee_id?: number }) {
+    // If an employee_id is provided, verify the employee is active (not terminated).
+    if (data.employee_id) {
+      const employee = await this.prisma.employee.findUnique({
+        where: { id: data.employee_id },
+      });
+      if (!employee) throw new BadRequestException('找不到對應的員工記錄');
+      if (employee.status !== 'active') {
+        throw new BadRequestException('無法為離職員工建立帳號');
+      }
+    }
+
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ username: `emp_${data.phone}` }, { phone: data.phone }] },
     });
