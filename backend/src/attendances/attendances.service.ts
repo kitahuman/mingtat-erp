@@ -61,7 +61,7 @@ export class AttendancesService {
         where,
         include: {
           employee: {
-            select: { id: true, name_zh: true, name_en: true, emp_code: true },
+            select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
           },
         },
         orderBy: { [sortBy]: sortOrder },
@@ -79,7 +79,7 @@ export class AttendancesService {
       where: { id },
       include: {
         employee: {
-          select: { id: true, name_zh: true, name_en: true, emp_code: true },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
         },
       },
     });

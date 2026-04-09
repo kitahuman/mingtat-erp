@@ -63,6 +63,13 @@ export class CompanyClockController {
     return this.service.updateEmployeePhoto(Number(id), body.photo_base64);
   }
 
+  // ── Check if temporary employee name already exists ────
+  @UseGuards(AuthGuard('jwt'))
+  @Get('temporary-employee/check-name')
+  async checkTemporaryEmployeeName(@Query('name_zh') name_zh: string) {
+    return this.service.checkTemporaryEmployeeName(name_zh);
+  }
+
   // ── Clock In/Out with Face Recognition ─────────────────
   @UseGuards(AuthGuard('jwt'))
   @Post('clock')
@@ -77,6 +84,8 @@ export class CompanyClockController {
       longitude?: number;
       address?: string;
       remarks?: string;
+      is_mid_shift?: boolean;
+      work_notes?: string;
     },
   ) {
     return this.service.clockIn({
@@ -97,6 +106,9 @@ export class CompanyClockController {
       phone?: string;
       photo_base64: string;
       company_id?: number;
+      role_title?: string;
+      work_notes?: string;
+      is_mid_shift?: boolean;
     },
   ) {
     return this.service.createTemporaryEmployee({

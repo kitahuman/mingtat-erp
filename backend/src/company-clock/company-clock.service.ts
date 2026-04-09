@@ -144,6 +144,7 @@ export class CompanyClockService {
         name_en: true,
         nickname: true,
         role: true,
+        role_title: true,
         phone: true,
         company_id: true,
         employee_photo_base64: true,
@@ -234,6 +235,8 @@ export class CompanyClockService {
     longitude?: number;
     address?: string;
     remarks?: string;
+    is_mid_shift?: boolean;
+    work_notes?: string;
   }) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: data.employee_id },
@@ -290,6 +293,9 @@ export class CompanyClockService {
     }
     --- */
 
+    // is_mid_shift only applies to clock_out
+    const isMidShift = data.type === 'clock_out' ? (data.is_mid_shift ?? false) : false;
+
     // Create attendance record
     const attendance = await this.prisma.employeeAttendance.create({
       data: {
@@ -304,6 +310,8 @@ export class CompanyClockService {
         longitude: data.longitude,
         address: data.address,
         remarks: data.remarks,
+        is_mid_shift: isMidShift,
+        work_notes: data.work_notes,
       },
     });
 
@@ -323,6 +331,18 @@ export class CompanyClockService {
     };
   }
 
+  // ── Check if temporary employee name already exists ─────────────
+  async checkTemporaryEmployeeName(name_zh: string): Promise<{ exists: boolean }> {
+    const existing = await this.prisma.employee.findFirst({
+      where: {
+        name_zh: { equals: name_zh, mode: 'insensitive' },
+        employee_is_temporary: true,
+        status: 'active',
+      },
+    });
+    return { exists: !!existing };
+  }
+
   // ── Create Temporary Employee ───────────────────────────────────
   async createTemporaryEmployee(data: {
     name_zh: string;
@@ -331,7 +351,22 @@ export class CompanyClockService {
     photo_base64: string;
     company_id?: number | null;
     operator_user_id: number;
+    role_title?: string;
+    work_notes?: string;
+    is_mid_shift?: boolean;
   }) {
+    // Check for duplicate name
+    const existing = await this.prisma.employee.findFirst({
+      where: {
+        name_zh: { equals: data.name_zh, mode: 'insensitive' },
+        employee_is_temporary: true,
+        status: 'active',
+      },
+    });
+    if (existing) {
+      throw new BadRequestException(`已有同名臨時員工「${data.name_zh}」，請確認是否重複`);
+    }
+
     // Create the temporary employee
     const employee = await this.prisma.employee.create({
       data: {
@@ -342,10 +377,12 @@ export class CompanyClockService {
         employee_photo_base64: data.photo_base64,
         employee_is_temporary: true,
         role: 'worker',
+        role_title: data.role_title || null,
         status: 'active',
       },
     });
 
+    // is_mid_shift only applies to clock_out; new temp employee auto clock_in so always false
     // Auto clock-in for the new temporary employee
     const attendance = await this.prisma.employeeAttendance.create({
       data: {
@@ -355,6 +392,8 @@ export class CompanyClockService {
         attendance_photo_base64: data.photo_base64,
         attendance_verification_method: 'first_time',
         attendance_operator_user_id: data.operator_user_id,
+        is_mid_shift: false,
+        work_notes: data.work_notes || null,
       },
     });
 
@@ -365,6 +404,7 @@ export class CompanyClockService {
         name_zh: employee.name_zh,
         name_en: employee.name_en,
         employee_is_temporary: employee.employee_is_temporary,
+        role_title: employee.role_title,
       },
       attendance,
       message: `臨時員工「${data.name_zh}」已建立並完成打卡`,
@@ -404,6 +444,8 @@ export class CompanyClockService {
             name_zh: true,
             name_en: true,
             emp_code: true,
+            role_title: true,
+            employee_is_temporary: true,
             company: { select: { name: true, internal_prefix: true } },
           },
         },

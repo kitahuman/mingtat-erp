@@ -203,6 +203,7 @@ model Employee {
   employee_mpf_applied                Boolean   @default(false)
   employee_mpf_applied_date            DateTime? @db.Date
   employee_is_temporary               Boolean   @default(false)
+  role_title                          String?   @db.VarChar(100)
   company_id                          Int?
   status                              String    @default("active")
   notes                               String?   @db.Text
@@ -1194,6 +1195,8 @@ model EmployeeAttendance {
   longitude                       Float?
   address                         String?  @db.Text
   remarks                         String?  @db.Text
+  is_mid_shift                    Boolean  @default(false)
+  work_notes                      String?  @db.Text
   created_at                      DateTime @default(now())
   updated_at                      DateTime @default(now()) @updatedAt
 

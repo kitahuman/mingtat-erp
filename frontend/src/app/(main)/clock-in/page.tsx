@@ -23,6 +23,7 @@ const mainClockApi = {
   getCompanies: () => mainAuthClockApi.get('/company-clock/companies'),
   getEmployeePhoto: (id: number) => mainAuthClockApi.get(`/company-clock/employees/${id}/photo`),
   updateEmployeePhoto: (id: number, photoBase64: string) => mainAuthClockApi.put(`/company-clock/employees/${id}/photo`, { photo_base64: photoBase64 }),
+  checkTemporaryEmployeeName: (name_zh: string) => mainAuthClockApi.get('/company-clock/temporary-employee/check-name', { params: { name_zh } }),
   clock: (data: any) => mainAuthClockApi.post('/company-clock/clock', data),
   createTemporaryEmployee: (data: any) => mainAuthClockApi.post('/company-clock/temporary-employee', data),
   getTodayAttendances: (params?: any) => mainAuthClockApi.get('/company-clock/today-attendances', { params }),
@@ -35,6 +36,7 @@ interface Employee {
   name_en?: string | null;
   nickname?: string | null;
   role: string;
+  role_title?: string | null;
   phone?: string | null;
   company_id: number;
   hasStandardPhoto: boolean;
@@ -52,16 +54,24 @@ interface AttendanceRecord {
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  is_mid_shift?: boolean;
+  work_notes?: string | null;
   employee: {
     id: number;
     name_zh: string;
     name_en?: string | null;
     emp_code?: string | null;
+    role_title?: string | null;
+    employee_is_temporary?: boolean;
     company?: { name: string; internal_prefix?: string | null } | null;
   };
 }
 
 type Step = 'list' | 'camera' | 'verifying' | 'result' | 'temp_employee';
+
+const POSITION_OPTIONS = [
+  '雜工', '機手', '司機', '管工', '科文', '測量', '安全員', '其他'
+];
 
 export default function CompanyClockPage() {
   const { user, loading: authLoading } = useAuth();
@@ -98,13 +108,17 @@ export default function CompanyClockPage() {
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [showRecords, setShowRecords] = useState(false);
 
+  // Form fields
+  const [isMidShift, setIsMidShift] = useState(false);
+  const [workNotes, setWorkNotes] = useState('');
+
   // Temp employee form
   const [tempName, setTempName] = useState('');
   const [tempNameEn, setTempNameEn] = useState('');
   const [tempPhone, setTempPhone] = useState('');
+  const [tempPosition, setTempPosition] = useState('');
   const [tempCompanyId, setTempCompanyId] = useState<number | ''>('');
-
-  // No redirect needed - (main) layout handles auth
+  const [tempNameError, setTempNameError] = useState('');
 
   // Load companies
   useEffect(() => {
@@ -194,7 +208,6 @@ export default function CompanyClockPage() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    // Compress to max 800px for smaller payload
     const maxSize = 800;
     let w = video.videoWidth;
     let h = video.videoHeight;
@@ -228,6 +241,8 @@ export default function CompanyClockPage() {
     setStep('camera');
     setResultMessage('');
     setVerificationInfo(null);
+    setIsMidShift(false);
+    setWorkNotes('');
   };
 
   // ── Get current GPS location ──────────────────────────
@@ -262,7 +277,6 @@ export default function CompanyClockPage() {
     setResultMessage('');
 
     try {
-      // Get GPS location
       const location = await getCurrentLocation();
       let address: string | undefined;
       if (location) {
@@ -276,6 +290,8 @@ export default function CompanyClockPage() {
         latitude: location?.latitude,
         longitude: location?.longitude,
         address,
+        is_mid_shift: clockType === 'clock_out' ? isMidShift : false,
+        work_notes: workNotes,
       });
 
       setResultType('success');
@@ -305,7 +321,16 @@ export default function CompanyClockPage() {
 
   // ── Create Temporary Employee ─────────────────────────
   const handleCreateTemp = async () => {
-    if (!tempName || !tempCompanyId || !photoDataUrl) return;
+    if (!tempName || !photoDataUrl) return;
+
+    // Final duplicate check
+    try {
+      const check = await mainClockApi.checkTemporaryEmployeeName(tempName);
+      if (check.data.exists) {
+        setTempNameError('已有同名臨時員工，請更改名稱');
+        return;
+      }
+    } catch {}
 
     setProcessing(true);
     try {
@@ -314,7 +339,10 @@ export default function CompanyClockPage() {
         name_en: tempNameEn || undefined,
         phone: tempPhone || undefined,
         photo_base64: photoDataUrl,
-        company_id: Number(tempCompanyId),
+        company_id: tempCompanyId ? Number(tempCompanyId) : undefined,
+        role_title: tempPosition || undefined,
+        work_notes: workNotes,
+        is_mid_shift: isMidShift,
       });
 
       setResultType('success');
@@ -323,7 +351,11 @@ export default function CompanyClockPage() {
       setTempName('');
       setTempNameEn('');
       setTempPhone('');
+      setTempPosition('');
       setTempCompanyId('');
+      setWorkNotes('');
+      setIsMidShift(false);
+
       await loadEmployees(1);
       await loadTodayRecords();
     } catch (err: any) {
@@ -335,6 +367,25 @@ export default function CompanyClockPage() {
     }
   };
 
+  // ── Check Name Duplicate (Front-end validation) ──────
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (tempName && step === 'temp_employee') {
+        try {
+          const res = await mainClockApi.checkTemporaryEmployeeName(tempName);
+          if (res.data.exists) {
+            setTempNameError('已有同名臨時員工，請更改名稱');
+          } else {
+            setTempNameError('');
+          }
+        } catch {}
+      } else {
+        setTempNameError('');
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [tempName, step]);
+
   // ── Back to list ──────────────────────────────────────
   const backToList = () => {
     setStep('list');
@@ -343,6 +394,7 @@ export default function CompanyClockPage() {
     closeCamera();
     setResultMessage('');
     setVerificationInfo(null);
+    setTempNameError('');
   };
 
   // ── Format time ───────────────────────────────────────
@@ -381,7 +433,6 @@ export default function CompanyClockPage() {
           >
             今日記錄 ({todayRecords.length})
           </button>
-
         </div>
       </div>
 
@@ -422,25 +473,25 @@ export default function CompanyClockPage() {
                           {r.type === 'clock_in' ? '上班' : '下班'}
                         </span>
                         <span className="font-medium text-gray-900">{r.employee.name_zh}</span>
-                        {r.employee.company?.internal_prefix && (
-                          <span className="text-gray-400 text-xs">{r.employee.company.internal_prefix}</span>
+                        {r.employee.role_title && (
+                          <span className="text-gray-400 text-xs">({r.employee.role_title})</span>
+                        )}
+                        {r.is_mid_shift && (
+                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded font-bold">中直</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {r.attendance_verification_method === 'face_ai' && (
-                          <span className="text-xs text-blue-500" title={`相似度: ${r.attendance_verification_score}%`}>
-                            AI {r.attendance_verification_score}%
-                          </span>
-                        )}
-                        {r.attendance_verification_method === 'first_time' && (
-                          <span className="text-xs text-amber-500">首次</span>
-                        )}
                         <span className="text-gray-500">
                           {new Date(r.timestamp).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' })}{' '}
                           {formatTime(r.timestamp)}
                         </span>
                       </div>
                     </div>
+                    {r.work_notes && (
+                      <div className="mt-1 text-xs text-blue-600 italic">
+                        備註: {r.work_notes}
+                      </div>
+                    )}
                     {r.address && (
                       <div className="mt-1 text-xs text-gray-400 truncate" title={r.address}>
                         📍 {r.address}
@@ -456,7 +507,6 @@ export default function CompanyClockPage() {
         {/* ── Step: Employee List ─────────────────────────── */}
         {step === 'list' && (
           <>
-            {/* Search & Filter */}
             <div className="mb-4 space-y-3">
               <div className="flex gap-2">
                 <input
@@ -480,11 +530,17 @@ export default function CompanyClockPage() {
                 </select>
               </div>
 
-              {/* Add Temporary Employee Button */}
               <button
                 onClick={() => {
                   setStep('temp_employee');
                   setPhotoDataUrl(null);
+                  setTempName('');
+                  setTempNameEn('');
+                  setTempPhone('');
+                  setTempPosition('');
+                  setTempCompanyId('');
+                  setWorkNotes('');
+                  setIsMidShift(false);
                 }}
                 className="w-full py-2.5 bg-amber-50 border-2 border-amber-200 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-colors text-sm flex items-center justify-center gap-2"
               >
@@ -495,7 +551,6 @@ export default function CompanyClockPage() {
               </button>
             </div>
 
-            {/* Employee List */}
             <div className="space-y-2">
               {listLoading ? (
                 <div className="flex justify-center py-8">
@@ -512,34 +567,24 @@ export default function CompanyClockPage() {
                     className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 flex items-center justify-between"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {/* Photo indicator */}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                         emp.hasStandardPhoto
                           ? 'bg-emerald-100 text-emerald-600'
                           : 'bg-gray-100 text-gray-400'
                       }`}>
-                        {emp.hasStandardPhoto ? (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        )}
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-gray-900 text-sm truncate">{emp.name_zh}</span>
                           {emp.employee_is_temporary && (
-                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded font-medium">臨時</span>
-                          )}
-                          {!emp.hasStandardPhoto && (
-                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs rounded">無照片</span>
+                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded font-medium">臨時</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-400">
-                          {emp.name_en && <span>{emp.name_en}</span>}
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                          {emp.role_title && <span className="text-blue-600 font-medium">{emp.role_title}</span>}
                           {emp.emp_code && <span>({emp.emp_code})</span>}
                           {emp.company?.internal_prefix && (
                             <span className="text-gray-300">| {emp.company.internal_prefix}</span>
@@ -566,7 +611,6 @@ export default function CompanyClockPage() {
               )}
             </div>
 
-            {/* Pagination */}
             {listTotal > 50 && (
               <div className="flex justify-center gap-2 mt-4">
                 <button
@@ -602,7 +646,6 @@ export default function CompanyClockPage() {
             </button>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              {/* Employee info */}
               <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                   clockType === 'clock_in' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'
@@ -612,7 +655,7 @@ export default function CompanyClockPage() {
                 <div>
                   <h2 className="font-bold text-gray-900">{selectedEmployee.name_zh}</h2>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    {selectedEmployee.name_en && <span>{selectedEmployee.name_en}</span>}
+                    {selectedEmployee.role_title && <span className="text-blue-600 font-medium">{selectedEmployee.role_title}</span>}
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       clockType === 'clock_in' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
                     }`}>
@@ -622,53 +665,53 @@ export default function CompanyClockPage() {
                 </div>
               </div>
 
-              {/* First-time notice */}
-              {!selectedEmployee.hasStandardPhoto && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
-                  <p className="font-semibold">首次打卡</p>
-                  <p className="text-xs mt-1">此員工尚無標準照，拍攝的照片將自動存為標準照。</p>
+              {/* Extra fields for clock-out */}
+              <div className="mb-4 space-y-3">
+                {clockType === 'clock_out' && (
+                  <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
+                    <input
+                      type="checkbox"
+                      id="isMidShift"
+                      checked={isMidShift}
+                      onChange={(e) => setIsMidShift(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="isMidShift" className="text-sm font-bold text-purple-700 cursor-pointer select-none">
+                      中直 (Mid-Shift)
+                    </label>
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">工作備註 (選填)</label>
+                  <textarea
+                    value={workNotes}
+                    onChange={(e) => setWorkNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:border-emerald-500"
+                    placeholder="輸入今日工作備註..."
+                    rows={2}
+                  />
                 </div>
-              )}
+              </div>
 
-              {/* Camera / Photo */}
               {cameraOpen ? (
                 <div className="bg-black rounded-2xl overflow-hidden relative">
                   <video ref={videoRef} className="w-full" playsInline muted />
                   <canvas ref={canvasRef} className="hidden" />
                   <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                    <button
-                      onClick={capturePhoto}
-                      className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-95 transition-transform"
-                    />
-                    <button
-                      onClick={() => { closeCamera(); }}
-                      className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm"
-                    >
-                      取消
-                    </button>
+                    <button onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-95 transition-transform" />
+                    <button onClick={() => { closeCamera(); }} className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm">取消</button>
                   </div>
                 </div>
               ) : (
                 <div>
                   {photoDataUrl ? (
                     <div className="relative mb-4">
-                      <img
-                        src={photoDataUrl}
-                        alt="preview"
-                        className="w-full h-64 object-cover rounded-xl"
-                      />
-                      <button
-                        onClick={() => { setPhotoDataUrl(null); openCamera(); }}
-                        className="absolute bottom-2 right-2 px-3 py-1.5 bg-white rounded-lg text-xs font-medium shadow border"
-                      >
-                        重新拍照
-                      </button>
+                      <img src={photoDataUrl} alt="preview" className="w-full h-64 object-cover rounded-xl" />
+                      <button onClick={() => { setPhotoDataUrl(null); openCamera(); }} className="absolute bottom-2 right-2 px-3 py-1.5 bg-white rounded-lg text-xs font-medium shadow border">重新拍照</button>
                     </div>
                   ) : (
-                    <button
-                      onClick={openCamera}
-                      className="w-full h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors mb-4"
-                    >
+                    <button onClick={openCamera} className="w-full h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors mb-4">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-10 h-10">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -677,7 +720,6 @@ export default function CompanyClockPage() {
                     </button>
                   )}
 
-                  {/* Submit button */}
                   {photoDataUrl && (
                     <button
                       onClick={handleSubmitClock}
@@ -688,7 +730,7 @@ export default function CompanyClockPage() {
                           : 'bg-orange-500 hover:bg-orange-600'
                       }`}
                     >
-                      {processing ? '驗證中...' : selectedEmployee.hasStandardPhoto ? '提交打卡（AI 人臉驗證）' : '提交打卡（首次，存為標準照）'}
+                      {processing ? '處理中...' : '提交打卡'}
                     </button>
                   )}
                 </div>
@@ -701,8 +743,7 @@ export default function CompanyClockPage() {
         {step === 'verifying' && (
           <div className="flex flex-col items-center justify-center py-16 space-y-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600" />
-            <p className="text-gray-600 font-medium">AI 人臉驗證中...</p>
-            <p className="text-gray-400 text-sm">正在比對照片，請稍候</p>
+            <p className="text-gray-600 font-medium">處理中...</p>
           </div>
         )}
 
@@ -732,27 +773,13 @@ export default function CompanyClockPage() {
               }`}>
                 {resultMessage}
               </p>
-              {verificationInfo && resultType === 'success' && (
-                <div className="mt-3 space-y-1">
-                  {verificationInfo.method === 'face_ai' && (
-                    <p className="text-sm text-green-600">
-                      AI 人臉驗證通過 | 相似度: {verificationInfo.score}%
-                    </p>
-                  )}
-                  {verificationInfo.isFirstTime && (
-                    <p className="text-sm text-amber-600">
-                      照片已自動存為標準照
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
             <button
               onClick={backToList}
               className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors"
             >
-              繼續打卡
+              繼續
             </button>
           </div>
         )}
@@ -770,104 +797,101 @@ export default function CompanyClockPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
               <h2 className="font-bold text-gray-900 text-lg">新增臨時員工</h2>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">中文姓名 *</label>
-                <input
-                  type="text"
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm"
-                  placeholder="輸入員工中文姓名"
-                  required
-                />
-              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">中文姓名 *</label>
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    className={`w-full px-4 py-2.5 border-2 rounded-xl outline-none text-sm ${
+                      tempNameError ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-emerald-500'
+                    }`}
+                    placeholder="輸入員工中文姓名"
+                  />
+                  {tempNameError && <p className="mt-1 text-xs text-red-500 font-medium">{tempNameError}</p>}
+                </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">英文姓名</label>
-                <input
-                  type="text"
-                  value={tempNameEn}
-                  onChange={(e) => setTempNameEn(e.target.value)}
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm"
-                  placeholder="輸入員工英文姓名（選填）"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">電話</label>
-                <input
-                  type="tel"
-                  value={tempPhone}
-                  onChange={(e) => setTempPhone(e.target.value)}
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm"
-                  placeholder="輸入電話號碼（選填）"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">所屬公司 *</label>
-                <select
-                  value={tempCompanyId}
-                  onChange={(e) => setTempCompanyId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm bg-white"
-                  required
-                >
-                  <option value="">選擇公司</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Photo capture */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">拍照 *</label>
-                {cameraOpen ? (
-                  <div className="bg-black rounded-2xl overflow-hidden relative">
-                    <video ref={videoRef} className="w-full" playsInline muted />
-                    <canvas ref={canvasRef} className="hidden" />
-                    <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                      <button
-                        onClick={capturePhoto}
-                        className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-95 transition-transform"
-                      />
-                      <button
-                        onClick={closeCamera}
-                        className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                ) : photoDataUrl ? (
-                  <div className="relative">
-                    <img src={photoDataUrl} alt="preview" className="w-full h-48 object-cover rounded-xl" />
-                    <button
-                      onClick={() => { setPhotoDataUrl(null); openCamera(); }}
-                      className="absolute bottom-2 right-2 px-3 py-1.5 bg-white rounded-lg text-xs font-medium shadow border"
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">職位 (選填)</label>
+                    <select
+                      value={tempPosition}
+                      onChange={(e) => setTempPosition(e.target.value)}
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl outline-none text-sm bg-white"
                     >
-                      重新拍照
-                    </button>
+                      <option value="">選擇職位</option>
+                      {POSITION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
                   </div>
-                ) : (
-                  <button
-                    onClick={openCamera}
-                    className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="text-sm font-medium">點擊拍照</span>
-                  </button>
-                )}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">公司 (選填)</label>
+                    <select
+                      value={tempCompanyId}
+                      onChange={(e) => setTempCompanyId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl outline-none text-sm bg-white"
+                    >
+                      <option value="">選擇公司</option>
+                      {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix || c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">工作備註 (選填)</label>
+                  <textarea
+                    value={workNotes}
+                    onChange={(e) => setWorkNotes(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-emerald-500"
+                    placeholder="輸入工作備註..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
+                  <input
+                    type="checkbox"
+                    id="tempMidShift"
+                    checked={isMidShift}
+                    onChange={(e) => setIsMidShift(e.target.checked)}
+                    className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <label htmlFor="tempMidShift" className="text-sm font-bold text-purple-700 cursor-pointer select-none">
+                    中直 (Mid-Shift)
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">拍照 *</label>
+                  {cameraOpen ? (
+                    <div className="bg-black rounded-2xl overflow-hidden relative">
+                      <video ref={videoRef} className="w-full" playsInline muted />
+                      <canvas ref={canvasRef} className="hidden" />
+                      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                        <button onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg active:scale-95 transition-transform" />
+                        <button onClick={closeCamera} className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm">取消</button>
+                      </div>
+                    </div>
+                  ) : photoDataUrl ? (
+                    <div className="relative">
+                      <img src={photoDataUrl} alt="preview" className="w-full h-48 object-cover rounded-xl" />
+                      <button onClick={() => { setPhotoDataUrl(null); openCamera(); }} className="absolute bottom-2 right-2 px-3 py-1.5 bg-white rounded-lg text-xs font-medium shadow border">重新拍照</button>
+                    </div>
+                  ) : (
+                    <button onClick={openCamera} className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">點擊拍照</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <button
                 onClick={handleCreateTemp}
-                disabled={!tempName || !tempCompanyId || !photoDataUrl || processing}
+                disabled={!tempName || !!tempNameError || !photoDataUrl || processing}
                 className="w-full py-3.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? '建立中...' : '建立臨時員工並打卡'}

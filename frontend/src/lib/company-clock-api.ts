@@ -56,6 +56,10 @@ export const companyClockApi = {
   updateEmployeePhoto: (id: number, photoBase64: string) =>
     companyClockAxios.put(`/company-clock/employees/${id}/photo`, { photo_base64: photoBase64 }),
 
+  // Check if temporary employee name already exists
+  checkTemporaryEmployeeName: (name_zh: string) =>
+    companyClockAxios.get('/company-clock/temporary-employee/check-name', { params: { name_zh } }),
+
   // Clock in/out with face recognition
   clock: (data: {
     employee_id: number;
@@ -65,6 +69,8 @@ export const companyClockApi = {
     longitude?: number;
     address?: string;
     remarks?: string;
+    is_mid_shift?: boolean;
+    work_notes?: string;
   }) => companyClockAxios.post('/company-clock/clock', data),
 
   // Create temporary employee
@@ -73,7 +79,10 @@ export const companyClockApi = {
     name_en?: string;
     phone?: string;
     photo_base64: string;
-
+    company_id?: number;
+    role_title?: string;
+    work_notes?: string;
+    is_mid_shift?: boolean;
   }) => companyClockAxios.post('/company-clock/temporary-employee', data),
 
   // Today's attendance records
