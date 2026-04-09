@@ -161,13 +161,32 @@ export class WorkLogsService {
   }
 
   async bulkDelete(ids: number[]) {
-    // 先解除 PayrollWorkLog 的關聯（設 work_log_id 為 null），避免外鍵約束錯誤
+    // Guard: ids must be a non-empty array
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+
+    // Coerce every element to a proper integer (HTTP JSON may deliver strings
+    // or floating-point numbers depending on the client).
+    const safeIds = ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
+    if (safeIds.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+
+    // Step 1: Detach PayrollWorkLog rows that reference these work-logs so the
+    //         FK constraint (ON DELETE SET NULL) is handled explicitly before
+    //         the deleteMany, avoiding any race-condition or deferred-FK issue.
     await this.prisma.payrollWorkLog.updateMany({
-      where: { work_log_id: { in: ids } },
+      where: { work_log_id: { in: safeIds } },
       data: { work_log_id: null },
     });
-    await this.prisma.workLog.deleteMany({ where: { id: { in: ids } } });
-    return { success: true, deleted: ids.length };
+
+    // Step 2: Delete the work-log rows.
+    const result = await this.prisma.workLog.deleteMany({
+      where: { id: { in: safeIds } },
+    });
+
+    return { success: true, deleted: result.count };
   }
 
   async bulkUpdate(ids: number[], field: string, value: any) {
