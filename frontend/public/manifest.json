@@ -1,0 +1,25 @@
+{
+  "name": "明達建築 ERP",
+  "short_name": "明達ERP",
+  "description": "明達建築有限公司 ERP 系統",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a3a7c",
+  "theme_color": "#1a3a7c",
+  "lang": "zh-Hant",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
