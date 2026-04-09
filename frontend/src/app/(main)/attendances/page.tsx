@@ -370,6 +370,7 @@ export default function AttendancesPage() {
         loading={loading}
         total={total}
         page={page}
+        limit={20}
         onPageChange={setPage}
         onSort={handleSort}
         sortBy={sortBy}
@@ -377,7 +378,7 @@ export default function AttendancesPage() {
         filters={filters}
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
-        onResetColumns={handleReset}
+        onColumnConfigReset={handleReset}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
         exportFilename={`attendances_${new Date().toISOString().split('T')[0]}`}
@@ -385,7 +386,7 @@ export default function AttendancesPage() {
 
       {/* Map Modal */}
       <Modal
-        open={mapModal.open}
+        isOpen={mapModal.open}
         onClose={() => setMapModal({ ...mapModal, open: false })}
         title="打卡位置"
         size="lg"
@@ -409,7 +410,7 @@ export default function AttendancesPage() {
           )}
           <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-200">
             <Suspense fallback={<div className="h-full w-full bg-gray-100 animate-pulse flex items-center justify-center">載入地圖中...</div>}>
-              <MiniMap lat={mapModal.lat} lng={mapModal.lng} />
+              <MiniMap latitude={mapModal.lat} longitude={mapModal.lng} />
             </Suspense>
           </div>
           <div className="flex justify-end">
@@ -427,7 +428,7 @@ export default function AttendancesPage() {
 
       {/* Photo Modal */}
       <Modal
-        open={photoModal.open}
+        isOpen={photoModal.open}
         onClose={() => setPhotoModal({ ...photoModal, open: false })}
         title="打卡相片"
         size="md"
