@@ -3104,3 +3104,15 @@ DO $$ BEGIN
   ALTER TABLE "employees" ALTER COLUMN "company_id" DROP NOT NULL;
 EXCEPTION WHEN others THEN NULL;
 END $$;
+
+-- employees: add employee_mpf_applied and employee_mpf_applied_date
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='employees' AND column_name='employee_mpf_applied') THEN
+    ALTER TABLE employees ADD COLUMN employee_mpf_applied BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='employees' AND column_name='employee_mpf_applied_date') THEN
+    ALTER TABLE employees ADD COLUMN employee_mpf_applied_date DATE;
+  END IF;
+END $$;

@@ -150,6 +150,9 @@ export const customFieldsApi = {
 // Dashboard
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
+  workStatus: () => api.get('/dashboard/work-status'),
+  alerts: () => api.get('/dashboard/alerts'),
+  financial: () => api.get('/dashboard/financial'),
 };
 
 // Contracts (合約)
