@@ -103,7 +103,7 @@ export class EmployeePortalService {
       const userWithEmployee = await this.prisma.user.findUnique({
         where: { id: user.id },
         include: {
-          employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true, can_approve_mid_shift: true, can_daily_report: true, can_acceptance_report: true } },
+          employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true } },
         },
       });
       employee = userWithEmployee?.employee ?? null;
@@ -112,7 +112,7 @@ export class EmployeePortalService {
       if (!employee && user.phone) {
         employee = await this.prisma.employee.findFirst({
           where: { phone: user.phone },
-          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true, can_approve_mid_shift: true, can_daily_report: true, can_acceptance_report: true },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
         });
       }
     } catch {
@@ -141,6 +141,9 @@ export class EmployeePortalService {
         employeeId: employee?.id ?? null,
         employee,
         canCompanyClock: (user as any).user_can_company_clock ?? false,
+        can_approve_mid_shift: (user as any).can_approve_mid_shift ?? false,
+        can_daily_report: (user as any).can_daily_report ?? false,
+        can_acceptance_report: (user as any).can_acceptance_report ?? false,
       },
     };
   }
@@ -686,14 +689,11 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     
-    // Ensure user has permission
-    const employeeId = await this.resolveEmployeeId(user);
-    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
-    
-    const employee = await this.prisma.employee.findUnique({ where: { id: employeeId } });
-    if (!employee?.can_approve_mid_shift) {
+    if (!(user as any).can_approve_mid_shift) {
       throw new UnauthorizedException('您沒有權限進行中直批核');
     }
+
+    const employeeId = await this.resolveEmployeeId(user);
 
     const pending = await this.prisma.employeeAttendance.findMany({
       where: {
@@ -715,13 +715,12 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     
-    const approverEmployeeId = await this.resolveEmployeeId(user);
-    if (!approverEmployeeId) throw new BadRequestException('找不到對應的員工記錄');
-    
-    const employee = await this.prisma.employee.findUnique({ where: { id: approverEmployeeId } });
-    if (!employee?.can_approve_mid_shift) {
+    if (!(user as any).can_approve_mid_shift) {
       throw new UnauthorizedException('您沒有權限進行中直批核');
     }
+
+    const approverEmployeeId = await this.resolveEmployeeId(user);
+    if (!approverEmployeeId) throw new BadRequestException('找不到對應的員工記錄');
 
     if (!data.attendance_ids || data.attendance_ids.length === 0) {
       throw new BadRequestException('請選擇要批核的記錄');

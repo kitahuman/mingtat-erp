@@ -15,6 +15,9 @@ interface UserItem {
   department: string | null;
   isActive: boolean;
   user_can_company_clock: boolean;
+  can_approve_mid_shift: boolean;
+  can_daily_report: boolean;
+  can_acceptance_report: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -36,6 +39,9 @@ const emptyForm = {
   department: '',
   isActive: true,
   user_can_company_clock: false,
+  can_approve_mid_shift: false,
+  can_daily_report: false,
+  can_acceptance_report: false,
 };
 
 function UsersPageContent() {
@@ -90,6 +96,9 @@ function UsersPageContent() {
       department: u.department || '',
       isActive: u.isActive,
       user_can_company_clock: u.user_can_company_clock,
+      can_approve_mid_shift: u.can_approve_mid_shift ?? false,
+      can_daily_report: u.can_daily_report ?? false,
+      can_acceptance_report: u.can_acceptance_report ?? false,
     });
     setError('');
     setShowModal(true);
@@ -109,6 +118,9 @@ function UsersPageContent() {
           department: form.department || undefined,
           isActive: form.isActive,
           user_can_company_clock: form.user_can_company_clock,
+          can_approve_mid_shift: form.can_approve_mid_shift,
+          can_daily_report: form.can_daily_report,
+          can_acceptance_report: form.can_acceptance_report,
         };
         if (form.password) {
           payload.password = form.password;
@@ -130,6 +142,9 @@ function UsersPageContent() {
           department: form.department || undefined,
           isActive: form.isActive,
           user_can_company_clock: form.user_can_company_clock,
+          can_approve_mid_shift: form.can_approve_mid_shift,
+          can_daily_report: form.can_daily_report,
+          can_acceptance_report: form.can_acceptance_report,
         });
       }
 
@@ -165,6 +180,9 @@ function UsersPageContent() {
       minute: '2-digit',
     });
   };
+
+  const hasSupervisorPerms = (u: UserItem) =>
+    u.can_approve_mid_shift || u.can_daily_report || u.can_acceptance_report;
 
   return (
     <div>
@@ -224,7 +242,7 @@ function UsersPageContent() {
           <div className="text-center py-12 text-gray-500">沒有找到用戶</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: '640px' }}>
+            <table className="w-full text-sm" style={{ minWidth: '720px' }}>
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">用戶名</th>
@@ -233,6 +251,7 @@ function UsersPageContent() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">部門</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">狀態</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">公司打卡</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">監工權限</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">最後登入</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">操作</th>
                 </tr>
@@ -263,6 +282,23 @@ function UsersPageContent() {
                     <td className="px-4 py-3">
                       {(u.role === 'admin' || u.user_can_company_clock) ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">✓</span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {hasSupervisorPerms(u) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {u.can_approve_mid_shift && (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200">中直</span>
+                          )}
+                          {u.can_daily_report && (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200">日報</span>
+                          )}
+                          {u.can_acceptance_report && (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200">收貨</span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
@@ -404,16 +440,57 @@ function UsersPageContent() {
               </div>
             )}
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="canCompanyClock"
-                checked={form.user_can_company_clock}
-                onChange={(e) => setForm({ ...form, user_can_company_clock: e.target.checked })}
-                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <label htmlFor="canCompanyClock" className="text-sm text-gray-700">公司打卡權限</label>
-              <span className="text-xs text-gray-400">(允許登入公司打卡頁面)</span>
+            {/* Portal Permissions Section */}
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-700">員工 Portal 權限</p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="canCompanyClock"
+                  checked={form.user_can_company_clock}
+                  onChange={(e) => setForm({ ...form, user_can_company_clock: e.target.checked })}
+                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="canCompanyClock" className="text-sm text-gray-700">公司打卡</label>
+                <span className="text-xs text-gray-400">(允許登入公司打卡頁面)</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="canApproveMidShift"
+                  checked={form.can_approve_mid_shift}
+                  onChange={(e) => setForm({ ...form, can_approve_mid_shift: e.target.checked })}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="canApproveMidShift" className="text-sm text-gray-700">中直批核</label>
+                <span className="text-xs text-gray-400">(可進行中直批核)</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="canDailyReport"
+                  checked={form.can_daily_report}
+                  onChange={(e) => setForm({ ...form, can_daily_report: e.target.checked })}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="canDailyReport" className="text-sm text-gray-700">工程日報</label>
+                <span className="text-xs text-gray-400">(可填寫工程日報)</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="canAcceptanceReport"
+                  checked={form.can_acceptance_report}
+                  onChange={(e) => setForm({ ...form, can_acceptance_report: e.target.checked })}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="canAcceptanceReport" className="text-sm text-gray-700">工程收貨</label>
+                <span className="text-xs text-gray-400">(可填寫工程收貨報告)</span>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t">

@@ -30,6 +30,9 @@ model User {
   employee_id            Int?      @unique @map("employee_id")
   employee               Employee? @relation(fields: [employee_id], references: [id])
   user_can_company_clock Boolean   @default(false)
+  can_approve_mid_shift  Boolean   @default(false)
+  can_daily_report       Boolean   @default(false)
+  can_acceptance_report  Boolean   @default(false)
 
   @@map("users")
 }
@@ -203,9 +206,6 @@ model Employee {
   employee_mpf_applied                Boolean   @default(false)
   employee_mpf_applied_date            DateTime? @db.Date
   employee_is_temporary               Boolean   @default(false)
-  can_approve_mid_shift               Boolean   @default(false)
-  can_daily_report                    Boolean   @default(false)
-  can_acceptance_report               Boolean   @default(false)
   role_title                          String?   @db.VarChar(100)
   company_id                          Int?
   status                              String    @default("active")

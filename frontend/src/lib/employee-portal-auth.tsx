@@ -13,6 +13,9 @@ export interface EmployeeUser {
   isAdmin?: boolean;
   employeeId?: number | null;
   canCompanyClock?: boolean;
+  can_approve_mid_shift?: boolean;
+  can_daily_report?: boolean;
+  can_acceptance_report?: boolean;
   employee?: {
     id: number;
     name_zh: string;
@@ -20,9 +23,6 @@ export interface EmployeeUser {
     emp_code?: string | null;
     role: string;
     company_id?: number | null;
-    can_approve_mid_shift?: boolean;
-    can_daily_report?: boolean;
-    can_acceptance_report?: boolean;
   } | null;
 }
 

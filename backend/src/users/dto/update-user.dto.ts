@@ -38,4 +38,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   user_can_company_clock?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  can_approve_mid_shift?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  can_daily_report?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  can_acceptance_report?: boolean;
 }
