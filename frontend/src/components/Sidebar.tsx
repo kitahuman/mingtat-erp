@@ -119,7 +119,9 @@ const navEntries: NavEntry[] = [
       { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', pageKey: 'settings-custom-fields' },
       { href: '/settings/field-options', label: '選項管理', icon: '📋', pageKey: 'settings-field-options' },
       { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', pageKey: 'settings-expense-categories' },
-      { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏦', pageKey: 'settings-bank-accounts' },
+      { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏐', pageKey: 'settings-bank-accounts' },
+      { href: '/audit-logs', label: '操作歷史', icon: '📄', pageKey: 'audit-logs' },
+      { href: '/recycle-bin', label: '垃圾桶', icon: '🗑️', pageKey: 'recycle-bin' },
     ],
   },
 ];

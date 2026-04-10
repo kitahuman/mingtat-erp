@@ -357,13 +357,15 @@ export class EmployeePortalService {
     if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
 
     // Create work log via prisma
-    const { id, created_at, updated_at, ...workLogData } = data;
+    const { id, created_at, updated_at, photo_urls, signature_url, ...workLogData } = data;
     return this.prisma.workLog.create({
       data: {
         ...workLogData,
         employee_id: employeeId,
         user_id: userId,
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : new Date(),
+        work_log_photo_urls: photo_urls && Array.isArray(photo_urls) ? photo_urls : null,
+        work_log_signature_url: signature_url || null,
       },
     });
   }

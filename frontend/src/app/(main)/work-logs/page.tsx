@@ -98,6 +98,10 @@ export default function WorkLogsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
 
+  // ── Attachment Viewer ──────────────────────────────────────────
+  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false);
+  const [viewingAttachments, setViewingAttachments] = useState<{ photos: string[]; signature: string | null } | null>(null);
+
   // ── Edit lock ───────────────────────────────────────────────
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; lockedBy?: string; isMe?: boolean } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1090,8 +1094,23 @@ export default function WorkLogsPage() {
                       );
                     })}
                     {/* 操作 - sticky right */}
-                    <td className={`sticky right-0 z-10 ${rowBg} px-1 py-0 border-l border-gray-200 w-20`}>
+                    <td className={`sticky right-0 z-10 ${rowBg} px-1 py-0 border-l border-gray-200 w-28`}>
                       <div className="flex gap-0.5">
+                        {(row.work_log_photo_urls || row.work_log_signature_url) && (
+                          <button
+                            onClick={() => {
+                              setViewingAttachments({
+                                photos: Array.isArray(row.work_log_photo_urls) ? row.work_log_photo_urls : [],
+                                signature: row.work_log_signature_url || null,
+                              });
+                              setAttachmentViewerOpen(true);
+                            }}
+                            className="px-1 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                            title="查看附件"
+                          >
+                            📄
+                          </button>
+                        )}
                         <button onClick={() => handleDuplicate(row.id)} className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
                         <button onClick={() => handleDelete(row.id)} className="px-1 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
                       </div>
@@ -1149,6 +1168,45 @@ export default function WorkLogsPage() {
             className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">»</button>
         </div>
       </div>
+
+      {/* ── Attachment Viewer Modal ───────────────────────────────────────── */}
+      {attachmentViewerOpen && viewingAttachments && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">查看附件</h2>
+              <button
+                onClick={() => setAttachmentViewerOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              {viewingAttachments.photos.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-3">相片</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {viewingAttachments.photos.map((url, idx) => (
+                      <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <img src={url} alt={`Photo ${idx + 1}`} className="w-full h-auto object-contain" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {viewingAttachments.signature && (
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-3">簽名</h3>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden inline-block">
+                    <img src={viewingAttachments.signature} alt="Signature" className="h-32 object-contain" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

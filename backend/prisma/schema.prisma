@@ -58,6 +58,7 @@ model Company {
   status          String   @default("active")
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now()) @updatedAt
+  deleted_at      DateTime? // 軟刪除時間戳
 
   employees                Employee[]
   vehicles                 Vehicle[]
@@ -216,6 +217,7 @@ model Employee {
   notes                               String?   @db.Text
   created_at                          DateTime  @default(now())
   updated_at                          DateTime  @default(now()) @updatedAt
+  deleted_at                          DateTime? // 軯刪除時間時戳
   company         Company?                @relation(fields: [company_id], references: [id])
   salary_settings EmployeeSalarySetting[]
   transfers       EmployeeTransfer[]
@@ -315,6 +317,7 @@ model Vehicle {
   vehicle_owner_name        String?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @default(now()) @updatedAt
+  deleted_at        DateTime? // 軯刪除時間時戳
 
   owner_company Company               @relation(fields: [owner_company_id], references: [id])
   plate_history VehiclePlateHistory[]
@@ -372,6 +375,7 @@ model Machinery {
   notes                  String?   @db.Text
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
+  deleted_at             DateTime? // 軯刪除時間時戳
 
   owner_company Company             @relation(fields: [owner_company_id], references: [id])
   transfers     MachineryTransfer[]
@@ -427,6 +431,7 @@ model Partner {
   status              String   @default("active")
   created_at          DateTime @default(now())
   updated_at          DateTime @default(now()) @updatedAt
+  deleted_at          DateTime? // 軯刪除時間時戳
 
   projects_as_client   Project[]                  @relation("project_client")
   quotations_as_client Quotation[]                @relation("quotation_client")
@@ -463,6 +468,7 @@ model Contract {
   status          String    @default("active") @db.VarChar(20)
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
+  deleted_at      DateTime? // 軯刪除時間時戳
 
   // Phase 3: Retention settings
   retention_rate     Decimal @default(0.10) @db.Decimal(5, 4)
@@ -612,6 +618,7 @@ model Project {
   remarks      String?   @db.Text
   created_at   DateTime  @default(now())
   updated_at   DateTime  @default(now()) @updatedAt
+  deleted_at   DateTime? // 軯刪除時間時戳
 
   contract_id        Int?
   client_contract_no String?
@@ -672,6 +679,7 @@ model Quotation {
   internal_remark String?  @db.Text
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now()) @updatedAt
+  deleted_at      DateTime? // 軯刪除時間時戳
 
   company           Company          @relation(fields: [company_id], references: [id])
   client            Partner?         @relation("quotation_client", fields: [client_id], references: [id])
@@ -752,6 +760,7 @@ model RateCard {
   status              String    @default("active")
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
+  deleted_at          DateTime? // 軯刪除時間時戳
 
   company          Company          @relation(fields: [company_id], references: [id])
   client           Partner          @relation("rate_card_client", fields: [client_id], references: [id])
@@ -1009,9 +1018,12 @@ model WorkLog {
   source                 String    @default("manual") // manual | whatsapp | report
   is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
   ai_parsed_data         Json?     // AI 原始解析結果（WhatsApp 打卡）
+  work_log_photo_urls    Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
+  work_log_signature_url String?   @db.Text // 員工簽名圖片 URL
   remarks                String?   @db.Text
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
+  deleted_at             DateTime? // 軯刪除時間時戳
 
   project_id Int?
 
@@ -1316,6 +1328,7 @@ model Expense {
   quotation_id        Int?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
+  deleted_at          DateTime? // 軯刪除時間時戳
 
   company     Company?            @relation(fields: [company_id], references: [id])
   supplier    Partner?            @relation("expense_supplier", fields: [supplier_partner_id], references: [id])
@@ -1577,6 +1590,7 @@ model Invoice {
   remarks            String?   @db.Text
   created_at         DateTime  @default(now())
   updated_at         DateTime  @default(now()) @updatedAt
+  deleted_at         DateTime? // 軯刪除時間時戳
 
   client    Partner?      @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
   project   Project?      @relation(fields: [project_id], references: [id], onDelete: SetNull)
@@ -2054,6 +2068,7 @@ model DailyReport {
   daily_report_submitted_at DateTime?
   daily_report_created_at DateTime @default(now())
   daily_report_updated_at DateTime @default(now()) @updatedAt
+  daily_report_deleted_at DateTime? // 軯刪除時間時戳
   daily_report_client_id Int?
   daily_report_client_name String? @db.VarChar(200)
   daily_report_client_contract_no String? @db.VarChar(200)
@@ -2153,4 +2168,28 @@ model AcceptanceReportItem {
   report AcceptanceReport @relation(fields: [acceptance_report_item_report_id], references: [id], onDelete: Cascade)
 
   @@map("acceptance_report_items")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Audit Logs
+// ══════════════════════════════════════════════════════════════
+
+model AuditLog {
+  id                    Int       @id @default(autoincrement())
+  audit_user_id         Int       // 執行操作的用戶 ID
+  audit_action          String    @db.VarChar(50) // create, update, delete
+  audit_target_table    String    @db.VarChar(100) // 目標表名
+  audit_target_id       Int       // 目標記錄 ID
+  audit_changes_before  Json?     @db.JsonB // 變更前的數據
+  audit_changes_after   Json?     @db.JsonB // 變更後的數據
+  audit_ip_address      String?   @db.VarChar(45) // IPv4 或 IPv6
+  audit_timestamp       DateTime  @default(now())
+  audit_user_agent      String?   @db.Text // User-Agent 字符串
+
+  user User @relation(fields: [audit_user_id], references: [id], onDelete: Cascade)
+
+  @@index([audit_user_id])
+  @@index([audit_timestamp])
+  @@index([audit_target_table, audit_target_id])
+  @@map("audit_logs")
 }

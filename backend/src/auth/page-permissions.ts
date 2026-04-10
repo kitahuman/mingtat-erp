@@ -78,6 +78,8 @@ export const ALL_PAGES: PageDef[] = [
   { key: 'settings-field-options', label: '選項管理', group: '系統設定', path: '/settings/field-options' },
   { key: 'settings-expense-categories', label: '支出類別管理', group: '系統設定', path: '/settings/expense-categories' },
   { key: 'settings-bank-accounts', label: '銀行帳戶管理', group: '系統設定', path: '/settings/bank-accounts' },
+  { key: 'audit-logs', label: '操作歷史', group: '系統設定', path: '/audit-logs' },
+  { key: 'recycle-bin', label: '垃圾桶', group: '系統設定', path: '/recycle-bin' },
 ];
 
 // All page keys for convenience

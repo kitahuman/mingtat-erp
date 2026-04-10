@@ -80,9 +80,10 @@ export class CompanyProfilesService {
   }
 
   async getExpiryAlerts() {
-    const sixtyDaysLater = new Date();
-    sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
-    const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
+    // 改為 3 個月前提醒 (90 天)
+    const ninetyDaysLater = new Date();
+    ninetyDaysLater.setDate(ninetyDaysLater.getDate() + 90);
+    const ninetyStr = ninetyDaysLater.toISOString().split('T')[0];
 
     const profiles = await this.prisma.companyProfile.findMany({
       where: { status: 'active' },
@@ -95,7 +96,7 @@ export class CompanyProfilesService {
         { type: '分包商註冊', date: p.subcontractor_reg_expiry },
       ];
       for (const c of checks) {
-        if (c.date && c.date <= sixtyStr) {
+        if (c.date && c.date <= ninetyStr) {
           alerts.push({
             id: p.id,
             name: `${p.code} ${p.chinese_name}`,

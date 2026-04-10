@@ -602,12 +602,14 @@ export default function WorkReportPage() {
         day_night: form.shift,
         // OT hours
         ot_hours: form.ot_hours ? Number(form.ot_hours) : undefined,
+        // Attachments
+        photo_urls: form.photo_urls && form.photo_urls.length > 0 ? form.photo_urls : undefined,
+        signature_url: form.signature_url || undefined,
         remarks: [
           form.work_content ? `工作內容：${form.work_content}` : '',
           `更次：${shiftLabel}`,
           `中直：${midShiftLabel}`,
           form.ot_hours ? `超時：${form.ot_hours}小時` : '',
-          form.signature_url ? `簽名：${form.signature_url}` : '',
           form.remarks,
         ].filter(Boolean).join('\n') || undefined,
       };

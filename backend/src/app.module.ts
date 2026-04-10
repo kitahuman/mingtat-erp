@@ -52,6 +52,8 @@ import { CompanyClockModule } from './company-clock/company-clock.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
 import { AcceptanceReportsModule } from './acceptance-reports/acceptance-reports.module';
 import { WhatsappClockinModule } from './whatsapp-clockin/whatsapp-clockin.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 
 @Module({
   imports: [
@@ -110,6 +112,8 @@ import { WhatsappClockinModule } from './whatsapp-clockin/whatsapp-clockin.modul
     DailyReportsModule,
     AcceptanceReportsModule,
     WhatsappClockinModule,
+    AuditLogsModule,
+    RecycleBinModule,
   ],
 })
 export class AppModule {}

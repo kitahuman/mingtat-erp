@@ -106,9 +106,10 @@ export class CustomFieldsService {
 
     if (alertFields.length === 0) return [];
 
-    const sixtyDaysLater = new Date();
-    sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
-    const sixtyStr = sixtyDaysLater.toISOString().split('T')[0];
+    // 改為 3 個月前提醒 (90 天)
+    const ninetyDaysLater = new Date();
+    ninetyDaysLater.setDate(ninetyDaysLater.getDate() + 90);
+    const ninetyStr = ninetyDaysLater.toISOString().split('T')[0];
 
     const alerts: any[] = [];
 
@@ -118,7 +119,7 @@ export class CustomFieldsService {
       });
 
       for (const val of values) {
-        if (val.value && val.value <= sixtyStr) {
+        if (val.value && val.value <= ninetyStr) {
           alerts.push({
             id: val.entity_id,
             name: `#${val.entity_id}`,
