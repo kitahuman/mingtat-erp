@@ -309,7 +309,7 @@ export class OcrService {
     } else {
       console.log('[OcrService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
     }
-    this.openai = new OpenAI({ apiKey });
+    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
 
     // 註冊策略
     this.strategies = {

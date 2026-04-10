@@ -52,7 +52,7 @@ export class WhatsappClockinService {
     if (!apiKey) {
       this.logger.warn('OPENAI_API_KEY is not set! WhatsApp clock-in parsing will fail.');
     }
-    this.openai = new OpenAI({ apiKey });
+    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
   }
 
   // ────────────────────────────────────────────────────────────
@@ -73,7 +73,27 @@ export class WhatsappClockinService {
       return { success: false, error: 'Group not whitelisted' };
     }
 
-    // 2. 過濾非文字訊息
+    // 2. 儲存原始訊息到 verification_wa_messages（供 Dashboard feed 顯示）
+    try {
+      await this.prisma.verificationWaMessage.create({
+        data: {
+          wa_msg_group_id: chatId,
+          wa_msg_group_name: groupName || null,
+          wa_msg_sender_name: sender.split('@')[0],
+          wa_msg_timestamp: new Date(),
+          wa_msg_body: text,
+          wa_msg_type: 'text',
+          wa_msg_is_forwarded: false,
+          wa_msg_has_media: false,
+          wa_msg_ai_classified: 'clockin',
+          wa_msg_processed: false,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to save raw message to wa_messages: ${err.message}`);
+    }
+
+    // 3. 過濾非文字訊息
     if (!text || text.trim() === '' || text.startsWith('[非文字訊息')) {
       this.logger.log('Skipping non-text message');
       return { success: false, error: 'Non-text message, skipped' };

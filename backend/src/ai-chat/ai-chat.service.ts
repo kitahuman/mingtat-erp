@@ -13,7 +13,7 @@ export class AiChatService {
     } else {
       console.log('[AiChatService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
     }
-    this.openai = new OpenAI({ apiKey });
+    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
   }
 
   private getPromptAndTools() {

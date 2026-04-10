@@ -159,7 +159,7 @@ export class WhatsappService {
   private readonly QR_CODE_TTL_MS = 60 * 1000; // 60 秒
 
   constructor(private readonly prisma: PrismaService) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({ baseURL: process.env.OPENAI_BASE_URL || undefined });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1612,10 +1612,57 @@ export class WhatsappService {
       take: limit,
     });
 
-    return {
+     return {
       data: messages,
       pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Dashboard 打卡訊息 Feed
+  // ══════════════════════════════════════════════════════════════
+  /**
+   * 返回最近 N 條白名單群組訊息（包含 clockin + order 群組）供 Dashboard feed 顯示
+   */
+  async getClockinFeed(limit = 50) {
+    const CLOCKIN_GROUPS = [
+      '120363278016234111@g.us',
+      '120363277125015302@g.us',
+      '120363262093688968@g.us',
+      '85262366968-1600675068@g.us',
+    ];
+    const GROUP_NAME_MAP: Record<string, string> = {
+      '120363278016234111@g.us': '工程部',
+      '120363277125015302@g.us': '運輸部',
+      '120363262093688968@g.us': '機械部',
+      '85262366968-1600675068@g.us': '備忘錄',
+    };
+    const messages = await this.prisma.verificationWaMessage.findMany({
+      where: {
+        wa_msg_group_id: { in: CLOCKIN_GROUPS },
+      },
+      select: {
+        id: true,
+        wa_msg_group_id: true,
+        wa_msg_group_name: true,
+        wa_msg_sender_name: true,
+        wa_msg_timestamp: true,
+        wa_msg_body: true,
+        wa_msg_ai_classified: true,
+        wa_msg_created_at: true,
+      },
+      orderBy: { wa_msg_created_at: 'desc' },
+      take: limit,
+    });
+    return messages.map(m => ({
+      id: m.id,
+      group_id: m.wa_msg_group_id,
+      group_name: GROUP_NAME_MAP[m.wa_msg_group_id || ''] || m.wa_msg_group_name || '未知群組',
+      sender: m.wa_msg_sender_name,
+      timestamp: m.wa_msg_timestamp || m.wa_msg_created_at,
+      body: m.wa_msg_body,
+      classification: m.wa_msg_ai_classified,
+    }));
   }
 
   // ══════════════════════════════════════════════════════════════

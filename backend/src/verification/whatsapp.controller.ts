@@ -171,6 +171,14 @@ export class WhatsappController {
     });
   }
 
+  @Get('whatsapp-clockin-feed')
+  @UseGuards(AuthGuard('jwt'))
+  async getClockinFeed(
+    @Query('limit') limit?: string,
+  ) {
+    return this.whatsappService.getClockinFeed(limit ? +limit : 50);
+  }
+
   // ══════════════════════════════════════════════════════════════
   // CRUD: 手動編輯 Order Items（需要 JWT）
   // ══════════════════════════════════════════════════════════════
