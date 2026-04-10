@@ -113,7 +113,7 @@ export default function MidShiftApprovalPage() {
   const typeLabel = (type: string) => type === 'clock_in' ? '上班' : '下班';
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4 pb-40">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href="/employee-portal/supervisor" className="text-blue-600">
@@ -208,7 +208,7 @@ export default function MidShiftApprovalPage() {
             ))}
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
+          <div className="fixed bottom-16 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
             <button
               onClick={handleApprove}
               disabled={selectedIds.length === 0}
