@@ -110,7 +110,14 @@ export class WorkLogsController {
     return this.service.getEditLockStatus(lockKey, req.user.id);
   }
 
-  // ── 複製 ─────────────────────────────────────────
+   // ── 確認地點（WhatsApp 打卡黃色 Highlight 消除）───────────
+
+  @Post(':id/confirm-location')
+  confirmLocation(@Param('id') id: string) {
+    return this.service.confirmLocation(Number(id));
+  }
+
+  // ── 複製 ───────────────────────────────────────
 
   @Post(':id/duplicate')
   duplicate(@Param('id') id: string, @Request() req: any) {

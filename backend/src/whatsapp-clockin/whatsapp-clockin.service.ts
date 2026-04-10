@@ -14,16 +14,21 @@ interface ClockInPayload {
 }
 
 export interface ParsedClockIn {
+  is_clock_in: boolean;
   date: string;
   name: string;
   equipment_no: string;
   company: string;
   contract_no: string;
-  location: string;
+  start_location: string;
+  end_location: string;
   work_content: string;
   work_time: string;
   mid_shift: number;
   ot: number;
+  receipt_nos: string[];
+  goods_quantity: number;
+  service_type: string;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -76,7 +81,7 @@ export class WhatsappClockinService {
 
     try {
       // 3. 載入 ERP 資料做 fuzzy matching 參考
-      const [employees, machinery, vehicles, partners, contracts] = await Promise.all([
+      const [employees, machinery, vehicles, partners, contracts, locationOptions] = await Promise.all([
         this.prisma.employee.findMany({
           where: { status: 'active' },
           select: { id: true, nickname: true, name_zh: true, name_en: true },
@@ -93,6 +98,10 @@ export class WhatsappClockinService {
         }),
         this.prisma.contract.findMany({
           select: { id: true, contract_no: true, contract_name: true },
+        }),
+        this.prisma.fieldOption.findMany({
+          where: { category: 'location', is_active: true },
+          select: { id: true, label: true },
         }),
       ]);
 
@@ -117,6 +126,8 @@ export class WhatsappClockinService {
         `ID:${c.id} 合約號:${c.contract_no || ''} 名稱:${c.contract_name || ''}`
       ).join('\n');
 
+      const locationRef = locationOptions.map(l => l.label).join(', ');
+
       // 5. 用 OpenAI 解析訊息
       const parsed = await this.parseWithOpenAI(text, {
         employeeRef,
@@ -124,18 +135,15 @@ export class WhatsappClockinService {
         vehicleRef,
         partnerRef,
         contractRef,
+        locationRef,
       });
 
       if (!parsed) {
         return { success: false, error: 'Failed to parse message with AI' };
       }
 
-      // 6. 檢查是否為非打卡訊息
-      if (
-        parsed.name === '非打卡訊息' ||
-        parsed.name === '非文字訊息，如圖片或語音' ||
-        parsed.name === ''
-      ) {
+      // 6. 檢查是否為非打卡訊息（請假、閒聊等）
+      if (!parsed.is_clock_in) {
         this.logger.log('AI determined this is not a clock-in message');
         return { success: false, error: 'Not a clock-in message' };
       }
@@ -158,7 +166,25 @@ export class WhatsappClockinService {
       // 12. 解析工作時間
       const { startTime, endTime } = this.parseWorkTime(parsed.work_time);
 
-      // 13. 建立 WorkLog
+      // 13. 地點處理：檢查 FieldOption 是否存在，不存在則自動建立
+      let isLocationNew = false;
+      const startLoc = (parsed.start_location || '').trim();
+      const endLoc = (parsed.end_location || '').trim();
+
+      if (startLoc) {
+        const created = await this.ensureLocationOption(startLoc, locationOptions);
+        if (created) isLocationNew = true;
+      }
+      if (endLoc && endLoc !== startLoc) {
+        const created = await this.ensureLocationOption(endLoc, locationOptions);
+        if (created) isLocationNew = true;
+      }
+
+      // 14. 多飛仔號碼處理（逗號分隔）
+      const receiptNo = (parsed.receipt_nos || []).filter(Boolean).join(', ') || null;
+      const goodsQty = parsed.goods_quantity > 0 ? parsed.goods_quantity : null;
+
+      // 15. 建立 WorkLog
       const phone = sender.split('@')[0];
       const workLog = await this.prisma.workLog.create({
         data: {
@@ -172,14 +198,19 @@ export class WhatsappClockinService {
           client_id: matchedClient?.id || null,
           contract_id: matchedContract?.id || null,
           client_contract_no: parsed.contract_no || null,
-          start_location: parsed.location || null,
-          end_location: parsed.location || null,
+          start_location: startLoc || null,
+          end_location: endLoc || null,
           start_time: startTime || null,
           end_time: endTime || null,
           is_mid_shift: (parsed.mid_shift || 0) > 0,
           quantity: parsed.mid_shift > 0 ? parsed.mid_shift : null,
           ot_quantity: parsed.ot > 0 ? parsed.ot : null,
+          receipt_no: receiptNo,
+          goods_quantity: goodsQty,
           unverified_client_name: parsed.company || null,
+          service_type: parsed.service_type || parsed.work_content || null,
+          is_location_new: isLocationNew,
+          ai_parsed_data: parsed as any,
           remarks: [
             `[WhatsApp 打卡]`,
             `群組: ${groupName || chatId}`,
@@ -187,11 +218,10 @@ export class WhatsappClockinService {
             `原始訊息: ${text}`,
             parsed.work_content ? `工作內容: ${parsed.work_content}` : '',
           ].filter(Boolean).join('\n'),
-          service_type: parsed.work_content || null,
         },
       });
 
-      this.logger.log(`Created WorkLog #${workLog.id} from WhatsApp clock-in by ${parsed.name}`);
+      this.logger.log(`Created WorkLog #${workLog.id} from WhatsApp clock-in by ${parsed.name} (location_new=${isLocationNew})`);
 
       return { success: true, workLogId: workLog.id, parsed };
     } catch (error) {
@@ -201,7 +231,69 @@ export class WhatsappClockinService {
   }
 
   // ────────────────────────────────────────────────────────────
-  // OpenAI 解析
+  // 地點 FieldOption 自動建立
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * 檢查地點是否已存在於 FieldOption location 類別中。
+   * 若不存在，自動建立新選項。
+   * @returns true 表示新建立了選項，false 表示已存在
+   */
+  private async ensureLocationOption(
+    location: string,
+    existingOptions: { id: number; label: string }[],
+  ): Promise<boolean> {
+    if (!location) return false;
+
+    const normalized = location.trim();
+    // 先在已載入的選項中查找（不區分大小寫）
+    const found = existingOptions.some(
+      opt => opt.label.trim().toLowerCase() === normalized.toLowerCase(),
+    );
+    if (found) return false;
+
+    // 再次從 DB 確認（避免並發問題）
+    const dbCheck = await this.prisma.fieldOption.findFirst({
+      where: {
+        category: 'location',
+        label: { equals: normalized, mode: 'insensitive' },
+      },
+    });
+    if (dbCheck) return false;
+
+    // 不存在，建立新選項
+    const maxSort = await this.prisma.fieldOption.aggregate({
+      where: { category: 'location' },
+      _max: { sort_order: true },
+    });
+
+    await this.prisma.fieldOption.create({
+      data: {
+        category: 'location',
+        label: normalized,
+        sort_order: (maxSort._max.sort_order || 0) + 1,
+        is_active: true,
+      },
+    });
+
+    this.logger.log(`Auto-created new location field option: "${normalized}"`);
+    return true;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 確認地點 API（供 controller 呼叫）
+  // ────────────────────────────────────────────────────────────
+
+  async confirmLocation(workLogId: number): Promise<{ success: boolean }> {
+    await this.prisma.workLog.update({
+      where: { id: workLogId },
+      data: { is_location_new: false },
+    });
+    return { success: true };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // OpenAI 解析（優化 Prompt：運輸部、工程部、機械部格式）
   // ────────────────────────────────────────────────────────────
 
   private async parseWithOpenAI(
@@ -212,47 +304,85 @@ export class WhatsappClockinService {
       vehicleRef: string;
       partnerRef: string;
       contractRef: string;
+      locationRef: string;
     },
   ): Promise<ParsedClockIn | null> {
     const now = new Date();
     const hkNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     const todayStr = `${hkNow.getDate()}/${hkNow.getMonth() + 1}/${hkNow.getFullYear()}`;
 
-    const systemPrompt = `你是一個專業的打卡訊息解析助手。請從 WhatsApp 訊息中提取打卡資訊。
+    const systemPrompt = `你是香港建築運輸公司「明達建築」的 WhatsApp 打卡訊息解析助手。
+公司有三個部門，各有不同的打卡格式：
 
-提取欄位：
-- date: 日期（格式 dd/mm/yyyy）。如果訊息中沒有明確日期，使用今天 ${todayStr}。注意修正常見 OCR 錯誤（0寫成O、1寫成l/I等）。日期應該接近當前日期。
-- name: 員工姓名/花名（盡量匹配以下員工列表中的花名或中文名）
-- equipment_no: 機械編號/車牌（例如 VL647, EM987, DC17, ZX350）
-- company: 公司名稱/客戶名稱
-- contract_no: 合約號碼
-- location: 工作地點
-- work_content: 工作內容
-- work_time: 工作時間（例如 08:00-18:00）
-- mid_shift: 中直小時數（純數字，沒有就是 0）
-- ot: OT 加班小時數（純數字，沒有就是 0）
+【運輸部格式】結構化標籤，通常包含：
+  日期: dd/mm
+  車牌: XX1234
+  公司: 客戶名稱
+  地點: 起點→終點（或單一地點）
+  車數: 數字（飛仔數量）
+  飛仔號碼: 可能有多個號碼
+  中直: 小時數
+  OT: 小時數
 
-ERP 員工列表（用於姓名匹配）：
+【工程部格式】簡短格式或標準格式：
+  簡短: 花名 / 日期 / 公司 / 地點+機械+工作 / 時間
+  標準: 合約號碼、工作性質、工作時間、機械編號
+  例如: "洪 / 10/4 / 有利 / 將軍澳 ZX350 平整 / 08:00-18:00"
+
+【機械部格式】包含機械編號和工作：
+  機械編號: DC系列、WY系列等
+  工作范围: 地點和工作內容
+  中直/OT: 小時數
+
+請從訊息中提取以下 JSON 欄位：
+{
+  "is_clock_in": true/false,  // 是否為打卡訊息（請假、閒聊、問候、通知等非打卡內容設為 false）
+  "date": "dd/mm/yyyy",       // 日期，無明確日期則用今天 ${todayStr}
+  "name": "",                  // 員工姓名/花名
+  "equipment_no": "",          // 機械編號或車牌（如 VL647, DC17, ZX350）
+  "company": "",               // 客戶公司名稱
+  "contract_no": "",           // 合約號碼
+  "start_location": "",        // 起點/工作地點
+  "end_location": "",          // 終點（運輸部常有起點→終點，其他部門可能只有一個地點，此時 start 和 end 相同）
+  "work_content": "",          // 工作內容描述
+  "work_time": "",             // 工作時間（如 08:00-18:00）
+  "mid_shift": 0,              // 中直小時數（純數字）
+  "ot": 0,                     // OT 加班小時數（純數字）
+  "receipt_nos": [],            // 飛仔號碼陣列（可能有多個）
+  "goods_quantity": 0,          // 車數/商品數量（純數字）
+  "service_type": ""            // 服務類型：運輸/代工/工程/機械/管工工作/維修保養/雜務 等
+}
+
+ERP 員工列表（用於姓名匹配，優先匹配花名）：
 ${refs.employeeRef}
 
-ERP 機械列表（用於機械編號匹配）：
+ERP 機械列表：
 ${refs.machineryRef}
 
-ERP 車輛列表（用於車牌匹配）：
+ERP 車輛列表：
 ${refs.vehicleRef}
 
-ERP 客戶列表（用於公司名稱匹配）：
+ERP 客戶列表：
 ${refs.partnerRef}
 
-ERP 合約列表（用於合約號碼匹配）：
+ERP 合約列表：
 ${refs.contractRef}
 
+ERP 已有地點列表（盡量匹配已有地點，如果訊息中的地點名稱與列表中某個地點相似，使用列表中的名稱）：
+${refs.locationRef}
+
 重要規則：
-1. 即使缺少標籤，也請根據上下文推斷
-2. 如果內容完全與打卡無關（如圖片、語音、閒聊），name 欄位填 "非打卡訊息"
+1. 即使缺少標籤，也請根據上下文推斷欄位
+2. 非打卡訊息（請假、休息、閒聊、問候、通知、圖片描述、語音描述）：is_clock_in 設為 false
 3. 中直和 OT 只輸出數字，沒有就輸出 0
 4. 盡量將訊息中的名字匹配到員工列表中的花名
 5. 盡量將機械編號匹配到機械列表或車輛列表
+6. 地點盡量匹配已有地點列表，如果是新地點就保留原文
+7. 運輸部訊息通常有起點和終點，用「→」「去」「到」「至」等分隔
+8. 如果只有一個地點，start_location 和 end_location 填相同值
+9. 飛仔號碼可能出現多個，全部放入 receipt_nos 陣列
+10. service_type 根據內容推斷：有車牌/車數→運輸，有機械編號→機械，有工程描述→工程
+11. 時間分隔符多樣：「-」「～」「－」「.」「至」「到」都要能識別
 
 請僅輸出乾淨 JSON，不要加 \`\`\`json 標記。`;
 
@@ -264,7 +394,7 @@ ${refs.contractRef}
           { role: 'user', content: text },
         ],
         temperature: 0.1,
-        max_tokens: 500,
+        max_tokens: 800,
         response_format: { type: 'json_object' },
       });
 
@@ -272,19 +402,24 @@ ${refs.contractRef}
       if (!content) return null;
 
       const cleaned = content.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
+      const raw = JSON.parse(cleaned);
 
       return {
-        date: parsed.date || todayStr,
-        name: parsed.name || '',
-        equipment_no: parsed.equipment_no || '',
-        company: parsed.company || '',
-        contract_no: parsed.contract_no || '',
-        location: parsed.location || '',
-        work_content: parsed.work_content || '',
-        work_time: parsed.work_time || '',
-        mid_shift: Number(parsed.mid_shift) || 0,
-        ot: Number(parsed.ot) || 0,
+        is_clock_in: raw.is_clock_in !== false,
+        date: raw.date || todayStr,
+        name: raw.name || '',
+        equipment_no: raw.equipment_no || '',
+        company: raw.company || '',
+        contract_no: raw.contract_no || '',
+        start_location: raw.start_location || raw.location || '',
+        end_location: raw.end_location || raw.location || '',
+        work_content: raw.work_content || '',
+        work_time: raw.work_time || '',
+        mid_shift: Number(raw.mid_shift) || 0,
+        ot: Number(raw.ot) || 0,
+        receipt_nos: Array.isArray(raw.receipt_nos) ? raw.receipt_nos.map(String) : [],
+        goods_quantity: Number(raw.goods_quantity) || 0,
+        service_type: raw.service_type || '',
       };
     } catch (error) {
       this.logger.error(`OpenAI parsing error: ${error.message}`);
@@ -356,6 +491,7 @@ ${refs.contractRef}
     if (/^DC\d/i.test(eq)) return { type: '挖掘機', source: 'machinery' };
     if (/^VL\d/i.test(eq) || /^EM\d/i.test(eq)) return { type: '泥頭車', source: 'vehicle' };
     if (/^ZX\d/i.test(eq)) return { type: '挖掘機', source: 'machinery' };
+    if (/^WY\d/i.test(eq)) return { type: '機械', source: 'machinery' };
 
     return null;
   }
@@ -439,16 +575,19 @@ ${refs.contractRef}
   private parseWorkTime(timeStr: string): { startTime: string | null; endTime: string | null } {
     if (!timeStr) return { startTime: null, endTime: null };
 
-    // 匹配 HH:MM-HH:MM 或 HH:MM~HH:MM 或 HH:MM～HH:MM
-    const match = timeStr.match(/(\d{1,2}:\d{2})\s*[-~～至到]\s*(\d{1,2}:\d{2})/);
+    // 匹配 HH:MM-HH:MM 或 HH:MM~HH:MM 或 HH:MM～HH:MM 或 HH.MM-HH.MM
+    const match = timeStr.match(/(\d{1,2}[:.]\d{2})\s*[-~～－至到]\s*(\d{1,2}[:.]\d{2})/);
     if (match) {
-      return { startTime: match[1], endTime: match[2] };
+      return {
+        startTime: match[1].replace('.', ':'),
+        endTime: match[2].replace('.', ':'),
+      };
     }
 
     // 只有一個時間
-    const single = timeStr.match(/(\d{1,2}:\d{2})/);
+    const single = timeStr.match(/(\d{1,2}[:.]\d{2})/);
     if (single) {
-      return { startTime: single[1], endTime: null };
+      return { startTime: single[1].replace('.', ':'), endTime: null };
     }
 
     return { startTime: null, endTime: null };

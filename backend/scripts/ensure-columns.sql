@@ -3116,3 +3116,24 @@ DO $$ BEGIN
     ALTER TABLE employees ADD COLUMN employee_mpf_applied_date DATE;
   END IF;
 END $$;
+
+-- work_logs: add source column (whatsapp / report / manual)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='work_logs' AND column_name='source') THEN
+    ALTER TABLE "work_logs" ADD COLUMN "source" TEXT NOT NULL DEFAULT 'manual';
+  END IF;
+END $$;
+
+-- work_logs: add is_location_new flag for WhatsApp auto-created locations
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='work_logs' AND column_name='is_location_new') THEN
+    ALTER TABLE "work_logs" ADD COLUMN "is_location_new" BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+END $$;
+
+-- work_logs: add ai_parsed_data for storing AI parsing results
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='work_logs' AND column_name='ai_parsed_data') THEN
+    ALTER TABLE "work_logs" ADD COLUMN "ai_parsed_data" JSONB;
+  END IF;
+END $$;

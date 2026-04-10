@@ -316,6 +316,8 @@ export const workLogsApi = {
     api.post('/work-logs/edit-lock/release', { lockKey }),
   editLockStatus: (lockKey: string) =>
     api.get('/work-logs/edit-lock/status', { params: { lockKey } }),
+  confirmLocation: (id: number) =>
+    api.post(`/work-logs/${id}/confirm-location`),
 };
 
 // CSV Import (CSV 匯入)

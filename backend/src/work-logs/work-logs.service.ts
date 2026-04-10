@@ -137,6 +137,11 @@ export class WorkLogsService {
       }
     }
 
+    // 如果編輯了地點欄位，自動消除 WhatsApp 新地點黃色標記
+    if ('start_location' in rest || 'end_location' in rest) {
+      rest.is_location_new = false;
+    }
+
     await this.prisma.workLog.update({ where: { id }, data: rest });
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
@@ -505,6 +510,16 @@ export class WorkLogsService {
       lockedBy: existing.userName,
       isMe: existing.userId === userId,
     };
+  }
+
+  // ── 確認地點（消除 WhatsApp 打卡黃色 Highlight）───────────
+
+  async confirmLocation(id: number) {
+    await this.prisma.workLog.update({
+      where: { id },
+      data: { is_location_new: false },
+    });
+    return { success: true };
   }
 
   // ── 輔助方法 ─────────────────────────────────────────────

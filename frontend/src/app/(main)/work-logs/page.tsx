@@ -49,6 +49,7 @@ const COLUMNS = [
   { key: 'goods_quantity',   label: '商品數量',  width: 'w-24' },
   { key: 'is_confirmed',     label: '已確認',    width: 'w-20' },
   { key: 'is_paid',          label: '已付款',    width: 'w-20' },
+  { key: 'source',            label: '來源',      width: 'w-16' },
   { key: 'remarks',          label: '備註',      width: 'w-36' },
 ];
 
@@ -602,9 +603,29 @@ export default function WorkLogsPage() {
       case 'day_night':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['day_night'] || []} isDirty={dirty} disabled={!!isLocked} />;
       case 'start_location':
-        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />;
-      case 'end_location':
-        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />;
+      case 'end_location': {
+        const isWhatsappNewLoc = row.source === 'whatsapp' && row.is_location_new;
+        return (
+          <div className={`relative group ${isWhatsappNewLoc ? 'bg-yellow-100 ring-1 ring-yellow-300 rounded' : ''}`}>
+            <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />
+            {isWhatsappNewLoc && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await workLogsApi.confirmLocation(row.id);
+                    await fetchLogs();
+                  } catch {}
+                }}
+                className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-5 h-5 bg-green-500 text-white rounded-full text-xs shadow hover:bg-green-600 z-20"
+                title="確認地點正確"
+              >
+                ✓
+              </button>
+            )}
+          </div>
+        );
+      }
       case 'start_time':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="time" isDirty={dirty} disabled={!!isLocked} />;
       case 'end_time':
@@ -625,6 +646,19 @@ export default function WorkLogsPage() {
       case 'work_order_no':
       case 'remarks':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
+      case 'source': {
+        const sourceLabels: Record<string, { text: string; cls: string }> = {
+          whatsapp: { text: 'WA', cls: 'bg-green-100 text-green-700' },
+          report: { text: '報表', cls: 'bg-blue-100 text-blue-700' },
+          manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
+        };
+        const src = sourceLabels[val] || sourceLabels['manual'];
+        return (
+          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${src.cls}`}>
+            {src.text}
+          </span>
+        );
+      }
       default:
         return <EditableCell value={val} displayValue={display} onChange={() => {}} type="readonly" />;
     }
@@ -816,7 +850,21 @@ export default function WorkLogsPage() {
         );
       })()}
 
-      {/* ── Filters ──────────────────────────────────────────── */}
+      {/* ── WhatsApp New Location Banner ── */}
+      {(() => {
+        const newLocCount = rows.filter(r => r.source === 'whatsapp' && r.is_location_new).length;
+        if (newLocCount === 0) return null;
+        return (
+          <div className="bg-yellow-50 border-b border-yellow-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
+            <span className="text-yellow-600 text-lg">📍</span>
+            <p className="text-sm text-yellow-800 font-medium">
+              有 <span className="font-bold text-yellow-900">{newLocCount}</span> 筆 WhatsApp 打卡記錄包含新建地點（黃色標示），請確認或修正
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* ── Filters ──────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto">
         <div className="flex gap-2 items-end" style={{ minWidth: 'max-content' }}>
           <div className="flex flex-col gap-0.5">

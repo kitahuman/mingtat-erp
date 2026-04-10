@@ -1006,6 +1006,8 @@ model WorkLog {
   is_paid                Boolean   @default(false)
   unverified_client_name String? // 員工自行輸入的未確認客戶名
   source                 String    @default("manual") // manual | whatsapp | report
+  is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
+  ai_parsed_data         Json?     // AI 原始解析結果（WhatsApp 打卡）
   remarks                String?   @db.Text
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
