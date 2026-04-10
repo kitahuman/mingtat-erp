@@ -38,8 +38,8 @@ export function ChatWidget() {
 
     try {
       const token = getAuthToken();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${apiBase}/api/ai-chat`, {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
+      const response = await fetch(`${apiBase}/ai-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
