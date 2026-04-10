@@ -116,4 +116,121 @@ export class FieldOptionsService implements OnModuleInit {
     }
     return this.findByCategory(category);
   }
+
+  /**
+   * Merge multiple location options into one primary location.
+   * Updates ALL tables that reference location strings:
+   *   - work_logs (start_location, end_location)
+   *   - payroll_work_logs (start_location, end_location)
+   *   - verification_records (record_location_from, record_location_to)
+   *   - verification_wa_order_items (wa_item_location)
+   *   - rate_cards (origin, destination)
+   *   - fleet_rate_cards (origin, destination)
+   *   - subcon_rate_cards (origin, destination)
+   * Then deletes the merged FieldOption rows.
+   */
+  async mergeLocations(dto: { primaryId: number; mergeIds: number[] }) {
+    const { primaryId, mergeIds } = dto;
+
+    if (!mergeIds || mergeIds.length === 0) {
+      throw new NotFoundException('沒有選擇要合併的地點');
+    }
+
+    // Fetch primary option
+    const primary = await this.prisma.fieldOption.findUnique({ where: { id: primaryId } });
+    if (!primary) throw new NotFoundException('主地點不存在');
+    if (primary.category !== 'location') throw new NotFoundException('只能合併地點類別');
+
+    // Fetch all merge targets
+    const targets = await this.prisma.fieldOption.findMany({
+      where: { id: { in: mergeIds }, category: 'location' },
+    });
+    if (targets.length === 0) throw new NotFoundException('找不到要合併的地點');
+
+    const targetLabels = targets.map(t => t.label);
+    const primaryLabel = primary.label;
+
+    // Execute all updates in a single transaction
+    await this.prisma.$transaction(async (tx) => {
+      for (const oldLabel of targetLabels) {
+        // work_logs
+        await tx.workLog.updateMany({
+          where: { start_location: oldLabel },
+          data: { start_location: primaryLabel },
+        });
+        await tx.workLog.updateMany({
+          where: { end_location: oldLabel },
+          data: { end_location: primaryLabel },
+        });
+
+        // payroll_work_logs
+        await tx.payrollWorkLog.updateMany({
+          where: { start_location: oldLabel },
+          data: { start_location: primaryLabel },
+        });
+        await tx.payrollWorkLog.updateMany({
+          where: { end_location: oldLabel },
+          data: { end_location: primaryLabel },
+        });
+
+        // verification_records
+        await tx.verificationRecord.updateMany({
+          where: { record_location_from: oldLabel },
+          data: { record_location_from: primaryLabel },
+        });
+        await tx.verificationRecord.updateMany({
+          where: { record_location_to: oldLabel },
+          data: { record_location_to: primaryLabel },
+        });
+
+        // verification_wa_order_items
+        await tx.verificationWaOrderItem.updateMany({
+          where: { wa_item_location: oldLabel },
+          data: { wa_item_location: primaryLabel },
+        });
+
+        // rate_cards
+        await tx.rateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        });
+        await tx.rateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        });
+
+        // fleet_rate_cards
+        await tx.fleetRateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        });
+        await tx.fleetRateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        });
+
+        // subcon_rate_cards
+        await tx.subconRateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        });
+        await tx.subconRateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        });
+      }
+
+      // Delete the merged FieldOption rows (exclude primary)
+      await tx.fieldOption.deleteMany({
+        where: { id: { in: mergeIds } },
+      });
+    });
+
+    return {
+      success: true,
+      primary: primaryLabel,
+      merged: targetLabels,
+      message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄`,
+    };
+  }
 }

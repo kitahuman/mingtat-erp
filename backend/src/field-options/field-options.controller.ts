@@ -36,4 +36,9 @@ export class FieldOptionsController {
   reorder(@Body() dto: { category: string; orderedIds: number[] }) {
     return this.service.reorder(dto.category, dto.orderedIds);
   }
+
+  @Post('merge-locations')
+  mergeLocations(@Body() dto: { primaryId: number; mergeIds: number[] }) {
+    return this.service.mergeLocations(dto);
+  }
 }
