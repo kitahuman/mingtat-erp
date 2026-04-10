@@ -42,6 +42,7 @@
     "prisma": "^6.19.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socks-proxy-agent": "^10.0.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0"
   },

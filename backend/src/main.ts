@@ -4,6 +4,17 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AppModule } from './app.module';
 
+// Set up global SOCKS5 proxy for OpenAI API calls (bypasses HK geo-restriction)
+if (process.env.SOCKS_PROXY_URL) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SocksProxyAgent } = require('socks-proxy-agent');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const https = require('https');
+  const agent = new SocksProxyAgent(process.env.SOCKS_PROXY_URL);
+  https.globalAgent = agent;
+  console.log(`[Proxy] Global HTTPS agent set to SOCKS5: ${process.env.SOCKS_PROXY_URL}`);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: true,
