@@ -579,20 +579,14 @@ export class EmployeesService {
   async getNicknames(employeeId: number) {
     const emp = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { nickname: true, name_zh: true }
+      select: { id: true }
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
-    const mappings = await this.prisma.verificationNicknameMapping.findMany({
-      where: { nickname_employee_id: employeeId, nickname_is_active: true },
-      orderBy: { nickname_created_at: 'desc' }
+    return this.prisma.employeeNickname.findMany({
+      where: { emp_nickname_employee_id: employeeId },
+      orderBy: { emp_nickname_created_at: 'desc' }
     });
-
-    return {
-      primary_nickname: emp.nickname,
-      name_zh: emp.name_zh,
-      mappings
-    };
   }
 
   async addNickname(employeeId: number, nicknameValue: string, source: string = 'manual') {
@@ -606,43 +600,31 @@ export class EmployeesService {
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
-    // Check if exists
-    const existing = await this.prisma.verificationNicknameMapping.findFirst({
+    // Check if exists (upsert)
+    return this.prisma.employeeNickname.upsert({
       where: {
-        nickname_employee_id: employeeId,
-        nickname_value: val
-      }
-    });
-
-    if (existing) {
-      if (!existing.nickname_is_active) {
-        return this.prisma.verificationNicknameMapping.update({
-          where: { id: existing.id },
-          data: { nickname_is_active: true }
-        });
-      }
-      return existing;
-    }
-
-    return this.prisma.verificationNicknameMapping.create({
-      data: {
-        nickname_employee_id: employeeId,
-        nickname_employee_name: emp.name_zh,
-        nickname_value: val,
-        nickname_is_active: true
+        emp_nickname_employee_id_emp_nickname_value: {
+          emp_nickname_employee_id: employeeId,
+          emp_nickname_value: val
+        }
+      },
+      update: {},
+      create: {
+        emp_nickname_employee_id: employeeId,
+        emp_nickname_value: val,
+        emp_nickname_source: source
       }
     });
   }
 
   async removeNickname(employeeId: number, nicknameId: number) {
-    const mapping = await this.prisma.verificationNicknameMapping.findFirst({
-      where: { id: nicknameId, nickname_employee_id: employeeId }
+    const record = await this.prisma.employeeNickname.findFirst({
+      where: { id: nicknameId, emp_nickname_employee_id: employeeId }
     });
-    if (!mapping) throw new NotFoundException('Nickname mapping not found');
+    if (!record) throw new NotFoundException('Nickname not found');
 
-    return this.prisma.verificationNicknameMapping.update({
-      where: { id: nicknameId },
-      data: { nickname_is_active: false }
+    return this.prisma.employeeNickname.delete({
+      where: { id: nicknameId }
     });
   }
 
