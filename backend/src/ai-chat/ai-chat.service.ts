@@ -23,9 +23,10 @@ export class AiChatService {
 
 ### 可查詢的數據（使用對應工具）
 - **公司**：公司列表、數量、類型（getCompanies）
+- **公司商業登記/公司資料**：公司商業登記證號碼、商業登記證到期日（BR Expiry）、公司法人登記（CR）、分包商牌照到期日等（getCompanyProfiles）
 - **員工**：員工列表、數量、在職/離職狀態、角色（getEmployees）
-- **車輛**：車輛列表、數量、牌照、狀態、保險到期（getVehicles）
-- **機械**：機械列表、數量、類型、狀態（getMachinery）
+- **車輛**：車輛列表、數量、車牌號碼、車輛保險到期、車輛牌照到期（getVehicles）
+- **機械**：機械列表、數量、類型、狀態、機械保險到期（getMachinery）
 - **合作夥伴/客戶**：客戶、供應商列表（getPartners）
 - **項目**：項目列表、狀態（getProjects）
 - **合約**：合約列表、詳情（getContracts、getContractDetail）
@@ -38,6 +39,12 @@ export class AiChatService {
 - **請假記錄**：員工請假（getLeaves）
 - **財務摘要**：全公司財務概覽（getFinancialSummary）
 - **系統提醒**：待處理事項（getAlerts）
+
+## 重要：工具選擇指引
+- 用戶問「公司的商業登記證」、「BR 到期」、「商業登記到期」→ 使用 **getCompanyProfiles**（不是 getVehicles）
+- 用戶問「車輛牌照」、「車牌」、「車輛保險」→ 使用 **getVehicles**
+- 用戶問「機械保險」、「機械檢驗」→ 使用 **getMachinery**
+- 「商業登記」和「車牌/保險」是完全不同的概念，不要混淆
 
 ### 可執行的操作
 - 更新項目狀態（updateProjectStatus）
@@ -98,12 +105,28 @@ export class AiChatService {
           },
         },
       },
+      // ── 公司商業登記/公司資料 ──
+      {
+        type: 'function',
+        function: {
+          name: 'getCompanyProfiles',
+          description: '查詢公司商業登記證資料，包含：商業登記證號碼（BR Number）、商業登記證到期日（BR Expiry Date）、公司法人登記（CR）、分包商牌照到期日等。當用戶問「公司商業登記證」、「BR 到期」、「商業登記到期」、「分包商牌照」時，使用此工具。',
+          parameters: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['active', 'inactive', 'all'], description: '公司狀態，不填則查全部' },
+              search: { type: 'string', description: '按公司名稱或編號搜尋' },
+              expiringBrOnly: { type: 'boolean', description: '如果為 true，只返回商業登記證即將到期或已到期的公司' },
+            },
+          },
+        },
+      },
       // ── 車輛 ──
       {
         type: 'function',
         function: {
           name: 'getVehicles',
-          description: '查詢車輛列表及數量。可按狀態、公司篩選。包含保險到期日等資訊。',
+          description: '查詢車輛列表及數量。可按狀態、公司篩選。包含車輛保險到期日、車輛牌照到期日等資訊。注意：此工具查詢的是「車輛牌照」和「車輛保險」，不是公司商業登記證。如果用戶問的是公司商業登記證，請使用 getCompanyProfiles。',
           parameters: {
             type: 'object',
             properties: {
@@ -427,6 +450,8 @@ export class AiChatService {
     switch (name) {
       case 'getCompanies':
         return this.getCompanies(args.status);
+      case 'getCompanyProfiles':
+        return this.getCompanyProfiles(args.status, args.search, args.expiringBrOnly);
       case 'getEmployees':
         return this.getEmployees(args.status, args.role, args.companyId, args.search);
       case 'getVehicles':
@@ -487,6 +512,72 @@ export class AiChatService {
         status: c.status,
         prefix: c.internal_prefix,
       })),
+    };
+  }
+
+  private async getCompanyProfiles(status?: string, search?: string, expiringBrOnly?: boolean) {
+    const where: any = {};
+    if (status && status !== 'all') where.status = status;
+    if (search) {
+      where.OR = [
+        { chinese_name: { contains: search, mode: 'insensitive' } },
+        { english_name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const profiles = await this.prisma.companyProfile.findMany({
+      where,
+      select: {
+        id: true,
+        code: true,
+        chinese_name: true,
+        english_name: true,
+        br_number: true,
+        br_expiry_date: true,
+        cr_number: true,
+        subcontractor_reg_no: true,
+        subcontractor_reg_expiry: true,
+        status: true,
+      },
+      orderBy: { chinese_name: 'asc' },
+    });
+
+    const now = new Date();
+    const sixtyDaysLater = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+
+    const mapped = profiles.map(p => {
+      const brExpiry = p.br_expiry_date ? new Date(p.br_expiry_date) : null;
+      const brExpired = brExpiry ? brExpiry < now : false;
+      const brExpiringSoon = brExpiry ? (brExpiry >= now && brExpiry <= sixtyDaysLater) : false;
+      const subExpiry = p.subcontractor_reg_expiry ? new Date(p.subcontractor_reg_expiry) : null;
+      const subExpired = subExpiry ? subExpiry < now : false;
+      return {
+        code: p.code,
+        name: p.chinese_name,
+        name_en: p.english_name,
+        br_number: p.br_number,
+        br_expiry_date: p.br_expiry_date,
+        br_status: brExpired ? '已到期' : brExpiringSoon ? '即將到期（60天內）' : p.br_expiry_date ? '正常' : '未記錄',
+        cr_number: p.cr_number,
+        subcontractor_reg_no: p.subcontractor_reg_no,
+        subcontractor_reg_expiry: p.subcontractor_reg_expiry,
+        subcontractor_reg_status: subExpired ? '已到期' : p.subcontractor_reg_expiry ? '正常' : '未記錄',
+        status: p.status,
+      };
+    });
+
+    const filtered = expiringBrOnly
+      ? mapped.filter(p => p.br_status === '已到期' || p.br_status === '即將到期（60天內）')
+      : mapped;
+
+    return {
+      count: filtered.length,
+      total_profiles: profiles.length,
+      company_profiles: filtered,
+      summary: expiringBrOnly
+        ? `找到 ${filtered.length} 間公司的商業登記證即將到期或已到期`
+        : `共 ${filtered.length} 間公司的商業登記證資料`,
     };
   }
 
