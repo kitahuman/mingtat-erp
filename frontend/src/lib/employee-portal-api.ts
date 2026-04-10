@@ -47,6 +47,7 @@ export const employeePortalApi = {
     longitude?: number;
     address?: string;
     remarks?: string;
+    is_mid_shift?: boolean;
   }) => portalApi.post('/employee-portal/attendance', data),
 
   getTodayAttendance: () => portalApi.get('/employee-portal/attendance/today'),

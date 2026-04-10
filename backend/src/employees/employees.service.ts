@@ -489,11 +489,38 @@ export class EmployeesService {
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+   async remove(id: number) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
     await this.prisma.employee.delete({ where: { id } });
     return { message: '刪除成功' };
   }
 
+  /**
+   * Bulk-dismiss MPF alerts for employees hired more than 60 days ago.
+   * Sets employee_mpf_applied = true so they no longer appear in the dashboard MPF alert list.
+   * Employees hired within 60 days are NOT affected — they will still trigger the alert.
+   */
+  async mpfBulkDismiss() {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const result = await this.prisma.employee.updateMany({
+      where: {
+        status: 'active',
+        employee_is_temporary: false,
+        employee_mpf_applied: false,
+        join_date: { lte: sixtyDaysAgo },
+      },
+      data: {
+        employee_mpf_applied: true,
+        employee_mpf_applied_date: new Date(),
+      },
+    });
+
+    return {
+      message: `已清除 ${result.count} 位員工的 MPF 入職提醒（入職超過 60 天）`,
+      dismissed_count: result.count,
+    };
+  }
 }

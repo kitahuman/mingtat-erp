@@ -67,6 +67,7 @@ export default function ClockPage() {
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [showMiniMap, setShowMiniMap] = useState(false);
+  const [isMidShift, setIsMidShift] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -176,9 +177,16 @@ export default function ClockPage() {
   };
 
   const handleClock = async (type: 'clock_in' | 'clock_out') => {
-    setLoading(true);
     setError('');
     setSuccess('');
+
+    // Validation: mid-shift is not allowed when clocking IN
+    if (type === 'clock_in' && isMidShift) {
+      setError('上班打卡不可選擇中直，請取消勾選「中直」後再提交');
+      return;
+    }
+
+    setLoading(true);
     try {
       let photoUrl: string | undefined;
       if (photoFile) {
@@ -192,6 +200,7 @@ export default function ClockPage() {
         latitude: location?.lat,
         longitude: location?.lng,
         address: location?.address,
+        is_mid_shift: isMidShift,
       });
 
       setSuccess(type === 'clock_in' ? t('clockInSuccess') : t('clockOutSuccess'));
@@ -199,6 +208,7 @@ export default function ClockPage() {
       setPhotoFile(null);
       setLocation(null);
       setShowMiniMap(false);
+      setIsMidShift(false);
       await loadTodayRecords();
     } catch (err: any) {
       setError(err.response?.data?.message || t('error'));
@@ -342,6 +352,30 @@ export default function ClockPage() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Mid-shift (中直) checkbox */}
+      {!cameraOpen && (
+        <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isMidShift}
+              onChange={(e) => {
+                setIsMidShift(e.target.checked);
+                setError('');
+              }}
+              className="w-5 h-5 rounded accent-blue-600"
+            />
+            <span className="text-sm font-semibold text-gray-800">中直</span>
+            <span className="text-xs text-gray-400">（僅適用於下班打卡）</span>
+          </label>
+          {isMidShift && (
+            <p className="mt-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              ⚠️ 上班打卡時不可勾選「中直」，請在下班打卡時才勾選。
+            </p>
+          )}
         </div>
       )}
 

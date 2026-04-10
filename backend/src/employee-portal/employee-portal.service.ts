@@ -207,6 +207,7 @@ export class EmployeePortalService {
       longitude?: number;
       address?: string;
       remarks?: string;
+      is_mid_shift?: boolean;
     },
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -235,6 +236,7 @@ export class EmployeePortalService {
         longitude: data.longitude,
         address: address,
         remarks: data.remarks,
+        is_mid_shift: data.is_mid_shift === true ? true : false,
       },
     });
     return record;

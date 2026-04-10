@@ -83,4 +83,15 @@ export class EmployeesController {
     return this.service.remove(Number(id));
   }
 
+  /**
+   * POST /employees/mpf-bulk-dismiss
+   * Mark employee_mpf_applied = true for all active, non-temporary employees
+   * who joined more than 60 days ago but still have employee_mpf_applied = false.
+   * This is a one-time cleanup endpoint; safe to call multiple times (idempotent).
+   */
+  @Post('mpf-bulk-dismiss')
+  mpfBulkDismiss() {
+    return this.service.mpfBulkDismiss();
+  }
+
 }
