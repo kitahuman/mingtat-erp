@@ -509,8 +509,41 @@ export class EmployeesService {
     } else if (type === 'temporary') {
       where.employee_is_temporary = true;
     }
-    const result = await this.prisma.employee.deleteMany({ where });
-    return { message: `已刪除 ${result.count} 名員工`, count: result.count };
+
+    // 先查出實際符合條件的員工 ID（避免刪除不符合條件的關聯資料）
+    const eligibleEmployees = await this.prisma.employee.findMany({
+      where,
+      select: { id: true },
+    });
+    const eligibleIds = eligibleEmployees.map((e) => e.id);
+
+    if (eligibleIds.length === 0) {
+      return { message: '沒有符合條件的員工可刪除', count: 0 };
+    }
+
+    // 先刪除所有外鍵關聯資料（cascade）
+    await this.prisma.$transaction([
+      this.prisma.employeeAttendance.deleteMany({
+        where: {
+          OR: [
+            { employee_id: { in: eligibleIds } },
+            { mid_shift_approved_by: { in: eligibleIds } },
+          ],
+        },
+      }),
+      this.prisma.employeeLeave.deleteMany({
+        where: { employee_id: { in: eligibleIds } },
+      }),
+      this.prisma.employeeSalarySetting.deleteMany({
+        where: { employee_id: { in: eligibleIds } },
+      }),
+      this.prisma.employeeTransfer.deleteMany({
+        where: { employee_id: { in: eligibleIds } },
+      }),
+      this.prisma.employee.deleteMany({ where: { id: { in: eligibleIds } } }),
+    ]);
+
+    return { message: `已刪除 ${eligibleIds.length} 名員工`, count: eligibleIds.length };
   }
 
   /**
