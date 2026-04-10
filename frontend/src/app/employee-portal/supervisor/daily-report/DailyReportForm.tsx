@@ -1,116 +1,260 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+import Combobox from '@/components/Combobox';
+import MultiSelectPopup from '@/components/MultiSelectPopup';
+import type { MultiSelectOption } from '@/components/MultiSelectPopup';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SignaturePad = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
+
+// ── Types ──────────────────────────────────────────────────────────
 interface DailyReportItem {
   category: string;
   content: string;
   quantity: string;
   ot_hours: string;
   name_or_plate: string;
+  worker_type: string;
+  with_operator: boolean;
+  employee_ids: string[];
+  vehicle_ids: string[];
+  shift_quantity: string;
 }
 
-const categoryLabels: Record<string, string> = {
-  worker: '工人',
-  vehicle: '車輛',
-  machinery: '機械',
-  tool: '工具',
-};
-
-const defaultItem: DailyReportItem = {
-  category: 'worker',
+const defaultItem = (cat = 'worker'): DailyReportItem => ({
+  category: cat,
   content: '',
   quantity: '',
   ot_hours: '',
   name_or_plate: '',
-};
+  worker_type: '',
+  with_operator: false,
+  employee_ids: [],
+  vehicle_ids: [],
+  shift_quantity: '',
+});
 
 interface Props {
   reportId?: number;
 }
 
+// ── Component ──────────────────────────────────────────────────────
 export default function DailyReportForm({ reportId }: Props) {
   const router = useRouter();
   const { t } = useI18n();
   const isEdit = !!reportId;
+  const sigRef = useRef<any>(null);
 
+  // Reference data
   const [projects, setProjects] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [machinery, setMachinery] = useState<any[]>([]);
+  const [workerTypeOptions, setWorkerTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
+  const [machineTypeOptions, setMachineTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
+
+  // Form state
   const [form, setForm] = useState({
     project_id: '',
     report_date: new Date().toISOString().split('T')[0],
     shift_type: 'day',
     work_summary: '',
     memo: '',
+    client_id: '',
+    client_name: '',
+    client_contract_no: '',
+    project_name: '',
+    completed_work: '',
+    signature: '',
   });
-  const [items, setItems] = useState<DailyReportItem[]>([{ ...defaultItem }]);
+  const [items, setItems] = useState<DailyReportItem[]>([defaultItem('worker')]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  useEffect(() => {
-    portalSharedApi.getProjectsSimple().then(res => setProjects(res.data || [])).catch(() => {});
+  // Popup state
+  const [popupConfig, setPopupConfig] = useState<{
+    type: 'employee' | 'vehicle';
+    itemIdx: number;
+  } | null>(null);
 
-    if (isEdit) {
-      employeePortalApi.getDailyReport(reportId).then(res => {
-        const r = res.data;
-        setForm({
-          project_id: String(r.daily_report_project_id),
-          report_date: r.daily_report_date?.split('T')[0] || '',
-          shift_type: r.daily_report_shift_type,
-          work_summary: r.daily_report_work_summary,
-          memo: r.daily_report_memo || '',
-        });
-        if (r.items?.length) {
-          setItems(r.items.map((item: any) => ({
-            category: item.daily_report_item_category,
-            content: item.daily_report_item_content,
-            quantity: item.daily_report_item_quantity?.toString() || '',
-            ot_hours: item.daily_report_item_ot_hours?.toString() || '',
-            name_or_plate: item.daily_report_item_name_or_plate || '',
-          })));
-        }
-        setIsSubmitted(r.daily_report_status === 'submitted');
-        setLoading(false);
-      }).catch(() => {
-        router.push('/employee-portal/supervisor/daily-report');
+  // ── Load reference data ──────────────────────────────────────────
+  useEffect(() => {
+    portalSharedApi.getProjectsSimple().then(r => setProjects(r.data || [])).catch(() => {});
+    portalSharedApi.getPartnersSimple().then(r => setPartners(r.data || [])).catch(() => {});
+    portalSharedApi.getEmployeesSimple().then(r => {
+      const list = r.data?.data || r.data || [];
+      setEmployees(list);
+    }).catch(() => {});
+    portalSharedApi.getVehiclesSimple().then(r => setVehicles(r.data || [])).catch(() => {});
+    portalSharedApi.getMachinerySimple().then(r => setMachinery(r.data || [])).catch(() => {});
+
+    // Field options
+    portalSharedApi.getFieldOptions('worker_type').then(r => {
+      const data = r.data || [];
+      setWorkerTypeOptions(data.filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {
+      // Seed default worker types if empty
+      setWorkerTypeOptions([
+        '什工', '叻架', '中工石矢工', '中工燒焊工', '中工木工', '中工泥水匠',
+        '搬車司機', '吊車司機', '吊車機手', '大貨車司機', '機手',
+      ].map(v => ({ value: v, label: v })));
+    });
+    portalSharedApi.getFieldOptions('tonnage').then(r => {
+      setTonnageOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+    portalSharedApi.getFieldOptions('machine_type').then(r => {
+      setMachineTypeOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+    portalSharedApi.getFieldOptions('client_contract_no').then(r => {
+      setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+  }, []);
+
+  // ── Load existing report ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isEdit) return;
+    employeePortalApi.getDailyReport(reportId).then(res => {
+      const r = res.data;
+      setForm({
+        project_id: r.daily_report_project_id ? String(r.daily_report_project_id) : '',
+        report_date: r.daily_report_date?.split('T')[0] || '',
+        shift_type: r.daily_report_shift_type,
+        work_summary: r.daily_report_work_summary || '',
+        memo: r.daily_report_memo || '',
+        client_id: r.daily_report_client_id ? String(r.daily_report_client_id) : '',
+        client_name: r.daily_report_client_name || '',
+        client_contract_no: r.daily_report_client_contract_no || '',
+        project_name: r.daily_report_project_name || '',
+        completed_work: r.daily_report_completed_work || '',
+        signature: r.daily_report_signature || '',
       });
-    }
+      if (r.items?.length) {
+        setItems(r.items.map((item: any) => ({
+          category: item.daily_report_item_category,
+          content: item.daily_report_item_content || '',
+          quantity: item.daily_report_item_quantity?.toString() || '',
+          ot_hours: item.daily_report_item_ot_hours?.toString() || '',
+          name_or_plate: item.daily_report_item_name_or_plate || '',
+          worker_type: item.daily_report_item_worker_type || '',
+          with_operator: item.daily_report_item_with_operator || false,
+          employee_ids: item.daily_report_item_employee_ids ? JSON.parse(item.daily_report_item_employee_ids) : [],
+          vehicle_ids: item.daily_report_item_vehicle_ids ? JSON.parse(item.daily_report_item_vehicle_ids) : [],
+          shift_quantity: item.daily_report_item_shift_quantity?.toString() || '',
+        })));
+      }
+      setIsSubmitted(r.daily_report_status === 'submitted');
+      setLoading(false);
+    }).catch(() => {
+      router.push('/employee-portal/supervisor/daily-report');
+    });
   }, [reportId]);
 
-  const updateItem = (idx: number, field: keyof DailyReportItem, value: string) => {
-    const newItems = [...items];
-    newItems[idx] = { ...newItems[idx], [field]: value };
-    setItems(newItems);
+  // ── Item helpers ─────────────────────────────────────────────────
+  const updateItem = (idx: number, updates: Partial<DailyReportItem>) => {
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, ...updates } : item));
   };
-
-  const addItem = () => {
-    setItems([...items, { ...defaultItem }]);
-  };
-
+  const addItem = (cat = 'worker') => setItems(prev => [...prev, defaultItem(cat)]);
   const removeItem = (idx: number) => {
     if (items.length <= 1) return;
-    setItems(items.filter((_, i) => i !== idx));
+    setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = async (status: 'draft' | 'submitted') => {
-    if (!form.project_id || !form.report_date || !form.work_summary.trim()) {
-      alert('請填寫必填欄位（工程、日期、工作摘要）');
+  // ── Client selection ─────────────────────────────────────────────
+  const partnerOptions = partners.map((p: any) => ({
+    value: String(p.id),
+    label: p.name,
+  }));
+
+  const handleClientChange = (val: string | null) => {
+    if (!val) {
+      setForm(f => ({ ...f, client_id: '', client_name: '' }));
       return;
     }
-    if (status === 'submitted') {
-      if (!confirm('提交後不可修改，確定要提交嗎？')) return;
+    // Check if it's a partner ID
+    const partner = partners.find((p: any) => String(p.id) === val);
+    if (partner) {
+      setForm(f => ({ ...f, client_id: val, client_name: partner.name }));
+    } else {
+      // Manual input
+      setForm(f => ({ ...f, client_id: '', client_name: val }));
+    }
+  };
+
+  const handleContractChange = (val: string | null) => {
+    setForm(f => ({ ...f, client_contract_no: val || '' }));
+  };
+
+  const handleCreateContract = async (val: string) => {
+    setContractOptions(prev => {
+      if (prev.find(o => o.label === val)) return prev;
+      return [...prev, { value: val, label: val }];
+    });
+    try {
+      await portalSharedApi.createFieldOption({ category: 'client_contract_no', label: val });
+    } catch {}
+  };
+
+  const handleCreateWorkerType = async (val: string) => {
+    setWorkerTypeOptions(prev => {
+      if (prev.find(o => o.label === val)) return prev;
+      return [...prev, { value: val, label: val }];
+    });
+    try {
+      await portalSharedApi.createFieldOption({ category: 'worker_type', label: val });
+    } catch {}
+  };
+
+  // ── Employee & Vehicle multi-select options ──────────────────────
+  const employeeOptions: MultiSelectOption[] = employees.map((e: any) => ({
+    id: String(e.id),
+    label: e.name_zh || e.name_en || `#${e.id}`,
+    sublabel: e.emp_code || e.phone || '',
+  }));
+
+  const vehicleMachineryOptions: MultiSelectOption[] = [
+    ...vehicles.map((v: any) => ({
+      id: `v:${v.value}`,
+      label: v.label,
+      sublabel: `車輛${v.tonnage ? ` ${v.tonnage}T` : ''}${v.type ? ` ${v.type}` : ''}`,
+    })),
+    ...machinery.map((m: any) => ({
+      id: `m:${m.value}`,
+      label: m.label,
+      sublabel: `機械${m.tonnage ? ` ${m.tonnage}T` : ''}${m.type ? ` ${m.type}` : ''}`,
+    })),
+  ];
+
+  // ── Submit ───────────────────────────────────────────────────────
+  const handleSubmit = async (status: 'draft' | 'submitted') => {
+    if (!form.report_date) {
+      alert('請填寫日期');
+      return;
+    }
+    if (status === 'submitted' && !confirm('提交後不可修改，確定要提交嗎？')) return;
+
+    // Capture signature
+    let signature = form.signature;
+    if (sigRef.current && !sigRef.current.isEmpty()) {
+      signature = sigRef.current.getTrimmedCanvas().toDataURL('image/png');
     }
 
     setSubmitting(true);
     try {
       const payload = {
         ...form,
+        signature,
         status,
-        items: items.filter(i => i.content.trim()),
+        items: items.filter(i => i.content.trim() || i.worker_type || i.employee_ids.length > 0 || i.vehicle_ids.length > 0),
       };
       if (isEdit) {
         await employeePortalApi.updateDailyReport(reportId, payload);
@@ -135,6 +279,28 @@ export default function DailyReportForm({ reportId }: Props) {
     }
   };
 
+  const handlePrint = () => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
+    window.open(`${apiBase}/daily-reports/${reportId}/export?format=html`, '_blank');
+  };
+
+  // ── Render helpers ───────────────────────────────────────────────
+  const getEmployeeLabel = (id: string) => {
+    if (id.startsWith('manual:')) return id.replace('manual:', '');
+    const emp = employees.find((e: any) => String(e.id) === id);
+    return emp ? (emp.name_zh || emp.name_en || `#${emp.id}`) : id;
+  };
+
+  const getVehicleLabel = (id: string) => {
+    if (id.startsWith('manual:')) return id.replace('manual:', '');
+    const code = id.replace(/^[vm]:/, '');
+    const v = vehicles.find((x: any) => x.value === code);
+    if (v) return v.label;
+    const m = machinery.find((x: any) => x.value === code);
+    if (m) return m.label;
+    return code;
+  };
+
   if (loading) {
     return <div className="p-4 text-center py-10 text-gray-400">{t('loading')}</div>;
   }
@@ -157,24 +323,62 @@ export default function DailyReportForm({ reportId }: Props) {
         </div>
       )}
 
-      {/* Form */}
+      {/* ── Header Fields ─────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
         <h2 className="font-bold text-gray-700 text-sm">表頭資料</h2>
 
+        {/* Client */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">客戶</label>
+          <Combobox
+            value={form.client_id ? String(form.client_id) : form.client_name || null}
+            onChange={handleClientChange}
+            options={partnerOptions}
+            placeholder="選擇或輸入客戶名稱"
+            disabled={isSubmitted}
+          />
+        </div>
+
+        {/* Client Contract */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">客戶合約</label>
+          <Combobox
+            value={form.client_contract_no || null}
+            onChange={handleContractChange}
+            options={contractOptions}
+            placeholder="選擇或輸入客戶合約"
+            disabled={isSubmitted}
+            onCreateOption={handleCreateContract}
+          />
+        </div>
+
         {/* Project */}
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">工程 *</label>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">工程</label>
           <select
             value={form.project_id}
-            onChange={e => setForm({ ...form, project_id: e.target.value })}
+            onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}
             disabled={isSubmitted}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
           >
-            <option value="">請選擇工程</option>
+            <option value="">請選擇工程（非必填）</option>
             {projects.map((p: any) => (
               <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
             ))}
           </select>
+        </div>
+
+        {/* Project Name (manual) */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">工程名稱</label>
+          <input
+            type="text"
+            value={form.project_name}
+            onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))}
+            disabled={isSubmitted}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
+            placeholder="手動填寫工程名稱"
+          />
         </div>
 
         {/* Date */}
@@ -183,7 +387,7 @@ export default function DailyReportForm({ reportId }: Props) {
           <input
             type="date"
             value={form.report_date}
-            onChange={e => setForm({ ...form, report_date: e.target.value })}
+            onChange={e => setForm(f => ({ ...f, report_date: e.target.value }))}
             disabled={isSubmitted}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
           />
@@ -197,7 +401,7 @@ export default function DailyReportForm({ reportId }: Props) {
               <button
                 key={s}
                 type="button"
-                onClick={() => !isSubmitted && setForm({ ...form, shift_type: s })}
+                onClick={() => !isSubmitted && setForm(f => ({ ...f, shift_type: s }))}
                 disabled={isSubmitted}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
                   form.shift_type === s
@@ -205,7 +409,7 @@ export default function DailyReportForm({ reportId }: Props) {
                     : 'bg-gray-100 text-gray-500'
                 } disabled:opacity-60`}
               >
-                {s === 'day' ? '☀️ 日更' : '🌙 夜更'}
+                {s === 'day' ? '日更' : '夜更'}
               </button>
             ))}
           </div>
@@ -213,10 +417,10 @@ export default function DailyReportForm({ reportId }: Props) {
 
         {/* Work Summary */}
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">工作摘要 *</label>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">工作摘要</label>
           <textarea
             value={form.work_summary}
-            onChange={e => setForm({ ...form, work_summary: e.target.value })}
+            onChange={e => setForm(f => ({ ...f, work_summary: e.target.value }))}
             disabled={isSubmitted}
             rows={3}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 resize-none disabled:opacity-60"
@@ -225,105 +429,239 @@ export default function DailyReportForm({ reportId }: Props) {
         </div>
       </div>
 
-      {/* Labour & Plant Items */}
+      {/* ── Labour & Plant Items ──────────────────────────────────── */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-gray-700 text-sm">Labour and Plant</h2>
-          {!isSubmitted && (
-            <button
-              type="button"
-              onClick={addItem}
-              className="text-blue-600 text-sm font-bold"
-            >
-              + 新增行
-            </button>
-          )}
         </div>
 
+        {/* Category add buttons */}
+        {!isSubmitted && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => addItem('worker')} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">+ 工人</button>
+            <button type="button" onClick={() => addItem('vehicle')} className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">+ 車輛/機械</button>
+            <button type="button" onClick={() => addItem('tool')} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium">+ 工具</button>
+          </div>
+        )}
+
         {items.map((item, idx) => (
-          <div key={idx} className="bg-gray-50 rounded-xl p-3 space-y-2 relative">
-            {!isSubmitted && items.length > 1 && (
-              <button
-                type="button"
-                onClick={() => removeItem(idx)}
-                className="absolute top-2 right-2 text-red-400 hover:text-red-600 text-lg"
-              >
-                ×
-              </button>
+          <div key={idx} className={`rounded-xl p-3 space-y-2 relative ${
+            item.category === 'worker' ? 'bg-blue-50/50 border border-blue-100' :
+            item.category === 'vehicle' ? 'bg-green-50/50 border border-green-100' :
+            'bg-orange-50/50 border border-orange-100'
+          }`}>
+            {/* Category badge + remove */}
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                item.category === 'worker' ? 'bg-blue-100 text-blue-700' :
+                item.category === 'vehicle' ? 'bg-green-100 text-green-700' :
+                'bg-orange-100 text-orange-700'
+              }`}>
+                {item.category === 'worker' ? '工人' : item.category === 'vehicle' ? '車輛/機械' : '工具'}
+              </span>
+              {!isSubmitted && items.length > 1 && (
+                <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg leading-none">&times;</button>
+              )}
+            </div>
+
+            {/* ── Worker fields ── */}
+            {item.category === 'worker' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">工種</label>
+                  <Combobox
+                    value={item.worker_type || null}
+                    onChange={val => updateItem(idx, { worker_type: val || '' })}
+                    options={workerTypeOptions}
+                    placeholder="選擇或輸入工種"
+                    disabled={isSubmitted}
+                    onCreateOption={handleCreateWorkerType}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">內容描述</label>
+                  <input
+                    type="text"
+                    value={item.content}
+                    onChange={e => updateItem(idx, { content: e.target.value })}
+                    disabled={isSubmitted}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
+                    placeholder="描述..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">數量</label>
+                    <input type="number" value={item.quantity} onChange={e => updateItem(idx, { quantity: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">中直數量</label>
+                    <input type="number" value={item.shift_quantity} onChange={e => updateItem(idx, { shift_quantity: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">OT 數量</label>
+                    <input type="number" value={item.ot_hours} onChange={e => updateItem(idx, { ot_hours: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                </div>
+                {/* Employee multi-select */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">員工</label>
+                  <button
+                    type="button"
+                    onClick={() => !isSubmitted && setPopupConfig({ type: 'employee', itemIdx: idx })}
+                    disabled={isSubmitted}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white text-left disabled:opacity-60 min-h-[38px]"
+                  >
+                    {item.employee_ids.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {item.employee_ids.map(id => (
+                          <span key={id} className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded">{getEmployeeLabel(id)}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">點擊選擇員工...</span>
+                    )}
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="text-xs text-gray-400 mb-0.5 block">類別</label>
-                <select
-                  value={item.category}
-                  onChange={e => updateItem(idx, 'category', e.target.value)}
-                  disabled={isSubmitted}
-                  className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
-                >
-                  {Object.entries(categoryLabels).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="text-xs text-gray-400 mb-0.5 block">數量</label>
-                <input
-                  type="number"
-                  value={item.quantity}
-                  onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                  disabled={isSubmitted}
-                  className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
-                  placeholder="0"
-                  step="0.5"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-0.5 block">內容描述</label>
-              <input
-                type="text"
-                value={item.content}
-                onChange={e => updateItem(idx, 'content', e.target.value)}
-                disabled={isSubmitted}
-                className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
-                placeholder="例：紮鐵工人、挖掘機..."
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="text-xs text-gray-400 mb-0.5 block">OT 小時</label>
-                <input
-                  type="number"
-                  value={item.ot_hours}
-                  onChange={e => updateItem(idx, 'ot_hours', e.target.value)}
-                  disabled={isSubmitted}
-                  className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
-                  placeholder="0"
-                  step="0.5"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-xs text-gray-400 mb-0.5 block">名稱/車牌</label>
-                <input
-                  type="text"
-                  value={item.name_or_plate}
-                  onChange={e => updateItem(idx, 'name_or_plate', e.target.value)}
-                  disabled={isSubmitted}
-                  className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60"
-                  placeholder="選填"
-                />
-              </div>
-            </div>
+
+            {/* ── Vehicle/Machinery fields ── */}
+            {item.category === 'vehicle' && (
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-400">連機手/司機</label>
+                  <button
+                    type="button"
+                    onClick={() => !isSubmitted && updateItem(idx, { with_operator: !item.with_operator })}
+                    disabled={isSubmitted}
+                    className={`w-8 h-8 rounded-lg text-sm font-bold border ${
+                      item.with_operator ? 'bg-green-100 border-green-300 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-400'
+                    } disabled:opacity-60`}
+                  >
+                    {item.with_operator ? 'O' : 'X'}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">噸數</label>
+                    <Combobox
+                      value={item.name_or_plate || null}
+                      onChange={val => updateItem(idx, { name_or_plate: val || '' })}
+                      options={tonnageOptions}
+                      placeholder="噸數"
+                      disabled={isSubmitted}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">機種</label>
+                    <Combobox
+                      value={item.worker_type || null}
+                      onChange={val => updateItem(idx, { worker_type: val || '' })}
+                      options={machineTypeOptions}
+                      placeholder="機種"
+                      disabled={isSubmitted}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">內容描述</label>
+                  <input type="text" value={item.content} onChange={e => updateItem(idx, { content: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="描述..." />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">數量</label>
+                    <input type="number" value={item.quantity} onChange={e => updateItem(idx, { quantity: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">中直數量</label>
+                    <input type="number" value={item.shift_quantity} onChange={e => updateItem(idx, { shift_quantity: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 mb-0.5 block">OT 數量</label>
+                    <input type="number" value={item.ot_hours} onChange={e => updateItem(idx, { ot_hours: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="0.5" />
+                  </div>
+                </div>
+                {/* Vehicle multi-select */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">機號/車牌</label>
+                  <button
+                    type="button"
+                    onClick={() => !isSubmitted && setPopupConfig({ type: 'vehicle', itemIdx: idx })}
+                    disabled={isSubmitted}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white text-left disabled:opacity-60 min-h-[38px]"
+                  >
+                    {item.vehicle_ids.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {item.vehicle_ids.map(id => (
+                          <span key={id} className="bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded">{getVehicleLabel(id)}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">點擊選擇機號/車牌...</span>
+                    )}
+                  </button>
+                </div>
+                {/* Employee multi-select for operator */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">員工</label>
+                  <button
+                    type="button"
+                    onClick={() => !isSubmitted && setPopupConfig({ type: 'employee', itemIdx: idx })}
+                    disabled={isSubmitted}
+                    className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white text-left disabled:opacity-60 min-h-[38px]"
+                  >
+                    {item.employee_ids.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {item.employee_ids.map(id => (
+                          <span key={id} className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded">{getEmployeeLabel(id)}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">點擊選擇員工...</span>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Tool fields ── */}
+            {item.category === 'tool' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">內容描述</label>
+                  <input type="text" value={item.content} onChange={e => updateItem(idx, { content: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="工具描述..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-0.5 block">數量</label>
+                  <input type="number" value={item.quantity} onChange={e => updateItem(idx, { quantity: e.target.value })} disabled={isSubmitted} className="w-full px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60" placeholder="0" step="1" />
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Memo */}
+      {/* ── Completed Work ────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-2">
+        <h2 className="font-bold text-gray-700 text-sm">完成的工作</h2>
+        <textarea
+          value={form.completed_work}
+          onChange={e => setForm(f => ({ ...f, completed_work: e.target.value }))}
+          disabled={isSubmitted}
+          rows={4}
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
+          style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}
+          placeholder="測量數、完成項目等..."
+        />
+      </div>
+
+      {/* ── Memo ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-2">
         <h2 className="font-bold text-gray-700 text-sm">備忘錄</h2>
         <textarea
           value={form.memo}
-          onChange={e => setForm({ ...form, memo: e.target.value })}
+          onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
           disabled={isSubmitted}
           rows={3}
           className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 resize-none disabled:opacity-60"
@@ -331,39 +669,89 @@ export default function DailyReportForm({ reportId }: Props) {
         />
       </div>
 
-      {/* Actions */}
+      {/* ── Signature ─────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-2">
+        <h2 className="font-bold text-gray-700 text-sm">簽收</h2>
+        {isSubmitted && form.signature ? (
+          <div className="border rounded-xl p-2 bg-gray-50">
+            <img src={form.signature} alt="簽名" className="max-h-32 mx-auto" />
+          </div>
+        ) : !isSubmitted ? (
+          <>
+            <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-white">
+              <SignaturePad
+                ref={sigRef}
+                canvasProps={{ className: 'w-full', style: { width: '100%', height: '120px' } }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => sigRef.current?.clear()}
+              className="text-xs text-gray-400 hover:text-red-500"
+            >
+              清除簽名
+            </button>
+          </>
+        ) : (
+          <p className="text-sm text-gray-400">未簽名</p>
+        )}
+      </div>
+
+      {/* ── Actions ───────────────────────────────────────────────── */}
       {!isSubmitted && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
           <div className="max-w-md mx-auto space-y-2">
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleSubmit('draft')}
-                disabled={submitting}
-                className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm active:scale-95 disabled:opacity-50"
-              >
+              <button type="button" onClick={() => handleSubmit('draft')} disabled={submitting} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm active:scale-95 disabled:opacity-50">
                 {submitting ? '儲存中...' : '儲存草稿'}
               </button>
-              <button
-                type="button"
-                onClick={() => handleSubmit('submitted')}
-                disabled={submitting}
-                className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-md active:scale-95 disabled:opacity-50"
-              >
+              <button type="button" onClick={() => handleSubmit('submitted')} disabled={submitting} className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-md active:scale-95 disabled:opacity-50">
                 {submitting ? '提交中...' : '正式提交'}
               </button>
             </div>
             {isEdit && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="w-full py-2 text-red-500 text-sm font-medium"
-              >
-                刪除此日報
-              </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={handlePrint} className="flex-1 py-2 text-blue-600 text-sm font-medium border border-blue-200 rounded-xl">
+                  列印
+                </button>
+                <button type="button" onClick={handleDelete} className="flex-1 py-2 text-red-500 text-sm font-medium border border-red-200 rounded-xl">
+                  刪除此日報
+                </button>
+              </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* Print button for submitted reports */}
+      {isSubmitted && isEdit && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
+          <div className="max-w-md mx-auto">
+            <button type="button" onClick={handlePrint} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-md active:scale-95">
+              列印
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MultiSelect Popup ─────────────────────────────────────── */}
+      {popupConfig && (
+        <MultiSelectPopup
+          title={popupConfig.type === 'employee' ? '選擇員工' : '選擇機號/車牌'}
+          options={popupConfig.type === 'employee' ? employeeOptions : vehicleMachineryOptions}
+          selected={popupConfig.type === 'employee' ? items[popupConfig.itemIdx].employee_ids : items[popupConfig.itemIdx].vehicle_ids}
+          onConfirm={(selected) => {
+            if (popupConfig.type === 'employee') {
+              updateItem(popupConfig.itemIdx, { employee_ids: selected });
+            } else {
+              updateItem(popupConfig.itemIdx, { vehicle_ids: selected });
+            }
+            setPopupConfig(null);
+          }}
+          onClose={() => setPopupConfig(null)}
+          allowManualInput
+          manualInputPlaceholder={popupConfig.type === 'employee' ? '手動輸入員工名稱...' : '手動輸入車牌/機號...'}
+        />
       )}
     </div>
   );

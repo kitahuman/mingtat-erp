@@ -14,6 +14,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   payment_method: '付款方法',
   client_contract_no: '客戶合約',
   location: '地點（起點/終點）',
+  worker_type: '工程工人分類',
 };
 
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);

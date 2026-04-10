@@ -50,6 +50,11 @@ export default function AcceptanceReportsAdminPage() {
 
   const totalPages = Math.ceil(total / limit);
 
+  const handleExport = (id: number) => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
+    window.open(`${apiBase}/acceptance-reports/${id}/export`, '_blank');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -59,7 +64,7 @@ export default function AcceptanceReportsAdminPage() {
 
       <div className="bg-white rounded-lg shadow-sm border p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="搜尋工程/客戶/收貨項目..." className="px-3 py-2 border rounded-lg text-sm" />
+          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="搜尋工程/客戶..." className="px-3 py-2 border rounded-lg text-sm" />
           <select value={filterProjectId} onChange={e => { setFilterProjectId(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
             <option value="">全部工程</option>
             {projects.map((p: any) => (<option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>))}
@@ -92,27 +97,104 @@ export default function AcceptanceReportsAdminPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">驗收人</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">建立人</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">狀態</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {reports.map(report => (
-                  <tr key={report.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
-                    <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_date)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_acceptance_date)}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{report.acceptance_report_project_name}</div>
-                      <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
-                    </td>
-                    <td className="px-4 py-3">{report.acceptance_report_client_name}</td>
-                    <td className="px-4 py-3 max-w-xs truncate">{report.acceptance_report_items}</td>
-                    <td className="px-4 py-3">{report.inspector?.name_zh || '-'}</td>
-                    <td className="px-4 py-3">{report.creator?.displayName || '-'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[report.acceptance_report_status] || 'badge-gray'}`}>
-                        {statusLabels[report.acceptance_report_status] || report.acceptance_report_status}
-                      </span>
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={report.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
+                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_date)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_acceptance_date)}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{report.acceptance_report_project_name || report.project?.project_name || '-'}</div>
+                        <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
+                      </td>
+                      <td className="px-4 py-3">{report.acceptance_report_client_name || report.client?.name || '-'}</td>
+                      <td className="px-4 py-3 max-w-xs truncate">
+                        {report.acceptance_items?.length > 0
+                          ? `${report.acceptance_items.length} 個項目`
+                          : report.acceptance_report_items || '-'}
+                      </td>
+                      <td className="px-4 py-3">{report.acceptance_report_mingtat_inspector_name || report.inspector?.name_zh || '-'}</td>
+                      <td className="px-4 py-3">{report.creator?.displayName || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[report.acceptance_report_status] || 'badge-gray'}`}>
+                          {statusLabels[report.acceptance_report_status] || report.acceptance_report_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleExport(report.id); }}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                        >
+                          列印
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedId === report.id && (
+                      <tr key={`${report.id}-detail`}>
+                        <td colSpan={9} className="px-4 py-4 bg-blue-50/50">
+                          <div className="space-y-3">
+                            {report.acceptance_report_client_contract_no && (
+                              <div className="text-sm"><strong>客戶合約：</strong>{report.acceptance_report_client_contract_no}</div>
+                            )}
+                            {report.acceptance_report_site_address && (
+                              <div className="text-sm"><strong>地盤地址：</strong>{report.acceptance_report_site_address}</div>
+                            )}
+                            {/* Dynamic items */}
+                            {report.acceptance_items?.length > 0 && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-2">收貨項目</h4>
+                                <table className="w-full text-xs border rounded-lg overflow-hidden">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="px-2 py-1.5 text-left">#</th>
+                                      <th className="px-2 py-1.5 text-left">項目描述</th>
+                                      <th className="px-2 py-1.5 text-left">數量/單位</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {report.acceptance_items.map((item: any, idx: number) => (
+                                      <tr key={item.id}>
+                                        <td className="px-2 py-1.5">{idx + 1}</td>
+                                        <td className="px-2 py-1.5">{item.acceptance_report_item_description}</td>
+                                        <td className="px-2 py-1.5">{item.acceptance_report_item_quantity_unit || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                            {/* Legacy single text field fallback */}
+                            {!report.acceptance_items?.length && report.acceptance_report_items && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1">收貨項目</h4>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.acceptance_report_items}</p>
+                              </div>
+                            )}
+                            <div>
+                              <h4 className="font-medium text-gray-700 mb-1">驗收人員</h4>
+                              <div className="text-sm text-gray-600">
+                                <div>明達方：{report.acceptance_report_mingtat_inspector_name || report.inspector?.name_zh || '-'} ({report.acceptance_report_mingtat_inspector_title || '-'})</div>
+                                <div>客戶方：{report.acceptance_report_client_inspector_name || '-'} ({report.acceptance_report_client_inspector_title || '-'})</div>
+                              </div>
+                            </div>
+                            {report.acceptance_report_supplementary_notes && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1">補充說明</h4>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.acceptance_report_supplementary_notes}</p>
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-400">
+                              建立時間: {new Date(report.acceptance_report_created_at).toLocaleString('zh-HK')}
+                              {report.acceptance_report_submitted_at && ` | 提交時間: ${new Date(report.acceptance_report_submitted_at).toLocaleString('zh-HK')}`}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>

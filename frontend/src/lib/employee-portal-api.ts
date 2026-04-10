@@ -152,6 +152,7 @@ sharedApi.interceptors.request.use((config) => {
 
 export const portalSharedApi = {
   getPartners: (params?: any) => sharedApi.get('/partners', { params }),
+  getPartnersSimple: () => sharedApi.get('/partners/simple'),
   getCompanyProfiles: () => sharedApi.get('/company-profiles/simple'),
   getExpenseCategories: () => sharedApi.get('/expense-categories/tree'),
   getFieldOptions: (category: string) =>

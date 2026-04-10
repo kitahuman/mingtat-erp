@@ -5,6 +5,15 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AcceptanceReportsService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly includeAll = {
+    client: { select: { id: true, name: true } },
+    project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } },
+    inspector: { select: { id: true, name_zh: true, name_en: true, emp_code: true } },
+    creator: { select: { id: true, displayName: true } },
+    attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' as const } },
+    acceptance_items: { orderBy: { acceptance_report_item_sort_order: 'asc' as const } },
+  };
+
   async findAll(query: any) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
@@ -23,20 +32,13 @@ export class AcceptanceReportsService {
       where.OR = [
         { acceptance_report_project_name: { contains: query.search, mode: 'insensitive' } },
         { acceptance_report_client_name: { contains: query.search, mode: 'insensitive' } },
-        { acceptance_report_items: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 
     const [data, total] = await Promise.all([
       this.prisma.acceptanceReport.findMany({
         where,
-        include: {
-          client: { select: { id: true, name: true } },
-          project: { select: { id: true, project_no: true, project_name: true } },
-          inspector: { select: { id: true, name_zh: true, name_en: true, emp_code: true } },
-          creator: { select: { id: true, displayName: true } },
-          attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' } },
-        },
+        include: this.includeAll,
         orderBy: { acceptance_report_date: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
@@ -50,42 +52,44 @@ export class AcceptanceReportsService {
   async findOne(id: number) {
     const report = await this.prisma.acceptanceReport.findUnique({
       where: { id },
-      include: {
-        client: { select: { id: true, name: true } },
-        project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } },
-        inspector: { select: { id: true, name_zh: true, name_en: true, emp_code: true } },
-        creator: { select: { id: true, displayName: true } },
-        attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' } },
-      },
+      include: this.includeAll,
     });
     if (!report) throw new NotFoundException('收貨報告不存在');
     return report;
   }
 
+  private buildReportData(rd: any, userId: number) {
+    return {
+      acceptance_report_date: new Date(rd.report_date),
+      acceptance_report_acceptance_date: new Date(rd.acceptance_date),
+      acceptance_report_client_id: rd.client_id ? Number(rd.client_id) : null,
+      acceptance_report_client_name: rd.client_name || '',
+      acceptance_report_project_id: rd.project_id ? Number(rd.project_id) : null,
+      acceptance_report_project_name: rd.project_name || '',
+      acceptance_report_contract_ref: rd.contract_ref || null,
+      acceptance_report_client_contract_no: rd.client_contract_no || null,
+      acceptance_report_site_address: rd.site_address || '',
+      acceptance_report_items: rd.acceptance_items || '',
+      acceptance_report_quantity_unit: rd.quantity_unit || null,
+      acceptance_report_mingtat_inspector_id: rd.mingtat_inspector_id ? Number(rd.mingtat_inspector_id) : null,
+      acceptance_report_mingtat_inspector_name: rd.mingtat_inspector_name || null,
+      acceptance_report_mingtat_inspector_title: rd.mingtat_inspector_title || '',
+      acceptance_report_client_inspector_name: rd.client_inspector_name || '',
+      acceptance_report_client_inspector_title: rd.client_inspector_title || '',
+      acceptance_report_client_signature: rd.client_signature || null,
+      acceptance_report_mingtat_signature: rd.mingtat_signature || null,
+      acceptance_report_supplementary_notes: rd.supplementary_notes || null,
+      acceptance_report_created_by: userId,
+      acceptance_report_status: rd.status || 'draft',
+      acceptance_report_submitted_at: rd.status === 'submitted' ? new Date() : null,
+    };
+  }
+
   async create(userId: number, dto: any) {
-    const { attachments, ...reportData } = dto;
+    const { attachments, acceptance_items_list, ...rd } = dto;
     const report = await this.prisma.acceptanceReport.create({
       data: {
-        acceptance_report_date: new Date(reportData.report_date),
-        acceptance_report_acceptance_date: new Date(reportData.acceptance_date),
-        acceptance_report_client_id: reportData.client_id ? Number(reportData.client_id) : null,
-        acceptance_report_client_name: reportData.client_name,
-        acceptance_report_project_id: reportData.project_id ? Number(reportData.project_id) : null,
-        acceptance_report_project_name: reportData.project_name,
-        acceptance_report_contract_ref: reportData.contract_ref || null,
-        acceptance_report_site_address: reportData.site_address,
-        acceptance_report_items: reportData.acceptance_items,
-        acceptance_report_quantity_unit: reportData.quantity_unit || null,
-        acceptance_report_mingtat_inspector_id: Number(reportData.mingtat_inspector_id),
-        acceptance_report_mingtat_inspector_title: reportData.mingtat_inspector_title,
-        acceptance_report_client_inspector_name: reportData.client_inspector_name,
-        acceptance_report_client_inspector_title: reportData.client_inspector_title,
-        acceptance_report_client_signature: reportData.client_signature || null,
-        acceptance_report_mingtat_signature: reportData.mingtat_signature || null,
-        acceptance_report_supplementary_notes: reportData.supplementary_notes || null,
-        acceptance_report_created_by: userId,
-        acceptance_report_status: reportData.status || 'draft',
-        acceptance_report_submitted_at: reportData.status === 'submitted' ? new Date() : null,
+        ...this.buildReportData(rd, userId),
         attachments: attachments?.length ? {
           create: attachments.map((att: any, idx: number) => ({
             acceptance_report_attachment_file_name: att.file_name,
@@ -94,11 +98,15 @@ export class AcceptanceReportsService {
             acceptance_report_attachment_sort_order: idx,
           })),
         } : undefined,
+        acceptance_items: {
+          create: (acceptance_items_list || []).map((item: any, idx: number) => ({
+            acceptance_report_item_description: item.description || '',
+            acceptance_report_item_quantity_unit: item.quantity_unit || null,
+            acceptance_report_item_sort_order: idx,
+          })),
+        },
       },
-      include: {
-        project: { select: { id: true, project_no: true, project_name: true } },
-        attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' } },
-      },
+      include: this.includeAll,
     });
     return report;
   }
@@ -110,48 +118,42 @@ export class AcceptanceReportsService {
       throw new BadRequestException('已提交的收貨報告不可修改');
     }
 
-    const { attachments, ...reportData } = dto;
+    const { attachments, acceptance_items_list, ...rd } = dto;
 
-    // Delete existing attachments and recreate
+    // Delete existing attachments and items, then recreate
     await this.prisma.acceptanceReportAttachment.deleteMany({
       where: { acceptance_report_attachment_report_id: id },
     });
+    await this.prisma.acceptanceReportItem.deleteMany({
+      where: { acceptance_report_item_report_id: id },
+    });
+
+    const data: any = { ...this.buildReportData(rd, userId) };
+    delete data.acceptance_report_created_by; // Don't change creator on update
+
+    if (attachments?.length) {
+      data.attachments = {
+        create: attachments.map((att: any, idx: number) => ({
+          acceptance_report_attachment_file_name: att.file_name,
+          acceptance_report_attachment_file_url: att.file_url,
+          acceptance_report_attachment_file_type: att.file_type,
+          acceptance_report_attachment_sort_order: idx,
+        })),
+      };
+    }
+
+    data.acceptance_items = {
+      create: (acceptance_items_list || []).map((item: any, idx: number) => ({
+        acceptance_report_item_description: item.description || '',
+        acceptance_report_item_quantity_unit: item.quantity_unit || null,
+        acceptance_report_item_sort_order: idx,
+      })),
+    };
 
     const report = await this.prisma.acceptanceReport.update({
       where: { id },
-      data: {
-        acceptance_report_date: new Date(reportData.report_date),
-        acceptance_report_acceptance_date: new Date(reportData.acceptance_date),
-        acceptance_report_client_id: reportData.client_id ? Number(reportData.client_id) : null,
-        acceptance_report_client_name: reportData.client_name,
-        acceptance_report_project_id: reportData.project_id ? Number(reportData.project_id) : null,
-        acceptance_report_project_name: reportData.project_name,
-        acceptance_report_contract_ref: reportData.contract_ref || null,
-        acceptance_report_site_address: reportData.site_address,
-        acceptance_report_items: reportData.acceptance_items,
-        acceptance_report_quantity_unit: reportData.quantity_unit || null,
-        acceptance_report_mingtat_inspector_id: Number(reportData.mingtat_inspector_id),
-        acceptance_report_mingtat_inspector_title: reportData.mingtat_inspector_title,
-        acceptance_report_client_inspector_name: reportData.client_inspector_name,
-        acceptance_report_client_inspector_title: reportData.client_inspector_title,
-        acceptance_report_client_signature: reportData.client_signature || null,
-        acceptance_report_mingtat_signature: reportData.mingtat_signature || null,
-        acceptance_report_supplementary_notes: reportData.supplementary_notes || null,
-        acceptance_report_status: reportData.status || 'draft',
-        acceptance_report_submitted_at: reportData.status === 'submitted' ? new Date() : null,
-        attachments: attachments?.length ? {
-          create: attachments.map((att: any, idx: number) => ({
-            acceptance_report_attachment_file_name: att.file_name,
-            acceptance_report_attachment_file_url: att.file_url,
-            acceptance_report_attachment_file_type: att.file_type,
-            acceptance_report_attachment_sort_order: idx,
-          })),
-        } : undefined,
-      },
-      include: {
-        project: { select: { id: true, project_no: true, project_name: true } },
-        attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' } },
-      },
+      data,
+      include: this.includeAll,
     });
     return report;
   }
@@ -178,6 +180,7 @@ export class AcceptanceReportsService {
           inspector: { select: { id: true, name_zh: true, name_en: true } },
           creator: { select: { id: true, displayName: true } },
           attachments: { orderBy: { acceptance_report_attachment_sort_order: 'asc' } },
+          acceptance_items: { orderBy: { acceptance_report_item_sort_order: 'asc' } },
         },
         orderBy: { acceptance_report_date: 'desc' },
         skip: (page - 1) * limit,

@@ -440,6 +440,7 @@ model Partner {
   contracts_as_client  Contract[]                 @relation("contract_client")
   invoices_as_client   Invoice[]                  @relation("invoice_client")
   acceptance_reports_client AcceptanceReport[]     @relation("acceptance_report_client")
+  daily_reports_client      DailyReport[]          @relation("daily_report_client")
 
   @@map("partners")
 }
@@ -2026,7 +2027,7 @@ model VerificationActionLog {
 
 model DailyReport {
   id                    Int       @id @default(autoincrement())
-  daily_report_project_id Int
+  daily_report_project_id Int?
   daily_report_date     DateTime  @db.Date
   daily_report_shift_type String  @db.VarChar(20)
   daily_report_work_summary String @db.Text
@@ -2036,8 +2037,15 @@ model DailyReport {
   daily_report_submitted_at DateTime?
   daily_report_created_at DateTime @default(now())
   daily_report_updated_at DateTime @default(now()) @updatedAt
+  daily_report_client_id Int?
+  daily_report_client_name String? @db.VarChar(200)
+  daily_report_client_contract_no String? @db.VarChar(200)
+  daily_report_project_name String? @db.VarChar(200)
+  daily_report_completed_work String? @db.Text
+  daily_report_signature String? @db.Text
 
-  project Project  @relation(fields: [daily_report_project_id], references: [id])
+  project Project?  @relation(fields: [daily_report_project_id], references: [id])
+  client  Partner?  @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
   creator User     @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
   items   DailyReportItem[]
 
@@ -2053,6 +2061,11 @@ model DailyReportItem {
   daily_report_item_ot_hours  Decimal? @db.Decimal(10, 2)
   daily_report_item_name_or_plate String? @db.VarChar(200)
   daily_report_item_sort_order Int    @default(0)
+  daily_report_item_worker_type String? @db.VarChar(100)
+  daily_report_item_with_operator Boolean? @default(false)
+  daily_report_item_employee_ids String? @db.Text
+  daily_report_item_vehicle_ids String? @db.Text
+  daily_report_item_shift_quantity Decimal? @db.Decimal(10, 2)
 
   report DailyReport @relation(fields: [daily_report_item_report_id], references: [id], onDelete: Cascade)
 
@@ -2075,8 +2088,10 @@ model AcceptanceReport {
   acceptance_report_site_address        String    @db.Text
   acceptance_report_items               String    @db.Text
   acceptance_report_quantity_unit       String?   @db.VarChar(100)
-  acceptance_report_mingtat_inspector_id Int
+  acceptance_report_mingtat_inspector_id Int?
+  acceptance_report_mingtat_inspector_name String? @db.VarChar(200)
   acceptance_report_mingtat_inspector_title String @db.VarChar(100)
+  acceptance_report_client_contract_no String? @db.VarChar(200)
   acceptance_report_client_inspector_name String  @db.VarChar(200)
   acceptance_report_client_inspector_title String @db.VarChar(100)
   acceptance_report_client_signature    String?   @db.Text
@@ -2090,9 +2105,10 @@ model AcceptanceReport {
 
   client    Partner?  @relation("acceptance_report_client", fields: [acceptance_report_client_id], references: [id])
   project   Project?  @relation(fields: [acceptance_report_project_id], references: [id])
-  inspector Employee  @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
+  inspector Employee?  @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
   creator   User      @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id])
   attachments AcceptanceReportAttachment[]
+  acceptance_items AcceptanceReportItem[]
 
   @@map("acceptance_reports")
 }
@@ -2108,4 +2124,16 @@ model AcceptanceReportAttachment {
   report AcceptanceReport @relation(fields: [acceptance_report_attachment_report_id], references: [id], onDelete: Cascade)
 
   @@map("acceptance_report_attachments")
+}
+
+model AcceptanceReportItem {
+  id                                    Int    @id @default(autoincrement())
+  acceptance_report_item_report_id      Int
+  acceptance_report_item_description    String @db.Text
+  acceptance_report_item_quantity_unit  String? @db.VarChar(200)
+  acceptance_report_item_sort_order     Int    @default(0)
+
+  report AcceptanceReport @relation(fields: [acceptance_report_item_report_id], references: [id], onDelete: Cascade)
+
+  @@map("acceptance_report_items")
 }

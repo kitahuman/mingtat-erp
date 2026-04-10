@@ -7,7 +7,7 @@ import { fmtDate } from '@/lib/dateUtils';
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
 const statusColors: Record<string, string> = { draft: 'badge-yellow', submitted: 'badge-green' };
 const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
-const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛', machinery: '機械', tool: '工具' };
+const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛/機械', machinery: '車輛/機械', tool: '工具' };
 
 export default function DailyReportsAdminPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -52,6 +52,11 @@ export default function DailyReportsAdminPage() {
 
   const totalPages = Math.ceil(total / limit);
 
+  const handleExport = (id: number) => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
+    window.open(`${apiBase}/daily-reports/${id}/export`, '_blank');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -66,7 +71,7 @@ export default function DailyReportsAdminPage() {
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="搜尋工作摘要/工程名稱..."
+            placeholder="搜尋工作摘要/工程/客戶..."
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <select
@@ -116,11 +121,12 @@ export default function DailyReportsAdminPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">日期</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">工程</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">客戶</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">更次</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">工作摘要</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">項目數</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">建立人</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">狀態</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -133,11 +139,11 @@ export default function DailyReportsAdminPage() {
                     >
                       <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.daily_report_date)}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium">{report.project?.project_name || '-'}</div>
+                        <div className="font-medium">{report.daily_report_project_name || report.project?.project_name || '-'}</div>
                         <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
                       </td>
+                      <td className="px-4 py-3 text-sm">{report.daily_report_client_name || report.client?.name || '-'}</td>
                       <td className="px-4 py-3">{shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</td>
-                      <td className="px-4 py-3 max-w-xs truncate">{report.daily_report_work_summary}</td>
                       <td className="px-4 py-3">{report.items?.length || 0}</td>
                       <td className="px-4 py-3">{report.creator?.displayName || '-'}</td>
                       <td className="px-4 py-3">
@@ -145,21 +151,26 @@ export default function DailyReportsAdminPage() {
                           {statusLabels[report.daily_report_status] || report.daily_report_status}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleExport(report.id); }}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                        >
+                          列印
+                        </button>
+                      </td>
                     </tr>
                     {expandedId === report.id && (
                       <tr key={`${report.id}-detail`}>
-                        <td colSpan={7} className="px-4 py-4 bg-blue-50/50">
+                        <td colSpan={8} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
+                            {report.daily_report_client_contract_no && (
+                              <div className="text-sm"><strong>客戶合約：</strong>{report.daily_report_client_contract_no}</div>
+                            )}
                             <div>
                               <h4 className="font-medium text-gray-700 mb-1">工作摘要</h4>
                               <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_work_summary}</p>
                             </div>
-                            {report.daily_report_memo && (
-                              <div>
-                                <h4 className="font-medium text-gray-700 mb-1">備忘錄</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_memo}</p>
-                              </div>
-                            )}
                             {report.items?.length > 0 && (
                               <div>
                                 <h4 className="font-medium text-gray-700 mb-2">Labour and Plant</h4>
@@ -167,24 +178,40 @@ export default function DailyReportsAdminPage() {
                                   <thead className="bg-gray-100">
                                     <tr>
                                       <th className="px-2 py-1.5 text-left">類別</th>
+                                      <th className="px-2 py-1.5 text-left">工種</th>
                                       <th className="px-2 py-1.5 text-left">內容</th>
                                       <th className="px-2 py-1.5 text-right">數量</th>
+                                      <th className="px-2 py-1.5 text-right">中直</th>
                                       <th className="px-2 py-1.5 text-right">OT</th>
-                                      <th className="px-2 py-1.5 text-left">名稱/車牌</th>
+                                      <th className="px-2 py-1.5 text-left">員工/車牌</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
                                     {report.items.map((item: any) => (
                                       <tr key={item.id}>
                                         <td className="px-2 py-1.5">{categoryLabels[item.daily_report_item_category] || item.daily_report_item_category}</td>
+                                        <td className="px-2 py-1.5">{item.daily_report_item_worker_type || '-'}</td>
                                         <td className="px-2 py-1.5">{item.daily_report_item_content}</td>
                                         <td className="px-2 py-1.5 text-right">{item.daily_report_item_quantity || '-'}</td>
+                                        <td className="px-2 py-1.5 text-right">{item.daily_report_item_shift_quantity || '-'}</td>
                                         <td className="px-2 py-1.5 text-right">{item.daily_report_item_ot_hours || '-'}</td>
                                         <td className="px-2 py-1.5">{item.daily_report_item_name_or_plate || '-'}</td>
                                       </tr>
                                     ))}
                                   </tbody>
                                 </table>
+                              </div>
+                            )}
+                            {report.daily_report_completed_work && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1">完成的工作</h4>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_completed_work}</p>
+                              </div>
+                            )}
+                            {report.daily_report_memo && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1">備忘錄</h4>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_memo}</p>
                               </div>
                             )}
                             <div className="text-xs text-gray-400">

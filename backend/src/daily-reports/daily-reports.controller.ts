@@ -48,49 +48,125 @@ export class DailyReportsController {
     return this.service.remove(id);
   }
 
-  @Get(':id/pdf')
-  async exportPdf(
+  @Get(':id/export')
+  async exportHtml(
     @Param('id', ParseIntPipe) id: number,
     @Res() res: Response,
   ) {
     const report = await this.service.findOne(id);
-    const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛', machinery: '機械', tool: '工具' };
+    const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛/機械', machinery: '車輛/機械', tool: '工具' };
     const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
     const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('zh-HK') : '-';
 
+    const projectName = report.daily_report_project_name || report.project?.project_name || '-';
+    const projectNo = report.project?.project_no || '-';
+    const clientName = report.daily_report_client_name || (report as any).client?.name || '-';
+
+    // Build items table rows
     let itemsHtml = '';
     if (report.items?.length) {
+      const rows = report.items.map((item: any) => {
+        const cat = item.daily_report_item_category;
+        const catLabel = categoryLabels[cat] || cat;
+
+        let details = item.daily_report_item_content || '';
+        if (cat === 'worker' && item.daily_report_item_worker_type) {
+          details = `[${item.daily_report_item_worker_type}] ${details}`;
+        }
+        if ((cat === 'vehicle' || cat === 'machinery') && item.daily_report_item_with_operator) {
+          details = `[連機手/司機] ${details}`;
+        }
+
+        // Parse employee/vehicle IDs
+        let employeeInfo = '';
+        if (item.daily_report_item_employee_ids) {
+          try {
+            const ids = JSON.parse(item.daily_report_item_employee_ids);
+            if (Array.isArray(ids) && ids.length > 0) {
+              employeeInfo = ids.map((e: any) => typeof e === 'string' && e.startsWith('manual:') ? e.replace('manual:', '') : e).join(', ');
+            }
+          } catch { employeeInfo = item.daily_report_item_employee_ids; }
+        }
+
+        let vehicleInfo = '';
+        if (item.daily_report_item_vehicle_ids) {
+          try {
+            const ids = JSON.parse(item.daily_report_item_vehicle_ids);
+            if (Array.isArray(ids) && ids.length > 0) {
+              vehicleInfo = ids.map((v: any) => typeof v === 'string' && v.startsWith('manual:') ? v.replace('manual:', '') : v).join(', ');
+            }
+          } catch { vehicleInfo = item.daily_report_item_vehicle_ids; }
+        }
+
+        return `<tr>
+          <td>${catLabel}</td>
+          <td>${details}</td>
+          <td>${item.daily_report_item_quantity || '-'}</td>
+          <td>${item.daily_report_item_shift_quantity || '-'}</td>
+          <td>${item.daily_report_item_ot_hours || '-'}</td>
+          <td>${employeeInfo || item.daily_report_item_name_or_plate || '-'}</td>
+          <td>${vehicleInfo || '-'}</td>
+        </tr>`;
+      }).join('');
+
       itemsHtml = `<table class="items-table">
-        <thead><tr><th>類別</th><th>內容</th><th>數量</th><th>OT小時</th><th>名稱/車牌</th></tr></thead>
-        <tbody>${report.items.map((item: any) => `<tr><td>${categoryLabels[item.daily_report_item_category] || item.daily_report_item_category}</td><td>${item.daily_report_item_content}</td><td>${item.daily_report_item_quantity || '-'}</td><td>${item.daily_report_item_ot_hours || '-'}</td><td>${item.daily_report_item_name_or_plate || '-'}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>類別</th><th>內容</th><th>數量</th><th>中直</th><th>OT</th><th>員工</th><th>機號/車牌</th></tr></thead>
+        <tbody>${rows}</tbody>
       </table>`;
     }
 
+    const sigSection = (sigUrl: string | null) => {
+      if (!sigUrl) return '<div class="sig-empty">未簽名</div>';
+      return `<img src="${sigUrl}" class="sig-img" />`;
+    };
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body { font-family: 'Noto Sans TC', Arial, sans-serif; padding: 40px; font-size: 14px; }
+      @media print { body { padding: 20px; } }
+      body { font-family: 'Noto Sans TC', Arial, sans-serif; padding: 40px; font-size: 14px; max-width: 900px; margin: 0 auto; }
       h1 { text-align: center; font-size: 22px; margin-bottom: 20px; }
       .header-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
       .header-table td { padding: 6px 10px; border: 1px solid #ccc; }
       .header-table .label { font-weight: bold; background: #f5f5f5; width: 120px; }
       .items-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-      .items-table th, .items-table td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+      .items-table th, .items-table td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 13px; }
       .items-table th { background: #f5f5f5; font-weight: bold; }
       .section { margin-top: 20px; }
       .section-title { font-weight: bold; font-size: 15px; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+      .sig-row { margin-top: 30px; text-align: center; }
+      .sig-img { max-height: 80px; border: 1px solid #ccc; border-radius: 4px; }
+      .sig-empty { color: #999; font-style: italic; }
+      .print-btn { display: block; margin: 20px auto; padding: 10px 30px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+      @media print { .print-btn { display: none; } }
     </style></head><body>
+      <button class="print-btn" onclick="window.print()">列印</button>
       <h1>明達建築工程日報</h1>
       <table class="header-table">
-        <tr><td class="label">工程名稱</td><td>${report.project?.project_name || '-'}</td><td class="label">工程編號</td><td>${report.project?.project_no || '-'}</td></tr>
+        <tr><td class="label">工程名稱</td><td>${projectName}</td><td class="label">工程編號</td><td>${projectNo}</td></tr>
+        <tr><td class="label">客戶</td><td>${clientName}</td><td class="label">客戶合約</td><td>${report.daily_report_client_contract_no || '-'}</td></tr>
         <tr><td class="label">日期</td><td>${fmtDate(report.daily_report_date)}</td><td class="label">更次</td><td>${shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</td></tr>
         <tr><td class="label">建立人</td><td>${(report as any).creator?.displayName || '-'}</td><td class="label">狀態</td><td>${report.daily_report_status === 'submitted' ? '已提交' : '草稿'}</td></tr>
       </table>
       <div class="section"><div class="section-title">工作摘要</div><p>${(report.daily_report_work_summary || '').replace(/\n/g, '<br>')}</p></div>
       ${report.items?.length ? `<div class="section"><div class="section-title">Labour and Plant</div>${itemsHtml}</div>` : ''}
+      ${report.daily_report_completed_work ? `<div class="section"><div class="section-title">完成的工作</div><p>${report.daily_report_completed_work.replace(/\n/g, '<br>')}</p></div>` : ''}
       ${report.daily_report_memo ? `<div class="section"><div class="section-title">備忘錄</div><p>${report.daily_report_memo.replace(/\n/g, '<br>')}</p></div>` : ''}
+      <div class="sig-row">
+        <div class="section-title" style="text-align:left">簽收</div>
+        ${sigSection(report.daily_report_signature)}
+      </div>
     </body></html>`;
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `inline; filename="daily-report-${id}.html"`);
     res.send(html);
+  }
+
+  // Keep old /pdf route as alias
+  @Get(':id/pdf')
+  async exportPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    return this.exportHtml(id, res);
   }
 }
