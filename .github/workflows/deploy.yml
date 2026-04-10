@@ -29,6 +29,7 @@ jobs:
             echo "=== [1/7] Git Pull ==="
             cd /opt/mingtat-erp
             git stash || true
+            git clean -fd frontend/public/version.json || true
             git pull origin main
 
             echo "=== [2/7] Run Migrations ==="
