@@ -20,6 +20,9 @@ export class DailyReportsService {
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.status) where.daily_report_status = query.status;
     if (query.created_by) where.daily_report_created_by = Number(query.created_by);
+    if (query.client_id) where.daily_report_client_id = Number(query.client_id);
+    if (query.client_name) where.daily_report_client_name = { contains: query.client_name, mode: 'insensitive' };
+    if (query.client_contract_no) where.daily_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
     if (query.date_from || query.date_to) {
       where.daily_report_date = {};
       if (query.date_from) where.daily_report_date.gte = new Date(query.date_from);
@@ -30,6 +33,7 @@ export class DailyReportsService {
         { daily_report_work_summary: { contains: query.search, mode: 'insensitive' } },
         { daily_report_project_name: { contains: query.search, mode: 'insensitive' } },
         { daily_report_client_name: { contains: query.search, mode: 'insensitive' } },
+        { daily_report_client_contract_no: { contains: query.search, mode: 'insensitive' } },
         { project: { project_name: { contains: query.search, mode: 'insensitive' } } },
       ];
     }

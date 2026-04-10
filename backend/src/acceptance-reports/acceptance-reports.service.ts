@@ -21,6 +21,8 @@ export class AcceptanceReportsService {
 
     if (query.project_id) where.acceptance_report_project_id = Number(query.project_id);
     if (query.client_id) where.acceptance_report_client_id = Number(query.client_id);
+    if (query.client_name) where.acceptance_report_client_name = { contains: query.client_name, mode: 'insensitive' };
+    if (query.client_contract_no) where.acceptance_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
     if (query.status) where.acceptance_report_status = query.status;
     if (query.created_by) where.acceptance_report_created_by = Number(query.created_by);
     if (query.date_from || query.date_to) {
@@ -32,6 +34,7 @@ export class AcceptanceReportsService {
       where.OR = [
         { acceptance_report_project_name: { contains: query.search, mode: 'insensitive' } },
         { acceptance_report_client_name: { contains: query.search, mode: 'insensitive' } },
+        { acceptance_report_client_contract_no: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 

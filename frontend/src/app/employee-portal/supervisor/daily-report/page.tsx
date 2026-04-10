@@ -14,7 +14,12 @@ export default function DailyReportListPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [contractOptions, setContractOptions] = useState<string[]>([]);
   const [filterProjectId, setFilterProjectId] = useState('');
+  const [filterClientId, setFilterClientId] = useState('');
+  const [filterClientName, setFilterClientName] = useState('');
+  const [filterContractNo, setFilterContractNo] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
@@ -23,6 +28,9 @@ export default function DailyReportListPage() {
       setLoading(true);
       const params: any = { limit: 50 };
       if (filterProjectId) params.project_id = filterProjectId;
+      if (filterClientId) params.client_id = filterClientId;
+      if (filterClientName) params.client_name = filterClientName;
+      if (filterContractNo) params.client_contract_no = filterContractNo;
       if (filterDateFrom) params.date_from = filterDateFrom;
       if (filterDateTo) params.date_to = filterDateTo;
       const res = await employeePortalApi.getMyDailyReports(params);
@@ -36,16 +44,32 @@ export default function DailyReportListPage() {
 
   useEffect(() => {
     portalSharedApi.getProjectsSimple().then(res => setProjects(res.data || [])).catch(() => {});
+    portalSharedApi.getPartnersSimple().then(res => setPartners(res.data || [])).catch(() => {});
+    portalSharedApi.getFieldOptions('client_contract_no').then(res => {
+      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+    }).catch(() => {});
     loadReports();
   }, []);
 
   useEffect(() => {
     loadReports();
-  }, [filterProjectId, filterDateFrom, filterDateTo]);
+  }, [filterProjectId, filterClientId, filterClientName, filterContractNo, filterDateFrom, filterDateTo]);
 
   const fmtDate = (d: string) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('zh-HK');
+  };
+
+  const handleClientChange = (val: string) => {
+    setFilterClientId(val);
+    // If selecting a partner, clear manual client name
+    if (val) setFilterClientName('');
+  };
+
+  const handleClientNameChange = (val: string) => {
+    setFilterClientName(val);
+    // If typing manually, clear partner selection
+    if (val) setFilterClientId('');
   };
 
   return (
@@ -68,6 +92,7 @@ export default function DailyReportListPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 space-y-2">
+        {/* Project filter */}
         <select
           value={filterProjectId}
           onChange={e => setFilterProjectId(e.target.value)}
@@ -78,6 +103,41 @@ export default function DailyReportListPage() {
             <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
           ))}
         </select>
+
+        {/* Client filter */}
+        <select
+          value={filterClientId}
+          onChange={e => handleClientChange(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
+        >
+          <option value="">全部客戶（選擇）</option>
+          {partners.map((p: any) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+
+        {/* Manual client name filter */}
+        <input
+          type="text"
+          value={filterClientName}
+          onChange={e => handleClientNameChange(e.target.value)}
+          placeholder="客戶名稱搜尋（手動輸入）"
+          className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
+        />
+
+        {/* Contract filter */}
+        <select
+          value={filterContractNo}
+          onChange={e => setFilterContractNo(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
+        >
+          <option value="">全部客戶合約</option>
+          {contractOptions.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+
+        {/* Date range */}
         <div className="flex gap-2">
           <input
             type="date"
@@ -94,6 +154,23 @@ export default function DailyReportListPage() {
             placeholder="結束日期"
           />
         </div>
+
+        {/* Clear filters */}
+        {(filterProjectId || filterClientId || filterClientName || filterContractNo || filterDateFrom || filterDateTo) && (
+          <button
+            onClick={() => {
+              setFilterProjectId('');
+              setFilterClientId('');
+              setFilterClientName('');
+              setFilterContractNo('');
+              setFilterDateFrom('');
+              setFilterDateTo('');
+            }}
+            className="w-full py-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
+          >
+            清除所有篩選
+          </button>
+        )}
       </div>
 
       {/* List */}
@@ -114,10 +191,13 @@ export default function DailyReportListPage() {
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-gray-800 truncate">
-                    {report.project?.project_name || '-'}
+                    {report.daily_report_project_name || report.project?.project_name || '-'}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {report.project?.project_no || '-'}
+                    {report.daily_report_client_name || report.client?.name || '-'}
+                    {report.daily_report_client_contract_no && (
+                      <span className="ml-1 text-gray-400">· {report.daily_report_client_contract_no}</span>
+                    )}
                   </p>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[report.daily_report_status] || 'bg-gray-100 text-gray-600'}`}>

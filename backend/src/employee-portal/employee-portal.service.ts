@@ -817,6 +817,9 @@ export class EmployeePortalService {
     const limit = Number(query.limit) || 20;
     const where: any = { daily_report_created_by: userId };
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
+    if (query.client_id) where.daily_report_client_id = Number(query.client_id);
+    if (query.client_name) where.daily_report_client_name = { contains: query.client_name, mode: 'insensitive' };
+    if (query.client_contract_no) where.daily_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
     if (query.date_from || query.date_to) {
       where.daily_report_date = {};
       if (query.date_from) where.daily_report_date.gte = new Date(query.date_from);
@@ -915,6 +918,9 @@ export class EmployeePortalService {
     const limit = Number(query.limit) || 20;
     const where: any = { acceptance_report_created_by: userId };
     if (query.project_id) where.acceptance_report_project_id = Number(query.project_id);
+    if (query.client_id) where.acceptance_report_client_id = Number(query.client_id);
+    if (query.client_name) where.acceptance_report_client_name = { contains: query.client_name, mode: 'insensitive' };
+    if (query.client_contract_no) where.acceptance_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
     if (query.date_from || query.date_to) {
       where.acceptance_report_date = {};
       if (query.date_from) where.acceptance_report_date.gte = new Date(query.date_from);

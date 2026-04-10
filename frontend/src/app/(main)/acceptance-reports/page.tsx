@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { acceptanceReportsApi, projectsApi } from '@/lib/api';
+import { acceptanceReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
@@ -13,7 +13,12 @@ export default function AcceptanceReportsAdminPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [contractOptions, setContractOptions] = useState<string[]>([]);
   const [filterProjectId, setFilterProjectId] = useState('');
+  const [filterClientId, setFilterClientId] = useState('');
+  const [filterClientName, setFilterClientName] = useState('');
+  const [filterContractNo, setFilterContractNo] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -26,6 +31,9 @@ export default function AcceptanceReportsAdminPage() {
       setLoading(true);
       const params: any = { page, limit };
       if (filterProjectId) params.project_id = filterProjectId;
+      if (filterClientId) params.client_id = filterClientId;
+      if (filterClientName) params.client_name = filterClientName;
+      if (filterContractNo) params.client_contract_no = filterContractNo;
       if (filterStatus) params.status = filterStatus;
       if (filterDateFrom) params.date_from = filterDateFrom;
       if (filterDateTo) params.date_to = filterDateTo;
@@ -42,17 +50,33 @@ export default function AcceptanceReportsAdminPage() {
 
   useEffect(() => {
     projectsApi.simple().then(res => setProjects(res.data || [])).catch(() => {});
+    partnersApi.simple().then(res => setPartners(res.data || [])).catch(() => {});
+    fieldOptionsApi.getByCategory('client_contract_no').then(res => {
+      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
     loadData();
-  }, [page, filterProjectId, filterStatus, filterDateFrom, filterDateTo, search]);
+  }, [page, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search]);
 
   const totalPages = Math.ceil(total / limit);
 
   const handleExport = (id: number) => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.open(`${apiBase}/acceptance-reports/${id}/export`, '_blank');
+  };
+
+  const handleClientChange = (val: string) => {
+    setFilterClientId(val);
+    if (val) { setFilterClientName(''); }
+    setPage(1);
+  };
+
+  const handleClientNameChange = (val: string) => {
+    setFilterClientName(val);
+    if (val) { setFilterClientId(''); }
+    setPage(1);
   };
 
   return (
@@ -62,23 +86,82 @@ export default function AcceptanceReportsAdminPage() {
         <span className="text-sm text-gray-500">共 {total} 條記錄</span>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="搜尋工程/客戶..." className="px-3 py-2 border rounded-lg text-sm" />
-          <select value={filterProjectId} onChange={e => { setFilterProjectId(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
-            <option value="">全部工程</option>
-            {projects.map((p: any) => (<option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>))}
-          </select>
-          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-sm border p-4 space-y-3">
+        {/* Row 1: search + status + date range */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="搜尋工程/客戶/合約..."
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <select
+            value={filterStatus}
+            onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
             <option value="">全部狀態</option>
             <option value="draft">草稿</option>
             <option value="submitted">已提交</option>
           </select>
-          <input type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm" />
-          <input type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm" />
+          <input
+            type="date"
+            value={filterDateFrom}
+            onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <input
+            type="date"
+            value={filterDateTo}
+            onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+        </div>
+        {/* Row 2: project + client + contract */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select
+            value={filterProjectId}
+            onChange={e => { setFilterProjectId(e.target.value); setPage(1); }}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">全部工程</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
+            ))}
+          </select>
+          <select
+            value={filterClientId}
+            onChange={e => handleClientChange(e.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">全部客戶（選擇）</option>
+            {partners.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={filterClientName}
+            onChange={e => handleClientNameChange(e.target.value)}
+            placeholder="客戶名稱搜尋"
+            className="px-3 py-2 border rounded-lg text-sm"
+          />
+          <select
+            value={filterContractNo}
+            onChange={e => { setFilterContractNo(e.target.value); setPage(1); }}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">全部客戶合約</option>
+            {contractOptions.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-gray-400">載入中...</div>
@@ -93,6 +176,7 @@ export default function AcceptanceReportsAdminPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">驗收日期</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">工程</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">客戶</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">客戶合約</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">收貨項目</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">驗收人</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">建立人</th>
@@ -103,14 +187,19 @@ export default function AcceptanceReportsAdminPage() {
               <tbody className="divide-y divide-gray-100">
                 {reports.map(report => (
                   <>
-                    <tr key={report.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
+                    <tr
+                      key={report.id}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}
+                    >
                       <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_date)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_acceptance_date)}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium">{report.acceptance_report_project_name || report.project?.project_name || '-'}</div>
                         <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
                       </td>
-                      <td className="px-4 py-3">{report.acceptance_report_client_name || report.client?.name || '-'}</td>
+                      <td className="px-4 py-3 text-sm">{report.acceptance_report_client_name || report.client?.name || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{report.acceptance_report_client_contract_no || '-'}</td>
                       <td className="px-4 py-3 max-w-xs truncate">
                         {report.acceptance_items?.length > 0
                           ? `${report.acceptance_items.length} 個項目`
@@ -134,11 +223,8 @@ export default function AcceptanceReportsAdminPage() {
                     </tr>
                     {expandedId === report.id && (
                       <tr key={`${report.id}-detail`}>
-                        <td colSpan={9} className="px-4 py-4 bg-blue-50/50">
+                        <td colSpan={10} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
-                            {report.acceptance_report_client_contract_no && (
-                              <div className="text-sm"><strong>客戶合約：</strong>{report.acceptance_report_client_contract_no}</div>
-                            )}
                             {report.acceptance_report_site_address && (
                               <div className="text-sm"><strong>地盤地址：</strong>{report.acceptance_report_site_address}</div>
                             )}
@@ -166,7 +252,6 @@ export default function AcceptanceReportsAdminPage() {
                                 </table>
                               </div>
                             )}
-                            {/* Legacy single text field fallback */}
                             {!report.acceptance_items?.length && report.acceptance_report_items && (
                               <div>
                                 <h4 className="font-medium text-gray-700 mb-1">收貨項目</h4>
@@ -202,12 +287,25 @@ export default function AcceptanceReportsAdminPage() {
         )}
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500">第 {page} / {totalPages} 頁</span>
           <div className="flex gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50">上一頁</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50">下一頁</button>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
+            >
+              上一頁
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
+            >
+              下一頁
+            </button>
           </div>
         </div>
       )}
