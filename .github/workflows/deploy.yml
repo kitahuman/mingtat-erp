@@ -1,0 +1,59 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build & Deploy on EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            set -e
+
+            echo "=== [1/6] Git Pull ==="
+            cd /opt/mingtat-erp
+            git pull origin main
+
+            echo "=== [2/6] Backend Build ==="
+            cd /opt/mingtat-erp/backend
+            npm ci --prefer-offline 2>/dev/null || npm install
+            npm run build
+
+            echo "=== [3/6] Restart Backend ==="
+            pm2 restart mingtat-erp-backend
+            sleep 3
+            pm2 show mingtat-erp-backend | grep -E 'status|pid'
+
+            echo "=== [4/6] Frontend Build ==="
+            cd /opt/mingtat-erp/frontend
+            npm ci --prefer-offline 2>/dev/null || npm install
+            npm run build
+
+            echo "=== [5/6] Copy Frontend Assets ==="
+            cp -r .next/static .next/standalone/.next/static
+            cp -r public .next/standalone/public
+
+            echo "=== [6/6] Restart Frontend ==="
+            pm2 restart mingtat-erp-frontend
+            sleep 3
+            pm2 list
+
+            echo "=== Deployment Complete ==="
+          ENDSSH
