@@ -39,8 +39,8 @@ jobs:
             npx prisma generate
 
             echo "=== [3/7] Backend Build ==="
-            npm install --legacy-peer-deps
-            npx nest build
+            npm install --legacy-peer-deps --include=dev
+            npm run build
 
             echo "=== [4/7] Restart Backend ==="
             pm2 restart mingtat-erp-backend
