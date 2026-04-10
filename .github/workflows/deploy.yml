@@ -11,46 +11,57 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout code
+    uses: actions/checkout@v4
 
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          command_timeout: 25m
-          script: |
-            set -e
+  - name: Deploy to EC2 via SSH
+    uses: appleboy/ssh-action@v1.0.3
+    with:
+      host: <LaTex>${{ secrets.EC2_HOST }}
+      username: $</LaTex>{{ secrets.EC2_USER }}
+      key: ${{ secrets.EC2_SSH_KEY }}
+      port: 22
+      command_timeout: 25m
+      script: |
+        set -e
 
-            echo "=== [1/6] Git Pull ==="
-            cd /opt/mingtat-erp
-            git pull origin main
+        echo "=== [1/7] Git Pull ==="
+        cd /opt/mingtat-erp
+        git stash || true
+        git pull origin main
 
-            echo "=== [2/6] Backend Build ==="
-            cd /opt/mingtat-erp/backend
-            npm install --legacy-peer-deps
-            npm run build
+        echo "=== [2/7] Run Migrations ==="
+        cd /opt/mingtat-erp/backend
+        export $(cat .env | grep -v '^#' | xargs)
+        npx prisma migrate deploy
+        npx prisma generate
 
-            echo "=== [3/6] Restart Backend ==="
-            pm2 restart mingtat-erp-backend
-            sleep 2
+        echo "=== [3/7] Backend Build ==="
+        npm install --legacy-peer-deps
+        npm run build
 
-            echo "=== [4/6] Frontend Build ==="
-            cd /opt/mingtat-erp/frontend
-            npm install --legacy-peer-deps
-            npm run build
+        echo "=== [4/7] Restart Backend ==="
+        pm2 restart mingtat-erp-backend
+        sleep 2
 
-            echo "=== [5/6] Copy Frontend Assets ==="
-            cp -r .next/static .next/standalone/.next/static
-            cp -r public .next/standalone/public
+        echo "=== [5/7] Frontend Build ==="
+        cd /opt/mingtat-erp/frontend
+        npm install --legacy-peer-deps
+        rm -rf .next
+        npm run build
 
-            echo "=== [6/6] Restart Frontend ==="
-            pm2 restart mingtat-erp-frontend
-            sleep 2
+        echo "=== [6/7] Copy Frontend Assets + Version ==="
+        cp -r .next/static .next/standalone/.next/static
+        cp -r public .next/standalone/public
+        COMMIT_HASH=<LaTex>$(git rev-parse --short HEAD)
+        DEPLOY_TIME=$</LaTex>(date '+%Y-%m-%d %H:%M:%S')
+        echo "{\"commit\":\"<LaTex>$COMMIT_HASH\",\"deployTime\":\"$</LaTex>DEPLOY_TIME\"}" > .next/standalone/public/version.json
 
-            echo "=== Deployment Complete ==="
-            pm2 list
+        echo "=== [7/7] Restart Frontend ==="
+        pm2 restart mingtat-erp-frontend
+        sleep 2
+
+        echo "=== Deployment Complete ==="
+        pm2 list
+
