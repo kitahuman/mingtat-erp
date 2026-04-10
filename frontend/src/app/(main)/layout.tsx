@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Cookies from 'js-cookie';
 import Sidebar from '@/components/Sidebar';
 import { ChatWidget } from '@/components/ChatWidget';
@@ -12,14 +12,29 @@ import { useAuth } from '@/lib/auth';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const pathname = usePathname();
+  const { user, loading, canAccessPath } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (!loading && !Cookies.get('token')) {
       router.replace('/login');
     }
   }, [loading, router]);
+
+  // Page-level permission check
+  useEffect(() => {
+    if (!loading && user && pathname) {
+      // Skip guard for profile page (always accessible)
+      if (pathname === '/settings/profile') {
+        setAccessDenied(false);
+        return;
+      }
+      const allowed = canAccessPath(pathname);
+      setAccessDenied(!allowed);
+    }
+  }, [loading, user, pathname, canAccessPath]);
 
   // Listen for sidebar collapse state changes broadcast via custom event
   useEffect(() => {
@@ -48,7 +63,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         `}
       >
         <div className="p-4 sm:p-6 h-full">
-          {children}
+          {accessDenied ? (
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🔒</div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">無權限訪問</h2>
+                <p className="text-gray-500 mb-4">您沒有權限查看此頁面，請聯繫管理員。</p>
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  返回儀表板
+                </button>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
       <ChatWidget />

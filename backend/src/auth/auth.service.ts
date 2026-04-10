@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeEffectivePages, ALL_PAGES } from './page-permissions';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,11 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    const allowedPages = computeEffectivePages(
+      user.role,
+      user.page_permissions as any,
+    );
+
     const payload = { sub: user.id, username: user.username, role: user.role };
     return {
       access_token: this.jwtService.sign(payload),
@@ -38,6 +44,7 @@ export class AuthService {
         phone: user.phone,
         department: user.department,
         isActive: user.isActive,
+        allowedPages,
       },
     };
   }
@@ -45,6 +52,11 @@ export class AuthService {
   async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
+    const allowedPages = computeEffectivePages(
+      user.role,
+      user.page_permissions as any,
+    );
+
     return {
       id: user.id,
       username: user.username,
@@ -56,7 +68,15 @@ export class AuthService {
       isActive: user.isActive,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
+      allowedPages,
     };
+  }
+
+  /**
+   * Get all page definitions (for admin UI)
+   */
+  getAllPages() {
+    return ALL_PAGES;
   }
 
   async seedAdmin() {

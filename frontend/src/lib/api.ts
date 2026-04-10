@@ -37,6 +37,7 @@ export default api;
 export const authApi = {
   login: (data: { username: string; password: string }) => api.post('/auth/login', data),
   profile: () => api.get('/auth/profile'),
+  getPageDefinitions: () => api.get('/auth/page-definitions'),
 };
 
 // Users (Admin only)

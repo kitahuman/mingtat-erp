@@ -120,6 +120,7 @@ export class UsersService {
     if (dto.can_approve_mid_shift !== undefined) data.can_approve_mid_shift = dto.can_approve_mid_shift;
     if (dto.can_daily_report !== undefined) data.can_daily_report = dto.can_daily_report;
     if (dto.can_acceptance_report !== undefined) data.can_acceptance_report = dto.can_acceptance_report;
+    if (dto.page_permissions !== undefined) data.page_permissions = dto.page_permissions;
 
     const saved = await this.prisma.user.update({
       where: { id },

@@ -33,6 +33,7 @@ model User {
   can_approve_mid_shift  Boolean   @default(false)
   can_daily_report       Boolean   @default(false)
   can_acceptance_report  Boolean   @default(false)
+  page_permissions       Json?     @map("page_permissions")
 
   daily_reports_created      DailyReport[]      @relation("daily_report_creator")
   acceptance_reports_created AcceptanceReport[]  @relation("acceptance_report_creator")

@@ -16,4 +16,10 @@ export class AuthController {
   async getProfile(@Request() req: any) {
     return this.authService.getProfile(req.user.sub);
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('page-definitions')
+  getPageDefinitions() {
+    return this.authService.getAllPages();
+  }
 }

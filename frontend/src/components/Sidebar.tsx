@@ -9,6 +9,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: string;
+  pageKey?: string;     // maps to backend page permission key
   minRole?: UserRole;
   roles?: UserRole[];
   external?: boolean;
@@ -29,104 +30,96 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 }
 
 const navEntries: NavEntry[] = [
-  { href: '/dashboard', label: '儀表板', icon: '📊', minRole: 'clerk' },
-  { href: '/chat', label: 'AI 助手', icon: '🤖', minRole: 'clerk' },
-  { href: '/work-logs', label: '工作記錄', icon: '📝', minRole: 'clerk' },
+  { href: '/dashboard', label: '儀表板', icon: '📊', pageKey: 'dashboard' },
+  { href: '/chat', label: 'AI 助手', icon: '🤖', pageKey: 'chat' },
+  { href: '/work-logs', label: '工作記錄', icon: '📝', pageKey: 'work-logs' },
   {
     label: '工作紀錄核對',
     icon: '🔍',
-    minRole: 'clerk',
     items: [
-      { href: '/verification', label: '核對工作台', icon: '📋', minRole: 'clerk' },
-      { href: '/verification/matching', label: '六來源比對', icon: '🔀', minRole: 'clerk' },
-      { href: '/verification/upload', label: '上傳資料', icon: '📤', minRole: 'clerk' },
-      { href: '/verification/batches', label: '匯入紀錄', icon: '📦', minRole: 'clerk' },
-      { href: '/verification/records', label: '已匯入資料', icon: '📄', minRole: 'clerk' },
-      { href: '/verification/whatsapp', label: 'WhatsApp Order', icon: '💬', minRole: 'clerk' },
+      { href: '/verification', label: '核對工作台', icon: '📋', pageKey: 'verification' },
+      { href: '/verification/matching', label: '六來源比對', icon: '🔀', pageKey: 'verification-matching' },
+      { href: '/verification/upload', label: '上傳資料', icon: '📤', pageKey: 'verification-upload' },
+      { href: '/verification/batches', label: '匯入紀錄', icon: '📦', pageKey: 'verification-batches' },
+      { href: '/verification/records', label: '已匯入資料', icon: '📄', pageKey: 'verification-records' },
+      { href: '/verification/whatsapp', label: 'WhatsApp Order', icon: '💬', pageKey: 'verification-whatsapp' },
     ],
   },
   {
     label: '公司內部資料',
     icon: '🏢',
-    minRole: 'clerk',
     items: [
-      { href: '/company-profiles', label: '公司資料', icon: '🏛️', minRole: 'clerk' },
-      { href: '/companies', label: '公司管理', icon: '🏢', minRole: 'clerk' },
-      { href: '/employees', label: '員工管理', icon: '👷', minRole: 'clerk' },
-      { href: '/vehicles', label: '車輛管理', icon: '🚛', minRole: 'clerk' },
-      { href: '/machinery', label: '機械管理', icon: '⚙️', minRole: 'clerk' },
-      { href: '/partners', label: '合作單位', icon: '🤝', minRole: 'clerk' },
-      { href: '/subcon-fleet-drivers', label: '街車車隊管理', icon: '🚐', minRole: 'clerk' },
+      { href: '/company-profiles', label: '公司資料', icon: '🏛️', pageKey: 'company-profiles' },
+      { href: '/companies', label: '公司管理', icon: '🏢', pageKey: 'companies' },
+      { href: '/employees', label: '員工管理', icon: '👷', pageKey: 'employees' },
+      { href: '/vehicles', label: '車輛管理', icon: '🚛', pageKey: 'vehicles' },
+      { href: '/machinery', label: '機械管理', icon: '⚙️', pageKey: 'machinery' },
+      { href: '/partners', label: '合作單位', icon: '🤝', pageKey: 'partners' },
+      { href: '/subcon-fleet-drivers', label: '街車車隊管理', icon: '🚐', pageKey: 'subcon-fleet-drivers' },
     ],
   },
   {
     label: '工程管理',
     icon: '🏗️',
-    minRole: 'clerk',
     items: [
-      { href: '/contracts', label: '合約管理', icon: '📜', minRole: 'clerk' },
-      { href: '/projects', label: '工程項目', icon: '🏗️', minRole: 'clerk' },
-      { href: '/daily-reports', label: '工程日報', icon: '📝', minRole: 'clerk' },
-      { href: '/acceptance-reports', label: '工程收貨', icon: '📋', minRole: 'clerk' },
+      { href: '/contracts', label: '合約管理', icon: '📜', pageKey: 'contracts' },
+      { href: '/projects', label: '工程項目', icon: '🏗️', pageKey: 'projects' },
+      { href: '/daily-reports', label: '工程日報', icon: '📝', pageKey: 'daily-reports' },
+      { href: '/acceptance-reports', label: '工程收貨', icon: '📋', pageKey: 'acceptance-reports' },
     ],
   },
   {
     label: '人力資源',
     icon: '👥',
-    minRole: 'clerk',
     items: [
-      { href: '/salary-config', label: '員工薪酬', icon: '💵', minRole: 'clerk' },
-      { href: '/payroll', label: '計糧管理', icon: '🧮', minRole: 'clerk' },
-      { href: '/payroll-records', label: '糧單記錄', icon: '📄', minRole: 'clerk' },
-      { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', minRole: 'clerk' },
-      { href: '/clock-in', label: '公司打卡', icon: '📸', minRole: 'clerk' },
-      { href: '/attendances', label: '打卡紀錄', icon: '🕐', minRole: 'clerk' },
-      { href: '/leaves', label: '請假紀錄', icon: '📅', minRole: 'clerk' },
+      { href: '/salary-config', label: '員工薪酬', icon: '💵', pageKey: 'salary-config' },
+      { href: '/payroll', label: '計糧管理', icon: '🧮', pageKey: 'payroll' },
+      { href: '/payroll-records', label: '糧單記錄', icon: '📄', pageKey: 'payroll-records' },
+      { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', pageKey: 'subcon-payroll' },
+      { href: '/clock-in', label: '公司打卡', icon: '📸', pageKey: 'clock-in' },
+      { href: '/attendances', label: '打卡紀錄', icon: '🕐', pageKey: 'attendances' },
+      { href: '/leaves', label: '請假紀錄', icon: '📅', pageKey: 'leaves' },
     ],
   },
   {
     label: '會計部門',
     icon: '💵',
-    minRole: 'clerk',
     items: [
-      { href: '/expenses', label: '費用報銷', icon: '💸', minRole: 'clerk' },
-      { href: '/invoices', label: '發票管理', icon: '🧾', minRole: 'clerk' },
-      { href: '/payment-in', label: '收款記錄', icon: '💰', minRole: 'clerk' },
-      { href: '/payment-out', label: '付款記錄', icon: '💳', minRole: 'clerk' },
-      { href: '/bank-reconciliation', label: '銀行對帳', icon: '🏦', minRole: 'clerk' },
+      { href: '/expenses', label: '費用報銷', icon: '💸', pageKey: 'expenses' },
+      { href: '/invoices', label: '發票管理', icon: '🧾', pageKey: 'invoices' },
+      { href: '/payment-in', label: '收款記錄', icon: '💰', pageKey: 'payment-in' },
+      { href: '/payment-out', label: '付款記錄', icon: '💳', pageKey: 'payment-out' },
+      { href: '/bank-reconciliation', label: '銀行對帳', icon: '🏦', pageKey: 'bank-reconciliation' },
     ],
   },
   {
     label: '報價及價目',
     icon: '💰',
-    minRole: 'clerk',
     items: [
-      { href: '/quotations', label: '報價單', icon: '📋', minRole: 'clerk' },
-      { href: '/project-rate-cards', label: '工程價目表', icon: '🏗️', minRole: 'clerk' },
-      { href: '/rental-rate-cards', label: '客戶價目表', icon: '📊', minRole: 'clerk' },
-      { href: '/fleet-rate-cards', label: '租賃價目表', icon: '🚚', minRole: 'clerk' },
-      { href: '/subcon-rate-cards', label: '供應商價目表', icon: '🚛', minRole: 'clerk' },
+      { href: '/quotations', label: '報價單', icon: '📋', pageKey: 'quotations' },
+      { href: '/project-rate-cards', label: '工程價目表', icon: '🏗️', pageKey: 'project-rate-cards' },
+      { href: '/rental-rate-cards', label: '客戶價目表', icon: '📊', pageKey: 'rental-rate-cards' },
+      { href: '/fleet-rate-cards', label: '租賃價目表', icon: '🚚', pageKey: 'fleet-rate-cards' },
+      { href: '/subcon-rate-cards', label: '供應商價目表', icon: '🚛', pageKey: 'subcon-rate-cards' },
     ],
   },
   {
     label: '報表',
     icon: '📈',
-    minRole: 'clerk',
     items: [
-      { href: '/profit-loss', label: '工程損益總覽', icon: '📊', minRole: 'clerk' },
-      { href: '/company-profit-loss', label: '公司損益表', icon: '📈', minRole: 'clerk' },
+      { href: '/profit-loss', label: '工程損益總覽', icon: '📊', pageKey: 'profit-loss' },
+      { href: '/company-profit-loss', label: '公司損益表', icon: '📈', pageKey: 'company-profit-loss' },
     ],
   },
   {
     label: '系統設定',
     icon: '⚙️',
-    roles: ['admin'],
     items: [
-      { href: '/settings/users', label: '用戶管理', icon: '👥', roles: ['admin'] },
-      { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', roles: ['admin'] },
-      { href: '/settings/field-options', label: '選項管理', icon: '📋', roles: ['admin'] },
-      { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', roles: ['admin'] },
-      { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏦', roles: ['admin'] },
+      { href: '/settings/users', label: '用戶管理', icon: '👥', pageKey: 'settings-users' },
+      { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', pageKey: 'settings-custom-fields' },
+      { href: '/settings/field-options', label: '選項管理', icon: '📋', pageKey: 'settings-field-options' },
+      { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', pageKey: 'settings-expense-categories' },
+      { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏦', pageKey: 'settings-bank-accounts' },
     ],
   },
 ];
@@ -219,7 +212,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onCollapse }: SidebarProps) {
   const pathname = usePathname();
-  const { user, logout, hasRole, hasMinRole } = useAuth();
+  const { user, logout, hasRole, hasMinRole, canAccessPage } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -240,7 +233,10 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed: val } }));
   };
 
-  const canAccess = (item: { minRole?: UserRole; roles?: UserRole[] }) => {
+  const canAccess = (item: { pageKey?: string; minRole?: UserRole; roles?: UserRole[] }) => {
+    // Use page-level permission if pageKey is defined
+    if (item.pageKey) return canAccessPage(item.pageKey);
+    // Fallback to legacy role checks
     if (item.roles) return hasRole(...item.roles);
     if (item.minRole) return hasMinRole(item.minRole);
     return true;

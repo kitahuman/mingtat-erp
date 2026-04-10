@@ -50,4 +50,7 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   can_acceptance_report?: boolean;
+
+  @IsOptional()
+  page_permissions?: any;
 }

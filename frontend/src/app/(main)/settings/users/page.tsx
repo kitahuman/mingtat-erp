@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { usersApi } from '@/lib/api';
+import { useState, useEffect, useCallback } from 'react';
+import { usersApi, authApi } from '@/lib/api';
 import { useAuth, UserRole, ROLE_LABELS, DEPARTMENT_OPTIONS } from '@/lib/auth';
 import RoleGuard from '@/components/RoleGuard';
 import Modal from '@/components/Modal';
@@ -18,8 +18,42 @@ interface UserItem {
   can_approve_mid_shift: boolean;
   can_daily_report: boolean;
   can_acceptance_report: boolean;
+  page_permissions: { grant?: string[]; deny?: string[] } | null;
   lastLoginAt: string | null;
   createdAt: string;
+}
+
+interface PageDef {
+  key: string;
+  label: string;
+  group: string;
+  path: string;
+}
+
+// Role default pages (must match backend page-permissions.ts)
+const ALL_SETTINGS_KEYS = ['settings-users', 'settings-custom-fields', 'settings-field-options', 'settings-expense-categories', 'settings-bank-accounts'];
+function getRoleDefaultPages(role: string, allPageKeys: string[]): string[] {
+  switch (role) {
+    case 'admin': return [...allPageKeys];
+    case 'manager': return allPageKeys.filter(k => !k.startsWith('settings-'));
+    case 'clerk': return allPageKeys.filter(k => !k.startsWith('settings-'));
+    case 'worker': return [];
+    default: return [];
+  }
+}
+
+function computeEffectivePages(role: string, allPageKeys: string[], pagePermissions?: { grant?: string[]; deny?: string[] } | null): Set<string> {
+  if (role === 'admin') return new Set(allPageKeys);
+  const defaults = new Set(getRoleDefaultPages(role, allPageKeys));
+  if (pagePermissions) {
+    if (Array.isArray(pagePermissions.grant)) {
+      for (const key of pagePermissions.grant) defaults.add(key);
+    }
+    if (Array.isArray(pagePermissions.deny)) {
+      for (const key of pagePermissions.deny) defaults.delete(key);
+    }
+  }
+  return defaults;
 }
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
@@ -56,6 +90,18 @@ function UsersPageContent() {
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterActive, setFilterActive] = useState('');
+
+  // Page permissions
+  const [pageDefs, setPageDefs] = useState<PageDef[]>([]);
+  const [showPermModal, setShowPermModal] = useState(false);
+  const [permUser, setPermUser] = useState<UserItem | null>(null);
+  const [permChecked, setPermChecked] = useState<Set<string>>(new Set());
+  const [permSaving, setPermSaving] = useState(false);
+
+  // Load page definitions once
+  useEffect(() => {
+    authApi.getPageDefinitions().then(res => setPageDefs(res.data)).catch(() => {});
+  }, []);
 
   const loadUsers = async () => {
     try {
@@ -167,6 +213,65 @@ function UsersPageContent() {
       loadUsers();
     } catch (err) {
       console.error('Failed to toggle user:', err);
+    }
+  };
+
+  // ── Page permissions modal ──────────────────────────────
+  const openPermissions = (u: UserItem) => {
+    setPermUser(u);
+    const allKeys = pageDefs.map(p => p.key);
+    const effective = computeEffectivePages(u.role, allKeys, u.page_permissions);
+    setPermChecked(effective);
+    setShowPermModal(true);
+  };
+
+  const handlePermToggle = (key: string) => {
+    setPermChecked(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const handlePermGroupToggle = (group: string, checked: boolean) => {
+    const groupKeys = pageDefs.filter(p => p.group === group).map(p => p.key);
+    setPermChecked(prev => {
+      const next = new Set(prev);
+      groupKeys.forEach(k => checked ? next.add(k) : next.delete(k));
+      return next;
+    });
+  };
+
+  const handlePermSelectAll = (selectAll: boolean) => {
+    if (selectAll) {
+      setPermChecked(new Set(pageDefs.map(p => p.key)));
+    } else {
+      setPermChecked(new Set());
+    }
+  };
+
+  const savePermissions = async () => {
+    if (!permUser) return;
+    setPermSaving(true);
+    try {
+      const allKeys = pageDefs.map(p => p.key);
+      const roleDefaults = new Set(getRoleDefaultPages(permUser.role, allKeys));
+      const grant: string[] = [];
+      const deny: string[] = [];
+      for (const key of allKeys) {
+        const isDefault = roleDefaults.has(key);
+        const isChecked = permChecked.has(key);
+        if (isChecked && !isDefault) grant.push(key);
+        if (!isChecked && isDefault) deny.push(key);
+      }
+      const pagePermissions = (grant.length === 0 && deny.length === 0) ? null : { grant, deny };
+      await usersApi.update(permUser.id, { page_permissions: pagePermissions });
+      setShowPermModal(false);
+      loadUsers();
+    } catch (err) {
+      console.error('Failed to save permissions:', err);
+    } finally {
+      setPermSaving(false);
     }
   };
 
@@ -312,6 +417,14 @@ function UsersPageContent() {
                         >
                           編輯
                         </button>
+                        {u.role !== 'admin' && (
+                          <button
+                            onClick={() => openPermissions(u)}
+                            className="text-amber-600 hover:text-amber-800 text-xs font-medium"
+                          >
+                            權限
+                          </button>
+                        )}
                         {u.id !== currentUser?.id && (
                           <button
                             onClick={() => handleToggleActive(u)}
@@ -510,6 +623,113 @@ function UsersPageContent() {
             </div>
           </div>
         </Modal>
+
+      {/* Page Permissions Modal */}
+      <Modal isOpen={showPermModal} onClose={() => setShowPermModal(false)} title={`頁面權限 - ${permUser?.displayName || ''}`}>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              角色：<span className="font-medium">{permUser ? (ROLE_LABELS[permUser.role] || permUser.role) : ''}</span>
+              <span className="text-xs text-gray-400 ml-2">(勾選的頁面將可以訪問)</span>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePermSelectAll(true)}
+                className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+              >
+                全選
+              </button>
+              <button
+                onClick={() => handlePermSelectAll(false)}
+                className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+              >
+                取消全選
+              </button>
+              {permUser && (
+                <button
+                  onClick={() => {
+                    const allKeys = pageDefs.map(p => p.key);
+                    setPermChecked(new Set(getRoleDefaultPages(permUser.role, allKeys)));
+                  }}
+                  className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+                >
+                  重置預設
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-[60vh] overflow-y-auto space-y-4 border rounded-lg p-3">
+            {(() => {
+              const groups = Array.from(new Set(pageDefs.map(p => p.group)));
+              return groups.map(group => {
+                const groupPages = pageDefs.filter(p => p.group === group);
+                const allChecked = groupPages.every(p => permChecked.has(p.key));
+                const someChecked = groupPages.some(p => permChecked.has(p.key));
+                return (
+                  <div key={group} className="space-y-1">
+                    <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        ref={(el) => { if (el) el.indeterminate = someChecked && !allChecked; }}
+                        onChange={(e) => handlePermGroupToggle(group, e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm font-semibold text-gray-700">{group}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 pl-6">
+                      {groupPages.map(page => {
+                        const allKeys = pageDefs.map(p => p.key);
+                        const isDefault = permUser ? getRoleDefaultPages(permUser.role, allKeys).includes(page.key) : false;
+                        const isChecked = permChecked.has(page.key);
+                        const isOverride = isChecked !== isDefault;
+                        return (
+                          <label
+                            key={page.key}
+                            className={`flex items-center gap-2 py-1 px-2 rounded text-sm cursor-pointer hover:bg-gray-50 ${
+                              isOverride ? 'bg-amber-50 border border-amber-200' : ''
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handlePermToggle(page.key)}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-gray-700">{page.label}</span>
+                            {isOverride && (
+                              <span className="text-[10px] font-bold text-amber-600 ml-auto">
+                                {isChecked ? '+新增' : '-移除'}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => setShowPermModal(false)}
+              className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={savePermissions}
+              disabled={permSaving}
+              className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+            >
+              {permSaving ? '儲存中...' : '儲存權限'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

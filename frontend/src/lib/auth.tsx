@@ -14,6 +14,7 @@ export interface User {
   phone?: string | null;
   department?: string | null;
   isActive?: boolean;
+  allowedPages?: string[];
 }
 
 // Role hierarchy for permission checks
@@ -41,6 +42,8 @@ interface AuthContextType {
   updateUser: (user: User) => void;
   hasRole: (...roles: UserRole[]) => boolean;
   hasMinRole: (minRole: UserRole) => boolean;
+  canAccessPage: (pageKey: string) => boolean;
+  canAccessPath: (path: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -89,8 +92,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return ROLE_HIERARCHY[user.role] >= ROLE_HIERARCHY[minRole];
   };
 
+  const canAccessPage = (pageKey: string) => {
+    if (!user) return false;
+    // Admin always has full access
+    if (user.role === 'admin') return true;
+    // If allowedPages not loaded yet, fall back to role-based check
+    if (!user.allowedPages) return hasMinRole('clerk');
+    return user.allowedPages.includes(pageKey);
+  };
+
+  const canAccessPath = (path: string) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (!user.allowedPages) return hasMinRole('clerk');
+    // Match path against allowed pages
+    // e.g. /employees/123 should match page key 'employees'
+    const cleanPath = path.replace(/^\//, '').split('/')[0];
+    // Handle settings sub-pages: /settings/users -> settings-users
+    if (path.startsWith('/settings/')) {
+      const settingsPage = 'settings-' + path.split('/')[2];
+      return user.allowedPages.includes(settingsPage);
+    }
+    // Handle verification sub-pages: /verification/matching -> verification-matching
+    if (path.startsWith('/verification/') && path !== '/verification') {
+      const subPage = 'verification-' + path.split('/')[2];
+      return user.allowedPages.includes(subPage);
+    }
+    return user.allowedPages.includes(cleanPath);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updateUser, hasRole, hasMinRole }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser, hasRole, hasMinRole, canAccessPage, canAccessPath }}>
       {children}
     </AuthContext.Provider>
   );
