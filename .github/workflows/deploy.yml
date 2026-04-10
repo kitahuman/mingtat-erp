@@ -54,3 +54,4 @@ jobs:
 
             echo "=== Deployment Complete ==="
             pm2 list
+# CI/CD: Auto-deploy via GitHub Actions on push to main
