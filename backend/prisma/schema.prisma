@@ -1005,6 +1005,7 @@ model WorkLog {
   is_confirmed           Boolean   @default(false)
   is_paid                Boolean   @default(false)
   unverified_client_name String? // 員工自行輸入的未確認客戶名
+  source                 String    @default("manual") // manual | whatsapp | report
   remarks                String?   @db.Text
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
