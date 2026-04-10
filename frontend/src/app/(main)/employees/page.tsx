@@ -78,6 +78,11 @@ export default function EmployeesPage() {
   const [convertForm, setConvertForm] = useState<any>(EMPTY_CONVERT_FORM);
   const [convertLoading, setConvertLoading] = useState(false);
 
+  // Batch delete state
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
   // Ref to store roleLabels for use in callbacks without stale closures
   const roleLabelsRef = useRef(roleLabels);
   useEffect(() => { roleLabelsRef.current = roleLabels; }, [roleLabels]);
@@ -167,6 +172,7 @@ export default function EmployeesPage() {
     setSearch('');
     setRoleFilter('');
     setColumnFilters({});
+    setSelectedIds([]);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -291,6 +297,38 @@ export default function EmployeesPage() {
     return fmtDate(v);
   };
 
+  // ── Batch delete helpers ──────────────────────────────────────────────────
+  const toggleSelectId = (id: number) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === data.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(data.map((e: any) => e.id));
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const type = activeTab === 'inactive' ? 'inactive' : 'temporary';
+      await employeesApi.batchDelete(selectedIds, type);
+      setSelectedIds([]);
+      setShowBatchDeleteConfirm(false);
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量刪除失敗');
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   const companyOptions = companies.map(c => ({ value: c.id, label: c.internal_prefix || c.name }));
 
   const activeColumns = [
@@ -315,6 +353,15 @@ export default function EmployeesPage() {
   ];
 
   const inactiveColumns = [
+    { key: '_select', label: '', sortable: false, editable: false, className: 'w-8', render: (_: any, row: any) => (
+      <input
+        type="checkbox"
+        checked={selectedIds.includes(row.id)}
+        onChange={() => toggleSelectId(row.id)}
+        onClick={e => e.stopPropagation()}
+        className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-400 cursor-pointer"
+      />
+    )},
     { key: 'emp_code', label: '編號', sortable: true, className: 'w-20 font-mono', editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const, render: (_: any, row: any) => (
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
@@ -441,8 +488,29 @@ export default function EmployeesPage() {
       {/* Temporary Employees Tab */}
       {activeTab === 'temporary' ? (
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">共 <span className="font-semibold text-gray-800">{total}</span> 名臨時員工</p>
+          {/* Temporary tab toolbar: search + select all + batch delete */}
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-500">共 <span className="font-semibold text-gray-800">{total}</span> 名臨時員工</p>
+              {data.length > 0 && hasMinRole('clerk') && (
+                <>
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    {selectedIds.length === data.length && data.length > 0 ? '取消全選' : '全選'}
+                  </button>
+                  {selectedIds.length > 0 && (
+                    <button
+                      onClick={() => setShowBatchDeleteConfirm(true)}
+                      className="text-sm text-white bg-red-500 hover:bg-red-600 font-medium px-3 py-1 rounded-lg transition-colors"
+                    >
+                      刪除已選 ({selectedIds.length})
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
             <input
               type="text"
               placeholder="搜尋姓名..."
@@ -462,7 +530,24 @@ export default function EmployeesPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {data.map((emp: any) => (
-                <div key={emp.id} className="border border-gray-200 rounded-xl p-4 hover:border-orange-300 hover:shadow-sm transition-all bg-white">
+                <div
+                  key={emp.id}
+                  className={`border-2 rounded-xl p-4 hover:shadow-sm transition-all bg-white relative ${
+                    selectedIds.includes(emp.id) ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  {/* Checkbox overlay */}
+                  {hasMinRole('clerk') && (
+                    <div className="absolute top-3 right-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(emp.id)}
+                        onChange={() => toggleSelectId(emp.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-400 cursor-pointer"
+                      />
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-100 flex-shrink-0 border-2 border-orange-200">
                       {emp.employee_photo_base64 ? (
@@ -471,7 +556,7 @@ export default function EmployeesPage() {
                         <div className="w-full h-full flex items-center justify-center text-2xl text-gray-400">👤</div>
                       )}
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 pr-6">
                       <p className="font-semibold text-gray-900 truncate">{emp.name_zh}</p>
                       {emp.name_en && <p className="text-xs text-gray-500 truncate">{emp.name_en}</p>}
                       <span className="inline-block mt-0.5 bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5 rounded-full">臨時員工</span>
@@ -509,6 +594,28 @@ export default function EmployeesPage() {
         </div>
       ) : (
       <div className="card">
+        {/* Inactive tab batch delete toolbar */}
+        {activeTab === 'inactive' && hasMinRole('clerk') && data.length > 0 && (
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+            <button
+              onClick={toggleSelectAll}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              {selectedIds.length === data.length && data.length > 0 ? '取消全選' : '全選'}
+            </button>
+            {selectedIds.length > 0 && (
+              <button
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                className="text-sm text-white bg-red-500 hover:bg-red-600 font-medium px-3 py-1 rounded-lg transition-colors"
+              >
+                刪除已選 ({selectedIds.length})
+              </button>
+            )}
+            {selectedIds.length > 0 && (
+              <span className="text-sm text-gray-500">已選 {selectedIds.length} 名員工</span>
+            )}
+          </div>
+        )}
         <InlineEditDataTable
           exportFilename={activeTab === 'active' ? '在職員工列表' : '已離職員工列表'}
           onExportFetchAll={async () => {
@@ -562,6 +669,58 @@ export default function EmployeesPage() {
         />
       </div>
       )}
+
+      {/* Batch Delete Confirmation Modal */}
+      <Modal
+        isOpen={showBatchDeleteConfirm}
+        onClose={() => setShowBatchDeleteConfirm(false)}
+        title="確認批量刪除"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <span className="text-red-500 text-xl mt-0.5">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-red-800">此操作不可撤銷</p>
+              <p className="text-sm text-red-700 mt-1">
+                即將永久刪除 <strong>{selectedIds.length}</strong> 名
+                {activeTab === 'inactive' ? '離職員工' : '臨時員工'}的所有資料，包括打卡紀錄等關聯數據。
+              </p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600">請確認您要刪除以下員工：</p>
+          <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+            {data
+              .filter((e: any) => selectedIds.includes(e.id))
+              .map((e: any) => (
+                <div key={e.id} className="px-3 py-2 text-sm text-gray-700 flex items-center gap-2">
+                  <span className="font-medium">{e.name_zh}</span>
+                  {e.name_en && <span className="text-gray-400 text-xs">{e.name_en}</span>}
+                  {e.emp_code && <span className="text-gray-400 text-xs font-mono">({e.emp_code})</span>}
+                </div>
+              ))
+            }
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <button
+              type="button"
+              onClick={() => setShowBatchDeleteConfirm(false)}
+              className="btn-secondary"
+              disabled={batchDeleting}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              disabled={batchDeleting}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {batchDeleting ? '刪除中...' : `確認刪除 ${selectedIds.length} 名員工`}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增員工" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">

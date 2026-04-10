@@ -84,6 +84,16 @@ export class EmployeesController {
   }
 
   /**
+   * POST /employees/batch-delete
+   * Batch delete employees by IDs.
+   * Body: { ids: number[], type: 'inactive' | 'temporary' }
+   */
+  @Post('batch-delete')
+  batchDelete(@Body() body: { ids: number[]; type?: 'inactive' | 'temporary' }) {
+    return this.service.batchDelete(body.ids, body.type);
+  }
+
+  /**
    * POST /employees/mpf-bulk-dismiss
    * Mark employee_mpf_applied = true for all active, non-temporary employees
    * who joined more than 60 days ago but still have employee_mpf_applied = false.

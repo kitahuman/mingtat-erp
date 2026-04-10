@@ -497,6 +497,23 @@ export class EmployeesService {
   }
 
   /**
+   * Batch delete employees by IDs.
+   * type='inactive' restricts deletion to employees with status='inactive'.
+   * type='temporary' restricts deletion to employees with employee_is_temporary=true.
+   */
+  async batchDelete(ids: number[], type?: 'inactive' | 'temporary') {
+    if (!ids || ids.length === 0) throw new Error('請選擇要刪除的員工');
+    const where: any = { id: { in: ids } };
+    if (type === 'inactive') {
+      where.status = 'inactive';
+    } else if (type === 'temporary') {
+      where.employee_is_temporary = true;
+    }
+    const result = await this.prisma.employee.deleteMany({ where });
+    return { message: `已刪除 ${result.count} 名員工`, count: result.count };
+  }
+
+  /**
    * Bulk-dismiss MPF alerts for employees hired more than 60 days ago.
    * Sets employee_mpf_applied = true so they no longer appear in the dashboard MPF alert list.
    * Employees hired within 60 days are NOT affected — they will still trigger the alert.
