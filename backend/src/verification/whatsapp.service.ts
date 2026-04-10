@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
+import { createOpenAIClient } from '../common/openai-client';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -159,7 +160,7 @@ export class WhatsappService {
   private readonly QR_CODE_TTL_MS = 60 * 1000; // 60 秒
 
   constructor(private readonly prisma: PrismaService) {
-    this.openai = new OpenAI({ baseURL: process.env.OPENAI_BASE_URL || undefined });
+    this.openai = createOpenAIClient();
   }
 
   // ══════════════════════════════════════════════════════════════

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import OpenAI from 'openai';
+import { createOpenAIClient } from '../common/openai-client';
 
 @Injectable()
 export class AiChatService {
@@ -13,7 +14,7 @@ export class AiChatService {
     } else {
       console.log('[AiChatService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
     }
-    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
+    this.openai = createOpenAIClient();
   }
 
   private getPromptAndTools() {

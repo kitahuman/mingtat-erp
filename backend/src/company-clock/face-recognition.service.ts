@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import OpenAI from 'openai';
+import { createOpenAIClient } from '../common/openai-client';
 
 export interface FaceComparisonResult {
   isSamePerson: boolean;
@@ -19,7 +20,7 @@ export class FaceRecognitionService {
     } else {
       console.log('[FaceRecognitionService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
     }
-    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
+    this.openai = createOpenAIClient();
   }
 
   /**

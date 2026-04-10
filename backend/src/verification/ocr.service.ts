@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import * as fs from 'fs';
+import { createOpenAIClient } from '../common/openai-client';
 
 // ══════════════════════════════════════════════════════════════
 // OCR 結果介面
@@ -309,7 +310,7 @@ export class OcrService {
     } else {
       console.log('[OcrService] OPENAI_API_KEY loaded, prefix:', apiKey.substring(0, 7) + '...');
     }
-    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
+    this.openai = createOpenAIClient();
 
     // 註冊策略
     this.strategies = {

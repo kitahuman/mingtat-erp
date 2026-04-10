@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import OpenAI from 'openai';
+import { createOpenAIClient } from '../common/openai-client';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -52,7 +53,7 @@ export class WhatsappClockinService {
     if (!apiKey) {
       this.logger.warn('OPENAI_API_KEY is not set! WhatsApp clock-in parsing will fail.');
     }
-    this.openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
+    this.openai = createOpenAIClient();
   }
 
   // ────────────────────────────────────────────────────────────
