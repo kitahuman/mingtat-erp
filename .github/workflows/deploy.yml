@@ -32,7 +32,7 @@ jobs:
 
             echo "=== [2/6] Backend Build ==="
             cd /opt/mingtat-erp/backend
-            npm install --prefer-offline 2>/dev/null || npm install
+            npm install --legacy-peer-deps
             npm run build
 
             echo "=== [3/6] Restart Backend ==="
@@ -41,7 +41,7 @@ jobs:
 
             echo "=== [4/6] Frontend Build ==="
             cd /opt/mingtat-erp/frontend
-            npm install --prefer-offline 2>/dev/null || npm install
+            npm install --legacy-peer-deps
             npm run build
 
             echo "=== [5/6] Copy Frontend Assets ==="
@@ -54,5 +54,3 @@ jobs:
 
             echo "=== Deployment Complete ==="
             pm2 list
-# CI/CD: Auto-deploy via GitHub Actions on push to main
-
