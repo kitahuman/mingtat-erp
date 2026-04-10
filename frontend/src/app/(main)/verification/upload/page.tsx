@@ -313,27 +313,24 @@ export default function VerificationUploadPage() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pl-8">
                   {displayItems.map(s => {
-                    const isDisabled = s.source_code === 'whatsapp_order';
                     return (
                       <button
                         key={s.source_code}
-                        onClick={() => { if (!isDisabled) { setSelectedSource(s.source_code); handleReset(); } }}
-                        disabled={isDisabled}
+                        onClick={() => { setSelectedSource(s.source_code); handleReset(); }}
                         className={`border-2 rounded-lg p-4 text-left transition-all ${
-                          isDisabled
-                            ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                            : selectedSource === s.source_code
-                              ? s.source_code === 'clock'
-                                ? 'border-blue-500 bg-blue-50'
+                          selectedSource === s.source_code
+                            ? s.source_code === 'clock'
+                              ? 'border-blue-500 bg-blue-50'
+                              : s.source_code === 'whatsapp_order'
+                                ? 'border-green-500 bg-green-50'
                                 : group.key === 'ai_ocr'
                                   ? 'border-purple-500 bg-purple-50'
                                   : 'border-primary-500 bg-primary-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <div className="font-medium text-sm">
                           {s.source_name}
-                          {isDisabled && <span className="text-xs text-gray-400 ml-1">（第三階段）</span>}
                         </div>
                         {s.source_description && (
                           <div className="text-xs text-gray-500 mt-1">{s.source_description}</div>
@@ -392,11 +389,65 @@ export default function VerificationUploadPage() {
           />
         )}
 
-        {/* ═══ WhatsApp（尚未開放）═══ */}
+        {/* ═══ WhatsApp Order 自動接收模式 ═══ */}
         {isWhatsAppSource && (
-          <div className="text-center py-12">
-            <div className="text-5xl mb-4">💬</div>
-            <p className="text-gray-500">WhatsApp Order 接收功能將在第三階段開放</p>
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+              <span className="text-2xl flex-shrink-0">✅</span>
+              <div>
+                <div className="font-semibold text-green-800 text-sm">WhatsApp Order 自動接收已啟用</div>
+                <div className="text-xs text-green-700 mt-1">
+                  系統已透過 Webhook 自動接收 WhatsApp 群組的 Order 訊息，並由 AI 自動解析存儲。不需要手動上傳。
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white border rounded-lg p-4">
+                <div className="text-2xl mb-2">📥</div>
+                <div className="font-medium text-sm text-gray-800">自動接收</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  WhatsApp Bot 透過 Webhook 將訊息傳送至 ERP，AI 自動判斷是否為 Order
+                </div>
+              </div>
+              <div className="bg-white border rounded-lg p-4">
+                <div className="text-2xl mb-2">🤖</div>
+                <div className="font-medium text-sm text-gray-800">AI 解析</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  支援機械調配、工程部員工、泥車/運輸三種 Order 格式，自動建立每日總結
+                </div>
+              </div>
+              <div className="bg-white border rounded-lg p-4">
+                <div className="text-2xl mb-2">📊</div>
+                <div className="font-medium text-sm text-gray-800">每日總結</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  同一天多條訊息自動合併，可作為六來源交叉比對的基礎
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Link
+                href="/verification/whatsapp"
+                className="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+              >
+                💬 查看 WhatsApp Order 記錄
+              </Link>
+              <a
+                href="#webhook-info"
+                className="inline-flex items-center gap-2 border border-gray-300 text-gray-600 px-6 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                onClick={(e) => { e.preventDefault(); setSelectedSource('whatsapp_order'); }}
+              >
+                ℹ️ Webhook 配置說明
+              </a>
+            </div>
+
+            <div className="bg-gray-50 border rounded-lg p-4 text-xs text-gray-600 space-y-1">
+              <div className="font-semibold text-gray-700 mb-2">🔧 Webhook 配置資訊</div>
+              <div><span className="font-medium">端點：</span> <code className="bg-gray-200 px-1 rounded">POST /api/verification/whatsapp-webhook</code></div>
+              <div><span className="font-medium">Header：</span> <code className="bg-gray-200 px-1 rounded">x-webhook-secret: mingtat-wa-webhook-2026</code></div>
+              <div><span className="font-medium">Payload：</span> <code className="bg-gray-200 px-1 rounded">{'{'}chatId, sender, text, groupName{'}'}</code></div>
+            </div>
           </div>
         )}
 
