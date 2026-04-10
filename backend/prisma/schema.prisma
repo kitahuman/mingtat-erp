@@ -1022,9 +1022,21 @@ model WorkLog {
   contract          Contract?        @relation(fields: [contract_id], references: [id])
   employee          Employee?        @relation(fields: [employee_id], references: [id])
   project           Project?         @relation(fields: [project_id], references: [id])
-  payroll_work_logs PayrollWorkLog[]
-
+   payroll_work_logs PayrollWorkLog[]
+  whatsapp_messages WhatsAppMessage[]
   @@map("work_logs")
+}
+
+model WhatsAppMessage {
+  id          Int      @id @default(autoincrement())
+  group_id    String   @db.VarChar(100)
+  group_name  String   @db.VarChar(200)
+  sender      String?  @db.VarChar(100)
+  text        String   @db.Text
+  received_at DateTime @default(now())
+  work_log_id Int?
+  work_log    WorkLog? @relation(fields: [work_log_id], references: [id])
+  @@map("whatsapp_messages")
 }
 
 // ══════════════════════════════════════════════════════════════

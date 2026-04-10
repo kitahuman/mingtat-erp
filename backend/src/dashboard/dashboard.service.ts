@@ -647,4 +647,49 @@ export class DashboardService {
       reminders: { unmatched_bank_tx: unmatchedBankTx, upcoming_invoices: upcomingInvoices, unconfirmed_ipas: unconfirmedIpas, employee_cert_expiring: employeeAlerts.length, pending_leaves: pendingLeaves },
     };
   }
+
+  // ════════════════════════════════════════════════════════════
+  // WhatsApp 報工訊息即時 feed
+  // ════════════════════════════════════════════════════════════
+  async getWhatsappFeed() {
+    const CLOCKIN_GROUPS = [
+      '120363278016234111@g.us',
+      '120363277125015302@g.us',
+      '120363262093688968@g.us',
+      '85262366968-1600675068@g.us',
+    ];
+    const GROUP_LABELS: Record<string, string> = {
+      '120363278016234111@g.us': '工程部',
+      '120363277125015302@g.us': '運輸部',
+      '120363262093688968@g.us': '機械部',
+      '85262366968-1600675068@g.us': '公司打卡',
+    };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const messages = await this.prisma.verificationWaMessage.findMany({
+      where: {
+        wa_msg_group_id: { in: CLOCKIN_GROUPS },
+        wa_msg_timestamp: { gte: todayStart },
+        wa_msg_type: 'text',
+      },
+      orderBy: { wa_msg_timestamp: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        wa_msg_group_id: true,
+        wa_msg_group_name: true,
+        wa_msg_sender_name: true,
+        wa_msg_timestamp: true,
+        wa_msg_body: true,
+      },
+    });
+    return messages.map((m) => ({
+      id: m.id,
+      group_id: m.wa_msg_group_id,
+      group_label: GROUP_LABELS[m.wa_msg_group_id || ''] || m.wa_msg_group_name || '報工群組',
+      sender: m.wa_msg_sender_name,
+      text: m.wa_msg_body,
+      received_at: m.wa_msg_timestamp,
+    }));
+  }
 }

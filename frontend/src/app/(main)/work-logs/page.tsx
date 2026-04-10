@@ -525,11 +525,11 @@ export default function WorkLogsPage() {
     }
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
-    if (field === 'company_id') return row.company?.name || row.company_profile?.code || '—';
-    if (field === 'client_id') return row.unverified_client_name || row.client?.code || row.client?.name || '—';
-    if (field === 'quotation_id') return row.quotation?.quotation_no || '—';
-    if (field === 'contract_id') return row.contract?.contract_no || '—';
-    if (field === 'employee_id') return row.employee?.name_zh || '—';
+    if (field === 'company_id') return row.company?.name || row.company_profile?.code || companies.find(o => o.value === row.company_id)?.label || '—';
+    if (field === 'client_id') return row.unverified_client_name || row.client?.name || row.client?.code || clients.find(o => o.value === row.client_id)?.label || '—';
+    if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
+    if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
+    if (field === 'employee_id') return row.employee?.name_zh || employees.find(o => String(o.value) === `emp_${row.employee_id}`)?.label || '—';
     if (field === 'scheduled_date') return row.scheduled_date ? fmtDate(row.scheduled_date) : '—';
     if (field === 'is_mid_shift' || field === 'is_confirmed' || field === 'is_paid') return row[field] ? '✓' : '—';
     return row[field] != null && row[field] !== '' ? String(row[field]) : '—';

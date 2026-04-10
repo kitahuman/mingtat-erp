@@ -30,4 +30,10 @@ export class DashboardController {
   getFinancial() {
     return this.service.getFinancial();
   }
+
+  // WhatsApp 報工訊息即時 feed
+  @Get('whatsapp-feed')
+  getWhatsappFeed() {
+    return this.service.getWhatsappFeed();
+  }
 }

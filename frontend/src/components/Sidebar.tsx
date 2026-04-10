@@ -216,13 +216,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    '工作紀錄核對': true,
+    '工作紀錄核對': false,
     '公司內部資料': false,
-    '工程管理': true,
+    '工程管理': false,
     '人力資源': false,
     '會計部門': false,
-    '報價及價目': true,
-    '報表': true,
+    '報價及價目': false,
+    '報表': false,
     '系統設定': false,
   });
 

@@ -772,16 +772,100 @@ function FinancialTab({ data }: { data: any }) {
 // 主頁面
 // ══════════════════════════════════════════════════════════════
 
-type TabId = 'work' | 'alerts' | 'financial';
+// ════════════════════════════════════════════════════════════
+// WhatsApp 報工訊息 Feed Tab
+// ════════════════════════════════════════════════════════════
+const GROUP_COLORS: Record<string, string> = {
+  '工程部': 'bg-blue-100 text-blue-800',
+  '運輸部': 'bg-green-100 text-green-800',
+  '機械部': 'bg-orange-100 text-orange-800',
+  '公司打卡': 'bg-purple-100 text-purple-800',
+};
+function WhatsAppFeedTab({ messages, onRefresh }: { messages: any[]; onRefresh: () => void }) {
+  const formatTime = (ts: string) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' });
+  };
+  const getFirstLine = (text: string) => {
+    if (!text) return '';
+    return text.split('\n')[0].trim().substring(0, 60);
+  };
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">💬 WhatsApp 報工訊息</h2>
+          <p className="text-sm text-gray-500 mt-0.5">今日報工群組收到的訊息（共 {messages.length} 條）</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          刷新
+        </button>
+      </div>
+      {messages.length === 0 ? (
+        <div className="card text-center py-12 text-gray-400">
+          <p className="text-4xl mb-3">💭</p>
+          <p>今日尚未收到報工訊息</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {messages.map((msg: any) => (
+            <div key={msg.id} className="card p-3 hover:shadow-md transition-shadow">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 text-right min-w-[44px]">
+                  <span className="text-sm font-mono text-gray-500">{formatTime(msg.received_at)}</span>
+                </div>
+                <div className="flex-shrink-0">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${GROUP_COLORS[msg.group_label] || 'bg-gray-100 text-gray-700'}`}>
+                    {msg.group_label}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">{msg.sender || '未知'}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-0.5 truncate">{getFirstLine(msg.text)}</p>
+                </div>
+                <details className="flex-shrink-0">
+                  <summary className="text-xs text-primary-600 cursor-pointer hover:underline select-none">查看</summary>
+                  <div className="absolute right-4 mt-1 z-10 bg-white border border-gray-200 rounded-lg shadow-xl p-3 max-w-sm w-72">
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap break-words font-sans">{msg.text}</pre>
+                  </div>
+                </details>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
+type TabId = 'work' | 'alerts' | 'financial' | 'whatsapp';
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabId>('work');
   const [workData, setWorkData] = useState<any>(null);
   const [alertsData, setAlertsData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
+  const [feedMessages, setFeedMessages] = useState<any[]>([]);
   const [loadingWork, setLoadingWork] = useState(true);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [loadingFinancial, setLoadingFinancial] = useState(true);
+  const [loadingFeed, setLoadingFeed] = useState(true);
+
+  const loadFeed = () => {
+    setLoadingFeed(true);
+    dashboardApi.whatsappFeed()
+      .then(res => setFeedMessages(res.data || []))
+      .catch(() => setFeedMessages([]))
+      .finally(() => setLoadingFeed(false));
+  };
 
   // 並行載入所有 tab 數據
   useEffect(() => {
@@ -799,7 +883,9 @@ export default function DashboardPage() {
       .then(res => setFinancialData(res.data))
       .catch(() => setFinancialData({}))
       .finally(() => setLoadingFinancial(false));
-  }, []);
+
+    loadFeed();
+  }, []);;
 
   // MPF 標記已申請
   const handleMpfApplied = async (employeeId: number) => {
@@ -848,6 +934,12 @@ export default function DashboardPage() {
             onClick={() => setActiveTab('financial')}
             label="公司收支"
           />
+          <TabButton
+            active={activeTab === 'whatsapp'}
+            onClick={() => setActiveTab('whatsapp')}
+            label="💬 報工訊息"
+            badge={loadingFeed ? undefined : feedMessages.length}
+          />
         </nav>
       </div>
 
@@ -866,6 +958,11 @@ export default function DashboardPage() {
         loadingFinancial
           ? <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
           : <FinancialTab data={financialData} />
+      )}
+      {activeTab === 'whatsapp' && (
+        loadingFeed
+          ? <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+          : <WhatsAppFeedTab messages={feedMessages} onRefresh={loadFeed} />
       )}
     </div>
   );
