@@ -17,7 +17,7 @@ interface ClockInResponse {
   error?: string;
 }
 
-@Controller('api/whatsapp-clockin')
+@Controller('whatsapp-clockin')
 export class WhatsappClockinController {
   private readonly logger = new Logger(WhatsappClockinController.name);
 
