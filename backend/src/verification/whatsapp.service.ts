@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
+import { NicknameMatchService } from './nickname-match.service';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -76,6 +77,8 @@ export interface DailySummaryItem {
   work_description: string | null;
   location: string | null;
   driver_nickname: string | null;
+  driver_id?: number | null;
+  driver_name_zh?: string | null;
   vehicle_no: string | null;
   machine_code: string | null;
   contact_person: string | null;
@@ -159,7 +162,10 @@ export class WhatsappService {
   // QR code 有效期（毫秒）
   private readonly QR_CODE_TTL_MS = 60 * 1000; // 60 秒
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly nicknameMatchService: NicknameMatchService
+  ) {
     this.openai = createOpenAIClient();
   }
 
@@ -334,12 +340,16 @@ export class WhatsappService {
     }
 
     // 3. 更新訊息分類結果
+    const isPendingReview = classification.confidence < 0.6 || 
+      (classification.message_type === 'order' && classification.items.length === 0);
+
     await this.prisma.verificationWaMessage.update({
       where: { id: waMessage.id },
       data: {
         wa_msg_ai_classified: classification.message_type,
         wa_msg_ai_confidence: classification.confidence,
         wa_msg_processed: true,
+        wa_msg_pending_review: isPendingReview,
       },
     });
 
@@ -372,6 +382,40 @@ export class WhatsappService {
     await this.syncDailySummaryToVerificationRecords(targetDate);
 
     return result;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 重新解析訊息
+  // ══════════════════════════════════════════════════════════════
+  async reparseMessage(messageId: number) {
+    const waMessage = await this.prisma.verificationWaMessage.findUnique({
+      where: { id: messageId },
+      include: { orders: true, mod_logs: true }
+    });
+
+    if (!waMessage || !waMessage.wa_msg_body) {
+      throw new Error('Message not found or has no body');
+    }
+
+    // Reset state
+    await this.prisma.verificationWaMessage.update({
+      where: { id: messageId },
+      data: {
+        wa_msg_ai_classified: null,
+        wa_msg_ai_confidence: null,
+        wa_msg_processed: false,
+        wa_msg_pending_review: false,
+        wa_msg_review_result: null,
+      }
+    });
+
+    // Reprocess
+    return this.processWebhookMessage({
+      chatId: waMessage.wa_msg_group_id || '',
+      sender: waMessage.wa_msg_sender_name || 'Unknown',
+      text: waMessage.wa_msg_body,
+      groupName: waMessage.wa_msg_group_name || undefined,
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -441,7 +485,7 @@ export class WhatsappService {
             wa_item_location: item.location || null,
             // transport/machinery: 司機/操作員花名; manpower: 帶隊人
             wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
-            wa_item_driver_id: null,
+            wa_item_driver_id: null, // We'll update this in the next step
             wa_item_vehicle_no: item.vehicle_no || null,
             wa_item_machine_code: item.machine_code || null,
             wa_item_contact_person: item.contact_person || null,
@@ -453,6 +497,23 @@ export class WhatsappService {
           };
         }),
       });
+
+      // Match nicknames to employee IDs
+      const createdItems = await this.prisma.verificationWaOrderItem.findMany({
+        where: { wa_item_order_id: waOrder.id }
+      });
+
+      for (const createdItem of createdItems) {
+        if (createdItem.wa_item_driver_nickname) {
+          const empId = await this.nicknameMatchService.matchNickname(createdItem.wa_item_driver_nickname);
+          if (empId) {
+            await this.prisma.verificationWaOrderItem.update({
+              where: { id: createdItem.id },
+              data: { wa_item_driver_id: empId }
+            });
+          }
+        }
+      }
     }
 
     return {
@@ -650,6 +711,15 @@ export class WhatsappService {
         if (mod.new_driver_nickname) {
           updateData.wa_item_driver_nickname = mod.new_driver_nickname;
           newSnapshot.wa_item_driver_nickname = mod.new_driver_nickname;
+          
+          const empId = await this.nicknameMatchService.matchNickname(mod.new_driver_nickname);
+          if (empId) {
+            updateData.wa_item_driver_id = empId;
+            newSnapshot.wa_item_driver_id = empId;
+          } else {
+            updateData.wa_item_driver_id = null;
+            newSnapshot.wa_item_driver_id = null;
+          }
         }
         if (mod.new_vehicle_no) {
           updateData.wa_item_vehicle_no = mod.new_vehicle_no;
@@ -748,7 +818,7 @@ export class WhatsappService {
           wa_item_work_desc: item.work_description || null,
           wa_item_location: item.location || null,
           wa_item_driver_nickname: item.driver_nickname || null,
-          wa_item_driver_id: null,
+          wa_item_driver_id: item.driver_nickname ? await this.nicknameMatchService.matchNickname(item.driver_nickname) : null,
           wa_item_vehicle_no: item.vehicle_no || null,
           wa_item_machine_code: item.machine_code || null,
           wa_item_contact_person: item.contact_person || null,
@@ -1150,6 +1220,21 @@ export class WhatsappService {
     const summaryItems: DailySummaryItem[] = [];
     const latestOrderPerType: typeof orders = [];
 
+    const allDriverIds = new Set<number>();
+    for (const order of orders) {
+      for (const item of order.items) {
+        if (item.wa_item_driver_id) {
+          allDriverIds.add(item.wa_item_driver_id);
+        }
+      }
+    }
+    
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: Array.from(allDriverIds) } },
+      select: { id: true, name_zh: true }
+    });
+    const employeeMap = new Map(employees.map(e => [e.id, e.name_zh]));
+
     for (const [_type, typeOrders] of Object.entries(ordersByType)) {
       // 按版本排序，取最新的
       typeOrders.sort((a, b) => a.wa_order_version - b.wa_order_version);
@@ -1166,6 +1251,8 @@ export class WhatsappService {
           work_description: item.wa_item_work_desc,
           location: item.wa_item_location,
           driver_nickname: item.wa_item_driver_nickname,
+          driver_id: item.wa_item_driver_id,
+          driver_name_zh: item.wa_item_driver_id ? employeeMap.get(item.wa_item_driver_id) || null : null,
           vehicle_no: item.wa_item_vehicle_no,
           machine_code: item.wa_item_machine_code,
           contact_person: item.wa_item_contact_person,

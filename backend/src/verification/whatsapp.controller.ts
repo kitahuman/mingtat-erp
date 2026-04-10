@@ -236,4 +236,13 @@ export class WhatsappController {
   ) {
     return this.whatsappService.deleteOrderItem(+orderId, +itemId);
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // Reparse Message（需要 JWT）
+  // ══════════════════════════════════════════════════════════════
+  @Post('whatsapp-messages/:id/reparse')
+  @UseGuards(AuthGuard('jwt'))
+  async reparseMessage(@Param('id') id: string) {
+    return this.whatsappService.reparseMessage(Number(id));
+  }
 }

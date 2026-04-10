@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
 import { useState, useRef, useEffect } from 'react';
 import WhatsAppBotStatus from './WhatsAppBotStatus';
+import VersionBadge from './VersionBadge';
 
 interface NavItem {
   href: string;
@@ -424,6 +425,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
         <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
           <WhatsAppBotStatus collapsed={collapsed} />
         </div>
+
+        {/* Version Badge */}
+        {!collapsed && (
+          <div className="px-2 pb-1">
+            <VersionBadge />
+          </div>
+        )}
 
         {/* Employee Portal Quick Link */}
         <div className={`px-2 pb-2 ${collapsed ? 'text-center' : ''}`}>

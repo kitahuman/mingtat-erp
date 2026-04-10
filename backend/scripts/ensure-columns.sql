@@ -3137,3 +3137,20 @@ DO $$ BEGIN
     ALTER TABLE "work_logs" ADD COLUMN "ai_parsed_data" JSONB;
   END IF;
 END $$;
+
+-- ===== 20260422000000: employee_nicknames and pending_review =====
+CREATE TABLE IF NOT EXISTS "employee_nicknames" (
+    "id" SERIAL NOT NULL,
+    "emp_nickname_employee_id" INTEGER NOT NULL,
+    "emp_nickname_value" VARCHAR(50) NOT NULL,
+    "emp_nickname_source" VARCHAR(30) DEFAULT 'manual',
+    "emp_nickname_created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "employee_nicknames_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "employee_nicknames_emp_nickname_employee_id_idx" ON "employee_nicknames"("emp_nickname_employee_id");
+CREATE INDEX IF NOT EXISTS "employee_nicknames_emp_nickname_value_idx" ON "employee_nicknames"("emp_nickname_value");
+CREATE UNIQUE INDEX IF NOT EXISTS "employee_nicknames_emp_id_value_key" ON "employee_nicknames"("emp_nickname_employee_id", "emp_nickname_value");
+DO $$ BEGIN ALTER TABLE "employee_nicknames" ADD CONSTRAINT "employee_nicknames_emp_nickname_employee_id_fkey" FOREIGN KEY ("emp_nickname_employee_id") REFERENCES "employees"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TABLE "verification_wa_messages" ADD COLUMN IF NOT EXISTS "wa_msg_pending_review" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "verification_wa_messages" ADD COLUMN IF NOT EXISTS "wa_msg_review_result" VARCHAR(30);
+CREATE INDEX IF NOT EXISTS "verification_wa_messages_wa_msg_pending_review_idx" ON "verification_wa_messages"("wa_msg_pending_review");

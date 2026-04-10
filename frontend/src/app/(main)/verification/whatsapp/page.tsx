@@ -1376,6 +1376,18 @@ export default function WhatsAppDailySummaryPage() {
     }
   };
 
+  const handleReparseMessage = async (messageId: number) => {
+    if (!confirm('確定要重新解析此訊息嗎？')) return;
+    try {
+      await verificationApi.reparseMessage(messageId);
+      showToast('已重新解析，請稍候...', 'success');
+      setTimeout(() => fetchData(pagination.page), 1500);
+    } catch (err) {
+      console.error('Failed to reparse message:', err);
+      showToast('重新解析失敗', 'error');
+    }
+  };
+
   // ── 共用 table props ──────────────────────────────────────
 
   const tableProps = {

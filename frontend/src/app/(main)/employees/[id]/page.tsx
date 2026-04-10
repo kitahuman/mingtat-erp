@@ -115,6 +115,10 @@ export default function EmployeeDetailPage() {
   const [transferForm, setTransferForm] = useState<any>({ to_company_id: '', transfer_date: '', notes: '' });
   const [terminateForm, setTerminateForm] = useState<any>({ termination_date: '', termination_reason: '' });
   const [showAllCerts, setShowAllCerts] = useState(false);
+  // Nickname management
+  const [nicknames, setNicknames] = useState<Array<{ id: number; emp_nickname_value: string; emp_nickname_source: string | null }>>([]);
+  const [newNickname, setNewNickname] = useState('');
+  const [nicknameLoading, setNicknameLoading] = useState(false);
   // Dynamic certificate types from field-options
   const [certTypes, setCertTypes] = useState<Array<{ id: number; label: string }>>([]);
   // other_certificates JSON: { [label]: { cert_no: string, expiry_date: string } }
@@ -132,6 +136,31 @@ export default function EmployeeDetailPage() {
       } catch { setOtherCerts({}); }
       setLoading(false);
     }).catch(() => router.push('/employees'));
+    // Load nicknames
+    employeesApi.getNicknames(Number(params.id)).then(res => {
+      setNicknames(res.data || []);
+    }).catch(() => {});
+  };
+
+  const handleAddNickname = async () => {
+    if (!newNickname.trim()) return;
+    setNicknameLoading(true);
+    try {
+      await employeesApi.addNickname(emp.id, newNickname.trim(), 'manual');
+      setNewNickname('');
+      const res = await employeesApi.getNicknames(emp.id);
+      setNicknames(res.data || []);
+    } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
+    setNicknameLoading(false);
+  };
+
+  const handleRemoveNickname = async (nicknameId: number) => {
+    if (!confirm('確定刪除此花名？')) return;
+    try {
+      await employeesApi.removeNickname(emp.id, nicknameId);
+      const res = await employeesApi.getNicknames(emp.id);
+      setNicknames(res.data || []);
+    } catch (err: any) { alert(err.response?.data?.message || '刪除失敗'); }
   };
 
   useEffect(() => {
@@ -464,6 +493,42 @@ export default function EmployeeDetailPage() {
             </table>
           </div>
         ) : <p className="text-gray-500 text-sm">暫無薪資紀錄</p>}
+      </div>
+
+      {/* Nickname Management */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">花名管理
+          <span className="ml-2 text-xs font-normal text-gray-400">(用於 WhatsApp Order 自動配對)</span>
+        </h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {nicknames.length === 0 && <p className="text-gray-400 text-sm">暫無花名</p>}
+          {nicknames.map(n => (
+            <span key={n.id} className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+              {n.emp_nickname_value}
+              {n.emp_nickname_source === 'auto' && <span className="text-xs text-blue-400">(AI學習)</span>}
+              <button onClick={() => handleRemoveNickname(n.id)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors" title="刪除">
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newNickname}
+            onChange={e => setNewNickname(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddNickname()}
+            placeholder="輸入新花名，例：阿明、肥仙4號、老王…"
+            className="input-field flex-1 max-w-xs"
+            disabled={nicknameLoading}
+          />
+          <button
+            onClick={handleAddNickname}
+            disabled={nicknameLoading || !newNickname.trim()}
+            className="btn-primary"
+          >
+            {nicknameLoading ? '新增中…' : '新增花名'}
+          </button>
+        </div>
       </div>
 
       {/* Custom Fields */}

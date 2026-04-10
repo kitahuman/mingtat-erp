@@ -93,6 +93,11 @@ export const employeesApi = {
   getPhoto: (id: number) => api.get(`/employees/${id}/photo`),
   updatePhoto: (id: number, photoBase64: string) => api.put(`/employees/${id}/photo`, { photo_base64: photoBase64 }),
   deletePhoto: (id: number) => api.delete(`/employees/${id}/photo`),
+  // Nickname management
+  getNicknames: (id: number) => api.get(`/employees/${id}/nicknames`),
+  addNickname: (id: number, nickname: string, source?: string) => api.post(`/employees/${id}/nicknames`, { nickname, source }),
+  removeNickname: (id: number, nicknameId: number) => api.delete(`/employees/${id}/nicknames/${nicknameId}`),
+  searchByNickname: (q: string) => api.get('/employees/search/by-nickname', { params: { q } }),
 };
 
 // Vehicles
@@ -757,6 +762,10 @@ export const verificationApi = {
 
   deleteWhatsappOrderItem: (orderId: number, itemId: number) =>
     api.delete(`/verification/whatsapp-orders/${orderId}/items/${itemId}`),
+
+  // 重新解析訊息
+  reparseMessage: (messageId: number) =>
+    api.post(`/verification/whatsapp-messages/${messageId}/reparse`),
 
   // ── 六來源交叉比對 ────────────────────────────────────────
 

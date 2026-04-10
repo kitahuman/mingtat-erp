@@ -573,4 +573,114 @@ export class EmployeesService {
       dismissed_count: result.count,
     };
   }
+
+  // ── Nickname Management ──
+
+  async getNicknames(employeeId: number) {
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { nickname: true, name_zh: true }
+    });
+    if (!emp) throw new NotFoundException('Employee not found');
+
+    const mappings = await this.prisma.verificationNicknameMapping.findMany({
+      where: { nickname_employee_id: employeeId, nickname_is_active: true },
+      orderBy: { nickname_created_at: 'desc' }
+    });
+
+    return {
+      primary_nickname: emp.nickname,
+      name_zh: emp.name_zh,
+      mappings
+    };
+  }
+
+  async addNickname(employeeId: number, nicknameValue: string, source: string = 'manual') {
+    if (!nicknameValue || nicknameValue.trim() === '') {
+      throw new Error('Nickname cannot be empty');
+    }
+    const val = nicknameValue.trim();
+
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId }
+    });
+    if (!emp) throw new NotFoundException('Employee not found');
+
+    // Check if exists
+    const existing = await this.prisma.verificationNicknameMapping.findFirst({
+      where: {
+        nickname_employee_id: employeeId,
+        nickname_value: val
+      }
+    });
+
+    if (existing) {
+      if (!existing.nickname_is_active) {
+        return this.prisma.verificationNicknameMapping.update({
+          where: { id: existing.id },
+          data: { nickname_is_active: true }
+        });
+      }
+      return existing;
+    }
+
+    return this.prisma.verificationNicknameMapping.create({
+      data: {
+        nickname_employee_id: employeeId,
+        nickname_employee_name: emp.name_zh,
+        nickname_value: val,
+        nickname_is_active: true
+      }
+    });
+  }
+
+  async removeNickname(employeeId: number, nicknameId: number) {
+    const mapping = await this.prisma.verificationNicknameMapping.findFirst({
+      where: { id: nicknameId, nickname_employee_id: employeeId }
+    });
+    if (!mapping) throw new NotFoundException('Nickname mapping not found');
+
+    return this.prisma.verificationNicknameMapping.update({
+      where: { id: nicknameId },
+      data: { nickname_is_active: false }
+    });
+  }
+
+  async searchByNickname(q: string) {
+    if (!q || q.trim().length === 0) return [];
+    const term = q.trim();
+
+    // Search in employee primary nickname/name, or in mappings
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        OR: [
+          { nickname: { contains: term, mode: 'insensitive' } },
+          { name_zh: { contains: term, mode: 'insensitive' } },
+          { name_en: { contains: term, mode: 'insensitive' } }
+        ]
+      },
+      select: { id: true, name_zh: true, nickname: true, role: true, status: true },
+      take: 10
+    });
+
+    const mappedEmployees = await this.prisma.verificationNicknameMapping.findMany({
+      where: {
+        nickname_value: { contains: term, mode: 'insensitive' },
+        nickname_is_active: true,
+        nickname_employee_id: { not: null }
+      },
+      select: { nickname_employee_id: true },
+      take: 10
+    });
+
+    const mappedIds = mappedEmployees.map(m => m.nickname_employee_id).filter(id => id !== null) as number[];
+    const allIds = [...new Set([...employees.map(e => e.id), ...mappedIds])];
+
+    if (allIds.length === 0) return [];
+
+    return this.prisma.employee.findMany({
+      where: { id: { in: allIds } },
+      select: { id: true, name_zh: true, nickname: true, role: true, status: true }
+    });
+  }
 }

@@ -104,4 +104,28 @@ export class EmployeesController {
     return this.service.mpfBulkDismiss();
   }
 
+  // ── Nickname Management ──
+
+  @Get(':id/nicknames')
+  getNicknames(@Param('id') id: number) {
+    return this.service.getNicknames(+id);
+  }
+
+  @Post(':id/nicknames')
+  addNickname(@Param('id') id: number, @Body() dto: { nickname: string; source?: string }) {
+    return this.service.addNickname(+id, dto.nickname, dto.source);
+  }
+
+  @Delete(':id/nicknames/:nicknameId')
+  removeNickname(@Param('id') id: number, @Param('nicknameId') nicknameId: number) {
+    return this.service.removeNickname(+id, +nicknameId);
+  }
+
+  // ── Nickname Search (for matching UI) ──
+
+  @Get('search/by-nickname')
+  searchByNickname(@Query('q') q: string) {
+    return this.service.searchByNickname(q);
+  }
+
 }
