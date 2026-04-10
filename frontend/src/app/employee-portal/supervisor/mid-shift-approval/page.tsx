@@ -10,7 +10,11 @@ import SignaturePad from 'react-signature-canvas';
 interface AttendanceRecord {
   id: number;
   employee_id: number;
+  type: string;
   timestamp: string;
+  address: string | null;
+  remarks: string | null;
+  work_notes: string | null;
   is_mid_shift: boolean;
   employee: {
     id: number;
@@ -106,6 +110,8 @@ export default function MidShiftApprovalPage() {
 
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
+  const typeLabel = (type: string) => type === 'clock_in' ? '上班' : '下班';
+
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between">
@@ -144,20 +150,56 @@ export default function MidShiftApprovalPage() {
                     <div
                       key={record.id}
                       onClick={() => toggleSelect(record.id)}
-                      className={`flex items-center gap-3 p-4 bg-white rounded-2xl border-2 transition-all shadow-sm ${
+                      className={`flex items-start gap-3 p-4 bg-white rounded-2xl border-2 transition-all shadow-sm cursor-pointer ${
                         selectedIds.includes(record.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-50'
                       }`}
                     >
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      {/* Checkbox */}
+                      <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
                         selectedIds.includes(record.id) ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
                       }`}>
                         {selectedIds.includes(record.id) && <span className="text-white text-[10px]">✓</span>}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-800">{record.employee.name_zh}</p>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        {/* Name + type badge */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-gray-800">{record.employee.name_zh}</p>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">中直</span>
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                            record.type === 'clock_in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>{typeLabel(record.type)}</span>
+                        </div>
+
+                        {/* Emp code + time */}
                         <p className="text-xs text-gray-500">
                           {record.employee.emp_code} · {new Date(record.timestamp).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}
                         </p>
+
+                        {/* Location */}
+                        {record.address && (
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-gray-400 text-xs mt-0.5">📍</span>
+                            <p className="text-xs text-gray-600 leading-relaxed">{record.address}</p>
+                          </div>
+                        )}
+
+                        {/* Remarks */}
+                        {record.remarks && (
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-gray-400 text-xs mt-0.5">💬</span>
+                            <p className="text-xs text-gray-600 leading-relaxed">{record.remarks}</p>
+                          </div>
+                        )}
+
+                        {/* Work notes */}
+                        {record.work_notes && (
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-gray-400 text-xs mt-0.5">📋</span>
+                            <p className="text-xs text-gray-600 leading-relaxed">{record.work_notes}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

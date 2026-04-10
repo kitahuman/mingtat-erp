@@ -152,17 +152,19 @@ sharedApi.interceptors.request.use((config) => {
 });
 
 export const portalSharedApi = {
+  // Legacy admin endpoints (kept for backward compatibility)
   getPartners: (params?: any) => sharedApi.get('/partners', { params }),
-  getPartnersSimple: () => sharedApi.get('/partners/simple'),
   getCompanyProfiles: () => sharedApi.get('/company-profiles/simple'),
   getExpenseCategories: () => sharedApi.get('/expense-categories/tree'),
+  getSubconFleetSimple: () => sharedApi.get('/subcon-fleet-drivers/simple'),
+  // Portal-native shared endpoints (use employee portal JWT)
+  getProjectsSimple: () => sharedApi.get('/employee-portal/shared/projects'),
+  getEmployeesSimple: () => sharedApi.get('/employee-portal/shared/employees'),
+  getVehiclesSimple: () => sharedApi.get('/employee-portal/shared/vehicles'),
+  getMachinerySimple: () => sharedApi.get('/employee-portal/shared/machinery'),
+  getPartnersSimple: () => sharedApi.get('/employee-portal/shared/partners'),
   getFieldOptions: (category: string) =>
-    sharedApi.get(`/field-options/category/${category}`),
+    sharedApi.get('/employee-portal/shared/field-options', { params: { category } }),
   createFieldOption: (data: { category: string; label: string }) =>
     sharedApi.post('/field-options', data),
-  getVehiclesSimple: () => sharedApi.get('/vehicles/simple'),
-  getMachinerySimple: () => sharedApi.get('/machinery/simple'),
-  getSubconFleetSimple: () => sharedApi.get('/subcon-fleet-drivers/simple'),
-  getProjectsSimple: () => sharedApi.get('/projects/simple'),
-  getEmployeesSimple: () => sharedApi.get('/employees', { params: { limit: 500 } }),
 };

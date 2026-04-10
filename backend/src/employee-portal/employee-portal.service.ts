@@ -715,7 +715,15 @@ export class EmployeePortalService {
         is_mid_shift: true,
         mid_shift_approved: false,
       },
-      include: {
+      select: {
+        id: true,
+        employee_id: true,
+        type: true,
+        timestamp: true,
+        address: true,
+        remarks: true,
+        work_notes: true,
+        is_mid_shift: true,
         employee: {
           select: { id: true, name_zh: true, name_en: true, emp_code: true }
         }
@@ -1029,5 +1037,95 @@ export class EmployeePortalService {
     if (existing.acceptance_report_created_by !== userId) throw new BadRequestException('只能刪除自己建立的收貨報告');
     await this.prisma.acceptanceReport.delete({ where: { id } });
     return { success: true };
+  }
+
+  // ── Shared Data Methods ────────────────────────────────────
+
+  async getProjectsSimple() {
+    const projects = await this.prisma.project.findMany({
+      where: { status: { not: 'cancelled' } },
+      select: {
+        id: true,
+        project_no: true,
+        project_name: true,
+        status: true,
+        address: true,
+      },
+      orderBy: [{ status: 'asc' }, { project_no: 'desc' }],
+    });
+    return projects;
+  }
+
+  async getEmployeesSimple() {
+    const employees = await this.prisma.employee.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        emp_code: true,
+        name_zh: true,
+        name_en: true,
+        role: true,
+        role_title: true,
+      },
+      orderBy: { emp_code: 'asc' },
+    });
+    return employees;
+  }
+
+  async getVehiclesSimple() {
+    const vehicles = await this.prisma.vehicle.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        plate_number: true,
+        machine_type: true,
+        tonnage: true,
+        brand: true,
+        model: true,
+      },
+      orderBy: { plate_number: 'asc' },
+    });
+    return vehicles;
+  }
+
+  async getMachinerySimple() {
+    const machinery = await this.prisma.machinery.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        machine_code: true,
+        machine_type: true,
+        tonnage: true,
+        brand: true,
+        model: true,
+      },
+      orderBy: { machine_code: 'asc' },
+    });
+    return machinery;
+  }
+
+  async getPartnersSimple() {
+    const partners = await this.prisma.partner.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        name_en: true,
+        partner_type: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    return partners;
+  }
+
+  async getFieldOptionsByCategory(category: string) {
+    if (!category) return [];
+    const options = await this.prisma.fieldOption.findMany({
+      where: { category },
+      select: { id: true, label: true, sort_order: true },
+      orderBy: { sort_order: 'asc' },
+    });
+    return options;
   }
 }

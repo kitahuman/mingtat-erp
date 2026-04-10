@@ -315,4 +315,41 @@ export class EmployeePortalController {
   async deleteAcceptanceReport(@Request() req: any, @Param('id') id: string) {
     return this.service.deleteAcceptanceReport(req.user.sub, +id);
   }
+
+  // ── Shared Data (for supervisor forms) ────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/projects')
+  async getProjectsSimple() {
+    return this.service.getProjectsSimple();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/employees')
+  async getEmployeesSimple() {
+    return this.service.getEmployeesSimple();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/vehicles')
+  async getVehiclesSimple() {
+    return this.service.getVehiclesSimple();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/machinery')
+  async getMachinerySimple() {
+    return this.service.getMachinerySimple();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/partners')
+  async getPartnersSimple() {
+    return this.service.getPartnersSimple();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/field-options')
+  async getFieldOptions(@Query('category') category: string) {
+    return this.service.getFieldOptionsByCategory(category);
+  }
 }

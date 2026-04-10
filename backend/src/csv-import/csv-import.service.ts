@@ -128,31 +128,52 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'fleet-rate-cards': [
+    { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
+    { key: 'name', label: '名稱', type: 'string' },
     { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
     { key: 'contract_no', label: '合約編號', type: 'string' },
-    { key: 'tonnage', label: '車輛噸數', type: 'string' },
-    { key: 'machine_type', label: '車輛類型', type: 'string' },
+    { key: 'client_contract_no', label: '客戶合約', type: 'string' },
+    { key: 'day_night', label: '日/夜班', type: 'string', description: '日/夜/中直' },
+    { key: 'tonnage', label: '車輛噸數', type: 'string', description: '例: 25T / 35T / 50T' },
+    { key: 'machine_type', label: '車輛/機種類型', type: 'string', description: '例: 吊車/大貨車/挖掘機' },
+    { key: 'equipment_number', label: '機號/車牌', type: 'string' },
     { key: 'origin', label: '起點', type: 'string' },
     { key: 'destination', label: '終點', type: 'string' },
     { key: 'day_rate', label: '日班價格', type: 'number' },
     { key: 'night_rate', label: '夜班價格', type: 'number' },
     { key: 'mid_shift_rate', label: '中直價格', type: 'number' },
     { key: 'ot_rate', label: 'OT價格', type: 'number' },
-    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'unit', label: '單位', type: 'string', description: '例: 日/次/趟/小時' },
+    { key: 'effective_date', label: '生效日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'expiry_date', label: '到期日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'subcon-rate-cards': [
+    { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
+    { key: 'name', label: '名稱', type: 'string' },
     { key: 'subcon_name', label: '街車公司', type: 'string', description: '合作單位名稱（系統自動匹配）' },
     { key: 'plate_no', label: '車牌號碼', type: 'string' },
-    { key: 'tonnage', label: '車輛噸數', type: 'string' },
+    { key: 'tonnage', label: '車輛噸數', type: 'string', description: '例: 25T / 35T / 50T' },
+    { key: 'machine_type', label: '機種類型', type: 'string', description: '例: 吊車/大貨車/挖掘機' },
+    { key: 'equipment_number', label: '機號', type: 'string' },
     { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
     { key: 'contract_no', label: '合約編號', type: 'string' },
+    { key: 'client_contract_no', label: '客戶合約', type: 'string' },
     { key: 'day_night', label: '日/夜班', type: 'string', description: '日/夜/中直' },
     { key: 'origin', label: '起點', type: 'string' },
     { key: 'destination', label: '終點', type: 'string' },
-    { key: 'unit_price', label: '單價', type: 'number' },
-    { key: 'unit', label: '單位', type: 'string' },
+    { key: 'day_rate', label: '日班價格', type: 'number' },
+    { key: 'day_unit', label: '日班單位', type: 'string', description: '例: 日/次/趟/小時' },
+    { key: 'night_rate', label: '夜班價格', type: 'number' },
+    { key: 'night_unit', label: '夜班單位', type: 'string' },
+    { key: 'mid_shift_rate', label: '中直價格', type: 'number' },
+    { key: 'mid_shift_unit', label: '中直單位', type: 'string' },
+    { key: 'ot_rate', label: 'OT價格', type: 'number' },
+    { key: 'ot_unit', label: 'OT單位', type: 'string' },
+    { key: 'unit', label: '單位（通用）', type: 'string' },
     { key: 'exclude_fuel', label: '不含油費', type: 'boolean', description: '是/否' },
+    { key: 'effective_date', label: '生效日期', type: 'date', description: 'DD/MM/YYYY' },
+    { key: 'expiry_date', label: '到期日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'remarks', label: '備註', type: 'string' },
   ],
   'work-logs': [
@@ -256,11 +277,23 @@ export class CsvImportService {
       return val;
     };
 
+    let optionReference = '';
+    if (module === 'fleet-rate-cards' || module === 'subcon-rate-cards') {
+      optionReference = '\n\n' + [
+        '--- 填寫參考 ---',
+        '服務類型: 租車, 運輸, 機械',
+        '車輛/機種類型: 吊車, 大貨車, 挖掘機, 泥頭車, 水車',
+        '單位: 日, 次, 趟, 小時, 噸',
+        '日/夜班: 日, 夜, 中直',
+        '不含油費 (只限街車): 是, 否'
+      ].join('\n');
+    }
+
     return {
       module,
       fields,
       csvHeader: headers.map(escapeCsv).join(','),
-      csvDescription: descriptions.map(escapeCsv).join(','),
+      csvDescription: descriptions.map(escapeCsv).join(',') + optionReference,
     };
   }
 
@@ -519,6 +552,9 @@ export class CsvImportService {
     for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
       if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
     }
+    for (const df of ['effective_date', 'expiry_date']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
 
     const created = await this.prisma.fleetRateCard.create({
       data: { ...rest, client_id: clientId },
@@ -531,7 +567,15 @@ export class CsvImportService {
     const subconId = subcon_name ? await this.resolvePartnerId(subcon_name) : null;
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
 
-    if (rest.unit_price !== undefined) rest.unit_price = Number(rest.unit_price) || 0;
+    for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
+      if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
+    }
+    for (const df of ['effective_date', 'expiry_date']) {
+      if (rest[df]) rest[df] = new Date(rest[df]);
+    }
+    if (rest.exclude_fuel !== undefined) {
+      rest.exclude_fuel = rest.exclude_fuel === 'true' || rest.exclude_fuel === true || rest.exclude_fuel === '是';
+    }
 
     const created = await this.prisma.subconRateCard.create({
       data: { ...rest, subcon_id: subconId, client_id: clientId },
