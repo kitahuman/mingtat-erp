@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { verificationApi } from '@/lib/api';
 
 // ══════════════════════════════════════════════════════════════
@@ -377,29 +378,18 @@ export default function WhatsAppBotStatus({ collapsed = false }: WhatsAppBotStat
 }
 
 // ══════════════════════════════════════════════════════════════
-// QR Code Canvas 渲染組件（用於純文字 QR data）
-// 使用簡易 QR 渲染：將 raw data 顯示為文字，
-// 實際 bot 應發送 base64 圖片格式
+// QR Code 渲染組件（支援純文字 QR data，使用 qrcode.react 渲染）
 // ══════════════════════════════════════════════════════════════
 
 function QrCodeCanvas({ data, size }: { data: string; size: number }) {
-  // 如果 bot 發送的是純文字 QR data（非圖片格式），
-  // 顯示提示讓用戶知道需要 bot 發送圖片格式
   return (
-    <div
-      className="flex items-center justify-center bg-gray-100 rounded"
-      style={{ width: size, height: size }}
-    >
-      <div className="text-center p-4">
-        <div className="text-xs text-gray-500 mb-2">QR Code Data</div>
-        <div className="text-[10px] text-gray-400 break-all max-h-32 overflow-y-auto font-mono">
-          {data.substring(0, 200)}
-          {data.length > 200 && '...'}
-        </div>
-        <div className="text-[10px] text-gray-400 mt-2">
-          Bot 應發送 base64 圖片格式
-        </div>
-      </div>
-    </div>
+    <QRCodeSVG
+      value={data}
+      size={size}
+      bgColor="#ffffff"
+      fgColor="#000000"
+      level="M"
+      includeMargin={false}
+    />
   );
 }
