@@ -1,0 +1,26 @@
+{
+  "name": "明達建築 ERP 公司打卡系統",
+  "short_name": "公司打卡",
+  "description": "明達建築有限公司 ERP 公司打卡系統",
+  "start_url": "/company-clock",
+  "scope": "/company-clock",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a5c3a",
+  "theme_color": "#1a5c3a",
+  "lang": "zh-Hant",
+  "icons": [
+    {
+      "src": "/company-clock/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/company-clock/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "明達建築 員工入口",
+  "short_name": "員工入口",
+  "description": "明達建築有限公司員工入口",
+  "start_url": "/employee-portal",
+  "scope": "/employee-portal",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#2a4db7",
+  "theme_color": "#2a4db7",
+  "lang": "zh-Hant",
+  "icons": [
+    {
+      "src": "/employee-portal/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/employee-portal/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
