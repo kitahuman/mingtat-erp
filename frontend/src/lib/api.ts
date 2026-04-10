@@ -199,6 +199,7 @@ export const fieldOptionsApi = {
   remove: (id: number) => api.delete(`/field-options/${id}`),
   reorder: (category: string, orderedIds: number[]) => api.post('/field-options/reorder', { category, orderedIds }),
   mergeLocations: (primaryId: number, mergeIds: number[]) => api.post('/field-options/merge-locations', { primaryId, mergeIds }),
+  updateAliases: (id: number, aliases: string[]) => api.put(`/field-options/${id}/aliases`, { aliases }),
 };
 
 // Rate Cards (客戶價目表)

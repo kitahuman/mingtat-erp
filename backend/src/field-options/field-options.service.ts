@@ -118,16 +118,24 @@ export class FieldOptionsService implements OnModuleInit {
   }
 
   /**
+   * Update the aliases array for a specific FieldOption.
+   */
+  async updateAliases(id: number, aliases: string[]) {
+    const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('選項不存在');
+    return this.prisma.fieldOption.update({
+      where: { id },
+      data: { aliases },
+    });
+  }
+
+  /**
    * Merge multiple location options into one primary location.
-   * Updates ALL tables that reference location strings:
-   *   - work_logs (start_location, end_location)
-   *   - payroll_work_logs (start_location, end_location)
-   *   - verification_records (record_location_from, record_location_to)
-   *   - verification_wa_order_items (wa_item_location)
-   *   - rate_cards (origin, destination)
-   *   - fleet_rate_cards (origin, destination)
-   *   - subcon_rate_cards (origin, destination)
-   * Then deletes the merged FieldOption rows.
+   * - Saves merged names as aliases on the primary location
+   * - Updates ALL tables that reference location strings:
+   *     work_logs, payroll_work_logs, verification_records,
+   *     verification_wa_order_items, rate_cards, fleet_rate_cards, subcon_rate_cards
+   * - Deletes the merged FieldOption rows
    */
   async mergeLocations(dto: { primaryId: number; mergeIds: number[] }) {
     const { primaryId, mergeIds } = dto;
@@ -150,8 +158,36 @@ export class FieldOptionsService implements OnModuleInit {
     const targetLabels = targets.map(t => t.label);
     const primaryLabel = primary.label;
 
+    // Collect existing aliases from primary + all merged targets
+    const existingAliases: string[] = Array.isArray(primary.aliases)
+      ? (primary.aliases as string[])
+      : [];
+    const newAliases: string[] = [...existingAliases];
+
+    for (const target of targets) {
+      // Add the target's label as alias (if not already the primary label or in aliases)
+      if (target.label !== primaryLabel && !newAliases.includes(target.label)) {
+        newAliases.push(target.label);
+      }
+      // Also carry over any existing aliases from the merged targets
+      const targetAliases: string[] = Array.isArray(target.aliases)
+        ? (target.aliases as string[])
+        : [];
+      for (const alias of targetAliases) {
+        if (alias !== primaryLabel && !newAliases.includes(alias)) {
+          newAliases.push(alias);
+        }
+      }
+    }
+
     // Execute all updates in a single transaction
     await this.prisma.$transaction(async (tx) => {
+      // Update primary location's aliases
+      await tx.fieldOption.update({
+        where: { id: primaryId },
+        data: { aliases: newAliases },
+      });
+
       for (const oldLabel of targetLabels) {
         // work_logs
         await tx.workLog.updateMany({
@@ -230,7 +266,8 @@ export class FieldOptionsService implements OnModuleInit {
       success: true,
       primary: primaryLabel,
       merged: targetLabels,
-      message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄`,
+      aliases: newAliases,
+      message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄。舊名稱已保留為別名。`,
     };
   }
 }

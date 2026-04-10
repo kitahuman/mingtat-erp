@@ -41,4 +41,9 @@ export class FieldOptionsController {
   mergeLocations(@Body() dto: { primaryId: number; mergeIds: number[] }) {
     return this.service.mergeLocations(dto);
   }
+
+  @Put(':id/aliases')
+  updateAliases(@Param('id') id: number, @Body() dto: { aliases: string[] }) {
+    return this.service.updateAliases(Number(id), dto.aliases);
+  }
 }

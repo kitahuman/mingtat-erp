@@ -18,36 +18,65 @@ export class AiChatService {
   }
 
   private getPromptAndTools() {
-    const systemPrompt = `你是一個專業的建築工程 ERP 系統智能助手，名叫「工程助手」。你擁有查詢系統內所有數據的能力。
+    const systemPrompt = `你是明達建築有限公司（Mingtat Construction）的 ERP 系統智能助手，名叫「工程助手」。
 
-## 你的完整能力
+## 公司背景
+明達建築是一間香港建築工程公司，主要業務包括：
+- **運輸服務**：車輛（泥頭車、吊機等）運輸廢料、建材
+- **工程服務**：建築、拆卸、地基工程
+- **機械服務**：挖掘機、壓路機等機械出租及操作
+- **分包服務**：向主承建商提供分包工程
 
-### 可查詢的數據（使用對應工具）
+公司旗下有多間相關公司（明達建築、明達運輸等），員工包括司機、工人、機械操作員等。
+
+## 你的完整查詢能力
+
+### 基本資料
 - **公司**：公司列表、數量、類型（getCompanies）
-- **公司商業登記/公司資料**：公司商業登記證號碼、商業登記證到期日（BR Expiry）、公司法人登記（CR）、分包商牌照到期日等（getCompanyProfiles）
-- **員工**：員工列表、數量、在職/離職狀態、角色（getEmployees）
-- **車輛**：車輛列表、數量、車牌號碼、車輛保險到期、車輛牌照到期（getVehicles）
-- **機械**：機械列表、數量、類型、狀態、機械保險到期（getMachinery）
+- **公司商業登記/公司資料**：BR 號碼、BR 到期日、CR、分包商牌照（getCompanyProfiles）
+- **員工**：員工列表、在職/離職狀態、角色（getEmployees）
+- **車輛**：車牌號碼、車輛保險到期、牌照到期（getVehicles）
+- **機械**：機械列表、類型、保險到期（getMachinery）
 - **合作夥伴/客戶**：客戶、供應商列表（getPartners）
+
+### 工程管理
 - **項目**：項目列表、狀態（getProjects）
 - **合約**：合約列表、詳情（getContracts、getContractDetail）
 - **變更指令（VO）**：VO 列表、狀態（getVariationOrders）
 - **期中付款申請（IPA）**：IPA 列表、狀態（getInterimPayments）
+- **報價單**：報價單列表、詳情（getQuotations）
+
+### 日常運作
+- **工作日誌**：WhatsApp 報工記錄、工作紀錄（getWorkLogs）
+- **打卡記錄**：員工上下班打卡（getAttendances）
+- **請假記錄**：員工請假（getLeaves）
+
+### 核對資料
+- **核對記錄**：收據核對記錄、配對狀態（getVerificationRecords）
+- **WhatsApp 出 Order**：WhatsApp 出 order 訊息、order 項目（getWaOrders）
+
+### 財務
 - **費用**：費用記錄、未付費用（getExpenses）
 - **薪資**：薪資記錄（getPayrolls）
 - **發票**：發票列表、未收款（getInvoices）
-- **工作日誌**：工作記錄（getWorkLogs）
-- **請假記錄**：員工請假（getLeaves）
 - **財務摘要**：全公司財務概覽（getFinancialSummary）
+
+### 系統工具
 - **系統提醒**：待處理事項（getAlerts）
+- **全文搜索**：跨表搜索 ERP 資料（searchERP）
 
-## 重要：工具選擇指引
-- 用戶問「公司的商業登記證」、「BR 到期」、「商業登記到期」→ 使用 **getCompanyProfiles**（不是 getVehicles）
-- 用戶問「車輛牌照」、「車牌」、「車輛保險」→ 使用 **getVehicles**
-- 用戶問「機械保險」、「機械檢驗」→ 使用 **getMachinery**
-- 「商業登記」和「車牌/保險」是完全不同的概念，不要混淆
+## 工具選擇指引
+- 問「商業登記證」、「BR 到期」→ **getCompanyProfiles**
+- 問「車輛牌照」、「車輛保險」→ **getVehicles**
+- 問「機械保險」、「機械檢驗」→ **getMachinery**
+- 問「報工」、「工作記錄」、「打卡報工」→ **getWorkLogs**
+- 問「打卡」、「上班打卡」、「出勤」→ **getAttendances**
+- 問「出 order」、「WhatsApp order」→ **getWaOrders**
+- 問「核對」、「收據核對」→ **getVerificationRecords**
+- 問「報價」、「報價單」→ **getQuotations**
+- 問題涉及多個範疇或不確定在哪個表 → **searchERP**
 
-### 可執行的操作
+## 可執行的操作
 - 更新項目狀態（updateProjectStatus）
 
 ## 回答規則
@@ -59,7 +88,6 @@ export class AiChatService {
 - 如查無數據，告知用戶並建議可能的原因
 - 當用戶問「有多少」時，直接使用工具查詢並給出數字答案
 - 查詢員工時，預設只查在職員工（status=active），除非用戶明確要求查看離職員工或全部員工
-- 查詢員工人數時，回覆的數字應該是在職員工數量，不包含離職員工
 
 ## 安全規則
 - 不能刪除任何數據
@@ -67,12 +95,14 @@ export class AiChatService {
 - 不要編造不存在的數據
 
 ## 常用術語
-- IPA = Interim Payment Application 期中付款申請（系統中對應 PaymentApplication）
+- IPA = Interim Payment Application 期中付款申請
 - VO = Variation Order 變更指令
 - BQ = Bill of Quantities 工程量清單
 - Retention = 保留金/扣留金
 - Certified Amount = 核准金額
-- Payment Certificate = 付款證書`;
+- Payment Certificate = 付款證書
+- 泥頭車 = 運土/廢料的卡車
+- 出 order = 工程排班指令（通過 WhatsApp 發出）`;
 
     const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       // ── 公司 ──
@@ -348,6 +378,98 @@ export class AiChatService {
           parameters: { type: 'object', properties: {} },
         },
       },
+      // ── 打卡記錄 ──
+      {
+        type: 'function',
+        function: {
+          name: 'getAttendances',
+          description: '查詢員工打卡記錄（上班/下班打卡）。可按日期範圍、員工姓名篩選。',
+          parameters: {
+            type: 'object',
+            properties: {
+              dateFrom: { type: 'string', description: '開始日期 YYYY-MM-DD' },
+              dateTo: { type: 'string', description: '結束日期 YYYY-MM-DD' },
+              employeeName: { type: 'string', description: '員工姓名搜尋' },
+              type: { type: 'string', enum: ['clock_in', 'clock_out', 'all'], description: '打卡類型：clock_in=上班，clock_out=下班，不填查全部' },
+              limit: { type: 'number', description: '返回筆數，預設 20' },
+            },
+          },
+        },
+      },
+      // ── 報價單 ──
+      {
+        type: 'function',
+        function: {
+          name: 'getQuotations',
+          description: '查詢報價單列表。可按狀態、客戶、日期篩選。',
+          parameters: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['draft', 'sent', 'approved', 'rejected', 'expired', 'all'], description: '報價單狀態' },
+              search: { type: 'string', description: '按報價單號碼、客戶名稱或項目名稱搜尋' },
+              dateFrom: { type: 'string', description: '開始日期 YYYY-MM-DD' },
+              dateTo: { type: 'string', description: '結束日期 YYYY-MM-DD' },
+              limit: { type: 'number', description: '返回筆數，預設 10' },
+            },
+          },
+        },
+      },
+      // ── 核對記錄 ──
+      {
+        type: 'function',
+        function: {
+          name: 'getVerificationRecords',
+          description: '查詢收據核對記錄。可按日期範圍、車輛號碼、配對狀態篩選。核對記錄是收據（receipt）與工作日誌的配對結果。',
+          parameters: {
+            type: 'object',
+            properties: {
+              dateFrom: { type: 'string', description: '工作日期開始 YYYY-MM-DD' },
+              dateTo: { type: 'string', description: '工作日期結束 YYYY-MM-DD' },
+              vehicleNo: { type: 'string', description: '車輛號碼搜尋' },
+              matchStatus: { type: 'string', enum: ['matched', 'unmatched', 'disputed', 'all'], description: '配對狀態' },
+              limit: { type: 'number', description: '返回筆數，預設 15' },
+            },
+          },
+        },
+      },
+      // ── WhatsApp 出 Order ──
+      {
+        type: 'function',
+        function: {
+          name: 'getWaOrders',
+          description: '查詢 WhatsApp 出 order 記錄（工程排班指令）。可按日期範圍、狀態篩選。',
+          parameters: {
+            type: 'object',
+            properties: {
+              dateFrom: { type: 'string', description: '開始日期 YYYY-MM-DD' },
+              dateTo: { type: 'string', description: '結束日期 YYYY-MM-DD' },
+              status: { type: 'string', enum: ['tentative', 'confirmed', 'all'], description: 'order 狀態' },
+              search: { type: 'string', description: '按合約號碼、客戶、地點搜尋' },
+              limit: { type: 'number', description: '返回筆數，預設 10' },
+            },
+          },
+        },
+      },
+      // ── 全文搜索 ──
+      {
+        type: 'function',
+        function: {
+          name: 'searchERP',
+          description: '跨表全文搜索 ERP 資料。當問題涉及多個範疇或不確定在哪個表時使用。可搜索員工、車輛、機械、合約、項目、合作夥伴等。',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: '搜索關鍵字' },
+              tables: {
+                type: 'array',
+                items: { type: 'string', enum: ['employees', 'vehicles', 'machinery', 'contracts', 'projects', 'partners', 'work_logs', 'invoices', 'quotations'] },
+                description: '要搜索的表，不填則搜索全部',
+              },
+            },
+            required: ['query'],
+          },
+        },
+      },
       // ── 更新項目狀態 ──
       {
         type: 'function',
@@ -487,6 +609,16 @@ export class AiChatService {
         return this.getAlerts();
       case 'updateProjectStatus':
         return this.updateProjectStatus(args.projectNo, args.newStatus);
+      case 'getAttendances':
+        return this.getAttendances(args.dateFrom, args.dateTo, args.employeeName, args.type, args.limit);
+      case 'getQuotations':
+        return this.getQuotations(args.status, args.search, args.dateFrom, args.dateTo, args.limit);
+      case 'getVerificationRecords':
+        return this.getVerificationRecords(args.dateFrom, args.dateTo, args.vehicleNo, args.matchStatus, args.limit);
+      case 'getWaOrders':
+        return this.getWaOrders(args.dateFrom, args.dateTo, args.status, args.search, args.limit);
+      case 'searchERP':
+        return this.searchERP(args.query, args.tables);
       default:
         return { error: `工具 ${name} 尚未實作` };
     }
@@ -1246,5 +1378,383 @@ export class AiChatService {
     });
 
     return { success: true, message: `項目 ${projectNo} 狀態已更新為 ${newStatus}` };
+  }
+
+  private async getAttendances(dateFrom?: string, dateTo?: string, employeeName?: string, type?: string, limit?: number) {
+    const where: any = {};
+    if (type && type !== 'all') where.type = type;
+    if (dateFrom || dateTo) {
+      where.timestamp = {};
+      if (dateFrom) where.timestamp.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.timestamp.lte = end;
+      }
+    }
+    if (employeeName) {
+      where.employee = {
+        OR: [
+          { name_zh: { contains: employeeName, mode: 'insensitive' } },
+          { name_en: { contains: employeeName, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const total = await this.prisma.employeeAttendance.count({ where });
+    const records = await this.prisma.employeeAttendance.findMany({
+      where,
+      select: {
+        id: true,
+        type: true,
+        timestamp: true,
+        attendance_verification_method: true,
+        attendance_verification_score: true,
+        employee: { select: { name_zh: true, emp_code: true } },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: limit || 20,
+    });
+
+    return {
+      count: total,
+      shown: records.length,
+      attendances: records.map(r => ({
+        id: r.id,
+        employee: r.employee?.name_zh,
+        emp_code: r.employee?.emp_code,
+        type: r.type === 'clock_in' ? '上班' : '下班',
+        timestamp: r.timestamp,
+        method: r.attendance_verification_method,
+        score: r.attendance_verification_score,
+      })),
+    };
+  }
+
+  private async getQuotations(status?: string, search?: string, dateFrom?: string, dateTo?: string, limit?: number) {
+    const where: any = {};
+    if (status && status !== 'all') where.status = status;
+    if (dateFrom || dateTo) {
+      where.quotation_date = {};
+      if (dateFrom) where.quotation_date.gte = new Date(dateFrom);
+      if (dateTo) where.quotation_date.lte = new Date(dateTo);
+    }
+    if (search) {
+      where.OR = [
+        { quotation_no: { contains: search, mode: 'insensitive' } },
+        { contract_name: { contains: search, mode: 'insensitive' } },
+        { project_name: { contains: search, mode: 'insensitive' } },
+        { client: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const total = await this.prisma.quotation.count({ where });
+    const quotations = await this.prisma.quotation.findMany({
+      where,
+      select: {
+        id: true,
+        quotation_no: true,
+        quotation_date: true,
+        quotation_type: true,
+        contract_name: true,
+        project_name: true,
+        total_amount: true,
+        status: true,
+        client: { select: { name: true } },
+        company: { select: { name: true } },
+      },
+      orderBy: { quotation_date: 'desc' },
+      take: limit || 10,
+    });
+
+    const totalAmount = await this.prisma.quotation.aggregate({
+      where,
+      _sum: { total_amount: true },
+    });
+
+    return {
+      count: total,
+      total_amount: totalAmount._sum.total_amount,
+      shown: quotations.length,
+      quotations: quotations.map(q => ({
+        quotation_no: q.quotation_no,
+        date: q.quotation_date,
+        type: q.quotation_type,
+        name: q.contract_name || q.project_name,
+        client: q.client?.name,
+        company: q.company?.name,
+        total_amount: q.total_amount,
+        status: q.status,
+      })),
+    };
+  }
+
+  private async getVerificationRecords(dateFrom?: string, dateTo?: string, vehicleNo?: string, matchStatus?: string, limit?: number) {
+    const where: any = {};
+    if (dateFrom || dateTo) {
+      where.record_work_date = {};
+      if (dateFrom) where.record_work_date.gte = new Date(dateFrom);
+      if (dateTo) where.record_work_date.lte = new Date(dateTo);
+    }
+    if (vehicleNo) where.record_vehicle_no = { contains: vehicleNo, mode: 'insensitive' };
+    if (matchStatus && matchStatus !== 'all') {
+      if (matchStatus === 'matched') {
+        where.matches = { some: { match_status: { in: ['auto_matched', 'manual_matched', 'confirmed'] } } };
+      } else if (matchStatus === 'unmatched') {
+        where.matches = { none: {} };
+      } else if (matchStatus === 'disputed') {
+        where.matches = { some: { match_status: 'disputed' } };
+      }
+    }
+
+    const total = await this.prisma.verificationRecord.count({ where });
+    const records = await this.prisma.verificationRecord.findMany({
+      where,
+      select: {
+        id: true,
+        record_work_date: true,
+        record_vehicle_no: true,
+        record_driver_name: true,
+        record_customer: true,
+        record_location_from: true,
+        record_location_to: true,
+        record_time_in: true,
+        record_time_out: true,
+        matches: {
+          select: { match_status: true, match_confidence: true },
+          take: 1,
+        },
+      },
+      orderBy: { record_work_date: 'desc' },
+      take: limit || 15,
+    });
+
+    return {
+      count: total,
+      shown: records.length,
+      records: records.map(r => ({
+        id: r.id,
+        work_date: r.record_work_date,
+        vehicle_no: r.record_vehicle_no,
+        driver: r.record_driver_name,
+        customer: r.record_customer,
+        from: r.record_location_from,
+        to: r.record_location_to,
+        time_in: r.record_time_in,
+        time_out: r.record_time_out,
+        match_status: r.matches[0]?.match_status || 'unmatched',
+        match_confidence: r.matches[0]?.match_confidence,
+      })),
+    };
+  }
+
+  private async getWaOrders(dateFrom?: string, dateTo?: string, status?: string, search?: string, limit?: number) {
+    const where: any = {};
+    if (status && status !== 'all') where.wa_order_status = status;
+    if (dateFrom || dateTo) {
+      where.wa_order_date = {};
+      if (dateFrom) where.wa_order_date.gte = new Date(dateFrom);
+      if (dateTo) where.wa_order_date.lte = new Date(dateTo);
+    }
+    if (search) {
+      where.items = {
+        some: {
+          OR: [
+            { wa_item_contract_no: { contains: search, mode: 'insensitive' } },
+            { wa_item_customer: { contains: search, mode: 'insensitive' } },
+            { wa_item_location: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      };
+    }
+
+    const total = await this.prisma.verificationWaOrder.count({ where });
+    const orders = await this.prisma.verificationWaOrder.findMany({
+      where,
+      include: {
+        items: {
+          select: {
+            wa_item_seq: true,
+            wa_item_order_type: true,
+            wa_item_contract_no: true,
+            wa_item_customer: true,
+            wa_item_work_desc: true,
+            wa_item_location: true,
+            wa_item_vehicle_no: true,
+          },
+        },
+      },
+      orderBy: { wa_order_date: 'desc' },
+      take: limit || 10,
+    });
+
+    return {
+      count: total,
+      shown: orders.length,
+      orders: orders.map(o => ({
+        id: o.id,
+        date: o.wa_order_date,
+        status: o.wa_order_status,
+        version: o.wa_order_version,
+        sender: o.wa_order_sender_name,
+        item_count: o.wa_order_item_count,
+        confidence: o.wa_order_ai_confidence,
+        items: o.items.map(i => ({
+          seq: i.wa_item_seq,
+          type: i.wa_item_order_type,
+          contract_no: i.wa_item_contract_no,
+          customer: i.wa_item_customer,
+          work_desc: i.wa_item_work_desc,
+          location: i.wa_item_location,
+          vehicle_no: i.wa_item_vehicle_no,
+        })),
+      })),
+    };
+  }
+
+  private async searchERP(query: string, tables?: string[]) {
+    const searchTables = tables && tables.length > 0 ? tables : ['employees', 'vehicles', 'machinery', 'contracts', 'projects', 'partners', 'work_logs', 'invoices', 'quotations'];
+    const results: Record<string, any[]> = {};
+    const q = query.trim();
+
+    if (searchTables.includes('employees')) {
+      const employees = await this.prisma.employee.findMany({
+        where: {
+          OR: [
+            { name_zh: { contains: q, mode: 'insensitive' } },
+            { name_en: { contains: q, mode: 'insensitive' } },
+            { emp_code: { contains: q, mode: 'insensitive' } },
+            { phone: { contains: q } },
+          ],
+        },
+        select: { emp_code: true, name_zh: true, name_en: true, role: true, status: true },
+        take: 5,
+      });
+      if (employees.length > 0) results.employees = employees;
+    }
+
+    if (searchTables.includes('vehicles')) {
+      const vehicles = await this.prisma.vehicle.findMany({
+        where: {
+          OR: [
+            { plate_number: { contains: q, mode: 'insensitive' } },
+            { brand: { contains: q, mode: 'insensitive' } },
+            { model: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { plate_number: true, machine_type: true, brand: true, model: true, status: true },
+        take: 5,
+      });
+      if (vehicles.length > 0) results.vehicles = vehicles;
+    }
+
+    if (searchTables.includes('machinery')) {
+      const machinery = await this.prisma.machinery.findMany({
+        where: {
+          OR: [
+            { machine_code: { contains: q, mode: 'insensitive' } },
+            { machine_type: { contains: q, mode: 'insensitive' } },
+            { brand: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { machine_code: true, machine_type: true, brand: true, model: true, status: true },
+        take: 5,
+      });
+      if (machinery.length > 0) results.machinery = machinery;
+    }
+
+    if (searchTables.includes('contracts')) {
+      const contracts = await this.prisma.contract.findMany({
+        where: {
+          OR: [
+            { contract_no: { contains: q, mode: 'insensitive' } },
+            { contract_name: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { contract_no: true, contract_name: true, status: true },
+        take: 5,
+      });
+      if (contracts.length > 0) results.contracts = contracts;
+    }
+
+    if (searchTables.includes('projects')) {
+      const projects = await this.prisma.project.findMany({
+        where: {
+          OR: [
+            { project_no: { contains: q, mode: 'insensitive' } },
+            { project_name: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { project_no: true, project_name: true, status: true },
+        take: 5,
+      });
+      if (projects.length > 0) results.projects = projects;
+    }
+
+    if (searchTables.includes('partners')) {
+      const partners = await this.prisma.partner.findMany({
+        where: {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { name_en: { contains: q, mode: 'insensitive' } },
+            { code: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { code: true, name: true, partner_type: true, status: true },
+        take: 5,
+      });
+      if (partners.length > 0) results.partners = partners;
+    }
+
+    if (searchTables.includes('work_logs')) {
+      const workLogs = await this.prisma.workLog.findMany({
+        where: {
+          OR: [
+            { start_location: { contains: q, mode: 'insensitive' } },
+            { end_location: { contains: q, mode: 'insensitive' } },
+            { remarks: { contains: q, mode: 'insensitive' } },
+            { equipment_number: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, scheduled_date: true, equipment_number: true, start_location: true, end_location: true, status: true },
+        orderBy: { scheduled_date: 'desc' },
+        take: 5,
+      });
+      if (workLogs.length > 0) results.work_logs = workLogs;
+    }
+
+    if (searchTables.includes('invoices')) {
+      const invoices = await this.prisma.invoice.findMany({
+        where: { invoice_no: { contains: q, mode: 'insensitive' } },
+        select: { invoice_no: true, date: true, total_amount: true, status: true },
+        take: 5,
+      });
+      if (invoices.length > 0) results.invoices = invoices;
+    }
+
+    if (searchTables.includes('quotations')) {
+      const quotations = await this.prisma.quotation.findMany({
+        where: {
+          OR: [
+            { quotation_no: { contains: q, mode: 'insensitive' } },
+            { contract_name: { contains: q, mode: 'insensitive' } },
+            { project_name: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { quotation_no: true, quotation_date: true, contract_name: true, total_amount: true, status: true },
+        take: 5,
+      });
+      if (quotations.length > 0) results.quotations = quotations;
+    }
+
+    const totalFound = Object.values(results).reduce((sum, arr) => sum + arr.length, 0);
+    return {
+      query,
+      total_found: totalFound,
+      results,
+      summary: totalFound > 0
+        ? `在 ${Object.keys(results).join('、')} 中找到 ${totalFound} 條相關記錄`
+        : `未找到與「${query}」相關的資料`,
+    };
   }
 }

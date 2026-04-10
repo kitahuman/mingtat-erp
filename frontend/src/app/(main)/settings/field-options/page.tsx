@@ -25,19 +25,12 @@ interface FieldOption {
   label: string;
   sort_order: number;
   is_active: boolean;
+  aliases?: string[];
 }
 
-// Draggable item row — with optional checkbox for merge mode
 function DraggableRow({
-  option,
-  onEdit,
-  onDelete,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  mergeMode,
-  checked,
-  onCheck,
+  option, onEdit, onDelete, onDragStart, onDragOver, onDrop,
+  mergeMode, checked, onCheck, showAliases,
 }: {
   option: FieldOption;
   onEdit: (o: FieldOption) => void;
@@ -48,7 +41,9 @@ function DraggableRow({
   mergeMode?: boolean;
   checked?: boolean;
   onCheck?: (id: number, checked: boolean) => void;
+  showAliases?: boolean;
 }) {
+  const aliases = option.aliases || [];
   return (
     <tr
       draggable={!mergeMode}
@@ -60,18 +55,26 @@ function DraggableRow({
     >
       {mergeMode ? (
         <td className="px-3 py-2 w-8 text-center">
-          <input
-            type="checkbox"
-            checked={!!checked}
+          <input type="checkbox" checked={!!checked}
             onChange={e => onCheck && onCheck(option.id, e.target.checked)}
             onClick={e => e.stopPropagation()}
-            className="w-4 h-4 accent-blue-600"
-          />
+            className="w-4 h-4 accent-blue-600" />
         </td>
       ) : (
         <td className="px-3 py-2 text-gray-400 w-8 text-center select-none">⠿</td>
       )}
-      <td className="px-3 py-2 text-sm font-medium">{option.label}</td>
+      <td className="px-3 py-2">
+        <div className="text-sm font-medium">{option.label}</div>
+        {showAliases && aliases.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {aliases.map((alias, i) => (
+              <span key={i} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                {alias}
+              </span>
+            ))}
+          </div>
+        )}
+      </td>
       <td className="px-3 py-2 text-center w-20">
         <span className={option.is_active ? 'badge-green' : 'badge-gray'}>
           {option.is_active ? '啟用' : '停用'}
@@ -80,18 +83,10 @@ function DraggableRow({
       {!mergeMode && (
         <td className="px-3 py-2 w-28">
           <div className="flex gap-1 justify-end">
-            <button
-              onClick={e => { e.stopPropagation(); onEdit(option); }}
-              className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-            >
-              編輯
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); onDelete(option); }}
-              className="px-2 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100"
-            >
-              刪除
-            </button>
+            <button onClick={e => { e.stopPropagation(); onEdit(option); }}
+              className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100">編輯</button>
+            <button onClick={e => { e.stopPropagation(); onDelete(option); }}
+              className="px-2 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100">刪除</button>
           </div>
         </td>
       )}
@@ -104,20 +99,19 @@ export default function FieldOptionsPage() {
   const [allOptions, setAllOptions] = useState<Record<string, FieldOption[]>>({});
   const [loading, setLoading] = useState(true);
 
-  // Add/Edit modal
   const [showModal, setShowModal] = useState(false);
   const [editingOption, setEditingOption] = useState<FieldOption | null>(null);
   const [formLabel, setFormLabel] = useState('');
+  const [formAliases, setFormAliases] = useState<string[]>([]);
+  const [newAlias, setNewAlias] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Merge mode state
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [primaryId, setPrimaryId] = useState<number | null>(null);
   const [merging, setMerging] = useState(false);
 
-  // Drag state
   const dragId = useRef<number | null>(null);
 
   const load = async () => {
@@ -131,8 +125,6 @@ export default function FieldOptionsPage() {
   };
 
   useEffect(() => { load(); }, []);
-
-  // Reset merge state when switching tabs
   useEffect(() => {
     setMergeMode(false);
     setSelectedIds(new Set());
@@ -140,17 +132,33 @@ export default function FieldOptionsPage() {
   }, [activeTab]);
 
   const currentOptions = allOptions[activeTab] || [];
+  const isLocationTab = activeTab === 'location';
 
   const openAdd = () => {
     setEditingOption(null);
     setFormLabel('');
+    setFormAliases([]);
+    setNewAlias('');
     setShowModal(true);
   };
 
   const openEdit = (o: FieldOption) => {
     setEditingOption(o);
     setFormLabel(o.label);
+    setFormAliases(o.aliases ? [...o.aliases] : []);
+    setNewAlias('');
     setShowModal(true);
+  };
+
+  const handleAddAlias = () => {
+    const trimmed = newAlias.trim();
+    if (!trimmed || formAliases.includes(trimmed)) return;
+    setFormAliases(prev => [...prev, trimmed]);
+    setNewAlias('');
+  };
+
+  const handleRemoveAlias = (alias: string) => {
+    setFormAliases(prev => prev.filter(a => a !== alias));
   };
 
   const handleSave = async () => {
@@ -159,6 +167,9 @@ export default function FieldOptionsPage() {
     try {
       if (editingOption) {
         await fieldOptionsApi.update(editingOption.id, { label: formLabel.trim() });
+        if (isLocationTab) {
+          await fieldOptionsApi.updateAliases(editingOption.id, formAliases);
+        }
       } else {
         await fieldOptionsApi.create({ category: activeTab, label: formLabel.trim() });
       }
@@ -181,7 +192,6 @@ export default function FieldOptionsPage() {
     }
   };
 
-  // Drag & drop reorder
   const handleDragStart = (id: number) => { dragId.current = id; };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = async (targetId: number) => {
@@ -201,7 +211,6 @@ export default function FieldOptionsPage() {
     }
   };
 
-  // Merge mode handlers
   const toggleMergeMode = () => {
     setMergeMode(v => !v);
     setSelectedIds(new Set());
@@ -218,11 +227,7 @@ export default function FieldOptionsPage() {
   };
 
   const openMergeModal = () => {
-    if (selectedIds.size < 2) {
-      alert('請至少勾選 2 個地點才能合併');
-      return;
-    }
-    // Default primary = first selected
+    if (selectedIds.size < 2) { alert('請至少勾選 2 個地點才能合併'); return; }
     setPrimaryId(Array.from(selectedIds)[0]);
     setShowMergeModal(true);
   };
@@ -230,10 +235,7 @@ export default function FieldOptionsPage() {
   const handleMerge = async () => {
     if (!primaryId) return;
     const mergeIds = Array.from(selectedIds).filter(id => id !== primaryId);
-    if (mergeIds.length === 0) {
-      alert('請選擇不同的主地點');
-      return;
-    }
+    if (mergeIds.length === 0) { alert('請選擇不同的主地點'); return; }
     setMerging(true);
     try {
       const res = await fieldOptionsApi.mergeLocations(primaryId, mergeIds);
@@ -251,6 +253,14 @@ export default function FieldOptionsPage() {
   };
 
   const selectedOptions = currentOptions.filter(o => selectedIds.has(o.id));
+  const primaryOption = selectedOptions.find(o => o.id === primaryId);
+  const mergeTargets = selectedOptions.filter(o => o.id !== primaryId);
+  const previewAliases: string[] = primaryOption
+    ? [
+        ...(primaryOption.aliases || []),
+        ...mergeTargets.flatMap(t => [t.label, ...(t.aliases || [])]),
+      ].filter((v, i, arr) => v !== primaryOption.label && arr.indexOf(v) === i)
+    : [];
 
   return (
     <RoleGuard minRole="admin">
@@ -263,30 +273,26 @@ export default function FieldOptionsPage() {
         </div>
 
         <div className="card">
-          {/* Tabs */}
           <div className="flex gap-1 border-b border-gray-200 mb-4 -mx-6 px-6 overflow-x-auto">
             {CATEGORY_KEYS.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setActiveTab(cat)}
+              <button key={cat} onClick={() => setActiveTab(cat)}
                 className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeTab === cat
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
+                  activeTab === cat ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}>
                 {CATEGORY_LABELS[cat]}
               </button>
             ))}
           </div>
 
-          {/* Tab content */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">{CATEGORY_LABELS[activeTab]}</h2>
                 {!mergeMode && (
-                  <p className="text-xs text-gray-400 mt-0.5">拖拽行可調整排序；點擊「編輯」可修改名稱</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    拖拽行可調整排序；點擊「編輯」可修改名稱
+                    {isLocationTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（合併後的舊地點名稱，WhatsApp 報工時也能匹配）</span>}
+                  </p>
                 )}
                 {mergeMode && (
                   <p className="text-xs text-blue-500 mt-0.5">
@@ -296,30 +302,22 @@ export default function FieldOptionsPage() {
                 )}
               </div>
               <div className="flex gap-2">
-                {activeTab === 'location' && (
-                  <button
-                    onClick={toggleMergeMode}
+                {isLocationTab && (
+                  <button onClick={toggleMergeMode}
                     className={`text-sm py-1.5 px-3 rounded-lg border transition-colors ${
-                      mergeMode
-                        ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                    }`}
-                  >
+                      mergeMode ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                    }`}>
                     {mergeMode ? '取消合併' : '⊕ 合併地點'}
                   </button>
                 )}
                 {mergeMode && selectedIds.size >= 2 && (
-                  <button
-                    onClick={openMergeModal}
-                    className="text-sm py-1.5 px-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                  >
+                  <button onClick={openMergeModal}
+                    className="text-sm py-1.5 px-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
                     確認合併 ({selectedIds.size})
                   </button>
                 )}
                 {!mergeMode && (
-                  <button onClick={openAdd} className="btn-primary text-sm py-1.5 px-3">
-                    + 新增選項
-                  </button>
+                  <button onClick={openAdd} className="btn-primary text-sm py-1.5 px-3">+ 新增選項</button>
                 )}
               </div>
             </div>
@@ -334,7 +332,10 @@ export default function FieldOptionsPage() {
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="px-3 py-2 w-8"></th>
-                      <th className="px-3 py-2 text-left whitespace-nowrap">選項名稱</th>
+                      <th className="px-3 py-2 text-left whitespace-nowrap">
+                        選項名稱
+                        {isLocationTab && !mergeMode && <span className="ml-1 text-xs font-normal text-gray-400">（含別名）</span>}
+                      </th>
                       <th className="px-3 py-2 text-center w-20 whitespace-nowrap">狀態</th>
                       {!mergeMode && <th className="px-3 py-2 w-28"></th>}
                     </tr>
@@ -348,18 +349,10 @@ export default function FieldOptionsPage() {
                       </tr>
                     ) : (
                       currentOptions.map(opt => (
-                        <DraggableRow
-                          key={opt.id}
-                          option={opt}
-                          onEdit={openEdit}
-                          onDelete={handleDelete}
-                          onDragStart={handleDragStart}
-                          onDragOver={handleDragOver}
-                          onDrop={handleDrop}
-                          mergeMode={mergeMode}
-                          checked={selectedIds.has(opt.id)}
-                          onCheck={handleCheck}
-                        />
+                        <DraggableRow key={opt.id} option={opt} onEdit={openEdit} onDelete={handleDelete}
+                          onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop}
+                          mergeMode={mergeMode} checked={selectedIds.has(opt.id)} onCheck={handleCheck}
+                          showAliases={isLocationTab && !mergeMode} />
                       ))
                     )}
                   </tbody>
@@ -381,16 +374,41 @@ export default function FieldOptionsPage() {
               <div className="px-6 py-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">選項名稱 *</label>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={formLabel}
+                  <input autoFocus type="text" value={formLabel}
                     onChange={e => setFormLabel(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && !isLocationTab) handleSave(); }}
                     className="input-field"
-                    placeholder={`例如：${activeTab === 'machine_type' ? '平斗' : activeTab === 'tonnage' ? '13噸' : '輸入選項名稱'}`}
-                  />
+                    placeholder={`例如：${activeTab === 'machine_type' ? '平斗' : activeTab === 'tonnage' ? '13噸' : '輸入選項名稱'}`} />
                 </div>
+
+                {isLocationTab && editingOption && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      別名（舊地點名稱）
+                      <span className="ml-1 text-xs font-normal text-gray-400">— WhatsApp 報工時也能匹配</span>
+                    </label>
+                    {formAliases.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {formAliases.map((alias, i) => (
+                          <span key={i} className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                            {alias}
+                            <button type="button" onClick={() => handleRemoveAlias(alias)}
+                              className="text-amber-500 hover:text-red-500 font-bold leading-none">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input type="text" value={newAlias} onChange={e => setNewAlias(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddAlias(); } }}
+                        className="input-field flex-1 text-sm" placeholder="輸入別名後按 Enter 或點擊新增" />
+                      <button type="button" onClick={handleAddAlias} disabled={!newAlias.trim()}
+                        className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-40">
+                        新增
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button onClick={() => setShowModal(false)} className="btn-secondary">取消</button>
@@ -409,32 +427,32 @@ export default function FieldOptionsPage() {
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">合併地點</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  選擇保留哪一個作為主地點，其餘地點的所有引用記錄（工作紀錄、價目表等）將自動更新為主地點，被合併的地點將從選項中移除。
+                  選擇保留哪一個作為主地點，其餘地點的所有引用記錄將自動更新，被合併的地點從選項中移除，舊名稱保留為別名。
                 </p>
               </div>
               <div className="px-6 py-4 space-y-3">
                 <p className="text-sm font-medium text-gray-700">選擇主地點（保留的地點）：</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {selectedOptions.map(opt => (
-                    <label
-                      key={opt.id}
+                    <label key={opt.id}
                       className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        primaryId === opt.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="primaryLocation"
-                        value={opt.id}
-                        checked={primaryId === opt.id}
-                        onChange={() => setPrimaryId(opt.id)}
-                        className="accent-blue-600"
-                      />
-                      <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+                        primaryId === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}>
+                      <input type="radio" name="primaryLocation" value={opt.id}
+                        checked={primaryId === opt.id} onChange={() => setPrimaryId(opt.id)}
+                        className="accent-blue-600" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+                        {opt.aliases && opt.aliases.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {opt.aliases.map((a, i) => (
+                              <span key={i} className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0 rounded-full">{a}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       {primaryId === opt.id && (
-                        <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">主地點</span>
+                        <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">主地點</span>
                       )}
                     </label>
                   ))}
@@ -445,29 +463,29 @@ export default function FieldOptionsPage() {
                     <p className="font-medium mb-1">合併預覽：</p>
                     <p>
                       將把{' '}
-                      <span className="font-semibold">
-                        {selectedOptions.filter(o => o.id !== primaryId).map(o => `「${o.label}」`).join('、')}
-                      </span>
+                      <span className="font-semibold">{mergeTargets.map(o => `「${o.label}」`).join('、')}</span>
                       {' '}合併至{' '}
-                      <span className="font-semibold text-blue-700">「{selectedOptions.find(o => o.id === primaryId)?.label}」</span>
+                      <span className="font-semibold text-blue-700">「{primaryOption?.label}」</span>
                     </p>
-                    <p className="mt-1 text-xs text-amber-600">所有工作紀錄、薪資紀錄、核對記錄、價目表中的地點引用將一併更新。此操作不可撤銷。</p>
+                    {previewAliases.length > 0 && (
+                      <div className="mt-1.5">
+                        <span className="text-xs text-amber-700">合併後別名：</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {previewAliases.map((a, i) => (
+                            <span key={i} className="text-xs bg-white text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded-full">{a}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="mt-1.5 text-xs text-amber-600">所有工作紀錄、薪資紀錄、核對記錄、價目表中的地點引用將一併更新。此操作不可撤銷。</p>
                   </div>
                 )}
               </div>
               <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                <button
-                  onClick={() => { setShowMergeModal(false); setPrimaryId(null); }}
-                  className="btn-secondary"
-                  disabled={merging}
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleMerge}
-                  disabled={!primaryId || merging}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <button onClick={() => { setShowMergeModal(false); setPrimaryId(null); }}
+                  className="btn-secondary" disabled={merging}>取消</button>
+                <button onClick={handleMerge} disabled={!primaryId || merging}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {merging ? '合併中...' : '確認合併'}
                 </button>
               </div>

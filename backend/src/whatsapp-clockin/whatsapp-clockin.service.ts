@@ -122,7 +122,7 @@ export class WhatsappClockinService {
         }),
         this.prisma.fieldOption.findMany({
           where: { category: 'location', is_active: true },
-          select: { id: true, label: true },
+          select: { id: true, label: true, aliases: true },
         }),
       ]);
 
@@ -147,7 +147,10 @@ export class WhatsappClockinService {
         `ID:${c.id} 合約號:${c.contract_no || ''} 名稱:${c.contract_name || ''}`
       ).join('\n');
 
-      const locationRef = locationOptions.map(l => l.label).join(', ');
+      const locationRef = locationOptions.map(l => {
+        const aliases = (l.aliases as string[] | null) || [];
+        return aliases.length > 0 ? `${l.label}（別名：${aliases.join('/')}）` : l.label;
+      }).join(', ');
 
       // 5. 用 OpenAI 解析訊息
       const parsed = await this.parseWithOpenAI(text, {
@@ -262,16 +265,28 @@ export class WhatsappClockinService {
    */
   private async ensureLocationOption(
     location: string,
-    existingOptions: { id: number; label: string }[],
+    existingOptions: { id: number; label: string; aliases?: any }[],
   ): Promise<boolean> {
     if (!location) return false;
 
     const normalized = location.trim();
-    // 先在已載入的選項中查找（不區分大小寫）
-    const found = existingOptions.some(
-      opt => opt.label.trim().toLowerCase() === normalized.toLowerCase(),
+    const normalizedLower = normalized.toLowerCase();
+
+    // 先在已載入的選項中查找主名稱（不區分大小寫）
+    const foundByLabel = existingOptions.some(
+      opt => opt.label.trim().toLowerCase() === normalizedLower,
     );
-    if (found) return false;
+    if (foundByLabel) return false;
+
+    // 再查找 aliases（別名匹配）
+    const foundByAlias = existingOptions.some(opt => {
+      const aliases = (opt.aliases as string[] | null) || [];
+      return aliases.some(a => a.trim().toLowerCase() === normalizedLower);
+    });
+    if (foundByAlias) {
+      this.logger.log(`Location "${normalized}" matched via alias — skipping auto-create`);
+      return false;
+    }
 
     // 再次從 DB 確認（避免並發問題）
     const dbCheck = await this.prisma.fieldOption.findFirst({
@@ -281,6 +296,19 @@ export class WhatsappClockinService {
       },
     });
     if (dbCheck) return false;
+
+    // 也檢查 DB 中的 aliases
+    const dbAliasCheck = await this.prisma.$queryRaw<{ id: number }[]>`
+      SELECT id FROM field_options
+      WHERE category = 'location'
+        AND is_active = true
+        AND aliases::text ILIKE '%' || ${normalized} || '%'
+      LIMIT 1
+    `;
+    if (dbAliasCheck && dbAliasCheck.length > 0) {
+      this.logger.log(`Location "${normalized}" matched via DB alias — skipping auto-create`);
+      return false;
+    }
 
     // 不存在，建立新選項
     const maxSort = await this.prisma.fieldOption.aggregate({
