@@ -1501,6 +1501,7 @@ export class WhatsappService {
 
   // ══════════════════════════════════════════════════════════════
   // 取得每日總結的 items（供 matching service 使用）
+  // 修正：按 order_type 分組，每種類型取最新版本（與 getDailySummary 一致）
   // ══════════════════════════════════════════════════════════════
   async getDailySummaryItemsForMatching(dateFrom: Date, dateTo: Date) {
     const dateStart = new Date(dateFrom);
@@ -1516,20 +1517,39 @@ export class WhatsappService {
       include: {
         items: true,
       },
-      orderBy: [{ wa_order_date: 'asc' }, { wa_order_version: 'desc' }],
+      orderBy: [{ wa_order_date: 'asc' }, { wa_order_version: 'asc' }],
     });
 
-    // 每天只取最新版本
-    const latestByDate = new Map<string, typeof orders[0]>();
+    // 判斷每個 order 的主要 order_type（根據其 items 的多數類型）
+    const getOrderPrimaryType = (order: typeof orders[0]): string => {
+      const typeCounts: Record<string, number> = {};
+      for (const item of order.items) {
+        const t = item.wa_item_order_type || 'unknown';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      }
+      let maxType = 'unknown';
+      let maxCount = 0;
+      for (const [t, c] of Object.entries(typeCounts)) {
+        if (c > maxCount) { maxType = t; maxCount = c; }
+      }
+      return maxType;
+    };
+
+    // 按 date + order_type 分組，每組取最新版本
+    // key: "YYYY-MM-DD|order_type"
+    const latestByDateType = new Map<string, typeof orders[0]>();
     for (const order of orders) {
       const dateKey = order.wa_order_date.toISOString().slice(0, 10);
-      if (!latestByDate.has(dateKey) || order.wa_order_version > latestByDate.get(dateKey)!.wa_order_version) {
-        latestByDate.set(dateKey, order);
+      const primaryType = getOrderPrimaryType(order);
+      const groupKey = `${dateKey}|${primaryType}`;
+      const existing = latestByDateType.get(groupKey);
+      if (!existing || order.wa_order_version > existing.wa_order_version) {
+        latestByDateType.set(groupKey, order);
       }
     }
 
     // 展平為 items，排除已取消的
-    return Array.from(latestByDate.values()).flatMap((o) =>
+    return Array.from(latestByDateType.values()).flatMap((o) =>
       o.items
         .filter((item) => item.wa_item_mod_status !== 'cancelled')
         .map((item) => ({
