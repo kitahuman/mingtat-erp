@@ -5,12 +5,11 @@ FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json pnpm-workspace.yaml ./
+# Copy package files (use npm with package-lock.json)
+COPY package.json package-lock.json ./
 
-# Install pnpm and dependencies
-RUN npm install -g pnpm@10 && \
-    pnpm install --frozen-lockfile
+# Install all dependencies (including dev for build)
+RUN npm ci
 
 # ============================================
 # Stage 2: Build application
@@ -38,14 +37,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install pnpm for production install
-RUN npm install -g pnpm@10
-
 # Copy package files
-COPY package.json package-lock.json pnpm-workspace.yaml ./
+COPY package.json package-lock.json ./
 
 # Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+RUN npm ci --omit=dev
 
 # Copy Prisma schema and migrations (needed for migrate deploy)
 COPY prisma ./prisma
