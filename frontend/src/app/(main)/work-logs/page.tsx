@@ -171,6 +171,12 @@ export default function WorkLogsPage() {
         next.set(workLogId, { ...existing, [sourceCode]: { status, confirmed_by: '我', confirmed_at: new Date().toISOString() } });
         return next;
       });
+      // 同步更新 rows 中的 verification_confirmations，讓核對按鈕顏色即時反映
+      setRows(prev => prev.map(r => {
+        if (r.id !== workLogId) return r;
+        const confs = (r.verification_confirmations || []).filter((c: any) => c.source_code !== sourceCode);
+        return { ...r, verification_confirmations: [...confs, { source_code: sourceCode, status }] };
+      }));
     } catch (e: any) {
       alert('操作失敗: ' + (e?.message || '未知錯誤'));
     } finally {
@@ -191,6 +197,11 @@ export default function WorkLogsPage() {
         next.set(workLogId, existing);
         return next;
       });
+      // 同步更新 rows 中的 verification_confirmations
+      setRows(prev => prev.map(r => {
+        if (r.id !== workLogId) return r;
+        return { ...r, verification_confirmations: (r.verification_confirmations || []).filter((c: any) => c.source_code !== sourceCode) };
+      }));
     } catch (e: any) {
       alert('操作失敗: ' + (e?.message || '未知錯誤'));
     } finally {
@@ -1296,11 +1307,32 @@ export default function WorkLogsPage() {
                         )}
                         <button onClick={() => handleDuplicate(row.id)} className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
                         <button onClick={() => handleDelete(row.id)} className="px-1 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
-                        <button
-                          onClick={() => handleVerify(row.id)}
-                          className={`px-1 py-0.5 text-xs rounded ${openVerifyId === row.id ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
-                          title="核對"
-                        >✓✓</button>
+                        {(() => {
+                          const confs = row.verification_confirmations || [];
+                          const allConfirmed = confs.length > 0 && confs.every((c: any) => c.status === 'confirmed' || c.status === 'manual_match');
+                          const hasRejected = confs.some((c: any) => c.status === 'rejected');
+                          const hasAny = confs.length > 0;
+                          let btnClass = '';
+                          let btnTitle = '核對（未審核）';
+                          if (openVerifyId === row.id) {
+                            btnClass = 'bg-indigo-600 text-white';
+                          } else if (allConfirmed) {
+                            btnClass = 'bg-green-100 text-green-700 hover:bg-green-200';
+                            btnTitle = '核對（全部已確認）';
+                          } else if (hasRejected || (hasAny && !allConfirmed)) {
+                            btnClass = 'bg-amber-100 text-amber-700 hover:bg-amber-200';
+                            btnTitle = '核對（部分審核）';
+                          } else {
+                            btnClass = 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100';
+                          }
+                          return (
+                            <button
+                              onClick={() => handleVerify(row.id)}
+                              className={`px-1 py-0.5 text-xs rounded ${btnClass}`}
+                              title={btnTitle}
+                            >✓✓</button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

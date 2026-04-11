@@ -74,6 +74,9 @@ export class WorkLogsService {
           contract: true,
           employee: true,
           project: true,
+          verification_confirmations: {
+            select: { source_code: true, status: true },
+          },
         },
         orderBy: { [safeSortBy]: safeSortOrder },
         skip: (pg - 1) * lm,
