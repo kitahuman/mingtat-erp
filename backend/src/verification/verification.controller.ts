@@ -167,32 +167,52 @@ export class VerificationController {
     });
   }
 
-  // ══════════════════════════════════════════════════════════════
+   // ════════════════════════════════════════════════════════════
   // GPS 相關端點
-  // ══════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
 
-  // ── 上傳 GPS 追蹤報表 Excel ───────────────────────────────
+  // ── 上傳 GPS 追蹤報表 Excel（支援多檔案） ───────────────────────────
   @Post('gps/upload')
   @UseInterceptors(
-    FileInterceptor('file', {
+    FilesInterceptor('files', 20, {
       storage: verificationStorage,
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB per file
     }),
   )
   async uploadGps(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: Express.Multer.File[],
     @Body('period_year') periodYear?: string,
     @Body('period_month') periodMonth?: string,
     @Request() req?: any,
   ) {
-    return this.gpsService.uploadAndProcessGps(file, {
+    if (!files || files.length === 0) {
+      return { results: [], total: 0, succeeded: 0, failed: 0, duplicates: 0 };
+    }
+    const opts = {
       periodYear: periodYear ? +periodYear : undefined,
       periodMonth: periodMonth ? +periodMonth : undefined,
       userId: req?.user?.id,
-    });
+    };
+    const results: any[] = [];
+    for (const file of files) {
+      try {
+        const result = await this.gpsService.uploadAndProcessGps(file, opts);
+        results.push({ file_name: file.originalname, ...result });
+      } catch (err: any) {
+        results.push({
+          file_name: file.originalname,
+          error: err?.message || 'GPS 報表處理失敗',
+          status: 'failed',
+        });
+      }
+    }
+    const succeeded = results.filter(r => !r.error && !r.duplicate).length;
+    const duplicates = results.filter(r => r.duplicate).length;
+    const failed = results.filter(r => r.error && !r.duplicate).length;
+    return { results, total: files.length, succeeded, failed, duplicates };
   }
 
-  // ══════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
   // 核對工作台（原有端點）
   // ══════════════════════════════════════════════════════════════
 

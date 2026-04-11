@@ -1366,7 +1366,7 @@ export default function WorkLogsPage() {
                             const SOURCE_META: Record<string, { label: string; icon: string; color: string }> = {
                               work_log:       { label: '工作紀錄', icon: '📝', color: 'blue' },
                               chit:           { label: '入帳票',   icon: '🧾', color: 'green' },
-                              delivery_note:  { label: '飛仙4 OCR', icon: '📄', color: 'purple' },
+                              delivery_note:  { label: '飛仔 OCR', icon: '📄', color: 'purple' },
                               gps:            { label: 'GPS 追蹤',  icon: '📍', color: 'orange' },
                               attendance:     { label: '打卡紀錄', icon: '⏰', color: 'teal' },
                               whatsapp_order: { label: 'WhatsApp', icon: '💬', color: 'emerald' },

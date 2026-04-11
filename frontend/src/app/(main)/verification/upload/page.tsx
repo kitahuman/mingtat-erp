@@ -77,7 +77,9 @@ export default function VerificationUploadPage() {
   // OCR upload result
   const [ocrResult, setOcrResult] = useState<any>(null);
 
-  // GPS upload result
+  // GPS upload state
+  const [gpsFiles, setGpsFiles] = useState<File[]>([]);
+  const [gpsProgress, setGpsProgress] = useState<number>(0); // index of file currently being processed (1-based)
   const [gpsResult, setGpsResult] = useState<any>(null);
 
   // Confirm state
@@ -177,19 +179,30 @@ export default function VerificationUploadPage() {
     setUploading(false);
   }, [selectedSource, periodYear, periodMonth]);
 
-  // ── GPS Excel 上傳 ─────────────────────────────────────────
-  const doGpsUpload = useCallback(async (f: File) => {
-    setFile(f);
+  // ── GPS Excel 上傳（支援多檔案） ────────────────────────────────────
+  const doGpsUpload = useCallback(async (fileList: File[]) => {
+    setGpsFiles(fileList);
     setGpsResult(null);
+    setGpsProgress(0);
     setUploading(true);
 
     try {
       const formData = new FormData();
-      formData.append('file', f);
+      fileList.forEach(f => formData.append('files', f));
       formData.append('period_year', periodYear);
       formData.append('period_month', periodMonth);
 
+      // 模擬逐檔進度（實際上是一次批次發送，後端逐個處理）
+      let prog = 0;
+      const progInterval = setInterval(() => {
+        prog = Math.min(prog + 1, fileList.length);
+        setGpsProgress(prog);
+        if (prog >= fileList.length) clearInterval(progInterval);
+      }, 800);
+
       const res = await verificationApi.gpsUpload(formData);
+      clearInterval(progInterval);
+      setGpsProgress(fileList.length);
       setGpsResult(res.data);
     } catch (err: any) {
       const msg = err?.response?.data?.message || 'GPS 報表處理失敗';
@@ -201,11 +214,16 @@ export default function VerificationUploadPage() {
   // ── 檔案處理分發 ──────────────────────────────────────────
   const handleFile = useCallback(async (f: File) => {
     if (isGpsSource) {
-      doGpsUpload(f);
+      doGpsUpload([f]);
     } else {
       doUpload(f, false);
     }
   }, [isGpsSource, doGpsUpload, doUpload]);
+
+  const handleGpsFiles = useCallback((fileList: FileList) => {
+    const arr = Array.from(fileList);
+    if (arr.length > 0) doGpsUpload(arr);
+  }, [doGpsUpload]);
 
   const handleOcrFiles = useCallback(async (fileList: FileList) => {
     const arr = Array.from(fileList);
@@ -221,10 +239,14 @@ export default function VerificationUploadPage() {
       if (e.dataTransfer.files?.length) {
         handleOcrFiles(e.dataTransfer.files);
       }
+    } else if (isGpsSource) {
+      if (e.dataTransfer.files?.length) {
+        handleGpsFiles(e.dataTransfer.files);
+      }
     } else if (e.dataTransfer.files?.[0]) {
       handleFile(e.dataTransfer.files[0]);
     }
-  }, [isOcrSource, handleFile, handleOcrFiles]);
+  }, [isOcrSource, isGpsSource, handleFile, handleGpsFiles, handleOcrFiles]);
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragActive(true); };
   const handleDragLeave = () => setDragActive(false);
@@ -264,6 +286,8 @@ export default function VerificationUploadPage() {
   const handleReset = () => {
     setFile(null);
     setFiles([]);
+    setGpsFiles([]);
+    setGpsProgress(0);
     setUploadResult(null);
     setOcrResult(null);
     setGpsResult(null);
@@ -475,12 +499,13 @@ export default function VerificationUploadPage() {
             fileInputRef={fileInputRef}
             uploading={uploading}
             gpsResult={gpsResult}
-            file={file}
+            gpsFiles={gpsFiles}
+            gpsProgress={gpsProgress}
             dragActive={dragActive}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onFileSelect={(f) => handleFile(f)}
+            onFilesSelect={(fl) => handleGpsFiles(fl)}
             onReset={handleReset}
           />
         )}
@@ -772,31 +797,35 @@ function OcrUploadSection({
 }
 
 // ══════════════════════════════════════════════════════════════
-// GPS Excel 上傳區塊
+// GPS Excel 上傳區塊（支援多檔案）
 // ══════════════════════════════════════════════════════════════
 function GpsUploadSection({
   fileInputRef,
   uploading,
   gpsResult,
-  file,
+  gpsFiles,
+  gpsProgress,
   dragActive,
   onDrop,
   onDragOver,
   onDragLeave,
-  onFileSelect,
+  onFilesSelect,
   onReset,
 }: {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   uploading: boolean;
   gpsResult: any;
-  file: File | null;
+  gpsFiles: File[];
+  gpsProgress: number;
   dragActive: boolean;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
-  onFileSelect: (f: File) => void;
+  onFilesSelect: (fl: FileList) => void;
   onReset: () => void;
 }) {
+  const total = gpsFiles.length;
+
   return (
     <>
       {!gpsResult ? (
@@ -804,8 +833,10 @@ function GpsUploadSection({
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${
+            uploading ? 'cursor-default' : 'cursor-pointer'
+          } ${
             dragActive ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
           }`}
         >
@@ -813,114 +844,190 @@ function GpsUploadSection({
             ref={fileInputRef}
             type="file"
             accept=".xlsx,.xls,.csv"
+            multiple
             className="hidden"
-            onChange={e => e.target.files?.[0] && onFileSelect(e.target.files[0])}
+            onChange={e => e.target.files && e.target.files.length > 0 && onFilesSelect(e.target.files)}
           />
           {uploading ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="text-4xl animate-spin inline-block">&#9203;</div>
-              <div className="text-gray-600">正在解析 GPS 追蹤報表並生成行程摘要...</div>
-              <div className="text-xs text-gray-400">系統正在解析 GPS 軌跡資料並生成每日摘要...</div>
+              {total > 1 ? (
+                <>
+                  <div className="text-gray-700 font-medium">
+                    正在處理第 {Math.min(gpsProgress + 1, total)}/{total} 個檔案...
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {gpsFiles[Math.min(gpsProgress, total - 1)]?.name}
+                  </div>
+                  <div className="w-full max-w-xs mx-auto bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-primary-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${total > 0 ? (gpsProgress / total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-gray-600">正在解析 GPS 追蹤報表並生成行程摘要...</div>
+                  <div className="text-xs text-gray-400">系統正在解析 GPS 軌跡資料並生成每日摘要...</div>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
               <div className="text-4xl">&#128205;</div>
               <div className="text-gray-600">拖放 GPS 追蹤報表 Excel 到此處，或點擊選擇檔案</div>
-              <div className="text-xs text-gray-400">支援 Autotoll 格式的 .xlsx, .xls, .csv 檔案，最大 50MB</div>
+              <div className="text-xs text-gray-400">支援一次選擇多個 .xlsx, .xls, .csv 檔案，每個最大 50MB</div>
             </div>
           )}
         </div>
       ) : (
         <div className="space-y-4">
-          {/* GPS 結果摘要 */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          {/* 整體摘要 */}
+          <div className={`border rounded-lg p-4 ${
+            gpsResult.failed > 0
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-green-50 border-green-200'
+          }`}>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-green-600 text-lg">&#128205;</span>
-              <span className="font-medium text-green-800">GPS 報表處理完成</span>
+              <span className="text-lg">{gpsResult.failed > 0 ? '⚠️' : '✅'}</span>
+              <span className="font-medium text-gray-800">
+                GPS 報表處理完成（共 {gpsResult.total} 個檔案）
+              </span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <div className="text-gray-500">批次編號</div>
-                <div className="font-medium font-mono">{gpsResult.batch_code}</div>
+                <div className="text-gray-500">成功</div>
+                <div className="font-medium text-green-600">{gpsResult.succeeded} 個</div>
               </div>
               <div>
-                <div className="text-gray-500">原始 GPS 點數</div>
-                <div className="font-medium">{gpsResult.total_raw_rows}</div>
+                <div className="text-gray-500">重複跳過</div>
+                <div className="font-medium text-amber-600">{gpsResult.duplicates} 個</div>
               </div>
               <div>
-                <div className="text-gray-500">車牌/日分組</div>
-                <div className="font-medium">{gpsResult.vehicle_day_groups}</div>
-              </div>
-              <div>
-                <div className="text-gray-500">摘要生成</div>
-                <div className="font-medium text-green-600">{gpsResult.summaries_completed}</div>
+                <div className="text-gray-500">失敗</div>
+                <div className="font-medium text-red-600">{gpsResult.failed} 個</div>
               </div>
             </div>
           </div>
 
-          {/* GPS 每日摘要表格 */}
-          {gpsResult.summaries && gpsResult.summaries.length > 0 && (
+          {/* 逐檔結果列表 */}
+          {gpsResult.results && gpsResult.results.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600">
-                每日 GPS 摘要（{gpsResult.summaries.length} 天）
+                檔案處理結果
               </div>
-              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-gray-50">
-                    <tr>
-                      <th className="text-left px-3 py-2">狀態</th>
-                      <th className="text-left px-3 py-2">日期</th>
-                      <th className="text-left px-3 py-2">車牌</th>
-                      <th className="text-left px-3 py-2">首次開引擎</th>
-                      <th className="text-left px-3 py-2">最後關引擎</th>
-                      <th className="text-right px-3 py-2">里程</th>
-                      <th className="text-right px-3 py-2">GPS 點數</th>
-                      <th className="text-left px-3 py-2">主要位置</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {gpsResult.summaries.map((s: any, idx: number) => (
-                      <tr key={idx} className="border-t hover:bg-gray-50">
-                        <td className="px-3 py-2">
-                          <span className={`inline-block w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">{s.date}</td>
-                        <td className="px-3 py-2 font-mono font-medium">{s.vehicle_no}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                          {s.first_engine_on ? s.first_engine_on.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                          {s.last_engine_off ? s.last_engine_off.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {s.total_distance != null && Number(s.total_distance) > 0
-                            ? `${Number(s.total_distance).toFixed(1)} km`
-                            : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-500">
-                          {s.raw_point_count || '—'}
-                        </td>
-                        <td className="px-3 py-2">
-                          {s.locations && s.locations.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {s.locations.slice(0, 3).map((loc: string, i: number) => (
-                                <span key={i} className="inline-block px-1.5 py-0.5 bg-yellow-50 text-yellow-800 text-xs rounded">
-                                  {loc}
-                                </span>
-                              ))}
-                              {s.locations.length > 3 && (
-                                <span className="text-gray-400">+{s.locations.length - 3}</span>
-                              )}
-                            </div>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y max-h-[280px] overflow-y-auto">
+                {gpsResult.results.map((r: any, idx: number) => {
+                  const isDup = r.duplicate;
+                  const isFail = !!r.error && !isDup;
+                  const isOk = !isDup && !isFail;
+                  return (
+                    <div key={idx} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`shrink-0 w-2 h-2 rounded-full ${
+                            isOk ? 'bg-green-500' : isDup ? 'bg-amber-400' : 'bg-red-500'
+                          }`} />
+                          <span className="text-sm font-medium text-gray-700 truncate">{r.file_name}</span>
+                        </div>
+                        <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
+                          isOk ? 'bg-green-100 text-green-700'
+                          : isDup ? 'bg-amber-100 text-amber-700'
+                          : 'bg-red-100 text-red-600'
+                        }`}>
+                          {isOk ? '✅ 成功' : isDup ? '⚠️ 重複' : '❌ 失敗'}
+                        </span>
+                      </div>
+                      {isDup && r.existing_batch && (
+                        <div className="mt-1 ml-4 text-xs text-amber-600">
+                          已於 {r.existing_batch.upload_time} 上傳（批次: {r.existing_batch.batch_code}）
+                        </div>
+                      )}
+                      {isFail && (
+                        <div className="mt-1 ml-4 text-xs text-red-500">{r.error}</div>
+                      )}
+                      {isOk && (
+                        <div className="mt-1 ml-4 text-xs text-gray-500">
+                          批次: {r.batch_code} · GPS 點 {r.total_raw_rows} 個 · 車牌/日 {r.vehicle_day_groups} 組 · 摘要 {r.summaries_completed} 筆
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
+
+          {/* 合併所有檔案的 GPS 每日摘要表格 */}
+          {(() => {
+            const allSummaries = (gpsResult.results || [])
+              .filter((r: any) => !r.duplicate && !r.error && r.summaries?.length > 0)
+              .flatMap((r: any) => r.summaries);
+            if (allSummaries.length === 0) return null;
+            return (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600">
+                  每日 GPS 摘要（共 {allSummaries.length} 筆）
+                </div>
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-gray-50">
+                      <tr>
+                        <th className="text-left px-3 py-2">狀態</th>
+                        <th className="text-left px-3 py-2">日期</th>
+                        <th className="text-left px-3 py-2">車牌</th>
+                        <th className="text-left px-3 py-2">首次開引擎</th>
+                        <th className="text-left px-3 py-2">最後關引擎</th>
+                        <th className="text-right px-3 py-2">里程</th>
+                        <th className="text-right px-3 py-2">GPS 點數</th>
+                        <th className="text-left px-3 py-2">主要位置</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allSummaries.map((s: any, idx: number) => (
+                        <tr key={idx} className="border-t hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            <span className={`inline-block w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-green-500' : 'bg-red-500'}`} />
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{s.date}</td>
+                          <td className="px-3 py-2 font-mono font-medium">{s.vehicle_no}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                            {s.first_engine_on ? s.first_engine_on.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                            {s.last_engine_off ? s.last_engine_off.replace(/^\d{4}-\d{2}-\d{2}\s/, '').slice(0, 5) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {s.total_distance != null && Number(s.total_distance) > 0
+                              ? `${Number(s.total_distance).toFixed(1)} km`
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500">
+                            {s.raw_point_count || '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {s.locations && s.locations.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {s.locations.slice(0, 3).map((loc: string, i: number) => (
+                                  <span key={i} className="inline-block px-1.5 py-0.5 bg-yellow-50 text-yellow-800 text-xs rounded">
+                                    {loc}
+                                  </span>
+                                ))}
+                                {s.locations.length > 3 && (
+                                  <span className="text-gray-400">+{s.locations.length - 3}</span>
+                                )}
+                              </div>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 操作按鈕 */}
           <div className="flex gap-3">

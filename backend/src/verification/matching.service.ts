@@ -1002,7 +1002,7 @@ export class MatchingService {
       include: { chits: true },
     }) : [];
 
-    // 3. 飛仙4 OCR
+    // 3. 飛仔 OCR
     const slipSources = await this.prisma.verificationSource.findMany({ where: { source_code: { in: ['slip_chit', 'slip_no_chit'] } } });
     const slipSourceIds = slipSources.map((s) => s.id);
     const slipRecords = slipSourceIds.length > 0 ? await this.prisma.verificationRecord.findMany({
@@ -1065,13 +1065,13 @@ export class MatchingService {
       sources['chit'] = { source: '入帳票', status: 'missing', details: [] };
     }
 
-    // 飛仙4 OCR
+    // 飛仔 OCR
     const matchedSlips = vehicleNorm
       ? slipRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
       : [];
     if (matchedSlips.length > 0) {
       sources['delivery_note'] = {
-        source: '飛仙4 OCR',
+        source: '飛仔 OCR',
         status: 'found',
         details: matchedSlips.map((r: any) => ({
           id: r.id,
@@ -1084,7 +1084,7 @@ export class MatchingService {
         })),
       };
     } else {
-      sources['delivery_note'] = { source: '飛仙4 OCR', status: 'missing', details: [] };
+      sources['delivery_note'] = { source: '飛仔 OCR', status: 'missing', details: [] };
     }
 
     // GPS
@@ -1137,6 +1137,24 @@ export class MatchingService {
             this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm),
         )
       : [];
+
+    // 檢查是否有手動配對記錄
+    const waManualMatch = await this.prisma.verificationConfirmation.findUnique({
+      where: { work_log_id_source_code: { work_log_id: workLogId, source_code: 'whatsapp_order' } },
+    });
+    if (waManualMatch && waManualMatch.status === 'manual_match' && waManualMatch.matched_record_id) {
+      // 用 matched_record_id 查 wa_order_item，合併到結果中（避免重複）
+      const alreadyIncluded = matchedWa.some((item: any) => item.id === waManualMatch.matched_record_id);
+      if (!alreadyIncluded) {
+        const manualItem = await this.prisma.verificationWaOrderItem.findUnique({
+          where: { id: waManualMatch.matched_record_id },
+        });
+        if (manualItem) {
+          matchedWa.push(manualItem as any);
+        }
+      }
+    }
+
     if (matchedWa.length > 0) {
       sources['whatsapp_order'] = {
         source: 'WhatsApp Order',
