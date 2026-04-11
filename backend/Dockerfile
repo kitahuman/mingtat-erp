@@ -45,7 +45,6 @@ RUN npm ci --omit=dev
 
 # Copy Prisma schema and migrations (needed for migrate deploy)
 COPY prisma ./prisma
-COPY prisma.config.ts ./prisma.config.ts
 
 # Re-generate Prisma client in production node_modules
 RUN npx prisma generate
