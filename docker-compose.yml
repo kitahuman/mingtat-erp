@@ -29,9 +29,6 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - BACKEND_URL=http://backend:3001
-    depends_on:
-      backend:
-        condition: service_healthy
     networks:
       - mingtat-network
 
