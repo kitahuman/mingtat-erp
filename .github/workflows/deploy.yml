@@ -37,7 +37,7 @@ jobs:
         id: version
         run: |
           COMMIT_HASH=$(git rev-parse --short HEAD)
-          DEPLOY_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          DEPLOY_TIME=$(TZ='Asia/Hong_Kong' date '+%Y-%m-%d %H:%M:%S HKT')
           echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
           echo "deploy_time=$DEPLOY_TIME" >> $GITHUB_OUTPUT
           echo "tag=$COMMIT_HASH" >> $GITHUB_OUTPUT
