@@ -52,12 +52,12 @@ interface Pagination {
 // ══════════════════════════════════════════════════════════════
 
 const ALL_SOURCE_COLUMNS = [
+  { key: 'whatsapp_order', label: 'WhatsApp', icon: '💬', alwaysOn: false },
   { key: 'work_log', label: '工作紀錄', icon: '📋', alwaysOn: true },
   { key: 'chit', label: '入帳票', icon: '🧾', alwaysOn: false },
-  { key: 'delivery_note', label: '飛仔 OCR', icon: '📄', alwaysOn: false },
+  { key: 'delivery_note', label: '飛仙4 OCR', icon: '📄', alwaysOn: false },
   { key: 'gps', label: 'GPS', icon: '📍', alwaysOn: false },
   { key: 'attendance', label: '打卡', icon: '⏰', alwaysOn: false },
-  { key: 'whatsapp_order', label: 'WhatsApp', icon: '💬', alwaysOn: false },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; emoji: string; color: string; bg: string }> = {

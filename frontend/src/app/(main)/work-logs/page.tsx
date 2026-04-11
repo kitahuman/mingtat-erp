@@ -1170,7 +1170,7 @@ export default function WorkLogsPage() {
                               attendance:     { label: '打卡紀錄', icon: '⏰', color: 'teal' },
                               whatsapp_order: { label: 'WhatsApp', icon: '💬', color: 'emerald' },
                             };
-                            const SOURCE_ORDER = ['work_log', 'chit', 'delivery_note', 'gps', 'attendance', 'whatsapp_order'];
+                            const SOURCE_ORDER = ['whatsapp_order', 'work_log', 'chit', 'delivery_note', 'gps', 'attendance'];
                             return (
                               <div className="flex flex-wrap gap-3">
                                 {SOURCE_ORDER.map(key => {
