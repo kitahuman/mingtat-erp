@@ -554,15 +554,6 @@ export default function MatchingPage() {
                                         </div>
                                       )}
 
-                                      {/* 其他來源：欄位分數進度條（always visible if found） */}
-                                      {src.status === 'found' && col.key !== 'work_log' && src.field_scores && src.field_scores.length > 0 && (
-                                        <div className="mt-2 space-y-1 border-t pt-2">
-                                          {src.field_scores.map((fs: FieldScore, fsIdx: number) => (
-                                            <FieldScoreBar key={fsIdx} fieldScore={fs} />
-                                          ))}
-                                        </div>
-                                      )}
-
                                       {/* 展開詳情（點擊後顯示） */}
                                       {col.key !== 'work_log' && isSourceExpanded && src.details.length > 0 && (
                                         <div className="mt-2 space-y-1.5 text-xs border-t pt-2">
