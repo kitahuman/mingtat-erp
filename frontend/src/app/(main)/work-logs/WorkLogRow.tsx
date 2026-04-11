@@ -143,7 +143,8 @@ export default function WorkLogRow({
   // ── Display mode ───────────────────────────────────────────────────────────────────────────────────────
   if (!isEditing) {
     const statusColor = STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600';
-    const hasUnverifiedClient = !!row.unverified_client_name;
+    // 只有在沒有確認客戶（client_id）且有未確認名稱時，才顯示琥色背景
+    const hasUnverifiedClient = !row.client_id && !!row.unverified_client_name;
     return (
       <tr
         className={`cursor-pointer border-b border-gray-100 text-xs ${
@@ -176,15 +177,18 @@ export default function WorkLogRow({
         {/* 公司 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.company?.name || row.company_profile?.code || '—'}</td>
         {/* 客戶公司 */}
+        {/* 有 client_id 時顯示正式客戶名稱（白底），只有 unverified_client_name 時顯示琥色標籤（未確認） */}
         <td className="px-2 py-1.5 whitespace-nowrap w-36 max-w-[144px] truncate">
-          {row.unverified_client_name ? (
+          {row.client?.name ? (
+            row.client.name
+          ) : row.unverified_client_name ? (
             <span className="inline-flex items-center gap-1">
-              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800 whitespace-nowrap">
+              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800 whitespace-nowrap" title="未確認客戶（司機輸入）">
                 {row.unverified_client_name}
               </span>
             </span>
           ) : (
-            row.client?.name || '—'
+            '—'
           )}
         </td>
         {/* 報價單 */}

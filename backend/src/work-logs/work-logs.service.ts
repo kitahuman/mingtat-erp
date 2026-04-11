@@ -142,6 +142,18 @@ export class WorkLogsService {
       rest.is_location_new = false;
     }
 
+    // 當 client_id 被設定時，同步更新 unverified_client_name 為正式客戶名稱
+    // 這樣交叉比對頁面和工作紀錄頁面顯示的客戶名稱會一致
+    if ('client_id' in rest && rest.client_id) {
+      const partner = await this.prisma.partner.findUnique({
+        where: { id: Number(rest.client_id) },
+        select: { name: true },
+      });
+      if (partner) {
+        rest.unverified_client_name = partner.name;
+      }
+    }
+
     await this.prisma.workLog.update({ where: { id }, data: rest });
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];

@@ -228,7 +228,7 @@ export class MatchingService {
       const ref = {
         employee: refWl.employee?.name_zh || refWl.employee?.nickname || '',
         employeeNickname: refWl.employee?.nickname || '',
-        customer: refWl.unverified_client_name || refWl.client?.name || '',
+        customer: refWl.client?.name || refWl.unverified_client_name || '',
         contract: refWl.contract?.contract_no || refWl.client_contract_no || '',
         location: `${refWl.start_location || ''} ${refWl.end_location || ''}`.trim(),
       };
@@ -246,7 +246,7 @@ export class MatchingService {
           date,
           vehicle: wl.equipment_number,
           employee: wl.employee?.name_zh || wl.employee?.nickname || '—',
-          customer: wl.unverified_client_name || wl.client?.name || '—',
+          customer: wl.client?.name || wl.unverified_client_name || '—',
           contract: wl.contract?.contract_no || wl.client_contract_no || '—',
           location: `${wl.start_location || '—'} → ${wl.end_location || '—'}`,
           service_type: wl.service_type || '—',
@@ -484,7 +484,7 @@ export class MatchingService {
       const ref = {
         employee: employeeName,
         employeeNickname,
-        customer: refWl.unverified_client_name || refWl.client?.name || '',
+        customer: refWl.client?.name || refWl.unverified_client_name || '',
         contract: refWl.contract?.contract_no || refWl.client_contract_no || '',
         location: `${refWl.start_location || ''} ${refWl.end_location || ''}`.trim(),
       };
@@ -507,7 +507,7 @@ export class MatchingService {
           date,
           vehicle: wl.equipment_number || '—',
           employee: employeeName,
-          customer: wl.unverified_client_name || wl.client?.name || '—',
+          customer: wl.client?.name || wl.unverified_client_name || '—',
           contract: wl.contract?.contract_no || wl.client_contract_no || '—',
           location: `${wl.start_location || '—'} → ${wl.end_location || '—'}`,
           service_type: wl.service_type || '—',
