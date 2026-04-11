@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (--legacy-peer-deps for react-leaflet peer conflict)
+RUN npm ci --legacy-peer-deps
 
 # ============================================
 # Stage 2: Build application
