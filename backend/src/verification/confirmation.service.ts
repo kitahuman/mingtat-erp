@@ -134,18 +134,28 @@ export class ConfirmationService {
       }
 
       case 'whatsapp_order': {
+        const waWhere: any = { order: { wa_order_date: dateObj } };
+        if (params.search && params.search.trim()) {
+          waWhere.OR = [
+            { wa_item_vehicle_no: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_machine_code: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_driver_nickname: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_customer: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_contract_no: { contains: params.search, mode: 'insensitive' } },
+          ];
+        }
         return this.prisma.verificationWaOrderItem.findMany({
-          where: {
-            order: { wa_order_date: dateObj },
-            OR: [
-              { wa_item_vehicle_no: { contains: params.search, mode: 'insensitive' } },
-              { wa_item_machine_code: { contains: params.search, mode: 'insensitive' } },
-              { wa_item_driver_nickname: { contains: params.search, mode: 'insensitive' } },
-              { wa_item_customer: { contains: params.search, mode: 'insensitive' } },
-            ],
+          where: waWhere,
+          include: {
+            order: {
+              select: { id: true, wa_order_date: true, wa_order_status: true, wa_order_version: true },
+            },
           },
-          include: { order: { select: { id: true, wa_order_date: true, wa_order_status: true } } },
-          take: 20,
+          orderBy: [
+            { order: { wa_order_version: 'desc' } },
+            { wa_item_seq: 'asc' },
+          ],
+          take: 50,
         });
       }
 

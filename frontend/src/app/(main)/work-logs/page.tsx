@@ -111,6 +111,17 @@ export default function WorkLogsPage() {
   const [confirmations, setConfirmations] = useState<Map<number, Record<string, { status: string; confirmed_by: string; confirmed_at: string }>>>(new Map());
   const [confirmActionLoading, setConfirmActionLoading] = useState<string | null>(null);
 
+  // ── Manual Match Popup ──────────────────────────────────────────
+  const [manualMatchPopup, setManualMatchPopup] = useState<{
+    workLogId: number;
+    workLogDate: string; // YYYY-MM-DD
+    sourceCode: string;
+  } | null>(null);
+  const [manualMatchSearch, setManualMatchSearch] = useState('');
+  const [manualMatchResults, setManualMatchResults] = useState<any[]>([]);
+  const [manualMatchLoading, setManualMatchLoading] = useState(false);
+  const [manualMatchSelected, setManualMatchSelected] = useState<any | null>(null);
+
   const handleVerify = async (workLogId: number) => {
     if (openVerifyId === workLogId) {
       // 已展開，點擊再次則收起
@@ -175,6 +186,87 @@ export default function WorkLogsPage() {
       alert('操作失敗: ' + (e?.message || '未知錯誤'));
     } finally {
       setConfirmActionLoading(null);
+    }
+  };
+
+  // 開啟手動配對 popup
+  const openManualMatchPopup = async (workLogId: number, workLogDate: string, sourceCode: string) => {
+    setManualMatchPopup({ workLogId, workLogDate, sourceCode });
+    setManualMatchSearch('');
+    setManualMatchSelected(null);
+    setManualMatchResults([]);
+    // 自動載入當天所有 WA items
+    setManualMatchLoading(true);
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      const res = await verificationApi.searchRecords({ source_code: sourceCode, date: workLogDate, search: '' });
+      setManualMatchResults(res.data || []);
+    } catch (e) {
+      setManualMatchResults([]);
+    } finally {
+      setManualMatchLoading(false);
+    }
+  };
+
+  // 搜尋 WA items
+  const handleManualMatchSearch = async (search: string) => {
+    setManualMatchSearch(search);
+    if (!manualMatchPopup) return;
+    setManualMatchLoading(true);
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      const res = await verificationApi.searchRecords({
+        source_code: manualMatchPopup.sourceCode,
+        date: manualMatchPopup.workLogDate,
+        search,
+      });
+      setManualMatchResults(res.data || []);
+    } catch (e) {
+      setManualMatchResults([]);
+    } finally {
+      setManualMatchLoading(false);
+    }
+  };
+
+  // 確認手動配對
+  const handleManualMatchConfirm = async () => {
+    if (!manualMatchPopup || !manualMatchSelected) return;
+    setManualMatchLoading(true);
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      await verificationApi.upsertConfirmation({
+        work_log_id: manualMatchPopup.workLogId,
+        source_code: manualMatchPopup.sourceCode,
+        status: 'manual_match',
+        matched_record_id: manualMatchSelected.id,
+        matched_record_type: 'wa_order_item',
+        notes: `手動配對: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || ''} ${manualMatchSelected.wa_item_driver_nickname || ''}`.trim(),
+      });
+      // 更新確認狀態
+      setConfirmations(prev => {
+        const next = new Map(prev);
+        const existing = next.get(manualMatchPopup.workLogId) || {};
+        next.set(manualMatchPopup.workLogId, {
+          ...existing,
+          [manualMatchPopup.sourceCode]: {
+            status: 'manual_match',
+            confirmed_by: '我',
+            confirmed_at: new Date().toISOString(),
+          },
+        });
+        return next;
+      });
+      // 重新載入核對面板資料
+      setVerifyData(prev => {
+        const next = new Map(prev);
+        next.delete(manualMatchPopup.workLogId); // 清除快取，下次展開會重新載入
+        return next;
+      });
+      setManualMatchPopup(null);
+    } catch (e: any) {
+      alert('手動配對失敗: ' + (e?.message || '未知錯誤'));
+    } finally {
+      setManualMatchLoading(false);
     }
   };
 
@@ -1324,7 +1416,25 @@ export default function WorkLogsPage() {
                                         );
                                         return null;
                                       })()}
-                                      {!found && <div className="text-gray-400 text-xs">未找到對應資料</div>}
+                                      {!found && (
+                                        <div className="space-y-2">
+                                          <div className="text-gray-400 text-xs">未找到對應資料</div>
+                                          {key === 'whatsapp_order' && !conf && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const dateStr = row.scheduled_date
+                                                  ? new Date(row.scheduled_date).toISOString().slice(0, 10)
+                                                  : new Date().toISOString().slice(0, 10);
+                                                openManualMatchPopup(row.id, dateStr, key);
+                                              }}
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200"
+                                            >
+                                              🔗 手動配對
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
                                       {/* 確認/拒絕按鈕 */}
                                       {key !== 'work_log' && found && (
                                         <div className="mt-2 pt-2 border-t flex items-center gap-2">
@@ -1415,7 +1525,119 @@ export default function WorkLogsPage() {
         </div>
       </div>
 
-      {/* ── Attachment Viewer Modal ───────────────────────────────────────── */}
+       {/* ── Manual Match Popup ──────────────────────────────────────── */}
+      {manualMatchPopup && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setManualMatchPopup(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between rounded-t-xl">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">🔗 手動配對 WhatsApp Order</h2>
+                <p className="text-xs text-gray-500 mt-0.5">日期: {manualMatchPopup.workLogDate}，工作紀錄 #{manualMatchPopup.workLogId}</p>
+              </div>
+              <button onClick={() => setManualMatchPopup(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+            </div>
+
+            {/* Search bar */}
+            <div className="px-5 py-3 border-b border-gray-100">
+              <input
+                type="text"
+                value={manualMatchSearch}
+                onChange={e => handleManualMatchSearch(e.target.value)}
+                placeholder="搜尋車牌、司機、客戶、合約號碼..."
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                autoFocus
+              />
+            </div>
+
+            {/* Results list */}
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+              {manualMatchLoading && (
+                <div className="text-center text-gray-400 py-8 text-sm">載入中...</div>
+              )}
+              {!manualMatchLoading && manualMatchResults.length === 0 && (
+                <div className="text-center text-gray-400 py-8 text-sm">沒有找到對應的 WhatsApp Order</div>
+              )}
+              {!manualMatchLoading && manualMatchResults.map((item: any) => {
+                const isSelected = manualMatchSelected?.id === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setManualMatchSelected(isSelected ? null : item)}
+                    className={`cursor-pointer rounded-lg border p-3 text-sm transition-colors ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(item.wa_item_vehicle_no || item.wa_item_machine_code) && (
+                            <span className="font-mono font-semibold text-gray-800">
+                              {item.wa_item_vehicle_no || item.wa_item_machine_code}
+                            </span>
+                          )}
+                          {item.wa_item_order_type && (
+                            <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                              {item.wa_item_order_type}
+                            </span>
+                          )}
+                          {item.order?.wa_order_version && (
+                            <span className="text-xs text-gray-400">v{item.order.wa_order_version}</span>
+                          )}
+                        </div>
+                        {item.wa_item_driver_nickname && (
+                          <div className="text-gray-600">👤 {item.wa_item_driver_nickname}</div>
+                        )}
+                        {item.wa_item_customer && (
+                          <div className="text-gray-600">🏢 {item.wa_item_customer}</div>
+                        )}
+                        {item.wa_item_contract_no && (
+                          <div className="text-gray-500 text-xs">📄 {item.wa_item_contract_no}</div>
+                        )}
+                        {item.wa_item_location && (
+                          <div className="text-gray-500 text-xs">📍 {item.wa_item_location}</div>
+                        )}
+                        {item.wa_item_work_desc && (
+                          <div className="text-gray-500 text-xs">💬 {item.wa_item_work_desc}</div>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <span className="text-indigo-600 font-bold text-lg">✓</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 px-5 py-3 flex items-center justify-between bg-gray-50 rounded-b-xl">
+              <div className="text-xs text-gray-500">
+                {manualMatchSelected
+                  ? `已選擇: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || `#${manualMatchSelected.id}`}`
+                  : '請選擇一筆記錄來配對'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setManualMatchPopup(null)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100"
+                >取消</button>
+                <button
+                  onClick={handleManualMatchConfirm}
+                  disabled={!manualMatchSelected || manualMatchLoading}
+                  className="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
+                >
+                  {manualMatchLoading ? '處理中...' : '確認配對'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Attachment Viewer Modal ──────────────────────────────────────── */}
       {attachmentViewerOpen && viewingAttachments && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
