@@ -102,6 +102,31 @@ export default function WorkLogsPage() {
   const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false);
   const [viewingAttachments, setViewingAttachments] = useState<{ photos: string[]; signature: string | null } | null>(null);
 
+  // ── Verification panel ──────────────────────────────────────────
+  // openVerifyId: 目前展開核對面板的 workLogId（null = 全部收起）
+  const [openVerifyId, setOpenVerifyId] = useState<number | null>(null);
+  // verifyData: Map<workLogId, { loading, data, error }>
+  const [verifyData, setVerifyData] = useState<Map<number, { loading: boolean; data: any; error: string | null }>>(new Map());
+
+  const handleVerify = async (workLogId: number) => {
+    if (openVerifyId === workLogId) {
+      // 已展開，點擊再次則收起
+      setOpenVerifyId(null);
+      return;
+    }
+    setOpenVerifyId(workLogId);
+    // 如果已有資料則不重新載入
+    if (verifyData.has(workLogId) && !verifyData.get(workLogId)?.error) return;
+    setVerifyData(prev => new Map(prev).set(workLogId, { loading: true, data: null, error: null }));
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      const res = await verificationApi.matchSingle(workLogId);
+      setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: res.data, error: null }));
+    } catch (e: any) {
+      setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: null, error: e?.message || '載入失敗' }));
+    }
+  };
+
   // ── Edit lock ───────────────────────────────────────────────
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; lockedBy?: string; isMe?: boolean } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1059,6 +1084,7 @@ export default function WorkLogsPage() {
                 const rowNum = (page - 1) * limit + rowIndex + 1;
 
                 return (
+                  <>
                   <tr key={row.id}
                     className={`border-b border-gray-100 text-xs ${
                       rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-50/30'
@@ -1113,9 +1139,137 @@ export default function WorkLogsPage() {
                         )}
                         <button onClick={() => handleDuplicate(row.id)} className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100" title="複製">📋</button>
                         <button onClick={() => handleDelete(row.id)} className="px-1 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100" title="刪除">🗑️</button>
+                        <button
+                          onClick={() => handleVerify(row.id)}
+                          className={`px-1 py-0.5 text-xs rounded ${openVerifyId === row.id ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                          title="核對"
+                        >✓✓</button>
                       </div>
                     </td>
                   </tr>
+                  {/* 核對面板展開行 */}
+                  {openVerifyId === row.id && (() => {
+                    const vd = verifyData.get(row.id);
+                    const totalCols = (visibleColumns as any[]).length + 3; // 3 = 行號 + checkbox + ID
+                    return (
+                      <tr key={`verify-${row.id}`} className="bg-indigo-50 border-b border-indigo-200">
+                        <td colSpan={totalCols + 1} className="px-4 py-3">
+                          {vd?.loading && (
+                            <div className="text-xs text-indigo-500 py-1">核對資料載入中…</div>
+                          )}
+                          {vd?.error && (
+                            <div className="text-xs text-red-500 py-1">✖ {vd.error}</div>
+                          )}
+                          {vd?.data && (() => {
+                            const sources = vd.data.sources || {};
+                            const SOURCE_META: Record<string, { label: string; icon: string; color: string }> = {
+                              work_log:       { label: '工作紀錄', icon: '📝', color: 'blue' },
+                              chit:           { label: '入帳票',   icon: '🧾', color: 'green' },
+                              delivery_note:  { label: '飛仙4 OCR', icon: '📄', color: 'purple' },
+                              gps:            { label: 'GPS 追蹤',  icon: '📍', color: 'orange' },
+                              attendance:     { label: '打卡紀錄', icon: '⏰', color: 'teal' },
+                              whatsapp_order: { label: 'WhatsApp', icon: '💬', color: 'emerald' },
+                            };
+                            const SOURCE_ORDER = ['work_log', 'chit', 'delivery_note', 'gps', 'attendance', 'whatsapp_order'];
+                            return (
+                              <div className="flex flex-wrap gap-3">
+                                {SOURCE_ORDER.map(key => {
+                                  const src = sources[key];
+                                  const meta = SOURCE_META[key];
+                                  if (!src || !meta) return null;
+                                  const found = src.status === 'found';
+                                  const colorMap: Record<string, string> = {
+                                    blue: 'border-blue-300 bg-blue-50',
+                                    green: 'border-green-300 bg-green-50',
+                                    purple: 'border-purple-300 bg-purple-50',
+                                    orange: 'border-orange-300 bg-orange-50',
+                                    teal: 'border-teal-300 bg-teal-50',
+                                    emerald: 'border-emerald-300 bg-emerald-50',
+                                  };
+                                  const missingColor = 'border-gray-200 bg-gray-50';
+                                  return (
+                                    <div key={key} className={`rounded-lg border px-3 py-2 min-w-[160px] max-w-[280px] text-xs ${found ? colorMap[meta.color] : missingColor}`}>
+                                      {/* 標題 */}
+                                      <div className="flex items-center gap-1 mb-1.5">
+                                        <span>{meta.icon}</span>
+                                        <span className="font-semibold text-gray-700">{meta.label}</span>
+                                        {found
+                                          ? <span className="ml-auto text-green-600 font-bold">✓</span>
+                                          : <span className="ml-auto text-gray-400">✕</span>
+                                        }
+                                      </div>
+                                      {/* 詳情 */}
+                                      {found && src.details?.length > 0 && (() => {
+                                        const d = src.details[0];
+                                        if (key === 'work_log') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
+                                            {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
+                                            {d.customer && d.customer !== '—' && <div>🏢 {d.customer}</div>}
+                                            {d.contract && d.contract !== '—' && <div>📄 {d.contract}</div>}
+                                            {d.location && d.location !== '—' && <div>📍 {d.location}</div>}
+                                          </div>
+                                        );
+                                        if (key === 'chit') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.facility && d.facility !== '—' && <div>🏭 設施: {d.facility}</div>}
+                                            {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
+                                            {d.account_no && d.account_no !== '—' && <div>💳 戶口: {d.account_no}</div>}
+                                            {d.chit_nos?.length > 0 && <div>🧾 入帳票: {d.chit_nos.join(', ')}</div>}
+                                            {d.weight_net != null && d.weight_net !== '—' && <div>⚖️ 凈重: {d.weight_net} T</div>}
+                                            {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
+                                          </div>
+                                        );
+                                        if (key === 'delivery_note') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
+                                            {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
+                                            {d.customer && d.customer !== '—' && <div>🏢 {d.customer}</div>}
+                                            {d.location && d.location !== '—' && <div>📍 {d.location}</div>}
+                                            {d.chit_nos?.length > 0 && <div>🧾 {d.chit_nos.join(', ')}</div>}
+                                          </div>
+                                        );
+                                        if (key === 'gps') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
+                                            {d.trip_count != null && <div>🔄 行程: {d.trip_count} 次</div>}
+                                            {d.distance != null && <div>📐 距離: {d.distance} km</div>}
+                                            {d.locations && d.locations !== '—' && <div>📍 {d.locations}</div>}
+                                          </div>
+                                        );
+                                        if (key === 'attendance') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
+                                            {d.type && d.type !== '—' && <div>⏰ {d.type}</div>}
+                                            {d.address && d.address !== '—' && <div>📍 {d.address}</div>}
+                                            {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
+                                          </div>
+                                        );
+                                        if (key === 'whatsapp_order') return (
+                                          <div className="space-y-0.5 text-gray-600">
+                                            {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
+                                            {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
+                                            {d.customer && d.customer !== '—' && <div>🏢 {d.customer}</div>}
+                                            {d.contract && d.contract !== '—' && <div>📄 {d.contract}</div>}
+                                            {d.location && d.location !== '—' && <div>📍 {d.location}</div>}
+                                            {d.work_desc && d.work_desc !== '—' && <div>💬 {d.work_desc}</div>}
+                                            {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
+                                          </div>
+                                        );
+                                        return null;
+                                      })()}
+                                      {!found && <div className="text-gray-400 text-xs">未找到對應資料</div>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                  </>
                 );
               })
             )}

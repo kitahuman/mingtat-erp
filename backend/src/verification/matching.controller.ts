@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Param,
+  ParseIntPipe,
   Query,
   UseGuards,
   BadRequestException,
@@ -12,6 +14,12 @@ import { MatchingService } from './matching.service';
 @UseGuards(AuthGuard('jwt'))
 export class MatchingController {
   constructor(private readonly matchingService: MatchingService) {}
+
+  // ── 單筆工作紀錄核對（工作紀錄頁面展開面板） ────────────────
+  @Get('match-single/:workLogId')
+  async matchSingle(@Param('workLogId', ParseIntPipe) workLogId: number) {
+    return this.matchingService.matchSingle(workLogId);
+  }
 
   // ── 六來源交叉比對總覽 ────────────────────────────────────
   @Get('matching')

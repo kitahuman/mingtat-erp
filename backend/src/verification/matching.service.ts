@@ -910,4 +910,195 @@ export class MatchingService {
     if (nickname && n1.includes(nickname.toLowerCase())) return true;
     return false;
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // 單筆工作紀錄核對（給工作紀錄頁面的展開面板使用）
+  // ══════════════════════════════════════════════════════════════
+  async matchSingle(workLogId: number) {
+    // 1. 取得單筆工作紀錄
+    const wl = await this.prisma.workLog.findUnique({
+      where: { id: workLogId },
+      include: {
+        employee: { select: { id: true, name_zh: true, name_en: true, nickname: true, emp_code: true } },
+        client: { select: { id: true, name: true } },
+        contract: { select: { id: true, contract_no: true } },
+      },
+    });
+    if (!wl) throw new Error(`WorkLog ${workLogId} not found`);
+
+    const date = wl.scheduled_date?.toISOString().slice(0, 10);
+    if (!date) return { work_log_id: workLogId, date: null, sources: {} };
+
+    const dateObj = new Date(date);
+    const vehicleNorm = this.normalizeVehicle(wl.equipment_number);
+    const employeeId = wl.employee_id;
+
+    // 2. 入帳票
+    const receiptSource = await this.prisma.verificationSource.findUnique({ where: { source_code: 'receipt' } });
+    const receiptRecords = receiptSource ? await this.prisma.verificationRecord.findMany({
+      where: { record_source_id: receiptSource.id, record_work_date: dateObj },
+      include: { chits: true },
+    }) : [];
+
+    // 3. 飛仙4 OCR
+    const slipSources = await this.prisma.verificationSource.findMany({ where: { source_code: { in: ['slip_chit', 'slip_no_chit'] } } });
+    const slipSourceIds = slipSources.map((s) => s.id);
+    const slipRecords = slipSourceIds.length > 0 ? await this.prisma.verificationRecord.findMany({
+      where: { record_source_id: { in: slipSourceIds }, record_work_date: dateObj },
+      include: { chits: true },
+    }) : [];
+
+    // 4. GPS
+    const gpsSummaries = await this.prisma.verificationGpsSummary.findMany({
+      where: { gps_summary_date: dateObj },
+    });
+
+    // 5. 打卡
+    const attendances = await this.prisma.employeeAttendance.findMany({
+      where: { timestamp: { gte: dateObj, lt: new Date(dateObj.getTime() + 86400000) } },
+      include: { employee: { select: { id: true, name_zh: true, nickname: true } } },
+    });
+
+    // 6. WhatsApp
+    const waOrderItems = await this.whatsappService.getDailySummaryItemsForMatching(dateObj, dateObj);
+
+    const sources: Record<string, any> = {};
+
+    // 工作紀錄本身
+    sources['work_log'] = {
+      source: '工作紀錄',
+      status: 'found',
+      details: [{
+        id: wl.id,
+        vehicle: wl.equipment_number || '—',
+        employee: wl.employee?.name_zh || wl.employee?.nickname || '—',
+        customer: wl.client?.name || wl.unverified_client_name || '—',
+        contract: wl.contract?.contract_no || wl.client_contract_no || '—',
+        location: [wl.start_location, wl.end_location].filter(Boolean).join(' → ') || '—',
+        service_type: wl.service_type || '—',
+      }],
+    };
+
+    // 入帳票
+    const matchedReceipts = vehicleNorm
+      ? receiptRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
+      : [];
+    if (matchedReceipts.length > 0) {
+      sources['chit'] = {
+        source: '入帳票',
+        status: 'found',
+        details: matchedReceipts.map((r: any) => {
+          const raw = r.record_raw_data as any || {};
+          return {
+            id: r.id,
+            facility: raw.facility || '—',
+            vehicle: r.record_vehicle_no || '—',
+            account_no: raw.account_no || '—',
+            chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
+            weight_net: r.record_weight_net ?? '—',
+          };
+        }),
+      };
+    } else {
+      sources['chit'] = { source: '入帳票', status: 'missing', details: [] };
+    }
+
+    // 飛仙4 OCR
+    const matchedSlips = vehicleNorm
+      ? slipRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
+      : [];
+    if (matchedSlips.length > 0) {
+      sources['delivery_note'] = {
+        source: '飛仙4 OCR',
+        status: 'found',
+        details: matchedSlips.map((r: any) => ({
+          id: r.id,
+          vehicle: r.record_vehicle_no || '—',
+          slip_no: r.record_slip_no || '—',
+          employee: r.record_driver_name || '—',
+          customer: r.record_customer || '—',
+          location: [r.record_location_from, r.record_location_to].filter(Boolean).join(' → ') || '—',
+          chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
+        })),
+      };
+    } else {
+      sources['delivery_note'] = { source: '飛仙4 OCR', status: 'missing', details: [] };
+    }
+
+    // GPS
+    const matchedGps = vehicleNorm
+      ? gpsSummaries.filter((g: any) => this.normalizeVehicle(g.gps_summary_vehicle_no) === vehicleNorm)
+      : [];
+    if (matchedGps.length > 0) {
+      sources['gps'] = {
+        source: 'GPS 追蹤',
+        status: 'found',
+        details: matchedGps.map((g: any) => ({
+          id: g.id,
+          vehicle: g.gps_summary_vehicle_no || '—',
+          distance: g.gps_summary_total_distance ?? '—',
+          trip_count: g.gps_summary_trip_count ?? '—',
+          locations: g.gps_summary_locations || '—',
+          start_time: g.gps_summary_start_time || '—',
+          end_time: g.gps_summary_end_time || '—',
+        })),
+      };
+    } else {
+      sources['gps'] = { source: 'GPS 追蹤', status: 'missing', details: [] };
+    }
+
+    // 打卡
+    const matchedAttendances = employeeId
+      ? attendances.filter((a: any) => a.employee_id === employeeId)
+      : [];
+    if (matchedAttendances.length > 0) {
+      sources['attendance'] = {
+        source: '打卡紀錄',
+        status: 'found',
+        details: matchedAttendances.map((a: any) => ({
+          id: a.id,
+          employee: a.employee?.name_zh || '—',
+          type: a.type || '—',
+          timestamp: a.timestamp,
+          address: a.address || '—',
+        })),
+      };
+    } else {
+      sources['attendance'] = { source: '打卡紀錄', status: 'missing', details: [] };
+    }
+
+    // WhatsApp
+    const matchedWa = vehicleNorm
+      ? waOrderItems.filter((item: any) =>
+          item.order_date === date &&
+          (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
+            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm),
+        )
+      : [];
+    if (matchedWa.length > 0) {
+      sources['whatsapp_order'] = {
+        source: 'WhatsApp Order',
+        status: 'found',
+        details: matchedWa.map((item: any) => ({
+          id: item.id,
+          vehicle: item.wa_item_vehicle_no || item.wa_item_machine_code || '—',
+          employee: item.wa_item_driver_nickname || '—',
+          customer: item.wa_item_customer || '—',
+          contract: item.wa_item_contract_no || '—',
+          location: item.wa_item_location || '—',
+          work_desc: item.wa_item_work_desc || '—',
+          order_status: item.order_status || '—',
+        })),
+      };
+    } else {
+      sources['whatsapp_order'] = { source: 'WhatsApp Order', status: 'missing', details: [] };
+    }
+
+    return {
+      work_log_id: workLogId,
+      date,
+      vehicle: wl.equipment_number,
+      sources,
+    };
+  }
 }

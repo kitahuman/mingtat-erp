@@ -767,7 +767,7 @@ export const verificationApi = {
   reparseMessage: (messageId: number) =>
     api.post(`/verification/whatsapp-messages/${messageId}/reparse`),
 
-  // ── 六來源交叉比對 ────────────────────────────────────────
+  // ── 六來源交叉比對 ────────────────────────────────────────────
 
   // 交叉比對總覽
   getMatchingOverview: (params: {
@@ -779,6 +779,10 @@ export const verificationApi = {
     limit?: number;
   }) =>
     api.get('/verification/matching', { params }),
+
+  // 單筆工作紀錄核對（工作紀錄頁面展開面板）
+  matchSingle: (workLogId: number) =>
+    api.get(`/verification/match-single/${workLogId}`),
 };
 
 // Daily Reports (工程日報) - Admin
