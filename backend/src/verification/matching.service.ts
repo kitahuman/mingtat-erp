@@ -303,18 +303,19 @@ export class MatchingService {
         })),
       };
 
-      // 6. WhatsApp Order
+      // 6. WhatsApp Order（同時比對 vehicle_no 和 machine_code）
       const matchedWa = waOrderItems.filter(
         (item: any) =>
           item.order_date === date &&
-          this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm,
+          (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
+            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm),
       );
       sources['whatsapp_order'] = {
         source: 'WhatsApp Order',
         status: matchedWa.length > 0 ? 'found' : 'missing',
         details: matchedWa.map((item: any) => ({
           id: item.id,
-          vehicle: item.wa_item_vehicle_no,
+          vehicle: item.wa_item_vehicle_no || item.wa_item_machine_code || '—',
           driver: item.wa_item_driver_nickname || '—',
           customer: item.wa_item_customer || '—',
           contract: item.wa_item_contract_no || '—',
@@ -488,11 +489,12 @@ export class MatchingService {
         })),
       };
 
-      // 6. WhatsApp Order（通過花名或車牌匹配）
+      // 6. WhatsApp Order（通過花名、車牌或機械編號匹配）
       const matchedWa = waOrderItems.filter(
         (item: any) =>
           item.order_date === date &&
           (vehicleNos.includes(this.normalizeVehicle(item.wa_item_vehicle_no)) ||
+            vehicleNos.includes(this.normalizeVehicle(item.wa_item_machine_code)) ||
             this.nameMatch(item.wa_item_driver_nickname, employeeName, employeeNickname)),
       );
       sources['whatsapp_order'] = {
@@ -500,7 +502,7 @@ export class MatchingService {
         status: matchedWa.length > 0 ? 'found' : 'missing',
         details: matchedWa.map((item: any) => ({
           id: item.id,
-          vehicle: item.wa_item_vehicle_no || '—',
+          vehicle: item.wa_item_vehicle_no || item.wa_item_machine_code || '—',
           driver: item.wa_item_driver_nickname || '—',
           customer: item.wa_item_customer || '—',
           contract: item.wa_item_contract_no || '—',
