@@ -38,6 +38,7 @@ model User {
   daily_reports_created      DailyReport[]      @relation("daily_report_creator")
   acceptance_reports_created AcceptanceReport[]  @relation("acceptance_report_creator")
   audit_logs              AuditLog[]
+  verification_confirmations VerificationConfirmation[]
 
   @@map("users")
 }
@@ -1052,6 +1053,7 @@ model WorkLog {
   project           Project?         @relation(fields: [project_id], references: [id])
    payroll_work_logs PayrollWorkLog[]
   whatsapp_messages WhatsAppMessage[]
+  verification_confirmations VerificationConfirmation[]
   @@map("work_logs")
 }
 
@@ -2209,4 +2211,29 @@ model AuditLog {
   @@index([audit_timestamp])
   @@index([audit_target_table, audit_target_id])
   @@map("audit_logs")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Verification Confirmations — 人工確認配對結果
+// ══════════════════════════════════════════════════════════════
+model VerificationConfirmation {
+  id                  Int       @id @default(autoincrement())
+  work_log_id         Int
+  source_code         String    @db.VarChar(50)
+  status              String    @db.VarChar(20)
+  matched_record_id   Int?
+  matched_record_type String?   @db.VarChar(50)
+  notes               String?   @db.Text
+  confirmed_by        Int
+  confirmed_at        DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
+
+  user    User    @relation(fields: [confirmed_by], references: [id])
+  workLog WorkLog @relation(fields: [work_log_id], references: [id])
+
+  @@unique([work_log_id, source_code])
+  @@index([work_log_id])
+  @@index([status])
+  @@index([confirmed_at])
+  @@map("verification_confirmations")
 }

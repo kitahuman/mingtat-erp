@@ -28,6 +28,7 @@ export class MatchingController {
     @Query('date_to') dateTo?: string,
     @Query('group_by') groupBy?: string,
     @Query('search') search?: string,
+    @Query('review_status') reviewStatus?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -40,6 +41,7 @@ export class MatchingController {
       date_to: dateTo,
       group_by: (groupBy as 'vehicle' | 'employee') || 'vehicle',
       search,
+      review_status: (reviewStatus as any) || 'all',
       page: page ? +page : 1,
       limit: limit ? +limit : 50,
     });

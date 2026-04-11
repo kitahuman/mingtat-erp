@@ -5,15 +5,17 @@ import { OcrService } from './ocr.service';
 import { GpsService } from './gps.service';
 import { WhatsappService } from './whatsapp.service';
 import { MatchingService } from './matching.service';
+import { ConfirmationService } from './confirmation.service';
 import { VerificationController } from './verification.controller';
 import { WhatsappController } from './whatsapp.controller';
 import { MatchingController } from './matching.controller';
+import { ConfirmationController } from './confirmation.controller';
 import { NicknameMatchService } from './nickname-match.service';
 
 @Module({
   imports: [PrismaModule],
-  providers: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, NicknameMatchService],
-  controllers: [VerificationController, WhatsappController, MatchingController],
-  exports: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, NicknameMatchService],
+  providers: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],
+  controllers: [VerificationController, WhatsappController, MatchingController, ConfirmationController],
+  exports: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],
 })
 export class VerificationModule {}

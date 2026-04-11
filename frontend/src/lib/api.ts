@@ -775,6 +775,7 @@ export const verificationApi = {
     date_to: string;
     group_by?: string;
     search?: string;
+    review_status?: string;
     page?: number;
     limit?: number;
   }) =>
@@ -783,6 +784,29 @@ export const verificationApi = {
   // 單筆工作紀錄核對（工作紀錄頁面展開面板）
   matchSingle: (workLogId: number) =>
     api.get(`/verification/match-single/${workLogId}`),
+
+  // 確認/拒絕/手動配對
+  upsertConfirmation: (data: {
+    work_log_id: number;
+    source_code: string;
+    status: 'confirmed' | 'rejected' | 'manual_match';
+    matched_record_id?: number;
+    matched_record_type?: string;
+    notes?: string;
+  }) =>
+    api.post('/verification/confirmations', data),
+
+  // 重置為未審核
+  deleteConfirmation: (workLogId: number, sourceCode: string) =>
+    api.delete(`/verification/confirmations/${workLogId}/${sourceCode}`),
+
+  // 查詢單筆工作紀錄的確認狀態
+  getConfirmations: (workLogId: number) =>
+    api.get(`/verification/confirmations/${workLogId}`),
+
+  // 搜尋可配對的記錄（手動配對用）
+  searchRecords: (params: { source_code: string; date: string; search: string }) =>
+    api.get('/verification/confirmations/search/records', { params }),
 };
 
 // Daily Reports (工程日報) - Admin

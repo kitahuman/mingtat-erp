@@ -107,6 +107,9 @@ export default function WorkLogsPage() {
   const [openVerifyId, setOpenVerifyId] = useState<number | null>(null);
   // verifyData: Map<workLogId, { loading, data, error }>
   const [verifyData, setVerifyData] = useState<Map<number, { loading: boolean; data: any; error: string | null }>>(new Map());
+  // confirmations: Map<workLogId, Map<sourceCode, status>>
+  const [confirmations, setConfirmations] = useState<Map<number, Record<string, { status: string; confirmed_by: string; confirmed_at: string }>>>(new Map());
+  const [confirmActionLoading, setConfirmActionLoading] = useState<string | null>(null);
 
   const handleVerify = async (workLogId: number) => {
     if (openVerifyId === workLogId) {
@@ -120,10 +123,58 @@ export default function WorkLogsPage() {
     setVerifyData(prev => new Map(prev).set(workLogId, { loading: true, data: null, error: null }));
     try {
       const { verificationApi } = await import('@/lib/api');
-      const res = await verificationApi.matchSingle(workLogId);
-      setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: res.data, error: null }));
+      const [matchRes, confRes] = await Promise.all([
+        verificationApi.matchSingle(workLogId),
+        verificationApi.getConfirmations(workLogId),
+      ]);
+      setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: matchRes.data, error: null }));
+      // 把確認狀態存到 Map
+      const confMap: Record<string, any> = {};
+      if (Array.isArray(confRes.data)) {
+        confRes.data.forEach((c: any) => { confMap[c.source_code] = c; });
+      }
+      setConfirmations(prev => new Map(prev).set(workLogId, confMap));
     } catch (e: any) {
       setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: null, error: e?.message || '載入失敗' }));
+    }
+  };
+
+  const handleConfirmSource = async (workLogId: number, sourceCode: string, status: 'confirmed' | 'rejected') => {
+    const loadKey = `${workLogId}-${sourceCode}`;
+    setConfirmActionLoading(loadKey);
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      await verificationApi.upsertConfirmation({ work_log_id: workLogId, source_code: sourceCode, status });
+      setConfirmations(prev => {
+        const next = new Map(prev);
+        const existing = next.get(workLogId) || {};
+        next.set(workLogId, { ...existing, [sourceCode]: { status, confirmed_by: '我', confirmed_at: new Date().toISOString() } });
+        return next;
+      });
+    } catch (e: any) {
+      alert('操作失敗: ' + (e?.message || '未知錯誤'));
+    } finally {
+      setConfirmActionLoading(null);
+    }
+  };
+
+  const handleResetConfirmation = async (workLogId: number, sourceCode: string) => {
+    const loadKey = `${workLogId}-${sourceCode}`;
+    setConfirmActionLoading(loadKey);
+    try {
+      const { verificationApi } = await import('@/lib/api');
+      await verificationApi.deleteConfirmation(workLogId, sourceCode);
+      setConfirmations(prev => {
+        const next = new Map(prev);
+        const existing = { ...(next.get(workLogId) || {}) };
+        delete existing[sourceCode];
+        next.set(workLogId, existing);
+        return next;
+      });
+    } catch (e: any) {
+      alert('操作失敗: ' + (e?.message || '未知錯誤'));
+    } finally {
+      setConfirmActionLoading(null);
     }
   };
 
@@ -1187,13 +1238,28 @@ export default function WorkLogsPage() {
                                     emerald: 'border-emerald-300 bg-emerald-50',
                                   };
                                   const missingColor = 'border-gray-200 bg-gray-50';
+                                  const conf = (confirmations.get(row.id) || {})[key];
+                                  const isActionLoading = confirmActionLoading === `${row.id}-${key}`;
+                                  const cardBorder = conf
+                                    ? conf.status === 'confirmed' ? 'border-green-400 bg-green-50'
+                                      : conf.status === 'rejected' ? 'border-red-400 bg-red-50'
+                                      : 'border-purple-400 bg-purple-50'
+                                    : found ? colorMap[meta.color] : missingColor;
                                   return (
-                                    <div key={key} className={`rounded-lg border px-3 py-2 min-w-[160px] max-w-[280px] text-xs ${found ? colorMap[meta.color] : missingColor}`}>
+                                    <div key={key} className={`rounded-lg border px-3 py-2 min-w-[160px] max-w-[280px] text-xs ${cardBorder}`}>
                                       {/* 標題 */}
                                       <div className="flex items-center gap-1 mb-1.5">
                                         <span>{meta.icon}</span>
                                         <span className="font-semibold text-gray-700">{meta.label}</span>
-                                        {found
+                                        {conf ? (
+                                          <span className={`ml-auto text-xs px-1.5 py-0.5 rounded border ${
+                                            conf.status === 'confirmed' ? 'text-green-600 bg-green-100 border-green-300' :
+                                            conf.status === 'rejected' ? 'text-red-600 bg-red-100 border-red-300' :
+                                            'text-purple-600 bg-purple-100 border-purple-300'
+                                          }`}>
+                                            {conf.status === 'confirmed' ? '✅ 已確認' : conf.status === 'rejected' ? '❎ 已拒絕' : '🔗 手動配對'}
+                                          </span>
+                                        ) : found
                                           ? <span className="ml-auto text-green-600 font-bold">✓</span>
                                           : <span className="ml-auto text-gray-400">✕</span>
                                         }
@@ -1259,6 +1325,32 @@ export default function WorkLogsPage() {
                                         return null;
                                       })()}
                                       {!found && <div className="text-gray-400 text-xs">未找到對應資料</div>}
+                                      {/* 確認/拒絕按鈕 */}
+                                      {key !== 'work_log' && found && (
+                                        <div className="mt-2 pt-2 border-t flex items-center gap-2">
+                                          {!conf ? (
+                                            <>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleConfirmSource(row.id, key, 'confirmed'); }}
+                                                disabled={isActionLoading}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 disabled:opacity-50"
+                                              >✅ 確認</button>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleConfirmSource(row.id, key, 'rejected'); }}
+                                                disabled={isActionLoading}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 disabled:opacity-50"
+                                              >❎ 拒絕</button>
+                                            </>
+                                          ) : (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleResetConfirmation(row.id, key); }}
+                                              disabled={isActionLoading}
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 disabled:opacity-50"
+                                            >↩ 重置</button>
+                                          )}
+                                          {isActionLoading && <span className="text-gray-400">處理中...</span>}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}

@@ -11,6 +11,7 @@ interface MatchingQuery {
   date_to: string;
   group_by: 'vehicle' | 'employee';
   search?: string;
+  review_status?: 'all' | 'unreviewed' | 'confirmed' | 'rejected' | 'manual_match';
   page?: number;
   limit?: number;
 }
@@ -34,7 +35,9 @@ interface SourceData {
 export interface MatchingRow {
   key: string;
   date: string;
+  work_log_ids: number[];
   sources: Record<string, SourceData>;
+  confirmations: Record<string, any>; // source_code → confirmation record
   match_status: 'full_match' | 'partial_match' | 'conflict' | 'missing_source';
   match_count: number;
   total_sources: number;
@@ -70,6 +73,7 @@ export class MatchingService {
       date_to,
       group_by,
       search,
+      review_status = 'all',
       page = 1,
       limit = 50,
     } = query;
@@ -162,6 +166,42 @@ export class MatchingService {
       results.push(...this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems));
     }
 
+    // 7. 載入確認狀態
+    const allWorkLogIds = results.flatMap((r) => r.work_log_ids);
+    const confirmations = allWorkLogIds.length > 0
+      ? await this.prisma.verificationConfirmation.findMany({
+          where: { work_log_id: { in: allWorkLogIds } },
+          include: { user: { select: { id: true, displayName: true, username: true } } },
+        })
+      : [];
+
+    // 按 work_log_id 分組確認記錄
+    const confirmMap = new Map<number, any[]>();
+    for (const c of confirmations) {
+      if (!confirmMap.has(c.work_log_id)) confirmMap.set(c.work_log_id, []);
+      confirmMap.get(c.work_log_id)!.push(c);
+    }
+
+    // 附加確認狀態到每一行
+    for (const row of results) {
+      const rowConfirms: Record<string, any> = {};
+      for (const wlId of row.work_log_ids) {
+        const cs = confirmMap.get(wlId) || [];
+        for (const c of cs) {
+          rowConfirms[c.source_code] = {
+            id: c.id,
+            status: c.status,
+            matched_record_id: c.matched_record_id,
+            matched_record_type: c.matched_record_type,
+            notes: c.notes,
+            confirmed_by: c.user?.displayName || c.user?.username || '—',
+            confirmed_at: c.confirmed_at,
+          };
+        }
+      }
+      row.confirmations = rowConfirms;
+    }
+
     // 搜尋過濾
     let filtered = results;
     if (search) {
@@ -169,6 +209,19 @@ export class MatchingService {
       filtered = results.filter(
         (r) => r.key.toLowerCase().includes(s) || r.date.includes(s),
       );
+    }
+
+    // 審核狀態過濾
+    if (review_status && review_status !== 'all') {
+      filtered = filtered.filter((row) => {
+        const sourceKeys = ['chit', 'delivery_note', 'gps', 'attendance', 'whatsapp_order'];
+        if (review_status === 'unreviewed') {
+          // 至少有一個來源沒有確認記錄
+          return sourceKeys.some((k) => !row.confirmations[k]);
+        }
+        // confirmed / rejected / manual_match：至少有一個來源是該狀態
+        return sourceKeys.some((k) => row.confirmations[k]?.status === review_status);
+      });
     }
 
     // 分頁
@@ -438,7 +491,9 @@ export class MatchingService {
       results.push({
         key: vehicleDisplay,
         date,
+        work_log_ids: wls.map((wl: any) => wl.id),
         sources,
+        confirmations: {},
         match_status: matchStatus,
         match_count: Object.values(sources).filter((s) => s.status === 'found').length,
         total_sources: 6,
@@ -679,7 +734,9 @@ export class MatchingService {
       results.push({
         key: employeeName,
         date,
+        work_log_ids: wls.map((wl: any) => wl.id),
         sources,
+        confirmations: {},
         match_status: matchStatus,
         match_count: Object.values(sources).filter((s) => s.status === 'found').length,
         total_sources: 6,

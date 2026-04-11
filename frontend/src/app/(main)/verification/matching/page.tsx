@@ -22,10 +22,22 @@ interface SourceData {
   details: any[];
 }
 
+interface ConfirmationData {
+  id: number;
+  status: 'confirmed' | 'rejected' | 'manual_match';
+  matched_record_id?: number;
+  matched_record_type?: string;
+  notes?: string;
+  confirmed_by: string;
+  confirmed_at: string;
+}
+
 interface MatchingRow {
   key: string;
   date: string;
+  work_log_ids: number[];
   sources: Record<string, SourceData>;
+  confirmations: Record<string, ConfirmationData>;
   match_status: 'full_match' | 'partial_match' | 'conflict' | 'missing_source';
   match_count: number;
   total_sources: number;
@@ -55,7 +67,7 @@ const ALL_SOURCE_COLUMNS = [
   { key: 'whatsapp_order', label: 'WhatsApp', icon: '💬', alwaysOn: false },
   { key: 'work_log', label: '工作紀錄', icon: '📋', alwaysOn: true },
   { key: 'chit', label: '入帳票', icon: '🧾', alwaysOn: false },
-  { key: 'delivery_note', label: '飛仙4 OCR', icon: '📄', alwaysOn: false },
+  { key: 'delivery_note', label: '飛仔 OCR', icon: '📄', alwaysOn: false },
   { key: 'gps', label: 'GPS', icon: '📍', alwaysOn: false },
   { key: 'attendance', label: '打卡', icon: '⏰', alwaysOn: false },
 ];
@@ -65,6 +77,20 @@ const STATUS_CONFIG: Record<string, { label: string; emoji: string; color: strin
   partial_match: { label: '部分吻合', emoji: '⚠️', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200' },
   conflict: { label: '有衝突', emoji: '❌', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
   missing_source: { label: '缺少來源', emoji: '❓', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-200' },
+};
+
+const REVIEW_STATUS_OPTIONS = [
+  { value: 'all', label: '全部', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+  { value: 'unreviewed', label: '未審核', color: 'bg-orange-100 text-orange-700 border-orange-300' },
+  { value: 'confirmed', label: '已確認', color: 'bg-green-100 text-green-700 border-green-300' },
+  { value: 'rejected', label: '已拒絕', color: 'bg-red-100 text-red-700 border-red-300' },
+  { value: 'manual_match', label: '手動配對', color: 'bg-purple-100 text-purple-700 border-purple-300' },
+];
+
+const CONFIRM_STATUS_BADGE: Record<string, { label: string; icon: string; color: string }> = {
+  confirmed: { label: '已確認', icon: '✅', color: 'text-green-600 bg-green-50 border-green-200' },
+  rejected: { label: '已拒絕', icon: '❎', color: 'text-red-600 bg-red-50 border-red-200' },
+  manual_match: { label: '手動配對', icon: '🔗', color: 'text-purple-600 bg-purple-50 border-purple-200' },
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -87,12 +113,6 @@ function getScoreColor(score: number): { text: string; bg: string; ring: string 
   return { text: 'text-red-700', bg: 'bg-red-100', ring: 'ring-red-300' };
 }
 
-function getBarColor(score: number): string {
-  if (score >= 80) return 'bg-green-500';
-  if (score >= 60) return 'bg-yellow-500';
-  return 'bg-red-500';
-}
-
 // ══════════════════════════════════════════════════════════════
 // 子元件
 // ══════════════════════════════════════════════════════════════
@@ -110,26 +130,6 @@ function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' 
   );
 }
 
-function FieldScoreBar({ fieldScore }: { fieldScore: FieldScore }) {
-  const barColor = getBarColor(fieldScore.score);
-  const weightPct = Math.round(fieldScore.weight * 100);
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="w-20 shrink-0 text-gray-500 truncate" title={fieldScore.field}>
-        {fieldScore.field}
-      </div>
-      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${fieldScore.score}%` }}
-        />
-      </div>
-      <div className="w-8 text-right font-mono text-gray-600">{fieldScore.score}</div>
-      <div className="w-10 text-right text-gray-400">({weightPct}%)</div>
-    </div>
-  );
-}
-
 // ══════════════════════════════════════════════════════════════
 // 主頁面元件
 // ══════════════════════════════════════════════════════════════
@@ -140,6 +140,7 @@ export default function MatchingPage() {
   const [dateTo, setDateTo] = useState(defaultRange.to);
   const [groupBy, setGroupBy] = useState<'vehicle' | 'employee'>('vehicle');
   const [search, setSearch] = useState('');
+  const [reviewStatus, setReviewStatus] = useState('all');
   const [data, setData] = useState<MatchingRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, total_pages: 0 });
@@ -147,6 +148,7 @@ export default function MatchingPage() {
   const [loaded, setLoaded] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState<string | null>(null);
 
   // 顯示來源篩選器：預設全部開啟（work_log 強制開啟）
   const [visibleSources, setVisibleSources] = useState<Set<string>>(
@@ -154,7 +156,6 @@ export default function MatchingPage() {
   );
 
   const toggleSource = (key: string) => {
-    // work_log 不可關閉
     if (key === 'work_log') return;
     setVisibleSources((prev) => {
       const next = new Set(prev);
@@ -167,7 +168,6 @@ export default function MatchingPage() {
     });
   };
 
-  // 目前顯示的欄位（按原始順序）
   const visibleColumns = ALL_SOURCE_COLUMNS.filter((c) => visibleSources.has(c.key));
 
   const fetchData = useCallback(async (page = 1) => {
@@ -179,6 +179,7 @@ export default function MatchingPage() {
         date_to: dateTo,
         group_by: groupBy,
         search: search || undefined,
+        review_status: reviewStatus !== 'all' ? reviewStatus : undefined,
         page,
         limit: 50,
       });
@@ -191,7 +192,7 @@ export default function MatchingPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, groupBy, search]);
+  }, [dateFrom, dateTo, groupBy, search, reviewStatus]);
 
   const handleSearch = () => {
     setExpandedKey(null);
@@ -215,7 +216,74 @@ export default function MatchingPage() {
     setExpandedSource(expandedSource === sourceKey ? null : sourceKey);
   };
 
-  // 展開詳情的 colSpan = 固定欄(7: ▶+日期+車牌+司機+客戶+合約+地點) + 可見來源欄 + 平均分(1) + 狀態(1)
+  // 確認/拒絕操作
+  const handleConfirm = async (row: MatchingRow, sourceCode: string, status: 'confirmed' | 'rejected') => {
+    const loadingKey = `${row.date}-${row.key}-${sourceCode}`;
+    setConfirmLoading(loadingKey);
+    try {
+      const workLogId = row.work_log_ids[0];
+      if (!workLogId) return;
+      await verificationApi.upsertConfirmation({
+        work_log_id: workLogId,
+        source_code: sourceCode,
+        status,
+      });
+      // 更新本地狀態
+      setData((prev) =>
+        prev.map((r) => {
+          if (r.date === row.date && r.key === row.key) {
+            return {
+              ...r,
+              confirmations: {
+                ...r.confirmations,
+                [sourceCode]: {
+                  id: 0,
+                  status,
+                  confirmed_by: '我',
+                  confirmed_at: new Date().toISOString(),
+                } as ConfirmationData,
+              },
+            };
+          }
+          return r;
+        })
+      );
+    } catch (err) {
+      console.error('Confirm failed:', err);
+      alert('操作失敗，請重試');
+    } finally {
+      setConfirmLoading(null);
+    }
+  };
+
+  // 重置為未審核
+  const handleReset = async (row: MatchingRow, sourceCode: string) => {
+    const loadingKey = `${row.date}-${row.key}-${sourceCode}`;
+    setConfirmLoading(loadingKey);
+    try {
+      const workLogId = row.work_log_ids[0];
+      if (!workLogId) return;
+      await verificationApi.deleteConfirmation(workLogId, sourceCode);
+      // 更新本地狀態
+      setData((prev) =>
+        prev.map((r) => {
+          if (r.date === row.date && r.key === row.key) {
+            const newConfirmations = { ...r.confirmations };
+            delete newConfirmations[sourceCode];
+            return { ...r, confirmations: newConfirmations };
+          }
+          return r;
+        })
+      );
+    } catch (err) {
+      console.error('Reset failed:', err);
+      alert('操作失敗，請重試');
+    } finally {
+      setConfirmLoading(null);
+    }
+  };
+
+  // 展開詳情的 colSpan
   const expandColSpan = 7 + visibleColumns.length + 2;
 
   return (
@@ -279,6 +347,23 @@ export default function MatchingPage() {
           </button>
         </div>
 
+        {/* 審核狀態篩選 */}
+        <div className="mt-3 pt-3 border-t">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-500 shrink-0">審核狀態:</span>
+            {REVIEW_STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setReviewStatus(opt.value)}
+                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-all
+                  ${reviewStatus === opt.value ? opt.color : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* 顯示來源篩選 chips */}
         <div className="mt-3 pt-3 border-t">
           <div className="flex flex-wrap items-center gap-2">
@@ -310,7 +395,6 @@ export default function MatchingPage() {
                 </button>
               );
             })}
-            {/* 全選/全取消 */}
             <button
               onClick={() => setVisibleSources(new Set(ALL_SOURCE_COLUMNS.map((c) => c.key)))}
               className="text-xs text-gray-400 hover:text-gray-600 underline ml-1"
@@ -412,207 +496,22 @@ export default function MatchingPage() {
                   const statusCfg = STATUS_CONFIG[row.match_status] || STATUS_CONFIG.missing_source;
 
                   return (
-                    <>
-                      <tr
-                        key={rowKey}
-                        className={`cursor-pointer hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
-                        onClick={() => toggleExpand(rowKey)}
-                      >
-                        <td className="px-2 py-2 text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</td>
-                        <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{row.date}</td>
-                        <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap font-mono">{row.key}</td>
-                        {/* 工作紀錄主要欄位：直接從 work_log 第一筆 detail 取值 */}
-                        {(() => {
-                          const wl = row.sources['work_log'];
-                          const d = wl?.details?.[0];
-                          return (
-                            <>
-                              <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{d?.employee || '—'}</td>
-                              <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.customer}>{d?.customer || '—'}</td>
-                              <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs font-mono">{d?.contract && d.contract !== '—' ? d.contract : '—'}</td>
-                              <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.location}>{d?.location && d.location !== '—' ? d.location : '—'}</td>
-                            </>
-                          );
-                        })()}
-                        {visibleColumns.map((col) => {
-                          const src = row.sources[col.key];
-                          if (!src) {
-                            return (
-                              <td key={col.key} className="px-2 py-2 text-center">
-                                <span className="text-gray-300 text-xs">—</span>
-                              </td>
-                            );
-                          }
-
-                          // 工作紀錄固定顯示 REF
-                          if (col.key === 'work_log') {
-                            return (
-                              <td key={col.key} className="px-2 py-2 text-center">
-                                <span
-                                  className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-xs font-bold ring-1 ring-blue-300"
-                                  title="工作紀錄（比對基準）"
-                                >
-                                  REF
-                                </span>
-                              </td>
-                            );
-                          }
-
-                          // missing
-                          if (src.status === 'missing') {
-                            return (
-                              <td key={col.key} className="px-2 py-2 text-center">
-                                <span
-                                  className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 text-gray-400 text-xs ring-1 ring-gray-200"
-                                  title="無資料"
-                                >
-                                  N/A
-                                </span>
-                              </td>
-                            );
-                          }
-
-                          // found — 顯示分數
-                          return (
-                            <td key={col.key} className="px-2 py-2 text-center">
-                              <ScoreBadge score={src.match_score ?? 0} />
-                            </td>
-                          );
-                        })}
-                        {/* 平均分 */}
-                        <td className="px-2 py-2 text-center">
-                          {row.avg_score > 0 ? (
-                            <ScoreBadge score={row.avg_score} />
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-                        {/* 狀態 */}
-                        <td className="px-2 py-2 text-center">
-                          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border ${statusCfg.bg} ${statusCfg.color} whitespace-nowrap`}>
-                            {statusCfg.emoji} <span className="hidden sm:inline">{statusCfg.label}</span>
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* 展開的詳情 */}
-                      {isExpanded && (
-                        <tr key={`${rowKey}-detail`}>
-                          <td colSpan={expandColSpan} className="p-0">
-                            <div className="bg-blue-50 border-t border-b border-blue-100 p-3 sm:p-4">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {ALL_SOURCE_COLUMNS.map((col) => {
-                                  const src = row.sources[col.key];
-                                  if (!src) return null;
-                                  const isSourceExpanded = expandedSource === `${rowKey}-${col.key}`;
-
-                                  return (
-                                    <div
-                                      key={col.key}
-                                      className={`rounded-lg border p-3 cursor-pointer transition-all ${
-                                        col.key === 'work_log'
-                                          ? 'bg-blue-50 border-blue-300 hover:border-blue-500'
-                                          : src.status === 'found'
-                                            ? 'bg-white border-green-200 hover:border-green-400'
-                                            : 'bg-gray-50 border-gray-200'
-                                      }`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleSourceDetail(`${rowKey}-${col.key}`);
-                                      }}
-                                    >
-                                      {/* 卡片標題 */}
-                                      <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-sm font-medium text-gray-700">
-                                          {col.icon} {col.label}
-                                          {col.key === 'work_log' && (
-                                            <span className="ml-1.5 text-xs text-blue-500 font-normal">基準</span>
-                                          )}
-                                        </span>
-                                        <div className="flex items-center gap-1.5">
-                                          {src.status === 'found' && col.key !== 'work_log' && (
-                                            <ScoreBadge score={src.match_score ?? 0} size="sm" />
-                                          )}
-                                          {src.status === 'found' ? (
-                                            <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
-                                              {src.details.length} 筆
-                                            </span>
-                                          ) : (
-                                            <span className="text-xs text-gray-400">無資料</span>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* 工作紀錄：直接顯示第一筆詳情（不需點擊展開） */}
-                                      {col.key === 'work_log' && src.details.length > 0 && (
-                                        <div className="mt-1 text-xs space-y-0.5 text-gray-700">
-                                          {src.details.map((detail: any, dIdx: number) => (
-                                            <div key={dIdx} className={dIdx > 0 ? 'border-t pt-1 mt-1' : ''}>
-                                              {renderSourceDetail('work_log', detail)}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* 展開詳情（點擊後顯示） */}
-                                      {col.key !== 'work_log' && isSourceExpanded && src.details.length > 0 && (
-                                        <div className="mt-2 space-y-1.5 text-xs border-t pt-2">
-                                          {src.details.map((detail: any, dIdx: number) => (
-                                            <div key={dIdx} className="bg-gray-50 rounded p-2 border">
-                                              {renderSourceDetail(col.key, detail)}
-                                            </div>
-                                          ))}
-
-                                          {/* 欄位值對比表 */}
-                                          {src.field_scores && src.field_scores.length > 0 && (
-                                            <div className="mt-2 bg-white rounded border p-2">
-                                              <div className="text-xs font-medium text-gray-600 mb-1.5">欄位值對比</div>
-                                              <table className="w-full text-xs">
-                                                <thead>
-                                                  <tr className="text-gray-400 text-left">
-                                                    <th className="py-0.5 pr-2 font-normal">欄位</th>
-                                                    <th className="py-0.5 pr-2 font-normal">工作紀錄</th>
-                                                    <th className="py-0.5 pr-2 font-normal">{col.label}</th>
-                                                    <th className="py-0.5 text-right font-normal">分</th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {src.field_scores.map((fs: FieldScore, fsIdx: number) => (
-                                                    <tr key={fsIdx} className="border-t border-gray-100">
-                                                      <td className="py-0.5 pr-2 text-gray-500">{fs.field}</td>
-                                                      <td className="py-0.5 pr-2 font-mono text-gray-700 max-w-[80px] truncate" title={fs.ref_value}>{fs.ref_value || '—'}</td>
-                                                      <td className="py-0.5 pr-2 font-mono text-gray-700 max-w-[80px] truncate" title={fs.src_value}>{fs.src_value || '—'}</td>
-                                                      <td className={`py-0.5 text-right font-bold ${
-                                                        fs.score >= 80 ? 'text-green-600' :
-                                                        fs.score >= 60 ? 'text-yellow-600' :
-                                                        fs.score > 0 ? 'text-red-600' : 'text-gray-400'
-                                                      }`}>
-                                                        {fs.score}
-                                                      </td>
-                                                    </tr>
-                                                  ))}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* 提示文字 */}
-                                      {col.key !== 'work_log' && !isSourceExpanded && src.status === 'found' && src.details.length > 0 && (
-                                        <div className="text-xs text-gray-400 mt-1.5">
-                                          點擊展開原始資料
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <MatchingTableRow
+                      key={rowKey}
+                      row={row}
+                      rowKey={rowKey}
+                      isExpanded={isExpanded}
+                      statusCfg={statusCfg}
+                      groupBy={groupBy}
+                      visibleColumns={visibleColumns}
+                      expandedSource={expandedSource}
+                      expandColSpan={expandColSpan}
+                      confirmLoading={confirmLoading}
+                      onToggleExpand={toggleExpand}
+                      onToggleSourceDetail={toggleSourceDetail}
+                      onConfirm={handleConfirm}
+                      onReset={handleReset}
+                    />
                   );
                 })}
               </tbody>
@@ -644,6 +543,320 @@ export default function MatchingPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 表格行元件（避免 Fragment key 問題）
+// ══════════════════════════════════════════════════════════════
+
+function MatchingTableRow({
+  row,
+  rowKey,
+  isExpanded,
+  statusCfg,
+  groupBy,
+  visibleColumns,
+  expandedSource,
+  expandColSpan,
+  confirmLoading,
+  onToggleExpand,
+  onToggleSourceDetail,
+  onConfirm,
+  onReset,
+}: {
+  row: MatchingRow;
+  rowKey: string;
+  isExpanded: boolean;
+  statusCfg: { label: string; emoji: string; color: string; bg: string };
+  groupBy: string;
+  visibleColumns: { key: string; label: string; icon: string; alwaysOn: boolean }[];
+  expandedSource: string | null;
+  expandColSpan: number;
+  confirmLoading: string | null;
+  onToggleExpand: (key: string) => void;
+  onToggleSourceDetail: (key: string) => void;
+  onConfirm: (row: MatchingRow, sourceCode: string, status: 'confirmed' | 'rejected') => void;
+  onReset: (row: MatchingRow, sourceCode: string) => void;
+}) {
+  const wl = row.sources['work_log'];
+  const d = wl?.details?.[0];
+
+  return (
+    <>
+      <tr
+        className={`cursor-pointer hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
+        onClick={() => onToggleExpand(rowKey)}
+      >
+        <td className="px-2 py-2 text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</td>
+        <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{row.date}</td>
+        <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap font-mono">{row.key}</td>
+        <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{d?.employee || '—'}</td>
+        <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.customer}>{d?.customer || '—'}</td>
+        <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs font-mono">{d?.contract && d.contract !== '—' ? d.contract : '—'}</td>
+        <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.location}>{d?.location && d.location !== '—' ? d.location : '—'}</td>
+        {visibleColumns.map((col) => {
+          const src = row.sources[col.key];
+          const conf = row.confirmations?.[col.key];
+
+          if (!src) {
+            return (
+              <td key={col.key} className="px-2 py-2 text-center">
+                <span className="text-gray-300 text-xs">—</span>
+              </td>
+            );
+          }
+
+          // 工作紀錄固定顯示 REF
+          if (col.key === 'work_log') {
+            return (
+              <td key={col.key} className="px-2 py-2 text-center">
+                <span
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-xs font-bold ring-1 ring-blue-300"
+                  title="工作紀錄（比對基準）"
+                >
+                  REF
+                </span>
+              </td>
+            );
+          }
+
+          // 有確認狀態時覆蓋顯示
+          if (conf) {
+            const badge = CONFIRM_STATUS_BADGE[conf.status];
+            return (
+              <td key={col.key} className="px-2 py-2 text-center">
+                <span
+                  className={`inline-flex items-center justify-center w-9 h-9 rounded-full text-xs font-bold ring-1 ${badge.color}`}
+                  title={`${badge.label} - ${conf.confirmed_by}`}
+                >
+                  {badge.icon}
+                </span>
+              </td>
+            );
+          }
+
+          // missing
+          if (src.status === 'missing') {
+            return (
+              <td key={col.key} className="px-2 py-2 text-center">
+                <span
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 text-gray-400 text-xs ring-1 ring-gray-200"
+                  title="無資料"
+                >
+                  N/A
+                </span>
+              </td>
+            );
+          }
+
+          // found — 顯示分數
+          return (
+            <td key={col.key} className="px-2 py-2 text-center">
+              <ScoreBadge score={src.match_score ?? 0} />
+            </td>
+          );
+        })}
+        {/* 平均分 */}
+        <td className="px-2 py-2 text-center">
+          {row.avg_score > 0 ? (
+            <ScoreBadge score={row.avg_score} />
+          ) : (
+            <span className="text-gray-300 text-xs">—</span>
+          )}
+        </td>
+        {/* 狀態 */}
+        <td className="px-2 py-2 text-center">
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border ${statusCfg.bg} ${statusCfg.color} whitespace-nowrap`}>
+            {statusCfg.emoji} <span className="hidden sm:inline">{statusCfg.label}</span>
+          </span>
+        </td>
+      </tr>
+
+      {/* 展開的詳情 */}
+      {isExpanded && (
+        <tr>
+          <td colSpan={expandColSpan} className="p-0">
+            <div className="bg-blue-50 border-t border-b border-blue-100 p-3 sm:p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {ALL_SOURCE_COLUMNS.map((col) => {
+                  const src = row.sources[col.key];
+                  if (!src) return null;
+                  const isSourceExpanded = expandedSource === `${rowKey}-${col.key}`;
+                  const conf = row.confirmations?.[col.key];
+                  const isLoading = confirmLoading === `${row.date}-${row.key}-${col.key}`;
+
+                  return (
+                    <div
+                      key={col.key}
+                      className={`rounded-lg border p-3 transition-all ${
+                        col.key === 'work_log'
+                          ? 'bg-blue-50 border-blue-300'
+                          : conf
+                            ? conf.status === 'confirmed'
+                              ? 'bg-green-50 border-green-300'
+                              : conf.status === 'rejected'
+                                ? 'bg-red-50 border-red-300'
+                                : 'bg-purple-50 border-purple-300'
+                            : src.status === 'found'
+                              ? 'bg-white border-green-200 hover:border-green-400 cursor-pointer'
+                              : 'bg-gray-50 border-gray-200'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (col.key !== 'work_log') {
+                          onToggleSourceDetail(`${rowKey}-${col.key}`);
+                        }
+                      }}
+                    >
+                      {/* 卡片標題 */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-medium text-gray-700">
+                          {col.icon} {col.label}
+                          {col.key === 'work_log' && (
+                            <span className="ml-1.5 text-xs text-blue-500 font-normal">基準</span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {/* 確認狀態標記 */}
+                          {conf && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded border ${CONFIRM_STATUS_BADGE[conf.status]?.color}`}>
+                              {CONFIRM_STATUS_BADGE[conf.status]?.icon} {CONFIRM_STATUS_BADGE[conf.status]?.label}
+                            </span>
+                          )}
+                          {src.status === 'found' && col.key !== 'work_log' && !conf && (
+                            <ScoreBadge score={src.match_score ?? 0} size="sm" />
+                          )}
+                          {src.status === 'found' ? (
+                            <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                              {src.details.length} 筆
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">無資料</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 確認者資訊 */}
+                      {conf && (
+                        <div className="text-xs text-gray-400 mb-1.5">
+                          {conf.confirmed_by} · {new Date(conf.confirmed_at).toLocaleString('zh-HK', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {conf.notes && <span className="ml-1">({conf.notes})</span>}
+                        </div>
+                      )}
+
+                      {/* 工作紀錄：直接顯示詳情 */}
+                      {col.key === 'work_log' && src.details.length > 0 && (
+                        <div className="mt-1 text-xs space-y-0.5 text-gray-700">
+                          {src.details.map((detail: any, dIdx: number) => (
+                            <div key={dIdx} className={dIdx > 0 ? 'border-t pt-1 mt-1' : ''}>
+                              {renderSourceDetail('work_log', detail)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 展開詳情（點擊後顯示） */}
+                      {col.key !== 'work_log' && isSourceExpanded && src.details.length > 0 && (
+                        <div className="mt-2 space-y-1.5 text-xs border-t pt-2">
+                          {src.details.map((detail: any, dIdx: number) => (
+                            <div key={dIdx} className="bg-gray-50 rounded p-2 border">
+                              {renderSourceDetail(col.key, detail)}
+                            </div>
+                          ))}
+
+                          {/* 欄位值對比表 */}
+                          {src.field_scores && src.field_scores.length > 0 && (
+                            <div className="mt-2 bg-white rounded border p-2">
+                              <div className="text-xs font-medium text-gray-600 mb-1.5">欄位值對比</div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-gray-400 text-left">
+                                    <th className="py-0.5 pr-2 font-normal">欄位</th>
+                                    <th className="py-0.5 pr-2 font-normal">工作紀錄</th>
+                                    <th className="py-0.5 pr-2 font-normal">{col.label}</th>
+                                    <th className="py-0.5 text-right font-normal">分</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {src.field_scores.map((fs: FieldScore, fsIdx: number) => (
+                                    <tr key={fsIdx} className="border-t border-gray-100">
+                                      <td className="py-0.5 pr-2 text-gray-500">{fs.field}</td>
+                                      <td className="py-0.5 pr-2 font-mono text-gray-700 max-w-[80px] truncate" title={fs.ref_value}>{fs.ref_value || '—'}</td>
+                                      <td className="py-0.5 pr-2 font-mono text-gray-700 max-w-[80px] truncate" title={fs.src_value}>{fs.src_value || '—'}</td>
+                                      <td className={`py-0.5 text-right font-bold ${
+                                        fs.score >= 80 ? 'text-green-600' :
+                                        fs.score >= 60 ? 'text-yellow-600' :
+                                        fs.score > 0 ? 'text-red-600' : 'text-gray-400'
+                                      }`}>
+                                        {fs.score}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 提示文字 */}
+                      {col.key !== 'work_log' && !isSourceExpanded && src.status === 'found' && src.details.length > 0 && (
+                        <div className="text-xs text-gray-400 mt-1.5">
+                          點擊展開原始資料
+                        </div>
+                      )}
+
+                      {/* ✅ ❎ 確認/拒絕按鈕 — 只在非 work_log 且有資料時顯示 */}
+                      {col.key !== 'work_log' && src.status === 'found' && (
+                        <div className="mt-2 pt-2 border-t flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          {!conf ? (
+                            <>
+                              <button
+                                onClick={() => onConfirm(row, col.key, 'confirmed')}
+                                disabled={isLoading}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 disabled:opacity-50 transition-all"
+                              >
+                                ✅ 確認
+                              </button>
+                              <button
+                                onClick={() => onConfirm(row, col.key, 'rejected')}
+                                disabled={isLoading}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 disabled:opacity-50 transition-all"
+                              >
+                                ❎ 拒絕
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => onReset(row, col.key)}
+                              disabled={isLoading}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 disabled:opacity-50 transition-all"
+                            >
+                              ↩ 重置為未審核
+                            </button>
+                          )}
+                          {isLoading && <span className="text-xs text-gray-400">處理中...</span>}
+                        </div>
+                      )}
+
+                      {/* 手動配對按鈕 — 只在 missing 且沒有確認記錄時顯示 */}
+                      {col.key !== 'work_log' && src.status === 'missing' && !conf && (
+                        <div className="mt-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-xs text-gray-400">
+                            系統未自動配對到此來源
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
