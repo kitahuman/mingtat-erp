@@ -278,13 +278,25 @@ export default function WorkLogsPage() {
         });
         return next;
       });
-      // 重新載入核對面板資料
-      setVerifyData(prev => {
-        const next = new Map(prev);
-        next.delete(manualMatchPopup.workLogId); // 清除快取，下次展開會重新載入
-        return next;
-      });
+      // 重新載入核對面板資料（面板仍展開，立即重新 fetch 以更新卡片顯示）
+      const workLogId = manualMatchPopup.workLogId;
       setManualMatchPopup(null);
+      setVerifyData(prev => new Map(prev).set(workLogId, { loading: true, data: null, error: null }));
+      try {
+        const { verificationApi: vApi } = await import('@/lib/api');
+        const [matchRes, confRes] = await Promise.all([
+          vApi.matchSingle(workLogId),
+          vApi.getConfirmations(workLogId),
+        ]);
+        setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: matchRes.data, error: null }));
+        const confMap: Record<string, any> = {};
+        if (Array.isArray(confRes.data)) {
+          confRes.data.forEach((c: any) => { confMap[c.source_code] = c; });
+        }
+        setConfirmations(prev => new Map(prev).set(workLogId, confMap));
+      } catch (reloadErr: any) {
+        setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: null, error: reloadErr?.message || '重新載入失敗' }));
+      }
     } catch (e: any) {
       alert('手動配對失敗: ' + (e?.message || '未知錯誤'));
     } finally {
