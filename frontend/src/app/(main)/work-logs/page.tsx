@@ -102,6 +102,15 @@ export default function WorkLogsPage() {
   const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false);
   const [viewingAttachments, setViewingAttachments] = useState<{ photos: string[]; signature: string | null } | null>(null);
 
+  // ── Toast 通知 ──────────────────────────────────────────
+  const [toasts, setToasts] = useState<{ id: number; message: string; type: 'error' | 'success' | 'info' }[]>([]);
+  const toastIdRef = useRef(0);
+  const showToast = useCallback((message: string, type: 'error' | 'success' | 'info' = 'error') => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+  }, []);
+
   // ── Verification panel ──────────────────────────────────────────
   // openVerifyId: 目前展開核對面板的 workLogId（null = 全部收起）
   const [openVerifyId, setOpenVerifyId] = useState<number | null>(null);
@@ -201,8 +210,9 @@ export default function WorkLogsPage() {
       const { verificationApi } = await import('@/lib/api');
       const res = await verificationApi.searchRecords({ source_code: sourceCode, date: workLogDate, search: '' });
       setManualMatchResults(res.data || []);
-    } catch (e) {
+    } catch (e: any) {
       setManualMatchResults([]);
+      showToast('載入 WhatsApp 訂單失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
     } finally {
       setManualMatchLoading(false);
     }
@@ -221,8 +231,9 @@ export default function WorkLogsPage() {
         search,
       });
       setManualMatchResults(res.data || []);
-    } catch (e) {
+    } catch (e: any) {
       setManualMatchResults([]);
+      showToast('搜尋失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
     } finally {
       setManualMatchLoading(false);
     }
@@ -362,12 +373,13 @@ export default function WorkLogsPage() {
       const res = await workLogsApi.list(params);
       setRows(res.data?.data || []);
       setTotal(res.data?.total || 0);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      showToast('載入工作紀錄失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
     } finally {
       setLoading(false);
     }
-  }, [page, limit, filterPublisher, filterStatus, filterCompany, filterClient,
+  }, [page, limit, filterPublisher, filterStatus, filterCompany, filterClient, showToast,
       filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
@@ -698,7 +710,7 @@ export default function WorkLogsPage() {
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
     if (field === 'company_id') return row.company?.name || row.company_profile?.code || companies.find(o => o.value === row.company_id)?.label || '—';
-    if (field === 'client_id') return row.unverified_client_name || row.client?.name || row.client?.code || clients.find(o => o.value === row.client_id)?.label || '—';
+    if (field === 'client_id') return (row.client_id ? (row.client?.name || row.client?.code) : null) || row.unverified_client_name || clients.find(o => o.value === row.client_id)?.label || '—';
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
     if (field === 'employee_id') return row.employee?.name_zh || employees.find(o => String(o.value) === `emp_${row.employee_id}`)?.label || '—';
@@ -787,7 +799,9 @@ export default function WorkLogsPage() {
                   try {
                     await workLogsApi.confirmLocation(row.id);
                     await fetchLogs();
-                  } catch {}
+                  } catch (e: any) {
+                    showToast('確認地點失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+                  }
                 }}
                 className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-5 h-5 bg-green-500 text-white rounded-full text-xs shadow hover:bg-green-600 z-20"
                 title="確認地點正確"
@@ -1010,7 +1024,7 @@ export default function WorkLogsPage() {
 
       {/* ── Unverified Client Banner ── */}
       {(() => {
-        const unverifiedCount = rows.filter(r => r.unverified_client_name).length;
+        const unverifiedCount = rows.filter(r => !r.client_id && r.unverified_client_name).length;
         if (unverifiedCount === 0) return null;
         return (
           <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
@@ -1222,7 +1236,7 @@ export default function WorkLogsPage() {
             ) : (
               rows.map((row, rowIndex) => {
                 const rowDirty = dirtyRows.has(row.id);
-                const hasUnverifiedClient = !!row.unverified_client_name;
+                const hasUnverifiedClient = !row.client_id && !!row.unverified_client_name;
                 const rowBg = rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'bg-white';
                 const rowNum = (page - 1) * limit + rowIndex + 1;
 
@@ -1673,6 +1687,30 @@ export default function WorkLogsPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {/* ── Toast 通知 ──────────────────────────────────────── */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in slide-in-from-right ${
+                t.type === 'error' ? 'bg-red-600 text-white' :
+                t.type === 'success' ? 'bg-green-600 text-white' :
+                'bg-gray-800 text-white'
+              }`}
+            >
+              <span className="mt-0.5 shrink-0">
+                {t.type === 'error' ? '⚠️' : t.type === 'success' ? '✅' : 'ℹ️'}
+              </span>
+              <span className="flex-1">{t.message}</span>
+              <button
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="shrink-0 opacity-70 hover:opacity-100 text-lg leading-none"
+              >×</button>
+            </div>
+          ))}
         </div>
       )}
     </div>
