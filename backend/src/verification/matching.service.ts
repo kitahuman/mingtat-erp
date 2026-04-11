@@ -815,12 +815,15 @@ export class MatchingService {
   /**
    * 員工/司機匹配（支援花名、全名、暱稱）
    */
-  private employeeMatch(refName: string, refNickname: string, srcName: string): number {
-    if (!refName || !srcName) return 0;
+  private employeeMatch(refName: unknown, refNickname: unknown, srcName: unknown): number {
+    const refNameStr = (refName == null) ? '' : String(refName);
+    const refNicknameStr = (refNickname == null) ? '' : String(refNickname);
+    const srcNameStr = (srcName == null) ? '' : String(srcName);
+    if (!refNameStr || !srcNameStr) return 0;
 
-    const r = refName.trim().toLowerCase();
-    const rn = refNickname.trim().toLowerCase();
-    const s = srcName.trim().toLowerCase();
+    const r = refNameStr.trim().toLowerCase();
+    const rn = refNicknameStr.trim().toLowerCase();
+    const s = srcNameStr.trim().toLowerCase();
     if (!r || !s) return 0;
 
     // 完全匹配
@@ -856,10 +859,10 @@ export class MatchingService {
   /**
    * 合約號碼匹配（精確為主，部分匹配為輔）
    */
-  private contractMatch(ref: string, src: string): number {
-    if (!ref || !src) return 0;
-    const r = ref.trim().toUpperCase().replace(/[\s\-]/g, '');
-    const s = src.trim().toUpperCase().replace(/[\s\-]/g, '');
+  private contractMatch(ref: unknown, src: unknown): number {
+    if (ref == null || src == null || ref === '' || src === '') return 0;
+    const r = String(ref).trim().toUpperCase().replace(/[\s\-]/g, '');
+    const s = String(src).trim().toUpperCase().replace(/[\s\-]/g, '');
     if (!r || !s) return 0;
 
     // 完全匹配
@@ -874,11 +877,13 @@ export class MatchingService {
   /**
    * 模糊匹配（客戶名稱、地點）
    */
-  private fuzzyMatch(ref: string, src: string): number {
-    if (!ref || !src) return 0;
-    const r = ref.trim().toLowerCase().replace(/[\s,，、]/g, '');
-    const s = src.trim().toLowerCase().replace(/[\s,，、]/g, '');
-    if (!r || !s || r === '—' || s === '—') return 0;
+  private fuzzyMatch(ref: unknown, src: unknown): number {
+    // Guard: convert non-string / null / undefined to string safely
+    const refStr = (ref == null || ref === '') ? '' : String(ref).trim().toLowerCase().replace(/[\s,，、]/g, '');
+    const srcStr = (src == null || src === '') ? '' : String(src).trim().toLowerCase().replace(/[\s,，、]/g, '');
+    if (!refStr || !srcStr || refStr === '—' || srcStr === '—') return 0;
+    const r = refStr;
+    const s = srcStr;
 
     // 完全匹配
     if (r === s) return 100;
