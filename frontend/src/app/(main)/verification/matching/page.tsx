@@ -215,8 +215,8 @@ export default function MatchingPage() {
     setExpandedSource(expandedSource === sourceKey ? null : sourceKey);
   };
 
-  // 展開詳情的 colSpan = 固定欄(3) + 可見來源欄 + 平均分(1) + 狀態(1)
-  const expandColSpan = 3 + visibleColumns.length + 2;
+  // 展開詳情的 colSpan = 固定欄(7: ▶+日期+車牌+司機+客戶+合約+地點) + 可見來源欄 + 平均分(1) + 狀態(1)
+  const expandColSpan = 7 + visibleColumns.length + 2;
 
   return (
     <div className="p-4 sm:p-6 max-w-full">
@@ -391,6 +391,10 @@ export default function MatchingPage() {
                   <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
                     {groupBy === 'vehicle' ? '車牌' : '員工'}
                   </th>
+                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">司機/員工</th>
+                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">客戶</th>
+                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">合約</th>
+                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">地點</th>
                   {visibleColumns.map((col) => (
                     <th key={col.key} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 min-w-[56px]">
                       <div>{col.icon}</div>
@@ -416,7 +420,20 @@ export default function MatchingPage() {
                       >
                         <td className="px-2 py-2 text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</td>
                         <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{row.date}</td>
-                        <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap">{row.key}</td>
+                        <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap font-mono">{row.key}</td>
+                        {/* 工作紀錄主要欄位：直接從 work_log 第一筆 detail 取值 */}
+                        {(() => {
+                          const wl = row.sources['work_log'];
+                          const d = wl?.details?.[0];
+                          return (
+                            <>
+                              <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs">{d?.employee || '—'}</td>
+                              <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.customer}>{d?.customer || '—'}</td>
+                              <td className="px-2 py-2 text-gray-700 whitespace-nowrap text-xs font-mono">{d?.contract && d.contract !== '—' ? d.contract : '—'}</td>
+                              <td className="px-2 py-2 text-gray-700 text-xs max-w-[120px] truncate" title={d?.location}>{d?.location && d.location !== '—' ? d.location : '—'}</td>
+                            </>
+                          );
+                        })()}
                         {visibleColumns.map((col) => {
                           const src = row.sources[col.key];
                           if (!src) {
