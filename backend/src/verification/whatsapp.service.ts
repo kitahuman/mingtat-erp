@@ -1501,7 +1501,8 @@ export class WhatsappService {
 
   // ══════════════════════════════════════════════════════════════
   // 取得每日總結的 items（供 matching service 使用）
-  // 修正：按 order_type 分組，每種類型取最新版本（與 getDailySummary 一致）
+  // 修正：按 date + order_type 分組，合併所有版本的 items，
+  //       同一車牌/機械編號取最新版本，排除 cancelled
   // ══════════════════════════════════════════════════════════════
   async getDailySummaryItemsForMatching(dateFrom: Date, dateTo: Date) {
     const dateStart = new Date(dateFrom);
@@ -1509,7 +1510,7 @@ export class WhatsappService {
     const dateEnd = new Date(dateTo);
     dateEnd.setHours(23, 59, 59, 999);
 
-    // 取得日期範圍內所有 order，按日期和版本排序
+    // 取得日期範圍內所有 order，按日期和版本排序（版本小→大）
     const orders = await this.prisma.verificationWaOrder.findMany({
       where: {
         wa_order_date: { gte: dateStart, lte: dateEnd },
@@ -1535,30 +1536,63 @@ export class WhatsappService {
       return maxType;
     };
 
-    // 按 date + order_type 分組，每組取最新版本
+    // 按 date + order_type 分組，收集所有版本的 orders
     // key: "YYYY-MM-DD|order_type"
-    const latestByDateType = new Map<string, typeof orders[0]>();
+    const ordersByDateType = new Map<string, (typeof orders[0])[]>();
     for (const order of orders) {
       const dateKey = order.wa_order_date.toISOString().slice(0, 10);
       const primaryType = getOrderPrimaryType(order);
       const groupKey = `${dateKey}|${primaryType}`;
-      const existing = latestByDateType.get(groupKey);
-      if (!existing || order.wa_order_version > existing.wa_order_version) {
-        latestByDateType.set(groupKey, order);
+      if (!ordersByDateType.has(groupKey)) {
+        ordersByDateType.set(groupKey, []);
+      }
+      ordersByDateType.get(groupKey)!.push(order);
+    }
+
+    // 合併每組所有版本的 items，同一車牌/機械編號取最新版本
+    const allItems: any[] = [];
+    for (const [, groupOrders] of ordersByDateType) {
+      // 用車牌/機械編號作為 dedup key，新版本覆蓋舊版本
+      const itemMap = new Map<string, { item: any; order: typeof orders[0] }>();
+      for (const order of groupOrders) {
+        for (const item of order.items) {
+          const vehicleId = (
+            item.wa_item_vehicle_no ||
+            item.wa_item_machine_code ||
+            ''
+          ).trim().toUpperCase();
+          if (vehicleId) {
+            // 有車牌/機械編號：新版本覆蓋舊版本
+            const existing = itemMap.get(vehicleId);
+            if (!existing || order.wa_order_version > existing.order.wa_order_version) {
+              itemMap.set(vehicleId, { item, order });
+            } else if (order.wa_order_version === existing.order.wa_order_version) {
+              // 同版本不同 item，用唯一 key 保留
+              const uniqueKey = `${vehicleId}__id_${item.id}`;
+              if (!itemMap.has(uniqueKey)) {
+                itemMap.set(uniqueKey, { item, order });
+              }
+            }
+          } else {
+            // 無車牌/機械編號（如 manpower）：用 item id 作為唯一 key，不去重
+            const uniqueKey = `__noid_${item.id}`;
+            itemMap.set(uniqueKey, { item, order });
+          }
+        }
+      }
+      // 排除 cancelled 並展平
+      for (const [, { item, order }] of itemMap) {
+        if (item.wa_item_mod_status === 'cancelled') continue;
+        allItems.push({
+          ...item,
+          order_date: order.wa_order_date.toISOString().slice(0, 10),
+          order_status: order.wa_order_status,
+          order_version: order.wa_order_version,
+        });
       }
     }
 
-    // 展平為 items，排除已取消的
-    return Array.from(latestByDateType.values()).flatMap((o) =>
-      o.items
-        .filter((item) => item.wa_item_mod_status !== 'cancelled')
-        .map((item) => ({
-          ...item,
-          order_date: o.wa_order_date.toISOString().slice(0, 10),
-          order_status: o.wa_order_status,
-          order_version: o.wa_order_version,
-        })),
-    );
+    return allItems;
   }
 
   // ══════════════════════════════════════════════════════════════
