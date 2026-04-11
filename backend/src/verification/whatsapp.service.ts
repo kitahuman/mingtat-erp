@@ -1487,7 +1487,7 @@ export class WhatsappService {
         record_source_id: source.id,
         record_source_row_number: idx + 1,
         record_work_date: orderDate,
-        record_vehicle_no: item.vehicle_no || null,
+        record_vehicle_no: item.vehicle_no || item.machine_code || null,
         record_driver_name: item.driver_nickname || null,
         record_customer: item.customer || null,
         record_location_from: item.location || null,

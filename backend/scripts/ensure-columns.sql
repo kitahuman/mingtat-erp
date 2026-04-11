@@ -3154,3 +3154,15 @@ DO $$ BEGIN ALTER TABLE "employee_nicknames" ADD CONSTRAINT "employee_nicknames_
 ALTER TABLE "verification_wa_messages" ADD COLUMN IF NOT EXISTS "wa_msg_pending_review" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "verification_wa_messages" ADD COLUMN IF NOT EXISTS "wa_msg_review_result" VARCHAR(30);
 CREATE INDEX IF NOT EXISTS "verification_wa_messages_wa_msg_pending_review_idx" ON "verification_wa_messages"("wa_msg_pending_review");
+
+-- ===== fix-machine-code-in-records: backfill machine_code into record_vehicle_no =====
+-- For existing whatsapp_order verification_records where record_vehicle_no is NULL
+-- but raw_data contains a machine_code (e.g. DC07, DC08)
+UPDATE verification_records vr
+SET record_vehicle_no = vr.record_raw_data->>'machine_code'
+FROM verification_sources vs
+WHERE vs.id = vr.record_source_id
+  AND vs.source_code = 'whatsapp_order'
+  AND (vr.record_vehicle_no IS NULL OR vr.record_vehicle_no = '')
+  AND vr.record_raw_data->>'machine_code' IS NOT NULL
+  AND vr.record_raw_data->>'machine_code' != '';
