@@ -144,7 +144,7 @@ export class ConfirmationService {
               { wa_item_customer: { contains: params.search, mode: 'insensitive' } },
             ],
           },
-          include: { order: { select: { id: true, wa_order_type: true, wa_order_status: true } } },
+          include: { order: { select: { id: true, wa_order_date: true, wa_order_status: true } } },
           take: 20,
         });
       }
