@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  backend:
+    image: ghcr.io/kitahuman/mingtat-erp-backend:latest
+    container_name: mingtat-erp-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - /opt/mingtat-erp/backend/.env
+    volumes:
+      - /opt/mingtat-erp/backend/uploads:/app/uploads
+    networks:
+      - mingtat-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    image: ghcr.io/kitahuman/mingtat-erp-frontend:latest
+    container_name: mingtat-erp-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - mingtat-network
+
+networks:
+  mingtat-network:
+    driver: bridge
