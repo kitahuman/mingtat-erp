@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from './whatsapp.service';
 import * as ExcelJS from 'exceljs';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -41,7 +42,10 @@ interface SyncClockOptions {
 
 @Injectable()
 export class VerificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsappService: WhatsappService,
+  ) {}
 
   // ══════════════════════════════════════════════════════════════
   // 來源列表
@@ -989,9 +993,8 @@ export class VerificationService {
       throw error;
     }
   }
-
   // ══════════════════════════════════════════════════════════════
-  // 核對工作台
+  // 核對工作台（統一使用 matching + confirmation 邏輯）
   // ══════════════════════════════════════════════════════════════
   async getWorkbench(query: WorkbenchQuery) {
     const { page, pageSize, filterStatus, filterWorkType, searchKeyword, sortBy, sortOrder, dateFrom, dateTo } = query;
@@ -1019,21 +1022,14 @@ export class VerificationService {
       ];
     }
 
-    // 取得所有來源
-    const sources = await this.prisma.verificationSource.findMany({
-      where: { source_is_active: true },
-      orderBy: { id: 'asc' },
-    });
-    const sourceMap = new Map(sources.map((s) => [s.source_code, s]));
-
     // 查詢工作紀錄
-    const orderBy: any = {};
-    if (sortBy === 'date') orderBy.scheduled_date = sortOrder === 'asc' ? 'asc' : 'desc';
-    else if (sortBy === 'vehicle') orderBy.equipment_number = sortOrder === 'asc' ? 'asc' : 'desc';
-    else orderBy.scheduled_date = 'desc';
+    const orderByClause: any = {};
+    if (sortBy === 'date') orderByClause.scheduled_date = sortOrder === 'asc' ? 'asc' : 'desc';
+    else if (sortBy === 'vehicle') orderByClause.equipment_number = sortOrder === 'asc' ? 'asc' : 'desc';
+    else orderByClause.scheduled_date = 'desc';
 
     const total = await this.prisma.workLog.count({ where });
-      const workLogs = await this.prisma.workLog.findMany({
+    const workLogs = await this.prisma.workLog.findMany({
       where,
       include: {
         employee: { select: { id: true, name_zh: true, nickname: true } },
@@ -1041,75 +1037,227 @@ export class VerificationService {
         contract: { select: { id: true, contract_no: true } },
         company_profile: { select: { id: true, chinese_name: true } },
       },
-      orderBy,
+      orderBy: orderByClause,
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
 
-    // 取得這些工作紀錄的所有配對結果
-    const workLogIds = workLogs.map((wl) => wl.id);
-    const matches = await this.prisma.verificationMatch.findMany({
-      where: { match_work_record_id: { in: workLogIds } },
-      include: { source: true },
-    });
-
-    // 按工作紀錄 ID 分組配對結果
-    const matchMap = new Map<number, any[]>();
-    for (const m of matches) {
-      if (!matchMap.has(m.match_work_record_id)) {
-        matchMap.set(m.match_work_record_id, []);
-      }
-      matchMap.get(m.match_work_record_id)!.push(m);
+    if (workLogs.length === 0) {
+      return {
+        summary: { total_records: total, matched_count: 0, diff_count: 0, missing_count: 0, unverified_count: 0 },
+        records: [],
+        pagination: { page, page_size: pageSize, total_pages: Math.ceil(total / pageSize), total },
+      };
     }
 
-    // 定義 7 個來源的狀態欄位
-    const sourceKeys = ['receipt', 'slip_chit', 'driver_sheet', 'customer_record', 'gps', 'clock', 'whatsapp_order'];
+    // ── 批量取得所有來源資料 ──────────────────────────────────
+    // 計算日期範圍
+    const dates = workLogs
+      .map((wl) => wl.scheduled_date)
+      .filter((d): d is Date => d != null);
+    if (dates.length === 0) {
+      return {
+        summary: { total_records: total, matched_count: 0, diff_count: 0, missing_count: 0, unverified_count: 0 },
+        records: workLogs.map((wl) => this.buildEmptyRecord(wl)),
+        pagination: { page, page_size: pageSize, total_pages: Math.ceil(total / pageSize), total },
+      };
+    }
+    const minDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map((d) => d.getTime())));
+    minDate.setHours(0, 0, 0, 0);
+    maxDate.setHours(23, 59, 59, 999);
 
-    // 構建回應資料
-    const records = workLogs.map((wl) => {
-      const wlMatches = matchMap.get(wl.id) || [];
-      const statusBySource: Record<string, string> = {};
+    // 入帳票
+    const receiptSource = await this.prisma.verificationSource.findUnique({ where: { source_code: 'receipt' } });
+    const receiptRecords = receiptSource
+      ? await this.prisma.verificationRecord.findMany({
+          where: { record_source_id: receiptSource.id, record_work_date: { gte: minDate, lte: maxDate } },
+          include: { chits: true },
+        })
+      : [];
 
-      for (const key of sourceKeys) {
-        const src = sourceMap.get(key);
-        if (!src) {
-          statusBySource[key] = 'na';
-          continue;
-        }
-        const match = wlMatches.find((m) => m.match_source_id === src.id);
-        if (match) {
-          statusBySource[key] = match.match_status;
-        } else {
-          statusBySource[key] = 'unverified';
-        }
+    // 飛仔 OCR
+    const slipSources = await this.prisma.verificationSource.findMany({
+      where: { source_code: { in: ['slip_chit', 'slip_no_chit'] } },
+    });
+    const slipSourceIds = slipSources.map((s) => s.id);
+    const slipRecords = slipSourceIds.length > 0
+      ? await this.prisma.verificationRecord.findMany({
+          where: { record_source_id: { in: slipSourceIds }, record_work_date: { gte: minDate, lte: maxDate } },
+          include: { chits: true },
+        })
+      : [];
+
+    // GPS
+    const gpsSummaries = await this.prisma.verificationGpsSummary.findMany({
+      where: { gps_summary_date: { gte: minDate, lte: maxDate } },
+    });
+
+    // 打卡
+    const attendances = await this.prisma.employeeAttendance.findMany({
+      where: { timestamp: { gte: minDate, lt: new Date(maxDate.getTime() + 86400000) } },
+      include: { employee: { select: { id: true, name_zh: true, nickname: true } } },
+    });
+
+    // WhatsApp
+    const waOrderItems = await this.whatsappService.getDailySummaryItemsForMatching(minDate, maxDate);
+
+    // 手動配對記錄
+    const workLogIds = workLogs.map((wl) => wl.id);
+    const confirmations = await this.prisma.verificationConfirmation.findMany({
+      where: { work_log_id: { in: workLogIds } },
+    });
+    const confirmMap = new Map<number, Map<string, any>>();
+    for (const c of confirmations) {
+      if (!confirmMap.has(c.work_log_id)) confirmMap.set(c.work_log_id, new Map());
+      confirmMap.get(c.work_log_id)!.set(c.source_code, c);
+    }
+
+    // 手動配對的 WA item IDs（需要額外查詢）
+    const manualWaItemIds = confirmations
+      .filter((c) => c.source_code === 'whatsapp_order' && c.status === 'manual_match' && c.matched_record_id)
+      .map((c) => c.matched_record_id!);
+    const manualWaItems = manualWaItemIds.length > 0
+      ? await this.prisma.verificationWaOrderItem.findMany({ where: { id: { in: manualWaItemIds } } })
+      : [];
+    const manualWaItemMap = new Map(manualWaItems.map((item) => [item.id, item]));
+
+    // ── 車牌正規化工具 ──────────────────────────────────────
+    const normalizeVehicle = (plate: string | null | undefined): string => {
+      if (!plate) return '';
+      return plate.toUpperCase().replace(/[\s\-]/g, '');
+    };
+
+    // ── 按日期+車牌索引來源資料 ─────────────────────────────
+    // 入帳票索引
+    const receiptIndex = new Map<string, any[]>();
+    for (const r of receiptRecords) {
+      const dateKey = r.record_work_date?.toISOString().slice(0, 10) || '';
+      const vKey = normalizeVehicle(r.record_vehicle_no);
+      const key = `${dateKey}|${vKey}`;
+      if (!receiptIndex.has(key)) receiptIndex.set(key, []);
+      receiptIndex.get(key)!.push(r);
+    }
+
+    // 飛仔索引
+    const slipIndex = new Map<string, any[]>();
+    for (const r of slipRecords) {
+      const dateKey = r.record_work_date?.toISOString().slice(0, 10) || '';
+      const vKey = normalizeVehicle(r.record_vehicle_no);
+      const key = `${dateKey}|${vKey}`;
+      if (!slipIndex.has(key)) slipIndex.set(key, []);
+      slipIndex.get(key)!.push(r);
+    }
+
+    // GPS 索引
+    const gpsIndex = new Map<string, any[]>();
+    for (const g of gpsSummaries) {
+      const dateKey = (g as any).gps_summary_date?.toISOString().slice(0, 10) || '';
+      const vKey = normalizeVehicle((g as any).gps_summary_vehicle_no);
+      const key = `${dateKey}|${vKey}`;
+      if (!gpsIndex.has(key)) gpsIndex.set(key, []);
+      gpsIndex.get(key)!.push(g);
+    }
+
+    // 打卡索引（按日期+員工ID）
+    const attendanceIndex = new Map<string, any[]>();
+    for (const a of attendances) {
+      const dateKey = a.timestamp?.toISOString().slice(0, 10) || '';
+      const key = `${dateKey}|${a.employee_id}`;
+      if (!attendanceIndex.has(key)) attendanceIndex.set(key, []);
+      attendanceIndex.get(key)!.push(a);
+    }
+
+    // WhatsApp 索引（按日期+車牌）
+    const waIndex = new Map<string, any[]>();
+    for (const item of waOrderItems) {
+      const dateKey = (item as any).order_date || '';
+      const vKey1 = normalizeVehicle((item as any).wa_item_vehicle_no);
+      const vKey2 = normalizeVehicle((item as any).wa_item_machine_code);
+      if (vKey1) {
+        const key = `${dateKey}|${vKey1}`;
+        if (!waIndex.has(key)) waIndex.set(key, []);
+        waIndex.get(key)!.push(item);
       }
+      if (vKey2 && vKey2 !== vKey1) {
+        const key = `${dateKey}|${vKey2}`;
+        if (!waIndex.has(key)) waIndex.set(key, []);
+        waIndex.get(key)!.push(item);
+      }
+    }
+
+    // ── 逐筆工作紀錄計算各來源狀態 ─────────────────────────
+    // 來源 key 對應: receipt, slip_chit(→slip), driver_sheet(→sheet), customer_record(→customer), gps, clock, whatsapp_order(→whatsapp)
+    const records = workLogs.map((wl) => {
+      const date = wl.scheduled_date?.toISOString().slice(0, 10) || '';
+      const vehicleNorm = normalizeVehicle(wl.equipment_number);
+      const employeeId = wl.employee_id;
+      const lookupKey = `${date}|${vehicleNorm}`;
+      const wlConfirms = confirmMap.get(wl.id);
+
+      // 判斷單個來源的狀態
+      const getSourceStatus = (sourceCode: string, hasAutoMatch: boolean): string => {
+        const confirm = wlConfirms?.get(sourceCode);
+        if (confirm) {
+          if (confirm.status === 'manual_match' || confirm.status === 'confirmed') return 'matched';
+          if (confirm.status === 'skipped') return 'na';
+        }
+        return hasAutoMatch ? 'matched' : 'missing';
+      };
+
+      // 入帳票
+      const hasReceipt = vehicleNorm ? (receiptIndex.get(lookupKey)?.length || 0) > 0 : false;
+      const statusReceipt = date ? getSourceStatus('receipt', hasReceipt) : 'unverified';
+
+      // 飛仔
+      const hasSlip = vehicleNorm ? (slipIndex.get(lookupKey)?.length || 0) > 0 : false;
+      const statusSlip = date ? getSourceStatus('slip_chit', hasSlip) : 'unverified';
+
+      // 功課表（暫無自動配對資料）
+      const statusSheet = date ? getSourceStatus('driver_sheet', false) : 'unverified';
+
+      // 客戶記錄（暫無自動配對資料）
+      const statusCustomer = date ? getSourceStatus('customer_record', false) : 'unverified';
+
+      // GPS
+      const hasGps = vehicleNorm ? (gpsIndex.get(lookupKey)?.length || 0) > 0 : false;
+      const statusGps = date ? getSourceStatus('gps', hasGps) : 'unverified';
+
+      // 打卡
+      const clockKey = `${date}|${employeeId}`;
+      const hasClock = employeeId ? (attendanceIndex.get(clockKey)?.length || 0) > 0 : false;
+      const statusClock = date ? getSourceStatus('clock', hasClock) : 'unverified';
+
+      // WhatsApp
+      let hasWa = vehicleNorm ? (waIndex.get(lookupKey)?.length || 0) > 0 : false;
+      // 檢查手動配對
+      const waConfirm = wlConfirms?.get('whatsapp_order');
+      if (waConfirm?.status === 'manual_match' && waConfirm.matched_record_id) {
+        hasWa = true;
+      }
+      const statusWhatsapp = date ? getSourceStatus('whatsapp_order', hasWa) : 'unverified';
 
       // 計算整體狀態
-      const statuses = Object.values(statusBySource).filter((s) => s !== 'na' && s !== 'unverified');
+      const allStatuses = [statusReceipt, statusSlip, statusSheet, statusCustomer, statusGps, statusClock, statusWhatsapp];
+      const activeStatuses = allStatuses.filter((s) => s !== 'na' && s !== 'unverified');
       let overallStatus = 'unverified';
-      if (statuses.length > 0) {
-        if (statuses.includes('missing') || statuses.includes('source_missing')) overallStatus = 'missing';
-        else if (statuses.includes('diff')) overallStatus = 'diff';
-        else if (statuses.every((s) => s === 'matched')) overallStatus = 'matched';
-        else overallStatus = 'unverified';
-      }
-
-      // Build match_id map per frontend source key
-      const matchIdBySource: Record<string, number | null> = {};
-      const sourceKeyToCode: Record<string, string> = {
-        receipt: 'receipt', slip: 'slip_chit', sheet: 'driver_sheet',
-        customer: 'customer_record', gps: 'gps', clock: 'clock', whatsapp: 'whatsapp_order',
-      };
-      for (const [feKey, beCode] of Object.entries(sourceKeyToCode)) {
-        const src = sourceMap.get(beCode);
-        if (!src) { matchIdBySource[feKey] = null; continue; }
-        const m = wlMatches.find((mm) => mm.match_source_id === src.id);
-        matchIdBySource[feKey] = m ? m.id : null;
+      if (activeStatuses.length > 0) {
+        const matchedCount = activeStatuses.filter((s) => s === 'matched').length;
+        const missingCount = activeStatuses.filter((s) => s === 'missing').length;
+        if (matchedCount === activeStatuses.length) {
+          overallStatus = 'matched';
+        } else if (matchedCount > 0) {
+          overallStatus = 'diff'; // 部分匹配 → 顯示為有差異
+        } else if (missingCount === activeStatuses.length) {
+          overallStatus = 'missing';
+        } else {
+          overallStatus = 'unverified';
+        }
       }
 
       return {
         work_record_id: wl.id,
-        date: wl.scheduled_date ? wl.scheduled_date.toISOString().slice(0, 10) : null,
+        date,
         driver: (wl.employee as any)?.nickname || (wl.employee as any)?.name_zh || '—',
         vehicle: wl.equipment_number || '—',
         work_type: wl.service_type || '—',
@@ -1117,20 +1265,21 @@ export class VerificationService {
         location: `${wl.start_location || '—'} → ${wl.end_location || '—'}`,
         contract: (wl.contract as any)?.contract_no || '—',
         chit_no: wl.receipt_no || '—',
-        status_receipt: statusBySource['receipt'],
-        status_slip: statusBySource['slip_chit'],
-        status_sheet: statusBySource['driver_sheet'],
-        status_customer: statusBySource['customer_record'],
-        status_gps: statusBySource['gps'],
-        status_clock: statusBySource['clock'],
-        status_whatsapp: statusBySource['whatsapp_order'],
-        match_id_receipt: matchIdBySource['receipt'],
-        match_id_slip: matchIdBySource['slip'],
-        match_id_sheet: matchIdBySource['sheet'],
-        match_id_customer: matchIdBySource['customer'],
-        match_id_gps: matchIdBySource['gps'],
-        match_id_clock: matchIdBySource['clock'],
-        match_id_whatsapp: matchIdBySource['whatsapp'],
+        status_receipt: statusReceipt,
+        status_slip: statusSlip,
+        status_sheet: statusSheet,
+        status_customer: statusCustomer,
+        status_gps: statusGps,
+        status_clock: statusClock,
+        status_whatsapp: statusWhatsapp,
+        // 不再提供 match_id（舊系統），前端改用 work_record_id 調用 matchSingle
+        match_id_receipt: null,
+        match_id_slip: null,
+        match_id_sheet: null,
+        match_id_customer: null,
+        match_id_gps: null,
+        match_id_clock: null,
+        match_id_whatsapp: null,
         overall_status: overallStatus,
       };
     });
@@ -1141,19 +1290,18 @@ export class VerificationService {
       filteredRecords = records.filter((r) => r.overall_status === filterStatus);
     }
 
-    // 統計摘要
-    const allMatchStatuses = await this.prisma.verificationMatch.groupBy({
-      by: ['match_status'],
-      _count: { id: true },
-    });
+    // 統計摘要（基於當前頁面的工作紀錄）
+    const matchedCount = records.filter((r) => r.overall_status === 'matched').length;
+    const diffCount = records.filter((r) => r.overall_status === 'diff').length;
+    const missingCount = records.filter((r) => r.overall_status === 'missing').length;
+    const unverifiedCount = records.filter((r) => r.overall_status === 'unverified').length;
+
     const summary = {
       total_records: total,
-      matched_count: allMatchStatuses.find((s) => s.match_status === 'matched')?._count?.id || 0,
-      diff_count: allMatchStatuses.find((s) => s.match_status === 'diff')?._count?.id || 0,
-      missing_count:
-        (allMatchStatuses.find((s) => s.match_status === 'missing')?._count?.id || 0) +
-        (allMatchStatuses.find((s) => s.match_status === 'source_missing')?._count?.id || 0),
-      unverified_count: allMatchStatuses.find((s) => s.match_status === 'unverified')?._count?.id || 0,
+      matched_count: matchedCount,
+      diff_count: diffCount,
+      missing_count: missingCount,
+      unverified_count: unverifiedCount,
     };
 
     return {
@@ -1165,6 +1313,36 @@ export class VerificationService {
         total_pages: Math.ceil(total / pageSize),
         total,
       },
+    };
+  }
+
+  // 構建空記錄（無日期時使用）
+  private buildEmptyRecord(wl: any) {
+    return {
+      work_record_id: wl.id,
+      date: null,
+      driver: wl.employee?.nickname || wl.employee?.name_zh || '—',
+      vehicle: wl.equipment_number || '—',
+      work_type: wl.service_type || '—',
+      customer: wl.client?.name || '—',
+      location: `${wl.start_location || '—'} → ${wl.end_location || '—'}`,
+      contract: wl.contract?.contract_no || '—',
+      chit_no: wl.receipt_no || '—',
+      status_receipt: 'unverified',
+      status_slip: 'unverified',
+      status_sheet: 'unverified',
+      status_customer: 'unverified',
+      status_gps: 'unverified',
+      status_clock: 'unverified',
+      status_whatsapp: 'unverified',
+      match_id_receipt: null,
+      match_id_slip: null,
+      match_id_sheet: null,
+      match_id_customer: null,
+      match_id_gps: null,
+      match_id_clock: null,
+      match_id_whatsapp: null,
+      overall_status: 'unverified',
     };
   }
 

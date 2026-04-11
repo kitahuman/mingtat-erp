@@ -15,8 +15,8 @@ const STATUS_ICON: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   matched: '已匹配',
-  diff: '有差異',
-  missing: '系統缺失',
+  diff: '部分匹配',
+  missing: '缺失',
   source_missing: '來源缺失',
   unverified: '未核對',
   na: '不適用',
@@ -31,15 +31,6 @@ const STATUS_COLOR: Record<string, string> = {
   na: 'text-gray-300',
 };
 
-const MATCH_METHOD_LABEL: Record<string, string> = {
-  chit_no: '入帳票號配對',
-  slip_no: '飛仔號配對',
-  date_vehicle: '日期+車牌配對',
-  date_employee: '日期+員工配對',
-  bidirectional_check: '雙向檢查',
-  none: '未配對',
-};
-
 const SOURCE_LABELS: Record<string, string> = {
   receipt: '入帳票',
   slip: '飛仔',
@@ -50,15 +41,15 @@ const SOURCE_LABELS: Record<string, string> = {
   whatsapp: 'WhatsApp',
 };
 
-const DIFF_FIELD_LABELS: Record<string, string> = {
-  date: '日期',
-  time_in: '進入時間',
-  time_out: '離開時間',
-  weight: '重量',
-  vehicle: '車牌',
-  location: '地點',
-  location_to: '終點',
-  reason: '原因',
+// 前端 source key → matchSingle 返回的 source key
+const FE_TO_MATCH_SOURCE: Record<string, string> = {
+  receipt: 'chit',
+  slip: 'delivery_note',
+  sheet: 'driver_sheet',
+  customer: 'customer_record',
+  gps: 'gps',
+  clock: 'attendance',
+  whatsapp: 'whatsapp_order',
 };
 
 const SOURCE_KEYS = ['receipt', 'slip', 'sheet', 'customer', 'gps', 'clock', 'whatsapp'];
@@ -80,13 +71,6 @@ interface WorkbenchRecord {
   status_gps: string;
   status_clock: string;
   status_whatsapp: string;
-  match_id_receipt: number | null;
-  match_id_slip: number | null;
-  match_id_sheet: number | null;
-  match_id_customer: number | null;
-  match_id_gps: number | null;
-  match_id_clock: number | null;
-  match_id_whatsapp: number | null;
   overall_status: string;
 }
 
@@ -125,103 +109,30 @@ function StatCard({ label, count, color, icon, active, onClick }: {
   );
 }
 
-// ── 詳情 Popup（增強版：逐欄對比 + 橙色高亮 + 操作按鈕）──
-function DetailPopup({ matchId, sourceKey, onClose }: { matchId: number | null; sourceKey: string; onClose: () => void }) {
-  const [detail, setDetail] = useState<any>(null);
+// ── 詳情 Popup（使用 matchSingle API）──────────────────────
+function DetailPopup({ workRecordId, sourceKey, onClose }: {
+  workRecordId: number;
+  sourceKey: string;
+  onClose: () => void;
+}) {
+  const [matchData, setMatchData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!matchId || matchId <= 0) return;
+    if (!workRecordId) return;
     setLoading(true);
-    verificationApi.getMatchDetail(matchId)
-      .then(res => setDetail(res.data))
+    verificationApi.matchSingle(workRecordId)
+      .then(res => setMatchData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [matchId]);
+  }, [workRecordId]);
 
-  if (!matchId) return null;
+  if (!workRecordId) return null;
 
-  const handleAction = async (action: string) => {
-    if (!detail?.match?.id) return;
-    setActionLoading(action);
-    try {
-      // For override, build override_data from source record diff fields
-      let overrideData: any = undefined;
-      if (action === 'override' && detail.diff_fields) {
-        overrideData = {};
-        for (const [key, val] of Object.entries(detail.diff_fields) as [string, any][]) {
-          if (val.src) overrideData[key] = val.src;
-        }
-      }
-      await verificationApi.performMatchAction(detail.match.id, { action, override_data: overrideData });
-      onClose();
-    } catch {
-      // ignore
-    }
-    setActionLoading(null);
-  };
-
-  // Build comparison rows for side-by-side display
-  const buildComparisonRows = () => {
-    if (!detail) return [];
-    const wl = detail.work_log || {};
-    const sr = detail.source_record || {};
-    const diffs = detail.diff_fields || {};
-
-    const rows: Array<{ label: string; sysVal: string; srcVal: string; isDiff: boolean }> = [];
-
-    rows.push({
-      label: '日期',
-      sysVal: wl.scheduled_date?.slice(0, 10) || '—',
-      srcVal: sr.record_work_date?.slice(0, 10) || '—',
-      isDiff: !!diffs['date'],
-    });
-    rows.push({
-      label: '車牌',
-      sysVal: wl.equipment_number || '—',
-      srcVal: sr.record_vehicle_no || '—',
-      isDiff: !!diffs['vehicle'],
-    });
-    rows.push({
-      label: '進入時間',
-      sysVal: wl.start_time || '—',
-      srcVal: sr.record_time_in ? formatTimeField(sr.record_time_in) : '—',
-      isDiff: !!diffs['time_in'],
-    });
-    rows.push({
-      label: '離開時間',
-      sysVal: wl.end_time || '—',
-      srcVal: sr.record_time_out ? formatTimeField(sr.record_time_out) : '—',
-      isDiff: !!diffs['time_out'],
-    });
-    rows.push({
-      label: '重量/數量',
-      sysVal: wl.quantity != null ? String(wl.quantity) : '—',
-      srcVal: sr.record_weight_net != null ? String(sr.record_weight_net) : '—',
-      isDiff: !!diffs['weight'],
-    });
-    rows.push({
-      label: '起點',
-      sysVal: wl.start_location || '—',
-      srcVal: sr.record_location_from || '—',
-      isDiff: !!diffs['location'],
-    });
-    rows.push({
-      label: '終點',
-      sysVal: wl.end_location || '—',
-      srcVal: sr.record_location_to || '—',
-      isDiff: !!diffs['location_to'],
-    });
-    rows.push({
-      label: '入帳票號',
-      sysVal: wl.receipt_no || '—',
-      srcVal: sr.chits?.map((c: any) => c.chit_no).join(', ') || '—',
-      isDiff: false,
-    });
-
-    return rows;
-  };
+  // 從 matchSingle 結果中取出對應來源的資料
+  const matchSourceKey = FE_TO_MATCH_SOURCE[sourceKey] || sourceKey;
+  const sourceData = matchData?.sources?.[matchSourceKey];
+  const workLogData = matchData?.sources?.['work_log'];
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={onClose}>
@@ -235,95 +146,63 @@ function DetailPopup({ matchId, sourceKey, onClose }: { matchId: number | null; 
         <div className="p-6">
           {loading ? (
             <div className="text-center py-8 text-gray-400">載入中...</div>
-          ) : detail ? (
+          ) : sourceData ? (
             <div className="space-y-4">
               {/* 狀態列 */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-2xl">{STATUS_ICON[detail.match?.match_status] || '·'}</span>
-                <span className="font-medium">{STATUS_LABEL[detail.match?.match_status] || '未知'}</span>
-                {detail.match?.match_confidence != null && (
-                  <span className="text-sm text-gray-500 ml-2">信心度: {Number(detail.match.match_confidence).toFixed(0)}%</span>
-                )}
-                {detail.match?.match_method && (
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded ml-2">
-                    {MATCH_METHOD_LABEL[detail.match.match_method] || detail.match.match_method}
-                  </span>
-                )}
+                <span className="text-2xl">{STATUS_ICON[sourceData.status] || '·'}</span>
+                <span className="font-medium">
+                  {sourceData.status === 'found' ? '已匹配' : sourceData.status === 'missing' ? '未找到對應資料' : sourceData.status}
+                </span>
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded ml-2">
+                  {sourceData.source}
+                </span>
               </div>
 
-              {/* 逐欄對比表格 */}
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="text-left px-4 py-2.5 font-medium text-gray-600 w-28">欄位</th>
-                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">系統記錄</th>
-                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">來源資料</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {buildComparisonRows().map((row, idx) => (
-                      <tr key={idx} className={`border-t ${row.isDiff ? 'bg-orange-50' : ''}`}>
-                        <td className={`px-4 py-2.5 font-medium ${row.isDiff ? 'text-orange-700' : 'text-gray-600'}`}>
-                          {row.label}
-                          {row.isDiff && <span className="ml-1 text-orange-500 text-xs">●</span>}
-                        </td>
-                        <td className={`px-4 py-2.5 ${row.isDiff ? 'text-orange-700 font-medium' : ''}`}>{row.sysVal}</td>
-                        <td className={`px-4 py-2.5 ${row.isDiff ? 'text-orange-700 font-medium' : ''}`}>{row.srcVal}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* 差異摘要 */}
-              {detail.diff_fields && Object.keys(detail.diff_fields).length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                  <div className="text-sm font-medium text-amber-800 mb-1">差異摘要</div>
-                  <div className="text-sm text-amber-700">
-                    {Object.entries(detail.diff_fields).map(([key, val]: [string, any]) => (
-                      <div key={key}>
-                        <span className="font-medium">{DIFF_FIELD_LABELS[key] || key}：</span>
-                        {val.diff || `${val.sys} → ${val.src}`}
-                      </div>
-                    ))}
+              {/* 工作紀錄資訊 */}
+              {workLogData?.details?.[0] && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  <div className="text-sm font-medium text-blue-800 mb-2">工作紀錄</div>
+                  <div className="grid grid-cols-2 gap-2 text-sm text-blue-700">
+                    <div><span className="text-blue-500">車牌：</span>{workLogData.details[0].vehicle}</div>
+                    <div><span className="text-blue-500">員工：</span>{workLogData.details[0].employee}</div>
+                    <div><span className="text-blue-500">客戶：</span>{workLogData.details[0].customer}</div>
+                    <div><span className="text-blue-500">合約：</span>{workLogData.details[0].contract}</div>
+                    <div className="col-span-2"><span className="text-blue-500">地點：</span>{workLogData.details[0].location}</div>
                   </div>
                 </div>
               )}
 
-              {/* 操作按鈕 */}
-              {detail.match?.match_status !== 'matched' && (
-                <div className="flex gap-2 pt-2 flex-wrap border-t mt-4 pt-4">
-                  <button
-                    onClick={() => handleAction('confirm')}
-                    disabled={!!actionLoading}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === 'confirm' ? '處理中...' : '✓ 確認匹配'}
-                  </button>
-                  <button
-                    onClick={() => handleAction('override')}
-                    disabled={!!actionLoading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === 'override' ? '處理中...' : '↻ 以來源資料覆蓋'}
-                  </button>
-                  <button
-                    onClick={() => handleAction('ignore')}
-                    disabled={!!actionLoading}
-                    className="bg-gray-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-600 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === 'ignore' ? '處理中...' : '— 忽略差異'}
-                  </button>
-                  <button
-                    onClick={() => handleAction('manual_correct')}
-                    disabled={!!actionLoading}
-                    className="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === 'manual_correct' ? '處理中...' : '✎ 手動修正'}
-                  </button>
+              {/* 來源資料 */}
+              {sourceData.status === 'found' && sourceData.details?.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-green-50 px-4 py-2 text-sm font-medium text-green-700">
+                    找到 {sourceData.details.length} 筆匹配記錄
+                  </div>
+                  <div className="divide-y max-h-[300px] overflow-y-auto">
+                    {sourceData.details.map((detail: any, idx: number) => (
+                      <div key={idx} className="px-4 py-3">
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {Object.entries(detail)
+                            .filter(([k]) => k !== 'id')
+                            .map(([key, val]) => (
+                              <div key={key}>
+                                <span className="text-gray-500">{key}：</span>
+                                <span className="text-gray-800">
+                                  {Array.isArray(val) ? (val as any[]).join(', ') : String(val ?? '—')}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
+              ) : sourceData.status === 'missing' ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                  在此來源中未找到匹配的記錄
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400">無資料</div>
@@ -332,18 +211,6 @@ function DetailPopup({ matchId, sourceKey, onClose }: { matchId: number | null; 
       </div>
     </div>
   );
-}
-
-function formatTimeField(val: string | null): string {
-  if (!val) return '—';
-  // Handle ISO datetime string
-  if (val.includes('T')) {
-    const d = new Date(val);
-    const h = String(d.getUTCHours()).padStart(2, '0');
-    const m = String(d.getUTCMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
-  }
-  return val;
 }
 
 // ── 主頁面 ──────────────────────────────────────────────────
@@ -361,13 +228,9 @@ export default function VerificationWorkbenchPage() {
   const [dateTo, setDateTo] = useState<string>('');
   const [page, setPage] = useState(1);
 
-  // Popup
-  const [popupMatchId, setPopupMatchId] = useState<number | null>(null);
+  // Popup (now uses work_record_id instead of match_id)
+  const [popupWorkRecordId, setPopupWorkRecordId] = useState<number | null>(null);
   const [popupSourceKey, setPopupSourceKey] = useState<string>('');
-
-  // Batch selection
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [batchLoading, setBatchLoading] = useState(false);
 
   // Export
   const [exporting, setExporting] = useState(false);
@@ -394,76 +257,19 @@ export default function VerificationWorkbenchPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Clear selection when data changes
-  useEffect(() => { setSelected(new Set()); }, [records]);
-
   const handleStatusClick = (status: string) => {
     setFilterStatus(prev => prev === status ? 'all' : status);
     setPage(1);
   };
 
-  // 點擊狀態圖標 — 使用 match_id 直接打開 popup
+  // 點擊狀態圖標 — 使用 work_record_id 打開 popup
   const handleCellClick = (record: WorkbenchRecord, sourceKey: string) => {
     const statusField = `status_${sourceKey}` as keyof WorkbenchRecord;
     const status = record[statusField] as string;
     if (status === 'unverified' || status === 'na') return;
 
-    const matchIdField = `match_id_${sourceKey}` as keyof WorkbenchRecord;
-    const matchId = record[matchIdField] as number | null;
-    if (!matchId) return;
-
     setPopupSourceKey(sourceKey);
-    setPopupMatchId(matchId);
-  };
-
-  // Batch selection helpers
-  const toggleSelect = (workRecordId: number) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(workRecordId)) next.delete(workRecordId);
-      else next.add(workRecordId);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selected.size === records.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(records.map(r => r.work_record_id)));
-    }
-  };
-
-  // Collect all match IDs for selected records (non-null, non-matched)
-  const getSelectedMatchIds = (): number[] => {
-    const matchIds: number[] = [];
-    for (const rec of records) {
-      if (!selected.has(rec.work_record_id)) continue;
-      for (const key of SOURCE_KEYS) {
-        const matchIdField = `match_id_${key}` as keyof WorkbenchRecord;
-        const statusField = `status_${key}` as keyof WorkbenchRecord;
-        const mid = rec[matchIdField] as number | null;
-        const st = rec[statusField] as string;
-        if (mid && st !== 'matched' && st !== 'na' && st !== 'unverified') {
-          matchIds.push(mid);
-        }
-      }
-    }
-    return Array.from(new Set(matchIds));
-  };
-
-  const handleBatchAction = async (action: string) => {
-    const matchIds = getSelectedMatchIds();
-    if (matchIds.length === 0) return;
-    setBatchLoading(true);
-    try {
-      await verificationApi.batchAction({ match_ids: matchIds, action });
-      setSelected(new Set());
-      fetchData();
-    } catch (err) {
-      console.error('Batch action failed', err);
-    }
-    setBatchLoading(false);
+    setPopupWorkRecordId(record.work_record_id);
   };
 
   const handleExport = async () => {
@@ -510,12 +316,12 @@ export default function VerificationWorkbenchPage() {
           >
             {exporting ? (
               <>
-                <span className="animate-spin">⏳</span>
+                <span className="animate-spin">&#9203;</span>
                 <span>匯出中...</span>
               </>
             ) : (
               <>
-                <span>📊</span>
+                <span>&#128202;</span>
                 <span>匯出 Excel</span>
               </>
             )}
@@ -524,7 +330,7 @@ export default function VerificationWorkbenchPage() {
             href="/verification/upload"
             className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 text-sm"
           >
-            <span>📤</span>
+            <span>&#128228;</span>
             <span>上傳資料</span>
           </Link>
         </div>
@@ -534,19 +340,19 @@ export default function VerificationWorkbenchPage() {
       <div className="flex gap-4 flex-wrap">
         <StatCard
           label="已匹配" count={summary.matched_count} color="text-green-600"
-          icon="✅" active={filterStatus === 'matched'} onClick={() => handleStatusClick('matched')}
+          icon="&#9989;" active={filterStatus === 'matched'} onClick={() => handleStatusClick('matched')}
         />
         <StatCard
-          label="有差異" count={summary.diff_count} color="text-amber-500"
-          icon="⚠️" active={filterStatus === 'diff'} onClick={() => handleStatusClick('diff')}
+          label="部分匹配" count={summary.diff_count} color="text-amber-500"
+          icon="&#9888;&#65039;" active={filterStatus === 'diff'} onClick={() => handleStatusClick('diff')}
         />
         <StatCard
           label="缺失" count={summary.missing_count} color="text-red-500"
-          icon="❌" active={filterStatus === 'missing'} onClick={() => handleStatusClick('missing')}
+          icon="&#10060;" active={filterStatus === 'missing'} onClick={() => handleStatusClick('missing')}
         />
         <StatCard
           label="未核對" count={summary.unverified_count} color="text-gray-400"
-          icon="·" active={filterStatus === 'unverified'} onClick={() => handleStatusClick('unverified')}
+          icon="&#183;" active={filterStatus === 'unverified'} onClick={() => handleStatusClick('unverified')}
         />
       </div>
 
@@ -603,54 +409,12 @@ export default function VerificationWorkbenchPage() {
         </div>
       </div>
 
-      {/* 批量操作列 */}
-      {selected.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-blue-700">
-            已選擇 <span className="font-bold">{selected.size}</span> 筆記錄
-            {getSelectedMatchIds().length > 0 && (
-              <span className="ml-1">（{getSelectedMatchIds().length} 筆待處理配對）</span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleBatchAction('confirm')}
-              disabled={batchLoading || getSelectedMatchIds().length === 0}
-              className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              {batchLoading ? '處理中...' : '批量確認'}
-            </button>
-            <button
-              onClick={() => handleBatchAction('ignore')}
-              disabled={batchLoading || getSelectedMatchIds().length === 0}
-              className="bg-gray-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-gray-600 disabled:opacity-50 transition-colors"
-            >
-              {batchLoading ? '處理中...' : '批量忽略'}
-            </button>
-            <button
-              onClick={() => setSelected(new Set())}
-              className="text-gray-500 hover:text-gray-700 px-3 py-1.5 text-sm"
-            >
-              取消選擇
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 工作紀錄表格 */}
       <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="w-10 px-2 py-3">
-                  <input
-                    type="checkbox"
-                    checked={records.length > 0 && selected.size === records.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-gray-300"
-                  />
-                </th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">日期</th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">司機</th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">車牌</th>
@@ -666,19 +430,11 @@ export default function VerificationWorkbenchPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={14} className="text-center py-12 text-gray-400">載入中...</td></tr>
+                <tr><td colSpan={13} className="text-center py-12 text-gray-400">載入中...</td></tr>
               ) : records.length === 0 ? (
-                <tr><td colSpan={14} className="text-center py-12 text-gray-400">暫無資料</td></tr>
+                <tr><td colSpan={13} className="text-center py-12 text-gray-400">暫無資料</td></tr>
               ) : records.map((rec) => (
-                <tr key={rec.work_record_id} className={`border-b hover:bg-gray-50 transition-colors ${selected.has(rec.work_record_id) ? 'bg-blue-50' : ''}`}>
-                  <td className="w-10 px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(rec.work_record_id)}
-                      onChange={() => toggleSelect(rec.work_record_id)}
-                      className="rounded border-gray-300"
-                    />
-                  </td>
+                <tr key={rec.work_record_id} className="border-b hover:bg-gray-50 transition-colors">
                   <td className="px-3 py-2.5 whitespace-nowrap">{rec.date || '—'}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap">{rec.driver}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap font-mono text-xs">{rec.vehicle}</td>
@@ -688,9 +444,7 @@ export default function VerificationWorkbenchPage() {
                   {SOURCE_KEYS.map(key => {
                     const statusField = `status_${key}` as keyof WorkbenchRecord;
                     const status = rec[statusField] as string;
-                    const matchIdField = `match_id_${key}` as keyof WorkbenchRecord;
-                    const matchId = rec[matchIdField] as number | null;
-                    const clickable = !!matchId && status !== 'unverified' && status !== 'na';
+                    const clickable = status !== 'unverified' && status !== 'na';
                     return (
                       <td key={key} className="text-center px-2 py-2.5">
                         <button
@@ -737,11 +491,11 @@ export default function VerificationWorkbenchPage() {
       </div>
 
       {/* 詳情 Popup */}
-      {popupMatchId && (
+      {popupWorkRecordId && (
         <DetailPopup
-          matchId={popupMatchId}
+          workRecordId={popupWorkRecordId}
           sourceKey={popupSourceKey}
-          onClose={() => { setPopupMatchId(null); fetchData(); }}
+          onClose={() => { setPopupWorkRecordId(null); fetchData(); }}
         />
       )}
     </div>
