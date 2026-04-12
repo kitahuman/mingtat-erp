@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MachineryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   async simple() {
     const machines = await this.prisma.machinery.findMany({
@@ -74,13 +75,24 @@ export class MachineryService {
     return m;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { owner_company, transfers, ...data } = dto;
     const saved = await this.prisma.machinery.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'machinery',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.machinery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('機械不存在');
     const { transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -97,7 +109,19 @@ export class MachineryService {
       updateData.tonnage = updateData.tonnage != null && updateData.tonnage !== '' ? Number(updateData.tonnage) : null;
     }
 
-    await this.prisma.machinery.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.machinery.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'machinery',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
@@ -118,9 +142,20 @@ export class MachineryService {
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.machinery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('機械不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'machinery',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.machinery.delete({ where: { id } });
     return { message: '刪除成功' };
   }

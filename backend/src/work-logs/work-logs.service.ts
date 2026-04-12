@@ -12,6 +12,7 @@ export class WorkLogsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   // ── 工作記錄 CRUD ─────────────────────────────────────────
@@ -114,12 +115,24 @@ export class WorkLogsService {
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : undefined,
       },
     });
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'work_logs',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     // 自動匹配價格
     await this.matchAndSavePrice(saved);
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
       id: _id, created_at, updated_at,
@@ -157,20 +170,46 @@ export class WorkLogsService {
       }
     }
 
+    const existingWl = await this.prisma.workLog.findUnique({ where: { id } });
     await this.prisma.workLog.update({ where: { id }, data: rest });
+    if (userId) {
+      try {
+        const afterWl = await this.prisma.workLog.findUnique({ where: { id } });
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'work_logs',
+          targetId: id,
+          changesBefore: existingWl,
+          changesAfter: afterWl,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
     const hasPriceChange = priceRelatedFields.some(f => f in rest);
     if (hasPriceChange) {
-      const updated = await this.findOne(id);
-      if (updated) {
-        await this.matchAndSavePrice(updated as any);
+      const updatedWl = await this.findOne(id);
+      if (updatedWl) {
+        await this.matchAndSavePrice(updatedWl as any);
       }
     }
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
+    const existing = await this.prisma.workLog.findUnique({ where: { id } });
+    if (userId && existing) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'work_logs',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     // 先解除 PayrollWorkLog 的關聯
     await this.prisma.payrollWorkLog.updateMany({
       where: { work_log_id: id },

@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   /**
    * Parse column filter parameters from query.
@@ -326,13 +327,24 @@ export class EmployeesService {
     return emp;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { company, salary_settings, transfers, ...data } = dto;
     const saved = await this.prisma.employee.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'employees',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
     const { salary_settings, transfers, company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -347,7 +359,19 @@ export class EmployeesService {
         updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
       }
     }
-    await this.prisma.employee.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.employee.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'employees',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
@@ -489,9 +513,20 @@ export class EmployeesService {
     return this.findOne(id);
   }
 
-   async remove(id: number) {
+   async remove(id: number, userId?: number) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'employees',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.employee.delete({ where: { id } });
     return { message: '刪除成功' };
   }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { StatutoryHolidaysService } from './statutory-holidays.service';
 
@@ -18,8 +18,8 @@ export class StatutoryHolidaysController {
   }
 
   @Post()
-  create(@Body() dto: { date: string; name: string }) {
-    return this.service.create(dto);
+  create(@Body() dto: { date: string; name: string }, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Post('bulk')
@@ -28,12 +28,12 @@ export class StatutoryHolidaysController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: { date?: string; name?: string }) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: string, @Body() dto: { date?: string; name?: string }, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0);
   }
 }

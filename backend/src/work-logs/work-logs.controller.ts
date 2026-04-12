@@ -46,13 +46,13 @@ export class WorkLogsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: any) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: string, @Body() dto: any, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0);
   }
 
   // ── 批量操作 ─────────────────────────────────────────────

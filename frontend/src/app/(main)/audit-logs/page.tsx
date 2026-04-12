@@ -30,11 +30,21 @@ const TABLES = [
   { value: 'employees', label: '員工' },
   { value: 'vehicles', label: '車輛' },
   { value: 'machinery', label: '機械' },
+  { value: 'partners', label: '合作單位' },
   { value: 'projects', label: '工程項目' },
   { value: 'contracts', label: '合約' },
+  { value: 'work_logs', label: '工作記錄' },
   { value: 'invoices', label: '發票' },
   { value: 'expenses', label: '費用' },
-  { value: 'work_logs', label: '工作記錄' },
+  { value: 'payrolls', label: '糧單' },
+  { value: 'employee_salary_settings', label: '薪酬配置' },
+  { value: 'quotations', label: '報價單' },
+  { value: 'leaves', label: '請假紀錄' },
+  { value: 'rate_cards', label: '客戶價目表' },
+  { value: 'fleet_rate_cards', label: '租賃價目表' },
+  { value: 'subcon_rate_cards', label: '供應商價目表' },
+  { value: 'subcon_fleet_drivers', label: '街車車隊' },
+  { value: 'statutory_holidays', label: '法定假期' },
 ];
 
 export default function AuditLogsPage() {

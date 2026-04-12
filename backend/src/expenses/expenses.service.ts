@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const EXPENSE_INCLUDE = {
@@ -116,26 +117,60 @@ export class ExpensesService {
     return data;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const data = this.normalizeDto(dto);
     // Set default source if not provided
     if (!data.source) data.source = 'MANUAL';
     const saved = await this.prisma.expense.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'expenses',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('支出記錄不存在');
     const { id: _id, created_at, updated_at, ...rest } = dto;
     const data = this.normalizeDto(rest);
-    await this.prisma.expense.update({ where: { id }, data });
+    const updated = await this.prisma.expense.update({ where: { id }, data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'expenses',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('支出記錄不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'expenses',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.expense.delete({ where: { id } });
     return { message: '刪除成功' };
   }

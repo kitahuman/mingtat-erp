@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Put, Delete,
-  Body, Query, Param, ParseIntPipe, UseGuards,
+  Body, Query, Param, ParseIntPipe, UseGuards, Request,
   UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -30,18 +30,18 @@ export class ExpensesController {
   }
 
   @Post()
-  create(@Body() dto: any) {
-    return this.service.create(dto);
+  create(@Body() dto: any, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
-    return this.service.update(id, dto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.update(id, dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, req.user?.id || req.user?.userId || 0);
   }
 
   // ── Expense Items ───────────────────────────────────────────────

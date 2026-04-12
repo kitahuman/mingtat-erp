@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Put, Delete,
   Param, Query, Body,
-  UseGuards,
+  UseGuards, Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
@@ -47,13 +47,13 @@ export class PayrollController {
     company_profile_id?: number;
     company_id?: number;
     period?: string;
-  }) {
-    return this.payrollService.generate(body);
+  }, @Request() req: any) {
+    return this.payrollService.generate(body, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.payrollService.update(+id, body);
+  update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.payrollService.update(+id, body, req.user?.id || req.user?.userId || 0);
   }
 
   @Post('bulk/confirm')
@@ -84,8 +84,8 @@ export class PayrollController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.payrollService.remove(+id);
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.payrollService.remove(+id, req.user?.id || req.user?.userId || 0);
   }
 
   // ── 糧單工作記錄管理 ──────────────────────────────────────

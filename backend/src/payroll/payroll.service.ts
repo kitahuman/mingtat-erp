@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { PricingService } from '../common/pricing.service';
 import { StatutoryHolidaysService } from '../statutory-holidays/statutory-holidays.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
 function toDateStr(d: any): string {
@@ -24,6 +25,7 @@ export class PayrollService {
     private readonly expensesService: ExpensesService,
     private readonly pricingService: PricingService,
     private readonly statutoryHolidaysService: StatutoryHolidaysService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
@@ -297,7 +299,7 @@ export class PayrollService {
     company_profile_id?: number;
     company_id?: number;
     period?: string;
-  }) {
+  }, userId?: number) {
     const { employee_id, date_from, date_to, company_profile_id, company_id } = body;
 
     if (!employee_id) throw new BadRequestException('請選擇員工');
@@ -465,6 +467,17 @@ export class PayrollService {
       }
     }
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'payrolls',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
@@ -770,7 +783,7 @@ export class PayrollService {
   }
 
   // ── 更新糧單 ──────────────────────────────────────────────────
-  async update(id: number, body: any) {
+  async update(id: number, body: any, userId?: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
@@ -781,7 +794,20 @@ export class PayrollService {
     if (body.status !== undefined) updateData.status = body.status;
     if (body.mpf_relevant_income !== undefined) updateData.mpf_relevant_income = body.mpf_relevant_income !== null && body.mpf_relevant_income !== '' ? Number(body.mpf_relevant_income) : null;
 
-    return this.prisma.payroll.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.payroll.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'payrolls',
+          targetId: id,
+          changesBefore: payroll,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return updated;
   }
 
   // ── 確認單筆糧單（finalize）────────────────────────────────────────
@@ -864,7 +890,7 @@ export class PayrollService {
   }
 
   // ── 刪除糧單 ──────────────────────────────────────────────────
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft') {
@@ -878,6 +904,17 @@ export class PayrollService {
     await this.prisma.payrollAdjustment.deleteMany({ where: { payroll_id: id } });
     await this.prisma.payrollDailyAllowance.deleteMany({ where: { payroll_id: id } });
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'payrolls',
+          targetId: id,
+          changesBefore: payroll,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.payroll.delete({ where: { id } });
     return { deleted: true };
   }

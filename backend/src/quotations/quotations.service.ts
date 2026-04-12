@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class QuotationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
     'id', 'quotation_no', 'quotation_date', 'project_name', 'total_amount', 'status', 'created_at',
@@ -139,7 +140,7 @@ export class QuotationsService {
     return quotation;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { items, company, client, project, ...quotationData } = dto;
 
     // Generate quotation number
@@ -178,10 +179,22 @@ export class QuotationsService {
       },
     });
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'quotations',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
@@ -223,6 +236,19 @@ export class QuotationsService {
       }
     }
 
+    if (userId) {
+      try {
+        const afterQ = await this.prisma.quotation.findUnique({ where: { id } });
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'quotations',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: afterQ,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
@@ -250,7 +276,7 @@ export class QuotationsService {
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
@@ -268,6 +294,17 @@ export class QuotationsService {
       data: { status: 'deleted' },
     });
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'quotations',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.quotation.delete({ where: { id } });
     return { success: true };
   }

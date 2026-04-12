@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
     'id', 'project_no', 'project_name', 'status', 'start_date', 'end_date', 'created_at',
@@ -159,7 +160,7 @@ export class ProjectsService {
     return out;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const project_no = await this.generateProjectNo(dto.company_id);
     const { contract_id, client_id } = await this.resolveClientId(dto);
 
@@ -181,17 +182,28 @@ export class ProjectsService {
         client_contract_no: sanitized.client_contract_no,
       },
     });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'projects',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
 
     const { contract_id, client_id } = await this.resolveClientId(dto);
     const sanitized = this.sanitizeDto(dto);
 
-    await this.prisma.project.update({
+    const updated = await this.prisma.project.update({
       where: { id },
       data: {
         project_name: sanitized.project_name ?? dto.project_name,
@@ -206,13 +218,37 @@ export class ProjectsService {
         contract_id,
       },
     });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'projects',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
-  async updateStatus(id: number, status: string) {
+  async updateStatus(id: number, status: string, userId?: number) {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
-    await this.prisma.project.update({ where: { id }, data: { status } });
+    const updated = await this.prisma.project.update({ where: { id }, data: { status } });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'projects',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
 
@@ -18,18 +18,18 @@ export class InvoicesController {
   }
 
   @Post()
-  create(@Body() dto: any) {
-    return this.service.create(dto);
+  create(@Body() dto: any, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Post('from-quotation/:quotationId')
-  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: any) {
-    return this.service.createFromQuotation(Number(quotationId), dto);
+  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: any, @Request() req: any) {
+    return this.service.createFromQuotation(Number(quotationId), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Patch(':id/status')
@@ -53,7 +53,7 @@ export class InvoicesController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: number) {
-    return this.service.delete(Number(id));
+  remove(@Param('id') id: number, @Request() req: any) {
+    return this.service.delete(Number(id), req.user?.id || req.user?.userId || 0);
   }
 }

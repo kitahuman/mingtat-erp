@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SalaryConfigService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
     'id', 'employee_id', 'effective_date', 'base_salary', 'salary_type', 'created_at',
@@ -74,7 +75,7 @@ export class SalaryConfigService {
     });
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     // Ensure numeric fields
     const numericFields = [
       'base_salary', 'allowance_night', 'allowance_rent', 'allowance_3runway',
@@ -90,10 +91,21 @@ export class SalaryConfigService {
     }
 
     const saved = await this.prisma.employeeSalarySetting.create({ data: dto });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'employee_salary_settings',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
 
@@ -112,13 +124,36 @@ export class SalaryConfigService {
       }
     }
 
-    await this.prisma.employeeSalarySetting.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.employeeSalarySetting.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'employee_salary_settings',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
-  async delete(id: number) {
+  async delete(id: number, userId?: number) {
     const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'employee_salary_settings',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.employeeSalarySetting.delete({ where: { id } });
     return { deleted: true };
   }

@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SubconFleetDriversService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   async simple() {
     const drivers = await this.prisma.subcontractorFleetDriver.findMany({
@@ -135,7 +136,7 @@ export class SubconFleetDriversService {
     return driver;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { subcontractor, ...data } = dto;
     // Normalize date: empty string -> null
     data.date_of_birth = data.date_of_birth ? new Date(data.date_of_birth) : null;
@@ -146,10 +147,21 @@ export class SubconFleetDriversService {
       if (data[field] === '') data[field] = null;
     }
     const saved = await this.prisma.subcontractorFleetDriver.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'subcon_fleet_drivers',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.subcontractorFleetDriver.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('街車司機不存在');
     
@@ -158,13 +170,36 @@ export class SubconFleetDriversService {
     if (updateData.date_of_birth) updateData.date_of_birth = new Date(updateData.date_of_birth);
     if (updateData.subcontractor_id) updateData.subcontractor_id = Number(updateData.subcontractor_id);
     
-    await this.prisma.subcontractorFleetDriver.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.subcontractorFleetDriver.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'subcon_fleet_drivers',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.subcontractorFleetDriver.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('街車司機不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'subcon_fleet_drivers',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.subcontractorFleetDriver.delete({ where: { id } });
     return { message: '刪除成功' };
   }

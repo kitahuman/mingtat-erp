@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class VehiclesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   async simple() {
     const vehicles = await this.prisma.vehicle.findMany({
@@ -74,13 +75,24 @@ export class VehiclesService {
     return vehicle;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { owner_company, plate_history, transfers, ...data } = dto;
     const saved = await this.prisma.vehicle.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'vehicles',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('車輛不存在');
     const { plate_history, transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -108,7 +120,19 @@ export class VehiclesService {
       }
     }
 
-    await this.prisma.vehicle.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.vehicle.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'vehicles',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
@@ -151,9 +175,20 @@ export class VehiclesService {
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('車輛不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'vehicles',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.vehicle.delete({ where: { id } });
     return { message: '刪除成功' };
   }

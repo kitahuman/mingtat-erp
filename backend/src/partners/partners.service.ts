@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PartnersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
     'id', 'code', 'english_code', 'name', 'name_en', 'partner_type',
@@ -75,22 +76,47 @@ export class PartnersService {
     return data;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     if (dto.name) {
-      const existing = await this.prisma.partner.findFirst({
+      const dup = await this.prisma.partner.findFirst({
         where: { name: { equals: dto.name, mode: 'insensitive' } },
       });
-      if (existing) throw new BadRequestException(`合作單位名稱「${dto.name}」已存在，請使用其他名稱`);
+      if (dup) throw new BadRequestException(`合作單位名稱「${dto.name}」已存在，請使用其他名稱`);
     }
-    return this.prisma.partner.create({ data: this.serializeDto(dto) });
+    const saved = await this.prisma.partner.create({ data: this.serializeDto(dto) });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'partners',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return saved;
   }
 
-  async update(id: number, dto: any) {
-    const partner = await this.prisma.partner.findUnique({ where: { id } });
-    if (!partner) throw new NotFoundException('合作單位不存在');
+  async update(id: number, dto: any, userId?: number) {
+    const existing = await this.prisma.partner.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('合作單位不存在');
     const { created_at, updated_at, id: _id, ...rest } = dto;
     const updateData = this.serializeDto(rest);
-    return this.prisma.partner.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.partner.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'partners',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return updated;
   }
 
   async bulkCreate(dtos: any[]) {
@@ -102,7 +128,7 @@ export class PartnersService {
     return results;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.partner.findUnique({
       where: { id },
       include: {
@@ -126,6 +152,17 @@ export class PartnersService {
       throw new BadRequestException('此客戶下仍有項目，無法刪除');
     }
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'partners',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.partner.delete({ where: { id } });
     return { message: '刪除成功' };
   }

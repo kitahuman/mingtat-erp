@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Param, Query, Body, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProjectsService } from './projects.service';
 
@@ -23,17 +23,17 @@ export class ProjectsController {
   }
 
   @Post()
-  create(@Body() dto: any) {
-    return this.service.create(dto);
+  create(@Body() dto: any, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: number, @Body('status') status: string) {
-    return this.service.updateStatus(Number(id), status);
+  updateStatus(@Param('id') id: number, @Body('status') status: string, @Request() req: any) {
+    return this.service.updateStatus(Number(id), status, req.user?.id || req.user?.userId || 0);
   }
 }

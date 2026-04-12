@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ContractsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
     'id', 'contract_no', 'contract_name', 'original_amount',
@@ -75,7 +76,7 @@ export class ContractsService {
     });
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     // Check unique contract_no
     if (dto.contract_no) {
       const existing = await this.prisma.contract.findUnique({
@@ -104,10 +105,21 @@ export class ContractsService {
     // Remove empty string fields that would fail type validation
     if (data.description === '') data.description = null;
     const saved = await this.prisma.contract.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'contracts',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.contract.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('合約不存在');
 
@@ -131,11 +143,23 @@ export class ContractsService {
     if (updateData.original_amount !== undefined) updateData.original_amount = Number(updateData.original_amount);
     if (updateData.client_id) updateData.client_id = Number(updateData.client_id);
 
-    await this.prisma.contract.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.contract.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'contracts',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.contract.findUnique({
       where: { id },
       include: { _count: { select: { projects: true } } },
@@ -145,6 +169,17 @@ export class ContractsService {
       throw new BadRequestException('此合約下仍有項目，無法刪除');
     }
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'contracts',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.contract.delete({ where: { id } });
     return { message: '刪除成功' };
   }

@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class StatutoryHolidaysService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   async findAll(query: { year?: number }) {
     const where: any = {};
@@ -27,22 +28,34 @@ export class StatutoryHolidaysService {
     return holiday;
   }
 
-  async create(dto: { date: string; name: string }) {
+  async create(dto: { date: string; name: string }, userId?: number) {
     if (!dto.date || !dto.name) throw new BadRequestException('日期和名稱為必填');
-    const existing = await this.prisma.statutoryHoliday.findUnique({
+    const dup = await this.prisma.statutoryHoliday.findUnique({
       where: { date: new Date(dto.date) },
     });
-    if (existing) throw new BadRequestException(`${dto.date} 已有法定假期記錄`);
+    if (dup) throw new BadRequestException(`${dto.date} 已有法定假期記錄`);
 
-    return this.prisma.statutoryHoliday.create({
+    const saved = await this.prisma.statutoryHoliday.create({
       data: {
         date: new Date(dto.date),
         name: dto.name,
       },
     });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'statutory_holidays',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return saved;
   }
 
-  async update(id: number, dto: { date?: string; name?: string }) {
+  async update(id: number, dto: { date?: string; name?: string }, userId?: number) {
     const existing = await this.prisma.statutoryHoliday.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('法定假期不存在');
 
@@ -50,12 +63,36 @@ export class StatutoryHolidaysService {
     if (dto.date) updateData.date = new Date(dto.date);
     if (dto.name) updateData.name = dto.name;
 
-    return this.prisma.statutoryHoliday.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.statutoryHoliday.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'statutory_holidays',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return updated;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.statutoryHoliday.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('法定假期不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'statutory_holidays',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.statutoryHoliday.delete({ where: { id } });
     return { message: '刪除成功' };
   }

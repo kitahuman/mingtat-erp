@@ -3,12 +3,12 @@ import { MulterModule } from '@nestjs/platform-express';
 import { ExpensesController } from './expenses.controller';
 import { ExpensesService } from './expenses.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
     PrismaModule,
-    MulterModule.register({}),
-  ],
+    MulterModule.register({}), AuditLogsModule],
   controllers: [ExpensesController],
   providers: [ExpensesService],
   exports: [ExpensesService],

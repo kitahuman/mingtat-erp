@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class LeavesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   async findAll(query: {
     page?: number;
@@ -89,11 +90,24 @@ export class LeavesService {
     return record;
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.employeeLeave.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('請假記錄不存在');
     const { id: _id, created_at, updated_at, employee, ...updateData } = dto;
-    return this.prisma.employeeLeave.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.employeeLeave.update({ where: { id }, data: updateData });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'leaves',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return updated;
   }
 
   async approve(id: number, approverId: number) {
@@ -123,9 +137,20 @@ export class LeavesService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.employeeLeave.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('請假記錄不存在');
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'leaves',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.employeeLeave.delete({ where: { id } });
     return { success: true };
   }

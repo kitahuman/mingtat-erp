@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class InvoicesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   // ── helpers ──────────────────────────────────────────────────
   private includeRelations = {
@@ -184,7 +185,7 @@ export class InvoicesService {
       unit_price: number;
       sort_order?: number;
     }[];
-  }) {
+  }, userId?: number) {
     const companyId = Number(dto.company_id);
     if (!companyId) throw new BadRequestException('請選擇公司');
 
@@ -231,6 +232,18 @@ export class InvoicesService {
       include: this.includeRelations,
     });
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'invoices',
+          targetId: invoice.id,
+          changesAfter: invoice,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return invoice;
   }
 
@@ -243,7 +256,7 @@ export class InvoicesService {
     retention_rate?: number;
     payment_terms?: string;
     remarks?: string;
-  }) {
+  }, userId?: number) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id: quotationId },
       include: { items: { orderBy: { sort_order: 'asc' } }, client: true, company: true },
@@ -310,10 +323,22 @@ export class InvoicesService {
       data: { status: 'invoiced' },
     });
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'invoices',
+          targetId: invoice.id,
+          changesAfter: invoice,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return invoice;
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('發票不存在');
 
@@ -373,6 +398,19 @@ export class InvoicesService {
       data,
       include: this.includeRelations,
     });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'invoices',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: invoice,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
 
     return invoice;
   }
@@ -457,11 +495,22 @@ export class InvoicesService {
     });
   }
 
-  async delete(id: number) {
+  async delete(id: number, userId?: number) {
     const existing = await this.prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('發票不存在');
     if (existing.status === 'paid') throw new BadRequestException('已付款的發票無法刪除');
 
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'invoices',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
     await this.prisma.invoice.delete({ where: { id } });
     return { success: true };
   }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EmployeesService } from './employees.service';
 
@@ -23,13 +23,13 @@ export class EmployeesController {
   }
 
   @Post()
-  create(@Body() dto: any) {
-    return this.service.create(dto);
+  create(@Body() dto: any, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
-    return this.service.update(+id, dto);
+  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.update(+id, dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Post(':id/terminate')
@@ -43,7 +43,7 @@ export class EmployeesController {
   }
 
   @Post(':id/salary-settings')
-  addSalarySetting(@Param('id') id: number, @Body() dto: any) {
+  addSalarySetting(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
     return this.service.addSalarySetting(+id, dto);
   }
 
@@ -53,12 +53,12 @@ export class EmployeesController {
   }
 
   @Post(':id/transfer')
-  transferEmployee(@Param('id') id: number, @Body() dto: any) {
+  transferEmployee(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
     return this.service.transferEmployee(+id, dto);
   }
 
   @Post(':id/convert-to-regular')
-  convertToRegular(@Param('id') id: number, @Body() dto: any) {
+  convertToRegular(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
     return this.service.convertToRegular(+id, dto);
   }
 
@@ -79,8 +79,8 @@ export class EmployeesController {
 
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0);
   }
 
   /**
