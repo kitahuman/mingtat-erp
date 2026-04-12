@@ -1067,8 +1067,8 @@ export default function WorkLogsPage() {
       })()}
 
       {/* ── Filters ──────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto">
-        <div className="flex gap-2 items-end" style={{ minWidth: 'max-content' }}>
+      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto" style={{ overflowY: 'visible' }}>
+        <div className="flex gap-2 items-end" style={{ minWidth: 'max-content', position: 'relative', zIndex: 40 }}>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">發佈人</label>
             <div className="w-28">

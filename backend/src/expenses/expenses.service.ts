@@ -21,7 +21,10 @@ export type ExpenseSource = typeof EXPENSE_SOURCES[number];
 
 @Injectable()
 export class ExpensesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   async findAll(query: {
     page?: number;

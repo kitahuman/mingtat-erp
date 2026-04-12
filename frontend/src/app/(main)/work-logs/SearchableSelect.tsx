@@ -66,7 +66,7 @@ export default function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-0.5 w-full min-w-[140px] bg-white border border-gray-200 rounded shadow-lg">
+        <div className="absolute z-[200] mt-0.5 w-full min-w-[140px] bg-white border border-gray-200 rounded shadow-lg">
           <div className="p-1.5 border-b border-gray-100">
             <input
               autoFocus
