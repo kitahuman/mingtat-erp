@@ -306,7 +306,7 @@ export default function DailyReportForm({ reportId }: Props) {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-md mx-auto pb-44">
+    <div className="p-4 space-y-4 max-w-md mx-auto pb-52">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Link href="/employee-portal/supervisor/daily-report" className="text-blue-600 flex items-center gap-1">
@@ -699,7 +699,7 @@ export default function DailyReportForm({ reportId }: Props) {
 
       {/* ── Actions ───────────────────────────────────────────────── */}
       {!isSubmitted && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10" style={{ padding: '1rem', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           <div className="max-w-md mx-auto space-y-2">
             <div className="flex gap-2">
               <button type="button" onClick={() => handleSubmit('draft')} disabled={submitting} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm active:scale-95 disabled:opacity-50">
@@ -725,7 +725,7 @@ export default function DailyReportForm({ reportId }: Props) {
 
       {/* Print button for submitted reports */}
       {isSubmitted && isEdit && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-lg z-10" style={{ padding: '1rem', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
           <div className="max-w-md mx-auto">
             <button type="button" onClick={handlePrint} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-md active:scale-95">
               列印
