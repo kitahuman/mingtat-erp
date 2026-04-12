@@ -157,11 +157,27 @@ export class MatchingService {
     // 6. 取得 WhatsApp 每日總結 items
     const waOrderItems = await this.whatsappService.getDailySummaryItemsForMatching(dateFrom, dateTo);
 
+    // 7a. 取得街車司機花名索引（plate_norm → nicknames[]）
+    const fleetDrivers = await this.prisma.subcontractorFleetDriver.findMany({
+      where: { status: 'active', short_name: { not: null } },
+      select: { plate_no: true, short_name: true },
+    });
+    const fleetNicknameMap = new Map<string, string[]>();
+    for (const d of fleetDrivers) {
+      if (!d.plate_no || !d.short_name) continue;
+      const plateNorm = this.normalizeVehicle(d.plate_no);
+      const nicknames = d.short_name.split(/[,，]/).map((n: string) => n.trim()).filter(Boolean);
+      if (nicknames.length > 0) {
+        const existing = fleetNicknameMap.get(plateNorm) || [];
+        fleetNicknameMap.set(plateNorm, [...existing, ...nicknames]);
+      }
+    }
+
     // ── 組裝比對結果 ──────────────────────────────────────────
     const results: MatchingRow[] = [];
 
     if (group_by === 'vehicle') {
-      results.push(...this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems));
+      results.push(...this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, fleetNicknameMap));
     } else {
       results.push(...this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems));
     }
@@ -293,6 +309,7 @@ export class MatchingService {
     gpsSummaries: any[],
     attendances: any[],
     waOrderItems: any[],
+    fleetNicknameMap: Map<string, string[]> = new Map(),
   ): MatchingRow[] {
     const groupMap = new Map<string, any[]>();
     for (const wl of workLogs) {
@@ -482,11 +499,15 @@ export class MatchingService {
       }
 
       // 6. WhatsApp Order（同時比對 vehicle_no 和 machine_code）
+      // 街車司機花名（用於比對 wa_item_driver_nickname）
+      const fleetNicknames = fleetNicknameMap.get(vehicleNorm) || [];
       const matchedWa = waOrderItems.filter(
         (item: any) =>
           item.order_date === date &&
           (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
-            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm),
+            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm ||
+            (fleetNicknames.length > 0 && fleetNicknames.some(nick =>
+              this.nameMatch(item.wa_item_driver_nickname, nick, nick)))),
       );
       if (matchedWa.length > 0) {
         const bestWa = matchedWa[0];
@@ -1164,11 +1185,27 @@ export class MatchingService {
     }
 
     // WhatsApp
+    // 查詢街車司機花名（用於比對 wa_item_driver_nickname）
+    let fleetNicknames: string[] = [];
+    if (vehicleNorm) {
+      const allFleetDrivers = await this.prisma.subcontractorFleetDriver.findMany({
+        where: { status: 'active', short_name: { not: null } },
+        select: { plate_no: true, short_name: true },
+      });
+      for (const d of allFleetDrivers) {
+        if (d.plate_no && this.normalizeVehicle(d.plate_no) === vehicleNorm && d.short_name) {
+          const nicks = d.short_name.split(/[,，]/).map((n: string) => n.trim()).filter(Boolean);
+          fleetNicknames = [...fleetNicknames, ...nicks];
+        }
+      }
+    }
     const matchedWa = vehicleNorm
       ? waOrderItems.filter((item: any) =>
           item.order_date === date &&
           (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
-            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm),
+            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm ||
+            (fleetNicknames.length > 0 && fleetNicknames.some(nick =>
+              this.nameMatch(item.wa_item_driver_nickname, nick, nick)))),
         )
       : [];
 

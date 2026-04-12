@@ -45,6 +45,40 @@ export class SubconFleetDriversService {
       }));
   }
 
+  /** 回傳街車司機列表，供工作紀錄員工選單使用 */
+  async simpleDrivers() {
+    const drivers = await this.prisma.subcontractorFleetDriver.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        name_zh: true,
+        plate_no: true,
+        short_name: true,
+        subcontractor: {
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: { name_zh: 'asc' },
+    });
+
+    return drivers.map(d => {
+      const company = d.subcontractor?.name || '街車';
+      const isUnknown = !d.name_zh || d.name_zh === '未知';
+      const label = isUnknown
+        ? `${company}（街車）${d.plate_no || ''}`
+        : `${d.name_zh}（${company}・街車）`;
+      return {
+        value: `fleet_${d.id}`,
+        label,
+        name_zh: d.name_zh,
+        short_name: d.short_name,
+        plate_no: d.plate_no,
+        subcontractor_name: company,
+        is_fleet: true,
+      };
+    });
+  }
+
   async findAll(query: {
     page?: number;
     limit?: number;

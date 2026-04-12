@@ -98,7 +98,7 @@ export default function SubconFleetDriversPage() {
 
   const columns = [
     { key: 'subcontractor_id', label: '街車公司', sortable: true, editable: true, editType: 'select' as const, editOptions: subcontractorOptions, render: (_: any, row: any) => row.subcontractor?.name || '-', filterRender: (_: any, row: any) => row.subcontractor?.name || '-' },
-    { key: 'short_name', label: '簡稱', sortable: true, editable: true, editType: 'text' as const },
+    { key: 'short_name', label: '花名（WA配對用）', sortable: true, editable: true, editType: 'text' as const },
     { key: 'name_zh', label: '中文姓名', sortable: true, editable: true, editType: 'text' as const },
     { key: 'name_en', label: '英文姓名', sortable: true, editable: true, editType: 'text' as const },
     { key: 'id_number', label: '身份證號碼', sortable: true, editable: true, editType: 'text' as const },
@@ -176,8 +176,9 @@ export default function SubconFleetDriversPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">簡稱</label>
-              <input type="text" value={form.short_name} onChange={e => setForm({...form, short_name: e.target.value})} className="input-field" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">花名（WA配對用）</label>
+              <input type="text" value={form.short_name} onChange={e => setForm({...form, short_name: e.target.value})} className="input-field" placeholder="例如：文,阿文,文哥" />
+              <p className="text-xs text-gray-400 mt-1">多個花名用逗號分隔，供 AI 辨認 WA order 司機用</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">中文姓名 *</label>

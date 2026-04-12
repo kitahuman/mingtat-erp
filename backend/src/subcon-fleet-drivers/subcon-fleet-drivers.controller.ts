@@ -12,6 +12,11 @@ export class SubconFleetDriversController {
     return this.service.simple();
   }
 
+  @Get('simple-drivers')
+  simpleDrivers() {
+    return this.service.simpleDrivers();
+  }
+
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
