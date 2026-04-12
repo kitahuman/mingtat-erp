@@ -109,6 +109,9 @@ export default function FieldOptionsPage() {
   const [allOptions, setAllOptions] = useState<Record<string, FieldOption[]>>({});
   const [loading, setLoading] = useState(true);
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [showModal, setShowModal] = useState(false);
   const [editingOption, setEditingOption] = useState<FieldOption | null>(null);
   const [formLabel, setFormLabel] = useState('');
@@ -146,18 +149,30 @@ export default function FieldOptionsPage() {
     setMergeMode(false);
     setSelectedIds(new Set());
     setPrimaryId(null);
+    setSearchQuery(''); // Clear search when switching tabs
   }, [activeTab]);
 
   const isLocationTab = activeTab === 'location';
   const isCsvTab = CSV_IMPORT_CATEGORIES.has(activeTab);
 
   // For CSV-import tabs, display alphabetically; otherwise use sort_order
-  const currentOptions = (() => {
+  const sortedOptions = (() => {
     const opts = allOptions[activeTab] || [];
     if (isCsvTab) {
       return [...opts].sort((a, b) => a.label.localeCompare(b.label, 'zh-HK'));
     }
     return opts;
+  })();
+
+  // Apply search filter: match label or aliases (for location tab)
+  const currentOptions = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sortedOptions;
+    return sortedOptions.filter(opt => {
+      if (opt.label.toLowerCase().includes(q)) return true;
+      if (isLocationTab && opt.aliases && opt.aliases.some(a => a.toLowerCase().includes(q))) return true;
+      return false;
+    });
   })();
 
   const openAdd = () => {
@@ -321,7 +336,7 @@ export default function FieldOptionsPage() {
 
   // ────────────────────────────────────────────────────────────────────────────
 
-  const selectedOptions = currentOptions.filter(o => selectedIds.has(o.id));
+  const selectedOptions = sortedOptions.filter(o => selectedIds.has(o.id));
   const primaryOption = selectedOptions.find(o => o.id === primaryId);
   const mergeTargets = selectedOptions.filter(o => o.id !== primaryId);
   const previewAliases: string[] = primaryOption
@@ -330,6 +345,10 @@ export default function FieldOptionsPage() {
         ...mergeTargets.flatMap(t => [t.label, ...(t.aliases || [])]),
       ].filter((v, i, arr) => v !== primaryOption.label && arr.indexOf(v) === i)
     : [];
+
+  const totalCount = sortedOptions.length;
+  const filteredCount = currentOptions.length;
+  const isSearchActive = searchQuery.trim().length > 0;
 
   return (
     <RoleGuard minRole="admin">
@@ -410,6 +429,39 @@ export default function FieldOptionsPage() {
               </div>
             </div>
 
+            {/* Search bar */}
+            <div className="mb-3">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder={isLocationTab ? `搜尋${CATEGORY_LABELS[activeTab]}名稱或別名…` : `搜尋${CATEGORY_LABELS[activeTab]}…`}
+                  className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-gray-50"
+                />
+                {isSearchActive && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {isSearchActive && (
+                <p className="text-xs text-gray-400 mt-1 pl-1">
+                  找到 {filteredCount} / {totalCount} 個結果
+                </p>
+              )}
+            </div>
+
             {loading ? (
               <div className="flex justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -433,7 +485,7 @@ export default function FieldOptionsPage() {
                     {currentOptions.length === 0 ? (
                       <tr>
                         <td colSpan={mergeMode ? 3 : 4} className="px-3 py-8 text-center text-gray-400">
-                          暫無選項，點擊「新增選項」添加
+                          {isSearchActive ? `找不到符合「${searchQuery}」的選項` : '暫無選項，點擊「新增選項」添加'}
                         </td>
                       </tr>
                     ) : (
