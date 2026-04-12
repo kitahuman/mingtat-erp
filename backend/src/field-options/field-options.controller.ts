@@ -42,6 +42,11 @@ export class FieldOptionsController {
     return this.service.mergeLocations(dto);
   }
 
+  @Post('bulk-import')
+  bulkImport(@Body() dto: { category: string; labels: string[] }) {
+    return this.service.bulkImport(dto.category, dto.labels);
+  }
+
   @Put(':id/aliases')
   updateAliases(@Param('id') id: number, @Body() dto: { aliases: string[] }) {
     return this.service.updateAliases(Number(id), dto.aliases);

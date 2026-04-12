@@ -118,6 +118,42 @@ export class FieldOptionsService implements OnModuleInit {
   }
 
   /**
+   * Bulk import labels for a given category.
+   * Skips duplicates (case-insensitive match on trimmed label).
+   * Returns counts of added and skipped items.
+   */
+  async bulkImport(category: string, labels: string[]): Promise<{ added: number; skipped: number; addedLabels: string[]; skippedLabels: string[] }> {
+    const trimmed = labels.map(l => l.trim()).filter(l => l.length > 0);
+    const unique = [...new Set(trimmed)];
+
+    const existing = await this.prisma.fieldOption.findMany({
+      where: { category },
+      select: { label: true },
+    });
+    const existingSet = new Set(existing.map(e => e.label.trim().toLowerCase()));
+
+    const toAdd = unique.filter(l => !existingSet.has(l.toLowerCase()));
+    const skipped = unique.filter(l => existingSet.has(l.toLowerCase()));
+
+    if (toAdd.length > 0) {
+      const maxOrder = await this.prisma.fieldOption.aggregate({
+        where: { category },
+        _max: { sort_order: true },
+      });
+      const baseOrder = maxOrder._max.sort_order || 0;
+      const data = toAdd.map((label, idx) => ({
+        category,
+        label,
+        sort_order: baseOrder + idx + 1,
+        is_active: true,
+      }));
+      await this.prisma.fieldOption.createMany({ data });
+    }
+
+    return { added: toAdd.length, skipped: skipped.length, addedLabels: toAdd, skippedLabels: skipped };
+  }
+
+  /**
    * Update the aliases array for a specific FieldOption.
    */
   async updateAliases(id: number, aliases: string[]) {

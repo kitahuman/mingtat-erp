@@ -19,6 +19,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
 
+// Categories that support CSV import and alphabetical sort
+const CSV_IMPORT_CATEGORIES = new Set(['location', 'client_contract_no']);
+
 interface FieldOption {
   id: number;
   category: string;
@@ -26,6 +29,13 @@ interface FieldOption {
   sort_order: number;
   is_active: boolean;
   aliases?: string[];
+}
+
+interface ImportResult {
+  added: number;
+  skipped: number;
+  addedLabels: string[];
+  skippedLabels: string[];
 }
 
 function DraggableRow({
@@ -112,6 +122,13 @@ export default function FieldOptionsPage() {
   const [primaryId, setPrimaryId] = useState<number | null>(null);
   const [merging, setMerging] = useState(false);
 
+  // CSV Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   const dragId = useRef<number | null>(null);
 
   const load = async () => {
@@ -131,8 +148,17 @@ export default function FieldOptionsPage() {
     setPrimaryId(null);
   }, [activeTab]);
 
-  const currentOptions = allOptions[activeTab] || [];
   const isLocationTab = activeTab === 'location';
+  const isCsvTab = CSV_IMPORT_CATEGORIES.has(activeTab);
+
+  // For CSV-import tabs, display alphabetically; otherwise use sort_order
+  const currentOptions = (() => {
+    const opts = allOptions[activeTab] || [];
+    if (isCsvTab) {
+      return [...opts].sort((a, b) => a.label.localeCompare(b.label, 'zh-HK'));
+    }
+    return opts;
+  })();
 
   const openAdd = () => {
     setEditingOption(null);
@@ -196,7 +222,7 @@ export default function FieldOptionsPage() {
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = async (targetId: number) => {
     if (dragId.current === null || dragId.current === targetId) return;
-    const opts = [...currentOptions];
+    const opts = [...(allOptions[activeTab] || [])];
     const fromIdx = opts.findIndex(o => o.id === dragId.current);
     const toIdx = opts.findIndex(o => o.id === targetId);
     if (fromIdx < 0 || toIdx < 0) return;
@@ -252,6 +278,49 @@ export default function FieldOptionsPage() {
     }
   };
 
+  // ── CSV Import ──────────────────────────────────────────────────────────────
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+      setImportPreview(lines);
+      setImportResult(null);
+      setShowImportModal(true);
+    };
+    reader.readAsText(file, 'UTF-8');
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleImportConfirm = async () => {
+    if (importPreview.length === 0) return;
+    setImporting(true);
+    try {
+      const res = await fieldOptionsApi.bulkImport(activeTab, importPreview);
+      setImportResult(res.data);
+      await load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '匯入失敗');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setImportPreview([]);
+    setImportResult(null);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
+
   const selectedOptions = currentOptions.filter(o => selectedIds.has(o.id));
   const primaryOption = selectedOptions.find(o => o.id === primaryId);
   const mergeTargets = selectedOptions.filter(o => o.id !== primaryId);
@@ -290,14 +359,17 @@ export default function FieldOptionsPage() {
                 <h2 className="text-base font-semibold text-gray-900">{CATEGORY_LABELS[activeTab]}</h2>
                 {!mergeMode && (
                   <p className="text-xs text-gray-400 mt-0.5">
-                    拖拽行可調整排序；點擊「編輯」可修改名稱
-                    {isLocationTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（合併後的舊地點名稱，WhatsApp 報工時也能匹配）</span>}
+                    {isCsvTab
+                      ? '按名稱排序顯示；可匯入 CSV 批量新增'
+                      : '拖拽行可調整排序；點擊「編輯」可修改名稱'}
+                    {isLocationTab && !isCsvTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（合併後的舊地點名稱，WhatsApp 報工時也能匹配）</span>}
+                    {isLocationTab && isCsvTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（WhatsApp 報工時也能匹配）</span>}
                   </p>
                 )}
                 {mergeMode && (
                   <p className="text-xs text-blue-500 mt-0.5">
                     勾選 2 個或以上相似地點，然後點擊「確認合併」
-                    {selectedIds.size > 0 && <span className="ml-2 font-medium">（已選 {selectedIds.size} 個）</span>}
+                    {selectedIds.size > 0 && <span className="ml-1">（已選 {selectedIds.size} 個）</span>}
                   </p>
                 )}
               </div>
@@ -315,6 +387,22 @@ export default function FieldOptionsPage() {
                     className="text-sm py-1.5 px-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
                     確認合併 ({selectedIds.size})
                   </button>
+                )}
+                {!mergeMode && isCsvTab && (
+                  <>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv,.txt"
+                      className="hidden"
+                      onChange={handleCsvFileChange}
+                    />
+                    <button
+                      onClick={() => csvInputRef.current?.click()}
+                      className="text-sm py-1.5 px-3 rounded-lg border bg-green-50 text-green-700 border-green-300 hover:bg-green-100 transition-colors">
+                      ↑ 匯入 CSV
+                    </button>
+                  </>
                 )}
                 {!mergeMode && (
                   <button onClick={openAdd} className="btn-primary text-sm py-1.5 px-3">+ 新增選項</button>
@@ -335,6 +423,7 @@ export default function FieldOptionsPage() {
                       <th className="px-3 py-2 text-left whitespace-nowrap">
                         選項名稱
                         {isLocationTab && !mergeMode && <span className="ml-1 text-xs font-normal text-gray-400">（含別名）</span>}
+                        {isCsvTab && <span className="ml-1 text-xs font-normal text-gray-400">（按名稱排序）</span>}
                       </th>
                       <th className="px-3 py-2 text-center w-20 whitespace-nowrap">狀態</th>
                       {!mergeMode && <th className="px-3 py-2 w-28"></th>}
@@ -416,6 +505,91 @@ export default function FieldOptionsPage() {
                   {saving ? '儲存中...' : '儲存'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* CSV Import Modal */}
+        {showImportModal && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  匯入 {CATEGORY_LABELS[activeTab]} — CSV 預覽
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  每行一個選項名稱。已存在的選項將自動跳過。
+                </p>
+              </div>
+
+              {!importResult ? (
+                <>
+                  <div className="px-6 py-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        共 {importPreview.length} 個選項
+                      </span>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {importPreview.map((label, i) => (
+                        <div key={i} className="px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50">
+                          {label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                    <button onClick={closeImportModal} className="btn-secondary" disabled={importing}>取消</button>
+                    <button
+                      onClick={handleImportConfirm}
+                      disabled={importing || importPreview.length === 0}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50">
+                      {importing ? '匯入中...' : `確認匯入 ${importPreview.length} 個`}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="px-6 py-5 space-y-4">
+                    {/* Summary */}
+                    <div className="flex gap-4">
+                      <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                        <div className="text-3xl font-bold text-green-700">{importResult.added}</div>
+                        <div className="text-sm text-green-600 mt-1">成功新增</div>
+                      </div>
+                      <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                        <div className="text-3xl font-bold text-gray-500">{importResult.skipped}</div>
+                        <div className="text-sm text-gray-400 mt-1">已存在跳過</div>
+                      </div>
+                    </div>
+
+                    {importResult.addedLabels.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-green-700 mb-1.5">✅ 已新增：</p>
+                        <div className="max-h-36 overflow-y-auto border border-green-100 rounded-lg bg-green-50 divide-y divide-green-100">
+                          {importResult.addedLabels.map((l, i) => (
+                            <div key={i} className="px-3 py-1 text-sm text-green-800">{l}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {importResult.skippedLabels.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1.5">⏭ 已跳過（已存在）：</p>
+                        <div className="max-h-28 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 divide-y divide-gray-100">
+                          {importResult.skippedLabels.map((l, i) => (
+                            <div key={i} className="px-3 py-1 text-sm text-gray-500">{l}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+                    <button onClick={closeImportModal} className="btn-primary">完成</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
