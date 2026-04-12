@@ -182,9 +182,23 @@ export class MatchingService {
       confirmMap.get(c.work_log_id)!.push(c);
     }
 
-    // 附加確認狀態到每一行
+    // confirmation source_code → sources key 映射
+    // (confirmation 表用 receipt/slip_chit/slip_no_chit/gps/clock/whatsapp_order，
+    //  sources 物件用 chit/delivery_note/gps/attendance/whatsapp_order)
+    const confirmSourceToRowSource: Record<string, string> = {
+      receipt: 'chit',
+      slip_chit: 'delivery_note',
+      slip_no_chit: 'delivery_note',
+      gps: 'gps',
+      clock: 'attendance',
+      whatsapp_order: 'whatsapp_order',
+    };
+
+    // 附加確認狀態到每一行，並把手動配對/確認回饋到 sources，重新計算 match_status
     for (const row of results) {
       const rowConfirms: Record<string, any> = {};
+      let needRecompute = false;
+
       for (const wlId of row.work_log_ids) {
         const cs = confirmMap.get(wlId) || [];
         for (const c of cs) {
@@ -197,9 +211,29 @@ export class MatchingService {
             confirmed_by: c.user?.displayName || c.user?.username || '—',
             confirmed_at: c.confirmed_at,
           };
+
+          // 如果是手動配對或確認，把對應 source 的 status 改為 found
+          const rowSourceKey = confirmSourceToRowSource[c.source_code];
+          if (
+            rowSourceKey &&
+            (c.status === 'manual_match' || c.status === 'confirmed') &&
+            row.sources[rowSourceKey]?.status === 'missing'
+          ) {
+            row.sources[rowSourceKey].status = 'found';
+            row.sources[rowSourceKey].match_score = 100; // 手動確認視為滿分
+            needRecompute = true;
+          }
         }
       }
       row.confirmations = rowConfirms;
+
+      // 重新計算 match_status / match_count / avg_score
+      if (needRecompute) {
+        const { matchStatus, avgScore } = this.computeMatchStatus(row.sources);
+        row.match_status = matchStatus;
+        row.match_count = Object.values(row.sources).filter((s) => (s as any).status === 'found').length;
+        row.avg_score = avgScore;
+      }
     }
 
     // 搜尋過濾
