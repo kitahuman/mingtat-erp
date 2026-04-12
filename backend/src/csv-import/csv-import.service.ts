@@ -69,7 +69,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
   partners: [
     { key: 'name', label: '公司名稱', required: true, type: 'string' },
     { key: 'name_en', label: '英文名稱', type: 'string' },
-    { key: 'code', label: '公司代碼', type: 'string' },
+    { key: 'code', label: '簡稱', type: 'string', description: '用於糧單顯示' },
     { key: 'partner_type', label: '類型', required: true, type: 'string', description: 'client/subcontractor/supplier/other' },
     { key: 'category', label: '分類', type: 'string' },
     { key: 'contact_person', label: '聯絡人', type: 'string' },
@@ -130,6 +130,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
   'fleet-rate-cards': [
     { key: 'service_type', label: '服務類型', type: 'string', description: '租車/運輸/機械' },
     { key: 'name', label: '名稱', type: 'string' },
+    { key: 'company_name', label: '公司', type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'client_name', label: '客戶名稱', type: 'string', description: '合作單位名稱（系統自動匹配）' },
     { key: 'contract_no', label: '合約編號', type: 'string' },
     { key: 'client_contract_no', label: '客戶合約', type: 'string' },
@@ -546,8 +547,9 @@ export class CsvImportService {
   }
 
   private async importFleetRateCard(data: any) {
-    const { client_name, ...rest } = data;
+    const { client_name, company_name, ...rest } = data;
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
+    const companyId = company_name ? await this.resolveCompanyId(company_name) : null;
 
     for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
       if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
@@ -557,7 +559,7 @@ export class CsvImportService {
     }
 
     const created = await this.prisma.fleetRateCard.create({
-      data: { ...rest, client_id: clientId },
+      data: { ...rest, client_id: clientId, company_id: companyId },
     });
     return { status: 'created' as const, id: created.id };
   }
