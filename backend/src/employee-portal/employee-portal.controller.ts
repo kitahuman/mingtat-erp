@@ -221,6 +221,15 @@ export class EmployeePortalController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('certificates/update')
+  async updateCertificate(
+    @Request() req: any,
+    @Body() body: { cert_key: string; cert_no?: string | null; expiry_date?: string | null },
+  ) {
+    return this.service.updateCertificate(req.user.sub, body.cert_key, body.cert_no ?? null, body.expiry_date ?? null);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('certificates/expiring')
   async getExpiringCerts(
     @Request() req: any,

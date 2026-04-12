@@ -94,6 +94,8 @@ export const employeePortalApi = {
 
   // Certificates
   getCertificates: () => portalApi.get('/employee-portal/certificates'),
+  updateCertificate: (certKey: string, certNo: string | null, expiryDate: string | null) =>
+    portalApi.post('/employee-portal/certificates/update', { cert_key: certKey, cert_no: certNo, expiry_date: expiryDate }),
   updateCertPhoto: (certKey: string, photoUrl: string) =>
     portalApi.post('/employee-portal/certificates/photo', { cert_key: certKey, photo_url: photoUrl }),
   getExpiringCerts: (days?: number) =>

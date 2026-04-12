@@ -497,6 +497,98 @@ export class EmployeePortalService {
     const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return null;
 
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        driving_license_no: true, driving_license_expiry: true,
+        green_card_no: true, green_card_expiry: true,
+        construction_card_no: true, construction_card_expiry: true,
+        approved_worker_cert_no: true, approved_worker_cert_expiry: true,
+        earth_mover_cert_no: true, earth_mover_cert_expiry: true,
+        excavator_cert_no: true, excavator_cert_expiry: true,
+        crane_operator_cert_no: true, crane_operator_cert_expiry: true,
+        lorry_crane_cert_no: true, lorry_crane_cert_expiry: true,
+        crawler_crane_cert_no: true, crawler_crane_cert_expiry: true,
+        hydraulic_crane_cert_no: true, hydraulic_crane_cert_expiry: true,
+        airport_pass_no: true, airport_pass_expiry: true,
+        gammon_pass_no: true, gammon_pass_expiry: true,
+        leighton_pass_no: true, leighton_pass_expiry: true,
+        confined_space_cert_no: true, confined_space_cert_expiry: true,
+        compactor_cert_no: true, compactor_cert_expiry: true,
+        slinging_silver_card_no: true, slinging_silver_card_expiry: true,
+        craft_test_cert_no: true, craft_test_cert_expiry: true,
+        compaction_load_cert_no: true, compaction_load_cert_expiry: true,
+        aerial_platform_cert_no: true, aerial_platform_cert_expiry: true,
+        other_certificates: true,
+        cert_photos: true,
+      },
+    });
+    if (!emp) return { certificates: [] };
+
+    const certPhotos = (emp.cert_photos as any) || {};
+
+    // Map of cert key -> { name_zh, name_en, cert_no, expiry_date }
+    const CERT_DEFS = [
+      { key: 'driving_license',     name_zh: '駕駛執照',                          name_en: 'Driving License',          no: emp.driving_license_no,          expiry: emp.driving_license_expiry },
+      { key: 'green_card',          name_zh: '平安卡',                              name_en: 'Green Card',               no: emp.green_card_no,               expiry: emp.green_card_expiry },
+      { key: 'construction_card',   name_zh: '工卡',                                name_en: 'Construction Card',        no: emp.construction_card_no,        expiry: emp.construction_card_expiry },
+      { key: 'approved_worker',     name_zh: '核准工人證明書',                    name_en: 'Approved Worker Cert',     no: emp.approved_worker_cert_no,     expiry: emp.approved_worker_cert_expiry },
+      { key: 'earth_mover',         name_zh: '操作搞土機證明書',                  name_en: 'Earth Mover Cert',         no: emp.earth_mover_cert_no,         expiry: emp.earth_mover_cert_expiry },
+      { key: 'excavator',           name_zh: '操作挖掘機證明書',                  name_en: 'Excavator Cert',           no: emp.excavator_cert_no,           expiry: emp.excavator_cert_expiry },
+      { key: 'crane_operator',      name_zh: '起重機操作員證明書',                name_en: 'Crane Operator Cert',      no: emp.crane_operator_cert_no,      expiry: emp.crane_operator_cert_expiry },
+      { key: 'lorry_crane',         name_zh: '操作貨車吸機證明書',                name_en: 'Lorry Crane Cert',         no: emp.lorry_crane_cert_no,         expiry: emp.lorry_crane_cert_expiry },
+      { key: 'crawler_crane',       name_zh: '操作履帶式固定吸臂起重機證明書',      name_en: 'Crawler Crane Cert',       no: emp.crawler_crane_cert_no,       expiry: emp.crawler_crane_cert_expiry },
+      { key: 'hydraulic_crane',     name_zh: '操作輪胎式液壓伸縮吸臂起重機證明書', name_en: 'Hydraulic Crane Cert',     no: emp.hydraulic_crane_cert_no,     expiry: emp.hydraulic_crane_cert_expiry },
+      { key: 'airport_pass',        name_zh: '機場禁區通行證',                    name_en: 'Airport Pass',             no: emp.airport_pass_no,             expiry: emp.airport_pass_expiry },
+      { key: 'gammon_pass',         name_zh: '金門證',                              name_en: 'Gammon Pass',              no: emp.gammon_pass_no,              expiry: emp.gammon_pass_expiry },
+      { key: 'leighton_pass',       name_zh: '禮頓證',                              name_en: 'Leighton Pass',            no: emp.leighton_pass_no,            expiry: emp.leighton_pass_expiry },
+      { key: 'confined_space',      name_zh: '密閉空間作業核准工人證明書',          name_en: 'Confined Space Cert',      no: emp.confined_space_cert_no,      expiry: emp.confined_space_cert_expiry },
+      { key: 'compactor',           name_zh: '操作壓實機證明書',                  name_en: 'Compactor Cert',           no: emp.compactor_cert_no,           expiry: emp.compactor_cert_expiry },
+      { key: 'slinging_silver',     name_zh: '吸索銀和',                            name_en: 'Slinging Silver Card',     no: emp.slinging_silver_card_no,     expiry: emp.slinging_silver_card_expiry },
+      { key: 'craft_test',          name_zh: '工藝測試證明書',                    name_en: 'Craft Test Cert',          no: emp.craft_test_cert_no,          expiry: emp.craft_test_cert_expiry },
+      { key: 'compaction_load',     name_zh: '壓實負荷物移動機械操作員機證明書',    name_en: 'Compaction Load Cert',     no: emp.compaction_load_cert_no,     expiry: emp.compaction_load_cert_expiry },
+      { key: 'aerial_platform',     name_zh: '升降台安全使用訓練證書',              name_en: 'Aerial Platform Cert',     no: emp.aerial_platform_cert_no,     expiry: emp.aerial_platform_cert_expiry },
+    ];
+
+    // Only include certs that have at least a cert_no or expiry_date or photo
+    const certificates = CERT_DEFS
+      .filter(c => c.no || c.expiry || certPhotos[c.key])
+      .map(c => ({
+        key: c.key,
+        name_zh: c.name_zh,
+        name_en: c.name_en,
+        cert_no: c.no || null,
+        expiry_date: c.expiry ? c.expiry.toISOString().slice(0, 10) : null,
+        extra: null,
+        photo_url: certPhotos[c.key] || null,
+      }));
+
+    // Add other_certificates
+    const other = (emp.other_certificates as any) || {};
+    for (const label in other) {
+      const cert = other[label];
+      certificates.push({
+        key: `other_${label}`,
+        name_zh: label,
+        name_en: label,
+        cert_no: cert.cert_no || null,
+        expiry_date: cert.expiry_date || null,
+        extra: cert.extra || null,
+        photo_url: certPhotos[`other_${label}`] || null,
+      });
+    }
+
+    return { certificates };
+  }
+
+  // Keep the raw employee record method for internal use (getExpiringCerts etc.)
+  private async getEmployeeCertRaw(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) return null;
+
     return this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: {
@@ -543,7 +635,7 @@ export class EmployeePortalService {
   }
 
   async getExpiringCerts(userId: number, days: number = 90) {
-    const emp = await this.getCertificates(userId);
+    const emp = await this.getEmployeeCertRaw(userId);
     if (!emp) return { expiring: [] };
 
     const expiring: any[] = [];
@@ -602,6 +694,46 @@ export class EmployeePortalService {
     }
 
     return { expiring: expiring.sort((a, b) => a.days_left - b.days_left) };
+  }
+
+  async updateCertificate(userId: number, certKey: string, certNo: string | null, expiryDate: string | null) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
+
+    // Map cert key to employee table field names
+    const CERT_FIELD_MAP: Record<string, { no: string; expiry: string }> = {
+      driving_license:   { no: 'driving_license_no',         expiry: 'driving_license_expiry' },
+      green_card:        { no: 'green_card_no',              expiry: 'green_card_expiry' },
+      construction_card: { no: 'construction_card_no',       expiry: 'construction_card_expiry' },
+      approved_worker:   { no: 'approved_worker_cert_no',    expiry: 'approved_worker_cert_expiry' },
+      earth_mover:       { no: 'earth_mover_cert_no',        expiry: 'earth_mover_cert_expiry' },
+      excavator:         { no: 'excavator_cert_no',          expiry: 'excavator_cert_expiry' },
+      crane_operator:    { no: 'crane_operator_cert_no',     expiry: 'crane_operator_cert_expiry' },
+      lorry_crane:       { no: 'lorry_crane_cert_no',        expiry: 'lorry_crane_cert_expiry' },
+      crawler_crane:     { no: 'crawler_crane_cert_no',      expiry: 'crawler_crane_cert_expiry' },
+      hydraulic_crane:   { no: 'hydraulic_crane_cert_no',    expiry: 'hydraulic_crane_cert_expiry' },
+      airport_pass:      { no: 'airport_pass_no',            expiry: 'airport_pass_expiry' },
+      gammon_pass:       { no: 'gammon_pass_no',             expiry: 'gammon_pass_expiry' },
+      leighton_pass:     { no: 'leighton_pass_no',           expiry: 'leighton_pass_expiry' },
+      confined_space:    { no: 'confined_space_cert_no',     expiry: 'confined_space_cert_expiry' },
+      compactor:         { no: 'compactor_cert_no',          expiry: 'compactor_cert_expiry' },
+      slinging_silver:   { no: 'slinging_silver_card_no',    expiry: 'slinging_silver_card_expiry' },
+      craft_test:        { no: 'craft_test_cert_no',         expiry: 'craft_test_cert_expiry' },
+      compaction_load:   { no: 'compaction_load_cert_no',    expiry: 'compaction_load_cert_expiry' },
+      aerial_platform:   { no: 'aerial_platform_cert_no',    expiry: 'aerial_platform_cert_expiry' },
+    };
+
+    const fields = CERT_FIELD_MAP[certKey];
+    if (!fields) throw new BadRequestException(`不支援的證件類型: ${certKey}`);
+
+    const data: any = {};
+    data[fields.no] = certNo || null;
+    data[fields.expiry] = expiryDate ? new Date(expiryDate) : null;
+
+    await this.prisma.employee.update({ where: { id: employeeId }, data });
+    return { success: true };
   }
 
   // ── Admin: Create employee user account ─────────────────────────────

@@ -67,6 +67,12 @@ export default function CertificatesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeKeyRef = useRef<string>('');
 
+  // Edit state per cert card
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editCertNo, setEditCertNo] = useState('');
+  const [editExpiry, setEditExpiry] = useState('');
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
   useEffect(() => {
     loadCertificates();
   }, []);
@@ -86,12 +92,9 @@ export default function CertificatesPage() {
   async function handlePhotoUpload(certKey: string, file: File) {
     try {
       setUploadingKey(certKey);
-      // Upload photo first
       const uploadRes = await employeePortalApi.uploadPhoto(file);
       const photoUrl = uploadRes.data.url;
-      // Save cert photo URL
       await employeePortalApi.updateCertPhoto(certKey, photoUrl);
-      // Refresh
       await loadCertificates();
     } catch {
       setError(t('error'));
@@ -112,6 +115,35 @@ export default function CertificatesPage() {
     const file = e.target.files?.[0];
     if (file && activeKeyRef.current) {
       handlePhotoUpload(activeKeyRef.current, file);
+    }
+  }
+
+  function startEdit(cert: Certificate) {
+    setEditingKey(cert.key);
+    setEditCertNo(cert.cert_no || '');
+    setEditExpiry(cert.expiry_date || '');
+  }
+
+  function cancelEdit() {
+    setEditingKey(null);
+    setEditCertNo('');
+    setEditExpiry('');
+  }
+
+  async function handleSaveCert(certKey: string) {
+    try {
+      setSavingKey(certKey);
+      await employeePortalApi.updateCertificate(
+        certKey,
+        editCertNo.trim() || null,
+        editExpiry || null,
+      );
+      setEditingKey(null);
+      await loadCertificates();
+    } catch {
+      setError(t('error'));
+    } finally {
+      setSavingKey(null);
     }
   }
 
@@ -156,6 +188,7 @@ export default function CertificatesPage() {
             const daysLeft = getDaysLeft(cert.expiry_date);
             const isExpired = daysLeft !== null && daysLeft < 0;
             const isExpiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
+            const isEditing = editingKey === cert.key;
 
             return (
               <div
@@ -167,20 +200,73 @@ export default function CertificatesPage() {
                 {/* Header */}
                 <div className={`px-4 py-3 ${isExpired ? 'bg-red-50' : isExpiringSoon ? 'bg-amber-50' : 'bg-gray-50'}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 text-sm">{certName}</h3>
-                      {cert.cert_no && (
+                      {!isEditing && cert.cert_no && (
                         <p className="text-xs text-gray-500 mt-0.5">{t('certNo')}: {cert.cert_no}</p>
                       )}
-                      {cert.extra && (
+                      {!isEditing && cert.extra && (
                         <p className="text-xs text-gray-500 mt-0.5">{cert.extra}</p>
                       )}
+                      {!isEditing && (
+                        <div className="mt-1">
+                          <ExpiryBadge expiryDate={cert.expiry_date} />
+                        </div>
+                      )}
                     </div>
-                    <div className="shrink-0">
-                      <ExpiryBadge expiryDate={cert.expiry_date} />
-                    </div>
+                    {!isEditing && (
+                      <button
+                        onClick={() => startEdit(cert)}
+                        className="shrink-0 px-2.5 py-1 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                      >
+                        ✏️ 編輯
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Edit form */}
+                {isEditing && (
+                  <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('certNo')}</label>
+                        <input
+                          type="text"
+                          value={editCertNo}
+                          onChange={(e) => setEditCertNo(e.target.value)}
+                          placeholder="輸入證件號碼"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">到期日</label>
+                        <input
+                          type="date"
+                          value={editExpiry}
+                          onChange={(e) => setEditExpiry(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleSaveCert(cert.key)}
+                          disabled={savingKey === cert.key}
+                          className="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl active:scale-95 disabled:opacity-50"
+                        >
+                          {savingKey === cert.key ? '儲存中...' : '儲存'}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          disabled={savingKey === cert.key}
+                          className="flex-1 py-2 bg-gray-100 text-gray-600 text-sm font-semibold rounded-xl active:scale-95 disabled:opacity-50"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Photo section */}
                 <div className="px-4 py-3">
