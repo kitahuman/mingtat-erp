@@ -35,12 +35,13 @@ export default function Combobox({
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync input display with value
+  // Sync input display with value — show label if value matches an option, else show raw value
   useEffect(() => {
     if (!focused) {
-      setInputVal(value ?? '');
+      const matchedOption = options.find(o => String(o.value) === String(value ?? ''));
+      setInputVal(matchedOption ? matchedOption.label : (value ?? ''));
     }
-  }, [value, focused]);
+  }, [value, focused, options]);
 
   const filtered = options.filter(o =>
     !inputVal || o.label.toLowerCase().includes(inputVal.toLowerCase())
@@ -59,8 +60,9 @@ export default function Combobox({
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setFocused(false);
-        // Commit the typed value if it differs from current
-        if (inputVal !== (value ?? '')) {
+        // Compare against the current displayed label (not raw value) to detect real changes
+        const currentLabel = options.find(o => String(o.value) === String(value ?? ''))?.label ?? (value ?? '');
+        if (inputVal !== currentLabel) {
           commitValue(inputVal);
         }
       }
@@ -81,7 +83,8 @@ export default function Combobox({
       setOpen(false);
       setFocused(false);
     } else if (e.key === 'Escape') {
-      setInputVal(value ?? '');
+      const matchedOption = options.find(o => String(o.value) === String(value ?? ''));
+      setInputVal(matchedOption ? matchedOption.label : (value ?? ''));
       setOpen(false);
       setFocused(false);
     }
@@ -90,7 +93,9 @@ export default function Combobox({
   const handleSelect = (optValue: string | number) => {
     const strVal = String(optValue);
     onChange(strVal);
-    setInputVal(strVal);
+    // Display the label, not the raw value
+    const matchedOption = options.find(o => String(o.value) === strVal);
+    setInputVal(matchedOption ? matchedOption.label : strVal);
     setOpen(false);
     setFocused(false);
   };

@@ -306,7 +306,7 @@ export default function DailyReportForm({ reportId }: Props) {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-md mx-auto pb-32">
+    <div className="p-4 space-y-4 max-w-md mx-auto pb-44">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Link href="/employee-portal/supervisor/daily-report" className="text-blue-600 flex items-center gap-1">
