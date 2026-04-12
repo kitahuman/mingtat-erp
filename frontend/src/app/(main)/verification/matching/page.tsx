@@ -458,7 +458,18 @@ export default function MatchingPage() {
           <div>請選擇日期範圍並點擊「查詢」開始比對</div>
         </div>
       ) : loading ? (
-        <div className="text-center py-16 text-gray-400">載入中...</div>
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xl">🔗</span>
+            </div>
+          </div>
+          <div className="text-center">
+            <p className="text-base font-semibold text-gray-700">正在配對中，請稍候...</p>
+            <p className="text-sm text-gray-400 mt-1">系統正在比對各來源資料，這可能需要數秒鐘</p>
+          </div>
+        </div>
       ) : data.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <div className="text-4xl mb-3">📭</div>

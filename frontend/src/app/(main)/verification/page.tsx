@@ -145,7 +145,10 @@ function DetailPopup({ workRecordId, sourceKey, onClose }: {
         </div>
         <div className="p-6">
           {loading ? (
-            <div className="text-center py-8 text-gray-400">載入中...</div>
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <div className="w-10 h-10 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+              <p className="text-sm font-medium text-gray-600">正在配對中...</p>
+            </div>
           ) : sourceData ? (
             <div className="space-y-4">
               {/* 狀態列 */}
@@ -430,7 +433,22 @@ export default function VerificationWorkbenchPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={13} className="text-center py-12 text-gray-400">載入中...</td></tr>
+                <tr>
+                  <td colSpan={13} className="py-16">
+                    <div className="flex flex-col items-center justify-center gap-4">
+                      <div className="relative">
+                        <div className="w-14 h-14 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-lg">🔗</span>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-gray-700">正在配對中，請稍候...</p>
+                        <p className="text-xs text-gray-400 mt-1">系統正在比對各來源資料，這可能需要數秒鐘</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
               ) : records.length === 0 ? (
                 <tr><td colSpan={13} className="text-center py-12 text-gray-400">暫無資料</td></tr>
               ) : records.map((rec) => (
