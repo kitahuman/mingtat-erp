@@ -1477,7 +1477,8 @@ export default function WorkLogsPage() {
                                       {!found && (
                                         <div className="space-y-2">
                                           <div className="text-gray-400 text-xs">未找到對應資料</div>
-                                          {key === 'whatsapp_order' && !conf && (
+                                          {/* 所有來源（非 work_log）在 missing 且無確認記錄或已拒絕時，均顯示手動配對 */}
+                                          {key !== 'work_log' && (!conf || conf.status === 'rejected') && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -1510,11 +1511,27 @@ export default function WorkLogsPage() {
                                               >❎ 拒絕</button>
                                             </>
                                           ) : (
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleResetConfirmation(row.id, key); }}
-                                              disabled={isActionLoading}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 disabled:opacity-50"
-                                            >↩ 重置</button>
+                                            <>
+                                              {/* 已拒絕時顯示手動配對按鈕，讓用戶可選擇其他記錄 */}
+                                              {conf.status === 'rejected' && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const dateStr = row.scheduled_date
+                                                      ? new Date(row.scheduled_date).toISOString().slice(0, 10)
+                                                      : new Date().toISOString().slice(0, 10);
+                                                    openManualMatchPopup(row.id, dateStr, key);
+                                                  }}
+                                                  disabled={isActionLoading}
+                                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200 disabled:opacity-50"
+                                                >🔗 手動配對</button>
+                                              )}
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleResetConfirmation(row.id, key); }}
+                                                disabled={isActionLoading}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 disabled:opacity-50"
+                                              >↩ 重置</button>
+                                            </>
                                           )}
                                           {isActionLoading && <span className="text-gray-400">處理中...</span>}
                                         </div>
