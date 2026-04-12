@@ -14,6 +14,7 @@ export class AuditLogsController {
     @Query('userId') userId?: string,
     @Query('action') action?: string,
     @Query('targetTable') targetTable?: string,
+    @Query('targetId') targetId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
@@ -23,6 +24,7 @@ export class AuditLogsController {
       userId: userId ? Number(userId) : undefined,
       action,
       targetTable,
+      targetId: targetId ? Number(targetId) : undefined,
       dateFrom,
       dateTo,
     });

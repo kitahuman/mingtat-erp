@@ -5,9 +5,10 @@ import { PayrollController } from './payroll.controller';
 import { ExpensesModule } from '../expenses/expenses.module';
 import { ExpenseCategoriesModule } from '../expense-categories/expense-categories.module';
 import { PricingModule } from '../common/pricing.module';
+import { StatutoryHolidaysModule } from '../statutory-holidays/statutory-holidays.module';
 
 @Module({
-  imports: [PrismaModule, ExpensesModule, ExpenseCategoriesModule, PricingModule],
+  imports: [PrismaModule, ExpensesModule, ExpenseCategoriesModule, PricingModule, StatutoryHolidaysModule],
   providers: [PayrollService],
   controllers: [PayrollController],
   exports: [PayrollService],

@@ -54,6 +54,7 @@ import { AcceptanceReportsModule } from './acceptance-reports/acceptance-reports
 import { WhatsappClockinModule } from './whatsapp-clockin/whatsapp-clockin.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
+import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
     AcceptanceReportsModule,
     WhatsappClockinModule,
     AuditLogsModule,
+    StatutoryHolidaysModule,
     RecycleBinModule,
   ],
 })

@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class RateCardsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogsService: AuditLogsService,
+  ) {}
 
   private readonly allowedSortFields = [
     'id', 'name', 'service_type', 'tonnage', 'machine_type',
@@ -76,8 +80,14 @@ export class RateCardsService {
     return rc;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { ot_rates, company, client, source_quotation, project, ...data } = dto;
+
+    // effective_date is required on create
+    if (!data.effective_date) {
+      throw new BadRequestException('生效日期為必填欄位');
+    }
+
     if (data.effective_date) data.effective_date = new Date(data.effective_date);
     if (data.expiry_date) data.expiry_date = new Date(data.expiry_date);
 
@@ -138,10 +148,23 @@ export class RateCardsService {
       }
     }
 
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'rate_cards',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('價目表不存在');
 
@@ -149,7 +172,7 @@ export class RateCardsService {
     if (updateData.effective_date) updateData.effective_date = new Date(updateData.effective_date);
     if (updateData.expiry_date) updateData.expiry_date = new Date(updateData.expiry_date);
 
-    await this.prisma.rateCard.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.rateCard.update({ where: { id }, data: updateData });
 
     if (ot_rates !== undefined) {
       await this.prisma.rateCardOtRate.deleteMany({ where: { rate_card_id: id } });
@@ -165,12 +188,40 @@ export class RateCardsService {
       }
     }
 
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'rate_cards',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('價目表不存在');
+
+    // Audit log before deletion
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'rate_cards',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     await this.prisma.rateCard.delete({ where: { id } });
     return { message: '刪除成功' };
   }

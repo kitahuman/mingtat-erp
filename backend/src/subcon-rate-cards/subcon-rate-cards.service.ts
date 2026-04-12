@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class SubconRateCardsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogsService: AuditLogsService,
+  ) {}
 
   private readonly allowedSortFields = [
     'id', 'plate_no', 'tonnage', 'day_night', 'origin', 'destination',
@@ -122,8 +126,14 @@ export class SubconRateCardsService {
     return { data, ot_rates };
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { data, ot_rates } = this.sanitizeForCreate(dto);
+
+    // effective_date is required on create
+    if (!data.effective_date) {
+      throw new BadRequestException('生效日期為必填欄位');
+    }
+
     const saved = await this.prisma.subconRateCard.create({ data });
     if (ot_rates && Array.isArray(ot_rates) && ot_rates.length > 0) {
       for (const otr of ot_rates) {
@@ -132,14 +142,28 @@ export class SubconRateCardsService {
         });
       }
     }
+
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'subcon_rate_cards',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
     const { created_at, updated_at, id: _id, subcontractor, client, company, source_quotation, ot_rates, ...updateData } = dto;
-    await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.subconRateCard.update({ where: { id }, data: updateData });
     if (ot_rates !== undefined) {
       await this.prisma.subconRateCardOtRate.deleteMany({ where: { subcon_rate_card_id: id } });
       if (Array.isArray(ot_rates) && ot_rates.length > 0) {
@@ -150,12 +174,41 @@ export class SubconRateCardsService {
         }
       }
     }
+
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'subcon_rate_cards',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(id);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
+
+    // Audit log before deletion
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'subcon_rate_cards',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     await this.prisma.subconRateCard.delete({ where: { id } });
     return { message: '刪除成功' };
   }

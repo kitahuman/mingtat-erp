@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi, vehiclesApi, machineryApi } from '@/lib/api';
+import AuditHistory from '@/components/AuditHistory';
 import Link from 'next/link';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
@@ -305,6 +306,11 @@ export default function RateCardDetailPage() {
           <textarea value={form.remarks || ''} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={3} />
         </div>
       )}
+
+      {/* Audit History */}
+      <div className="card">
+        <AuditHistory targetTable="rate_cards" targetId={Number(params.id)} />
+      </div>
     </div>
   );
 }

@@ -41,6 +41,7 @@ export class AuditLogsService {
     userId?: number;
     action?: string;
     targetTable?: string;
+    targetId?: number;
     dateFrom?: string;
     dateTo?: string;
   }) {
@@ -58,6 +59,10 @@ export class AuditLogsService {
 
     if (query.targetTable) {
       where.audit_target_table = query.targetTable;
+    }
+
+    if (query.targetId) {
+      where.audit_target_id = Number(query.targetId);
     }
 
     if (query.dateFrom || query.dateTo) {

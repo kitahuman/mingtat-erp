@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RateCardsService } from './rate-cards.service';
 
@@ -18,19 +18,19 @@ export class RateCardsController {
   }
 
   @Post()
-  create(@Body() dto: any) {
-    return this.service.create(dto);
+  create(@Body() dto: any, @Request() req: any) {
+    return this.service.create(dto, req.user?.id);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id);
   }
 
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.service.remove(Number(id), req.user?.id);
   }
 
 }

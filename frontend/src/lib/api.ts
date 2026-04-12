@@ -811,6 +811,22 @@ export const verificationApi = {
     api.get('/verification/confirmations/search/records', { params }),
 };
 
+// Statutory Holidays (法定假期)
+export const statutoryHolidaysApi = {
+  list: (params?: any) => api.get('/statutory-holidays', { params }),
+  get: (id: number) => api.get(`/statutory-holidays/${id}`),
+  create: (data: { date: string; name: string }) => api.post('/statutory-holidays', data),
+  update: (id: number, data: { date?: string; name?: string }) => api.put(`/statutory-holidays/${id}`, data),
+  delete: (id: number) => api.delete(`/statutory-holidays/${id}`),
+  bulkCreate: (items: { date: string; name: string }[]) => api.post('/statutory-holidays/bulk', { items }),
+};
+
+// Audit Logs (操作歷史)
+export const auditLogsApi = {
+  list: (params?: any) => api.get('/audit-logs', { params }),
+  getByTarget: (targetTable: string, targetId: number) => api.get('/audit-logs', { params: { targetTable, targetId: targetId.toString() } }),
+};
+
 // Daily Reports (工程日報) - Admin
 export const dailyReportsApi = {
   list: (params?: any) => api.get('/daily-reports', { params }),

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { PricingService } from '../common/pricing.service';
+import { StatutoryHolidaysService } from '../statutory-holidays/statutory-holidays.service';
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
 function toDateStr(d: any): string {
@@ -22,6 +23,7 @@ export class PayrollService {
     private readonly prisma: PrismaService,
     private readonly expensesService: ExpensesService,
     private readonly pricingService: PricingService,
+    private readonly statutoryHolidaysService: StatutoryHolidaysService,
   ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
@@ -380,6 +382,7 @@ export class PayrollService {
         mpf_deduction: calc.mpf_deduction,
         mpf_plan: calc.mpf_plan,
         mpf_employer: calc.mpf_employer,
+        mpf_relevant_income: calc.mpf_relevant_income,
         adjustment_total: 0,
         net_amount: calc.net_amount,
         status: 'draft',
@@ -442,6 +445,26 @@ export class PayrollService {
       });
     }
 
+    // ── Auto-generate statutory holiday daily allowances for daily-salary employees ──
+    if (calc.salary_type === 'daily') {
+      const holidays = await this.statutoryHolidaysService.findByDateRange(date_from, date_to);
+      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
+      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
+        for (const holiday of holidays) {
+          await this.prisma.payrollDailyAllowance.create({
+            data: {
+              payroll_id: saved.id,
+              date: holiday.date,
+              allowance_key: 'statutory_holiday',
+              allowance_name: `法定假期 - ${holiday.name}`,
+              amount: baseSalaryForHoliday,
+              remarks: '自動生成',
+            },
+          });
+        }
+      }
+    }
+
     return this.findOne(saved.id);
   }
 
@@ -453,6 +476,7 @@ export class PayrollService {
     dateFrom: string,
     dateTo: string,
     companyProfileId: number | null,
+    mpfRelevantIncome?: number | null,
   ) {
     const items: any[] = [];
     let sortOrder = 1;
@@ -652,23 +676,63 @@ export class PayrollService {
 
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
 
+    // MPF 行業計劃供款級別表（日薪制臨時僱員）
+    const MPF_INDUSTRY_TIERS = [
+      { min: 0, max: 280, employer: 10, employee: 0 },
+      { min: 280, max: 350, employer: 15, employee: 15 },
+      { min: 350, max: 450, employer: 20, employee: 20 },
+      { min: 450, max: 550, employer: 25, employee: 25 },
+      { min: 550, max: 650, employer: 30, employee: 30 },
+      { min: 650, max: 750, employer: 35, employee: 35 },
+      { min: 750, max: 850, employer: 40, employee: 40 },
+      { min: 850, max: 950, employer: 45, employee: 45 },
+      { min: 950, max: Infinity, employer: 50, employee: 50 },
+    ];
+
     if (mpfPlan === 'industry') {
-      const workDatesForMpf = new Set(workLogs.map(wl => toDateStr(wl.scheduled_date)));
-      const mpfDays = workDatesForMpf.size;
-      mpfDeduction = 50 * mpfDays;
-      mpfEmployer = 50 * mpfDays;
+      // Build per-day effective income map (same logic as daily calculation)
+      const dayIncomeMap = new Map<string, number>();
+      for (const wl of workLogs) {
+        const date = toDateStr(wl.scheduled_date);
+        const lineAmt = Number(wl.line_amount ?? wl._line_amount ?? 0)
+          + Number(wl.ot_line_amount ?? wl._ot_line_amount ?? 0)
+          + Number(wl.mid_shift_line_amount ?? wl._mid_shift_line_amount ?? 0);
+        dayIncomeMap.set(date, (dayIncomeMap.get(date) || 0) + lineAmt);
+      }
+
+      let totalEmployeeContrib = 0;
+      let totalEmployerContrib = 0;
+
+      for (const [, workIncome] of dayIncomeMap) {
+        const effectiveIncome = baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+        const tier = MPF_INDUSTRY_TIERS.find(t => effectiveIncome > t.min && effectiveIncome <= t.max)
+          || MPF_INDUSTRY_TIERS[MPF_INDUSTRY_TIERS.length - 1];
+        totalEmployeeContrib += tier.employee;
+        totalEmployerContrib += tier.employer;
+      }
+
+      mpfDeduction = totalEmployeeContrib;
+      mpfEmployer = totalEmployerContrib;
+
+      const mpfDays = dayIncomeMap.size;
+      const avgEmployee = mpfDays > 0 ? Math.round(totalEmployeeContrib / mpfDays * 100) / 100 : 0;
 
       items.push({
         item_type: 'mpf_deduction',
         item_name: '強積金（行業計劃）',
-        unit_price: 50,
+        unit_price: avgEmployee,
         quantity: mpfDays,
         amount: -mpfDeduction,
+        remarks: `按日薪級別計算，${mpfDays}天`,
         sort_order: sortOrder++,
       });
     } else {
-      mpfDeduction = Math.min(grossIncome * 0.05, 1500);
-      mpfEmployer = Math.min(grossIncome * 0.05, 1500);
+      // Non-industry plan: use mpf_relevant_income if provided, otherwise grossIncome
+      const mpfBase = mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
+        ? Number(mpfRelevantIncome)
+        : grossIncome;
+      mpfDeduction = Math.min(mpfBase * 0.05, 1500);
+      mpfEmployer = Math.min(mpfBase * 0.05, 1500);
       mpfDeduction = Math.round(mpfDeduction * 100) / 100;
       mpfEmployer = Math.round(mpfEmployer * 100) / 100;
 
@@ -677,7 +741,7 @@ export class PayrollService {
       items.push({
         item_type: 'mpf_deduction',
         item_name: `強積金（${planLabel}）`,
-        unit_price: grossIncome,
+        unit_price: mpfBase,
         quantity: 0.05,
         amount: -mpfDeduction,
         remarks: `月入 5%，上限 $1,500`,
@@ -698,6 +762,7 @@ export class PayrollService {
       mpf_deduction: mpfDeduction,
       mpf_plan: mpfPlan,
       mpf_employer: mpfEmployer,
+      mpf_relevant_income: grossIncome,
       gross_income: grossIncome,
       net_amount: netAmount,
       items,
@@ -714,6 +779,7 @@ export class PayrollService {
     if (body.cheque_number !== undefined) updateData.cheque_number = body.cheque_number;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.mpf_relevant_income !== undefined) updateData.mpf_relevant_income = body.mpf_relevant_income !== null && body.mpf_relevant_income !== '' ? Number(body.mpf_relevant_income) : null;
 
     return this.prisma.payroll.update({ where: { id }, data: updateData });
   }
@@ -892,7 +958,12 @@ export class PayrollService {
       price_match_note: pwl.price_match_note,
     }));
 
-    const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, companyId ?? cpId);
+    // Preserve manual mpf_relevant_income if set
+    const existingMpfRelevantIncome = payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
+      ? Number(payroll.mpf_relevant_income)
+      : null;
+
+    const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, companyId ?? cpId, existingMpfRelevantIncome);
 
     // Calculate adjustment total
     const adjustments = payroll.adjustments || [];
@@ -909,7 +980,7 @@ export class PayrollService {
       });
     }
 
-    // Update payroll totals
+    // Update payroll totals (preserve mpf_relevant_income)
     await this.prisma.payroll.update({
       where: { id },
       data: {
@@ -1292,7 +1363,9 @@ export class PayrollService {
       daMap.get(date)!.push(da);
     }
 
-    const sortedDates = Array.from(dateMap.keys()).sort();
+    // Merge all dates from both work logs and daily allowances
+    const allDates = new Set([...dateMap.keys(), ...daMap.keys()]);
+    const sortedDates = Array.from(allDates).sort();
 
     return sortedDates.map(date => {
       const dayPwls = dateMap.get(date) || [];

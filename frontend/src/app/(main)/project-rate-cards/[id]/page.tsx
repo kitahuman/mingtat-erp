@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
+import AuditHistory from '@/components/AuditHistory';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -163,6 +164,11 @@ export default function ProjectRateCardDetailPage() {
           <textarea value={form.remarks || ''} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={3} />
         </div>
       )}
+
+      {/* Audit History */}
+      <div className="card">
+        <AuditHistory targetTable="rate_cards" targetId={Number(params.id)} />
+      </div>
     </div>
   );
 }

@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class FleetRateCardsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogsService: AuditLogsService,
+  ) {}
 
   private readonly allowedSortFields = [
     'id', 'tonnage', 'machine_type', 'origin', 'destination',
@@ -59,8 +63,14 @@ export class FleetRateCardsService {
     return frc;
   }
 
-  async create(dto: any) {
+  async create(dto: any, userId?: number) {
     const { client, company, source_quotation, ot_rates, ...data } = dto;
+
+    // effective_date is required on create
+    if (!data.effective_date) {
+      throw new BadRequestException('生效日期為必填欄位');
+    }
+
     const saved = await this.prisma.fleetRateCard.create({ data });
     // Handle ot_rates if provided
     if (ot_rates && Array.isArray(ot_rates) && ot_rates.length > 0) {
@@ -70,14 +80,28 @@ export class FleetRateCardsService {
         });
       }
     }
+
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'fleet_rate_cards',
+          targetId: saved.id,
+          changesAfter: saved,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any) {
+  async update(id: number, dto: any, userId?: number) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('租賃價目表不存在');
     const { created_at, updated_at, id: _id, client, company, source_quotation, ot_rates, ...updateData } = dto;
-    await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
+    const updated = await this.prisma.fleetRateCard.update({ where: { id }, data: updateData });
     // Handle ot_rates update: delete all and re-create
     if (ot_rates !== undefined) {
       await this.prisma.fleetRateCardOtRate.deleteMany({ where: { fleet_rate_card_id: id } });
@@ -89,6 +113,21 @@ export class FleetRateCardsService {
         }
       }
     }
+
+    // Audit log
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'fleet_rate_cards',
+          targetId: id,
+          changesBefore: existing,
+          changesAfter: updated,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     return this.findOne(id);
   }
 
@@ -139,9 +178,23 @@ export class FleetRateCardsService {
     return cards;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('租賃價目表不存在');
+
+    // Audit log before deletion
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'delete',
+          targetTable: 'fleet_rate_cards',
+          targetId: id,
+          changesBefore: existing,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
     await this.prisma.fleetRateCard.delete({ where: { id } });
     return { message: '刪除成功' };
   }

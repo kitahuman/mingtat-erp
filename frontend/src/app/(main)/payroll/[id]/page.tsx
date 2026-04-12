@@ -188,8 +188,8 @@ function DailyCalculationView({
                       {day.daily_allowances && day.daily_allowances.length > 0 ? (
                         <div className="flex flex-wrap gap-1 justify-center">
                           {day.daily_allowances.map((da: any) => (
-                            <span key={da.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                              {da.allowance_name} ${Number(da.amount).toLocaleString()}
+                            <span key={da.id} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs ${da.allowance_key === 'statutory_holiday' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {da.allowance_key === 'statutory_holiday' && '🏷️ '}{da.allowance_name} ${Number(da.amount).toLocaleString()}
                               {isDraft && (
                                 <button onClick={() => onRemoveAllowance(da.id)} className="ml-0.5 text-blue-400 hover:text-red-500">&times;</button>
                               )}
@@ -631,6 +631,40 @@ export default function PayrollDetailPage() {
           <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
         </div>
       </div>
+
+      {/* ── MPF 計算薪金（非行業計劃） ── */}
+      {payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
+        <div className="card mb-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數</p>
+              {isDraft ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field w-48 font-mono"
+                    defaultValue={payroll.mpf_relevant_income ?? ''}
+                    onBlur={async (e) => {
+                      const val = e.target.value;
+                      try {
+                        await payrollApi.update(payroll.id, { mpf_relevant_income: val || null });
+                        alert('已更新 MPF 計算薪金，請按「重新計算」以更新糧單');
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || '更新失敗');
+                      }
+                    }}
+                  />
+                  <span className="text-xs text-gray-400">修改後請按「重新計算」</span>
+                </div>
+              ) : (
+                <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Custom Adjustments ── */}
       <div className="card mb-6">
