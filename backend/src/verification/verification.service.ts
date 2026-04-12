@@ -1213,11 +1213,13 @@ export class VerificationService {
       const hasSlip = vehicleNorm ? (slipIndex.get(lookupKey)?.length || 0) > 0 : false;
       const statusSlip = date ? getSourceStatus('slip_chit', hasSlip) : 'unverified';
 
-      // 功課表（暫無自動配對資料）
-      const statusSheet = date ? getSourceStatus('driver_sheet', false) : 'unverified';
+      // 功課表（暫無自動配對資料源；只有手動確認時才顯示狀態，否則 na）
+      const sheetConfirm = wlConfirms?.get('driver_sheet');
+      const statusSheet = sheetConfirm ? getSourceStatus('driver_sheet', false) : 'na';
 
-      // 客戶記錄（暫無自動配對資料）
-      const statusCustomer = date ? getSourceStatus('customer_record', false) : 'unverified';
+      // 客戶記錄（暫無自動配對資料源；只有手動確認時才顯示狀態，否則 na）
+      const customerConfirm = wlConfirms?.get('customer_record');
+      const statusCustomer = customerConfirm ? getSourceStatus('customer_record', false) : 'na';
 
       // GPS
       const hasGps = vehicleNorm ? (gpsIndex.get(lookupKey)?.length || 0) > 0 : false;
@@ -1290,18 +1292,79 @@ export class VerificationService {
       filteredRecords = records.filter((r) => r.overall_status === filterStatus);
     }
 
-    // 統計摘要（基於當前頁面的工作紀錄）
-    const matchedCount = records.filter((r) => r.overall_status === 'matched').length;
-    const diffCount = records.filter((r) => r.overall_status === 'diff').length;
-    const missingCount = records.filter((r) => r.overall_status === 'missing').length;
-    const unverifiedCount = records.filter((r) => r.overall_status === 'unverified').length;
+    // ── 統計摘要（基於全部符合篩選條件的工作紀錄，非僅當前頁）──
+    // 取得全部 workLog IDs（不分頁）
+    const allWorkLogIds = await this.prisma.workLog.findMany({
+      where,
+      select: { id: true, scheduled_date: true, equipment_number: true, employee_id: true },
+      orderBy: orderByClause,
+    });
+
+    // 取得全部的 confirmations（用於 summary 計算）
+    const allWorkLogIdList = allWorkLogIds.map((wl) => wl.id);
+    const allConfirmations = await this.prisma.verificationConfirmation.findMany({
+      where: { work_log_id: { in: allWorkLogIdList } },
+    });
+    const allConfirmMap = new Map<number, Map<string, any>>();
+    for (const c of allConfirmations) {
+      if (!allConfirmMap.has(c.work_log_id)) allConfirmMap.set(c.work_log_id, new Map());
+      allConfirmMap.get(c.work_log_id)!.set(c.source_code, c);
+    }
+
+    // 對全部 workLogs 做輕量版狀態計算（只需 overall_status）
+    let globalMatched = 0, globalDiff = 0, globalMissing = 0, globalUnverified = 0;
+    for (const wl of allWorkLogIds) {
+      const date = wl.scheduled_date?.toISOString().slice(0, 10) || '';
+      const vehicleNorm = normalizeVehicle(wl.equipment_number);
+      const employeeId = wl.employee_id;
+      const lookupKey = `${date}|${vehicleNorm}`;
+      const wlC = allConfirmMap.get(wl.id);
+
+      const calcStatus = (sourceCode: string, hasAuto: boolean): string => {
+        const c = wlC?.get(sourceCode);
+        if (c) {
+          if (c.status === 'manual_match' || c.status === 'confirmed') return 'matched';
+          if (c.status === 'skipped') return 'na';
+        }
+        return hasAuto ? 'matched' : 'missing';
+      };
+
+      if (!date) { globalUnverified++; continue; }
+
+      const sReceipt = calcStatus('receipt', vehicleNorm ? (receiptIndex.get(lookupKey)?.length || 0) > 0 : false);
+      const sSlip = calcStatus('slip_chit', vehicleNorm ? (slipIndex.get(lookupKey)?.length || 0) > 0 : false);
+      // 功課表/客戶記錄：無手動確認時為 na
+      const sSheet = wlC?.get('driver_sheet') ? calcStatus('driver_sheet', false) : 'na';
+      const sCustomer = wlC?.get('customer_record') ? calcStatus('customer_record', false) : 'na';
+      const sGps = calcStatus('gps', vehicleNorm ? (gpsIndex.get(lookupKey)?.length || 0) > 0 : false);
+      const clockKey2 = `${date}|${employeeId}`;
+      const sClock = calcStatus('clock', employeeId ? (attendanceIndex.get(clockKey2)?.length || 0) > 0 : false);
+      let hasWa2 = vehicleNorm ? (waIndex.get(lookupKey)?.length || 0) > 0 : false;
+      const waC = wlC?.get('whatsapp_order');
+      if (waC?.status === 'manual_match' && waC.matched_record_id) hasWa2 = true;
+      const sWa = calcStatus('whatsapp_order', hasWa2);
+
+      const active = [sReceipt, sSlip, sSheet, sCustomer, sGps, sClock, sWa].filter((s) => s !== 'na' && s !== 'unverified');
+      let overall = 'unverified';
+      if (active.length > 0) {
+        const mc = active.filter((s) => s === 'matched').length;
+        const misc = active.filter((s) => s === 'missing').length;
+        if (mc === active.length) overall = 'matched';
+        else if (mc > 0) overall = 'diff';
+        else if (misc === active.length) overall = 'missing';
+      }
+      if (overall === 'matched') globalMatched++;
+      else if (overall === 'diff') globalDiff++;
+      else if (overall === 'missing') globalMissing++;
+      else globalUnverified++;
+    }
 
     const summary = {
       total_records: total,
-      matched_count: matchedCount,
-      diff_count: diffCount,
-      missing_count: missingCount,
-      unverified_count: unverifiedCount,
+      matched_count: globalMatched,
+      diff_count: globalDiff,
+      missing_count: globalMissing,
+      unverified_count: globalUnverified,
     };
 
     return {
