@@ -1648,11 +1648,14 @@ export default function WorkLogsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 space-y-0.5">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {(item.wa_item_vehicle_no || item.wa_item_machine_code) && (
+                          {/* 車牌/機械號（transport/machinery）或帶隊人（manpower） */}
+                          {(item.wa_item_vehicle_no || item.wa_item_machine_code) ? (
                             <span className="font-mono font-semibold text-gray-800">
                               {item.wa_item_vehicle_no || item.wa_item_machine_code}
                             </span>
-                          )}
+                          ) : item.wa_item_driver_nickname ? (
+                            <span className="font-semibold text-gray-800">👤 {item.wa_item_driver_nickname}</span>
+                          ) : null}
                           {item.wa_item_order_type && (
                             <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
                               {item.wa_item_order_type}
@@ -1662,9 +1665,16 @@ export default function WorkLogsPage() {
                             <span className="text-xs text-gray-400">v{item.order.wa_order_version}</span>
                           )}
                         </div>
-                        {item.wa_item_driver_nickname && (
+                        {/* transport/machinery 類型：在標題下方顯示司機花名 */}
+                        {(item.wa_item_vehicle_no || item.wa_item_machine_code) && item.wa_item_driver_nickname && (
                           <div className="text-gray-600">👤 {item.wa_item_driver_nickname}</div>
                         )}
+                        {/* manpower 類型：從 remarks 解析員工列表 */}
+                        {item.wa_item_order_type === 'manpower' && item.wa_item_remarks && (() => {
+                          const staffMatch = item.wa_item_remarks.match(/\[staff\]員工: (.+)/);
+                          if (!staffMatch) return null;
+                          return <div className="text-gray-600 text-xs">👥 {staffMatch[1]}</div>;
+                        })()}
                         {item.wa_item_customer && (
                           <div className="text-gray-600">🏢 {item.wa_item_customer}</div>
                         )}
