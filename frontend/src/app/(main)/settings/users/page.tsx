@@ -313,6 +313,7 @@ function UsersPageContent() {
             placeholder="搜尋用戶名、顯示名稱或電郵..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            autoComplete="off"
             className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
           <select
@@ -475,6 +476,7 @@ function UsersPageContent() {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
+                autoComplete="new-password"
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder={editingUser ? '留空表示不修改密碼' : '至少 6 個字元'}
               />
