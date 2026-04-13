@@ -500,9 +500,7 @@ export default function PayrollDetailPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   // Field options for inline editing dropdowns
-  const [unitOptions, setUnitOptions] = useState<{ value: string; label: string }[]>([]);
-  const [productUnitOptions, setProductUnitOptions] = useState<{ value: string; label: string }[]>([]);
-  const [serviceTypeOptions, setServiceTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [fieldOptions, setFieldOptions] = useState<Record<string, { value: string; label: string }[]>>({});
 
   const loadData = async () => {
     try {
@@ -519,11 +517,12 @@ export default function PayrollDetailPage() {
   const loadFieldOptions = async () => {
     try {
       const res = await fieldOptionsApi.getAll();
-      const opts = res.data || [];
-      const toOptions = (cat: string) => opts.filter((o: any) => o.category === cat && o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
-      setUnitOptions(toOptions('unit'));
-      setProductUnitOptions(toOptions('product_unit'));
-      setServiceTypeOptions(toOptions('service_type'));
+      // res.data is Record<category, FieldOption[]> (grouped object, same as work-logs page)
+      const grouped: Record<string, { value: string; label: string }[]> = {};
+      for (const [cat, opts] of Object.entries(res.data || {})) {
+        grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
+      }
+      setFieldOptions(grouped);
     } catch { /* ignore */ }
   };
 
@@ -876,30 +875,28 @@ export default function PayrollDetailPage() {
                     const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
                     const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
                     const totalLineAmount = baseLineAmount + otLineAmount + midShiftLineAmount;
-                    const dayNightOptions = [{ value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }];
-
                     return (
                       <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'hover:bg-gray-50'}`}>
                         <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
                         <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} display={fmtDate(pwl.scheduled_date)} />
-                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={serviceTypeOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['service_type'] || []} onSaved={loadData} />
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.company_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap truncate max-w-[120px]" title={pwl.client_name}>{pwl.client_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.quotation_no || '—'}</td>
                         <InlineEditCell value={pwl.client_contract_no} field="client_contract_no" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['tonnage'] || []} onSaved={loadData} />
+                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['machine_type'] || []} onSaved={loadData} />
                         <InlineEditCell value={pwl.equipment_number} field="equipment_number" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={dayNightOptions} onSaved={loadData} />
-                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['day_night'] || []} onSaved={loadData} />
+                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={loadData} />
+                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={loadData} />
                         <InlineEditCell value={pwl.quantity} field="quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
-                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={unitOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={loadData} />
                         <InlineEditCell value={pwl.ot_quantity} field="ot_quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
-                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={unitOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={loadData} />
                         <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={loadData} />
                         <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={productUnitOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['product_unit'] || []} onSaved={loadData} />
                         <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">
                           {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : '—'}
                         </td>
