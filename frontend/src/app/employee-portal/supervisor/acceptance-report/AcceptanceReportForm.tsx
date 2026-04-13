@@ -3,13 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 import Combobox from '@/components/Combobox';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SignaturePad = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
+import SignaturePad from '@/components/SignatureCanvas';
+import type { SignatureCanvasRef } from '@/components/SignatureCanvas';
 
 interface AcceptanceItem {
   description: string;
@@ -31,8 +29,8 @@ export default function AcceptanceReportForm({ reportId }: Props) {
   const { t } = useI18n();
   const isEdit = !!reportId;
 
-  const mingtatSigRef = useRef<any>(null);
-  const clientSigRef = useRef<any>(null);
+  const mingtatSigRef = useRef<SignatureCanvasRef>(null);
+  const clientSigRef = useRef<SignatureCanvasRef>(null);
 
   // Reference data
   const [projects, setProjects] = useState<any[]>([]);

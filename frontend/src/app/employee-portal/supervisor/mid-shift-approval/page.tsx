@@ -2,13 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi } from '@/lib/employee-portal-api';
 import { fmtDate } from '@/lib/dateUtils';
-
-// Dynamic import to avoid SSR issues with canvas-based signature pad
-const SignaturePad = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
+import SignaturePad from '@/components/SignatureCanvas';
+import type { SignatureCanvasRef } from '@/components/SignatureCanvas';
 
 interface AttendanceRecord {
   id: number;
@@ -33,7 +31,7 @@ export default function MidShiftApprovalPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showSignature, setShowSignature] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const sigPad = useRef<any>(null);
+  const sigPad = useRef<SignatureCanvasRef>(null);
 
   useEffect(() => {
     loadPending();

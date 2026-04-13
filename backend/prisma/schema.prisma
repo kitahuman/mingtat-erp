@@ -2100,8 +2100,23 @@ model DailyReport {
   client  Partner?  @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
   creator User     @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
   items   DailyReportItem[]
+  attachments DailyReportAttachment[]
 
   @@map("daily_reports")
+}
+
+model DailyReportAttachment {
+  id                                    Int      @id @default(autoincrement())
+  daily_report_attachment_report_id     Int
+  daily_report_attachment_file_name     String   @db.VarChar(255)
+  daily_report_attachment_file_url      String   @db.Text
+  daily_report_attachment_file_type     String   @db.VarChar(100)
+  daily_report_attachment_sort_order    Int      @default(0)
+  daily_report_attachment_created_at    DateTime @default(now())
+
+  report DailyReport @relation(fields: [daily_report_attachment_report_id], references: [id], onDelete: Cascade)
+
+  @@map("daily_report_attachments")
 }
 
 model DailyReportItem {

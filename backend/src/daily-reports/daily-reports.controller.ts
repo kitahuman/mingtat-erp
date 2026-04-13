@@ -1,10 +1,21 @@
 import {
   Controller, Get, Post, Put, Delete, Res,
   Body, Query, Param, ParseIntPipe, UseGuards, Request,
+  UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { DailyReportsService } from './daily-reports.service';
+
+const UPLOAD_DIR = join(process.cwd(), 'uploads', 'daily-reports');
+if (!existsSync(UPLOAD_DIR)) {
+  mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 @Controller('daily-reports')
 @UseGuards(AuthGuard('jwt'))
@@ -46,6 +57,54 @@ export class DailyReportsController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // ── File Upload ─────────────────────────────────────────────────
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: UPLOAD_DIR,
+      filename: (_req, file, cb) => {
+        cb(null, `${uuidv4()}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  }))
+  async uploadFile(
+    @Request() req: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      return { url: null };
+    }
+    const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+    const url = `${baseUrl}/uploads/daily-reports/${file.filename}`;
+    return {
+      url,
+      filename: file.filename,
+      file_name: file.originalname,
+      file_type: file.mimetype,
+    };
+  }
+
+  // ── Add attachments to submitted report ─────────────────────────
+  @Post(':id/attachments')
+  async addAttachments(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() dto: { attachments: { file_name: string; file_url: string; file_type: string }[] },
+  ) {
+    return this.service.addAttachments(id, req.user.sub, dto.attachments);
+  }
+
+  // ── Delete single attachment ────────────────────────────────────
+  @Delete(':id/attachments/:attachmentId')
+  async removeAttachment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @Request() req: any,
+  ) {
+    return this.service.removeAttachment(id, attachmentId, req.user.sub);
   }
 
   @Get(':id/export')
@@ -115,6 +174,18 @@ export class DailyReportsController {
       </table>`;
     }
 
+    // Build attachments section
+    let attachmentsHtml = '';
+    if ((report as any).attachments?.length) {
+      const attItems = (report as any).attachments.map((a: any) => {
+        if (a.daily_report_attachment_file_type?.startsWith('image/')) {
+          return `<div style="display:inline-block;margin:5px;"><img src="${a.daily_report_attachment_file_url}" style="max-width:200px;max-height:200px;border:1px solid #ccc;border-radius:4px;" /><br/><small>${a.daily_report_attachment_file_name}</small></div>`;
+        }
+        return `<div style="display:inline-block;margin:5px;padding:10px;border:1px solid #ccc;border-radius:4px;"><a href="${a.daily_report_attachment_file_url}" target="_blank">${a.daily_report_attachment_file_name}</a></div>`;
+      }).join('');
+      attachmentsHtml = `<div class="section"><div class="section-title">附件</div>${attItems}</div>`;
+    }
+
     const sigSection = (sigUrl: string | null) => {
       if (!sigUrl) return '<div class="sig-empty">未簽名</div>';
       return `<img src="${sigUrl}" class="sig-img" />`;
@@ -150,6 +221,7 @@ export class DailyReportsController {
       ${report.items?.length ? `<div class="section"><div class="section-title">Labour and Plant</div>${itemsHtml}</div>` : ''}
       ${report.daily_report_completed_work ? `<div class="section"><div class="section-title">完成的工作</div><p>${report.daily_report_completed_work.replace(/\n/g, '<br>')}</p></div>` : ''}
       ${report.daily_report_memo ? `<div class="section"><div class="section-title">備忘錄</div><p>${report.daily_report_memo.replace(/\n/g, '<br>')}</p></div>` : ''}
+      ${attachmentsHtml}
       <div class="sig-row">
         <div class="section-title" style="text-align:left">簽收</div>
         ${sigSection(report.daily_report_signature)}

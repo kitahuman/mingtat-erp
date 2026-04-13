@@ -294,6 +294,52 @@ export class EmployeePortalController {
     return this.service.deleteDailyReport(req.user.sub, +id);
   }
 
+  // ── Daily Report Attachments ───────────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Post('daily-reports/upload')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = join(process.cwd(), 'uploads', 'daily-reports');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        cb(null, `${uuidv4()}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 20 * 1024 * 1024 },
+  }))
+  async uploadDailyReportFile(
+    @Request() req: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) return { url: null };
+    const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+    const url = `${baseUrl}/uploads/daily-reports/${file.filename}`;
+    return { url, filename: file.filename, file_name: file.originalname, file_type: file.mimetype };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('daily-reports/:id/attachments')
+  async addDailyReportAttachments(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: { attachments: { file_name: string; file_url: string; file_type: string }[] },
+  ) {
+    return this.service.addDailyReportAttachments(req.user.sub, +id, dto.attachments);
+  }
+
+  @Post('daily-reports/:id/attachments/:attachmentId/delete')
+  @UseGuards(AuthGuard('jwt'))
+  async removeDailyReportAttachment(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.service.removeDailyReportAttachment(req.user.sub, +id, +attachmentId);
+  }
+
   // ── Acceptance Reports ─────────────────────────────────────
   @Get('acceptance-reports')
   @UseGuards(AuthGuard('jwt'))

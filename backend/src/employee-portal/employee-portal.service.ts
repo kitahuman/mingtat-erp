@@ -986,7 +986,7 @@ export class EmployeePortalService {
       if (query.date_to) where.daily_report_date.lte = new Date(query.date_to);
     }
     const [data, total] = await Promise.all([
-      this.prisma.dailyReport.findMany({ where, include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } } }, orderBy: { daily_report_date: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.dailyReport.findMany({ where, include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } }, attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' } } }, orderBy: { daily_report_date: 'desc' }, skip: (page - 1) * limit, take: limit }),
       this.prisma.dailyReport.count({ where }),
     ]);
     return { data, total, page, limit };
@@ -996,7 +996,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
-    const report = await this.prisma.dailyReport.findUnique({ where: { id }, include: { project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } } } });
+    const report = await this.prisma.dailyReport.findUnique({ where: { id }, include: { project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } }, attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' } } } });
     if (!report) throw new BadRequestException('日報不存在');
     return report;
   }
@@ -1005,7 +1005,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
-    const { items, ...rd } = dto;
+    const { items, attachments, ...rd } = dto;
     return this.prisma.dailyReport.create({
       data: {
         daily_report_project_id: rd.project_id ? Number(rd.project_id) : null,
@@ -1023,8 +1023,9 @@ export class EmployeePortalService {
         daily_report_completed_work: rd.completed_work || null,
         daily_report_signature: rd.signature || null,
         items: items?.length ? { create: items.map((i: any, idx: number) => this.buildDailyReportItemData(i, idx)) } : undefined,
+        attachments: attachments?.length ? { create: attachments.map((a: any, idx: number) => ({ daily_report_attachment_file_name: a.file_name, daily_report_attachment_file_url: a.file_url, daily_report_attachment_file_type: a.file_type, daily_report_attachment_sort_order: idx })) } : undefined,
       },
-      include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } } },
+      include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } }, attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' } } },
     });
   }
 
@@ -1036,8 +1037,9 @@ export class EmployeePortalService {
     if (!existing) throw new BadRequestException('日報不存在');
     if (existing.daily_report_status === 'submitted') throw new BadRequestException('已提交的日報不可修改');
     if (existing.daily_report_created_by !== userId) throw new BadRequestException('只能修改自己建立的日報');
-    const { items, ...rd } = dto;
+    const { items, attachments, ...rd } = dto;
     await this.prisma.dailyReportItem.deleteMany({ where: { daily_report_item_report_id: id } });
+    await this.prisma.dailyReportAttachment.deleteMany({ where: { daily_report_attachment_report_id: id } });
     return this.prisma.dailyReport.update({
       where: { id },
       data: {
@@ -1055,8 +1057,9 @@ export class EmployeePortalService {
         daily_report_completed_work: rd.completed_work || null,
         daily_report_signature: rd.signature || null,
         items: items?.length ? { create: items.map((i: any, idx: number) => this.buildDailyReportItemData(i, idx)) } : undefined,
+        attachments: attachments?.length ? { create: attachments.map((a: any, idx: number) => ({ daily_report_attachment_file_name: a.file_name, daily_report_attachment_file_url: a.file_url, daily_report_attachment_file_type: a.file_type, daily_report_attachment_sort_order: idx })) } : undefined,
       },
-      include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } } },
+      include: { project: { select: { id: true, project_no: true, project_name: true } }, client: { select: { id: true, name: true } }, items: { orderBy: { daily_report_item_sort_order: 'asc' } }, attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' } } },
     });
   }
 
@@ -1067,6 +1070,37 @@ export class EmployeePortalService {
     if (existing.daily_report_created_by !== userId) throw new BadRequestException('只能刪除自己建立的日報');
     await this.prisma.dailyReport.delete({ where: { id } });
     return { success: true };
+  }
+
+  async addDailyReportAttachments(userId: number, id: number, attachments: { file_name: string; file_url: string; file_type: string }[]) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
+    const existing = await this.prisma.dailyReport.findUnique({ where: { id }, include: { attachments: true } });
+    if (!existing) throw new BadRequestException('日報不存在');
+    if (existing.daily_report_created_by !== userId) throw new BadRequestException('只能修改自己建立的日報');
+    const startOrder = existing.attachments.length;
+    await this.prisma.dailyReportAttachment.createMany({
+      data: attachments.map((a, idx) => ({
+        daily_report_attachment_report_id: id,
+        daily_report_attachment_file_name: a.file_name,
+        daily_report_attachment_file_url: a.file_url,
+        daily_report_attachment_file_type: a.file_type,
+        daily_report_attachment_sort_order: startOrder + idx,
+      })),
+    });
+    return this.getDailyReport(userId, id);
+  }
+
+  async removeDailyReportAttachment(userId: number, reportId: number, attachmentId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
+    const existing = await this.prisma.dailyReport.findUnique({ where: { id: reportId } });
+    if (!existing) throw new BadRequestException('日報不存在');
+    if (existing.daily_report_created_by !== userId) throw new BadRequestException('只能修改自己建立的日報');
+    await this.prisma.dailyReportAttachment.delete({ where: { id: attachmentId } });
+    return this.getDailyReport(userId, reportId);
   }
 
   // ── Acceptance Reports (工程收貨報告) ──────────────────────────────

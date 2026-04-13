@@ -119,6 +119,17 @@ export const employeePortalApi = {
     portalApi.post(`/employee-portal/daily-reports/${id}`, data),
   deleteDailyReport: (id: number) =>
     portalApi.post(`/employee-portal/daily-reports/${id}/delete`),
+  uploadDailyReportFile: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return portalApi.post('/employee-portal/daily-reports/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  addDailyReportAttachments: (id: number, attachments: { file_name: string; file_url: string; file_type: string }[]) =>
+    portalApi.post(`/employee-portal/daily-reports/${id}/attachments`, { attachments }),
+  removeDailyReportAttachment: (id: number, attachmentId: number) =>
+    portalApi.post(`/employee-portal/daily-reports/${id}/attachments/${attachmentId}/delete`),
 
   // Acceptance Reports
   getMyAcceptanceReports: (params?: any) =>

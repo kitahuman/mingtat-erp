@@ -3,15 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 import Combobox from '@/components/Combobox';
 import MultiSelectPopup from '@/components/MultiSelectPopup';
 import type { MultiSelectOption } from '@/components/MultiSelectPopup';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SignaturePad = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
+import SignaturePad from '@/components/SignatureCanvas';
+import type { SignatureCanvasRef } from '@/components/SignatureCanvas';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface DailyReportItem {
@@ -49,7 +47,7 @@ export default function DailyReportForm({ reportId }: Props) {
   const router = useRouter();
   const { t } = useI18n();
   const isEdit = !!reportId;
-  const sigRef = useRef<any>(null);
+  const sigRef = useRef<SignatureCanvasRef>(null);
 
   // Reference data
   const [projects, setProjects] = useState<any[]>([]);
@@ -80,6 +78,17 @@ export default function DailyReportForm({ reportId }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Attachments
+  interface AttachmentInfo {
+    id?: number;
+    file_name: string;
+    file_url: string;
+    file_type: string;
+  }
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Popup state
   const [popupConfig, setPopupConfig] = useState<{
@@ -150,6 +159,14 @@ export default function DailyReportForm({ reportId }: Props) {
           employee_ids: item.daily_report_item_employee_ids ? JSON.parse(item.daily_report_item_employee_ids) : [],
           vehicle_ids: item.daily_report_item_vehicle_ids ? JSON.parse(item.daily_report_item_vehicle_ids) : [],
           shift_quantity: item.daily_report_item_shift_quantity?.toString() || '',
+        })));
+      }
+      if (r.attachments?.length) {
+        setAttachments(r.attachments.map((a: any) => ({
+          id: a.id,
+          file_name: a.daily_report_attachment_file_name,
+          file_url: a.daily_report_attachment_file_url,
+          file_type: a.daily_report_attachment_file_type,
         })));
       }
       setIsSubmitted(r.daily_report_status === 'submitted');
@@ -233,8 +250,61 @@ export default function DailyReportForm({ reportId }: Props) {
       sublabel: `機械${m.tonnage ? ` ${m.tonnage}T` : ''}${m.type ? ` ${m.type}` : ''}`,
     })),
   ];
+  // ── File upload handlers ───────────────────────────────────────────
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      const newAttachments: AttachmentInfo[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const res = await employeePortalApi.uploadDailyReportFile(files[i]);
+        const d = res.data;
+        newAttachments.push({ file_name: d.file_name, file_url: d.url, file_type: d.file_type });
+      }
 
-  // ── Submit ───────────────────────────────────────────────────────
+      if (isEdit && isSubmitted) {
+        // For submitted reports, add attachments via dedicated endpoint
+        const res = await employeePortalApi.addDailyReportAttachments(reportId!, newAttachments);
+        const r = res.data;
+        setAttachments((r.attachments || []).map((a: any) => ({
+          id: a.id,
+          file_name: a.daily_report_attachment_file_name,
+          file_url: a.daily_report_attachment_file_url,
+          file_type: a.daily_report_attachment_file_type,
+        })));
+      } else {
+        setAttachments(prev => [...prev, ...newAttachments]);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '上傳失敗');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = async (idx: number) => {
+    const att = attachments[idx];
+    if (att.id && isEdit) {
+      try {
+        const res = await employeePortalApi.removeDailyReportAttachment(reportId!, att.id);
+        const r = res.data;
+        setAttachments((r.attachments || []).map((a: any) => ({
+          id: a.id,
+          file_name: a.daily_report_attachment_file_name,
+          file_url: a.daily_report_attachment_file_url,
+          file_type: a.daily_report_attachment_file_type,
+        })));
+      } catch (err: any) {
+        alert(err.response?.data?.message || '刪除失敗');
+      }
+    } else {
+      setAttachments(prev => prev.filter((_, i) => i !== idx));
+    }
+  };
+
+  // ── Submit ─────────────────────────────────────────────────────────
   const handleSubmit = async (status: 'draft' | 'submitted') => {
     if (!form.report_date) {
       alert('請填寫日期');
@@ -255,6 +325,7 @@ export default function DailyReportForm({ reportId }: Props) {
         signature,
         status,
         items: items.filter(i => i.content.trim() || i.worker_type || i.employee_ids.length > 0 || i.vehicle_ids.length > 0),
+        attachments: attachments.map(a => ({ file_name: a.file_name, file_url: a.file_url, file_type: a.file_type })),
       };
       if (isEdit) {
         await employeePortalApi.updateDailyReport(reportId, payload);
@@ -268,7 +339,6 @@ export default function DailyReportForm({ reportId }: Props) {
       setSubmitting(false);
     }
   };
-
   const handleDelete = async () => {
     if (!confirm('確定要刪除此日報嗎？')) return;
     try {
@@ -669,7 +739,63 @@ export default function DailyReportForm({ reportId }: Props) {
         />
       </div>
 
-      {/* ── Signature ─────────────────────────────────────────────── */}
+      {/* ── Attachments ───────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-700 text-sm">附件 / 相片</h2>
+          <span className="text-xs text-gray-400">{attachments.length} 個檔案</span>
+        </div>
+
+        {/* Attachment list */}
+        {attachments.length > 0 && (
+          <div className="space-y-2">
+            {attachments.map((att, idx) => (
+              <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
+                {att.file_type?.startsWith('image/') ? (
+                  <img src={att.file_url} alt={att.file_name} className="w-12 h-12 object-cover rounded-lg border" />
+                ) : (
+                  <div className="w-12 h-12 flex items-center justify-center bg-blue-100 rounded-lg text-blue-600 text-xs font-bold">
+                    {att.file_type?.split('/').pop()?.toUpperCase() || 'FILE'}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-700 truncate">{att.file_name}</p>
+                  <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500">查看</a>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(idx)}
+                  className="text-red-400 hover:text-red-600 text-lg px-1"
+                  title="刪除"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload button */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-50"
+          >
+            {uploading ? '上傳中...' : '+ 點此上傳相片/檔案'}
+          </button>
+        </div>
+      </div>
+      {/* ── Signature ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-2">
         <h2 className="font-bold text-gray-700 text-sm">簽收</h2>
         {isSubmitted && form.signature ? (

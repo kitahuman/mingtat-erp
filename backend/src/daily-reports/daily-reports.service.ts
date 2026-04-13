@@ -10,6 +10,7 @@ export class DailyReportsService {
     client: { select: { id: true, name: true } },
     creator: { select: { id: true, displayName: true } },
     items: { orderBy: { daily_report_item_sort_order: 'asc' as const } },
+    attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' as const } },
   };
 
   async findAll(query: any) {
@@ -97,12 +98,20 @@ export class DailyReportsService {
   }
 
   async create(userId: number, dto: any) {
-    const { items, ...rd } = dto;
+    const { items, attachments, ...rd } = dto;
     const report = await this.prisma.dailyReport.create({
       data: {
         ...this.buildReportData(rd, userId),
         items: items?.length ? {
           create: items.map((item: any, idx: number) => this.buildItemData(item, idx)),
+        } : undefined,
+        attachments: attachments?.length ? {
+          create: attachments.map((a: any, idx: number) => ({
+            daily_report_attachment_file_name: a.file_name,
+            daily_report_attachment_file_url: a.file_url,
+            daily_report_attachment_file_type: a.file_type,
+            daily_report_attachment_sort_order: idx,
+          })),
         } : undefined,
       },
       include: this.includeAll,
@@ -117,9 +126,10 @@ export class DailyReportsService {
       throw new BadRequestException('已提交的日報不可修改');
     }
 
-    const { items, ...rd } = dto;
+    const { items, attachments, ...rd } = dto;
 
     await this.prisma.dailyReportItem.deleteMany({ where: { daily_report_item_report_id: id } });
+    await this.prisma.dailyReportAttachment.deleteMany({ where: { daily_report_attachment_report_id: id } });
 
     const data: any = {
       daily_report_project_id: rd.project_id ? Number(rd.project_id) : null,
@@ -141,12 +151,54 @@ export class DailyReportsService {
       data.items = { create: items.map((item: any, idx: number) => this.buildItemData(item, idx)) };
     }
 
+    if (attachments?.length) {
+      data.attachments = {
+        create: attachments.map((a: any, idx: number) => ({
+          daily_report_attachment_file_name: a.file_name,
+          daily_report_attachment_file_url: a.file_url,
+          daily_report_attachment_file_type: a.file_type,
+          daily_report_attachment_sort_order: idx,
+        })),
+      };
+    }
+
     const report = await this.prisma.dailyReport.update({
       where: { id },
       data,
       include: this.includeAll,
     });
     return report;
+  }
+
+  // ── Add attachments (works even after submission) ───────────────
+  async addAttachments(id: number, userId: number, attachments: { file_name: string; file_url: string; file_type: string }[]) {
+    const existing = await this.prisma.dailyReport.findUnique({
+      where: { id },
+      include: { attachments: true },
+    });
+    if (!existing) throw new NotFoundException('日報不存在');
+
+    const startOrder = existing.attachments.length;
+    await this.prisma.dailyReportAttachment.createMany({
+      data: attachments.map((a, idx) => ({
+        daily_report_attachment_report_id: id,
+        daily_report_attachment_file_name: a.file_name,
+        daily_report_attachment_file_url: a.file_url,
+        daily_report_attachment_file_type: a.file_type,
+        daily_report_attachment_sort_order: startOrder + idx,
+      })),
+    });
+
+    return this.findOne(id);
+  }
+
+  // ── Remove single attachment ────────────────────────────────────
+  async removeAttachment(reportId: number, attachmentId: number, userId: number) {
+    const existing = await this.prisma.dailyReport.findUnique({ where: { id: reportId } });
+    if (!existing) throw new NotFoundException('日報不存在');
+
+    await this.prisma.dailyReportAttachment.delete({ where: { id: attachmentId } });
+    return this.findOne(reportId);
   }
 
   async remove(id: number) {
@@ -170,6 +222,7 @@ export class DailyReportsService {
         include: {
           creator: { select: { id: true, displayName: true } },
           items: { orderBy: { daily_report_item_sort_order: 'asc' } },
+          attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' } },
         },
         orderBy: { daily_report_date: 'desc' },
         skip: (page - 1) * limit,
