@@ -847,17 +847,322 @@ function WhatsAppFeedTab({ messages, onRefresh }: { messages: any[]; onRefresh: 
   );
 }
 
-type TabId = 'work' | 'alerts' | 'financial' | 'whatsapp';
+// ════════════════════════════════════════════════════════════════
+// Tab 5: 打卡總覽
+// ════════════════════════════════════════════════════════════════
+
+const TYPE_LABELS: Record<string, string> = {
+  clock_in: '開工',
+  clock_out: '收工',
+};
+
+const TYPE_BADGE_STYLE: Record<string, string> = {
+  clock_in: 'bg-green-100 text-green-800 border border-green-200',
+  clock_out: 'bg-blue-100 text-blue-800 border border-blue-200',
+};
+
+function formatHKTTime(ts: any): string {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  return d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Hong_Kong' });
+}
+
+function formatMinutes(m: number): string {
+  if (m < 60) return `${m} 分鐘`;
+  const h = Math.floor(m / 60);
+  const mins = m % 60;
+  return mins > 0 ? `${h} 小時 ${mins} 分鐘` : `${h} 小時`;
+}
+
+function AttendanceTab({ data, onRefresh }: { data: any; onRefresh: () => void }) {
+  const summary = data?.summary || {};
+  const records = data?.records || [];
+  const notClockedIn = data?.not_clocked_in || [];
+  const lateRecords = data?.late_records || [];
+  const earlyLeaveRecords = data?.early_leave_records || [];
+
+  const [showSection, setShowSection] = useState<'records' | 'not_clocked' | 'late' | 'early'>('records');
+
+  const clockedInPct = summary.total_active_employees > 0
+    ? Math.round((summary.clocked_in_count / summary.total_active_employees) * 100)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* 標題列 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">今日打卡總覽</h2>
+          <p className="text-sm text-gray-500 mt-0.5">共 {summary.total_records || 0} 筆打卡記錄</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/attendances" className="text-sm text-primary-600 hover:underline">查看全部打卡記錄</Link>
+          <button
+            onClick={onRefresh}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            刷新
+          </button>
+        </div>
+      </div>
+
+      {/* 統計卡片 */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="card hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">在職員工數</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{summary.total_active_employees ?? 0}</p>
+            </div>
+            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </div>
+          </div>
+        </div>
+        <button onClick={() => setShowSection('records')} className={`card hover:shadow-md transition-shadow text-left ${showSection === 'records' ? 'ring-2 ring-green-500' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">已打卡</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{summary.clocked_in_count ?? 0}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{clockedInPct}%</p>
+            </div>
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-green-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+        </button>
+        <button onClick={() => setShowSection('not_clocked')} className={`card hover:shadow-md transition-shadow text-left ${showSection === 'not_clocked' ? 'ring-2 ring-red-500' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">未打卡</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">{summary.not_clocked_in_count ?? 0}</p>
+            </div>
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+        </button>
+        <button onClick={() => setShowSection('late')} className={`card hover:shadow-md transition-shadow text-left ${showSection === 'late' ? 'ring-2 ring-orange-500' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">遲到</p>
+              <p className="text-2xl font-bold text-orange-600 mt-1">{summary.late_count ?? 0}</p>
+            </div>
+            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+        </button>
+        <button onClick={() => setShowSection('early')} className={`card hover:shadow-md transition-shadow text-left ${showSection === 'early' ? 'ring-2 ring-purple-500' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">早退</p>
+              <p className="text-2xl font-bold text-purple-600 mt-1">{summary.early_leave_count ?? 0}</p>
+            </div>
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* 打卡率進度條 */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">今日打卡率</span>
+          <span className="text-sm font-bold text-gray-900">{clockedInPct}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div
+            className={`h-3 rounded-full transition-all duration-500 ${
+              clockedInPct >= 80 ? 'bg-green-500' : clockedInPct >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+            }`}
+            style={{ width: `${clockedInPct}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-1 text-xs text-gray-400">
+          <span>已打卡 {summary.clocked_in_count ?? 0} 人</span>
+          <span>未打卡 {summary.not_clocked_in_count ?? 0} 人</span>
+        </div>
+      </div>
+
+      {/* 動態內容區域 */}
+      {showSection === 'records' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">今日打卡記錄</h3>
+            <span className="text-sm text-gray-500">共 {records.length} 筆</span>
+          </div>
+          {records.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left">
+                    <th className="pb-3 pr-4 font-medium text-gray-500">員工</th>
+                    <th className="pb-3 pr-4 font-medium text-gray-500">類型</th>
+                    <th className="pb-3 pr-4 font-medium text-gray-500">時間</th>
+                    <th className="pb-3 pr-4 font-medium text-gray-500">地點</th>
+                    <th className="pb-3 font-medium text-gray-500">備註</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {records.map((rec: any) => (
+                    <tr key={rec.id} className="hover:bg-gray-50">
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-xs font-bold flex-shrink-0">
+                            {rec.name_zh?.[0] || '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{rec.name_zh}</p>
+                            <p className="text-xs text-gray-400 truncate">{rec.emp_code || ''} {rec.company_name ? `· ${rec.company_name}` : ''}{rec.is_temporary ? ' · 臨時工' : ''}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_STYLE[rec.type] || 'bg-gray-100 text-gray-700'}`}>
+                          {TYPE_LABELS[rec.type] || rec.type}
+                          {rec.is_mid_shift && ' (中直)'}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatHKTTime(rec.timestamp)}</td>
+                      <td className="py-3 pr-4">
+                        <p className="text-gray-600 truncate max-w-[200px]" title={rec.address || ''}>
+                          {rec.address || '-'}
+                        </p>
+                      </td>
+                      <td className="py-3 text-gray-500 truncate max-w-[150px]">{rec.work_notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-4xl mb-3">⏰</p>
+              <p>今日尚無打卡記錄</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showSection === 'not_clocked' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">未打卡員工</h3>
+            <span className="text-sm text-gray-500">共 {notClockedIn.length} 人</span>
+          </div>
+          {notClockedIn.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {notClockedIn.map((emp: any) => (
+                <Link key={emp.id} href={`/employees/${emp.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100 hover:bg-red-100 transition-colors">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-sm font-bold flex-shrink-0">
+                    {emp.name_zh?.[0] || '?'}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{emp.name_zh}</p>
+                    <p className="text-xs text-gray-500 truncate">{emp.role_title || roleLabels[emp.role] || emp.role} {emp.company_name ? `· ${emp.company_name}` : ''}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">所有員工已打卡</p>
+          )}
+        </div>
+      )}
+
+      {showSection === 'late' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">遲到記錄</h3>
+            <span className="text-xs text-gray-400">標準開工時間：08:00</span>
+          </div>
+          {lateRecords.length > 0 ? (
+            <div className="space-y-2">
+              {lateRecords.map((rec: any) => (
+                <div key={rec.employee_id} className="flex items-center justify-between p-3 rounded-lg bg-orange-50 border border-orange-200">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 text-sm font-bold flex-shrink-0">
+                      {rec.name_zh?.[0] || '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{rec.name_zh}</p>
+                      <p className="text-xs text-gray-500">{rec.role_title || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 ml-2 flex-shrink-0">
+                    <span className="text-sm text-gray-700">開工: {formatHKTTime(rec.clock_in_time)}</span>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-orange-100 text-orange-800">
+                      遲到 {formatMinutes(rec.minutes_late)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">今日無人遲到</p>
+          )}
+        </div>
+      )}
+
+      {showSection === 'early' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">早退記錄</h3>
+            <span className="text-xs text-gray-400">標準收工時間：18:00</span>
+          </div>
+          {earlyLeaveRecords.length > 0 ? (
+            <div className="space-y-2">
+              {earlyLeaveRecords.map((rec: any) => (
+                <div key={rec.employee_id} className="flex items-center justify-between p-3 rounded-lg bg-purple-50 border border-purple-200">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 text-sm font-bold flex-shrink-0">
+                      {rec.name_zh?.[0] || '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{rec.name_zh}</p>
+                      <p className="text-xs text-gray-500">{rec.role_title || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 ml-2 flex-shrink-0">
+                    <span className="text-sm text-gray-700">收工: {formatHKTTime(rec.clock_out_time)}</span>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-purple-100 text-purple-800">
+                      早退 {formatMinutes(rec.minutes_early)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">今日無人早退</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// 主頁面
+// ════════════════════════════════════════════════════════════════
+
+type TabId = 'work' | 'alerts' | 'financial' | 'whatsapp' | 'attendance';
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabId>('work');
   const [workData, setWorkData] = useState<any>(null);
   const [alertsData, setAlertsData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
   const [feedMessages, setFeedMessages] = useState<any[]>([]);
+  const [attendanceData, setAttendanceData] = useState<any>(null);
   const [loadingWork, setLoadingWork] = useState(true);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [loadingFinancial, setLoadingFinancial] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(true);
+  const [loadingAttendance, setLoadingAttendance] = useState(true);
 
   const loadFeed = () => {
     setLoadingFeed(true);
@@ -865,6 +1170,14 @@ export default function DashboardPage() {
       .then(res => setFeedMessages(res.data || []))
       .catch(() => setFeedMessages([]))
       .finally(() => setLoadingFeed(false));
+  };
+
+  const loadAttendance = () => {
+    setLoadingAttendance(true);
+    dashboardApi.attendanceSummary()
+      .then(res => setAttendanceData(res.data))
+      .catch(() => setAttendanceData({}))
+      .finally(() => setLoadingAttendance(false));
   };
 
   // 並行載入所有 tab 數據
@@ -885,7 +1198,8 @@ export default function DashboardPage() {
       .finally(() => setLoadingFinancial(false));
 
     loadFeed();
-  }, []);;
+    loadAttendance();
+  }, []);
 
   // MPF 標記已申請
   const handleMpfApplied = async (employeeId: number) => {
@@ -906,6 +1220,7 @@ export default function DashboardPage() {
   };
 
   const alertTotalCount = alertsData?.summary?.total ?? 0;
+  const attendanceTotalRecords = attendanceData?.summary?.total_records ?? 0;
 
   return (
     <div>
@@ -922,6 +1237,12 @@ export default function DashboardPage() {
             active={activeTab === 'work'}
             onClick={() => setActiveTab('work')}
             label="工作狀況"
+          />
+          <TabButton
+            active={activeTab === 'attendance'}
+            onClick={() => setActiveTab('attendance')}
+            label="打卡總覽"
+            badge={loadingAttendance ? undefined : attendanceTotalRecords}
           />
           <TabButton
             active={activeTab === 'alerts'}
@@ -948,6 +1269,11 @@ export default function DashboardPage() {
         loadingWork
           ? <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
           : <WorkStatusTab data={workData} />
+      )}
+      {activeTab === 'attendance' && (
+        loadingAttendance
+          ? <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+          : <AttendanceTab data={attendanceData} onRefresh={loadAttendance} />
       )}
       {activeTab === 'alerts' && (
         loadingAlerts

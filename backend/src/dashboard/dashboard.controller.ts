@@ -36,4 +36,10 @@ export class DashboardController {
   getWhatsappFeed() {
     return this.service.getWhatsappFeed();
   }
+
+  // Tab 5: 打卡總覽
+  @Get('attendance-summary')
+  getAttendanceSummary() {
+    return this.service.getAttendanceSummary();
+  }
 }

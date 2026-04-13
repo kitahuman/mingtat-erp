@@ -649,8 +649,218 @@ export class DashboardService {
   }
 
   // ════════════════════════════════════════════════════════════
-  // WhatsApp 報工訊息即時 feed
+  // Tab 5: 打卡總覽
   // ════════════════════════════════════════════════════════════
+
+  private getHKTDayRange(): { start: Date; end: Date } {
+    const now = new Date();
+    const hktOffset = 8 * 60;
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const hktMs = utcMs + hktOffset * 60000;
+    const hktNow = new Date(hktMs);
+    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
+    const start = new Date(hktDayStart.getTime() - hktOffset * 60000);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, end };
+  }
+
+  private toHKTDate(d: Date): Date {
+    const hktOffset = 8 * 60;
+    const utcMs = d.getTime() + d.getTimezoneOffset() * 60000;
+    return new Date(utcMs + hktOffset * 60000);
+  }
+
+  async getAttendanceSummary() {
+    const { start: todayStart, end: todayEnd } = this.getHKTDayRange();
+
+    // ── 今天所有打卡記錄 ─────────────────────────────────────
+    const todayRecords = await this.prisma.employeeAttendance.findMany({
+      where: {
+        timestamp: { gte: todayStart, lt: todayEnd },
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name_zh: true,
+            name_en: true,
+            emp_code: true,
+            role: true,
+            role_title: true,
+            employee_is_temporary: true,
+            company: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    // ── 所有在職員工（非臨時工）─────────────────────────────
+    const activeEmployees = await this.prisma.employee.findMany({
+      where: {
+        status: 'active',
+        employee_is_temporary: false,
+        deleted_at: null,
+      },
+      select: {
+        id: true,
+        name_zh: true,
+        name_en: true,
+        emp_code: true,
+        role: true,
+        role_title: true,
+        company: { select: { id: true, name: true } },
+      },
+    });
+
+    // ── 統計已打卡/未打卡 ────────────────────────────────────
+    const clockedInEmployeeIds = new Set<number>();
+    for (const rec of todayRecords) {
+      clockedInEmployeeIds.add(rec.employee_id);
+    }
+
+    const totalActive = activeEmployees.length;
+    const clockedInCount = activeEmployees.filter((e) => clockedInEmployeeIds.has(e.id)).length;
+    const notClockedInCount = totalActive - clockedInCount;
+
+    // 未打卡員工列表
+    const notClockedIn = activeEmployees
+      .filter((e) => !clockedInEmployeeIds.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        name_zh: e.name_zh,
+        name_en: e.name_en,
+        emp_code: e.emp_code,
+        role: e.role,
+        role_title: e.role_title,
+        company_name: e.company?.name || '',
+      }));
+
+    // ── 遲到/早退統計 ────────────────────────────────────────
+    // 規則：開工 clock_in 在 HKT 08:00 之後算遲到
+    //       收工 clock_out 在 HKT 18:00 之前算早退
+    const LATE_HOUR = 8;
+    const LATE_MINUTE = 0;
+    const EARLY_HOUR = 18;
+    const EARLY_MINUTE = 0;
+
+    const lateRecords: Array<{
+      employee_id: number;
+      name_zh: string;
+      emp_code: string | null;
+      role_title: string | null;
+      company_name: string;
+      clock_in_time: string;
+      minutes_late: number;
+    }> = [];
+
+    const earlyLeaveRecords: Array<{
+      employee_id: number;
+      name_zh: string;
+      emp_code: string | null;
+      role_title: string | null;
+      company_name: string;
+      clock_out_time: string;
+      minutes_early: number;
+    }> = [];
+
+    // 每位員工的第一筆 clock_in 和最後一筆 clock_out
+    const firstClockIn = new Map<number, typeof todayRecords[0]>();
+    const lastClockOut = new Map<number, typeof todayRecords[0]>();
+
+    // todayRecords 已按 timestamp desc 排序
+    for (const rec of todayRecords) {
+      if (rec.type === 'clock_in') {
+        // 取最早的 clock_in（因為 desc 排序，後面的更早）
+        firstClockIn.set(rec.employee_id, rec);
+      }
+      if (rec.type === 'clock_out') {
+        // 取最晚的 clock_out（因為 desc 排序，第一筆就是最晚的）
+        if (!lastClockOut.has(rec.employee_id)) {
+          lastClockOut.set(rec.employee_id, rec);
+        }
+      }
+    }
+
+    for (const [empId, rec] of firstClockIn) {
+      const hktTime = this.toHKTDate(new Date(rec.timestamp));
+      const lateThreshold = LATE_HOUR * 60 + LATE_MINUTE;
+      const actualMinutes = hktTime.getHours() * 60 + hktTime.getMinutes();
+      if (actualMinutes > lateThreshold) {
+        lateRecords.push({
+          employee_id: empId,
+          name_zh: rec.employee?.name_zh || '',
+          emp_code: rec.employee?.emp_code || null,
+          role_title: rec.employee?.role_title || null,
+          company_name: rec.employee?.company?.name || '',
+          clock_in_time: rec.timestamp.toISOString(),
+          minutes_late: actualMinutes - lateThreshold,
+        });
+      }
+    }
+
+    for (const [empId, rec] of lastClockOut) {
+      // 只計算非中直的 clock_out
+      if (rec.is_mid_shift) continue;
+      const hktTime = this.toHKTDate(new Date(rec.timestamp));
+      const earlyThreshold = EARLY_HOUR * 60 + EARLY_MINUTE;
+      const actualMinutes = hktTime.getHours() * 60 + hktTime.getMinutes();
+      if (actualMinutes < earlyThreshold) {
+        earlyLeaveRecords.push({
+          employee_id: empId,
+          name_zh: rec.employee?.name_zh || '',
+          emp_code: rec.employee?.emp_code || null,
+          role_title: rec.employee?.role_title || null,
+          company_name: rec.employee?.company?.name || '',
+          clock_out_time: rec.timestamp.toISOString(),
+          minutes_early: earlyThreshold - actualMinutes,
+        });
+      }
+    }
+
+    // 排序：遲到最多的排前面
+    lateRecords.sort((a, b) => b.minutes_late - a.minutes_late);
+    earlyLeaveRecords.sort((a, b) => b.minutes_early - a.minutes_early);
+
+    // ── 打卡記錄列表（不含 photo base64 以減少傳輸量）────────
+    const records = todayRecords.map((rec) => ({
+      id: rec.id,
+      employee_id: rec.employee_id,
+      name_zh: rec.employee?.name_zh || '',
+      name_en: rec.employee?.name_en || '',
+      emp_code: rec.employee?.emp_code || '',
+      role_title: rec.employee?.role_title || '',
+      is_temporary: rec.employee?.employee_is_temporary || false,
+      company_name: rec.employee?.company?.name || '',
+      type: rec.type,
+      timestamp: rec.timestamp,
+      address: rec.address,
+      latitude: rec.latitude,
+      longitude: rec.longitude,
+      is_mid_shift: rec.is_mid_shift,
+      work_notes: rec.work_notes,
+      verification_method: rec.attendance_verification_method,
+    }));
+
+    return {
+      records,
+      summary: {
+        total_records: todayRecords.length,
+        total_active_employees: totalActive,
+        clocked_in_count: clockedInCount,
+        not_clocked_in_count: notClockedInCount,
+        late_count: lateRecords.length,
+        early_leave_count: earlyLeaveRecords.length,
+      },
+      not_clocked_in: notClockedIn,
+      late_records: lateRecords,
+      early_leave_records: earlyLeaveRecords,
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // WhatsApp 報工訊息即時 feed
+  // ════════════════════════════════════════════════════════════════════
   async getWhatsappFeed() {
     const CLOCKIN_GROUPS = [
       '120363278016234111@g.us',
