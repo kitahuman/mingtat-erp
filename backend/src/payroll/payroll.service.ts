@@ -1363,6 +1363,7 @@ export class PayrollService {
       'service_type', 'scheduled_date', 'day_night', 'start_location', 'end_location',
       'machine_type', 'tonnage', 'equipment_number', 'quantity', 'unit',
       'ot_quantity', 'ot_unit', 'is_mid_shift', 'remarks', 'client_name', 'client_contract_no',
+      'payroll_work_log_product_name', 'payroll_work_log_product_unit',
     ];
 
     const updateData: any = { is_modified: true };

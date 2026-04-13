@@ -1,7 +1,7 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { payrollApi } from '@/lib/api';
+import { payrollApi, fieldOptionsApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
@@ -32,8 +32,126 @@ const TAB_LABELS: Record<TabKey, string> = {
   print: '列印預覽',
 };
 
-// ─── Grouped Settlement View ──────────────────────────────────
-function GroupedSettlementView({ groups }: { groups: any[] }) {
+// ─── Inline Edit Cell Component ────────────────────────────────────────────
+function InlineEditCell({
+  value,
+  field,
+  payrollId,
+  pwlId,
+  editable,
+  type = 'text',
+  options,
+  align = 'left',
+  onSaved,
+  display,
+}: {
+  value: any;
+  field: string;
+  payrollId: number;
+  pwlId: number;
+  editable: boolean;
+  type?: 'text' | 'number' | 'select' | 'checkbox';
+  options?: { value: string; label: string }[];
+  align?: 'left' | 'right' | 'center';
+  onSaved: () => void;
+  display?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState(value ?? '');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+
+  useEffect(() => { setLocalVal(value ?? ''); }, [value]);
+
+  const save = async (newVal: any) => {
+    if (newVal === (value ?? '')) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      const sendVal = type === 'number' ? (newVal === '' ? null : Number(newVal)) : (type === 'checkbox' ? Boolean(newVal) : (newVal || null));
+      await payrollApi.updateWorkLog(payrollId, pwlId, { [field]: sendVal });
+      onSaved();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新失敗');
+    }
+    setSaving(false);
+    setEditing(false);
+  };
+
+  if (type === 'checkbox') {
+    return (
+      <td className="px-2 py-1.5 text-center">
+        {editable ? (
+          <input
+            type="checkbox"
+            checked={!!localVal}
+            onChange={async (e) => {
+              const newVal = e.target.checked;
+              setLocalVal(newVal);
+              await save(newVal);
+            }}
+            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+          />
+        ) : (
+          value ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>
+        )}
+      </td>
+    );
+  }
+
+  const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+  if (!editable || !editing) {
+    const displayText = display || (value != null && value !== '' ? String(value) : '—');
+    return (
+      <td
+        className={`px-2 py-1.5 whitespace-nowrap ${alignClass} ${type === 'number' ? 'font-mono' : ''} ${editable ? 'cursor-pointer hover:bg-blue-50 group' : ''}`}
+        onClick={() => editable && setEditing(true)}
+        title={editable ? '點擊編輯' : undefined}
+      >
+        <span className={saving ? 'opacity-50' : ''}>{displayText}</span>
+        {editable && <span className="ml-1 text-blue-400 opacity-0 group-hover:opacity-100 text-[10px]">✏</span>}
+      </td>
+    );
+  }
+
+  // Editing mode
+  if (type === 'select' && options) {
+    return (
+      <td className={`px-1 py-0.5 ${alignClass}`}>
+        <select
+          ref={inputRef as any}
+          value={localVal}
+          onChange={(e) => { setLocalVal(e.target.value); save(e.target.value); }}
+          onBlur={() => setEditing(false)}
+          autoFocus
+          className="w-full text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50"
+        >
+          <option value="">—</option>
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </td>
+    );
+  }
+
+  return (
+    <td className={`px-1 py-0.5 ${alignClass}`}>
+      <input
+        ref={inputRef as any}
+        type={type === 'number' ? 'number' : 'text'}
+        step={type === 'number' ? '0.01' : undefined}
+        value={localVal}
+        onChange={(e) => setLocalVal(e.target.value)}
+        onBlur={() => save(localVal)}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(localVal); if (e.key === 'Escape') { setLocalVal(value ?? ''); setEditing(false); } }}
+        autoFocus
+        className={`w-full text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 ${type === 'number' ? 'font-mono text-right' : ''}`}
+        style={{ minWidth: type === 'number' ? '60px' : '80px' }}
+      />
+    </td>
+  );
+}
+
+// ─── Grouped Settlement View ──────────────────────────────────────────────────function GroupedSettlementView({ groups }: { groups: any[] }) {
   if (!groups || groups.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
   }
@@ -380,6 +498,11 @@ export default function PayrollDetailPage() {
   const [editForm, setEditForm] = useState<any>({});
   const [editSaving, setEditSaving] = useState(false);
 
+  // Field options for inline editing dropdowns
+  const [unitOptions, setUnitOptions] = useState<{ value: string; label: string }[]>([]);
+  const [productUnitOptions, setProductUnitOptions] = useState<{ value: string; label: string }[]>([]);
+  const [serviceTypeOptions, setServiceTypeOptions] = useState<{ value: string; label: string }[]>([]);
+
   const loadData = async () => {
     try {
       const res = await payrollApi.get(Number(params.id));
@@ -392,7 +515,18 @@ export default function PayrollDetailPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [params.id]);
+  const loadFieldOptions = async () => {
+    try {
+      const res = await fieldOptionsApi.getAll();
+      const opts = res.data || [];
+      const toOptions = (cat: string) => opts.filter((o: any) => o.category === cat && o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
+      setUnitOptions(toOptions('unit'));
+      setProductUnitOptions(toOptions('product_unit'));
+      setServiceTypeOptions(toOptions('service_type'));
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { loadData(); loadFieldOptions(); }, [params.id]);
 
   const handleConfirm = async () => {
     if (!confirm('確定要確認此糧單？確認後將自動產生薪資支出記錄。')) return;
@@ -725,6 +859,8 @@ export default function PayrollDetailPage() {
                     <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">OT數量</th>
                     <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">OT單位</th>
                     <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">中直</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">商品名稱</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">商品單位</th>
                     <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">單價</th>
                     <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">小計</th>
                     <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -733,34 +869,36 @@ export default function PayrollDetailPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {pwls.map((pwl: any) => {
                     const isExcluded = pwl.is_excluded;
+                    const canEdit = isDraft && !isExcluded;
                     const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
                     const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
                     const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
                     const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
                     const totalLineAmount = baseLineAmount + otLineAmount + midShiftLineAmount;
+                    const dayNightOptions = [{ value: '日', label: '日' }, { value: '夜', label: '夜' }, { value: '中直', label: '中直' }];
 
                     return (
                       <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'hover:bg-gray-50'}`}>
                         <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{fmtDate(pwl.scheduled_date)}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.service_type || '—'}</td>
+                        <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} display={fmtDate(pwl.scheduled_date)} />
+                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={serviceTypeOptions} onSaved={loadData} />
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.company_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap truncate max-w-[120px]" title={pwl.client_name}>{pwl.client_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.quotation_no || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.client_contract_no || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.tonnage || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.machine_type || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.equipment_number || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.day_night || '—'}</td>
-                        <td className="px-2 py-1.5 truncate max-w-[100px]" title={pwl.start_location}>{pwl.start_location || '—'}</td>
-                        <td className="px-2 py-1.5 truncate max-w-[100px]" title={pwl.end_location}>{pwl.end_location || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">{pwl.quantity ?? '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.unit || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">{pwl.ot_quantity ?? '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.ot_unit || '—'}</td>
-                        <td className="px-2 py-1.5 text-center">
-                          {pwl.is_mid_shift ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}
-                        </td>
+                        <InlineEditCell value={pwl.client_contract_no} field="client_contract_no" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.equipment_number} field="equipment_number" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={dayNightOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.quantity} field="quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
+                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={unitOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.ot_quantity} field="ot_quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
+                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={unitOptions} onSaved={loadData} />
+                        <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={loadData} />
+                        <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
+                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={productUnitOptions} onSaved={loadData} />
                         <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">
                           {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : '—'}
                         </td>
@@ -775,14 +913,9 @@ export default function PayrollDetailPage() {
                                   🔄
                                 </button>
                               ) : (
-                                <>
-                                  <button onClick={() => openEditWorkLog(pwl)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="編輯">
-                                    ✏️
-                                  </button>
-                                  <button onClick={() => handleExcludeWorkLog(pwl.id)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="移除">
-                                    🗑️
-                                  </button>
-                                </>
+                                <button onClick={() => handleExcludeWorkLog(pwl.id)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="移除">
+                                  🗑️
+                                </button>
                               )}
                             </div>
                           )}
