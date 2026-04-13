@@ -122,8 +122,21 @@ export class PayrollService {
     // Build available allowance options from salary setting
     const allowanceOptions = this.buildAllowanceOptions(salarySetting);
 
+    // Calculate gross_amount (sum of positive items) and deduction_total (sum of negative items)
+    const items = payroll.items || [];
+    const grossAmount = items.reduce((sum: number, item: any) => {
+      const amt = Number(item.amount);
+      return sum + (amt > 0 ? amt : 0);
+    }, 0);
+    const deductionTotal = items.reduce((sum: number, item: any) => {
+      const amt = Number(item.amount);
+      return sum + (amt < 0 ? amt : 0);
+    }, 0);
+
     return {
       ...payroll,
+      gross_amount: grossAmount,
+      deduction_total: deductionTotal,
       payroll_work_logs: pwls,
       grouped_settlement: grouped,
       daily_calculation: dailyCalc,

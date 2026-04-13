@@ -190,7 +190,7 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
                 <td className="px-3 py-2 text-right font-mono">
                   {hasPrice ? `$${Number(g.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
                 </td>
-                <td className="px-3 py-2 text-right font-mono">{g.count}車</td>
+                <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}車</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">
                   {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
                 </td>
@@ -453,7 +453,7 @@ function PrintGroupedSettlement({ groups }: { groups: any[] }) {
                 <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>
                   {hasPrice ? `$${Number(g.matched_rate).toLocaleString()}` : '未設定'}
                 </td>
-                <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>{g.count}車</td>
+                <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>{Number(g.total_quantity)}車</td>
                 <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
                   {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : '未設定'}
                 </td>
