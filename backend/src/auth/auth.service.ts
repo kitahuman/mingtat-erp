@@ -12,7 +12,11 @@ export class AuthService {
   ) {}
 
   async login(username: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    // 先用 username 查找，找不到再用 phone 查找
+    let user = await this.prisma.user.findUnique({ where: { username } });
+    if (!user) {
+      user = await this.prisma.user.findFirst({ where: { phone: username } });
+    }
     if (!user || !user.isActive) {
       throw new UnauthorizedException('帳號或密碼錯誤');
     }

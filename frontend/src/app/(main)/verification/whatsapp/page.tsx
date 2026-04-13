@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { verificationApi } from '@/lib/api';
 
 // ══════════════════════════════════════════════════════════════
@@ -609,12 +609,13 @@ function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
 // 機械調配表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
+function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, setEditForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
   editingId: number | null;
   editForm: EditingItem | null;
+  setEditForm: React.Dispatch<React.SetStateAction<EditingItem | null>>;
   onStartEdit: (item: SummaryItem) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -657,14 +658,14 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                   <tr key={item.id} className="border-b bg-blue-50/50">
                     <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
                     <td className="px-3 py-2">
-                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => setEditForm((prev) => prev ? { ...prev, is_suspended: v } : prev)} label="暫停" />
                     </td>
-                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => { editForm.location = v; }} placeholder="地點" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.machine_code} onChange={(v) => { editForm.machine_code = v; }} placeholder="DC編號" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="操作員" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="工作描述" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => setEditForm((prev) => prev ? { ...prev, contract_no: v } : prev)} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => setEditForm((prev) => prev ? { ...prev, location: v } : prev)} placeholder="地點" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.machine_code} onChange={(v) => setEditForm((prev) => prev ? { ...prev, machine_code: v } : prev)} placeholder="DC編號" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="操作員" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="備註" /></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
                   </tr>
                 );
@@ -730,12 +731,13 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
 // 工程部員工表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function ManpowerTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
+function ManpowerTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, setEditForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
   editingId: number | null;
   editForm: EditingItem | null;
+  setEditForm: React.Dispatch<React.SetStateAction<EditingItem | null>>;
   onStartEdit: (item: SummaryItem) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -781,13 +783,13 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog, editingId, edit
                   <tr key={item.id} className="border-b bg-blue-50/50">
                     <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
                     <td className="px-3 py-2">
-                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => setEditForm((prev) => prev ? { ...prev, is_suspended: v } : prev)} label="暫停" />
                     </td>
-                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="工作描述" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => { editForm.location = v; }} placeholder="地點" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="帶隊人" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="員工（頓號分隔）" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => setEditForm((prev) => prev ? { ...prev, contract_no: v } : prev)} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => setEditForm((prev) => prev ? { ...prev, location: v } : prev)} placeholder="地點" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="帶隊人" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="員工（頓號分隔）" /></td>
                     <td className="px-3 py-2"></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
                   </tr>
@@ -867,12 +869,13 @@ function ManpowerTable({ items, expandedItemLogs, toggleItemLog, editingId, edit
 // 泥車/運輸表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
+function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, setEditForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
   editingId: number | null;
   editForm: EditingItem | null;
+  setEditForm: React.Dispatch<React.SetStateAction<EditingItem | null>>;
   onStartEdit: (item: SummaryItem) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -916,15 +919,15 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                   <tr key={item.id} className="border-b bg-blue-50/50">
                     <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
                     <td className="px-3 py-2">
-                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => setEditForm((prev) => prev ? { ...prev, is_suspended: v } : prev)} label="暫停" />
                     </td>
-                    <td className="px-3 py-2"><EditInput value={editForm.customer} onChange={(v) => { editForm.customer = v; }} placeholder="客戶" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => { editForm.contract_no = v; }} placeholder="合約" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="路線/工作描述" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="司機" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.vehicle_no} onChange={(v) => { editForm.vehicle_no = v; }} placeholder="車牌" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.contact_person} onChange={(v) => { editForm.contact_person = v; }} placeholder="聯絡人" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.customer} onChange={(v) => setEditForm((prev) => prev ? { ...prev, customer: v } : prev)} placeholder="客戶" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contract_no} onChange={(v) => setEditForm((prev) => prev ? { ...prev, contract_no: v } : prev)} placeholder="合約" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="路線/工作描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="司機" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.vehicle_no} onChange={(v) => setEditForm((prev) => prev ? { ...prev, vehicle_no: v } : prev)} placeholder="車牌" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.contact_person} onChange={(v) => setEditForm((prev) => prev ? { ...prev, contact_person: v } : prev)} placeholder="聯絡人" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="備註" /></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
                   </tr>
                 );
@@ -993,12 +996,13 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
 // 其他/雜項表格（含 CRUD）
 // ══════════════════════════════════════════════════════════════
 
-function OtherTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
+function OtherTable({ items, expandedItemLogs, toggleItemLog, editingId, editForm, setEditForm, onStartEdit, onCancelEdit, onSaveEdit, onDelete, saving }: {
   items: SummaryItem[];
   expandedItemLogs: Set<number>;
   toggleItemLog: (id: number) => void;
   editingId: number | null;
   editForm: EditingItem | null;
+  setEditForm: React.Dispatch<React.SetStateAction<EditingItem | null>>;
   onStartEdit: (item: SummaryItem) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -1040,11 +1044,11 @@ function OtherTable({ items, expandedItemLogs, toggleItemLog, editingId, editFor
                     <td className="px-3 py-2 text-gray-400 text-xs">{item.seq}</td>
                     <td className="px-3 py-2"><OrderTypeBadge type={item.order_type} /></td>
                     <td className="px-3 py-2">
-                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => { editForm.is_suspended = v; onStartEdit({ ...item }); }} label="暫停" />
+                      <EditCheckbox checked={editForm.is_suspended} onChange={(v) => setEditForm((prev) => prev ? { ...prev, is_suspended: v } : prev)} label="暫停" />
                     </td>
-                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => { editForm.work_description = v; }} placeholder="描述" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => { editForm.driver_nickname = v; }} placeholder="人員" /></td>
-                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => { editForm.remarks = v; }} placeholder="備註" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="描述" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="人員" /></td>
+                    <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="備註" /></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
                   </tr>
                 );
@@ -1395,6 +1399,7 @@ export default function WhatsAppDailySummaryPage() {
     toggleItemLog,
     editingId,
     editForm,
+    setEditForm,
     onStartEdit: handleStartEdit,
     onCancelEdit: handleCancelEdit,
     onSaveEdit: handleSaveEdit,
