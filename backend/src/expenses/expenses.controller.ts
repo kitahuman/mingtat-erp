@@ -9,6 +9,7 @@ import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { ExpensesService } from './expenses.service';
 import { AuthGuard } from '@nestjs/passport';
+import { FileValidationPipe } from '../common/file-validation.pipe';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'expenses');
 
@@ -88,7 +89,7 @@ export class ExpensesController {
   )
   async uploadAttachment(
     @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
     @Body() body: any,
   ) {
     const fileUrl = `/uploads/expenses/${file.filename}`;

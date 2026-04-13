@@ -233,6 +233,14 @@ model Employee {
   acceptance_reports_inspected AcceptanceReport[] @relation("acceptance_report_inspector")
   nicknames             EmployeeNickname[]
 
+  // ── Performance indexes ──
+  @@index([company_id])
+  @@index([status])
+  @@index([deleted_at])
+  @@index([name_zh])
+  @@index([name_en])
+  @@index([phone])
+  @@index([emp_code])
   @@map("employees")
 }
 
@@ -709,6 +717,13 @@ model Quotation {
   invoices          Invoice[]
   daily_reports     DailyReport[] @relation("daily_report_quotation")
 
+  // ── Performance indexes ──
+  @@index([company_id])
+  @@index([client_id])
+  @@index([project_id])
+  @@index([status])
+  @@index([quotation_type])
+  @@index([deleted_at])
   @@map("quotations")
 }
 
@@ -840,6 +855,14 @@ model FleetRateCard {
   source_quotation Quotation?            @relation(fields: [source_quotation_id], references: [id])
   ot_rates         FleetRateCardOtRate[]
 
+  // ── Performance indexes ──
+  @@index([client_id])
+  @@index([contract_id])
+  @@index([company_id])
+  @@index([status])
+  @@index([machine_type])
+  @@index([tonnage])
+  @@index([day_night])
   @@map("fleet_rate_cards")
 }
 
@@ -889,6 +912,13 @@ model SubconRateCard {
   source_quotation Quotation?             @relation(fields: [source_quotation_id], references: [id])
   ot_rates         SubconRateCardOtRate[]
 
+  // ── Performance indexes ──
+  @@index([client_id])
+  @@index([subcon_id])
+  @@index([company_id])
+  @@index([status])
+  @@index([machine_type])
+  @@index([tonnage])
   @@map("subcon_rate_cards")
 }
 
@@ -1059,6 +1089,22 @@ model WorkLog {
    payroll_work_logs PayrollWorkLog[]
   whatsapp_messages WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
+  // ── Performance indexes ──
+  @@index([scheduled_date])
+  @@index([employee_id])
+  @@index([company_id])
+  @@index([client_id])
+  @@index([contract_id])
+  @@index([quotation_id])
+  @@index([project_id])
+  @@index([status])
+  @@index([is_confirmed])
+  @@index([is_paid])
+  @@index([deleted_at])
+  @@index([company_profile_id])
+  @@index([equipment_number])
+  @@index([scheduled_date, employee_id])
+  @@index([scheduled_date, company_id])
   @@map("work_logs")
 }
 
@@ -1114,6 +1160,13 @@ model Payroll {
   adjustments       PayrollAdjustment[]
   daily_allowances  PayrollDailyAllowance[]
 
+  // ── Performance indexes ──
+  @@index([employee_id])
+  @@index([period])
+  @@index([company_id])
+  @@index([company_profile_id])
+  @@index([status])
+  @@index([employee_id, period])
   @@map("payrolls")
 }
 
@@ -1624,6 +1677,13 @@ model Invoice {
   company   Company       @relation(fields: [company_id], references: [id])
   items     InvoiceItem[]
 
+  // ── Performance indexes ──
+  @@index([client_id])
+  @@index([project_id])
+  @@index([company_id])
+  @@index([status])
+  @@index([date])
+  @@index([deleted_at])
   @@map("invoices")
 }
 

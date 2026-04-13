@@ -7,6 +7,7 @@ import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { FileValidationPipe } from '../common/file-validation.pipe';
 
 function getUploadDir() {
   const dir = path.join(process.cwd(), 'uploads');
@@ -39,7 +40,7 @@ export class DocumentsController {
     limits: { fileSize: 20 * 1024 * 1024 },
   }))
   async upload(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
     @Body('entity_type') entityType: string,
     @Body('entity_id') entityId: string,
     @Body('doc_type') docType: string,

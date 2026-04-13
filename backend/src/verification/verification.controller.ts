@@ -23,6 +23,12 @@ import type { Response } from 'express';
 import { VerificationService } from './verification.service';
 import { OcrService } from './ocr.service';
 import { GpsService } from './gps.service';
+import {
+  FileValidationPipe,
+  FilesValidationPipe,
+  ALL_ALLOWED_MIME_TYPES,
+  MAX_VERIFICATION_FILE_SIZE,
+} from '../common/file-validation.pipe';
 
 function getUploadDir() {
   const dir = path.join(process.cwd(), 'uploads', 'verification');
@@ -59,7 +65,8 @@ export class VerificationController {
     }),
   )
   async uploadFile(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(new FileValidationPipe({ maxSize: MAX_VERIFICATION_FILE_SIZE }))
+    file: Express.Multer.File,
     @Body('source_type') sourceType: string,
     @Body('period_year') periodYear?: string,
     @Body('period_month') periodMonth?: string,
@@ -124,7 +131,8 @@ export class VerificationController {
     }),
   )
   async processOcr(
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles(new FilesValidationPipe({ maxSize: MAX_VERIFICATION_FILE_SIZE }))
+    files: Express.Multer.File[],
     @Body('source_type') sourceType: string,
     @Body('period_year') periodYear?: string,
     @Body('period_month') periodMonth?: string,
@@ -180,7 +188,8 @@ export class VerificationController {
     }),
   )
   async uploadGps(
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles(new FilesValidationPipe({ maxSize: MAX_VERIFICATION_FILE_SIZE }))
+    files: Express.Multer.File[],
     @Body('period_year') periodYear?: string,
     @Body('period_month') periodMonth?: string,
     @Request() req?: any,

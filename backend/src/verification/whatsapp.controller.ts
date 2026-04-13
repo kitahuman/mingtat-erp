@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { WhatsappService } from './whatsapp.service';
 
 // ══════════════════════════════════════════════════════════════
@@ -23,6 +24,7 @@ import { WhatsappService } from './whatsapp.service';
 // ══════════════════════════════════════════════════════════════
 
 @Controller('verification')
+@SkipThrottle()
 export class WhatsappController {
   constructor(private readonly whatsappService: WhatsappService) {}
 

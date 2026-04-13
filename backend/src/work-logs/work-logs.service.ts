@@ -416,13 +416,28 @@ export class WorkLogsService {
   // ── 地點自動完成 ─────────────────────────────────────────
 
   async getLocationSuggestions(type: 'start' | 'end', q: string) {
-    const field = type === 'start' ? 'start_location' : 'end_location';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results: any[] = await (this.prisma.$queryRawUnsafe as any)(
-      `SELECT DISTINCT "${field}" AS location FROM work_logs WHERE "${field}" ILIKE $1 AND "${field}" IS NOT NULL AND "${field}" != '' ORDER BY location ASC LIMIT 20`,
-      `%${q}%`,
-    );
-    return results.map((r: { location: string }) => r.location).filter(Boolean);
+    const pattern = `%${q}%`;
+    const results: { location: string }[] =
+      type === 'start'
+        ? await this.prisma.$queryRaw`
+            SELECT DISTINCT "start_location" AS location
+            FROM work_logs
+            WHERE "start_location" ILIKE ${pattern}
+              AND "start_location" IS NOT NULL
+              AND "start_location" != ''
+            ORDER BY location ASC
+            LIMIT 20
+          `
+        : await this.prisma.$queryRaw`
+            SELECT DISTINCT "end_location" AS location
+            FROM work_logs
+            WHERE "end_location" ILIKE ${pattern}
+              AND "end_location" IS NOT NULL
+              AND "end_location" != ''
+            ORDER BY location ASC
+            LIMIT 20
+          `;
+    return results.map((r) => r.location).filter(Boolean);
   }
 
   // ── 機號聯動查詢 ─────────────────────────────────────────

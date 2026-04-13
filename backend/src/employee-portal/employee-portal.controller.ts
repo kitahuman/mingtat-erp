@@ -21,6 +21,12 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
+import {
+  FileValidationPipe,
+  ALLOWED_MIME_TYPES,
+  MAX_FILE_SIZE,
+} from '../common/file-validation.pipe';
+import { Throttle } from '@nestjs/throttler';
 
 // Ensure upload directory exists
 const uploadDir = join(process.cwd(), 'uploads', 'employee-portal');
@@ -42,6 +48,7 @@ export class EmployeePortalController {
   // ── Auth ───────────────────────────────────────────────
   // Accepts phone number OR username (admin accounts can use username for testing)
   @Post('login')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async login(
     @Body()
     body: {
@@ -132,10 +139,11 @@ export class EmployeePortalController {
   // ── Photo Upload ───────────────────────────────────────────────
   @UseGuards(AuthGuard('jwt'))
   @Post('upload-photo')
-  @UseInterceptors(FileInterceptor('file', { storage }))
+  @UseInterceptors(FileInterceptor('file', { storage, limits: { fileSize: MAX_FILE_SIZE } }))
   async uploadPhoto(
     @Request() req: any,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(new FileValidationPipe({ allowedMimeTypes: ALLOWED_MIME_TYPES.image, required: false }))
+    file: Express.Multer.File,
   ) {
     if (!file) {
       return { url: null };
@@ -325,7 +333,8 @@ export class EmployeePortalController {
   }))
   async uploadDailyReportFile(
     @Request() req: any,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(new FileValidationPipe({ required: false }))
+    file: Express.Multer.File,
   ) {
     if (!file) return { url: null };
     const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
