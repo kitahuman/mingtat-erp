@@ -50,6 +50,7 @@ import { VerificationModule } from './verification/verification.module';
 import { GeoModule } from './geo/geo.module';
 import { CompanyClockModule } from './company-clock/company-clock.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
+import { DailyReportStatsModule } from './daily-report-stats/daily-report-stats.module';
 import { AcceptanceReportsModule } from './acceptance-reports/acceptance-reports.module';
 import { WhatsappClockinModule } from './whatsapp-clockin/whatsapp-clockin.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -112,6 +113,7 @@ import { HealthModule } from './health/health.module';
     GeoModule,
     CompanyClockModule,
     DailyReportsModule,
+    DailyReportStatsModule,
     AcceptanceReportsModule,
     WhatsappClockinModule,
     AuditLogsModule,

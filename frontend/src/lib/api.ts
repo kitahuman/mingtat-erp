@@ -835,6 +835,12 @@ export const auditLogsApi = {
 };
 
 // Daily Reports (工程日報) - Admin
+// Daily Report Statistics (日報統計)
+export const dailyReportStatsApi = {
+  getStats: (params?: any) => api.get('/daily-report-stats', { params }),
+  getExportData: (params?: any) => api.get('/daily-report-stats/export', { params }),
+};
+
 export const dailyReportsApi = {
   list: (params?: any) => api.get('/daily-reports', { params }),
   get: (id: number) => api.get(`/daily-reports/${id}`),
