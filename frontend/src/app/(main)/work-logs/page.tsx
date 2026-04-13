@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import EditableCell from './EditableCell';
 import SearchableSelect from './SearchableSelect';
+import MultiSearchableSelect from './MultiSearchableSelect';
 import { STATUS_OPTIONS, STATUS_COLORS, getStatusLabel, getEquipmentSource } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -115,14 +116,14 @@ export default function WorkLogsPage() {
   const [sortBy, setSortBy]       = useState('scheduled_date');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
-  // ── Filters ─────────────────────────────────────────────────
-  const [filterPublisher, setFilterPublisher] = useState<string | number | null>(null);
-  const [filterStatus,    setFilterStatus]    = useState<string | number | null>(null);
-  const [filterCompany,   setFilterCompany]   = useState<string | number | null>(null);
-  const [filterClient,    setFilterClient]    = useState<string | number | null>(null);
-  const [filterQuotation, setFilterQuotation] = useState<string | number | null>(null);
-  const [filterContract,  setFilterContract]  = useState<string | number | null>(null);
-  const [filterEmployee,  setFilterEmployee]  = useState<string | number | null>(null);
+   // ── Filters ───────────────────────────────────────────────
+  const [filterPublisher, setFilterPublisher] = useState<(string | number)[]>([]);
+  const [filterStatus,    setFilterStatus]    = useState<(string | number)[]>([]);
+  const [filterCompany,   setFilterCompany]   = useState<(string | number)[]>([]);
+  const [filterClient,    setFilterClient]    = useState<(string | number)[]>([]);
+  const [filterQuotation, setFilterQuotation] = useState<(string | number)[]>([]);
+  const [filterContract,  setFilterContract]  = useState<(string | number)[]>([]);
+  const [filterEmployee,  setFilterEmployee]  = useState<(string | number)[]>([]);
   const [filterEquipment, setFilterEquipment] = useState('');
   const [filterDateFrom,  setFilterDateFrom]  = useState('');
   const [filterDateTo,    setFilterDateTo]    = useState('');
@@ -417,20 +418,22 @@ export default function WorkLogsPage() {
         page, limit,
         sortBy, sortOrder,
       };
-      if (filterPublisher) params.publisher_id     = filterPublisher;
-      if (filterStatus)    params.status           = filterStatus;
-      if (filterCompany)   params.company_id = filterCompany;
-      if (filterClient)    params.client_id        = filterClient;
-      if (filterQuotation) params.quotation_id     = filterQuotation;
-      if (filterContract)  params.contract_id      = filterContract;
-      if (filterEmployee && typeof filterEmployee === 'string') {
-        if (filterEmployee.startsWith('emp_')) {
-          params.employee_id = Number(filterEmployee.replace('emp_', ''));
-        } else if (filterEmployee.startsWith('fleet_')) {
-          params.fleet_driver_id = Number(filterEmployee.replace('fleet_', ''));
-        } else if (filterEmployee.startsWith('part_')) {
-          params.client_id = Number(filterEmployee.replace('part_', ''));
+      if (filterPublisher.length)  params.publisher_id  = filterPublisher.join(',');
+      if (filterStatus.length)     params.status        = filterStatus.join(',');
+      if (filterCompany.length)    params.company_id    = filterCompany.join(',');
+      if (filterClient.length)     params.client_id     = filterClient.join(',');
+      if (filterQuotation.length)  params.quotation_id  = filterQuotation.join(',');
+      if (filterContract.length)   params.contract_id   = filterContract.join(',');
+      if (filterEmployee.length) {
+        const empIds: number[] = [];
+        const fleetIds: number[] = [];
+        for (const v of filterEmployee) {
+          const s = String(v);
+          if (s.startsWith('emp_'))   empIds.push(Number(s.replace('emp_', '')));
+          else if (s.startsWith('fleet_')) fleetIds.push(Number(s.replace('fleet_', '')));
         }
+        if (empIds.length)   params.employee_id   = empIds.join(',');
+        if (fleetIds.length) params.fleet_driver_id = fleetIds.join(',');
       }
       if (filterEquipment) params.equipment_number = filterEquipment;
       if (filterDateFrom)  params.date_from        = filterDateFrom;
@@ -777,14 +780,14 @@ export default function WorkLogsPage() {
   const resetFilters = () => {
     if (hasDirty && !confirm('有未儲存的修改，重設篩選將會丟失。確定要繼續嗎？')) return;
     setDirtyRows(new Map());
-    setFilterPublisher(null); setFilterStatus(null);  setFilterCompany(null);
-    setFilterClient(null);    setFilterQuotation(null); setFilterContract(null); setFilterEmployee(null);
+    setFilterPublisher([]); setFilterStatus([]);  setFilterCompany([]);
+    setFilterClient([]);    setFilterQuotation([]); setFilterContract([]); setFilterEmployee([]);
     setFilterEquipment('');   setFilterDateFrom('');   setFilterDateTo('');
     setPage(1);
   };
 
-  const hasFilters = !!(filterPublisher || filterStatus || filterCompany || filterClient ||
-    filterQuotation || filterContract || filterEmployee || filterEquipment || filterDateFrom || filterDateTo);
+  const hasFilters = !!(filterPublisher.length || filterStatus.length || filterCompany.length || filterClient.length ||
+    filterQuotation.length || filterContract.length || filterEmployee.length || filterEquipment || filterDateFrom || filterDateTo);
 
   // ── Helper: get display value for relation fields ───────────
   const getDisplayValue = (row: any, field: string): string => {
@@ -1165,65 +1168,50 @@ export default function WorkLogsPage() {
       })()}
 
       {/* ── Filters ────────────────────────────────── */}
-      {/* 外層容器負責水平滾動，但不裁切垂直方向，避免下拉選單被遠行層遮住 */}
-      <div className="bg-white border-b border-gray-200 shrink-0" style={{ position: 'relative', zIndex: 50 }}>
-        <div className="overflow-x-auto" style={{ overflowY: 'visible' }}>
+      {/* 注意：此容器不能有任何 overflow 設定，否則會裁切 MultiSearchableSelect Portal 下拉選單 */}
+      <div className="bg-white border-b border-gray-200 shrink-0 overflow-x-auto">
         <div className="flex gap-2 items-end px-6 py-3" style={{ minWidth: 'max-content' }}>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">發佈人</label>
-            <div className="w-28">
-              <SearchableSelect value={filterPublisher}
-                onChange={v => { setFilterPublisher(v); setPage(1); }}
-                options={users} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterPublisher}
+              onChange={v => { setFilterPublisher(v); setPage(1); }}
+              options={users} placeholder="全部" className="w-32" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">狀態</label>
-            <div className="w-24">
-              <SearchableSelect value={filterStatus}
-                onChange={v => { setFilterStatus(v); setPage(1); }}
-                options={STATUS_OPTIONS} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterStatus}
+              onChange={v => { setFilterStatus(v); setPage(1); }}
+              options={STATUS_OPTIONS} placeholder="全部" className="w-28" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">公司</label>
-            <div className="w-28">
-              <SearchableSelect value={filterCompany}
-                onChange={v => { setFilterCompany(v); setPage(1); }}
-                options={companies} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterCompany}
+              onChange={v => { setFilterCompany(v); setPage(1); }}
+              options={companies} placeholder="全部" className="w-32" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">客戶公司</label>
-            <div className="w-36">
-              <SearchableSelect value={filterClient}
-                onChange={v => { setFilterClient(v); setPage(1); }}
-                options={clients} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterClient}
+              onChange={v => { setFilterClient(v); setPage(1); }}
+              options={clients} placeholder="全部" className="w-40" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">報價單</label>
-            <div className="w-32">
-              <SearchableSelect value={filterQuotation}
-                onChange={v => { setFilterQuotation(v); setPage(1); }}
-                options={quotations} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterQuotation}
+              onChange={v => { setFilterQuotation(v); setPage(1); }}
+              options={quotations} placeholder="全部" className="w-36" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">合約</label>
-            <div className="w-32">
-              <SearchableSelect value={filterContract}
-                onChange={v => { setFilterContract(v); setPage(1); }}
-                options={contracts} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterContract}
+              onChange={v => { setFilterContract(v); setPage(1); }}
+              options={contracts} placeholder="全部" className="w-36" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">員工</label>
-            <div className="w-28">
-              <SearchableSelect value={filterEmployee}
-                onChange={v => { setFilterEmployee(v); setPage(1); }}
-                options={employees} placeholder="全部" />
-            </div>
+            <MultiSearchableSelect value={filterEmployee}
+              onChange={v => { setFilterEmployee(v); setPage(1); }}
+              options={employees} placeholder="全部" className="w-36" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">機號</label>
@@ -1253,7 +1241,6 @@ export default function WorkLogsPage() {
               清除篩選
             </button>
           )}
-        </div>
         </div>
       </div>
 

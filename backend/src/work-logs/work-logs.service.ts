@@ -37,17 +37,35 @@ export class WorkLogsService {
       sortOrder = 'DESC',
     } = query;
 
+    // Helper: parse comma-separated string or single value into Prisma filter
+    const toFilter = (val: any, toNum = true) => {
+      if (!val) return undefined;
+      const parts = String(val).split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length === 0) return undefined;
+      if (parts.length === 1) return toNum ? Number(parts[0]) : parts[0];
+      return { in: toNum ? parts.map(Number) : parts };
+    };
+    const toStrFilter = (val: any) => toFilter(val, false);
+
     const where: any = { deleted_at: null };
-    if (publisher_id) where.publisher_id = Number(publisher_id);
-    if (status) where.status = status;
+    const pubFilter = toFilter(publisher_id);
+    if (pubFilter !== undefined) where.publisher_id = pubFilter;
+    const statusFilter = toStrFilter(status);
+    if (statusFilter !== undefined) where.status = statusFilter;
     if (company_profile_id) where.company_profile_id = Number(company_profile_id);
-    if (company_id) where.company_id = Number(company_id);
-    if (client_id) where.client_id = Number(client_id);
-    if (quotation_id) where.quotation_id = Number(quotation_id);
-    if (contract_id) where.contract_id = Number(contract_id);
-    if (employee_id) where.employee_id = Number(employee_id);
+    const companyFilter = toFilter(company_id);
+    if (companyFilter !== undefined) where.company_id = companyFilter;
+    const clientFilter = toFilter(client_id);
+    if (clientFilter !== undefined) where.client_id = clientFilter;
+    const quotationFilter = toFilter(quotation_id);
+    if (quotationFilter !== undefined) where.quotation_id = quotationFilter;
+    const contractFilter = toFilter(contract_id);
+    if (contractFilter !== undefined) where.contract_id = contractFilter;
+    const empFilter = toFilter(employee_id);
+    if (empFilter !== undefined) where.employee_id = empFilter;
     if (query.project_id) where.project_id = Number(query.project_id);
-    if (query.fleet_driver_id) where.work_log_fleet_driver_id = Number(query.fleet_driver_id);
+    const fleetFilter = toFilter(query.fleet_driver_id);
+    if (fleetFilter !== undefined) where.work_log_fleet_driver_id = fleetFilter;
     if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
     if (date_from || date_to) {
       where.scheduled_date = {};
