@@ -1049,7 +1049,7 @@ export default function PayrollDetailPage() {
       {/* ── MPF 計算薪金（非行業計劃）── 放在最底部 */}
       {!isPreparing && payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
         <div className="card mb-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3">
             <div>
               <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數 <span className="text-blue-500 ml-1">(完 5% 的強積金數)</span></p>
               {isDraft ? (
@@ -1076,6 +1076,19 @@ export default function PayrollDetailPage() {
                 <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>
               )}
             </div>
+            {/* 強積金自動計算：薪金基數 × 5% */}
+            {payroll.mpf_relevant_income && Number(payroll.mpf_relevant_income) > 0 && (
+              <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-4 py-2">
+                <span className="text-sm text-blue-700 font-medium">強積金 5%</span>
+                <span className="text-sm text-blue-500">=</span>
+                <span className="text-lg font-bold font-mono text-blue-700">
+                  ${(Number(payroll.mpf_relevant_income) * 0.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-xs text-blue-400 ml-1">
+                  (${Number(payroll.mpf_relevant_income).toLocaleString()} × 5%)
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
