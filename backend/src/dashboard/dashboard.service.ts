@@ -143,6 +143,19 @@ export class DashboardService {
   // Tab 2: 警告及提醒（含 MPF 提醒）
   // ═══════════════════════════════════════════════════════════
 
+  // 將任意日期值轉換為 YYYY-MM-DD 字串（相容 Date 物件和字串）
+  private toDateStr(val: any): string | null {
+    if (!val) return null;
+    if (val instanceof Date) return val.toISOString().split('T')[0];
+    const s = String(val);
+    // 已是 YYYY-MM-DD 格式
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // 嘗試解析其他格式
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return null;
+  }
+
   async getAlerts() {
     const sixtyDaysLater = new Date();
     sixtyDaysLater.setDate(sixtyDaysLater.getDate() + 60);
@@ -189,12 +202,13 @@ export class DashboardService {
         { type: '中電安全證書', date: e.clp_safety_cert_expiry },
       ];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
           employeeAlerts.push({
             id: e.id,
             name: e.name_zh,
             type: c.type,
-            expiry_date: c.date,
+            expiry_date: dateStr,
             company_name: e.company?.name || '',
           });
         }
@@ -231,12 +245,13 @@ export class DashboardService {
         { type: '行車證', date: v.license_expiry },
       ];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
           vehicleAlerts.push({
             id: v.id,
             name: v.plate_number,
             type: c.type,
-            expiry_date: c.date,
+            expiry_date: dateStr,
             company_name: v.owner_company?.name || '',
           });
         }
@@ -256,12 +271,13 @@ export class DashboardService {
         { type: '保險', date: m.insurance_expiry },
       ];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
           machineryAlerts.push({
             id: m.id,
             name: m.machine_code,
             type: c.type,
-            expiry_date: c.date,
+            expiry_date: dateStr,
             company_name: m.owner_company?.name || '',
           });
         }
@@ -596,8 +612,9 @@ export class DashboardService {
         { type: '中電安全證書', date: e.clp_safety_cert_expiry },
       ];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
-          employeeAlerts.push({ id: e.id, name: e.name_zh, type: c.type, expiry_date: c.date, company_name: e.company?.name || '' });
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
+          employeeAlerts.push({ id: e.id, name: e.name_zh, type: c.type, expiry_date: dateStr, company_name: e.company?.name || '' });
         }
       }
       // ── 動態證件（other_certificates JSON）──────────────────
@@ -620,8 +637,9 @@ export class DashboardService {
         { type: '驗車', date: v.inspection_date }, { type: '行車證', date: v.license_expiry },
       ];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
-          vehicleAlerts.push({ id: v.id, name: v.plate_number, type: c.type, expiry_date: c.date, company_name: v.owner_company?.name || '' });
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
+          vehicleAlerts.push({ id: v.id, name: v.plate_number, type: c.type, expiry_date: dateStr, company_name: v.owner_company?.name || '' });
         }
       }
     }
@@ -632,8 +650,9 @@ export class DashboardService {
     for (const m of activeMachinery) {
       const checks = [{ type: '驗機紙', date: m.inspection_cert_expiry }, { type: '保險', date: m.insurance_expiry }];
       for (const c of checks) {
-        if (c.date && String(c.date) <= sixtyStr) {
-          machineryAlerts.push({ id: m.id, name: m.machine_code, type: c.type, expiry_date: c.date, company_name: m.owner_company?.name || '' });
+        const dateStr = this.toDateStr(c.date);
+        if (dateStr && dateStr <= sixtyStr) {
+          machineryAlerts.push({ id: m.id, name: m.machine_code, type: c.type, expiry_date: dateStr, company_name: m.owner_company?.name || '' });
         }
       }
     }
