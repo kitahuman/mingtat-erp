@@ -80,7 +80,7 @@ export class RateCardsService {
     return rc;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { ot_rates, company, client, source_quotation, project, ...data } = dto;
 
     // effective_date is required on create
@@ -157,6 +157,7 @@ export class RateCardsService {
           targetTable: 'rate_cards',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -164,7 +165,7 @@ export class RateCardsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('價目表不存在');
 
@@ -198,6 +199,7 @@ export class RateCardsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -205,7 +207,7 @@ export class RateCardsService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('價目表不存在');
 
@@ -218,6 +220,7 @@ export class RateCardsService {
           targetTable: 'rate_cards',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

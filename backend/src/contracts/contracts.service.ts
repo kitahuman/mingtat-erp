@@ -76,7 +76,7 @@ export class ContractsService {
     });
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     // Check unique contract_no
     if (dto.contract_no) {
       const existing = await this.prisma.contract.findUnique({
@@ -113,13 +113,14 @@ export class ContractsService {
           targetTable: 'contracts',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.contract.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('合約不存在');
 
@@ -153,13 +154,14 @@ export class ContractsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.contract.findUnique({
       where: { id },
       include: { _count: { select: { projects: true } } },
@@ -177,6 +179,7 @@ export class ContractsService {
           targetTable: 'contracts',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

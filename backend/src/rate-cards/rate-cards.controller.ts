@@ -19,7 +19,7 @@ export class RateCardsController {
 
   @Post()
   create(@Body() dto: any, @Request() req: any) {
-    return this.service.create(dto, req.user?.id);
+    return this.service.create(dto, req.user?.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
@@ -30,7 +30,7 @@ export class RateCardsController {
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
   remove(@Param('id') id: string, @Request() req: any) {
-    return this.service.remove(Number(id), req.user?.id);
+    return this.service.remove(Number(id), req.user?.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
 }

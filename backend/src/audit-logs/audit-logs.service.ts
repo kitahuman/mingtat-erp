@@ -39,6 +39,7 @@ export class AuditLogsService {
     page?: number;
     limit?: number;
     userId?: number;
+    userName?: string;
     action?: string;
     targetTable?: string;
     targetId?: number;
@@ -51,6 +52,15 @@ export class AuditLogsService {
 
     if (query.userId) {
       where.audit_user_id = Number(query.userId);
+    }
+
+    if (query.userName) {
+      where.user = {
+        OR: [
+          { displayName: { contains: query.userName, mode: 'insensitive' } },
+          { username: { contains: query.userName, mode: 'insensitive' } },
+        ],
+      };
     }
 
     if (query.action) {

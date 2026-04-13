@@ -597,7 +597,7 @@ export class PayrollService {
     company_profile_id?: number;
     company_id?: number;
     period?: string;
-  }, userId?: number) {
+  }, userId?: number, ipAddress?: string) {
     const { employee_id, date_from, date_to, company_profile_id, company_id } = body;
 
     if (!employee_id) throw new BadRequestException('請選擇員工');
@@ -775,6 +775,7 @@ export class PayrollService {
           targetTable: 'payrolls',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -1083,7 +1084,7 @@ export class PayrollService {
   }
 
   // ── 更新糧單 ──────────────────────────────────────────────────
-  async update(id: number, body: any, userId?: number) {
+  async update(id: number, body: any, userId?: number, ipAddress?: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
@@ -1104,6 +1105,7 @@ export class PayrollService {
           targetId: id,
           changesBefore: payroll,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -1190,7 +1192,7 @@ export class PayrollService {
   }
 
   // ── 刪除糧單 ──────────────────────────────────────────────────
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
@@ -1212,6 +1214,7 @@ export class PayrollService {
           targetTable: 'payrolls',
           targetId: id,
           changesBefore: payroll,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

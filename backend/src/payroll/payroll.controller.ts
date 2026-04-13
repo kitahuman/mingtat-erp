@@ -60,12 +60,12 @@ export class PayrollController {
     company_id?: number;
     period?: string;
   }, @Request() req: any) {
-    return this.payrollService.generate(body, req.user?.id || req.user?.userId || 0);
+    return this.payrollService.generate(body, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.payrollService.update(+id, body, req.user?.id || req.user?.userId || 0);
+    return this.payrollService.update(+id, body, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Post('bulk/confirm')
@@ -103,7 +103,7 @@ export class PayrollController {
 
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req: any) {
-    return this.payrollService.remove(+id, req.user?.id || req.user?.userId || 0);
+    return this.payrollService.remove(+id, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   // ── 糧單工作記錄管理 ──────────────────────────────────────

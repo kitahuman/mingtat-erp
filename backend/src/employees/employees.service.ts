@@ -337,7 +337,7 @@ export class EmployeesService {
     return emp;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { company, salary_settings, transfers, force_create, ...data } = dto;
 
     // 身份證號碼重複檢查（硬性阻擋）
@@ -417,13 +417,14 @@ export class EmployeesService {
           targetTable: 'employees',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
     const { salary_settings, transfers, company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -448,6 +449,7 @@ export class EmployeesService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -611,7 +613,7 @@ export class EmployeesService {
     return this.findOne(id);
   }
 
-   async remove(id: number, userId?: number) {
+   async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('員工不存在');
     if (userId) {
@@ -622,6 +624,7 @@ export class EmployeesService {
           targetTable: 'employees',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

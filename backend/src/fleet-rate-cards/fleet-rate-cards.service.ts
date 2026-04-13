@@ -63,7 +63,7 @@ export class FleetRateCardsService {
     return frc;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { client, company, source_quotation, ot_rates, ...data } = dto;
 
     // effective_date is required on create
@@ -90,6 +90,7 @@ export class FleetRateCardsService {
           targetTable: 'fleet_rate_cards',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -97,7 +98,7 @@ export class FleetRateCardsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('租賃價目表不存在');
     const { created_at, updated_at, id: _id, client, company, source_quotation, ot_rates, ...updateData } = dto;
@@ -124,6 +125,7 @@ export class FleetRateCardsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -178,7 +180,7 @@ export class FleetRateCardsService {
     return cards;
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.fleetRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('租賃價目表不存在');
 
@@ -191,6 +193,7 @@ export class FleetRateCardsService {
           targetTable: 'fleet_rate_cards',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

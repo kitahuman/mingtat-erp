@@ -90,7 +90,7 @@ export class LeavesService {
     return record;
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employeeLeave.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('請假記錄不存在');
     const { id: _id, created_at, updated_at, employee, ...updateData } = dto;
@@ -104,6 +104,7 @@ export class LeavesService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -137,7 +138,7 @@ export class LeavesService {
     });
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employeeLeave.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('請假記錄不存在');
     if (userId) {
@@ -148,6 +149,7 @@ export class LeavesService {
           targetTable: 'leaves',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

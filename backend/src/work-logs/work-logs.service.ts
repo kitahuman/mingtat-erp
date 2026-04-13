@@ -132,7 +132,7 @@ export class WorkLogsService {
     });
   }
 
-  async create(dto: any, userId: number) {
+  async create(dto: any, userId: number, ipAddress?: string) {
     const { publisher, company_profile, company, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, fleet_driver, ...data } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
@@ -151,6 +151,7 @@ export class WorkLogsService {
           targetTable: 'work_logs',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -159,7 +160,7 @@ export class WorkLogsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
       id: _id, created_at, updated_at,
@@ -209,6 +210,7 @@ export class WorkLogsService {
           targetId: id,
           changesBefore: existingWl,
           changesAfter: afterWl,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -224,7 +226,7 @@ export class WorkLogsService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.workLog.findUnique({ where: { id } });
     if (userId && existing) {
       try {
@@ -234,6 +236,7 @@ export class WorkLogsService {
           targetTable: 'work_logs',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

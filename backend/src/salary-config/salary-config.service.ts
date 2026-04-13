@@ -75,7 +75,7 @@ export class SalaryConfigService {
     });
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     // Ensure numeric fields
     const numericFields = [
       'base_salary', 'allowance_night', 'allowance_rent', 'allowance_3runway',
@@ -99,13 +99,14 @@ export class SalaryConfigService {
           targetTable: 'employee_salary_settings',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
 
@@ -134,13 +135,14 @@ export class SalaryConfigService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(id);
   }
 
-  async delete(id: number, userId?: number) {
+  async delete(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
     if (userId) {
@@ -151,6 +153,7 @@ export class SalaryConfigService {
           targetTable: 'employee_salary_settings',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

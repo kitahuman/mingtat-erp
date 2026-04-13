@@ -75,7 +75,7 @@ export class VehiclesService {
     return vehicle;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { owner_company, plate_history, transfers, ...data } = dto;
     const saved = await this.prisma.vehicle.create({ data });
     if (userId) {
@@ -86,13 +86,14 @@ export class VehiclesService {
           targetTable: 'vehicles',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('車輛不存在');
     const { plate_history, transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -130,6 +131,7 @@ export class VehiclesService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -175,7 +177,7 @@ export class VehiclesService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('車輛不存在');
     if (userId) {
@@ -186,6 +188,7 @@ export class VehiclesService {
           targetTable: 'vehicles',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

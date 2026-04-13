@@ -136,7 +136,7 @@ export class SubconFleetDriversService {
     return driver;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { subcontractor, ...data } = dto;
     // Normalize date: empty string -> null
     data.date_of_birth = data.date_of_birth ? new Date(data.date_of_birth) : null;
@@ -155,13 +155,14 @@ export class SubconFleetDriversService {
           targetTable: 'subcon_fleet_drivers',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.subcontractorFleetDriver.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('街車司機不存在');
     
@@ -180,13 +181,14 @@ export class SubconFleetDriversService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.subcontractorFleetDriver.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('街車司機不存在');
     if (userId) {
@@ -197,6 +199,7 @@ export class SubconFleetDriversService {
           targetTable: 'subcon_fleet_drivers',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

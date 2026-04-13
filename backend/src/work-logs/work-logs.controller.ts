@@ -42,7 +42,7 @@ export class WorkLogsController {
 
   @Post()
   create(@Body() dto: any, @Request() req: any) {
-    return this.service.create(dto, req.user.id);
+    return this.service.create(dto, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
@@ -52,7 +52,7 @@ export class WorkLogsController {
 
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req: any) {
-    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0);
+    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   // ── 批量操作 ─────────────────────────────────────────────
@@ -97,17 +97,17 @@ export class WorkLogsController {
 
   @Post('edit-lock/heartbeat')
   heartbeatEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.heartbeatEditLock(body.lockKey, req.user.id);
+    return this.service.heartbeatEditLock(body.lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Post('edit-lock/release')
   releaseEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.releaseEditLock(body.lockKey, req.user.id);
+    return this.service.releaseEditLock(body.lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Get('edit-lock/status')
   getEditLockStatus(@Query('lockKey') lockKey: string, @Request() req: any) {
-    return this.service.getEditLockStatus(lockKey, req.user.id);
+    return this.service.getEditLockStatus(lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
    // ── 確認地點（WhatsApp 打卡黃色 Highlight 消除）───────────

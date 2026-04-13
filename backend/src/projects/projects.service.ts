@@ -160,7 +160,7 @@ export class ProjectsService {
     return out;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const project_no = await this.generateProjectNo(dto.company_id);
     const { contract_id, client_id } = await this.resolveClientId(dto);
 
@@ -190,13 +190,14 @@ export class ProjectsService {
           targetTable: 'projects',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
 
@@ -227,13 +228,14 @@ export class ProjectsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(id);
   }
 
-  async updateStatus(id: number, status: string, userId?: number) {
+  async updateStatus(id: number, status: string, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.project.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('工程項目不存在');
     const updated = await this.prisma.project.update({ where: { id }, data: { status } });
@@ -246,6 +248,7 @@ export class ProjectsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

@@ -46,7 +46,7 @@ export class CompaniesService {
     return company;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const saved = await this.prisma.company.create({ data: dto });
     if (userId) {
       try {
@@ -56,13 +56,14 @@ export class CompaniesService {
           targetTable: 'companies',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return saved;
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.company.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('公司不存在');
     const { id: _id, created_at, updated_at, employees, vehicles, machinery, ...updateData } = dto;
@@ -76,6 +77,7 @@ export class CompaniesService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

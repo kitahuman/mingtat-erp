@@ -18,6 +18,11 @@ interface AuditLog {
   user_agent: string | null;
 }
 
+interface UserOption {
+  id: number;
+  name: string;
+}
+
 const ACTIONS = [
   { value: '', label: '所有操作' },
   { value: 'create', label: '新增' },
@@ -26,7 +31,7 @@ const ACTIONS = [
 ];
 
 const TABLES = [
-  { value: '', label: '所有表' },
+  { value: '', label: '所有模組' },
   { value: 'companies', label: '公司' },
   { value: 'employees', label: '員工' },
   { value: 'vehicles', label: '車輛' },
@@ -48,6 +53,15 @@ const TABLES = [
   { value: 'statutory_holidays', label: '法定假期' },
 ];
 
+// Map DB table names to Chinese labels
+const TABLE_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  TABLES.filter(t => t.value).map(t => [t.value, t.label])
+);
+
+function getTableLabel(tableName: string): string {
+  return TABLE_LABEL_MAP[tableName] || tableName;
+}
+
 export default function AuditLogsPage() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -57,17 +71,34 @@ export default function AuditLogsPage() {
   const [loading, setLoading] = useState(false);
 
   // Filters
-  const [filterUser, setFilterUser] = useState('');
+  const [filterUserName, setFilterUserName] = useState('');
   const [filterAction, setFilterAction] = useState('');
   const [filterTable, setFilterTable] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
-  // Users for filter
-  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  // Users for filter dropdown
+  const [users, setUsers] = useState<UserOption[]>([]);
 
   // Expanded log for details
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Fetch users for dropdown
+  useEffect(() => {
+    const token = Cookies.get('token');
+    fetch('/api/users', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data.data || []);
+        setUsers(list.map((u: any) => ({
+          id: u.id,
+          name: u.displayName || u.username || `用戶 ${u.id}`,
+        })));
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -75,7 +106,7 @@ export default function AuditLogsPage() {
       const params = new URLSearchParams();
       params.append('page', String(page));
       params.append('limit', String(limit));
-      if (filterUser) params.append('userId', filterUser);
+      if (filterUserName) params.append('userName', filterUserName);
       if (filterAction) params.append('action', filterAction);
       if (filterTable) params.append('targetTable', filterTable);
       if (filterDateFrom) params.append('dateFrom', filterDateFrom);
@@ -95,7 +126,7 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, filterUser, filterAction, filterTable, filterDateFrom, filterDateTo]);
+  }, [page, limit, filterUserName, filterAction, filterTable, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
     fetchLogs();
@@ -103,7 +134,7 @@ export default function AuditLogsPage() {
 
   const handleFilterReset = () => {
     setPage(1);
-    setFilterUser('');
+    setFilterUserName('');
     setFilterAction('');
     setFilterTable('');
     setFilterDateFrom('');
@@ -143,13 +174,16 @@ export default function AuditLogsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">用戶</label>
-            <input
-              type="text"
-              value={filterUser}
-              onChange={e => { setFilterUser(e.target.value); setPage(1); }}
-              placeholder="用戶 ID"
+            <select
+              value={filterUserName}
+              onChange={e => { setFilterUserName(e.target.value); setPage(1); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            >
+              <option value="">所有用戶</option>
+              {users.map(u => (
+                <option key={u.id} value={u.name}>{u.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -166,7 +200,7 @@ export default function AuditLogsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">表名</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">模組</label>
             <select
               value={filterTable}
               onChange={e => { setFilterTable(e.target.value); setPage(1); }}
@@ -217,10 +251,10 @@ export default function AuditLogsPage() {
               <th className="px-6 py-3 text-left font-semibold text-gray-700">時間</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">用戶</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">操作</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700">表名</th>
+              <th className="px-6 py-3 text-left font-semibold text-gray-700">模組</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">記錄 ID</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">IP 地址</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700">操作</th>
+              <th className="px-6 py-3 text-left font-semibold text-gray-700">詳情</th>
             </tr>
           </thead>
           <tbody>
@@ -249,9 +283,9 @@ export default function AuditLogsPage() {
                         {getActionLabel(log.action)}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-600 font-mono text-xs">{log.target_table}</td>
+                    <td className="px-6 py-3 text-gray-700 text-sm">{getTableLabel(log.target_table)}</td>
                     <td className="px-6 py-3 text-gray-600 font-mono">{log.target_id}</td>
-                    <td className="px-6 py-3 text-gray-600 text-xs">{log.ip_address || '—'}</td>
+                    <td className="px-6 py-3 text-gray-600 text-xs font-mono">{log.ip_address || '—'}</td>
                     <td className="px-6 py-3">
                       <button
                         onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
@@ -284,7 +318,7 @@ export default function AuditLogsPage() {
                           {log.user_agent && (
                             <div>
                               <h4 className="font-semibold text-gray-800 mb-1">User Agent</h4>
-                              <p className="text-xs text-gray-600 break-words">{log.user_agent}</p>
+                              <p className="text-xs text-gray-600 break-all">{log.user_agent}</p>
                             </div>
                           )}
                         </div>

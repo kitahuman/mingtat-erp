@@ -76,7 +76,7 @@ export class PartnersService {
     return data;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     if (dto.name) {
       const dup = await this.prisma.partner.findFirst({
         where: { name: { equals: dto.name, mode: 'insensitive' } },
@@ -92,13 +92,14 @@ export class PartnersService {
           targetTable: 'partners',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return saved;
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.partner.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('合作單位不存在');
     const { created_at, updated_at, id: _id, ...rest } = dto;
@@ -113,6 +114,7 @@ export class PartnersService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -128,7 +130,7 @@ export class PartnersService {
     return results;
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.partner.findUnique({
       where: { id },
       include: {
@@ -160,6 +162,7 @@ export class PartnersService {
           targetTable: 'partners',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

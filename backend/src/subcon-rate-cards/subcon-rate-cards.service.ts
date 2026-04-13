@@ -126,7 +126,7 @@ export class SubconRateCardsService {
     return { data, ot_rates };
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { data, ot_rates } = this.sanitizeForCreate(dto);
 
     // effective_date is required on create
@@ -152,6 +152,7 @@ export class SubconRateCardsService {
           targetTable: 'subcon_rate_cards',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -159,7 +160,7 @@ export class SubconRateCardsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
     const { created_at, updated_at, id: _id, subcontractor, client, company, source_quotation, ot_rates, ...updateData } = dto;
@@ -185,6 +186,7 @@ export class SubconRateCardsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -192,7 +194,7 @@ export class SubconRateCardsService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.subconRateCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('供應商價目表不存在');
 
@@ -205,6 +207,7 @@ export class SubconRateCardsService {
           targetTable: 'subcon_rate_cards',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

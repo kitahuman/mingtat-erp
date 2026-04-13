@@ -185,7 +185,7 @@ export class InvoicesService {
       unit_price: number;
       sort_order?: number;
     }[];
-  }, userId?: number) {
+  }, userId?: number, ipAddress?: string) {
     const companyId = Number(dto.company_id);
     if (!companyId) throw new BadRequestException('請選擇公司');
 
@@ -240,6 +240,7 @@ export class InvoicesService {
           targetTable: 'invoices',
           targetId: invoice.id,
           changesAfter: invoice,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -331,6 +332,7 @@ export class InvoicesService {
           targetTable: 'invoices',
           targetId: invoice.id,
           changesAfter: invoice,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -338,7 +340,7 @@ export class InvoicesService {
     return invoice;
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('發票不存在');
 
@@ -408,6 +410,7 @@ export class InvoicesService {
           targetId: id,
           changesBefore: existing,
           changesAfter: invoice,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -495,7 +498,7 @@ export class InvoicesService {
     });
   }
 
-  async delete(id: number, userId?: number) {
+  async delete(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.invoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('發票不存在');
     if (existing.status === 'paid') throw new BadRequestException('已付款的發票無法刪除');
@@ -508,6 +511,7 @@ export class InvoicesService {
           targetTable: 'invoices',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

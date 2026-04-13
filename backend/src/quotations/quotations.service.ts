@@ -140,7 +140,7 @@ export class QuotationsService {
     return quotation;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { items, company, client, project, ...quotationData } = dto;
 
     // Generate quotation number
@@ -187,6 +187,7 @@ export class QuotationsService {
           targetTable: 'quotations',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -194,7 +195,7 @@ export class QuotationsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
@@ -246,6 +247,7 @@ export class QuotationsService {
           targetId: id,
           changesBefore: existing,
           changesAfter: afterQ,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -276,7 +278,7 @@ export class QuotationsService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
@@ -302,6 +304,7 @@ export class QuotationsService {
           targetTable: 'quotations',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }

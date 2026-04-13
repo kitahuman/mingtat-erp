@@ -75,7 +75,7 @@ export class MachineryService {
     return m;
   }
 
-  async create(dto: any, userId?: number) {
+  async create(dto: any, userId?: number, ipAddress?: string) {
     const { owner_company, transfers, ...data } = dto;
     const saved = await this.prisma.machinery.create({ data });
     if (userId) {
@@ -86,13 +86,14 @@ export class MachineryService {
           targetTable: 'machinery',
           targetId: saved.id,
           changesAfter: saved,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number) {
+  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.machinery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('機械不存在');
     const { transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
@@ -119,6 +120,7 @@ export class MachineryService {
           targetId: id,
           changesBefore: existing,
           changesAfter: updated,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
@@ -142,7 +144,7 @@ export class MachineryService {
     return this.findOne(id);
   }
 
-  async remove(id: number, userId?: number) {
+  async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.machinery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('機械不存在');
     if (userId) {
@@ -153,6 +155,7 @@ export class MachineryService {
           targetTable: 'machinery',
           targetId: id,
           changesBefore: existing,
+          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
