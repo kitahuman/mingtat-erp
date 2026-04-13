@@ -1019,6 +1019,12 @@ function renderSourceDetail(sourceKey: string, detail: any) {
           {detail.location && detail.location !== '—' && (
             <div><span className="text-gray-400">地點:</span> {detail.location}</div>
           )}
+          {detail.product_name && (
+            <div><span className="text-gray-400">商品:</span> <span className="text-blue-600 font-medium">{detail.product_name}</span></div>
+          )}
+          {(detail.goods_quantity || detail.product_unit) && (
+            <div><span className="text-gray-400">數量:</span> {detail.goods_quantity} {detail.product_unit}</div>
+          )}
           {detail.is_suspended && (
             <div className="text-red-600 font-medium">暫停</div>
           )}

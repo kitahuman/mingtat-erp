@@ -35,6 +35,9 @@ interface ParsedOrderItem {
   contact_person?: string;
   slip_write_as?: string;
   is_suspended: boolean;
+  product_name?: string;
+  product_unit?: string;
+  goods_quantity?: number;
   remarks?: string;
 }
 
@@ -84,6 +87,9 @@ export interface DailySummaryItem {
   contact_person: string | null;
   slip_write_as: string | null;
   is_suspended: boolean;
+  product_name: string | null;
+  product_unit: string | null;
+  goods_quantity: number | null;
   remarks: string | null;
   mod_status: string | null; // cancelled | reassigned | suspended | added | null
   mod_prev_data: any | null;
@@ -491,6 +497,9 @@ export class WhatsappService {
             wa_item_contact_person: item.contact_person || null,
             wa_item_slip_write_as: item.slip_write_as || null,
             wa_item_is_suspended: item.is_suspended || false,
+            wa_item_product_name: item.product_name || null,
+            wa_item_product_unit: item.product_unit || null,
+            wa_item_goods_quantity: item.goods_quantity ?? null,
             wa_item_remarks: combinedRemarks,
             wa_item_mod_status: null,
             wa_item_mod_prev_data: undefined,
@@ -824,14 +833,16 @@ export class WhatsappService {
           wa_item_contact_person: item.contact_person || null,
           wa_item_slip_write_as: item.slip_write_as || null,
           wa_item_is_suspended: item.is_suspended || false,
+          wa_item_product_name: item.product_name || null,
+          wa_item_product_unit: item.product_unit || null,
+          wa_item_goods_quantity: item.goods_quantity ?? null,
           wa_item_remarks: item.remarks || null,
           wa_item_mod_status: 'added',
           wa_item_mod_prev_data: undefined,
         },
       });
       createdItems.push(created.id);
-
-      await this.prisma.verificationWaModLog.create({
+      await this.prisma.verificationWaModLog.create({{
         data: {
           mod_order_id: order.id,
           mod_item_id: created.id,
@@ -1053,6 +1064,9 @@ export class WhatsappService {
       "contact_person": "聯絡人+電話或null（不是司機！）",
       "slip_write_as": "飛仔寫什麼或null",
       "is_suspended": true/false,
+      "product_name": "商品名稱或null（如泥頭、石粉、混凝土、廢料等）",
+      "product_unit": "商品單位或null（如車、噸、桶、包等）",
+      "goods_quantity": "商品數量或null（數字）",
       "remarks": "備註或null"
     }
   ],
@@ -1258,6 +1272,9 @@ export class WhatsappService {
           contact_person: item.wa_item_contact_person,
           slip_write_as: item.wa_item_slip_write_as,
           is_suspended: item.wa_item_is_suspended,
+          product_name: item.wa_item_product_name,
+          product_unit: item.wa_item_product_unit,
+          goods_quantity: item.wa_item_goods_quantity !== null ? Number(item.wa_item_goods_quantity) : null,
           remarks: item.wa_item_remarks,
           mod_status: item.wa_item_mod_status,
           mod_prev_data: item.wa_item_mod_prev_data,
@@ -1827,6 +1844,9 @@ export class WhatsappService {
       contact_person?: string;
       slip_write_as?: string;
       is_suspended?: boolean;
+      product_name?: string;
+      product_unit?: string;
+      goods_quantity?: number;
       remarks?: string;
     },
   ) {
@@ -1853,6 +1873,9 @@ export class WhatsappService {
       contact_person: 'wa_item_contact_person',
       slip_write_as: 'wa_item_slip_write_as',
       is_suspended: 'wa_item_is_suspended',
+      product_name: 'wa_item_product_name',
+      product_unit: 'wa_item_product_unit',
+      goods_quantity: 'wa_item_goods_quantity',
       remarks: 'wa_item_remarks',
     };
 
@@ -1916,6 +1939,9 @@ export class WhatsappService {
       contact_person?: string;
       slip_write_as?: string;
       is_suspended?: boolean;
+      product_name?: string;
+      product_unit?: string;
+      goods_quantity?: number;
       remarks?: string;
     },
   ) {
@@ -1949,6 +1975,9 @@ export class WhatsappService {
         wa_item_contact_person: data.contact_person || null,
         wa_item_slip_write_as: data.slip_write_as || null,
         wa_item_is_suspended: data.is_suspended || false,
+        wa_item_product_name: data.product_name || null,
+        wa_item_product_unit: data.product_unit || null,
+        wa_item_goods_quantity: data.goods_quantity || null,
         wa_item_remarks: data.remarks || null,
         wa_item_mod_status: 'added',
         wa_item_mod_prev_data: undefined,

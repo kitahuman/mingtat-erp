@@ -2004,6 +2004,9 @@ model VerificationWaOrderItem {
   wa_item_contact_person  String?  @db.VarChar(200)
   wa_item_slip_write_as   String?  @db.VarChar(100)
   wa_item_is_suspended    Boolean  @default(false)
+  wa_item_product_name    String?  @db.Text
+  wa_item_product_unit    String?  @db.Text
+  wa_item_goods_quantity  Decimal? @db.Decimal(10, 2)
   wa_item_remarks         String?  @db.Text
   wa_item_mod_status      String?  @db.VarChar(30) // cancelled | reassigned | suspended | added | null(unmodified)
   wa_item_mod_prev_data   Json?    // snapshot of previous values before modification

@@ -200,6 +200,9 @@ export class WhatsappController {
       contact_person?: string;
       slip_write_as?: string;
       is_suspended?: boolean;
+      product_name?: string;
+      product_unit?: string;
+      goods_quantity?: number;
       remarks?: string;
     },
   ) {
@@ -222,6 +225,9 @@ export class WhatsappController {
       contact_person?: string;
       slip_write_as?: string;
       is_suspended?: boolean;
+      product_name?: string;
+      product_unit?: string;
+      goods_quantity?: number;
       remarks?: string;
     },
   ) {

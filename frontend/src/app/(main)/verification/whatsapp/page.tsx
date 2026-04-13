@@ -36,6 +36,9 @@ interface SummaryItem {
   contact_person: string | null;
   slip_write_as: string | null;
   is_suspended: boolean;
+  product_name: string | null;
+  product_unit: string | null;
+  goods_quantity: number | null;
   remarks: string | null;
   mod_status: string | null;
   mod_prev_data: any | null;
@@ -108,6 +111,9 @@ interface EditingItem {
   contact_person: string;
   slip_write_as: string;
   is_suspended: boolean;
+  product_name: string;
+  product_unit: string;
+  goods_quantity: string;
   remarks: string;
 }
 
@@ -185,6 +191,9 @@ function itemToEditingItem(item: SummaryItem): EditingItem {
     contact_person: item.contact_person || '',
     slip_write_as: item.slip_write_as || '',
     is_suspended: item.is_suspended,
+    product_name: item.product_name || '',
+    product_unit: item.product_unit || '',
+    goods_quantity: item.goods_quantity !== null ? String(item.goods_quantity) : '',
     remarks: item.remarks || '',
   };
 }
@@ -202,6 +211,9 @@ function emptyEditingItem(orderType: string): EditingItem {
     contact_person: '',
     slip_write_as: '',
     is_suspended: false,
+    product_name: '',
+    product_unit: '',
+    goods_quantity: '',
     remarks: '',
   };
 }
@@ -526,6 +538,9 @@ function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
           { key: 'location', label: '地點' },
           { key: 'machine_code', label: 'DC 編號' },
           { key: 'driver_nickname', label: '操作員' },
+          { key: 'product_name', label: '商品名稱' },
+          { key: 'product_unit', label: '商品單位' },
+          { key: 'goods_quantity', label: '商品數量' },
           { key: 'work_description', label: '工作描述' },
           { key: 'customer', label: '客戶' },
           { key: 'remarks', label: '備註' },
@@ -536,6 +551,9 @@ function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
           { key: 'work_description', label: '工作描述' },
           { key: 'location', label: '地點' },
           { key: 'driver_nickname', label: '帶隊人' },
+          { key: 'product_name', label: '商品名稱' },
+          { key: 'product_unit', label: '商品單位' },
+          { key: 'goods_quantity', label: '商品數量' },
           { key: 'remarks', label: '員工列表（頓號分隔）' },
           { key: 'customer', label: '客戶' },
         ];
@@ -547,6 +565,9 @@ function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
           { key: 'location', label: '地點' },
           { key: 'driver_nickname', label: '司機' },
           { key: 'vehicle_no', label: '車牌' },
+          { key: 'product_name', label: '商品名稱' },
+          { key: 'product_unit', label: '商品單位' },
+          { key: 'goods_quantity', label: '商品數量' },
           { key: 'contact_person', label: '聯絡人' },
           { key: 'remarks', label: '備註' },
         ];
@@ -640,6 +661,7 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
               <th className="px-3 py-2 text-left font-medium min-w-[120px]">地點</th>
               <th className="px-3 py-2 text-left font-medium w-20">DC 編號</th>
               <th className="px-3 py-2 text-left font-medium w-20">操作員</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">商品/數量</th>
               <th className="px-3 py-2 text-left font-medium min-w-[120px]">工作描述</th>
               <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
               <th className="px-3 py-2 text-center font-medium w-20">操作</th>
@@ -664,6 +686,15 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                     <td className="px-3 py-2"><EditInput value={editForm.location} onChange={(v) => setEditForm((prev) => prev ? { ...prev, location: v } : prev)} placeholder="地點" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.machine_code} onChange={(v) => setEditForm((prev) => prev ? { ...prev, machine_code: v } : prev)} placeholder="DC編號" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="操作員" /></td>
+                    <td className="px-3 py-2">
+                      <div className="space-y-1">
+                        <EditInput value={editForm.product_name} onChange={(v) => setEditForm((prev) => prev ? { ...prev, product_name: v } : prev)} placeholder="商品名稱" />
+                        <div className="flex gap-1">
+                          <EditInput value={editForm.goods_quantity} onChange={(v) => setEditForm((prev) => prev ? { ...prev, goods_quantity: v } : prev)} placeholder="數量" />
+                          <EditInput value={editForm.product_unit} onChange={(v) => setEditForm((prev) => prev ? { ...prev, product_unit: v } : prev)} placeholder="單位" />
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="工作描述" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="備註" /></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
@@ -691,6 +722,15 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                       {item.machine_code || '—'}
                     </td>
                     <td className={`px-3 py-2 text-xs font-medium ${textClass}`}>{item.driver_nickname || '—'}</td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.product_name && <div className="font-medium text-blue-600">{item.product_name}</div>}
+                      {item.goods_quantity !== null && (
+                        <div className="text-gray-600">
+                          {item.goods_quantity} {item.product_unit}
+                        </div>
+                      )}
+                      {!item.product_name && item.goods_quantity === null && <span className="text-gray-300">—</span>}
+                    </td>
                     <td className={`px-3 py-2 text-xs max-w-[150px] ${textClass}`}>
                       <div className="truncate" title={item.work_description || ''}>{item.work_description || '—'}</div>
                     </td>
@@ -703,7 +743,7 @@ function MachineryTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                   </tr>
                   {isItemExpanded && hasLogs && (
                     <tr className="bg-orange-50/40">
-                      <td colSpan={9} className="px-4 py-3">
+                      <td colSpan={10} className="px-4 py-3">
                         <div className="border-l-2 border-orange-300 pl-3">
                           <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
                           {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
@@ -901,6 +941,7 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
               <th className="px-3 py-2 text-left font-medium min-w-[160px]">路線/工作描述</th>
               <th className="px-3 py-2 text-left font-medium w-20">司機</th>
               <th className="px-3 py-2 text-left font-medium w-20">車牌</th>
+              <th className="px-3 py-2 text-left font-medium min-w-[100px]">商品/數量</th>
               <th className="px-3 py-2 text-left font-medium min-w-[100px]">聯絡人</th>
               <th className="px-3 py-2 text-left font-medium min-w-[80px]">備註</th>
               <th className="px-3 py-2 text-center font-medium w-20">操作</th>
@@ -926,6 +967,15 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                     <td className="px-3 py-2"><EditInput value={editForm.work_description} onChange={(v) => setEditForm((prev) => prev ? { ...prev, work_description: v } : prev)} placeholder="路線/工作描述" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.driver_nickname} onChange={(v) => setEditForm((prev) => prev ? { ...prev, driver_nickname: v } : prev)} placeholder="司機" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.vehicle_no} onChange={(v) => setEditForm((prev) => prev ? { ...prev, vehicle_no: v } : prev)} placeholder="車牌" /></td>
+                    <td className="px-3 py-2">
+                      <div className="space-y-1">
+                        <EditInput value={editForm.product_name} onChange={(v) => setEditForm((prev) => prev ? { ...prev, product_name: v } : prev)} placeholder="商品名稱" />
+                        <div className="flex gap-1">
+                          <EditInput value={editForm.goods_quantity} onChange={(v) => setEditForm((prev) => prev ? { ...prev, goods_quantity: v } : prev)} placeholder="數量" />
+                          <EditInput value={editForm.product_unit} onChange={(v) => setEditForm((prev) => prev ? { ...prev, product_unit: v } : prev)} placeholder="單位" />
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-3 py-2"><EditInput value={editForm.contact_person} onChange={(v) => setEditForm((prev) => prev ? { ...prev, contact_person: v } : prev)} placeholder="聯絡人" /></td>
                     <td className="px-3 py-2"><EditInput value={editForm.remarks} onChange={(v) => setEditForm((prev) => prev ? { ...prev, remarks: v } : prev)} placeholder="備註" /></td>
                     <td className="px-3 py-2 text-center"><SaveCancelButtons onSave={onSaveEdit} onCancel={onCancelEdit} saving={saving} /></td>
@@ -959,6 +1009,15 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                     <td className={`px-3 py-2 text-xs font-mono font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-teal-700'}`}>
                       {item.vehicle_no || '—'}
                     </td>
+                    <td className={`px-3 py-2 text-xs ${textClass}`}>
+                      {item.product_name && <div className="font-medium text-blue-600">{item.product_name}</div>}
+                      {item.goods_quantity !== null && (
+                        <div className="text-gray-600">
+                          {item.goods_quantity} {item.product_unit}
+                        </div>
+                      )}
+                      {!item.product_name && item.goods_quantity === null && <span className="text-gray-300">—</span>}
+                    </td>
                     <td className={`px-3 py-2 text-xs ${textClass}`}>{item.contact_person || '—'}</td>
                     <td className={`px-3 py-2 text-xs text-gray-500 max-w-[100px] ${textClass}`}>
                       <div className="truncate" title={item.remarks || ''}>{item.remarks || '—'}</div>
@@ -969,7 +1028,7 @@ function TransportTable({ items, expandedItemLogs, toggleItemLog, editingId, edi
                   </tr>
                   {isItemExpanded && hasLogs && (
                     <tr className="bg-orange-50/40">
-                      <td colSpan={10} className="px-4 py-3">
+                      <td colSpan={11} className="px-4 py-3">
                         <div className="border-l-2 border-orange-300 pl-3">
                           <div className="text-xs font-medium text-gray-500 mb-2">修改歷史 ({item.mod_logs.length})</div>
                           {item.mod_logs.map((log) => <ModLogRow key={log.id} log={log} />)}
@@ -1184,6 +1243,13 @@ function MobileItemCard({ item, expandedItemLogs, toggleItemLog, onEdit, onDelet
           <div>
             <div className="text-gray-400 text-[10px]">DC 編號</div>
             <div className="font-mono font-bold">{item.machine_code}</div>
+          </div>
+        )}
+        {(item.product_name || item.goods_quantity !== null) && (
+          <div>
+            <div className="text-gray-400 text-[10px]">商品/數量</div>
+            {item.product_name && <div className="font-medium text-blue-600">{item.product_name}</div>}
+            {item.goods_quantity !== null && <div className="text-gray-600">{item.goods_quantity} {item.product_unit}</div>}
           </div>
         )}
         {staffList.length > 0 && (

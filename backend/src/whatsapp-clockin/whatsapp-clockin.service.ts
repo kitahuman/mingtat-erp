@@ -29,6 +29,8 @@ export interface ParsedClockIn {
   ot: number;
   receipt_nos: string[];
   goods_quantity: number;
+  product_name: string;
+  product_unit: string;
   service_type: string;
 }
 
@@ -231,6 +233,8 @@ export class WhatsappClockinService {
           ot_quantity: parsed.ot > 0 ? parsed.ot : null,
           receipt_no: receiptNo,
           goods_quantity: goodsQty,
+          work_log_product_name: parsed.product_name || null,
+          work_log_product_unit: parsed.product_unit || null,
           unverified_client_name: parsed.company || null,
           service_type: parsed.service_type || parsed.work_content || null,
           is_location_new: isLocationNew,
@@ -399,6 +403,8 @@ export class WhatsappClockinService {
   "ot": 0,                     // OT 加班小時數（純數字）
   "receipt_nos": [],            // 飛仔號碼陣列（可能有多個）
   "goods_quantity": 0,          // 車數/商品數量（純數字）
+  "product_name": "",           // 商品名稱（如：碎石、泥頭、英泥）
+  "product_unit": "",           // 商品單位（如：噸、車、M3）
   "service_type": ""            // 服務類型：運輸/代工/工程/機械/管工工作/維修保養/雜務 等
 }
 
@@ -468,6 +474,8 @@ ${refs.locationRef}
         ot: Number(raw.ot) || 0,
         receipt_nos: Array.isArray(raw.receipt_nos) ? raw.receipt_nos.map(String) : [],
         goods_quantity: Number(raw.goods_quantity) || 0,
+        product_name: raw.product_name || '',
+        product_unit: raw.product_unit || '',
         service_type: raw.service_type || '',
       };
     } catch (error) {
