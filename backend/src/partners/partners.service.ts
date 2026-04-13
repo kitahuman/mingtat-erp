@@ -18,7 +18,7 @@ export class PartnersService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.partner_type) where.partner_type = query.partner_type;
     if (query.category) where.category = query.category;
@@ -163,7 +163,7 @@ export class PartnersService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.partner.delete({ where: { id } });
+    await this.prisma.partner.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 

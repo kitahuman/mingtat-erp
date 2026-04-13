@@ -9,7 +9,7 @@ export class CompaniesService {
   async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string; exclude_external?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.company_type) where.company_type = query.company_type;
     if (query.status) where.status = query.status;

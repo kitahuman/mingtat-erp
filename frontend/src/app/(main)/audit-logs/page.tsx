@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Cookies from 'js-cookie';
 import { useAuth } from '@/lib/auth';
 
 interface AuditLog {
@@ -80,7 +81,12 @@ export default function AuditLogsPage() {
       if (filterDateFrom) params.append('dateFrom', filterDateFrom);
       if (filterDateTo) params.append('dateTo', filterDateTo);
 
-      const res = await fetch(`/api/audit-logs?${params.toString()}`);
+      const token = Cookies.get('token');
+      const res = await fetch(`/api/audit-logs?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       const data = await res.json();
       setLogs(data.data || []);
       setTotal(data.total || 0);

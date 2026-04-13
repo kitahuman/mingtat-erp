@@ -122,7 +122,7 @@ export class InvoicesService {
     const limit = Number(query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (query.status) where.status = query.status;
     if (query.client_id) where.client_id = Number(query.client_id);
     if (query.project_id) where.project_id = Number(query.project_id);
@@ -511,7 +511,7 @@ export class InvoicesService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.invoice.delete({ where: { id } });
+    await this.prisma.invoice.update({ where: { id }, data: { deleted_at: new Date() } });
     return { success: true };
   }
 }

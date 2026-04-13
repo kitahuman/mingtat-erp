@@ -37,7 +37,7 @@ export class WorkLogsService {
       sortOrder = 'DESC',
     } = query;
 
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (publisher_id) where.publisher_id = Number(publisher_id);
     if (status) where.status = status;
     if (company_profile_id) where.company_profile_id = Number(company_profile_id);
@@ -216,7 +216,7 @@ export class WorkLogsService {
       where: { work_log_id: id },
       data: { work_log_id: null },
     });
-    await this.prisma.workLog.delete({ where: { id } });
+    await this.prisma.workLog.update({ where: { id }, data: { deleted_at: new Date() } });
     return { success: true };
   }
 
@@ -241,9 +241,10 @@ export class WorkLogsService {
       data: { work_log_id: null },
     });
 
-    // Step 2: Delete the work-log rows.
-    const result = await this.prisma.workLog.deleteMany({
+    // Step 2: Soft-delete the work-log rows.
+    const result = await this.prisma.workLog.updateMany({
       where: { id: { in: safeIds } },
+      data: { deleted_at: new Date() },
     });
 
     return { success: true, deleted: result.count };

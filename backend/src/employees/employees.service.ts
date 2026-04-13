@@ -163,7 +163,7 @@ export class EmployeesService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.role) where.role = query.role;
     if (query.company_id) where.company_id = Number(query.company_id);
@@ -242,7 +242,7 @@ export class EmployeesService {
     [key: string]: any;
   }) {
     // Build the same base where clause as findAll (excluding the column being filtered)
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (query.role) where.role = query.role;
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.status) where.status = query.status;
@@ -625,7 +625,7 @@ export class EmployeesService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.employee.delete({ where: { id } });
+    await this.prisma.employee.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 
@@ -673,7 +673,7 @@ export class EmployeesService {
       this.prisma.employeeTransfer.deleteMany({
         where: { employee_id: { in: eligibleIds } },
       }),
-      this.prisma.employee.deleteMany({ where: { id: { in: eligibleIds } } }),
+      this.prisma.employee.updateMany({ where: { id: { in: eligibleIds } }, data: { deleted_at: new Date() } }),
     ]);
 
     return { message: `已刪除 ${eligibleIds.length} 名員工`, count: eligibleIds.length };

@@ -28,7 +28,7 @@ export class VehiclesService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.machine_type) where.machine_type = query.machine_type;
     if (query.owner_company_id) where.owner_company_id = Number(query.owner_company_id);
@@ -189,7 +189,7 @@ export class VehiclesService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.vehicle.delete({ where: { id } });
+    await this.prisma.vehicle.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 

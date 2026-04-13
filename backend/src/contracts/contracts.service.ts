@@ -18,7 +18,7 @@ export class ContractsService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.clientId) where.client_id = Number(query.clientId);
     if (query.status) where.status = query.status;
@@ -180,7 +180,7 @@ export class ContractsService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.contract.delete({ where: { id } });
+    await this.prisma.contract.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 }

@@ -16,7 +16,7 @@ export class DailyReportsService {
   async findAll(query: any) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { daily_report_deleted_at: null };
 
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.status) where.daily_report_status = query.status;
@@ -207,7 +207,7 @@ export class DailyReportsService {
     if (existing.daily_report_status === 'submitted') {
       throw new BadRequestException('已提交的日報不可刪除');
     }
-    await this.prisma.dailyReport.delete({ where: { id } });
+    await this.prisma.dailyReport.update({ where: { id }, data: { daily_report_deleted_at: new Date() } });
     return { success: true };
   }
 

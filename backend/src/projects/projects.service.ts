@@ -51,7 +51,7 @@ export class ProjectsService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.client_id) where.client_id = Number(query.client_id);

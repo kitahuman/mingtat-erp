@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Cookies from 'js-cookie';
 
 interface DeletedRecord {
   id: number;
@@ -79,7 +80,12 @@ export default function RecycleBinPage() {
       params.append('limit', String(limit));
       if (filterTable !== 'all') params.append('table', filterTable);
 
-      const res = await fetch(`/api/recycle-bin?${params.toString()}`);
+      const token = Cookies.get('token');
+      const res = await fetch(`/api/recycle-bin?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       const data = await res.json();
       setRecords(data.data || []);
       setTotal(data.total || 0);
@@ -99,9 +105,10 @@ export default function RecycleBinPage() {
 
     setRestoring(id);
     try {
+      const token = Cookies.get('token');
       const res = await fetch('/api/recycle-bin/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ table, id }),
       });
 
@@ -124,9 +131,10 @@ export default function RecycleBinPage() {
 
     setDeleting(id);
     try {
+      const token = Cookies.get('token');
       const res = await fetch('/api/recycle-bin/permanent', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ table, id }),
       });
 

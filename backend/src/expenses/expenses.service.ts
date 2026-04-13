@@ -41,7 +41,7 @@ export class ExpensesService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.category_id) where.category_id = Number(query.category_id);
@@ -174,7 +174,7 @@ export class ExpensesService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.expense.delete({ where: { id } });
+    await this.prisma.expense.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 

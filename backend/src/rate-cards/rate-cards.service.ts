@@ -25,7 +25,7 @@ export class RateCardsService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = {};
+    const where: any = { deleted_at: null };
 
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.client_id) where.client_id = Number(query.client_id);
@@ -222,7 +222,7 @@ export class RateCardsService {
       } catch (e) { console.error('Audit log error:', e); }
     }
 
-    await this.prisma.rateCard.delete({ where: { id } });
+    await this.prisma.rateCard.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
 
