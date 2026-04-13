@@ -614,12 +614,8 @@ export class CsvImportService {
     const companyProfileId = company_name ? await this.resolveCompanyProfileId(company_name) : null;
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
     let employeeId: number | null = null;
-    let importRemarks = '';
     if (employee_code) {
       employeeId = await this.resolveEmployeeId(employee_code);
-      if (!employeeId) {
-        importRemarks = `[未匹配員工: ${employee_code}]`;
-      }
     }
     let contractId: number | null = null;
     if (contract_name) {
@@ -646,14 +642,9 @@ export class CsvImportService {
       }
     }
 
-    const finalRemarks = importRemarks 
-      ? (rest.remarks ? `${importRemarks} ${rest.remarks}` : importRemarks)
-      : rest.remarks;
-
     const created = await this.prisma.workLog.create({
       data: {
         ...rest,
-        remarks: finalRemarks,
         company_profile_id: companyProfileId,
         client_id: clientId,
         employee_id: employeeId,
