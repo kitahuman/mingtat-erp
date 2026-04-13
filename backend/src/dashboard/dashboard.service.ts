@@ -159,6 +159,34 @@ export class DashboardService {
         { type: '平安卡', date: e.green_card_expiry },
         { type: '建造業工人註冊證', date: e.construction_card_expiry },
         { type: '駕駛執照', date: e.driving_license_expiry },
+        { type: '核准工人證明書', date: e.approved_worker_cert_expiry },
+        { type: '操作搬土機證明書', date: e.earth_mover_cert_expiry },
+        { type: '操作挖掘機證明書', date: e.excavator_cert_expiry },
+        { type: '起重機操作員證明書', date: e.crane_operator_cert_expiry },
+        { type: '操作貨車吊機證明書', date: e.lorry_crane_cert_expiry },
+        { type: '操作履帶式固定吊臂起重機證明書', date: e.crawler_crane_cert_expiry },
+        { type: '操作輪胎式液壓伸縮吊臂起重機證明書', date: e.hydraulic_crane_cert_expiry },
+        { type: '機場禁區通行證', date: e.airport_pass_expiry },
+        { type: '金門證', date: e.gammon_pass_expiry },
+        { type: '禮頓證', date: e.leighton_pass_expiry },
+        { type: '密閉空間作業核准工人證明書', date: e.confined_space_cert_expiry },
+        { type: '操作壓實機證明書', date: e.compactor_cert_expiry },
+        { type: '吊索銀咭', date: e.slinging_silver_card_expiry },
+        { type: '工藝測試證明書', date: e.craft_test_cert_expiry },
+        { type: '壓實負荷物移動機械操作員證明書', date: e.compaction_load_cert_expiry },
+        { type: '升降台安全使用訓練證書', date: e.aerial_platform_cert_expiry },
+        { type: '地盤索具A12證書', date: e.site_rigging_a12_cert_expiry },
+        { type: '吊索及信號員A12S證書', date: e.slinging_signaler_a12s_cert_expiry },
+        { type: '零意外證書', date: e.zero_injury_cert_expiry },
+        { type: '指定行業安全訓練證書', date: e.designated_trade_safety_cert_expiry },
+        { type: '小型裝載機操作員證書', date: e.small_loader_cert_expiry },
+        { type: '安全督導員證書', date: e.safety_supervisor_cert_expiry },
+        { type: '安全工作程序證書', date: e.safe_work_procedure_cert_expiry },
+        { type: '磨輪機操作員證書', date: e.grinding_wheel_cert_expiry },
+        { type: '船貨裝卸證書', date: e.ship_cargo_cert_expiry },
+        { type: '電弧焊接證書', date: e.arc_welding_cert_expiry },
+        { type: '氣體焊接證書', date: e.gas_welding_cert_expiry },
+        { type: '中電安全證書', date: e.clp_safety_cert_expiry },
       ];
       for (const c of checks) {
         if (c.date && String(c.date) <= sixtyStr) {
@@ -169,6 +197,21 @@ export class DashboardService {
             expiry_date: c.date,
             company_name: e.company?.name || '',
           });
+        }
+      }
+      // ── 動態證件（other_certificates JSON）──────────────────
+      if (e.other_certificates && typeof e.other_certificates === 'object') {
+        const otherCerts = e.other_certificates as Record<string, { cert_no?: string; expiry_date?: string }>;
+        for (const [certLabel, certData] of Object.entries(otherCerts)) {
+          if (certData && certData.expiry_date && certData.expiry_date <= sixtyStr) {
+            employeeAlerts.push({
+              id: e.id,
+              name: e.name_zh,
+              type: certLabel,
+              expiry_date: certData.expiry_date,
+              company_name: e.company?.name || '',
+            });
+          }
         }
       }
     }
@@ -523,10 +566,47 @@ export class DashboardService {
         { type: '平安卡', date: e.green_card_expiry },
         { type: '建造業工人註冊證', date: e.construction_card_expiry },
         { type: '駕駛執照', date: e.driving_license_expiry },
+        { type: '核准工人證明書', date: e.approved_worker_cert_expiry },
+        { type: '操作搬土機證明書', date: e.earth_mover_cert_expiry },
+        { type: '操作挖掘機證明書', date: e.excavator_cert_expiry },
+        { type: '起重機操作員證明書', date: e.crane_operator_cert_expiry },
+        { type: '操作貨車吊機證明書', date: e.lorry_crane_cert_expiry },
+        { type: '操作履帶式固定吊臂起重機證明書', date: e.crawler_crane_cert_expiry },
+        { type: '操作輪胎式液壓伸縮吊臂起重機證明書', date: e.hydraulic_crane_cert_expiry },
+        { type: '機場禁區通行證', date: e.airport_pass_expiry },
+        { type: '金門證', date: e.gammon_pass_expiry },
+        { type: '禮頓證', date: e.leighton_pass_expiry },
+        { type: '密閉空間作業核准工人證明書', date: e.confined_space_cert_expiry },
+        { type: '操作壓實機證明書', date: e.compactor_cert_expiry },
+        { type: '吊索銀咭', date: e.slinging_silver_card_expiry },
+        { type: '工藝測試證明書', date: e.craft_test_cert_expiry },
+        { type: '壓實負荷物移動機械操作員證明書', date: e.compaction_load_cert_expiry },
+        { type: '升降台安全使用訓練證書', date: e.aerial_platform_cert_expiry },
+        { type: '地盤索具A12證書', date: e.site_rigging_a12_cert_expiry },
+        { type: '吊索及信號員A12S證書', date: e.slinging_signaler_a12s_cert_expiry },
+        { type: '零意外證書', date: e.zero_injury_cert_expiry },
+        { type: '指定行業安全訓練證書', date: e.designated_trade_safety_cert_expiry },
+        { type: '小型裝載機操作員證書', date: e.small_loader_cert_expiry },
+        { type: '安全督導員證書', date: e.safety_supervisor_cert_expiry },
+        { type: '安全工作程序證書', date: e.safe_work_procedure_cert_expiry },
+        { type: '磨輪機操作員證書', date: e.grinding_wheel_cert_expiry },
+        { type: '船貨裝卸證書', date: e.ship_cargo_cert_expiry },
+        { type: '電弧焊接證書', date: e.arc_welding_cert_expiry },
+        { type: '氣體焊接證書', date: e.gas_welding_cert_expiry },
+        { type: '中電安全證書', date: e.clp_safety_cert_expiry },
       ];
       for (const c of checks) {
         if (c.date && String(c.date) <= sixtyStr) {
           employeeAlerts.push({ id: e.id, name: e.name_zh, type: c.type, expiry_date: c.date, company_name: e.company?.name || '' });
+        }
+      }
+      // ── 動態證件（other_certificates JSON）──────────────────
+      if (e.other_certificates && typeof e.other_certificates === 'object') {
+        const otherCerts = e.other_certificates as Record<string, { cert_no?: string; expiry_date?: string }>;
+        for (const [certLabel, certData] of Object.entries(otherCerts)) {
+          if (certData && certData.expiry_date && certData.expiry_date <= sixtyStr) {
+            employeeAlerts.push({ id: e.id, name: e.name_zh, type: certLabel, expiry_date: certData.expiry_date, company_name: e.company?.name || '' });
+          }
         }
       }
     }
