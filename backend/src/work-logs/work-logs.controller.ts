@@ -97,7 +97,7 @@ export class WorkLogsController {
 
   @Post('edit-lock/heartbeat')
   heartbeatEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.heartbeatEditLock(body.lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+    return this.service.heartbeatEditLock(body.lockKey, req.user.id);
   }
 
   @Post('edit-lock/release')
