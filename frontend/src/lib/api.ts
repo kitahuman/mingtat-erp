@@ -728,8 +728,8 @@ export const verificationApi = {
     api.get('/verification/whatsapp-daily-summaries', { params }),
 
   // 單日 Order 總結詳情
-  getWhatsappDailySummary: (date: string) =>
-    api.get(`/verification/whatsapp-daily-summary/${date}`),
+  getWhatsappDailySummary: (date: string, shift?: string) =>
+    api.get(`/verification/whatsapp-daily-summary/${date}`, { params: { shift: shift || 'day' } }),
 
   // WhatsApp Orders 列表（向後兼容）
   getWhatsappOrders: (params?: {

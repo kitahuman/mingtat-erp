@@ -45,6 +45,7 @@ interface AiClassification {
   message_type: 'order' | 'modification' | 'chat';
   confidence: number;
   order_date?: string; // YYYY-MM-DD
+  shift?: 'day' | 'night'; // day (default) or night
   is_update: boolean;
   order_status: 'tentative' | 'confirmed';
   items: ParsedOrderItem[];
@@ -113,6 +114,7 @@ export interface DailySummaryItem {
 
 export interface DailySummary {
   date: string; // YYYY-MM-DD
+  shift: string; // day | night
   latest_status: string; // tentative | confirmed
   total_items: number;
   active_items: number; // items not cancelled
@@ -385,7 +387,8 @@ export class WhatsappService {
     const targetDate = classification.order_date
       || (classification.modifications?.[0]?.target_date)
       || new Date().toISOString().slice(0, 10);
-    await this.syncDailySummaryToVerificationRecords(targetDate);
+    const targetShift = classification.shift || 'day';
+    await this.syncDailySummaryToVerificationRecords(targetDate, targetShift);
 
     return result;
   }
@@ -436,8 +439,9 @@ export class WhatsappService {
     const orderDate = classification.order_date
       ? new Date(classification.order_date)
       : new Date();
+    const shift = classification.shift || 'day';
 
-    // 版本管理：檢查同一天是否已有 order
+    // 版本管理：檢查同一天 + 同一班次是否已有 order
     const dateStart = new Date(orderDate);
     dateStart.setHours(0, 0, 0, 0);
     const dateEnd = new Date(orderDate);
@@ -446,6 +450,7 @@ export class WhatsappService {
     const existingOrders = await this.prisma.verificationWaOrder.findMany({
       where: {
         wa_order_date: { gte: dateStart, lte: dateEnd },
+        wa_order_shift: shift,
       },
       orderBy: { wa_order_version: 'desc' },
       take: 1,
@@ -459,6 +464,7 @@ export class WhatsappService {
       data: {
         wa_order_msg_id: messageId,
         wa_order_date: orderDate,
+        wa_order_shift: shift,
         wa_order_status: classification.order_status,
         wa_order_version: version,
         wa_order_sender_name: sender,
@@ -532,6 +538,7 @@ export class WhatsappService {
       message_id: messageId,
       order_id: waOrder.id,
       order_date: classification.order_date,
+      shift,
       version,
       item_count: classification.items.length,
       leave_count: classification.leave_list.length,
@@ -561,9 +568,11 @@ export class WhatsappService {
 
     const results: any[] = [];
 
+    const shift = classification.shift || 'day';
+
     for (const mod of modifications) {
       try {
-        const result = await this.applyModification(messageId, mod, sender);
+        const result = await this.applyModification(messageId, mod, sender, shift);
         results.push(result);
       } catch (error) {
         this.logger.error(`Failed to apply modification:`, error);
@@ -588,6 +597,7 @@ export class WhatsappService {
     messageId: number,
     mod: AiModification,
     _sender: string,
+    shift: string = 'day',
   ) {
     const targetDate = mod.target_date ? new Date(mod.target_date) : new Date();
     const dateStart = new Date(targetDate);
@@ -595,13 +605,25 @@ export class WhatsappService {
     const dateEnd = new Date(targetDate);
     dateEnd.setHours(23, 59, 59, 999);
 
-    const latestOrder = await this.prisma.verificationWaOrder.findFirst({
+    // 先嘗試找同一班次的 order，找不到則 fallback 到任何班次
+    let latestOrder = await this.prisma.verificationWaOrder.findFirst({
       where: {
         wa_order_date: { gte: dateStart, lte: dateEnd },
+        wa_order_shift: shift,
       },
       orderBy: { wa_order_version: 'desc' },
       include: { items: true },
     });
+
+    if (!latestOrder) {
+      latestOrder = await this.prisma.verificationWaOrder.findFirst({
+        where: {
+          wa_order_date: { gte: dateStart, lte: dateEnd },
+        },
+        orderBy: { wa_order_version: 'desc' },
+        include: { items: true },
+      });
+    }
 
     if (!latestOrder) {
       return {
@@ -1035,6 +1057,9 @@ export class WhatsappService {
 
 ## 日期處理
 - 日期格式：D-M-YYYY 或 D-M-YYYY(暫定) 或 D-M-YYYY（星期X）暫定/更新
+- ⛔ 夜間 order 格式：D-M-YYYY(夜) 或 D-M-YYYY（夜）→ shift: "night"（日期後面帶「(夜)」或「（夜）」表示夜間班次）
+- 如果日期後面沒有「(夜)」或「（夜）」，則 shift: "day"（日間班次，預設值）
+- 夜間 order 的內容格式與日間相同，只是日期標記不同
 - 全形數字（４）= 半形數字（4）
 - 「暫定」→ order_status: "tentative"；「更新」→ is_update: true, order_status: "confirmed"
 - 「明天」「聽日」「今日」等相對日期基於今天 ${today}
@@ -1046,6 +1071,7 @@ export class WhatsappService {
   "message_type": "order",
   "confidence": 0.0-1.0,
   "order_date": "YYYY-MM-DD",
+  "shift": "day" 或 "night",  // ⛔ 必填！日期帶(夜)/(夜）→ "night"，否則 "day"
   "is_update": true/false,
   "order_status": "tentative" 或 "confirmed",
   "items": [
@@ -1078,6 +1104,7 @@ export class WhatsappService {
 {
   "message_type": "modification",
   "confidence": 0.0-1.0,
+  "shift": "day" 或 "night",  // 如果訊息提到夜間→ "night"，否則 "day"
   "modifications": [
     {
       "mod_type": "cancel/reassign/suspend/resume/add/other",
@@ -1107,6 +1134,7 @@ export class WhatsappService {
   "message_type": "chat",
   "confidence": 0.0-1.0,
   "order_date": null,
+  "shift": "day",
   "is_update": false,
   "order_status": "tentative",
   "items": [],
@@ -1154,16 +1182,17 @@ export class WhatsappService {
   // 每日 Order 總結 — 核心方法
   // 合併同一天所有 order 版本 + modification，產生最終版本
   // ══════════════════════════════════════════════════════════════
-  async getDailySummary(dateStr: string): Promise<DailySummary | null> {
+  async getDailySummary(dateStr: string, shift: string = 'day'): Promise<DailySummary | null> {
     const dateStart = new Date(dateStr);
     dateStart.setHours(0, 0, 0, 0);
     const dateEnd = new Date(dateStr);
     dateEnd.setHours(23, 59, 59, 999);
 
-    // 取得該天所有 order（按版本排序）
+    // 取得該天 + 該班次的所有 order（按版本排序）
     const orders = await this.prisma.verificationWaOrder.findMany({
       where: {
         wa_order_date: { gte: dateStart, lte: dateEnd },
+        wa_order_shift: shift,
       },
       include: {
         items: {
@@ -1343,6 +1372,7 @@ export class WhatsappService {
 
     return {
       date: dateStr,
+      shift,
       latest_status: overallLatestOrder.wa_order_status,
       total_items: summaryItems.length,
       active_items: activeCount,
@@ -1393,19 +1423,20 @@ export class WhatsappService {
 
     const allOrders = await this.prisma.verificationWaOrder.findMany({
       where,
-      select: { wa_order_date: true },
+      select: { wa_order_date: true, wa_order_shift: true },
       orderBy: { wa_order_date: 'desc' },
     });
 
-    // 取得不重複的日期
-    const uniqueDates = [...new Set(
-      allOrders.map((o) => o.wa_order_date.toISOString().slice(0, 10)),
+    // 取得不重複的日期+班次組合
+    const uniqueDateShifts = [...new Set(
+      allOrders.map((o) => `${o.wa_order_date.toISOString().slice(0, 10)}|${o.wa_order_shift}`),
     )].sort((a, b) => b.localeCompare(a)); // 最新日期在前
 
-    // 產生每天的總結
+    // 產生每天每班次的總結
     const summaries: DailySummary[] = [];
-    for (const dateStr of uniqueDates) {
-      const summary = await this.getDailySummary(dateStr);
+    for (const dateShift of uniqueDateShifts) {
+      const [dateStr, shift] = dateShift.split('|');
+      const summary = await this.getDailySummary(dateStr, shift);
       if (!summary) continue;
 
       // 搜尋過濾
@@ -1445,7 +1476,7 @@ export class WhatsappService {
   // 同步每日總結到 verification_records（用於六來源交叉比對）
   // 每次有新 order 或 modification 時調用
   // ══════════════════════════════════════════════════════════════
-  private async syncDailySummaryToVerificationRecords(dateStr: string) {
+  private async syncDailySummaryToVerificationRecords(dateStr: string, shift: string = 'day') {
     const source = await this.prisma.verificationSource.findUnique({
       where: { source_code: 'whatsapp_order' },
     });
@@ -1454,14 +1485,16 @@ export class WhatsappService {
       return;
     }
 
-    const summary = await this.getDailySummary(dateStr);
+    const summary = await this.getDailySummary(dateStr, shift);
     if (!summary) return;
 
-    // 刪除該日期的舊 verification_records（whatsapp_order 來源）
+    const shiftSuffix = shift === 'night' ? '-night' : '';
+
+    // 刪除該日期+班次的舊 verification_records（whatsapp_order 來源）
     const existingBatches = await this.prisma.verificationBatch.findMany({
       where: {
         batch_source_id: source.id,
-        batch_code: { startsWith: `BATCH-${dateStr}-whatsapp_order-summary` },
+        batch_code: { startsWith: `BATCH-${dateStr}-whatsapp_order-summary${shiftSuffix}` },
       },
       select: { id: true },
     });
@@ -1485,13 +1518,14 @@ export class WhatsappService {
     if (transportItems.length === 0) return;
 
     const orderDate = new Date(dateStr);
-    const batchCode = `BATCH-${dateStr}-whatsapp_order-summary`;
+    const batchCode = `BATCH-${dateStr}-whatsapp_order-summary${shiftSuffix}`;
+    const shiftLabel = shift === 'night' ? ' (夜間)' : '';
 
     const batch = await this.prisma.verificationBatch.create({
       data: {
         batch_code: batchCode,
         batch_source_id: source.id,
-        batch_file_name: `WhatsApp Daily Summary ${dateStr}`,
+        batch_file_name: `WhatsApp Daily Summary ${dateStr}${shiftLabel}`,
         batch_total_rows: transportItems.length,
         batch_filtered_rows: transportItems.length,
         batch_status: 'completed',
@@ -1553,13 +1587,13 @@ export class WhatsappService {
       return maxType;
     };
 
-    // 按 date + order_type 分組，收集所有版本的 orders
-    // key: "YYYY-MM-DD|order_type"
+    // 按 date + shift + order_type 分組，收集所有版本的 orders
+    // key: "YYYY-MM-DD|shift|order_type"
     const ordersByDateType = new Map<string, (typeof orders[0])[]>();
     for (const order of orders) {
       const dateKey = order.wa_order_date.toISOString().slice(0, 10);
       const primaryType = getOrderPrimaryType(order);
-      const groupKey = `${dateKey}|${primaryType}`;
+      const groupKey = `${dateKey}|${order.wa_order_shift}|${primaryType}`;
       if (!ordersByDateType.has(groupKey)) {
         ordersByDateType.set(groupKey, []);
       }

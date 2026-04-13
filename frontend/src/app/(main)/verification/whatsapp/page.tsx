@@ -79,6 +79,7 @@ interface OrderModLog {
 
 interface DailySummary {
   date: string;
+  shift: string; // day | night
   latest_status: string;
   total_items: number;
   active_items: number;
@@ -1341,20 +1342,22 @@ export default function WhatsAppDailySummaryPage() {
     fetchData();
   }, [fetchData]);
 
-  const toggleDate = (date: string) => {
+  const getSummaryKey = (summary: DailySummary) => `${summary.date}|${summary.shift}`;
+
+  const toggleDate = (key: string) => {
     setExpandedDates((prev) => {
       const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const toggleMessages = (date: string) => {
+  const toggleMessages = (key: string) => {
     setExpandedMessages((prev) => {
       const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -1571,8 +1574,9 @@ export default function WhatsAppDailySummaryPage() {
 
       {/* ── 每日總結卡片列表 ────────────────────────────────── */}
       {!loading && summaries.map((summary) => {
-        const isExpanded = expandedDates.has(summary.date);
-        const showMessages = expandedMessages.has(summary.date);
+        const summaryKey = getSummaryKey(summary);
+        const isExpanded = expandedDates.has(summaryKey);
+        const showMessages = expandedMessages.has(summaryKey);
         const latestVersion = summary.versions[summary.versions.length - 1];
         const grouped = groupItemsByType(summary.items);
         const latestOrderId = summary.items[0]?.source_order_id;
@@ -1585,16 +1589,21 @@ export default function WhatsAppDailySummaryPage() {
         ].filter(Boolean);
 
         return (
-          <div key={summary.date} className="bg-white rounded-lg shadow-sm border mb-4 overflow-hidden">
-            {/* ── 日期標題列 ──────────────────────────────── */}
+          <div key={summaryKey} className="bg-white rounded-lg shadow-sm border mb-4 overflow-hidden">
+            {/* ── 日期標題列 ──────────────────────── */}
             <div
               className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition"
-              onClick={() => toggleDate(summary.date)}
+              onClick={() => toggleDate(summaryKey)}
             >
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-lg font-semibold text-gray-900">
                   {formatDate(summary.date)}
                 </span>
+                {summary.shift === 'night' && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    夜間
+                  </span>
+                )}
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   summary.latest_status === 'confirmed'
                     ? 'bg-green-100 text-green-700'
@@ -1723,7 +1732,7 @@ export default function WhatsAppDailySummaryPage() {
                 <div className="border-t">
                   <div
                     className="flex items-center justify-between px-5 py-2.5 cursor-pointer hover:bg-gray-50 transition text-sm"
-                    onClick={() => toggleMessages(summary.date)}
+                    onClick={() => toggleMessages(summaryKey)}
                   >
                     <span className="text-gray-600 font-medium flex items-center gap-1.5">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

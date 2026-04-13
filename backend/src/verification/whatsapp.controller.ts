@@ -125,8 +125,11 @@ export class WhatsappController {
 
   @Get('whatsapp-daily-summary/:date')
   @UseGuards(AuthGuard('jwt'))
-  async getDailySummary(@Param('date') date: string) {
-    return this.whatsappService.getDailySummary(date);
+  async getDailySummary(
+    @Param('date') date: string,
+    @Query('shift') shift?: string,
+  ) {
+    return this.whatsappService.getDailySummary(date, shift || 'day');
   }
 
   // ══════════════════════════════════════════════════════════════

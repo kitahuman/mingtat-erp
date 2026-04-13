@@ -148,7 +148,7 @@ export class ConfirmationService {
           where: waWhere,
           include: {
             order: {
-              select: { id: true, wa_order_date: true, wa_order_status: true, wa_order_version: true },
+              select: { id: true, wa_order_date: true, wa_order_shift: true, wa_order_status: true, wa_order_version: true },
             },
           },
           orderBy: [

@@ -1967,6 +1967,7 @@ model VerificationWaOrder {
   id                     Int      @id @default(autoincrement())
   wa_order_msg_id        Int?
   wa_order_date          DateTime @db.Date
+  wa_order_shift         String   @default("day") @db.VarChar(10) // day | night
   wa_order_status        String   @default("tentative") @db.VarChar(20) // tentative | confirmed
   wa_order_version       Int      @default(1)
   wa_order_sender_name   String?  @db.VarChar(100)
@@ -1982,6 +1983,7 @@ model VerificationWaOrder {
   mod_logs VerificationWaModLog[]
 
   @@index([wa_order_date])
+  @@index([wa_order_shift])
   @@index([wa_order_status])
   @@index([wa_order_msg_id])
   @@map("verification_wa_orders")
