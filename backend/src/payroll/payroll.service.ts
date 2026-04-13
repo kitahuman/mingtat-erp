@@ -41,10 +41,8 @@ export class PayrollService {
     if (query.employee_id) where.employee_id = Number(query.employee_id);
     if (query.status) {
       where.status = query.status;
-    } else {
-      // By default, exclude 'preparing' status from list view
-      where.status = { not: 'preparing' };
     }
+    // preparing 狀態也顯示在列表中（作為草稿）
     if (query.search) {
       where.employee = {
         OR: [
@@ -331,6 +329,11 @@ export class PayrollService {
     }
     const existing = await this.prisma.payroll.findFirst({ where: existingWhere });
     if (existing) {
+      // 如果已存在 preparing 狀態的糧單，直接返回該糧單（讓前端跳轉繼續編輯）
+      if (existing.status === 'preparing') {
+        return this.findOne(existing.id);
+      }
+      // 其他狀態的糧單則報錯
       throw new BadRequestException(`此員工在 ${date_from} 至 ${date_to} 的糧單已存在（ID: ${existing.id}）`);
     }
 

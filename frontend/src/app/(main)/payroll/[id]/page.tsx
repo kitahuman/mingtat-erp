@@ -673,97 +673,7 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
-      {/* ── MPF 計算薪金（非行業計劃） ── */}
-      {!isPreparing && payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
-        <div className="card mb-6">
-          <div className="flex items-center gap-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數</p>
-              {isDraft ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input-field w-48 font-mono"
-                    defaultValue={payroll.mpf_relevant_income ?? ''}
-                    onBlur={async (e) => {
-                      const val = e.target.value;
-                      try {
-                        await payrollApi.update(payroll.id, { mpf_relevant_income: val || null });
-                        alert('已更新 MPF 計算薪金，請按「重新計算」以更新糧單');
-                      } catch (err: any) {
-                        alert(err.response?.data?.message || '更新失敗');
-                      }
-                    }}
-                  />
-                  <span className="text-xs text-gray-400">修改後請按「重新計算」</span>
-                </div>
-              ) : (
-                <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Custom Adjustments ── */}
-      {!isPreparing && <div className="card mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">自定義津貼/扣款</h2>
-          {isDraft && (
-            <button onClick={() => setShowAdjForm(true)} className="text-sm text-primary-600 hover:underline">+ 新增項目</button>
-          )}
-        </div>
-        {adjustments.length > 0 ? (
-          <div className="overflow-x-auto border rounded-lg">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600">項目名稱</th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
-                  {isDraft && <th className="px-4 py-2 text-center font-medium text-gray-600">操作</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {adjustments.map((adj: any) => {
-                  const isNeg = Number(adj.amount) < 0;
-                  return (
-                    <tr key={adj.id} className="border-b">
-                      <td className="px-4 py-2 font-medium">{adj.item_name}</td>
-                      <td className={`px-4 py-2 text-right font-mono font-bold ${isNeg ? 'text-red-600' : 'text-green-600'}`}>
-                        {isNeg ? '-' : '+'}${Math.abs(Number(adj.amount)).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2 text-gray-500 text-xs">{adj.remarks || '-'}</td>
-                      {isDraft && (
-                        <td className="px-4 py-2 text-center">
-                          <button onClick={() => handleRemoveAdjustment(adj.id)} className="text-xs text-red-500 hover:underline">刪除</button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="border-t">
-                <tr className="bg-gray-50">
-                  <td className="px-4 py-2 font-bold text-right">調整合計</td>
-                  <td className={`px-4 py-2 text-right font-mono font-bold ${Number(payroll.adjustment_total) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {Number(payroll.adjustment_total) < 0 ? '-' : '+'}${Math.abs(Number(payroll.adjustment_total)).toLocaleString()}
-                  </td>
-                  <td colSpan={isDraft ? 2 : 1}></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4">沒有自定義調整項目</p>
-        )}
-      </div>
-
-      }
-
-      {/* ── Work Logs Tabs ── */}
+      {/* ── Work Logs Tabs ── 順序：工作紀錄 → 津貼 → 總金額 → MPF */}
       <div className="card mb-6">
         <div className="flex items-center border-b mb-4">
           {TAB_KEYS.filter(tab => !isPreparing || tab === 'detail').map(tab => (
@@ -1067,6 +977,62 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
+      {/* ── Custom Adjustments ── */}
+      {!isPreparing && <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">自定義津貼/扣款</h2>
+          {isDraft && (
+            <button onClick={() => setShowAdjForm(true)} className="text-sm text-primary-600 hover:underline">+ 新增項目</button>
+          )}
+        </div>
+        {adjustments.length > 0 ? (
+          <div className="overflow-x-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">項目名稱</th>
+                  <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
+                  {isDraft && <th className="px-4 py-2 text-center font-medium text-gray-600">操作</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {adjustments.map((adj: any) => {
+                  const isNeg = Number(adj.amount) < 0;
+                  return (
+                    <tr key={adj.id} className="border-b">
+                      <td className="px-4 py-2 font-medium">{adj.item_name}</td>
+                      <td className={`px-4 py-2 text-right font-mono font-bold ${isNeg ? 'text-red-600' : 'text-green-600'}`}>
+                        {isNeg ? '-' : '+'}${Math.abs(Number(adj.amount)).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 text-xs">{adj.remarks || '-'}</td>
+                      {isDraft && (
+                        <td className="px-4 py-2 text-center">
+                          <button onClick={() => handleRemoveAdjustment(adj.id)} className="text-xs text-red-500 hover:underline">刪除</button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="border-t">
+                <tr className="bg-gray-50">
+                  <td className="px-4 py-2 font-bold text-right">調整合計</td>
+                  <td className={`px-4 py-2 text-right font-mono font-bold ${Number(payroll.adjustment_total) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {Number(payroll.adjustment_total) < 0 ? '-' : '+'}${Math.abs(Number(payroll.adjustment_total)).toLocaleString()}
+                  </td>
+                  <td colSpan={isDraft ? 2 : 1}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-4">沒有自定義調整項目</p>
+        )}
+      </div>
+
+      }
+
       {/* ── Summary Cards (bottom) ── */}
       {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card">
@@ -1090,6 +1056,40 @@ export default function PayrollDetailPage() {
       </div>
 
       }
+
+      {/* ── MPF 計算薪金（非行業計劃）── 放在最底部 */}
+      {!isPreparing && payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
+        <div className="card mb-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數</p>
+              {isDraft ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field w-48 font-mono"
+                    defaultValue={payroll.mpf_relevant_income ?? ''}
+                    onBlur={async (e) => {
+                      const val = e.target.value;
+                      try {
+                        await payrollApi.update(payroll.id, { mpf_relevant_income: val || null });
+                        alert('已更新 MPF 計算薪金，請按「重新計算」以更新糧單');
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || '更新失敗');
+                      }
+                    }}
+                  />
+                  <span className="text-xs text-gray-400">修改後請按「重新計算」</span>
+                </div>
+              ) : (
+                <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Payment Info ── */}
       {!isPreparing && <div className="card">
