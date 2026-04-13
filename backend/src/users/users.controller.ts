@@ -27,9 +27,11 @@ export class UsersController {
 
   /**
    * GET /api/users
-   * List all users (Admin only)
+   * List all users (Admin and Manager can read)
+   * Manager needs this to populate user dropdowns in work-logs and other pages.
    */
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   findAll(
     @Query() query: { role?: string; department?: string; isActive?: string; search?: string },
   ) {
@@ -38,9 +40,10 @@ export class UsersController {
 
   /**
    * GET /api/users/:id
-   * Get a single user by ID (Admin only)
+   * Get a single user by ID (Admin and Manager can read)
    */
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
   }
