@@ -44,7 +44,7 @@ export const ALL_PAGES: PageDef[] = [
   { key: 'projects', label: '工程項目', group: '工程管理', path: '/projects' },
   { key: 'daily-reports', label: '工程日報', group: '工程管理', path: '/daily-reports' },
   { key: 'acceptance-reports', label: '工程收貨', group: '工程管理', path: '/acceptance-reports' },
-  { key: 'daily-report-stats', label: '日報統計', group: '報表', path: '/daily-report-stats' },
+  { key: 'daily-report-stats', label: '日報統計', group: '工程管理', path: '/daily-report-stats' },
 
   // 人力資源
   { key: 'salary-config', label: '員工薪酬', group: '人力資源', path: '/salary-config' },

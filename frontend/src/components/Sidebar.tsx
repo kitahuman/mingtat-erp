@@ -67,6 +67,7 @@ const navEntries: NavEntry[] = [
       { href: '/projects', label: '工程項目', icon: '🏗️', pageKey: 'projects' },
       { href: '/daily-reports', label: '工程日報', icon: '📝', pageKey: 'daily-reports' },
       { href: '/acceptance-reports', label: '工程收貨', icon: '📋', pageKey: 'acceptance-reports' },
+      { href: '/daily-report-stats', label: '日報統計', icon: '📊', pageKey: 'daily-report-stats' },
     ],
   },
   {
@@ -110,7 +111,6 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/profit-loss', label: '工程損益總覽', icon: '📊', pageKey: 'profit-loss' },
       { href: '/company-profit-loss', label: '公司損益表', icon: '📈', pageKey: 'company-profit-loss' },
-      { href: '/daily-report-stats', label: '日報統計', icon: '📊', pageKey: 'daily-report-stats' },
     ],
   },
   {
