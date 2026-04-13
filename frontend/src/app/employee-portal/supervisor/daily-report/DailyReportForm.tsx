@@ -78,6 +78,7 @@ export default function DailyReportForm({ reportId }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [copying, setCopying] = useState(false);
 
   // Attachments
   interface AttachmentInfo {
@@ -354,6 +355,57 @@ export default function DailyReportForm({ reportId }: Props) {
     window.open(`${apiBase}/daily-reports/${reportId}/export?format=html`, '_blank');
   };
 
+  const handleCopyPrevious = async () => {
+    setCopying(true);
+    try {
+      const params: any = {};
+      if (form.project_id) params.project_id = form.project_id;
+      if (form.client_id) params.client_id = form.client_id;
+      if (form.client_contract_no) params.client_contract_no = form.client_contract_no;
+      const res = await employeePortalApi.getPreviousDailyReport(params);
+      const prev = res.data;
+      if (!prev) {
+        alert('找不到前一天的日報，請手動填寫。');
+        return;
+      }
+      // Fill in header fields (keep today's date)
+      setForm(f => ({
+        ...f,
+        project_id: prev.daily_report_project_id ? String(prev.daily_report_project_id) : f.project_id,
+        shift_type: prev.daily_report_shift_type || f.shift_type,
+        work_summary: prev.daily_report_work_summary || '',
+        memo: prev.daily_report_memo || '',
+        client_id: prev.daily_report_client_id ? String(prev.daily_report_client_id) : f.client_id,
+        client_name: prev.daily_report_client_name || f.client_name,
+        client_contract_no: prev.daily_report_client_contract_no || f.client_contract_no,
+        project_name: prev.daily_report_project_name || f.project_name,
+        completed_work: prev.daily_report_completed_work || '',
+        // Keep today's date, do not copy the old date
+      }));
+      // Fill in items (copy category/content/worker_type/quantity structure, clear actual counts)
+      if (prev.items?.length) {
+        setItems(prev.items.map((item: any) => ({
+          category: item.daily_report_item_category,
+          content: item.daily_report_item_content || '',
+          quantity: item.daily_report_item_quantity?.toString() || '',
+          ot_hours: item.daily_report_item_ot_hours?.toString() || '',
+          name_or_plate: item.daily_report_item_name_or_plate || '',
+          worker_type: item.daily_report_item_worker_type || '',
+          with_operator: item.daily_report_item_with_operator || false,
+          employee_ids: item.daily_report_item_employee_ids ? JSON.parse(item.daily_report_item_employee_ids) : [],
+          vehicle_ids: item.daily_report_item_vehicle_ids ? JSON.parse(item.daily_report_item_vehicle_ids) : [],
+          shift_quantity: item.daily_report_item_shift_quantity?.toString() || '',
+        })));
+      }
+      const prevDate = prev.daily_report_date ? new Date(prev.daily_report_date).toLocaleDateString('zh-HK') : '不明';
+      alert(`已從 ${prevDate} 的日報複製內容，請檢查並修改後儲存。`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '複製失敗，請重試。');
+    } finally {
+      setCopying(false);
+    }
+  };
+
   // ── Render helpers ───────────────────────────────────────────────
   const getEmployeeLabel = (id: string) => {
     if (id.startsWith('manual:')) return id.replace('manual:', '');
@@ -386,6 +438,28 @@ export default function DailyReportForm({ reportId }: Props) {
           {isEdit ? (isSubmitted ? '查看日報' : '編輯日報') : '新增日報'}
         </h1>
       </div>
+
+      {/* Copy from previous button - only show in create mode */}
+      {!isEdit && (
+        <button
+          type="button"
+          onClick={handleCopyPrevious}
+          disabled={copying}
+          className="w-full py-3 bg-amber-50 border border-amber-300 text-amber-700 rounded-2xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {copying ? (
+            <>
+              <span className="inline-block w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></span>
+              複製中...
+            </>
+          ) : (
+            <>
+              <span className="text-base">📋</span>
+              複製最近一份日報作為模板
+            </>
+          )}
+        </button>
+      )}
 
       {isSubmitted && (
         <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-green-700 text-sm font-medium">

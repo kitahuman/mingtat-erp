@@ -286,6 +286,13 @@ export class EmployeePortalController {
     return this.service.getMyDailyReports(req.user.sub, query);
   }
 
+  // NOTE: 'previous' static route MUST be defined BEFORE ':id' dynamic route
+  @Get('daily-reports/previous')
+  @UseGuards(AuthGuard('jwt'))
+  async getPreviousDailyReport(@Request() req: any, @Query() query: any) {
+    return this.service.getPreviousDailyReport(req.user.sub, query);
+  }
+
   @Get('daily-reports/:id')
   @UseGuards(AuthGuard('jwt'))
   async getDailyReport(@Request() req: any, @Param('id') id: string) {

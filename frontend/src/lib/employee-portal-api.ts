@@ -130,6 +130,8 @@ export const employeePortalApi = {
     portalApi.post(`/employee-portal/daily-reports/${id}/attachments`, { attachments }),
   removeDailyReportAttachment: (id: number, attachmentId: number) =>
     portalApi.post(`/employee-portal/daily-reports/${id}/attachments/${attachmentId}/delete`),
+  getPreviousDailyReport: (params?: { project_id?: string; client_id?: string; client_contract_no?: string }) =>
+    portalApi.get('/employee-portal/daily-reports/previous', { params }),
 
   // Acceptance Reports
   getMyAcceptanceReports: (params?: any) =>

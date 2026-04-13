@@ -1167,6 +1167,27 @@ export class EmployeePortalService {
     return { success: true };
   }
 
+  async getPreviousDailyReport(userId: number, query: any) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
+    const where: any = { daily_report_created_by: userId };
+    if (query.project_id) where.daily_report_project_id = Number(query.project_id);
+    if (query.client_id) where.daily_report_client_id = Number(query.client_id);
+    if (query.client_contract_no) where.daily_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
+    const report = await this.prisma.dailyReport.findFirst({
+      where,
+      include: {
+        project: { select: { id: true, project_no: true, project_name: true } },
+        client: { select: { id: true, name: true } },
+        items: { orderBy: { daily_report_item_sort_order: 'asc' } },
+      },
+      orderBy: { daily_report_date: 'desc' },
+    });
+    if (!report) return null;
+    return report;
+  }
+
   async addDailyReportAttachments(userId: number, id: number, attachments: { file_name: string; file_url: string; file_type: string }[]) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
