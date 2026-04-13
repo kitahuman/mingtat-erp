@@ -1389,6 +1389,13 @@ export class PayrollService {
     const finalPwl = { ...pwl, ...updateData };
     updateData.line_amount = this.calculateLineAmount(finalPwl);
 
+    // Recalculate group_key if grouping fields changed
+    const groupKeyFields = ['client_name', 'client_contract_no', 'service_type', 'day_night', 'start_location', 'end_location', 'machine_type', 'tonnage'];
+    const hasGroupKeyChange = groupKeyFields.some(f => body[f] !== undefined);
+    if (hasGroupKeyChange) {
+      updateData.group_key = this.buildGroupKeyFromPwl(finalPwl);
+    }
+
     await this.prisma.payrollWorkLog.update({
       where: { id: pwlId },
       data: updateData,

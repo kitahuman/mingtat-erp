@@ -53,7 +53,7 @@ function InlineEditCell({
   type?: 'text' | 'number' | 'select' | 'checkbox';
   options?: { value: string; label: string }[];
   align?: 'left' | 'right' | 'center';
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
   display?: string;
 }) {
   const [editing, setEditing] = useState(false);
@@ -69,7 +69,7 @@ function InlineEditCell({
     try {
       const sendVal = type === 'number' ? (newVal === '' ? null : Number(newVal)) : (type === 'checkbox' ? Boolean(newVal) : (newVal || null));
       await payrollApi.updateWorkLog(payrollId, pwlId, { [field]: sendVal });
-      onSaved();
+      await onSaved();
     } catch (err: any) {
       alert(err.response?.data?.message || '更新失敗');
     }
