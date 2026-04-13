@@ -664,8 +664,14 @@ export class DashboardService {
       '120363262093688968@g.us': '機械部',
       '85262366968-1600675068@g.us': '公司打卡',
     };
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Use HKT (UTC+8) for today boundary
+    const now = new Date();
+    const hktOffset = 8 * 60;
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const hktMs = utcMs + hktOffset * 60000;
+    const hktNow = new Date(hktMs);
+    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
+    const todayStart = new Date(hktDayStart.getTime() - hktOffset * 60000);
     const messages = await this.prisma.verificationWaMessage.findMany({
       where: {
         wa_msg_group_id: { in: CLOCKIN_GROUPS },

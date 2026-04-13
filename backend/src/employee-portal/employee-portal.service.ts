@@ -242,6 +242,31 @@ export class EmployeePortalService {
     return record;
   }
 
+  // ── Helper: get HKT day boundaries ────────────────────────────
+  private getHKTDayRange(date?: Date): { start: Date; end: Date } {
+    const now = date || new Date();
+    // Get current time in HKT (UTC+8)
+    const hktOffset = 8 * 60; // minutes
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const hktMs = utcMs + hktOffset * 60000;
+    const hktNow = new Date(hktMs);
+    // Get start of day in HKT, then convert back to UTC
+    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
+    const start = new Date(hktDayStart.getTime() - hktOffset * 60000);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, end };
+  }
+
+  private getHKTMonthStart(): Date {
+    const now = new Date();
+    const hktOffset = 8 * 60;
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const hktMs = utcMs + hktOffset * 60000;
+    const hktNow = new Date(hktMs);
+    const hktMonthStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), 1);
+    return new Date(hktMonthStart.getTime() - hktOffset * 60000);
+  }
+
   // ── Get today's attendance ─────────────────────────────────────
   async getTodayAttendance(userId: number) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -250,10 +275,7 @@ export class EmployeePortalService {
     const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) return { records: [], employeeId: null };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { start: today, end: tomorrow } = this.getHKTDayRange();
 
     try {
       const records = await this.prisma.employeeAttendance.findMany({
@@ -463,14 +485,8 @@ export class EmployeePortalService {
     if (!user) throw new UnauthorizedException();
     const employeeId = await this.resolveEmployeeId(user);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    const { start: today, end: tomorrow } = this.getHKTDayRange();
+    const monthStart = this.getHKTMonthStart();
 
     const [todayAttendance, monthWorkLogs, pendingExpenses, pendingLeaves] = await Promise.all([
       employeeId ? this.prisma.employeeAttendance.findMany({
