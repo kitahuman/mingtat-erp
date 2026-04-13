@@ -91,14 +91,26 @@ export default function BatchEditDialog({
     setApplying(true);
     try {
       let valueToSend = fieldValue;
+      const ids = selectedRows.map((r: any) => r.id);
       if (selectedField === 'employee_id' && typeof valueToSend === 'string') {
         if (valueToSend.startsWith('emp_')) {
           valueToSend = Number(valueToSend.replace('emp_', ''));
+          await workLogsApi.bulkUpdate(ids, 'employee_id', valueToSend);
+          await workLogsApi.bulkUpdate(ids, 'work_log_fleet_driver_id', null);
+          onSuccess();
+          onClose();
+          return;
+        } else if (valueToSend.startsWith('fleet_')) {
+          const fleetId = Number(valueToSend.replace('fleet_', ''));
+          await workLogsApi.bulkUpdate(ids, 'work_log_fleet_driver_id', fleetId);
+          await workLogsApi.bulkUpdate(ids, 'employee_id', null);
+          onSuccess();
+          onClose();
+          return;
         } else if (valueToSend.startsWith('part_')) {
           valueToSend = null;
         }
       }
-      const ids = selectedRows.map((r: any) => r.id);
       await workLogsApi.bulkUpdate(ids, selectedField, valueToSend);
       onSuccess();
       onClose();
@@ -287,7 +299,12 @@ export default function BatchEditDialog({
     const parts: string[] = [];
     parts.push(`#${row.id}`);
     if (row.scheduled_date) parts.push(fmtDate(row.scheduled_date));
-    if (row.employee?.name_zh) parts.push(row.employee.name_zh);
+    if (row.work_log_fleet_driver_id && row.fleet_driver) {
+      const fd = row.fleet_driver;
+      parts.push(fd.name_zh ? `${fd.name_zh}（${fd.subcontractor?.name || '街車'}・街車）` : `${fd.subcontractor?.name || '街車'}（街車）`);
+    } else if (row.employee?.name_zh) {
+      parts.push(row.employee.name_zh);
+    }
     if (row.client?.name) parts.push(row.client.name);
     if (row.service_type) parts.push(row.service_type);
     if (row.start_location || row.end_location) {
@@ -375,7 +392,13 @@ export default function BatchEditDialog({
                     <tr key={row.id} className="hover:bg-gray-50">
                       <td className="px-3 py-1.5 text-gray-400 font-mono">{row.id}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.scheduled_date)}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{row.employee?.name_zh || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        {row.work_log_fleet_driver_id && row.fleet_driver
+                          ? (row.fleet_driver.name_zh
+                              ? `${row.fleet_driver.name_zh}（${row.fleet_driver.subcontractor?.name || '街車'}・街車）`
+                              : `${row.fleet_driver.subcontractor?.name || '街車'}（街車）`)
+                          : (row.employee?.name_zh || '—')}
+                      </td>
                       <td className="px-3 py-1.5 truncate max-w-[200px]">
                         {[
                           row.service_type,
@@ -429,7 +452,13 @@ function getCurrentFieldValue(
     case 'client_id': return row.client?.name || '—';
     case 'quotation_id': return row.quotation?.quotation_no || '—';
     case 'contract_id': return row.contract?.contract_no || '—';
-    case 'employee_id': return row.employee?.name_zh || '—';
+    case 'employee_id': {
+      if (row.work_log_fleet_driver_id && row.fleet_driver) {
+        const fd = row.fleet_driver;
+        return fd.name_zh ? `${fd.name_zh}（${fd.subcontractor?.name || '街車'}・街車）` : `${fd.subcontractor?.name || '街車'}（街車）`;
+      }
+      return row.employee?.name_zh || '—';
+    }
     case 'is_mid_shift': return row.is_mid_shift ? '是' : '否';
     case 'is_confirmed': return row.is_confirmed ? '是' : '否';
     case 'is_paid': return row.is_paid ? '是' : '否';

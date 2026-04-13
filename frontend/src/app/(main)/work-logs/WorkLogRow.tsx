@@ -56,7 +56,9 @@ export default function WorkLogRow({
     if (isEditing) {
       const initialForm = { ...row };
       // Handle employee_id prefix for UI
-      if (initialForm.employee_id) {
+      if (initialForm.work_log_fleet_driver_id) {
+        initialForm.employee_id = `fleet_${initialForm.work_log_fleet_driver_id}`;
+      } else if (initialForm.employee_id) {
         initialForm.employee_id = `emp_${initialForm.employee_id}`;
       }
       setForm(initialForm);
@@ -133,6 +135,10 @@ export default function WorkLogRow({
     if (typeof payload.employee_id === 'string') {
       if (payload.employee_id.startsWith('emp_')) {
         payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+        payload.work_log_fleet_driver_id = null;
+      } else if (payload.employee_id.startsWith('fleet_')) {
+        payload.work_log_fleet_driver_id = Number(payload.employee_id.replace('fleet_', ''));
+        payload.employee_id = null;
       } else if (payload.employee_id.startsWith('part_')) {
         payload.employee_id = null;
       }
@@ -196,7 +202,13 @@ export default function WorkLogRow({
         {/* 客戶合約 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.client_contract_no || '—'}</td>
         {/* 員工 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.employee?.name_zh || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-24">
+          {row.work_log_fleet_driver_id && row.fleet_driver
+            ? (row.fleet_driver.name_zh
+                ? `${row.fleet_driver.name_zh}（${row.fleet_driver.subcontractor?.name || '街車'}・街車）`
+                : `${row.fleet_driver.subcontractor?.name || '街車'}（街車）${row.fleet_driver.plate_no || ''}`)
+            : (row.employee?.name_zh || '—')}
+        </td>
         {/* 機種 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">{row.machine_type || '—'}</td>
         {/* 機號 */}

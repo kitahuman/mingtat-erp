@@ -47,6 +47,7 @@ export class WorkLogsService {
     if (contract_id) where.contract_id = Number(contract_id);
     if (employee_id) where.employee_id = Number(employee_id);
     if (query.project_id) where.project_id = Number(query.project_id);
+    if (query.fleet_driver_id) where.work_log_fleet_driver_id = Number(query.fleet_driver_id);
     if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
     if (date_from || date_to) {
       where.scheduled_date = {};
@@ -76,6 +77,7 @@ export class WorkLogsService {
           contract: true,
           employee: true,
           project: true,
+          fleet_driver: { include: { subcontractor: true } },
           verification_confirmations: {
             select: { source_code: true, status: true },
           },
@@ -102,12 +104,13 @@ export class WorkLogsService {
         contract: true,
         employee: true,
         project: true,
+        fleet_driver: { include: { subcontractor: true } },
       },
     });
   }
 
   async create(dto: any, userId: number) {
-    const { publisher, company_profile, company, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, ...data } = dto;
+    const { publisher, company_profile, company, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, fleet_driver, ...data } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
@@ -139,7 +142,7 @@ export class WorkLogsService {
       id: _id, created_at, updated_at,
       publisher, company_profile, company, client, quotation, contract, employee,
       project, payroll_work_logs,
-      matched_rate_card, rate_card,
+      matched_rate_card, rate_card, fleet_driver,
       ...rest
     } = dto;
     if (rest.machine_type !== undefined) {
@@ -256,7 +259,7 @@ export class WorkLogsService {
       'status', 'scheduled_date', 'service_type',
       'company_profile_id', 'company_id', 'client_id',
       'quotation_id', 'contract_id', 'client_contract_no',
-      'employee_id', 'machine_type', 'equipment_number', 'tonnage',
+      'employee_id', 'work_log_fleet_driver_id', 'machine_type', 'equipment_number', 'tonnage',
       'day_night', 'start_location', 'start_time',
       'end_location', 'end_time',
       'quantity', 'unit', 'ot_quantity', 'ot_unit',
@@ -273,7 +276,7 @@ export class WorkLogsService {
     if (field === 'scheduled_date' && processedValue) {
       processedValue = new Date(processedValue);
     }
-    if (['company_profile_id', 'company_id', 'client_id', 'quotation_id', 'contract_id', 'employee_id'].includes(field)) {
+    if (['company_profile_id', 'company_id', 'client_id', 'quotation_id', 'contract_id', 'employee_id', 'work_log_fleet_driver_id'].includes(field)) {
       processedValue = processedValue !== null && processedValue !== '' ? Number(processedValue) : null;
     }
     if (['quantity', 'ot_quantity', 'goods_quantity'].includes(field)) {
@@ -338,6 +341,7 @@ export class WorkLogsService {
         contract_id: original.contract_id,
         client_contract_no: original.client_contract_no,
         employee_id: original.employee_id,
+        work_log_fleet_driver_id: original.work_log_fleet_driver_id,
         machine_type: original.machine_type,
         equipment_number: original.equipment_number,
         equipment_source: original.equipment_source,

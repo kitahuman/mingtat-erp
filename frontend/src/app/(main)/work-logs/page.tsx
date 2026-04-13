@@ -334,7 +334,8 @@ export default function WorkLogsPage() {
       vehiclesApi.simple().catch(() => ({ data: [] })),
       machineryApi.simple().catch(() => ({ data: [] })),
       subconFleetDriversApi.simple().catch(() => ({ data: [] })),
-    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet]) => {
+      subconFleetDriversApi.simpleDrivers().catch(() => ({ data: [] })),
+    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet, fleetDrivers]) => {
       setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.code || p.name })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
@@ -345,7 +346,12 @@ export default function WorkLogsPage() {
         label: e.name_zh,
         _raw: e
       }));
-      setEmployees([...employeeList]);
+      const fleetDriverList = (fleetDrivers.data || []).map((d: any) => ({
+        value: d.value,
+        label: d.label,
+        _raw: d
+      }));
+      setEmployees([...employeeList, ...fleetDriverList]);
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
       const grouped: Record<string, Option[]> = {};
       for (const [cat, opts] of Object.entries(fo.data || {})) {
@@ -378,6 +384,8 @@ export default function WorkLogsPage() {
       if (filterEmployee && typeof filterEmployee === 'string') {
         if (filterEmployee.startsWith('emp_')) {
           params.employee_id = Number(filterEmployee.replace('emp_', ''));
+        } else if (filterEmployee.startsWith('fleet_')) {
+          params.fleet_driver_id = Number(filterEmployee.replace('fleet_', ''));
         } else if (filterEmployee.startsWith('part_')) {
           params.client_id = Number(filterEmployee.replace('part_', ''));
         }
@@ -469,8 +477,12 @@ export default function WorkLogsPage() {
       if (field === 'scheduled_date' && originalValue) {
         originalValue = typeof originalValue === 'string' ? originalValue.split('T')[0] : originalValue;
       }
-      if (field === 'employee_id' && originalValue) {
-        originalValue = `emp_${originalValue}`;
+      if (field === 'employee_id') {
+        if (originalRow?.work_log_fleet_driver_id) {
+          originalValue = `fleet_${originalRow.work_log_fleet_driver_id}`;
+        } else if (originalValue) {
+          originalValue = `emp_${originalValue}`;
+        }
       }
 
       const isSameAsOriginal = String(value ?? '') === String(originalValue ?? '');
@@ -493,7 +505,10 @@ export default function WorkLogsPage() {
   const getCellValue = (row: any, field: string): any => {
     const dirty = dirtyRows.get(row.id);
     if (dirty && field in dirty) return dirty[field];
-    if (field === 'employee_id' && row.employee_id) return `emp_${row.employee_id}`;
+    if (field === 'employee_id') {
+      if (row.work_log_fleet_driver_id) return `fleet_${row.work_log_fleet_driver_id}`;
+      if (row.employee_id) return `emp_${row.employee_id}`;
+    }
     if (field === 'scheduled_date' && row.scheduled_date) {
       return typeof row.scheduled_date === 'string' ? row.scheduled_date.split('T')[0] : row.scheduled_date;
     }
@@ -513,14 +528,20 @@ export default function WorkLogsPage() {
       const changes: Array<{ id: number; data: any }> = [];
       for (const [id, fields] of Array.from(dirtyRows.entries())) {
         const payload = { ...fields };
-        // Strip employee_id prefix
+        // Strip employee_id prefix and handle fleet driver
         if ('employee_id' in payload) {
           if (typeof payload.employee_id === 'string') {
             if (payload.employee_id.startsWith('emp_')) {
               payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+              payload.work_log_fleet_driver_id = null;
+            } else if (payload.employee_id.startsWith('fleet_')) {
+              payload.work_log_fleet_driver_id = Number(payload.employee_id.replace('fleet_', ''));
+              payload.employee_id = null;
             } else if (payload.employee_id.startsWith('part_')) {
               payload.employee_id = null;
             }
+          } else if (payload.employee_id === null || payload.employee_id === '') {
+            payload.work_log_fleet_driver_id = null;
           }
         }
         changes.push({ id, data: payload });
@@ -619,6 +640,10 @@ export default function WorkLogsPage() {
       if (typeof payload.employee_id === 'string') {
         if (payload.employee_id.startsWith('emp_')) {
           payload.employee_id = Number(payload.employee_id.replace('emp_', ''));
+          payload.work_log_fleet_driver_id = null;
+        } else if (payload.employee_id.startsWith('fleet_')) {
+          payload.work_log_fleet_driver_id = Number(payload.employee_id.replace('fleet_', ''));
+          payload.employee_id = null;
         } else if (payload.employee_id.startsWith('part_')) {
           payload.employee_id = null;
         }
@@ -729,7 +754,17 @@ export default function WorkLogsPage() {
     if (field === 'client_id') return (row.client_id ? (row.client?.name || row.client?.code) : null) || row.unverified_client_name || clients.find(o => o.value === row.client_id)?.label || '—';
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
-    if (field === 'employee_id') return row.employee?.name_zh || employees.find(o => String(o.value) === `emp_${row.employee_id}`)?.label || '—';
+    if (field === 'employee_id') {
+      if (row.work_log_fleet_driver_id) {
+        const fd = row.fleet_driver;
+        if (fd) {
+          const company = fd.subcontractor?.name || '街車';
+          return fd.name_zh ? `${fd.name_zh}（${company}・街車）` : `${company}（街車）${fd.plate_no || ''}`;
+        }
+        return employees.find(o => String(o.value) === `fleet_${row.work_log_fleet_driver_id}`)?.label || '—';
+      }
+      return row.employee?.name_zh || employees.find(o => String(o.value) === `emp_${row.employee_id}`)?.label || '—';
+    }
     if (field === 'scheduled_date') return row.scheduled_date ? fmtDate(row.scheduled_date) : '—';
     if (field === 'is_mid_shift' || field === 'is_confirmed' || field === 'is_paid') return row[field] ? '✓' : '—';
     return row[field] != null && row[field] !== '' ? String(row[field]) : '—';
@@ -994,7 +1029,13 @@ export default function WorkLogsPage() {
               if (col.key === 'client') return row.client?.name || '';
               if (col.key === 'quotation') return row.quotation?.quotation_no || '';
               if (col.key === 'contract') return row.contract?.contract_no || '';
-              if (col.key === 'employee') return row.employee?.name_zh || '';
+              if (col.key === 'employee') {
+                if (row.work_log_fleet_driver_id && row.fleet_driver) {
+                  const fd = row.fleet_driver;
+                  return fd.name_zh ? `${fd.name_zh}（${fd.subcontractor?.name || '街車'}・街車）` : `${fd.subcontractor?.name || '街車'}（街車）${fd.plate_no || ''}`;
+                }
+                return row.employee?.name_zh || '';
+              }
               if (col.key === 'is_confirmed') return val ? '是' : '否';
               if (col.key === 'is_paid') return val ? '是' : '否';
               return val != null ? String(val) : '';

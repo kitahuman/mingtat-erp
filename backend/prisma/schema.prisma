@@ -1042,6 +1042,7 @@ model WorkLog {
   deleted_at             DateTime? // 軯刪除時間時戳
 
   project_id Int?
+  work_log_fleet_driver_id Int?
 
   publisher         User?            @relation(fields: [publisher_id], references: [id])
   company_profile   CompanyProfile?  @relation(fields: [company_profile_id], references: [id])
@@ -1051,6 +1052,7 @@ model WorkLog {
   contract          Contract?        @relation(fields: [contract_id], references: [id])
   employee          Employee?        @relation(fields: [employee_id], references: [id])
   project           Project?         @relation(fields: [project_id], references: [id])
+  fleet_driver      SubcontractorFleetDriver? @relation(fields: [work_log_fleet_driver_id], references: [id])
    payroll_work_logs PayrollWorkLog[]
   whatsapp_messages WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
@@ -1233,6 +1235,7 @@ model SubcontractorFleetDriver {
   updated_at       DateTime  @default(now()) @updatedAt
 
   subcontractor Partner @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
+  work_logs     WorkLog[]
 
   @@map("subcontractor_fleet_drivers")
 }
