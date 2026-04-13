@@ -211,6 +211,36 @@ export class MatchingService {
     };
 
     // 附加確認狀態到每一行，並把手動配對/確認回饋到 sources，重新計算 match_status
+
+    // 預先收集所有 whatsapp_order 手動配對的 matched_record_id，批量查詢 wa_order_item
+    const waManualMatchIds: number[] = [];
+    for (const [, cs] of confirmMap) {
+      for (const c of cs) {
+        if (c.source_code === 'whatsapp_order' && c.status === 'manual_match' && c.matched_record_id) {
+          waManualMatchIds.push(c.matched_record_id);
+        }
+      }
+    }
+    const waManualItemsMap = new Map<number, any>();
+    if (waManualMatchIds.length > 0) {
+      const waManualItems = await this.prisma.verificationWaOrderItem.findMany({
+        where: { id: { in: waManualMatchIds } },
+        include: {
+          order: {
+            select: { wa_order_date: true, wa_order_status: true, wa_order_version: true },
+          },
+        },
+      });
+      for (const item of waManualItems) {
+        waManualItemsMap.set(item.id, {
+          ...item,
+          order_date: item.order?.wa_order_date?.toISOString().slice(0, 10),
+          order_status: item.order?.wa_order_status,
+          order_version: item.order?.wa_order_version,
+        });
+      }
+    }
+
     for (const row of results) {
       const rowConfirms: Record<string, any> = {};
       let needRecompute = false;
@@ -228,16 +258,42 @@ export class MatchingService {
             confirmed_at: c.confirmed_at,
           };
 
-          // 如果是手動配對或確認，把對應 source 的 status 改為 found
           const rowSourceKey = confirmSourceToRowSource[c.source_code];
-          if (
-            rowSourceKey &&
-            (c.status === 'manual_match' || c.status === 'confirmed') &&
-            row.sources[rowSourceKey]?.status === 'missing'
-          ) {
-            row.sources[rowSourceKey].status = 'found';
-            row.sources[rowSourceKey].match_score = 100; // 手動確認視為滿分
-            needRecompute = true;
+          if (rowSourceKey) {
+            if (c.status === 'manual_match' && c.source_code === 'whatsapp_order' && c.matched_record_id) {
+              // WhatsApp 手動配對優先：用手動配對的 item 替換 details
+              const manualItem = waManualItemsMap.get(c.matched_record_id);
+              if (manualItem) {
+                row.sources['whatsapp_order'] = {
+                  source: 'WhatsApp Order',
+                  status: 'found',
+                  match_score: 100,
+                  field_scores: [],
+                  details: [{
+                    id: manualItem.id,
+                    vehicle: manualItem.wa_item_vehicle_no || manualItem.wa_item_machine_code || '—',
+                    employee: manualItem.wa_item_driver_nickname || '—',
+                    customer: manualItem.wa_item_customer || '—',
+                    contract: manualItem.wa_item_contract_no || '—',
+                    location: manualItem.wa_item_location || '—',
+                    work_desc: manualItem.wa_item_work_desc || '—',
+                    is_suspended: manualItem.wa_item_is_suspended,
+                    mod_status: manualItem.wa_item_mod_status || null,
+                    order_status: manualItem.order_status,
+                    order_version: manualItem.order_version,
+                  }],
+                };
+                needRecompute = true;
+              }
+            } else if (
+              (c.status === 'manual_match' || c.status === 'confirmed') &&
+              row.sources[rowSourceKey]?.status === 'missing'
+            ) {
+              // 其他來源：手動確認時將 missing 改為 found
+              row.sources[rowSourceKey].status = 'found';
+              row.sources[rowSourceKey].match_score = 100;
+              needRecompute = true;
+            }
           }
         }
       }
@@ -1214,15 +1270,27 @@ export class MatchingService {
       where: { work_log_id_source_code: { work_log_id: workLogId, source_code: 'whatsapp_order' } },
     });
     if (waManualMatch && waManualMatch.status === 'manual_match' && waManualMatch.matched_record_id) {
-      // 用 matched_record_id 查 wa_order_item，合併到結果中（避免重複）
-      const alreadyIncluded = matchedWa.some((item: any) => item.id === waManualMatch.matched_record_id);
-      if (!alreadyIncluded) {
-        const manualItem = await this.prisma.verificationWaOrderItem.findUnique({
-          where: { id: waManualMatch.matched_record_id },
-        });
-        if (manualItem) {
-          matchedWa.push(manualItem as any);
-        }
+      // 手動配對優先：直接用 matched_record_id 查 wa_order_item，並替換自動配對結果
+      // 需要 include order 以取得 order_date / order_status / order_version
+      const manualItem = await this.prisma.verificationWaOrderItem.findUnique({
+        where: { id: waManualMatch.matched_record_id },
+        include: {
+          order: {
+            select: { wa_order_date: true, wa_order_status: true, wa_order_version: true },
+          },
+        },
+      });
+      if (manualItem) {
+        // 將 order 資訊展平到 item 上（與 getDailySummaryItemsForMatching 的格式一致）
+        const flatItem = {
+          ...manualItem,
+          order_date: manualItem.order?.wa_order_date?.toISOString().slice(0, 10),
+          order_status: manualItem.order?.wa_order_status,
+          order_version: manualItem.order?.wa_order_version,
+        };
+        // 手動配對覆蓋自動配對：清空自動配對結果，只保留手動配對的 item
+        matchedWa.length = 0;
+        matchedWa.push(flatItem as any);
       }
     }
 
