@@ -266,6 +266,7 @@ export class WorkLogsService {
       'is_mid_shift', 'goods_quantity',
       'receipt_no', 'work_order_no',
       'is_confirmed', 'is_paid', 'remarks',
+      'work_log_product_name', 'work_log_product_unit',
     ];
     if (!ALLOWED_FIELDS.includes(field)) {
       throw new Error(`Field "${field}" is not allowed for batch update`);
@@ -356,6 +357,8 @@ export class WorkLogsService {
         ot_quantity: original.ot_quantity,
         ot_unit: original.ot_unit,
         goods_quantity: original.goods_quantity,
+        work_log_product_name: original.work_log_product_name,
+        work_log_product_unit: original.work_log_product_unit,
         remarks: original.remarks,
         publisher_id: userId,
         is_confirmed: false,

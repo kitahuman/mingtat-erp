@@ -49,6 +49,8 @@ const BATCH_FIELDS = [
   { key: 'ot_unit',           label: 'OT單位',     type: 'field_option', category: 'wage_unit' },
   { key: 'is_mid_shift',      label: '中直',       type: 'boolean' },
   { key: 'goods_quantity',    label: '商品數量',   type: 'number' },
+  { key: 'work_log_product_name', label: '商品名稱', type: 'text' },
+  { key: 'work_log_product_unit', label: '商品單位', type: 'field_option', category: 'product_unit' },
   { key: 'receipt_no',        label: '入帳票編號', type: 'text' },
   { key: 'work_order_no',     label: '單號',       type: 'text' },
   { key: 'is_confirmed',      label: '已確認',     type: 'boolean' },

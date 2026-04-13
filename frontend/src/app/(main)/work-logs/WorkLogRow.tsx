@@ -239,6 +239,10 @@ export default function WorkLogRow({
         </td>
         {/* 商品數量 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24 text-right">{row.goods_quantity ?? '—'}</td>
+        {/* 商品名稱 */}
+        <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.work_log_product_name || '—'}</td>
+        {/* 商品單位 */}
+        <td className="px-2 py-1.5 whitespace-nowrap w-20">{row.work_log_product_unit || '—'}</td>
         {/* 入帳票編號 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-28">{row.receipt_no || '—'}</td>
         {/* 單號 */}
@@ -451,6 +455,14 @@ export default function WorkLogRow({
       {/* 商品數量 */}
       <td className={`${cellCls} w-24`}>
         <input type="number" step="0.01" value={form.goods_quantity ?? ''} onChange={e => set('goods_quantity', e.target.value)} className={`${inputCls} text-right`} placeholder="0" />
+      </td>
+      {/* 商品名稱 */}
+      <td className={`${cellCls} w-28`}>
+        <input type="text" value={form.work_log_product_name || ''} onChange={e => set('work_log_product_name', e.target.value)} className={inputCls} placeholder="商品名稱" />
+      </td>
+      {/* 商品單位 */}
+      <td className={`${cellCls} w-20`}>
+        <Combobox value={form.work_log_product_unit} onChange={v => set('work_log_product_unit', v ? String(v) : null)} options={fieldOptions['product_unit'] || []} placeholder="單位" />
       </td>
       {/* 入帳票編號 */}
       <td className={`${cellCls} w-28`}>
