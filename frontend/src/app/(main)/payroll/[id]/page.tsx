@@ -702,107 +702,96 @@ export default function PayrollDetailPage() {
 
         {/* Tab Content */}
         {activeTab === 'detail' && (
-          <div>
+          <div className="overflow-x-auto border rounded-lg">
             {pwls.length > 0 ? (
-              <div className="space-y-4">
-                {pwls.map((pwl: any) => {
-                  const isExcluded = pwl.is_excluded;
-                  const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
-                  const route = [pwl.start_location, pwl.end_location].filter(Boolean).join(' → ');
-                  const equipment = [pwl.tonnage, pwl.machine_type, pwl.equipment_number].filter(Boolean).join('');
-                  // Use client_short_name (from code field) if available, else truncate client_name to 4 chars
-                  const clientShortName = pwl.client_short_name || pwl.client?.code || (pwl.client_name ? pwl.client_name.substring(0, 4) : '');
-                  
-                  // Calculate line amounts for each component
-                  const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
-                  const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
-                  const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
-                  
-                  // Build description: service_type + client_short + contract + route + equipment + day/night [+ OT] [+ 中直]
-                  const descParts = [
-                    pwl.service_type,
-                    clientShortName,
-                    pwl.client_contract_no,
-                    route,
-                    equipment ? `(${equipment})` : '',
-                    pwl.day_night || '日',
-                    pwl.ot_quantity && Number(pwl.ot_quantity) > 0 ? 'OT' : '',
-                    pwl.is_mid_shift ? '中直' : '',
-                  ].filter(Boolean).join(' ');
-                  
-                  return (
-                    <div key={pwl.id} className={`border rounded-lg p-3 ${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'bg-gray-50'}`}>
-                      {/* Header row */}
-                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-gray-900 text-sm">{descParts}</span>
-                        </div>
-                        {isDraft && (
-                          <div className="flex gap-1">
-                            {isExcluded ? (
-                              <button onClick={() => handleRestoreWorkLog(pwl.id)} className="text-xs text-blue-500 hover:underline">恢復</button>
-                            ) : (
-                              <>
-                                <button onClick={() => openEditWorkLog(pwl)} className="text-xs text-blue-500 hover:underline">編輯</button>
-                                <button onClick={() => handleExcludeWorkLog(pwl.id)} className="text-xs text-red-500 hover:underline">移除</button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Detail rows - up to 3 lines */}
-                      <div className="text-xs space-y-1">
-                        {/* Line 1: Base rate */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600">基本</span>
-                          <span className="font-mono text-gray-500">
-                            {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()} × ${pwl.quantity || 1}` : '未設定'}
-                          </span>
-                          <span className="font-mono font-bold w-24 text-right">
-                            {hasPrice ? `$${baseLineAmount.toLocaleString()}` : '-'}
-                          </span>
-                        </div>
-                        
-                        {/* Line 2: OT rate (only if ot_quantity > 0) */}
-                        {pwl.ot_quantity && Number(pwl.ot_quantity) > 0 && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">OT</span>
-                            <span className="font-mono text-gray-500">
-                              {pwl.matched_ot_rate ? `$${Number(pwl.matched_ot_rate).toLocaleString()} × ${pwl.ot_quantity}` : '未設定'}
-                            </span>
-                            <span className="font-mono font-bold w-24 text-right">
-                              {pwl.matched_ot_rate ? `$${otLineAmount.toLocaleString()}` : '-'}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {/* Line 3: Mid-shift rate (only if is_mid_shift is true) */}
-                        {pwl.is_mid_shift && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">中直</span>
-                            <span className="font-mono text-gray-500">
-                              {pwl.matched_mid_shift_rate ? `$${Number(pwl.matched_mid_shift_rate).toLocaleString()} × ${pwl.quantity || 1}` : '未設定'}
-                            </span>
-                            <span className="font-mono font-bold w-24 text-right">
-                              {pwl.matched_mid_shift_rate ? `$${midShiftLineAmount.toLocaleString()}` : '-'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Total line */}
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 font-bold">
-                        <span className="text-gray-700">小計</span>
-                        <span></span>
-                        <span className="font-mono w-24 text-right text-primary-600">
-                          ${(baseLineAmount + otLineAmount + midShiftLineAmount).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">約定日期</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">服務類型</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">公司</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">客戶公司</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">報價單</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">客戶合約</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">噸數</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">機種</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">機號</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">日夜班</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">起點</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">終點</th>
+                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">數量</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">單位</th>
+                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">OT數量</th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">OT單位</th>
+                    <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">中直</th>
+                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">單價</th>
+                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">小計</th>
+                    <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {pwls.map((pwl: any) => {
+                    const isExcluded = pwl.is_excluded;
+                    const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
+                    const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
+                    const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
+                    const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
+                    const totalLineAmount = baseLineAmount + otLineAmount + midShiftLineAmount;
+
+                    return (
+                      <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'hover:bg-gray-50'}`}>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{fmtDate(pwl.scheduled_date)}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.service_type || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.company_name || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap truncate max-w-[120px]" title={pwl.client_name}>{pwl.client_name || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.quotation_no || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.client_contract_no || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.tonnage || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.machine_type || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.equipment_number || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.day_night || '—'}</td>
+                        <td className="px-2 py-1.5 truncate max-w-[100px]" title={pwl.start_location}>{pwl.start_location || '—'}</td>
+                        <td className="px-2 py-1.5 truncate max-w-[100px]" title={pwl.end_location}>{pwl.end_location || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">{pwl.quantity ?? '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.unit || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">{pwl.ot_quantity ?? '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.ot_unit || '—'}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          {pwl.is_mid_shift ? <span className="text-green-600 font-bold">✓</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">
+                          {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : '—'}
+                        </td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono font-bold text-primary-600">
+                          ${totalLineAmount.toLocaleString()}
+                        </td>
+                        <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                          {isDraft && (
+                            <div className="flex justify-center gap-1">
+                              {isExcluded ? (
+                                <button onClick={() => handleRestoreWorkLog(pwl.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="恢復">
+                                  🔄
+                                </button>
+                              ) : (
+                                <>
+                                  <button onClick={() => openEditWorkLog(pwl)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="編輯">
+                                    ✏️
+                                  </button>
+                                  <button onClick={() => handleExcludeWorkLog(pwl.id)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="移除">
+                                    🗑️
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : (
               <p className="text-sm text-gray-400 text-center py-8">此糧單暫無工作記錄</p>
             )}
@@ -1062,7 +1051,7 @@ export default function PayrollDetailPage() {
         <div className="card mb-6">
           <div className="flex items-center gap-4">
             <div>
-              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數</p>
+              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數 <span className="text-blue-500 ml-1">(完 5% 的強積金數)</span></p>
               {isDraft ? (
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">$</span>
