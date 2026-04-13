@@ -49,6 +49,42 @@ const POSITION_OPTIONS = [
   '雜工', '機手', '司機', '管工', '科文', '測量', '安全員', '其他'
 ];
 
+/**
+ * Reverse geocode using Nominatim with richer address formatting
+ */
+async function reverseGeocodeClient(lat: number, lng: number): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=zh-TW,zh,en`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'MingtatERP/1.0' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+
+    const addr = data.address;
+    if (!addr) return data.display_name || null;
+
+    const parts: string[] = [];
+    if (addr.state) parts.push(addr.state);
+    if (addr.city && addr.city !== addr.state) parts.push(addr.city);
+    if (addr.county && addr.county !== addr.city) parts.push(addr.county);
+    if (addr.suburb) parts.push(addr.suburb);
+    if (addr.neighbourhood) parts.push(addr.neighbourhood);
+    if (addr.road) parts.push(addr.road);
+    if (addr.house_number) parts.push(addr.house_number);
+
+    const poi = addr.building || addr.amenity || addr.shop || addr.office || '';
+    let result = parts.join('');
+    if (poi && !result.includes(poi)) {
+      result = result ? `${result} (${poi})` : poi;
+    }
+    return result || data.display_name || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function CompanyClockPage() {
   const { user, logout, loading: authLoading } = useCompanyClockAuth();
   const router = useRouter();
@@ -73,6 +109,12 @@ export default function CompanyClockPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // GPS state
+  const [gpsLocation, setGpsLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsAddressLoading, setGpsAddressLoading] = useState(false);
+  const [gpsError, setGpsError] = useState('');
 
   // Result state
   const [resultMessage, setResultMessage] = useState('');
@@ -215,6 +257,41 @@ export default function CompanyClockPage() {
     setCameraOpen(false);
   };
 
+  // ── GPS Functions ─────────────────────────────────────
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsError('此裝置不支援 GPS 定位');
+      return;
+    }
+    setGpsLoading(true);
+    setGpsError('');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setGpsLocation({ latitude, longitude });
+        setGpsLoading(false);
+
+        // Auto reverse-geocode to show address preview
+        setGpsAddressLoading(true);
+        try {
+          const address = await reverseGeocodeClient(latitude, longitude);
+          if (address) {
+            setGpsLocation((prev) => prev ? { ...prev, address } : prev);
+          }
+        } catch {
+          // Geocoding failure is non-blocking
+        } finally {
+          setGpsAddressLoading(false);
+        }
+      },
+      () => {
+        setGpsError('無法獲取定位，請確認已授予定位權限');
+        setGpsLoading(false);
+      },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  };
+
   // ── Select Employee ───────────────────────────────────
   const handleSelectEmployee = (emp: Employee, type: 'clock_in' | 'clock_out') => {
     setSelectedEmployee(emp);
@@ -225,29 +302,11 @@ export default function CompanyClockPage() {
     setVerificationInfo(null);
     setIsMidShift(false);
     setWorkNotes('');
-  };
-
-  // ── Get current GPS location ──────────────────────────
-  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number } | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) { resolve(null); return; }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    });
-  };
-
-  // ── Reverse geocode to get address ────────────────────
-  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=zh-TW`);
-      const data = await res.json();
-      return data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    } catch {
-      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    }
+    // Reset GPS state for new clock session
+    setGpsLocation(null);
+    setGpsError('');
+    setGpsLoading(false);
+    setGpsAddressLoading(false);
   };
 
   // ── Submit Clock ──────────────────────────────────────
@@ -259,19 +318,13 @@ export default function CompanyClockPage() {
     setResultMessage('');
 
     try {
-      const location = await getCurrentLocation();
-      let address: string | undefined;
-      if (location) {
-        address = await reverseGeocode(location.latitude, location.longitude);
-      }
-
       const res = await companyClockApi.clock({
         employee_id: selectedEmployee.id,
         photo_base64: photoDataUrl,
         type: clockType,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        address,
+        latitude: gpsLocation?.latitude,
+        longitude: gpsLocation?.longitude,
+        address: gpsLocation?.address,
         is_mid_shift: clockType === 'clock_out' ? isMidShift : false,
         work_notes: workNotes,
       });
@@ -316,12 +369,6 @@ export default function CompanyClockPage() {
 
     setProcessing(true);
     try {
-      const location = await getCurrentLocation();
-      let address: string | undefined;
-      if (location) {
-        address = await reverseGeocode(location.latitude, location.longitude);
-      }
-
       const res = await companyClockApi.createTemporaryEmployee({
         name_zh: tempName,
         name_en: tempNameEn || undefined,
@@ -331,9 +378,9 @@ export default function CompanyClockPage() {
         work_notes: workNotes,
         is_mid_shift: clockType === 'clock_out' ? isMidShift : false,
         type: clockType,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        address,
+        latitude: gpsLocation?.latitude,
+        longitude: gpsLocation?.longitude,
+        address: gpsLocation?.address,
       });
 
       setResultType('success');
@@ -385,6 +432,11 @@ export default function CompanyClockPage() {
     setResultMessage('');
     setVerificationInfo(null);
     setTempNameError('');
+    // Reset GPS state
+    setGpsLocation(null);
+    setGpsError('');
+    setGpsLoading(false);
+    setGpsAddressLoading(false);
   };
 
   // ── Format time ───────────────────────────────────────
@@ -536,6 +588,11 @@ export default function CompanyClockPage() {
                   setTempPosition('');
                   setWorkNotes('');
                   setIsMidShift(false);
+                  // Reset GPS state for temp employee flow
+                  setGpsLocation(null);
+                  setGpsError('');
+                  setGpsLoading(false);
+                  setGpsAddressLoading(false);
                 }}
                 className="w-full py-2.5 bg-amber-50 border-2 border-amber-200 text-amber-700 font-semibold rounded-xl hover:bg-amber-100 transition-colors text-sm flex items-center justify-center gap-2"
               >
@@ -707,9 +764,10 @@ export default function CompanyClockPage() {
                   </div>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-4">
+                  {/* Photo capture */}
                   {photoDataUrl ? (
-                    <div className="relative mb-4">
+                    <div className="relative">
                       <img src={photoDataUrl} alt="preview" className="w-full h-64 object-cover rounded-xl" />
                       <button
                         onClick={() => { setPhotoDataUrl(null); openCamera(); }}
@@ -721,7 +779,7 @@ export default function CompanyClockPage() {
                   ) : (
                     <button
                       onClick={openCamera}
-                      className="w-full h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors mb-4"
+                      className="w-full h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-emerald-400 hover:text-emerald-500 transition-colors"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-10 h-10">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -731,6 +789,69 @@ export default function CompanyClockPage() {
                     </button>
                   )}
 
+                  {/* GPS Location Block */}
+                  {photoDataUrl && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">GPS 定位 (選填)</p>
+                      {gpsLocation ? (
+                        <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700">
+                          <p className="font-medium">✅ 定位成功</p>
+                          {gpsAddressLoading ? (
+                            <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              正在查詢地址...
+                            </p>
+                          ) : gpsLocation.address ? (
+                            <p className="text-xs mt-1 text-green-800 font-medium">
+                              📍 {gpsLocation.address}
+                            </p>
+                          ) : null}
+                          <p className="text-xs mt-1 text-green-600">
+                            {gpsLocation.latitude.toFixed(6)}, {gpsLocation.longitude.toFixed(6)}
+                          </p>
+                          <button
+                            onClick={handleGetLocation}
+                            disabled={gpsLoading}
+                            className="mt-2 text-xs text-green-600 underline hover:text-green-800 disabled:opacity-50"
+                          >
+                            重新定位
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <button
+                            onClick={handleGetLocation}
+                            disabled={gpsLoading}
+                            className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors disabled:opacity-50"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-sm font-medium">
+                              {gpsLoading ? '定位中...' : '獲取定位'}
+                            </span>
+                            {gpsLoading && (
+                              <svg className="animate-spin h-4 w-4 text-emerald-500" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            )}
+                          </button>
+                          {gpsError && (
+                            <p className="mt-1.5 text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2">
+                              ⚠️ {gpsError}（不影響打卡，可直接提交）
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Submit button */}
                   {photoDataUrl && (
                     <button
                       onClick={handleSubmitClock}
@@ -919,6 +1040,68 @@ export default function CompanyClockPage() {
                     </button>
                   )}
                 </div>
+
+                {/* GPS Location Block for Temp Employee */}
+                {photoDataUrl && !cameraOpen && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">GPS 定位 (選填)</p>
+                    {gpsLocation ? (
+                      <div className="bg-green-50 rounded-xl p-3 text-sm text-green-700">
+                        <p className="font-medium">✅ 定位成功</p>
+                        {gpsAddressLoading ? (
+                          <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            正在查詢地址...
+                          </p>
+                        ) : gpsLocation.address ? (
+                          <p className="text-xs mt-1 text-green-800 font-medium">
+                            📍 {gpsLocation.address}
+                          </p>
+                        ) : null}
+                        <p className="text-xs mt-1 text-green-600">
+                          {gpsLocation.latitude.toFixed(6)}, {gpsLocation.longitude.toFixed(6)}
+                        </p>
+                        <button
+                          onClick={handleGetLocation}
+                          disabled={gpsLoading}
+                          className="mt-2 text-xs text-green-600 underline hover:text-green-800 disabled:opacity-50"
+                        >
+                          重新定位
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <button
+                          onClick={handleGetLocation}
+                          disabled={gpsLoading}
+                          className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors disabled:opacity-50"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm font-medium">
+                            {gpsLoading ? '定位中...' : '獲取定位'}
+                          </span>
+                          {gpsLoading && (
+                            <svg className="animate-spin h-4 w-4 text-emerald-500" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          )}
+                        </button>
+                        {gpsError && (
+                          <p className="mt-1.5 text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2">
+                            ⚠️ {gpsError}（不影響打卡，可直接提交）
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button

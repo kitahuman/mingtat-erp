@@ -188,7 +188,7 @@ export class CompanyClockService {
   // ── Get companies for filter dropdown ───────────────────────────
   async getCompanies() {
     return this.prisma.company.findMany({
-      where: { status: 'active' },
+      where: { status: 'active', company_type: { not: 'external' } },
       select: { id: true, name: true, internal_prefix: true },
       orderBy: { name: 'asc' },
     });
