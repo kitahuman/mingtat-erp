@@ -558,6 +558,12 @@ export class CsvImportService {
       if (rest[df]) rest[df] = new Date(rest[df]);
     }
 
+    // 同步 rate = day_rate，確保列表頁「費率」欄位正確顯示
+    // 列表頁使用 rate 欄位顯示，CSV 匯入來源為 day_rate
+    if (rest.rate === undefined) {
+      rest.rate = rest.day_rate ?? 0;
+    }
+
     const created = await this.prisma.fleetRateCard.create({
       data: { ...rest, client_id: clientId, company_id: companyId },
     });
