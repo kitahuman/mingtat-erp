@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
@@ -10,6 +11,7 @@ const statusColors: Record<string, string> = { draft: 'bg-yellow-100 text-yellow
 const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
 
 export default function DailyReportListPage() {
+  const router = useRouter();
   const { t } = useI18n();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +72,14 @@ export default function DailyReportListPage() {
     setFilterClientName(val);
     // If typing manually, clear partner selection
     if (val) setFilterClientId('');
+  };
+
+  const handleCopy = (e: React.MouseEvent, reportId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm('確定要複製這份日報作為模板嗎？')) {
+      router.push(`/employee-portal/supervisor/daily-report/new?copy_from=${reportId}`);
+    }
   };
 
   return (
@@ -210,6 +220,15 @@ export default function DailyReportListPage() {
                 <span>{report.items?.length || 0} 項</span>
               </div>
               <p className="text-sm text-gray-600 mt-2 line-clamp-2">{report.daily_report_work_summary}</p>
+              
+              <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
+                <button
+                  onClick={(e) => handleCopy(e, report.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100 active:scale-95 transition-all"
+                >
+                  <span>📋</span> 複製
+                </button>
+              </div>
             </Link>
           ))}
         </div>
