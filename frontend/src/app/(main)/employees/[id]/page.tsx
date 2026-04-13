@@ -341,6 +341,47 @@ export default function EmployeeDetailPage() {
         </div>
       </div>
 
+      {/* Linked User Account */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">📱 連結的手機入口帳號</h2>
+        {emp?.user ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">登入帳號</p>
+              <p className="font-mono font-medium text-gray-900">{emp.user.username}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">顯示名稱</p>
+              <p className="font-medium">{emp.user.displayName || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">登入電話</p>
+              <p>{emp.user.phone || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">帳號狀態</p>
+              <p>
+                <span className={emp.user.isActive ? 'badge-green' : 'badge-red'}>
+                  {emp.user.isActive ? '啟用中' : '已停用'}
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">帳號 ID</p>
+              <p className="text-gray-400 text-sm">#{emp.user.id}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 py-3 px-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+            <span className="text-gray-400 text-xl">🔓</span>
+            <div>
+              <p className="text-sm font-medium text-gray-600">尚未建立手機入口帳號</p>
+              <p className="text-xs text-gray-400 mt-0.5">可在『員工管理』頁面點擊『📱 員工帳號管理』為此員工建立帳號</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Bank & MPF Info */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">銀行及強積金資料</h2>

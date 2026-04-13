@@ -786,6 +786,101 @@ export class EmployeePortalService {
     });
   }
 
+  // ── Admin: Get employees without accounts ─────────────────────────────────
+  async getEmployeesWithoutAccounts() {
+    // 取得所有在職、非臨時員工
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        status: 'active',
+        employee_is_temporary: false,
+      },
+      select: {
+        id: true,
+        emp_code: true,
+        name_zh: true,
+        name_en: true,
+        phone: true,
+        role: true,
+        company: { select: { internal_prefix: true, name: true } },
+        user: { select: { id: true, username: true, displayName: true, isActive: true } },
+      },
+      orderBy: { emp_code: 'asc' },
+    });
+
+    return employees.map(emp => ({
+      ...emp,
+      has_account: !!emp.user,
+      can_create_account: !emp.user && !!emp.phone && /^\d{8,}$/.test(emp.phone),
+    }));
+  }
+
+  // ── Admin: Create accounts for selected employees ──────────────────────────
+  async createAccountsForSelectedEmployees(employeeIds: number[]) {
+    if (!employeeIds || employeeIds.length === 0) {
+      throw new BadRequestException('請選擇至少一位員工');
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds }, status: 'active' },
+    });
+
+    const results = { created: [] as any[], skipped: [] as any[], errors: [] as any[] };
+
+    for (const emp of employees) {
+      if (!emp.phone || !/^\d{8,}$/.test(emp.phone)) {
+        results.skipped.push({ employee_id: emp.id, name: emp.name_zh, phone: emp.phone, reason: '電話號碼格式不正確或未填寫' });
+        continue;
+      }
+
+      const existing = await this.prisma.user.findFirst({
+        where: { OR: [{ username: `emp_${emp.phone}` }, { phone: emp.phone }, { employee_id: emp.id }] },
+      });
+
+      if (existing) {
+        results.skipped.push({ employee_id: emp.id, name: emp.name_zh, phone: emp.phone, reason: '帳號已存在' });
+        continue;
+      }
+
+      try {
+        const defaultPassword = `Aa-${emp.phone}`;
+        const hashed = await bcrypt.hash(defaultPassword, 10);
+
+        const user = await this.prisma.user.create({
+          data: {
+            username: `emp_${emp.phone}`,
+            password: hashed,
+            displayName: emp.name_zh || emp.name_en || emp.phone,
+            role: 'worker',
+            phone: emp.phone,
+            isActive: true,
+            employee_id: emp.id,
+          } as any,
+        });
+
+        results.created.push({
+          employee_id: emp.id,
+          user_id: user.id,
+          phone: emp.phone,
+          name: emp.name_zh || emp.name_en,
+          username: user.username,
+          default_password: defaultPassword,
+        });
+      } catch (e: any) {
+        results.errors.push({ employee_id: emp.id, phone: emp.phone, name: emp.name_zh || emp.name_en, error: e?.message ?? 'Unknown error' });
+      }
+    }
+
+    return {
+      total_selected: employeeIds.length,
+      created_count: results.created.length,
+      skipped_count: results.skipped.length,
+      error_count: results.errors.length,
+      created: results.created,
+      skipped: results.skipped,
+      errors: results.errors,
+    };
+  }
+
   // ── Admin: Bulk create accounts for all employees with phone numbers ────────
   async bulkCreateEmployeeAccounts() {
     const employees = await this.prisma.employee.findMany({

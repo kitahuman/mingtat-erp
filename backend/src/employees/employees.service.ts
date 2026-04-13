@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -321,6 +321,16 @@ export class EmployeesService {
           include: { from_company: true, to_company: true },
           orderBy: { transfer_date: 'desc' },
         },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            phone: true,
+            role: true,
+            isActive: true,
+          },
+        },
       },
     });
     if (!emp) throw new NotFoundException('員工不存在');
@@ -328,7 +338,36 @@ export class EmployeesService {
   }
 
   async create(dto: any, userId?: number) {
-    const { company, salary_settings, transfers, ...data } = dto;
+    const { company, salary_settings, transfers, force_create, ...data } = dto;
+
+    // 身份證號碼重複檢查（硬性阻擋）
+    if (data.id_number) {
+      const existingById = await this.prisma.employee.findFirst({
+        where: { id_number: data.id_number },
+        select: { id: true, emp_code: true, name_zh: true },
+      });
+      if (existingById) {
+        throw new BadRequestException({
+          code: 'DUPLICATE_ID_NUMBER',
+          message: `身份證號碼 ${data.id_number} 已被員工 ${existingById.name_zh}（${existingById.emp_code || 'N/A'}）使用，無法建立。`,
+        });
+      }
+    }
+
+    // 中文姓名重複檢查（警告，非阻擋）
+    if (data.name_zh && !force_create) {
+      const existingByName = await this.prisma.employee.findFirst({
+        where: { name_zh: data.name_zh },
+        select: { id: true, emp_code: true, name_zh: true },
+      });
+      if (existingByName) {
+        throw new HttpException({
+          code: 'DUPLICATE_NAME_WARNING',
+          message: `已有同名員工 ${existingByName.name_zh}（${existingByName.emp_code || 'N/A'}），是否確定繼續建立？`,
+          existingEmployee: `${existingByName.name_zh}（${existingByName.emp_code || 'N/A'}）`,
+        }, HttpStatus.CONFLICT);
+      }
+    }
 
     // 自動分配正式員工編號（臨時員工不分配）
     if (!data.employee_is_temporary && !data.emp_code) {

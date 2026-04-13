@@ -61,10 +61,12 @@ export default function EmployeesPage() {
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
-  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', employee_is_temporary: false });
+  const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', id_number: '', employee_is_temporary: false });
+  const [createError, setCreateError] = useState<string>('');
+  const [createWarning, setCreateWarning] = useState<{ message: string; existingEmployee: string } | null>(null);
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<any>(null);
   const [showCsvImport, setShowCsvImport] = useState(false);
-  const [bulkCreating, setBulkCreating] = useState(false);
-  const [bulkResult, setBulkResult] = useState<any>(null);
+  // bulkCreating and bulkResult kept for legacy compatibility (no longer used directly)
 
   const [roleOptions, setRoleOptions] = useState<{value: string; label: string}[]>([]);
   const [roleLabels, setRoleLabels] = useState<Record<string, string>>(FALLBACK_ROLE_LABELS);
@@ -82,6 +84,15 @@ export default function EmployeesPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+
+  // Account management modal state
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [accountEmployees, setAccountEmployees] = useState<any[]>([]);
+  const [accountLoadingList, setAccountLoadingList] = useState(false);
+  const [accountSelectedIds, setAccountSelectedIds] = useState<number[]>([]);
+  const [accountCreating, setAccountCreating] = useState(false);
+  const [accountResult, setAccountResult] = useState<any>(null);
+  const [accountFilter, setAccountFilter] = useState<'all' | 'without' | 'with'>('without');
 
   // Ref to store roleLabels for use in callbacks without stale closures
   const roleLabelsRef = useRef(roleLabels);
@@ -175,18 +186,58 @@ export default function EmployeesPage() {
     setSelectedIds([]);
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = async (e: React.FormEvent, forceCreate = false) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setCreateError('');
     try {
-      const payload = {
+      const payload: any = {
         ...form,
         company_id: form.employee_is_temporary ? undefined : (form.company_id ? Number(form.company_id) : undefined),
+        id_number: form.id_number || undefined,
       };
+      if (forceCreate) payload.force_create = true;
       await employeesApi.create(payload);
       setShowModal(false);
-      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', employee_is_temporary: false });
+      setCreateWarning(null);
+      setPendingCreatePayload(null);
+      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', id_number: '', employee_is_temporary: false });
       load();
-    } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
+    } catch (err: any) {
+      const status = err.response?.status;
+      const data = err.response?.data;
+      if (status === 400 && data?.code === 'DUPLICATE_ID_NUMBER') {
+        setCreateError(data.message || '身份證號碼已存在，無法建立。');
+      } else if (status === 409 && data?.code === 'DUPLICATE_NAME_WARNING') {
+        // 姓名重複警告：顯示確認對話框
+        setPendingCreatePayload({ ...form, company_id: form.employee_is_temporary ? undefined : (form.company_id ? Number(form.company_id) : undefined), id_number: form.id_number || undefined });
+        setCreateWarning({ message: data.message, existingEmployee: data.existingEmployee || '' });
+      } else {
+        alert(err.response?.data?.message || '建立失敗');
+      }
+    }
+  };
+
+  const handleConfirmCreate = async () => {
+    if (!pendingCreatePayload) return;
+    setCreateError('');
+    try {
+      await employeesApi.create({ ...pendingCreatePayload, force_create: true });
+      setShowModal(false);
+      setCreateWarning(null);
+      setPendingCreatePayload(null);
+      setForm({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', id_number: '', employee_is_temporary: false });
+      load();
+    } catch (err: any) {
+      const status = err.response?.status;
+      const data = err.response?.data;
+      if (status === 400 && data?.code === 'DUPLICATE_ID_NUMBER') {
+        setCreateError(data.message || '身份證號碼已存在，無法建立。');
+      } else {
+        alert(err.response?.data?.message || '建立失敗');
+      }
+      setCreateWarning(null);
+      setPendingCreatePayload(null);
+    }
   };
 
   const handleSort = (field: string, order: string) => {
@@ -399,69 +450,32 @@ export default function EmployeesPage() {
             <CsvImportModal module="employees" onImportComplete={load} />
             <button
               onClick={async () => {
-                if (!confirm('為所有有電話號碼的員工建立手機登入帳號？預設密碼為 Aa-電話號碼。')) return;
-                setBulkCreating(true);
-                setBulkResult(null);
+                setShowAccountModal(true);
+                setAccountResult(null);
+                setAccountSelectedIds([]);
+                setAccountFilter('without');
+                setAccountLoadingList(true);
                 try {
-                  const res = await api.post('/employee-portal/bulk-create-accounts', {});
-                  setBulkResult(res.data);
+                  const res = await api.get('/employee-portal/employees-without-accounts');
+                  setAccountEmployees(res.data);
                 } catch (e: any) {
-                  alert('建立帳號失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+                  alert('載入員工列表失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+                  setShowAccountModal(false);
                 } finally {
-                  setBulkCreating(false);
+                  setAccountLoadingList(false);
                 }
               }}
-              disabled={bulkCreating}
               className="btn-secondary text-sm"
-              title="為所有有電話號碼的員工建立手機入口帳號"
+              title="管理員工手機入口帳號"
             >
-              {bulkCreating ? '建立中...' : '📱 建立手機帳號'}
+              📱 員工帳號管理
             </button>
             <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
           </div>
         )}
       </div>
 
-      {/* Bulk Create Result */}
-      {bulkResult && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-green-800 font-medium">
-                共 {bulkResult.total_employees} 位員工，
-                新建 {bulkResult.created_count} 個帳號，
-                跳過 {bulkResult.skipped_count} 個（已存在）
-                {bulkResult.error_count > 0 && `，失敗 ${bulkResult.error_count} 個`}
-              </p>
-              {bulkResult.created?.length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-xs text-green-600 cursor-pointer">查看新建帳號詳情</summary>
-                  <div className="mt-1 max-h-40 overflow-y-auto">
-                    {bulkResult.created.map((c: any, i: number) => (
-                      <div key={i} className="text-xs text-green-700 py-0.5">
-                        {c.name} ({c.phone}) — 帳號: {c.username}，預設密碼: {c.default_password}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-              {bulkResult.errors?.length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-xs text-red-600 cursor-pointer">查看失敗詳情</summary>
-                  <div className="mt-1">
-                    {bulkResult.errors.map((e: any, i: number) => (
-                      <div key={i} className="text-xs text-red-600 py-0.5">
-                        {e.name} ({e.phone}): {e.error}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-            <button onClick={() => setBulkResult(null)} className="text-green-500 hover:text-green-700 text-lg">&#x2715;</button>
-          </div>
-        </div>
-      )}
+
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-4">
@@ -670,6 +684,186 @@ export default function EmployeesPage() {
       </div>
       )}
 
+      {/* Account Management Modal */}
+      <Modal isOpen={showAccountModal} onClose={() => { setShowAccountModal(false); setAccountResult(null); setAccountSelectedIds([]); }} title="📱 員工手機帳號管理" size="xl">
+        <div className="space-y-4">
+          {/* Filter tabs */}
+          <div className="flex gap-2 border-b pb-3">
+            <button onClick={() => setAccountFilter('without')} className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${accountFilter === 'without' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              未建立帳號 ({accountEmployees.filter(e => !e.has_account).length})
+            </button>
+            <button onClick={() => setAccountFilter('with')} className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${accountFilter === 'with' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              已有帳號 ({accountEmployees.filter(e => e.has_account).length})
+            </button>
+            <button onClick={() => setAccountFilter('all')} className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${accountFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              全部 ({accountEmployees.length})
+            </button>
+          </div>
+
+          {accountLoadingList ? (
+            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+          ) : (
+            <>
+              {/* Select all for without-account employees */}
+              {accountFilter !== 'with' && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="selectAllAccounts"
+                      checked={accountSelectedIds.length > 0 && accountSelectedIds.length === accountEmployees.filter(e => e.can_create_account).length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAccountSelectedIds(accountEmployees.filter(e => e.can_create_account).map(e => e.id));
+                        } else {
+                          setAccountSelectedIds([]);
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-primary-600"
+                    />
+                    <label htmlFor="selectAllAccounts" className="text-sm text-gray-600">
+                      全選可建立帳號的員工（共 {accountEmployees.filter(e => e.can_create_account).length} 位）
+                    </label>
+                  </div>
+                  {accountSelectedIds.length > 0 && (
+                    <span className="text-sm text-primary-600 font-medium">已選 {accountSelectedIds.length} 位</span>
+                  )}
+                </div>
+              )}
+
+              {/* Employee list */}
+              <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                {accountEmployees
+                  .filter(e => accountFilter === 'all' ? true : accountFilter === 'with' ? e.has_account : !e.has_account)
+                  .map((emp: any) => (
+                    <div key={emp.id} className={`px-3 py-2.5 flex items-center gap-3 ${emp.can_create_account ? 'hover:bg-gray-50' : ''}`}>
+                      {!emp.has_account && (
+                        <input
+                          type="checkbox"
+                          checked={accountSelectedIds.includes(emp.id)}
+                          disabled={!emp.can_create_account}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAccountSelectedIds(prev => [...prev, emp.id]);
+                            } else {
+                              setAccountSelectedIds(prev => prev.filter(id => id !== emp.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-primary-600 disabled:opacity-40"
+                        />
+                      )}
+                      {emp.has_account && <div className="w-4 h-4 flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900">{emp.name_zh}</span>
+                          {emp.emp_code && <span className="text-xs text-gray-400 font-mono">{emp.emp_code}</span>}
+                          <span className="text-xs text-gray-400">{emp.company?.internal_prefix || emp.company?.name || '-'}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {emp.phone ? `📱 ${emp.phone}` : <span className="text-orange-500">未填寫電話</span>}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {emp.has_account ? (
+                          <div className="text-right">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                              ✓ 已有帳號
+                            </span>
+                            <div className="text-xs text-gray-400 mt-0.5">{emp.user?.username}</div>
+                          </div>
+                        ) : emp.can_create_account ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">未建立</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">無效電話</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                }
+                {accountEmployees.filter(e => accountFilter === 'all' ? true : accountFilter === 'with' ? e.has_account : !e.has_account).length === 0 && (
+                  <div className="py-8 text-center text-sm text-gray-400">
+                    {accountFilter === 'with' ? '沒有員工已建立帳號' : '所有員工已建立帳號 ✅'}
+                  </div>
+                )}
+              </div>
+
+              {/* Result display */}
+              {accountResult && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-800 font-medium">
+                    新建 {accountResult.created_count} 個帳號，跳過 {accountResult.skipped_count} 個
+                    {accountResult.error_count > 0 && `，失敗 ${accountResult.error_count} 個`}
+                  </p>
+                  {accountResult.created?.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-green-600 cursor-pointer">查看新建帳號詳情</summary>
+                      <div className="mt-1 max-h-32 overflow-y-auto">
+                        {accountResult.created.map((c: any, i: number) => (
+                          <div key={i} className="text-xs text-green-700 py-0.5">
+                            {c.name} — 帳號: {c.username}，預設密碼: {c.default_password}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {accountResult.skipped?.length > 0 && (
+                    <details className="mt-1">
+                      <summary className="text-xs text-gray-500 cursor-pointer">查看跳過詳情</summary>
+                      <div className="mt-1 max-h-24 overflow-y-auto">
+                        {accountResult.skipped.map((s: any, i: number) => (
+                          <div key={i} className="text-xs text-gray-500 py-0.5">{s.name}: {s.reason}</div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              {accountFilter !== 'with' && (
+                <div className="flex justify-end gap-3 pt-3 border-t">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAccountModal(false); setAccountResult(null); setAccountSelectedIds([]); }}
+                    className="btn-secondary"
+                  >
+                    關閉
+                  </button>
+                  <button
+                    type="button"
+                    disabled={accountSelectedIds.length === 0 || accountCreating}
+                    onClick={async () => {
+                      setAccountCreating(true);
+                      setAccountResult(null);
+                      try {
+                        const res = await api.post('/employee-portal/create-accounts-for-selected', { employee_ids: accountSelectedIds });
+                        setAccountResult(res.data);
+                        setAccountSelectedIds([]);
+                        // Reload employee list
+                        const listRes = await api.get('/employee-portal/employees-without-accounts');
+                        setAccountEmployees(listRes.data);
+                      } catch (e: any) {
+                        alert('建立帳號失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+                      } finally {
+                        setAccountCreating(false);
+                      }
+                    }}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
+                  >
+                    {accountCreating ? '建立中...' : `為選定 ${accountSelectedIds.length} 位員工建立帳號`}
+                  </button>
+                </div>
+              )}
+              {accountFilter === 'with' && (
+                <div className="flex justify-end pt-3 border-t">
+                  <button type="button" onClick={() => { setShowAccountModal(false); setAccountResult(null); }} className="btn-secondary">關閉</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </Modal>
+
       {/* Batch Delete Confirmation Modal */}
       <Modal
         isOpen={showBatchDeleteConfirm}
@@ -743,6 +937,7 @@ export default function EmployeesPage() {
             )}
             <div><label className="block text-sm font-medium text-gray-700 mb-1">電話</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label><input type="date" value={form.join_date} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">身份證號碼</label><input value={form.id_number} onChange={e => setForm({...form, id_number: e.target.value, ...(createError ? { _clearError: true } : {})})} onInput={() => setCreateError('')} className="input-field" placeholder="例：R838479(6)" /></div>
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -756,10 +951,27 @@ export default function EmployeesPage() {
               </label>
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button>
-            <button type="submit" className="btn-primary">建立</button>
-          </div>
+          {createError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {createError}
+            </div>
+          )}
+          {createWarning && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+              <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ 發現同名員工</p>
+              <p className="text-sm text-yellow-700 mb-3">{createWarning.message}</p>
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => { setCreateWarning(null); setPendingCreatePayload(null); }} className="btn-secondary text-sm">取消</button>
+                <button type="button" onClick={handleConfirmCreate} className="bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-700 transition-colors">確認繼續建立</button>
+              </div>
+            </div>
+          )}
+          {!createWarning && (
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button type="button" onClick={() => { setShowModal(false); setCreateError(''); setCreateWarning(null); }} className="btn-secondary">取消</button>
+              <button type="submit" disabled={!!createError} className="btn-primary disabled:opacity-50">建立</button>
+            </div>
+          )}
         </form>
       </Modal>
 

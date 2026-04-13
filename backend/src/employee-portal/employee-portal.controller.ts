@@ -72,6 +72,22 @@ export class EmployeePortalController {
     return this.service.createEmployeeUser(body);
   }
 
+  // ── Admin: Get employees without accounts ─────────────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Get('employees-without-accounts')
+  async getEmployeesWithoutAccounts() {
+    return this.service.getEmployeesWithoutAccounts();
+  }
+
+  // ── Admin: Create accounts for selected employees ──────────────────────────
+  @UseGuards(AuthGuard('jwt'))
+  @Post('create-accounts-for-selected')
+  async createAccountsForSelected(
+    @Body() body: { employee_ids: number[] },
+  ) {
+    return this.service.createAccountsForSelectedEmployees(body.employee_ids);
+  }
+
   // ── Admin: Bulk create accounts for all employees with phone numbers ────────
   @UseGuards(AuthGuard('jwt'))
   @Post('bulk-create-accounts')
