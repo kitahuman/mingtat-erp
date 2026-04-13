@@ -585,14 +585,41 @@ export class CsvImportService {
     return { status: 'created' as const, id: created.id };
   }
 
+  private async resolveEmployeeId(value: string | undefined): Promise<number | null> {
+    if (!value) return null;
+    // 1. Try exact emp_code match first
+    const byCode = await this.prisma.employee.findFirst({
+      where: { emp_code: { equals: value, mode: 'insensitive' } },
+    });
+    if (byCode) return byCode.id;
+    // 2. Fall back to name match (name_zh exact, then name_en exact, then name_zh contains)
+    const byNameZh = await this.prisma.employee.findFirst({
+      where: { name_zh: { equals: value, mode: 'insensitive' } },
+    });
+    if (byNameZh) return byNameZh.id;
+    const byNameEn = await this.prisma.employee.findFirst({
+      where: { name_en: { equals: value, mode: 'insensitive' } },
+    });
+    if (byNameEn) return byNameEn.id;
+    // 3. Try nickname table
+    const byNickname = await this.prisma.employeeNickname.findFirst({
+      where: { emp_nickname_value: { equals: value, mode: 'insensitive' } },
+    });
+    if (byNickname) return byNickname.emp_nickname_employee_id;
+    return null;
+  }
+
   private async importWorkLog(data: any) {
     const { company_name, client_name, employee_code, contract_name, ...rest } = data;
     const companyProfileId = company_name ? await this.resolveCompanyProfileId(company_name) : null;
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
     let employeeId: number | null = null;
+    let importRemarks = '';
     if (employee_code) {
-      const emp = await this.prisma.employee.findFirst({ where: { emp_code: employee_code } });
-      employeeId = emp?.id ?? null;
+      employeeId = await this.resolveEmployeeId(employee_code);
+      if (!employeeId) {
+        importRemarks = `[未匹配員工: ${employee_code}]`;
+      }
     }
     let contractId: number | null = null;
     if (contract_name) {
@@ -619,9 +646,14 @@ export class CsvImportService {
       }
     }
 
+    const finalRemarks = importRemarks 
+      ? (rest.remarks ? `${importRemarks} ${rest.remarks}` : importRemarks)
+      : rest.remarks;
+
     const created = await this.prisma.workLog.create({
       data: {
         ...rest,
+        remarks: finalRemarks,
         company_profile_id: companyProfileId,
         client_id: clientId,
         employee_id: employeeId,
