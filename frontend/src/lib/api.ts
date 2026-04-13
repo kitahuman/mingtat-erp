@@ -839,6 +839,7 @@ export const auditLogsApi = {
 export const dailyReportStatsApi = {
   getStats: (params?: any) => api.get('/daily-report-stats', { params }),
   getExportData: (params?: any) => api.get('/daily-report-stats/export', { params }),
+  getProjectCost: (projectId: number, params?: any) => api.get(`/daily-report-stats/project-cost/${projectId}`, { params }),
 };
 
 export const dailyReportsApi = {

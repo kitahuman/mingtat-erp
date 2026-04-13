@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
+import ProjectCostAnalysis from '@/components/ProjectCostAnalysis';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 
@@ -327,6 +328,12 @@ export default function ProjectDetailPage() {
         ) : (
           <p className="text-gray-400 text-sm">暫無工程日報</p>
         )}
+      </div>
+
+      {/* Cost Analysis */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
+        <ProjectCostAnalysis projectId={Number(params.id)} projectNo={project?.project_no} />
       </div>
 
       {/* Acceptance Reports */}

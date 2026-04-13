@@ -151,7 +151,7 @@ export default function ExportButton({ columns, data, filename = 'export', onFet
     setShowMenu(false);
   };
 
-  if (!data || data.length === 0) return null;
+  if ((!data || data.length === 0) && !onFetchAll) return null;
 
   return (
     <div className="relative" ref={menuRef}>

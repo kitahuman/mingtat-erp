@@ -338,4 +338,312 @@ export class DailyReportStatsService {
 
     return rows;
   }
+
+  /**
+   * Get project cost analysis from daily reports + rate cards.
+   * Aggregates resource usage from daily reports and matches with rate cards
+   * to calculate estimated costs, then compares with quotation budget.
+   */
+  async getProjectCost(projectId: number, dateFrom?: string, dateTo?: string) {
+    // 1. Fetch project info
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        client: { select: { id: true, name: true } },
+        contract: { select: { id: true, contract_no: true, contract_name: true } },
+      },
+    });
+    if (!project) return null;
+
+    // 2. Fetch daily reports for this project
+    const reportWhere: any = {
+      daily_report_project_id: projectId,
+      daily_report_deleted_at: null,
+      daily_report_status: 'submitted',
+    };
+    if (dateFrom || dateTo) {
+      reportWhere.daily_report_date = {};
+      if (dateFrom) reportWhere.daily_report_date.gte = new Date(dateFrom);
+      if (dateTo) reportWhere.daily_report_date.lte = new Date(dateTo);
+    }
+
+    const reports = await this.prisma.dailyReport.findMany({
+      where: reportWhere,
+      include: {
+        items: { orderBy: { daily_report_item_sort_order: 'asc' as const } },
+        creator: { select: { id: true, displayName: true } },
+      },
+      orderBy: { daily_report_date: 'asc' },
+    });
+
+    // 3. Fetch rate cards for this project
+    const rateCards = await this.prisma.rateCard.findMany({
+      where: {
+        project_id: projectId,
+        status: 'active',
+        deleted_at: null,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // 4. Fetch quotations for budget comparison
+    const quotations = await this.prisma.quotation.findMany({
+      where: {
+        project_id: projectId,
+        deleted_at: null,
+        status: { in: ['accepted', 'sent'] },
+      },
+      include: {
+        items: { orderBy: { sort_order: 'asc' } },
+      },
+    });
+
+    // 5. Aggregate resource usage from daily reports
+    const resourceMap = new Map<string, {
+      category: string;
+      worker_type: string | null;
+      content: string;
+      total_quantity: number;
+      total_shift_quantity: number;
+      total_ot_hours: number;
+      report_count: number;
+      matched_rate_card_id: number | null;
+      matched_rate_card_name: string | null;
+      day_rate: number;
+      ot_rate: number;
+      mid_shift_rate: number;
+      estimated_day_cost: number;
+      estimated_ot_cost: number;
+      estimated_shift_cost: number;
+      estimated_total_cost: number;
+    }>();
+
+    for (const report of reports) {
+      for (const item of report.items) {
+        const key = `${item.daily_report_item_category}||${item.daily_report_item_worker_type || ''}||${item.daily_report_item_content}`;
+        if (!resourceMap.has(key)) {
+          // Try to match a rate card
+          const matched = this.matchRateCard(
+            rateCards,
+            item.daily_report_item_category,
+            item.daily_report_item_worker_type,
+            item.daily_report_item_content,
+          );
+          resourceMap.set(key, {
+            category: item.daily_report_item_category,
+            worker_type: item.daily_report_item_worker_type,
+            content: item.daily_report_item_content,
+            total_quantity: 0,
+            total_shift_quantity: 0,
+            total_ot_hours: 0,
+            report_count: 0,
+            matched_rate_card_id: matched?.id || null,
+            matched_rate_card_name: matched?.name || null,
+            day_rate: this.toNum(matched?.day_rate),
+            ot_rate: this.toNum(matched?.ot_rate),
+            mid_shift_rate: this.toNum(matched?.mid_shift_rate),
+            estimated_day_cost: 0,
+            estimated_ot_cost: 0,
+            estimated_shift_cost: 0,
+            estimated_total_cost: 0,
+          });
+        }
+        const res = resourceMap.get(key)!;
+        const qty = this.toNum(item.daily_report_item_quantity);
+        const shiftQty = this.toNum(item.daily_report_item_shift_quantity);
+        const otHours = this.toNum(item.daily_report_item_ot_hours);
+        res.total_quantity += qty;
+        res.total_shift_quantity += shiftQty;
+        res.total_ot_hours += otHours;
+        res.report_count += 1;
+      }
+    }
+
+    // 6. Calculate costs for each resource
+    const resources = Array.from(resourceMap.values());
+    let totalDayCost = 0;
+    let totalOtCost = 0;
+    let totalShiftCost = 0;
+    let totalEstimatedCost = 0;
+
+    for (const res of resources) {
+      res.estimated_day_cost = this.round2(res.total_quantity * res.day_rate);
+      res.estimated_ot_cost = this.round2(res.total_ot_hours * res.ot_rate);
+      res.estimated_shift_cost = this.round2(res.total_shift_quantity * res.mid_shift_rate);
+      res.estimated_total_cost = this.round2(
+        res.estimated_day_cost + res.estimated_ot_cost + res.estimated_shift_cost,
+      );
+      totalDayCost += res.estimated_day_cost;
+      totalOtCost += res.estimated_ot_cost;
+      totalShiftCost += res.estimated_shift_cost;
+      totalEstimatedCost += res.estimated_total_cost;
+    }
+
+    // 7. Category subtotals
+    const categoryTotals: Record<string, {
+      category: string;
+      total_quantity: number;
+      total_shift_quantity: number;
+      total_ot_hours: number;
+      estimated_cost: number;
+      item_count: number;
+    }> = {};
+    for (const res of resources) {
+      if (!categoryTotals[res.category]) {
+        categoryTotals[res.category] = {
+          category: res.category,
+          total_quantity: 0,
+          total_shift_quantity: 0,
+          total_ot_hours: 0,
+          estimated_cost: 0,
+          item_count: 0,
+        };
+      }
+      const ct = categoryTotals[res.category];
+      ct.total_quantity += res.total_quantity;
+      ct.total_shift_quantity += res.total_shift_quantity;
+      ct.total_ot_hours += res.total_ot_hours;
+      ct.estimated_cost += res.estimated_total_cost;
+      ct.item_count += 1;
+    }
+
+    // 8. Budget from quotations
+    let totalBudget = 0;
+    const budgetItems: { quotation_no: string; item_name: string; amount: number }[] = [];
+    for (const q of quotations) {
+      for (const item of q.items) {
+        const amount = this.toNum(item.amount);
+        totalBudget += amount;
+        budgetItems.push({
+          quotation_no: q.quotation_no,
+          item_name: item.item_name || item.item_description || '-',
+          amount: this.round2(amount),
+        });
+      }
+    }
+
+    // 9. Daily breakdown for chart
+    const dailyBreakdown: {
+      date: string;
+      shift_type: string;
+      worker_count: number;
+      vehicle_count: number;
+      machinery_count: number;
+      total_ot_hours: number;
+    }[] = [];
+    for (const report of reports) {
+      let wc = 0, vc = 0, mc = 0, ot = 0;
+      for (const item of report.items) {
+        const qty = this.toNum(item.daily_report_item_quantity);
+        const otH = this.toNum(item.daily_report_item_ot_hours);
+        if (item.daily_report_item_category === 'worker') wc += qty;
+        else if (item.daily_report_item_category === 'vehicle') vc += qty;
+        else if (item.daily_report_item_category === 'machinery') mc += qty;
+        ot += otH;
+      }
+      dailyBreakdown.push({
+        date: report.daily_report_date.toISOString().split('T')[0],
+        shift_type: report.daily_report_shift_type,
+        worker_count: this.round2(wc),
+        vehicle_count: this.round2(vc),
+        machinery_count: this.round2(mc),
+        total_ot_hours: this.round2(ot),
+      });
+    }
+
+    const variance = totalBudget - totalEstimatedCost;
+    const varianceRate = totalBudget > 0
+      ? this.round2((variance / totalBudget) * 100)
+      : 0;
+
+    return {
+      project: {
+        id: project.id,
+        project_no: project.project_no,
+        project_name: project.project_name,
+        status: project.status,
+        client: project.client,
+      },
+      summary: {
+        total_reports: reports.length,
+        date_range: reports.length > 0 ? {
+          from: reports[0].daily_report_date.toISOString().split('T')[0],
+          to: reports[reports.length - 1].daily_report_date.toISOString().split('T')[0],
+        } : null,
+        total_estimated_cost: this.round2(totalEstimatedCost),
+        total_day_cost: this.round2(totalDayCost),
+        total_ot_cost: this.round2(totalOtCost),
+        total_shift_cost: this.round2(totalShiftCost),
+        total_budget: this.round2(totalBudget),
+        variance: this.round2(variance),
+        variance_rate: varianceRate,
+      },
+      category_totals: Object.values(categoryTotals).map(ct => ({
+        ...ct,
+        total_quantity: this.round2(ct.total_quantity),
+        total_shift_quantity: this.round2(ct.total_shift_quantity),
+        total_ot_hours: this.round2(ct.total_ot_hours),
+        estimated_cost: this.round2(ct.estimated_cost),
+      })),
+      resources: resources.map(r => ({
+        ...r,
+        total_quantity: this.round2(r.total_quantity),
+        total_shift_quantity: this.round2(r.total_shift_quantity),
+        total_ot_hours: this.round2(r.total_ot_hours),
+      })),
+      rate_cards: rateCards.map(rc => ({
+        id: rc.id,
+        name: rc.name,
+        service_type: rc.service_type,
+        day_rate: this.toNum(rc.day_rate),
+        night_rate: this.toNum(rc.night_rate),
+        ot_rate: this.toNum(rc.ot_rate),
+        mid_shift_rate: this.toNum(rc.mid_shift_rate),
+        unit: rc.unit || rc.day_unit,
+      })),
+      budget_items: budgetItems,
+      daily_breakdown: dailyBreakdown,
+    };
+  }
+
+  /**
+   * Try to match a daily report item to a rate card by name/content similarity.
+   * Matching logic: service_type or name contains the worker_type or content.
+   */
+  private matchRateCard(
+    rateCards: any[],
+    category: string,
+    workerType: string | null | undefined,
+    content: string,
+  ): any | null {
+    if (rateCards.length === 0) return null;
+
+    // Normalize for comparison
+    const contentLower = (content || '').toLowerCase().trim();
+    const workerTypeLower = (workerType || '').toLowerCase().trim();
+
+    // Try exact match on name first
+    for (const rc of rateCards) {
+      const rcName = (rc.name || '').toLowerCase().trim();
+      const rcService = (rc.service_type || '').toLowerCase().trim();
+      if (rcName && (rcName === contentLower || rcName === workerTypeLower)) return rc;
+      if (rcService && (rcService === contentLower || rcService === workerTypeLower)) return rc;
+    }
+
+    // Try contains match
+    for (const rc of rateCards) {
+      const rcName = (rc.name || '').toLowerCase().trim();
+      const rcService = (rc.service_type || '').toLowerCase().trim();
+      if (contentLower && rcName && (rcName.includes(contentLower) || contentLower.includes(rcName))) return rc;
+      if (workerTypeLower && rcName && (rcName.includes(workerTypeLower) || workerTypeLower.includes(rcName))) return rc;
+      if (contentLower && rcService && (rcService.includes(contentLower) || contentLower.includes(rcService))) return rc;
+      if (workerTypeLower && rcService && (rcService.includes(workerTypeLower) || workerTypeLower.includes(rcService))) return rc;
+    }
+
+    return null;
+  }
+
+  private round2(v: number): number {
+    return Math.round(v * 100) / 100;
+  }
 }

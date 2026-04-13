@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Param,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -35,6 +36,19 @@ export class DailyReportStatsController {
       client_contract_no: clientContractNo,
       status,
     });
+  }
+
+  /**
+   * GET /daily-report-stats/project-cost/:projectId
+   * Returns cost analysis for a specific project based on daily reports + rate cards
+   */
+  @Get('project-cost/:projectId')
+  getProjectCost(
+    @Param('projectId') projectId: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+  ) {
+    return this.service.getProjectCost(Number(projectId), dateFrom, dateTo);
   }
 
   /**
