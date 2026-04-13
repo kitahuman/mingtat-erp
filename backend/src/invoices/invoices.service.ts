@@ -332,7 +332,6 @@ export class InvoicesService {
           targetTable: 'invoices',
           targetId: invoice.id,
           changesAfter: invoice,
-          ipAddress,
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
