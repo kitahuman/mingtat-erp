@@ -355,6 +355,20 @@ export class EmployeesService {
       data.emp_code = 'E' + String(nextNum).padStart(3, '0');
     }
 
+    // Convert date string fields to Date objects for Prisma DateTime columns
+    const dateFields = ['join_date', 'termination_date', 'date_of_birth', 'mpf_employment_date', 'mpf_old_employment_date', 'employee_mpf_applied_date',
+      'driving_license_expiry', 'approved_worker_cert_expiry', 'green_card_expiry', 'construction_card_expiry',
+      'earth_mover_cert_expiry', 'crane_cert_expiry', 'confined_space_cert_expiry', 'abrasive_wheel_cert_expiry',
+      'lifting_cert_expiry', 'gas_welding_cert_expiry', 'electric_welding_cert_expiry', 'first_aid_cert_expiry',
+      'signup_cert_expiry', 'silver_card_expiry', 'other_cert_expiry'];
+    for (const field of dateFields) {
+      if (field in data && data[field]) {
+        data[field] = new Date(data[field]);
+      } else if (field in data && !data[field]) {
+        data[field] = null;
+      }
+    }
+
     const saved = await this.prisma.employee.create({ data });
     if (userId) {
       try {
