@@ -438,7 +438,26 @@ export class EmployeesService {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
     // 復職時恢復員工編號（移除 [revoked] 後綴）
-    const restoredCode = emp.emp_code ? emp.emp_code.replace(' [revoked]', '') : emp.emp_code;
+    let restoredCode = emp.emp_code ? emp.emp_code.replace(' [revoked]', '') : emp.emp_code;
+
+    // 如果復職後沒有有效的員工編號且不是臨時員工，自動分配新編號
+    if (!restoredCode && !emp.employee_is_temporary) {
+      const existing = await this.prisma.employee.findMany({
+        where: { emp_code: { not: null } },
+        select: { emp_code: true },
+      });
+      let maxNum = 0;
+      for (const e of existing) {
+        if (!e.emp_code) continue;
+        const match = e.emp_code.match(/^E(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      restoredCode = 'E' + String(maxNum + 1).padStart(3, '0');
+    }
+
     await this.prisma.employee.update({
       where: { id },
       data: { status: 'active', emp_code: restoredCode, termination_date: null, termination_reason: null },
