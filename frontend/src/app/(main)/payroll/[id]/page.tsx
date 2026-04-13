@@ -151,7 +151,8 @@ function InlineEditCell({
   );
 }
 
-// ─── Grouped Settlement View ──────────────────────────────────────────────────function GroupedSettlementView({ groups }: { groups: any[] }) {
+// ─── Grouped Settlement View ──────────────────────────────────────────────────
+function GroupedSettlementView({ groups }: { groups: any[] }) {
   if (!groups || groups.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
   }
