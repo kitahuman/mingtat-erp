@@ -9,6 +9,7 @@ export interface FieldDef {
   description?: string;
   lookupModel?: string;
   lookupField?: string;
+  aliases?: string[];
 }
 
 const MODULE_FIELDS: Record<string, FieldDef[]> = {
@@ -140,8 +141,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'equipment_number', label: '機號/車牌', type: 'string' },
     { key: 'origin', label: '起點', type: 'string' },
     { key: 'destination', label: '終點', type: 'string' },
-    { key: 'day_rate', label: '日班價格', type: 'number' },
-    { key: 'night_rate', label: '夜班價格', type: 'number' },
+    { key: 'rate', label: '費率', type: 'number', aliases: ['日班價格'] },
     { key: 'mid_shift_rate', label: '中直價格', type: 'number' },
     { key: 'ot_rate', label: 'OT價格', type: 'number' },
     { key: 'unit', label: '單位', type: 'string', description: '例: 日/次/趟/小時' },
@@ -311,7 +311,7 @@ export class CsvImportService {
 
     for (let i = 0; i < headerLine.length; i++) {
       const header = headerLine[i].trim();
-      const field = fields.find(f => f.label === header || f.key === header);
+      const field = fields.find(f => f.label === header || f.key === header || (f.aliases && f.aliases.includes(header)));
       if (field) fieldMap.set(i, field);
     }
 
@@ -551,16 +551,20 @@ export class CsvImportService {
     const clientId = client_name ? await this.resolvePartnerId(client_name) : null;
     const companyId = company_name ? await this.resolveCompanyId(company_name) : null;
 
-    for (const nf of ['day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
+    for (const nf of ['rate', 'day_rate', 'night_rate', 'mid_shift_rate', 'ot_rate']) {
       if (rest[nf] !== undefined) rest[nf] = Number(rest[nf]) || 0;
     }
     for (const df of ['effective_date', 'expiry_date']) {
       if (rest[df]) rest[df] = new Date(rest[df]);
     }
 
-    // Sync rate field: if rate is not explicitly provided, use day_rate as the primary display rate
-    if (rest.rate === undefined || rest.rate === null) {
-      rest.rate = rest.day_rate ?? 0;
+    // Backward compatibility: if day_rate was provided (from old CSV) but rate wasn't
+    if (rest.rate === undefined && rest.day_rate !== undefined) {
+      rest.rate = rest.day_rate;
+    }
+    // Also sync back to day_rate for internal consistency if needed
+    if (rest.day_rate === undefined && rest.rate !== undefined) {
+      rest.day_rate = rest.rate;
     }
 
     const created = await this.prisma.fleetRateCard.create({
