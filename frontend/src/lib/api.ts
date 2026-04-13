@@ -846,6 +846,7 @@ export const dailyReportsApi = {
   get: (id: number) => api.get(`/daily-reports/${id}`),
   create: (data: any) => api.post('/daily-reports', data),
   update: (id: number, data: any) => api.put(`/daily-reports/${id}`, data),
+  adminUpdate: (id: number, data: any) => api.put(`/daily-reports/${id}/admin-update`, data),
   delete: (id: number) => api.delete(`/daily-reports/${id}`),
   byProject: (projectId: number, params?: any) => api.get(`/daily-reports/by-project/${projectId}`, { params }),
   exportPdf: (id: number) => api.get(`/daily-reports/${id}/pdf`, { responseType: 'blob' }),

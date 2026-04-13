@@ -9,6 +9,7 @@ export class DailyReportsService {
     project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } },
     client: { select: { id: true, name: true } },
     creator: { select: { id: true, displayName: true } },
+    quotation: { select: { id: true, quotation_no: true, contract_name: true, project_name: true, client: { select: { id: true, name: true } } } },
     items: { orderBy: { daily_report_item_sort_order: 'asc' as const } },
     attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' as const } },
   };
@@ -119,10 +120,10 @@ export class DailyReportsService {
     return report;
   }
 
-  async update(id: number, userId: number, dto: any) {
+  async update(id: number, userId: number, dto: any, adminOverride = false) {
     const existing = await this.prisma.dailyReport.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('日報不存在');
-    if (existing.daily_report_status === 'submitted') {
+    if (existing.daily_report_status === 'submitted' && !adminOverride) {
       throw new BadRequestException('已提交的日報不可修改');
     }
 
@@ -145,6 +146,7 @@ export class DailyReportsService {
       daily_report_project_name: rd.project_name || null,
       daily_report_completed_work: rd.completed_work || null,
       daily_report_signature: rd.signature || null,
+      daily_report_quotation_id: rd.quotation_id ? Number(rd.quotation_id) : null,
     };
 
     if (items?.length) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { dailyReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -10,6 +11,7 @@ const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
 const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛/機械', machinery: '車輛/機械', tool: '工具' };
 
 export default function DailyReportsAdminPage() {
+  const router = useRouter();
   const [reports, setReports] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -209,12 +211,20 @@ export default function DailyReportsAdminPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleExport(report.id); }}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                        >
-                          列印
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); router.push(`/daily-reports/${report.id}/edit`); }}
+                            className="text-green-600 hover:text-green-800 text-xs font-medium"
+                          >
+                            編輯
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleExport(report.id); }}
+                            className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                          >
+                            列印
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {expandedId === report.id && (

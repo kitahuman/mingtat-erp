@@ -707,6 +707,7 @@ model Quotation {
   work_logs         WorkLog[]
   expenses          Expense[]
   invoices          Invoice[]
+  daily_reports     DailyReport[] @relation("daily_report_quotation")
 
   @@map("quotations")
 }
@@ -2107,10 +2108,12 @@ model DailyReport {
   daily_report_project_name String? @db.VarChar(200)
   daily_report_completed_work String? @db.Text
   daily_report_signature String? @db.Text
+  daily_report_quotation_id Int?
 
-  project Project?  @relation(fields: [daily_report_project_id], references: [id])
-  client  Partner?  @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
-  creator User     @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
+  project   Project?   @relation(fields: [daily_report_project_id], references: [id])
+  client    Partner?   @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
+  creator   User       @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
+  quotation Quotation? @relation("daily_report_quotation", fields: [daily_report_quotation_id], references: [id])
   items   DailyReportItem[]
   attachments DailyReportAttachment[]
 

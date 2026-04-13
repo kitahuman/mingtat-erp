@@ -54,6 +54,16 @@ export class DailyReportsController {
     return this.service.update(id, req.user.sub, dto);
   }
 
+  /** Admin-only: force update even submitted reports */
+  @Put(':id/admin-update')
+  adminUpdate(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() dto: any,
+  ) {
+    return this.service.update(id, req.user.sub, dto, true);
+  }
+
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
