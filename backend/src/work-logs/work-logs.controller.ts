@@ -102,12 +102,12 @@ export class WorkLogsController {
 
   @Post('edit-lock/release')
   releaseEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.releaseEditLock(body.lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+    return this.service.releaseEditLock(body.lockKey, req.user.id);
   }
 
   @Get('edit-lock/status')
   getEditLockStatus(@Query('lockKey') lockKey: string, @Request() req: any) {
-    return this.service.getEditLockStatus(lockKey, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+    return this.service.getEditLockStatus(lockKey, req.user.id);
   }
 
    // ── 確認地點（WhatsApp 打卡黃色 Highlight 消除）───────────
