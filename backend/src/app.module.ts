@@ -55,6 +55,7 @@ import { WhatsappClockinModule } from './whatsapp-clockin/whatsapp-clockin.modul
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays
     AuditLogsModule,
     StatutoryHolidaysModule,
     RecycleBinModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

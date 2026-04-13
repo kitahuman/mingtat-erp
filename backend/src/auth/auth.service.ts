@@ -86,7 +86,12 @@ export class AuthService {
   async seedAdmin() {
     const exists = await this.prisma.user.findUnique({ where: { username: 'admin' } });
     if (!exists) {
-      const hashed = await bcrypt.hash('admin123', 10);
+      const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+      if (!initialPassword) {
+        console.error('[FATAL] ADMIN_INITIAL_PASSWORD environment variable is not set. Cannot seed admin user.');
+        process.exit(1);
+      }
+      const hashed = await bcrypt.hash(initialPassword, 10);
       await this.prisma.user.create({
         data: {
           username: 'admin',
@@ -97,7 +102,7 @@ export class AuthService {
           isActive: true,
         },
       });
-      console.log('Admin user seeded: admin / admin123');
+      console.log('[INFO] Admin user seeded successfully.');
     } else {
       // Ensure existing admin has admin role
       if (exists.role !== 'admin') {
@@ -105,7 +110,7 @@ export class AuthService {
           where: { id: exists.id },
           data: { role: 'admin' },
         });
-        console.log('Existing admin user upgraded to admin role');
+        console.log('[INFO] Existing admin user upgraded to admin role.');
       }
     }
   }

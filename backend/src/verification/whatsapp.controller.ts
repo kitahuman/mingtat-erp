@@ -28,7 +28,11 @@ export class WhatsappController {
 
   // ── 驗證 webhook secret 的共用方法 ────────────────────────────
   private validateWebhookSecret(webhookSecret?: string) {
-    const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET || 'mingtat-wa-webhook-2026';
+    const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
+    if (!expectedSecret) {
+      console.error('[SECURITY] WHATSAPP_WEBHOOK_SECRET is not configured. Rejecting all webhook requests.');
+      throw new UnauthorizedException('Webhook service is not properly configured');
+    }
     if (webhookSecret !== expectedSecret) {
       throw new UnauthorizedException('Invalid webhook secret');
     }

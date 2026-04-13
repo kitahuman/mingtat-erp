@@ -5,8 +5,11 @@
 const ExcelJS = require('exceljs');
 const { PrismaClient } = require('@prisma/client');
 
-const DB_URL = process.env.DATABASE_URL || '***REDACTED_DATABASE_URL***';
-const prisma = new PrismaClient({ datasources: { db: { url: DB_URL } } });
+if (!process.env.DATABASE_URL) {
+  console.error('[ERROR] DATABASE_URL environment variable is not set. Aborting.');
+  process.exit(1);
+}
+const prisma = new PrismaClient();
 
 // Company name -> id mapping
 const COMPANY_MAP = {

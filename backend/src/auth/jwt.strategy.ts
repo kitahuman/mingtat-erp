@@ -10,6 +10,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private prisma: PrismaService,
   ) {
+    const jwtSecret = config.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      console.error('[FATAL] JWT_SECRET environment variable is not set. Application cannot start securely.');
+      process.exit(1);
+    }
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -19,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: config.get('JWT_SECRET') || 'default-secret',
+      secretOrKey: jwtSecret,
     });
   }
 
