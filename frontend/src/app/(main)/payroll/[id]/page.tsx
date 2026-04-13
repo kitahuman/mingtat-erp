@@ -11,11 +11,13 @@ function formatDateDisplay(dateStr: string): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  preparing: '準備中（編輯工作記錄）',
   draft: '草稿',
   confirmed: '已確認',
   paid: '已付款',
 };
 const STATUS_COLORS: Record<string, string> = {
+  preparing: 'bg-amber-100 text-amber-800',
   draft: 'bg-gray-100 text-gray-800',
   confirmed: 'bg-blue-100 text-blue-800',
   paid: 'bg-green-100 text-green-800',
@@ -364,7 +366,7 @@ export default function PayrollDetailPage() {
   const printRef = useRef<HTMLDivElement>(null);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<TabKey>('daily');
+  const [activeTab, setActiveTab] = useState<TabKey>('detail');
 
   // Adjustment form
   const [showAdjForm, setShowAdjForm] = useState(false);
@@ -437,6 +439,17 @@ export default function PayrollDetailPage() {
       setPayroll(res.data);
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
+  const handleFinalizePreparation = async () => {
+    if (!confirm('確定工作記錄已編輯完成？系統將根據糧單工作記錄計算糧單。')) return;
+    try {
+      const res = await payrollApi.finalizePreparation(payroll.id);
+      setPayroll(res.data);
+      alert('糧單已成功計算！');
+    } catch (err: any) {
+      alert(err.response?.data?.message || '計算失敗');
     }
   };
 
@@ -576,7 +589,8 @@ export default function PayrollDetailPage() {
   const grouped = payroll.grouped_settlement || [];
   const dailyCalc = payroll.daily_calculation || [];
   const allowanceOptions = payroll.allowance_options || [];
-  const isDraft = payroll.status === 'draft';
+  const isPreparing = payroll.status === 'preparing';
+  const isDraft = payroll.status === 'draft' || isPreparing;
 
   const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
@@ -595,7 +609,13 @@ export default function PayrollDetailPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {isDraft && (
+          {isPreparing && (
+            <>
+              <button onClick={handleFinalizePreparation} className="btn-primary text-sm">確定並計算糧單</button>
+              <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
+            </>
+          )}
+          {payroll.status === 'draft' && (
             <>
               <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
               <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
@@ -610,6 +630,19 @@ export default function PayrollDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Preparing Banner ── */}
+      {isPreparing && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">&#x270F;&#xFE0F;</span>
+            <div>
+              <p className="font-bold text-amber-800">糧單工作記錄編輯中</p>
+              <p className="text-sm text-amber-700">請在下方「逐筆明細」中編輯工作記錄（例如修改計算單位、數量等），修改不會影響原始工作記錄。編輯完成後請按「確定並計算糧單」。</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -626,14 +659,22 @@ export default function PayrollDetailPage() {
           <p className="text-xs text-gray-500">計糧期間</p>
           <p className="font-bold text-sm">{fmtDate(payroll.date_from)} 至 {fmtDate(payroll.date_to)}</p>
         </div>
-        <div className="card">
-          <p className="text-xs text-gray-500">淨額</p>
-          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
-        </div>
+        {!isPreparing && (
+          <div className="card">
+            <p className="text-xs text-gray-500">淨額</p>
+            <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+          </div>
+        )}
+        {isPreparing && (
+          <div className="card">
+            <p className="text-xs text-gray-500">工作記錄</p>
+            <p className="font-bold text-xl text-amber-600">{pwls.filter((p: any) => !p.is_excluded).length} 筆</p>
+          </div>
+        )}
       </div>
 
       {/* ── MPF 計算薪金（非行業計劃） ── */}
-      {payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
+      {!isPreparing && payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
         <div className="card mb-6">
           <div className="flex items-center gap-4">
             <div>
@@ -667,7 +708,7 @@ export default function PayrollDetailPage() {
       )}
 
       {/* ── Custom Adjustments ── */}
-      <div className="card mb-6">
+      {!isPreparing && <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">自定義津貼/扣款</h2>
           {isDraft && (
@@ -720,10 +761,12 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
+      }
+
       {/* ── Work Logs Tabs ── */}
       <div className="card mb-6">
         <div className="flex items-center border-b mb-4">
-          {TAB_KEYS.map(tab => (
+          {TAB_KEYS.filter(tab => !isPreparing || tab === 'detail').map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1024,8 +1067,8 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
-      {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* ── Summary Cards (bottom) ── */}
+      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card">
           <p className="text-xs text-gray-500">應收總額</p>
           <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
@@ -1046,8 +1089,10 @@ export default function PayrollDetailPage() {
         </div>
       </div>
 
+      }
+
       {/* ── Payment Info ── */}
-      <div className="card">
+      {!isPreparing && <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">付款記錄</h2>
           {payroll.status !== 'paid' && (
@@ -1068,7 +1113,7 @@ export default function PayrollDetailPage() {
             <p className="text-sm text-gray-400">翌月7日前</p>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── Payment Modal ── */}
       <Modal isOpen={showPayment} onClose={() => setShowPayment(false)} title="記錄付款">

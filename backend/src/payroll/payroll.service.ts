@@ -39,7 +39,12 @@ export class PayrollService {
     if (query.company_profile_id) where.company_profile_id = Number(query.company_profile_id);
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.employee_id) where.employee_id = Number(query.employee_id);
-    if (query.status) where.status = query.status;
+    if (query.status) {
+      where.status = query.status;
+    } else {
+      // By default, exclude 'preparing' status from list view
+      where.status = { not: 'preparing' };
+    }
     if (query.search) {
       where.employee = {
         OR: [
@@ -291,6 +296,297 @@ export class PayrollService {
       date_from,
       date_to,
     };
+  }
+
+  // ── 準備糧單（建立草稿 + 複製工作記錄到糧單工作記錄）────────────
+  async prepare(body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_id?: number;
+    period?: string;
+  }, userId?: number) {
+    const { employee_id, date_from, date_to, company_id } = body;
+
+    if (!employee_id) throw new BadRequestException('請選擇員工');
+    if (!date_from || !date_to) throw new BadRequestException('請選擇日期範圍');
+    if (date_from > date_to) throw new BadRequestException('開始日期不能晚於結束日期');
+
+    const period = body.period || date_from.substring(0, 7);
+
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employee_id },
+      include: { company: true },
+    });
+    if (!emp) throw new NotFoundException('Employee not found');
+
+    // Check for existing payroll in same date range
+    const existingWhere: any = {
+      employee_id: emp.id,
+      date_from: new Date(date_from),
+      date_to: new Date(date_to),
+    };
+    if (company_id) {
+      existingWhere.company_id = Number(company_id);
+    }
+    const existing = await this.prisma.payroll.findFirst({ where: existingWhere });
+    if (existing) {
+      throw new BadRequestException(`此員工在 ${date_from} 至 ${date_to} 的糧單已存在（ID: ${existing.id}）`);
+    }
+
+    // Get work logs
+    const wlWhere: any = {
+      employee_id: emp.id,
+      scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
+      service_type: { not: '請假/休息' },
+    };
+
+    const workLogs = await this.prisma.workLog.findMany({
+      where: wlWhere,
+      include: { company_profile: true, company: true, client: true, quotation: true },
+      orderBy: { scheduled_date: 'asc' },
+    });
+
+    // Determine company info
+    let actualCompanyId = company_id ?? null;
+    let actualCpId = null as number | null;
+    if (!actualCompanyId && workLogs.length > 0) {
+      actualCompanyId = workLogs[0].company_id;
+    }
+    if (workLogs.length > 0) {
+      actualCpId = workLogs[0].company_profile_id;
+    }
+
+    // Create payroll record with status 'preparing'
+    const saved = await this.prisma.payroll.create({
+      data: {
+        period,
+        date_from: new Date(date_from),
+        date_to: new Date(date_to),
+        employee_id: emp.id,
+        company_profile_id: actualCpId ?? undefined,
+        company_id: actualCompanyId ?? undefined,
+        salary_type: 'daily',
+        base_rate: 0,
+        work_days: 0,
+        base_amount: 0,
+        allowance_total: 0,
+        ot_total: 0,
+        commission_total: 0,
+        mpf_deduction: 0,
+        adjustment_total: 0,
+        net_amount: 0,
+        status: 'preparing',
+      },
+    });
+
+    // Enrich work logs with price info and save as payroll_work_logs
+    const enrichedWorkLogs = await this.enrichWorkLogsWithPrice(workLogs);
+    for (const wl of enrichedWorkLogs) {
+      const baseAmt = wl._line_amount ?? 0;
+      const otAmt = wl._ot_line_amount ?? 0;
+      const midShiftAmt = wl._mid_shift_line_amount ?? 0;
+      const totalLineAmount = baseAmt + otAmt + midShiftAmt;
+
+      await this.prisma.payrollWorkLog.create({
+        data: {
+          payroll_id: saved.id,
+          work_log_id: wl.id,
+          service_type: wl.service_type,
+          scheduled_date: wl.scheduled_date,
+          day_night: wl.day_night,
+          start_location: wl.start_location,
+          end_location: wl.end_location,
+          machine_type: wl.machine_type,
+          tonnage: wl.tonnage,
+          equipment_number: wl.equipment_number,
+          quantity: wl.quantity,
+          unit: wl.unit,
+          ot_quantity: wl.ot_quantity,
+          ot_unit: wl.ot_unit,
+          is_mid_shift: wl.is_mid_shift || false,
+          remarks: wl.remarks,
+          matched_rate_card_id: wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
+          matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
+          matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
+          matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+          matched_mid_shift_rate: wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate ?? null,
+          price_match_status: wl._price_match_status ?? wl.price_match_status ?? null,
+          price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
+          line_amount: totalLineAmount,
+          ot_line_amount: otAmt,
+          mid_shift_line_amount: midShiftAmt,
+          group_key: wl._group_key ?? '',
+          client_id: wl.client_id ?? null,
+          client_name: wl.client?.name ?? wl.client_name ?? null,
+          company_profile_id: wl.company_profile_id ?? null,
+          company_profile_name: wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+          company_id: wl.company_id ?? null,
+          company_name: wl.company?.name ?? null,
+          quotation_id: wl.quotation_id ?? null,
+          client_contract_no: wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
+          payroll_work_log_product_name: wl.work_log_product_name ?? null,
+          payroll_work_log_product_unit: wl.work_log_product_unit ?? null,
+          is_modified: false,
+          is_excluded: false,
+        },
+      });
+    }
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'payrolls',
+          targetId: saved.id,
+          changesAfter: { ...saved, status: 'preparing' },
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  // ── 確定糧單工作記錄並計算糧單（從 preparing 狀態計算並轉為 draft）────
+  async finalizePreparation(id: number, userId?: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id },
+      include: {
+        employee: { include: { company: true } },
+        adjustments: true,
+      },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'preparing') {
+      throw new BadRequestException('只能對準備中的糧單執行此操作');
+    }
+
+    const emp = payroll.employee;
+    const dateFrom = toDateStr(payroll.date_from) || `${payroll.period}-01`;
+    const dateTo = toDateStr(payroll.date_to) || (() => {
+      const [y, m] = payroll.period.split('-');
+      const lastDay = new Date(Number(y), Number(m), 0).getDate();
+      return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
+    })();
+
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: emp.id,
+        effective_date: { lte: new Date(dateTo) },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
+
+    if (!salarySetting) {
+      throw new BadRequestException('此員工沒有薪酬配置，無法生成糧單');
+    }
+
+    // Get active payroll work logs
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: id, is_excluded: false },
+      orderBy: { scheduled_date: 'asc' },
+    });
+
+    // Convert PayrollWorkLog to WorkLog-like objects for calculation
+    const workLogLike = pwls.map(pwl => ({
+      id: pwl.work_log_id,
+      scheduled_date: pwl.scheduled_date,
+      service_type: pwl.service_type,
+      day_night: pwl.day_night,
+      start_location: pwl.start_location,
+      end_location: pwl.end_location,
+      machine_type: pwl.machine_type,
+      tonnage: pwl.tonnage,
+      equipment_number: pwl.equipment_number,
+      quantity: pwl.quantity,
+      unit: pwl.unit,
+      ot_quantity: pwl.ot_quantity,
+      ot_unit: pwl.ot_unit,
+      remarks: pwl.remarks,
+      company_profile_id: pwl.company_profile_id,
+      company_id: pwl.company_id,
+      client_id: pwl.client_id,
+      quotation_id: pwl.quotation_id,
+      matched_rate_card_id: pwl.matched_rate_card_id,
+      matched_rate: pwl.matched_rate,
+      matched_unit: pwl.matched_unit,
+      matched_ot_rate: pwl.matched_ot_rate,
+      price_match_status: pwl.price_match_status,
+      price_match_note: pwl.price_match_note,
+      is_mid_shift: pwl.is_mid_shift,
+      line_amount: pwl.line_amount,
+      ot_line_amount: pwl.ot_line_amount,
+      mid_shift_line_amount: pwl.mid_shift_line_amount,
+    }));
+
+    const calc = await this.calculatePayroll(emp, salarySetting, workLogLike, dateFrom, dateTo, payroll.company_id ?? payroll.company_profile_id ?? null);
+
+    // Update payroll items
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+    for (const item of calc.items) {
+      await this.prisma.payrollItem.create({
+        data: {
+          ...item,
+          payroll_id: id,
+        },
+      });
+    }
+
+    // Update payroll totals and change status to draft
+    await this.prisma.payroll.update({
+      where: { id },
+      data: {
+        salary_type: calc.salary_type,
+        base_rate: calc.base_rate,
+        work_days: calc.work_days,
+        base_amount: calc.base_amount,
+        allowance_total: calc.allowance_total,
+        ot_total: calc.ot_total,
+        commission_total: calc.commission_total,
+        mpf_deduction: calc.mpf_deduction,
+        mpf_plan: calc.mpf_plan,
+        mpf_employer: calc.mpf_employer,
+        mpf_relevant_income: calc.mpf_relevant_income,
+        adjustment_total: 0,
+        net_amount: calc.net_amount,
+        status: 'draft',
+      },
+    });
+
+    // Auto-generate statutory holiday daily allowances for daily-salary employees
+    if (calc.salary_type === 'daily') {
+      const holidays = await this.statutoryHolidaysService.findByDateRange(dateFrom, dateTo);
+      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
+      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
+        for (const holiday of holidays) {
+          await this.prisma.payrollDailyAllowance.create({
+            data: {
+              payroll_id: id,
+              date: holiday.date,
+              allowance_key: 'statutory_holiday',
+              allowance_name: `法定假期 - ${holiday.name}`,
+              amount: baseSalaryForHoliday,
+              remarks: '自動生成',
+            },
+          });
+        }
+      }
+    }
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'payrolls',
+          targetId: id,
+          changesAfter: { status: 'draft', net_amount: calc.net_amount },
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
+    return this.findOne(id);
   }
 
   // ── 生成計糧（單一員工，日期範圍）────────────────────────────
@@ -897,8 +1193,8 @@ export class PayrollService {
   async remove(id: number, userId?: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能刪除草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能刪除草稿或準備中狀態的糧單');
     }
 
     // Delete any auto-generated expenses (safety check)
@@ -933,8 +1229,8 @@ export class PayrollService {
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能重新計算草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能重新計算草稿或準備中狀態的糧單');
     }
 
     const empId = payroll.employee_id;
@@ -1047,8 +1343,8 @@ export class PayrollService {
   async updatePayrollWorkLog(payrollId: number, pwlId: number, body: any) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const pwl = await this.prisma.payrollWorkLog.findFirst({
@@ -1098,8 +1394,8 @@ export class PayrollService {
   async updateOriginalWorkLog(payrollId: number, pwlId: number, body: any) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const pwl = await this.prisma.payrollWorkLog.findFirst({
@@ -1154,8 +1450,8 @@ export class PayrollService {
   async excludePayrollWorkLog(payrollId: number, pwlId: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const pwl = await this.prisma.payrollWorkLog.findFirst({
@@ -1175,8 +1471,8 @@ export class PayrollService {
   async restorePayrollWorkLog(payrollId: number, pwlId: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const pwl = await this.prisma.payrollWorkLog.findFirst({
@@ -1196,8 +1492,8 @@ export class PayrollService {
   async addAdjustment(payrollId: number, body: { item_name: string; amount: number; remarks?: string }) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const maxSortResult = await this.prisma.payrollAdjustment.aggregate({
@@ -1225,8 +1521,8 @@ export class PayrollService {
   async removeAdjustment(payrollId: number, adjId: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const adj = await this.prisma.payrollAdjustment.findFirst({
@@ -1256,8 +1552,8 @@ export class PayrollService {
   }) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     // Check if same allowance already exists for this date
@@ -1286,8 +1582,8 @@ export class PayrollService {
   async removeDailyAllowance(payrollId: number, daId: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     const da = await this.prisma.payrollDailyAllowance.findFirst({
@@ -1307,8 +1603,8 @@ export class PayrollService {
   }) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'draft') {
-      throw new BadRequestException('只能編輯草稿狀態的糧單');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
     // Delete existing allowances for this date

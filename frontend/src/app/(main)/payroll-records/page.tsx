@@ -6,11 +6,13 @@ import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
 
 const STATUS_LABELS: Record<string, string> = {
+  preparing: '準備中',
   draft: '草稿',
   confirmed: '已確認',
   paid: '已付款',
 };
 const STATUS_COLORS: Record<string, string> = {
+  preparing: 'bg-amber-100 text-amber-800',
   draft: 'bg-gray-100 text-gray-800',
   confirmed: 'bg-blue-100 text-blue-800',
   paid: 'bg-green-100 text-green-800',
@@ -140,6 +142,7 @@ export default function PayrollRecordsPage() {
               className="input-field w-36"
             >
               <option value="">全部</option>
+              <option value="preparing">準備中</option>
               <option value="draft">草稿</option>
               <option value="confirmed">已確認</option>
               <option value="paid">已付款</option>

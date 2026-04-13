@@ -38,6 +38,18 @@ export class PayrollController {
     return this.payrollService.preview(body);
   }
 
+  // 準備糧單（建立草稿 + 複製工作記錄到糧單工作記錄，狀態為 preparing）
+  @Post('prepare')
+  prepare(@Body() body: {
+    employee_id: number;
+    date_from: string;
+    date_to: string;
+    company_id?: number;
+    period?: string;
+  }, @Request() req: any) {
+    return this.payrollService.prepare(body, req.user?.id || req.user?.userId || 0);
+  }
+
   // 生成糧單（單一員工 + 日期範圍）
   @Post('generate')
   generate(@Body() body: {
@@ -81,6 +93,12 @@ export class PayrollController {
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string) {
     return this.payrollService.recalculate(+id);
+  }
+
+  // 確定糧單工作記錄並計算糧單（從 preparing 轉為 draft）
+  @Post(':id/finalize-preparation')
+  finalizePreparation(@Param('id') id: string, @Request() req: any) {
+    return this.payrollService.finalizePreparation(+id, req.user?.id || req.user?.userId || 0);
   }
 
   @Delete(':id')

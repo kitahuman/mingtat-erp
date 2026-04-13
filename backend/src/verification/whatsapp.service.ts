@@ -842,7 +842,7 @@ export class WhatsappService {
         },
       });
       createdItems.push(created.id);
-      await this.prisma.verificationWaModLog.create({{
+      await this.prisma.verificationWaModLog.create({
         data: {
           mod_order_id: order.id,
           mod_item_id: created.id,

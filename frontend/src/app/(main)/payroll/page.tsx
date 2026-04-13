@@ -352,6 +352,26 @@ export default function PayrollPage() {
     }
   };
 
+  const handlePrepare = async () => {
+    if (!selectedEmployeeId) return;
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const res = await payrollApi.prepare({
+        employee_id: selectedEmployeeId,
+        date_from: dateFrom,
+        date_to: dateTo,
+        company_id: selectedCompanyId || undefined,
+      });
+      // 準備完成後直接跳轉到糧單詳情頁編輯工作記錄
+      router.push(`/payroll/${res.data.id}`);
+    } catch (err: any) {
+      setGenerateError(err.response?.data?.message || '準備失敗，請重試');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const openAddRateModal = (group: UnmatchedGroup) => {
     setAddRateForm({
       company_id: group.company_id || '',
@@ -708,12 +728,15 @@ export default function PayrollPage() {
             <p className="text-sm text-gray-400 text-center py-4">沒有計算數據（可能是薪酬配置未設定）</p>
           )}
 
-          {/* Generate button */}
+          {/* Generate / Prepare buttons */}
           {!generated && (
             <div className="mt-4 flex gap-3">
+              <button onClick={handlePrepare} disabled={generating} className="btn-primary">
+                {generating ? '準備中...' : '準備糧單（編輯工作記錄後再計算）'}
+              </button>
               {preview.salary_setting && (
-                <button onClick={handleGenerate} disabled={generating} className="btn-primary">
-                  {generating ? '生成中...' : '確認生成糧單'}
+                <button onClick={handleGenerate} disabled={generating} className="btn-secondary">
+                  {generating ? '生成中...' : '直接生成糧單（跳過編輯）'}
                 </button>
               )}
               <button onClick={handlePreview} disabled={loading} className="btn-secondary">

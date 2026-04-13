@@ -253,6 +253,12 @@ export const payrollApi = {
   // 預覽計糧（不儲存）
   preview: (data: { employee_id: number; date_from: string; date_to: string; company_profile_id?: number; company_id?: number }) =>
     api.post('/payroll/preview', data),
+  // 準備糧單（建立草稿 + 複製工作記錄到糧單工作記錄，狀態為 preparing）
+  prepare: (data: { employee_id: number; date_from: string; date_to: string; company_id?: number; period?: string }) =>
+    api.post('/payroll/prepare', data),
+  // 確定糧單工作記錄並計算糧單（從 preparing 轉為 draft）
+  finalizePreparation: (id: number) =>
+    api.post(`/payroll/${id}/finalize-preparation`),
   // 生成糧單（單一員工 + 日期範圍）
   generate: (data: { employee_id: number; date_from: string; date_to: string; company_profile_id?: number; company_id?: number; period?: string }) =>
     api.post('/payroll/generate', data),
