@@ -558,6 +558,11 @@ export class CsvImportService {
       if (rest[df]) rest[df] = new Date(rest[df]);
     }
 
+    // Sync rate field: if rate is not explicitly provided, use day_rate as the primary display rate
+    if (rest.rate === undefined || rest.rate === null) {
+      rest.rate = rest.day_rate ?? 0;
+    }
+
     const created = await this.prisma.fleetRateCard.create({
       data: { ...rest, client_id: clientId, company_id: companyId },
     });
