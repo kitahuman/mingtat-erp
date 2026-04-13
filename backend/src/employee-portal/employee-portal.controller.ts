@@ -298,19 +298,9 @@ export class EmployeePortalController {
     return this.service.createDailyReport(req.user.sub, dto);
   }
 
-  @Post('daily-reports/:id')
-  @UseGuards(AuthGuard('jwt'))
-  async updateDailyReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
-    return this.service.updateDailyReport(req.user.sub, +id, dto);
-  }
-
-  @Post('daily-reports/:id/delete')
-  @UseGuards(AuthGuard('jwt'))
-  async deleteDailyReport(@Request() req: any, @Param('id') id: string) {
-    return this.service.deleteDailyReport(req.user.sub, +id);
-  }
-
   // ── Daily Report Attachments ───────────────────────────────
+  // NOTE: 'upload' static route MUST be defined BEFORE ':id' dynamic route
+  // to prevent NestJS from matching 'upload' as an :id parameter.
   @UseGuards(AuthGuard('jwt'))
   @Post('daily-reports/upload')
   @UseInterceptors(FileInterceptor('file', {
@@ -334,6 +324,18 @@ export class EmployeePortalController {
     const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
     const url = `${baseUrl}/uploads/daily-reports/${file.filename}`;
     return { url, filename: file.filename, file_name: file.originalname, file_type: file.mimetype };
+  }
+
+  @Post('daily-reports/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateDailyReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+    return this.service.updateDailyReport(req.user.sub, +id, dto);
+  }
+
+  @Post('daily-reports/:id/delete')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteDailyReport(@Request() req: any, @Param('id') id: string) {
+    return this.service.deleteDailyReport(req.user.sub, +id);
   }
 
   @UseGuards(AuthGuard('jwt'))
