@@ -20,6 +20,42 @@ interface Option { value: string | number; label: string; _raw?: any; shortLabel
 
 const LIMIT_OPTIONS = [25, 50, 100];
 
+// Map column key → backend sortBy field (undefined = not sortable)
+const COLUMN_SORT_FIELD: Record<string, string> = {
+  publisher:              'publisher',
+  status:                 'status',
+  scheduled_date:         'scheduled_date',
+  service_type:           'service_type',
+  company:                'company',
+  client:                 'client',
+  quotation:              'quotation',
+  client_contract_no:     'client_contract_no',
+  contract:               'contract',
+  employee:               'employee',
+  tonnage:                'tonnage',
+  machine_type:           'machine_type',
+  equipment_number:       'equipment_number',
+  day_night:              'day_night',
+  start_location:         'start_location',
+  start_time:             'start_time',
+  end_location:           'end_location',
+  end_time:               'end_time',
+  work_order_no:          'work_order_no',
+  receipt_no:             'receipt_no',
+  quantity:               'quantity',
+  unit:                   'unit',
+  ot_quantity:            'ot_quantity',
+  ot_unit:                'ot_unit',
+  is_mid_shift:           'is_mid_shift',
+  goods_quantity:         'goods_quantity',
+  work_log_product_name:  'work_log_product_name',
+  work_log_product_unit:  'work_log_product_unit',
+  is_confirmed:           'is_confirmed',
+  is_paid:                'is_paid',
+  source:                 'source',
+  remarks:                'remarks',
+};
+
 const COLUMNS = [
   { key: 'publisher',        label: '發佈人',    width: 'w-24' },
   { key: 'status',           label: '狀態',      width: 'w-20' },
@@ -74,6 +110,10 @@ export default function WorkLogsPage() {
   const [page, setPage]   = useState(1);
   const [limit, setLimit] = useState(25);
   const [loading, setLoading] = useState(false);
+
+  // ── Sort state ───────────────────────────────────────────────
+  const [sortBy, setSortBy]       = useState('scheduled_date');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
   // ── Filters ─────────────────────────────────────────────────
   const [filterPublisher, setFilterPublisher] = useState<string | number | null>(null);
@@ -375,7 +415,7 @@ export default function WorkLogsPage() {
     try {
       const params: any = {
         page, limit,
-        sortBy: 'created_at', sortOrder: 'DESC',
+        sortBy, sortOrder,
       };
       if (filterPublisher) params.publisher_id     = filterPublisher;
       if (filterStatus)    params.status           = filterStatus;
@@ -405,7 +445,7 @@ export default function WorkLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, filterPublisher, filterStatus, filterCompany, filterClient, showToast,
+  }, [page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, showToast,
       filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
@@ -448,6 +488,21 @@ export default function WorkLogsPage() {
     workLogsApi.editLockRelease(lockKey).catch(() => {});
     setLockInfo(null);
   }, [lockKey]);
+
+  // ── Sort handler ──────────────────────────────────────────
+  const handleSort = useCallback((field: string) => {
+    if (hasDirty && !confirm('有未儲存的修改，切換排序將會丟失。確定要繼續嗎？')) return;
+    if (hasDirty) { setDirtyRows(new Map()); releaseLock(); }
+    setSortBy(prev => {
+      if (prev === field) {
+        setSortOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+        return prev;
+      }
+      setSortOrder('ASC');
+      return field;
+    });
+    setPage(1);
+  }, [hasDirty, releaseLock]);
 
   // Release lock on unmount
   useEffect(() => {
@@ -1109,9 +1164,11 @@ export default function WorkLogsPage() {
         );
       })()}
 
-      {/* ── Filters ──────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 overflow-x-auto" style={{ overflowY: 'visible' }}>
-        <div className="flex gap-2 items-end" style={{ minWidth: 'max-content', position: 'relative', zIndex: 40 }}>
+      {/* ── Filters ────────────────────────────────── */}
+      {/* 外層容器負責水平滾動，但不裁切垂直方向，避免下拉選單被遠行層遮住 */}
+      <div className="bg-white border-b border-gray-200 shrink-0" style={{ position: 'relative', zIndex: 50 }}>
+        <div className="overflow-x-auto" style={{ overflowY: 'visible' }}>
+        <div className="flex gap-2 items-end px-6 py-3" style={{ minWidth: 'max-content' }}>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">發佈人</label>
             <div className="w-28">
@@ -1197,6 +1254,7 @@ export default function WorkLogsPage() {
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* ── Table ────────────────────────────────────────────── */}
@@ -1222,12 +1280,26 @@ export default function WorkLogsPage() {
                 ID
               </th>
               {/* Visible COLUMNS in user-defined order */}
-              {(visibleColumns as any[]).map((col: any) => (
-                <th key={col.key}
-                  className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width}`}>
-                  {col.label}
-                </th>
-              ))}
+              {(visibleColumns as any[]).map((col: any) => {
+                const sortField = COLUMN_SORT_FIELD[col.key];
+                const isActive = sortField && sortBy === sortField;
+                return (
+                  <th key={col.key}
+                    onClick={sortField ? () => handleSort(sortField) : undefined}
+                    className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width} ${
+                      sortField ? 'cursor-pointer select-none hover:bg-gray-200' : ''
+                    } ${isActive ? 'bg-blue-50 text-blue-700' : ''}`}>
+                    <span className="flex items-center gap-0.5">
+                      {col.label}
+                      {sortField && (
+                        <span className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}>
+                          {isActive ? (sortOrder === 'ASC' ? '▲' : '▼') : '▲▼'}
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                );
+              })}
               {/* 操作 – sticky right */}
               <th className="sticky right-0 z-30 bg-gray-100 px-2 py-2 border-l border-gray-300 w-20 text-left font-semibold text-gray-600">
                 操作

@@ -58,9 +58,32 @@ export class WorkLogsService {
     const allowedSort = [
       'id', 'scheduled_date', 'status', 'service_type',
       'machine_type', 'equipment_number', 'day_night', 'created_at',
+      'start_time', 'end_time', 'start_location', 'end_location',
+      'quantity', 'unit', 'ot_quantity', 'ot_unit',
+      'tonnage', 'work_order_no', 'receipt_no',
+      'is_mid_shift', 'is_confirmed', 'is_paid',
+      'goods_quantity', 'work_log_product_name', 'work_log_product_unit',
+      'remarks', 'source',
     ];
-    const safeSortBy = allowedSort.includes(sortBy) ? sortBy : 'scheduled_date';
+    // Relation fields that need nested orderBy
+    const relationSortMap: Record<string, any> = {
+      publisher: { publisher: { displayName: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      company:   { company: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      client:    { client: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      quotation: { quotation: { quotation_no: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      contract:  { contract: { contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      employee:  { employee: { name_zh: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      client_contract_no: { client_contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
+    };
     const safeSortOrder = sortOrder === 'ASC' ? 'asc' : 'desc';
+    let orderBy: any;
+    if (relationSortMap[sortBy]) {
+      orderBy = relationSortMap[sortBy];
+    } else if (allowedSort.includes(sortBy)) {
+      orderBy = { [sortBy]: safeSortOrder };
+    } else {
+      orderBy = { scheduled_date: 'desc' };
+    }
 
     const pg = Number(page);
     const lm = Number(limit);
@@ -82,7 +105,7 @@ export class WorkLogsService {
             select: { source_code: true, status: true },
           },
         },
-        orderBy: { [safeSortBy]: safeSortOrder },
+        orderBy,
         skip: (pg - 1) * lm,
         take: lm,
       }),
