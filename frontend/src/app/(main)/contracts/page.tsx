@@ -49,6 +49,13 @@ export default function ContractsPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [clients, setClients] = useState<any[]>([]);
 
+  // Merge state
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [primaryId, setPrimaryId] = useState<number | null>(null);
+  const [merging, setMerging] = useState(false);
+
   useEffect(() => {
     partnersApi.simple().then(res => {
       const clientPartners = (res.data || []).filter((p: any) => p.partner_type === 'client');
@@ -121,7 +128,57 @@ export default function ContractsPage() {
     }
   };
 
+  const toggleMergeMode = () => {
+    setMergeMode(v => !v);
+    setSelectedIds(new Set());
+    setPrimaryId(null);
+  };
+
+  const handleCheck = (id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const openMergeModal = () => {
+    if (selectedIds.size < 2) { alert('請至少勾選 2 個合約才能合併'); return; }
+    setPrimaryId(Array.from(selectedIds)[0]);
+    setShowMergeModal(true);
+  };
+
+  const handleMerge = async () => {
+    if (!primaryId) return;
+    const mergeIds = Array.from(selectedIds).filter(id => id !== primaryId);
+    if (mergeIds.length === 0) { alert('請選擇不同的主合約'); return; }
+    setMerging(true);
+    try {
+      const res = await contractsApi.merge(primaryId, mergeIds);
+      setShowMergeModal(false);
+      setMergeMode(false);
+      setSelectedIds(new Set());
+      setPrimaryId(null);
+      await load();
+      alert(res.data?.message || '合併成功');
+    } catch (err: any) {
+      alert(err.response?.data?.message || '合併失敗');
+    } finally {
+      setMerging(false);
+    }
+  };
+
   const columns = [
+    ...(mergeMode ? [{
+      key: '_merge_check', label: '', sortable: false, width: 40,
+      render: (_: any, row: any) => (
+        <input type="checkbox" checked={selectedIds.has(row.id)}
+          onChange={e => handleCheck(row.id, e.target.checked)}
+          onClick={e => e.stopPropagation()}
+          className="w-4 h-4 accent-blue-600" />
+      )
+    }] : []),
     {
       key: 'contract_no', label: '合約編號', sortable: true, editable: true, editType: 'text' as const,
       render: (v: string) => <span className="font-mono font-bold text-primary-600">{v || '-'}</span>,
@@ -174,9 +231,21 @@ export default function ContractsPage() {
           <h1 className="text-2xl font-bold text-gray-900">合約管理</h1>
           <p className="text-gray-500 mt-1">管理工程合約，追蹤合約狀態和金額</p>
         </div>
-        {hasMinRole('clerk') && (
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增合約</button>
-        )}
+        <div className="flex gap-2">
+          {hasMinRole('clerk') && (
+            <>
+              {mergeMode ? (
+                <>
+                  <button onClick={openMergeModal} className="btn-primary bg-blue-600 border-blue-600">確認合併 ({selectedIds.size})</button>
+                  <button onClick={toggleMergeMode} className="btn-secondary">取消合併</button>
+                </>
+              ) : (
+                <button onClick={toggleMergeMode} className="btn-secondary">合併功能</button>
+              )}
+              <button onClick={() => setShowModal(true)} className="btn-primary">新增合約</button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -195,13 +264,14 @@ export default function ContractsPage() {
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
           searchPlaceholder="搜尋合約編號、合約名稱、客戶名稱..."
-          onRowClick={(row) => router.push(`/contracts/${row.id}`)}
+          onRowClick={(row) => mergeMode ? handleCheck(row.id, !selectedIds.has(row.id)) : router.push(`/contracts/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
           onDelete={handleInlineDelete}
+          rowClassName={(row) => mergeMode && selectedIds.has(row.id) ? 'bg-blue-50' : ''}
           filters={
             <div className="flex gap-2">
               <select value={clientFilter} onChange={(e) => { setClientFilter(e.target.value); setPage(1); }} className="input-field w-auto">
@@ -275,6 +345,34 @@ export default function ContractsPage() {
             <button type="submit" className="btn-primary">新增合約</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} title="合併合約確認" size="md">
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+            合併後，被選中的其他合約將會被標記為「已合併」，所有關聯的工程項目、工作紀錄、報價單、收支等數據都將遷移至主合約。
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">請選擇主合約 (數據將遷移至此)：</label>
+            <div className="space-y-2 max-h-60 overflow-y-auto border rounded p-2">
+              {data.filter(item => selectedIds.has(item.id)).map(item => (
+                <label key={item.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer border border-transparent has-[:checked]:border-blue-300 has-[:checked]:bg-blue-50">
+                  <input type="radio" name="primaryContract" checked={primaryId === item.id} onChange={() => setPrimaryId(item.id)} className="w-4 h-4 text-blue-600" />
+                  <div>
+                    <div className="font-bold text-sm">{item.contract_no}</div>
+                    <div className="text-xs text-gray-500">{item.contract_name}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="pt-4 flex justify-end gap-3 border-t">
+            <button onClick={() => setShowMergeModal(false)} className="btn-secondary">取消</button>
+            <button onClick={handleMerge} disabled={merging || !primaryId} className="btn-primary bg-blue-600 border-blue-600">
+              {merging ? '合併中...' : '確認合併'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

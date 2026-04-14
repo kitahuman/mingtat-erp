@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards, Requ
 import { AuthGuard } from '@nestjs/passport';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto, UpdateContractDto } from './dto/create-contract.dto';
+import { MergeContractsDto } from './dto/merge-contracts.dto';
 
 @Controller('contracts')
 @UseGuards(AuthGuard('jwt'))
@@ -36,5 +37,10 @@ export class ContractsController {
   @Delete(':id')
   remove(@Param('id') id: number, @Request() req: any) {
     return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  }
+
+  @Post('merge')
+  merge(@Body() dto: MergeContractsDto, @Request() req: any) {
+    return this.service.merge(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 }

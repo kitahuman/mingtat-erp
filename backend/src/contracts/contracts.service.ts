@@ -186,4 +186,145 @@ export class ContractsService {
     await this.prisma.contract.update({ where: { id }, data: { deleted_at: new Date() } });
     return { message: '刪除成功' };
   }
+
+  async merge(dto: { primaryId: number; mergeIds: number[] }, userId?: number, ipAddress?: string) {
+    const { primaryId, mergeIds } = dto;
+
+    if (!mergeIds || mergeIds.length === 0) {
+      throw new BadRequestException('沒有選擇要合併的合約');
+    }
+
+    // Fetch primary contract
+    const primary = await this.prisma.contract.findUnique({ where: { id: primaryId } });
+    if (!primary) throw new NotFoundException('主合約不存在');
+
+    // Fetch all merge targets
+    const targets = await this.prisma.contract.findMany({
+      where: { id: { in: mergeIds }, deleted_at: null },
+    });
+    if (targets.length === 0) throw new NotFoundException('找不到要合併的合約');
+
+    const targetIds = targets.map(t => t.id);
+    const targetNos = targets.map(t => t.contract_no);
+
+    // Execute all updates in a single transaction
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Update Projects
+      await tx.project.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 2. Update Expenses
+      await tx.expense.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 3. Update ContractBqSection
+      // Since there's a unique constraint on [contract_id, section_code], we need to handle potential conflicts.
+      // For simplicity, we move items first, then delete empty sections.
+      const targetSections = await tx.contractBqSection.findMany({
+        where: { contract_id: { in: targetIds } },
+      });
+
+      for (const section of targetSections) {
+        // Find if primary already has this section_code
+        const existingPrimarySection = await tx.contractBqSection.findUnique({
+          where: { contract_id_section_code: { contract_id: primaryId, section_code: section.section_code } },
+        });
+
+        if (existingPrimarySection) {
+          // Move items to the existing primary section
+          await tx.contractBqItem.updateMany({
+            where: { section_id: section.id },
+            data: { section_id: existingPrimarySection.id, contract_id: primaryId },
+          });
+        } else {
+          // Move the whole section to the primary contract
+          await tx.contractBqSection.update({
+            where: { id: section.id },
+            data: { contract_id: primaryId },
+          });
+          // Also update items' contract_id
+          await tx.contractBqItem.updateMany({
+            where: { section_id: section.id },
+            data: { contract_id: primaryId },
+          });
+        }
+      }
+
+      // 4. Update ContractBqItem (those without sections)
+      await tx.contractBqItem.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 5. Update VariationOrder
+      await tx.variationOrder.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 6. Update PaymentApplication
+      await tx.paymentApplication.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 7. Update PaymentIn
+      await tx.paymentIn.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 8. Update RetentionTracking & Release
+      await tx.retentionTracking.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+      await tx.retentionRelease.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 9. Update WorkLog
+      await tx.workLog.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 10. Update FleetRateCard
+      await tx.fleetRateCard.updateMany({
+        where: { contract_id: { in: targetIds } },
+        data: { contract_id: primaryId },
+      });
+
+      // 11. Soft delete the merged contracts
+      await tx.contract.updateMany({
+        where: { id: { in: targetIds } },
+        data: { deleted_at: new Date(), status: 'merged' },
+      });
+
+      // Log audit trail
+      if (userId) {
+        try {
+          await this.auditLogsService.log({
+            userId,
+            action: 'update',
+            targetTable: 'contracts',
+            targetId: primaryId,
+            changesBefore: { note: 'Merging contracts' },
+            changesAfter: { mergedIds: targetIds, mergedNos: targetNos },
+            ipAddress,
+          });
+        } catch (e) { console.error('Audit log error:', e); }
+      }
+    });
+
+    return {
+      success: true,
+      message: `已將合約 ${targetNos.join('、')} 合併至「${primary.contract_no}」，並遷移了所有相關數據。`,
+    };
+  }
 }

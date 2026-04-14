@@ -172,6 +172,7 @@ export const contractsApi = {
   create: (data: any) => api.post('/contracts', data),
   update: (id: number, data: any) => api.put(`/contracts/${id}`, data),
   delete: (id: number) => api.delete(`/contracts/${id}`),
+  merge: (primaryId: number, mergeIds: number[]) => api.post('/contracts/merge', { primaryId, mergeIds }),
 };
 
 // Projects (工程項目)

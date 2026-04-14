@@ -44,6 +44,11 @@ export class WorkLogsService {
       equipment_number,
       date_from,
       date_to,
+      start_location,
+      end_location,
+      work_order_no,
+      receipt_no,
+      work_log_product_name,
       sortBy = 'created_at',
       sortOrder = 'DESC',
     } = query;
@@ -91,6 +96,22 @@ export class WorkLogsService {
       where.scheduled_date = {};
       if (date_from) where.scheduled_date.gte = new Date(date_from);
       if (date_to) where.scheduled_date.lte = new Date(date_to);
+    }
+
+    if (start_location) {
+      where.start_location = { contains: String(start_location), mode: 'insensitive' };
+    }
+    if (end_location) {
+      where.end_location = { contains: String(end_location), mode: 'insensitive' };
+    }
+    if (work_order_no) {
+      where.work_order_no = { contains: String(work_order_no), mode: 'insensitive' };
+    }
+    if (receipt_no) {
+      where.receipt_no = { contains: String(receipt_no), mode: 'insensitive' };
+    }
+    if (work_log_product_name) {
+      where.work_log_product_name = { contains: String(work_log_product_name), mode: 'insensitive' };
     }
 
     const allowedSort = [
