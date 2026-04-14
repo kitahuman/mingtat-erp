@@ -66,6 +66,8 @@ export default function EditDailyReportPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [workerTypes, setWorkerTypes] = useState<string[]>([]);
   const [contractOptions, setContractOptions] = useState<string[]>([]);
+  const [projectLocation, setProjectLocation] = useState('');
+  const [projectLocationOptions, setProjectLocationOptions] = useState<string[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -87,6 +89,9 @@ export default function EditDailyReportPage() {
     }).catch(() => {});
     fieldOptionsApi.getByCategory('client_contract_no').then(res => {
       setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+    }).catch(() => {});
+    fieldOptionsApi.getByCategory('project_location').then(res => {
+      setProjectLocationOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
     }).catch(() => {});
   }, []);
 
