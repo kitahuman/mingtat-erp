@@ -379,15 +379,40 @@ export class EmployeePortalService {
     if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
 
     // Create work log via prisma
-    const { id, created_at, updated_at, photo_urls, signature_url, ...workLogData } = data;
+    // Strip non-scalar / metadata fields from DTO before spreading into Prisma create
+    const {
+      id,
+      created_at,
+      updated_at,
+      photo_urls,
+      signature_url,
+      employee_id: _employee_id,
+      user_id: _user_id,
+      project_id,
+      client_id,
+      company_id,
+      company_profile_id,
+      quotation_id,
+      contract_id,
+      work_log_fleet_driver_id,
+      publisher_id,
+      ...workLogData
+    } = data;
     return this.prisma.workLog.create({
       data: {
         ...workLogData,
-        employee_id: employeeId,
-        user_id: userId,
+        employee: { connect: { id: employeeId } },
+        publisher: { connect: { id: userId } },
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : new Date(),
         work_log_photo_urls: photo_urls && Array.isArray(photo_urls) ? photo_urls : null,
         work_log_signature_url: signature_url || null,
+        ...(project_id ? { project: { connect: { id: Number(project_id) } } } : {}),
+        ...(client_id ? { client: { connect: { id: Number(client_id) } } } : {}),
+        ...(company_id ? { company: { connect: { id: Number(company_id) } } } : {}),
+        ...(company_profile_id ? { company_profile: { connect: { id: Number(company_profile_id) } } } : {}),
+        ...(quotation_id ? { quotation: { connect: { id: Number(quotation_id) } } } : {}),
+        ...(contract_id ? { contract: { connect: { id: Number(contract_id) } } } : {}),
+        ...(work_log_fleet_driver_id ? { fleet_driver: { connect: { id: Number(work_log_fleet_driver_id) } } } : {}),
       },
     });
   }
