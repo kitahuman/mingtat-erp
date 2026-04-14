@@ -1251,7 +1251,14 @@ export default function WorkLogsPage() {
           </div>
           {hasFilters && (
             <button onClick={resetFilters}
-              className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:      {/* ── Table ────────────────────────────────────────────── */}
+              className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50 self-end">
+              清除篩選
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Table ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
@@ -1319,7 +1326,8 @@ export default function WorkLogsPage() {
                 ID
               </th>
               {/* Visible COLUMNS in user-defined order */}
-              {(visibleColumns as any[]).map((col: any) => {  const sortField = COLUMN_SORT_FIELD[col.key];
+              {(visibleColumns as any[]).map((col: any) => {
+                const sortField = COLUMN_SORT_FIELD[col.key];
                 const isActive = sortField && sortBy === sortField;
                 return (
                   <th key={col.key}

@@ -271,7 +271,6 @@ export default function ContractsPage() {
           onSort={handleSort}
           onSave={handleInlineSave}
           onDelete={handleInlineDelete}
-          rowClassName={(row) => mergeMode && selectedIds.has(row.id) ? 'bg-blue-50' : ''}
           filters={
             <div className="flex gap-2">
               <select value={clientFilter} onChange={(e) => { setClientFilter(e.target.value); setPage(1); }} className="input-field w-auto">
