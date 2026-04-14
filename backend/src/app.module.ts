@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
 import { join } from 'path';
 import { throttlerConfig } from './common/throttler.config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -65,6 +66,28 @@ import { HealthModule } from './health/health.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot(throttlerConfig),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+        transport: process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
+          : undefined,
+        autoLogging: {
+          ignore: (req: any) => req.url === '/api/health',
+        },
+        serializers: {
+          req: (req: any) => ({
+            id: req.id,
+            method: req.method,
+            url: req.url,
+            remoteAddress: req.remoteAddress,
+          }),
+          res: (res: any) => ({
+            statusCode: res.statusCode,
+          }),
+        },
+      },
+    }),
     AiChatModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
