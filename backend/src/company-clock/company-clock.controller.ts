@@ -106,7 +106,7 @@ export class CompanyClockController {
       phone?: string;
       photo_base64: string;
       company_id?: number;
-      role_title?: string;
+      role?: string;
       work_notes?: string;
       is_mid_shift?: boolean;
       type?: 'clock_in' | 'clock_out';

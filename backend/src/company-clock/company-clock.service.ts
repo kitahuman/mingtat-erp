@@ -144,7 +144,6 @@ export class CompanyClockService {
         name_en: true,
         nickname: true,
         role: true,
-        role_title: true,
         phone: true,
         company_id: true,
         employee_photo_base64: true,
@@ -351,7 +350,7 @@ export class CompanyClockService {
     photo_base64: string;
     company_id?: number | null;
     operator_user_id: number;
-    role_title?: string;
+    role?: string;
     work_notes?: string;
     is_mid_shift?: boolean;
     type?: 'clock_in' | 'clock_out';
@@ -381,8 +380,7 @@ export class CompanyClockService {
         company_id: data.company_id || null,
         employee_photo_base64: data.photo_base64,
         employee_is_temporary: true,
-        role: 'worker',
-        role_title: data.role_title || null,
+        role: data.role || 'worker',
         status: 'active',
       },
     });
@@ -414,7 +412,7 @@ export class CompanyClockService {
         name_zh: employee.name_zh,
         name_en: employee.name_en,
         employee_is_temporary: employee.employee_is_temporary,
-        role_title: employee.role_title,
+        role: employee.role,
       },
       attendance,
       message: `臨時員工「${data.name_zh}」已建立並完成打卡`,
@@ -464,7 +462,7 @@ export class CompanyClockService {
             name_zh: true,
             name_en: true,
             emp_code: true,
-            role_title: true,
+            role: true,
             employee_is_temporary: true,
             company: { select: { name: true, internal_prefix: true } },
           },

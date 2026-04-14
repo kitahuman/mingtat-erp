@@ -37,7 +37,7 @@ const ANOMALY_TYPE_BADGE: Record<string, string> = {
 const DEFAULT_COLUMNS = [
   { key: 'emp_code', label: '員工編號', sortable: true },
   { key: 'employee_name', label: '員工姓名', sortable: true },
-  { key: 'role_title', label: '職位' },
+  { key: 'role', label: '職位' },
   { key: 'date', label: '日期', sortable: true },
   { key: 'type', label: '打卡類型', sortable: true },
   { key: 'is_mid_shift', label: '中直' },
@@ -188,13 +188,13 @@ export default function AttendancesPage() {
       exportRender: (_: any, row: any) => row.employee?.name_zh || row.employee?.name_en || '',
     },
     {
-      key: 'role_title',
+      key: 'role',
       label: '職位',
       render: (_: any, row: any) => {
-        const position = row.employee?.role_title || row.employee?.role || '-';
+        const position = row.employee?.role || '-';
         return <span className="text-sm text-blue-600 font-medium">{position}</span>;
       },
-      exportRender: (_: any, row: any) => row.employee?.role_title || row.employee?.role || '',
+      exportRender: (_: any, row: any) => row.employee?.role || '',
     },
     {
       key: 'date',

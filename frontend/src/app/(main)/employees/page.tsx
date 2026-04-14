@@ -11,26 +11,7 @@ import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
 import api from '@/lib/api';
 
-// Fallback role labels for display (used when API options not loaded yet)
-const FALLBACK_ROLE_LABELS: Record<string, string> = {
-  '管理': '管理', '司機': '司機', '機手': '機手', '雜工': '雜工',
-  '鴻輝代工': '鴻輝代工', '散工機手': '散工機手', '散工司機': '散工司機',
-  '管工': '管工', '安全督導員': '安全督導員', '董事': '董事', 'T1': 'T1',
-  '文員': '文員', 'QS': 'QS',
-};
 
-const roleBadgeClass = (v: string) => {
-  switch (v) {
-    case '管理': return 'badge-blue';
-    case '司機': return 'badge-green';
-    case '機手': return 'badge-yellow';
-    case '鴻輝代工': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '散工機手': case '散工司機': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '董事': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '文員': case 'QS': return 'bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    default: return 'badge-gray';
-  }
-};
 
 type TabType = 'active' | 'inactive' | 'temporary';
 
@@ -69,7 +50,7 @@ export default function EmployeesPage() {
   // bulkCreating and bulkResult kept for legacy compatibility (no longer used directly)
 
   const [roleOptions, setRoleOptions] = useState<{value: string; label: string}[]>([]);
-  const [roleLabels, setRoleLabels] = useState<Record<string, string>>(FALLBACK_ROLE_LABELS);
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>({});
 
   // Server-side column filters state
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
@@ -102,18 +83,11 @@ export default function EmployeesPage() {
     companiesApi.simple().then(res => setCompanies(res.data));
     fieldOptionsApi.getByCategory('employee_role').then(res => {
       const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
-      if (opts.length > 0) {
-        setRoleOptions(opts);
-        const labels: Record<string, string> = {};
-        opts.forEach((o: any) => { labels[o.value] = o.label; });
-        setRoleLabels({ ...FALLBACK_ROLE_LABELS, ...labels });
-      } else {
-        // Fallback to hardcoded options
-        setRoleOptions(Object.entries(FALLBACK_ROLE_LABELS).map(([value, label]) => ({ value, label })));
-      }
-    }).catch(() => {
-      setRoleOptions(Object.entries(FALLBACK_ROLE_LABELS).map(([value, label]) => ({ value, label })));
-    });
+      setRoleOptions(opts);
+      const labels: Record<string, string> = {};
+      opts.forEach((o: any) => { labels[o.value] = o.label; });
+      setRoleLabels(labels);
+    }).catch(() => {});
   }, []);
 
   /**
@@ -389,7 +363,7 @@ export default function EmployeesPage() {
     )},
     { key: 'name_en', label: '英文姓名', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
-      <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
+      <span className={'badge-gray'}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
     { key: 'id_number', label: '身份證號碼', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'join_date', label: '入職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
@@ -418,7 +392,7 @@ export default function EmployeesPage() {
       <div><div className="font-medium text-gray-900">{row.name_zh}</div>{row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}</div>
     )},
     { key: 'role', label: '職位', sortable: true, editable: true, editType: 'select' as const, editOptions: roleOptions, render: (v: string) => (
-      <span className={roleBadgeClass(v)}>{roleLabels[v] || v}</span>
+      <span className={'badge-gray'}>{roleLabels[v] || v}</span>
     ), filterRender: (v: string) => roleLabels[v] || v },
     { key: 'company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || row.company?.name || '-' },
     { key: 'termination_date', label: '離職日期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },

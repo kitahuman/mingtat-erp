@@ -5,7 +5,7 @@ import { companiesApi } from '@/lib/api';
 import Link from 'next/link';
 
 const typeLabels: Record<string, string> = { internal: '內部公司', client: '客戶', subcontractor: '外判' };
-const roleLabels: Record<string, string> = { admin: '管理', driver: '司機', operator: '機手', worker: '雜工' };
+
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -114,7 +114,7 @@ export default function CompanyDetailPage() {
                   <tr key={emp.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/employees/${emp.id}`)}>
                     <td className="px-3 py-2 font-mono">{emp.emp_code}</td>
                     <td className="px-3 py-2 font-medium">{emp.name_zh}</td>
-                    <td className="px-3 py-2">{roleLabels[emp.role] || emp.role}</td>
+                    <td className="px-3 py-2">{emp.role || '-'}</td>
                     <td className="px-3 py-2"><span className={emp.status === 'active' ? 'badge-green' : 'badge-red'}>{emp.status === 'active' ? '在職' : '離職'}</span></td>
                   </tr>
                 ))}

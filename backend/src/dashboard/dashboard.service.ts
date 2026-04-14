@@ -785,7 +785,6 @@ export class DashboardService {
             name_en: true,
             emp_code: true,
             role: true,
-            role_title: true,
             employee_is_temporary: true,
             company: { select: { id: true, name: true } },
           },
@@ -807,7 +806,6 @@ export class DashboardService {
         name_en: true,
         emp_code: true,
         role: true,
-        role_title: true,
         company: { select: { id: true, name: true } },
       },
     });
@@ -831,7 +829,6 @@ export class DashboardService {
         name_en: e.name_en,
         emp_code: e.emp_code,
         role: e.role,
-        role_title: e.role_title,
         company_name: e.company?.name || '',
       }));
 
@@ -847,7 +844,7 @@ export class DashboardService {
       employee_id: number;
       name_zh: string;
       emp_code: string | null;
-      role_title: string | null;
+      role: string | null;
       company_name: string;
       clock_in_time: string;
       minutes_late: number;
@@ -857,7 +854,7 @@ export class DashboardService {
       employee_id: number;
       name_zh: string;
       emp_code: string | null;
-      role_title: string | null;
+      role: string | null;
       company_name: string;
       clock_out_time: string;
       minutes_early: number;
@@ -890,7 +887,7 @@ export class DashboardService {
           employee_id: empId,
           name_zh: rec.employee?.name_zh || '',
           emp_code: rec.employee?.emp_code || null,
-          role_title: rec.employee?.role_title || null,
+          role: rec.employee?.role || null,
           company_name: rec.employee?.company?.name || '',
           clock_in_time: rec.timestamp.toISOString(),
           minutes_late: actualMinutes - lateThreshold,
@@ -909,7 +906,7 @@ export class DashboardService {
           employee_id: empId,
           name_zh: rec.employee?.name_zh || '',
           emp_code: rec.employee?.emp_code || null,
-          role_title: rec.employee?.role_title || null,
+          role: rec.employee?.role || null,
           company_name: rec.employee?.company?.name || '',
           clock_out_time: rec.timestamp.toISOString(),
           minutes_early: earlyThreshold - actualMinutes,
@@ -928,7 +925,7 @@ export class DashboardService {
       name_zh: rec.employee?.name_zh || '',
       name_en: rec.employee?.name_en || '',
       emp_code: rec.employee?.emp_code || '',
-      role_title: rec.employee?.role_title || '',
+      role: rec.employee?.role || '',
       is_temporary: rec.employee?.employee_is_temporary || false,
       company_name: rec.employee?.company?.name || '',
       type: rec.type,

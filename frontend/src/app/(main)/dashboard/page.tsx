@@ -7,9 +7,7 @@ import Link from 'next/link';
 // 工具函數
 // ══════════════════════════════════════════════════════════════
 
-const roleLabels: Record<string, string> = {
-  admin: '管理', driver: '司機', operator: '機手', worker: '雜工',
-};
+
 
 const moduleLinks: Record<string, string> = {
   company: '/company-profiles', 'company-profile': '/company-profiles',
@@ -321,7 +319,7 @@ function WorkStatusTab({ data }: { data: any }) {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{emp.name_zh}</p>
-                      <p className="text-xs text-gray-500">{roleLabels[emp.role] || emp.role} · {emp.company_name}</p>
+                      <p className="text-xs text-gray-500">{emp.role || '-'} · {emp.company_name}</p>
                     </div>
                   </div>
                   <span className="text-xs text-gray-400 whitespace-nowrap ml-2">{formatDate(emp.join_date)}</span>
@@ -398,7 +396,7 @@ function AlertsTab({ data, onMpfApplied }: { data: any; onMpfApplied: (id: numbe
                   </div>
                   <div className="min-w-0">
                     <Link href={`/employees/${emp.id}`} className="text-sm font-medium text-blue-700 hover:underline truncate block">{emp.name}</Link>
-                    <p className="text-xs text-gray-500">{roleLabels[emp.role] || emp.role} · {emp.company_name} · 入職 {formatDate(emp.join_date)}</p>
+                    <p className="text-xs text-gray-500">{emp.role || '-'} · {emp.company_name} · 入職 {formatDate(emp.join_date)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-2 flex-shrink-0">
@@ -753,7 +751,7 @@ function FinancialTab({ data }: { data: any }) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {roleBreakdown.map((item: any) => (
             <div key={item.role} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-              <span className="text-sm text-gray-700">{roleLabels[item.role] || item.role}</span>
+              <span className="text-sm text-gray-700">{item.role || '-'}</span>
               <div className="flex items-center gap-2">
                 <div className="w-20 bg-gray-200 rounded-full h-2">
                   <div className="bg-primary-500 rounded-full h-2" style={{ width: `${(parseInt(item.count) / totalEmployees) * 100}%` }} />
@@ -1064,7 +1062,7 @@ function AttendanceTab({ data, onRefresh }: { data: any; onRefresh: () => void }
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{emp.name_zh}</p>
-                    <p className="text-xs text-gray-500 truncate">{emp.role_title || roleLabels[emp.role] || emp.role} {emp.company_name ? `· ${emp.company_name}` : ''}</p>
+                    <p className="text-xs text-gray-500 truncate">{emp.role || '-'} {emp.company_name ? `· ${emp.company_name}` : ''}</p>
                   </div>
                 </Link>
               ))}
@@ -1091,7 +1089,7 @@ function AttendanceTab({ data, onRefresh }: { data: any; onRefresh: () => void }
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{rec.name_zh}</p>
-                      <p className="text-xs text-gray-500">{rec.role_title || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
+                      <p className="text-xs text-gray-500">{rec.role || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 ml-2 flex-shrink-0">
@@ -1125,7 +1123,7 @@ function AttendanceTab({ data, onRefresh }: { data: any; onRefresh: () => void }
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{rec.name_zh}</p>
-                      <p className="text-xs text-gray-500">{rec.role_title || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
+                      <p className="text-xs text-gray-500">{rec.role || ''} {rec.company_name ? `· ${rec.company_name}` : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 ml-2 flex-shrink-0">

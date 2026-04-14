@@ -1392,7 +1392,6 @@ export class EmployeePortalService {
         name_zh: true,
         name_en: true,
         role: true,
-        role_title: true,
       },
       orderBy: { emp_code: 'asc' },
     });

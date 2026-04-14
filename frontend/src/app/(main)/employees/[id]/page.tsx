@@ -9,33 +9,7 @@ import EmployeePhotoSection from '@/components/EmployeePhotoSection';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
-const roleLabels: Record<string, string> = {
-  '管理': '管理', '司機': '司機', '機手': '機手', '雜工': '雜工',
-  '鴻輝代工': '鴻輝代工', '散工機手': '散工機手', '散工司機': '散工司機',
-  '管工': '管工', '安全督導員': '安全督導員', '董事': '董事', 'T1': 'T1',
-  '文員': '文員', 'QS': 'QS',
-};
-const roleOptions = [
-  { value: '管理', label: '管理' }, { value: '司機', label: '司機' },
-  { value: '機手', label: '機手' }, { value: '雜工', label: '雜工' },
-  { value: '鴻輝代工', label: '鴻輝代工' }, { value: '散工機手', label: '散工機手' },
-  { value: '散工司機', label: '散工司機' }, { value: '管工', label: '管工' },
-  { value: '安全督導員', label: '安全督導員' }, { value: '董事', label: '董事' },
-  { value: 'T1', label: 'T1' }, { value: '文員', label: '文員' }, { value: 'QS', label: 'QS' },
-];
 
-const roleBadgeClass = (v: string) => {
-  switch (v) {
-    case '管理': return 'badge-blue';
-    case '司機': return 'badge-green';
-    case '機手': return 'badge-yellow';
-    case '鴻輝代工': return 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '散工機手': case '散工司機': return 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '董事': return 'bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    case '文員': case 'QS': return 'bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full text-xs font-medium';
-    default: return 'badge-gray';
-  }
-};
 
 const mpfOptions = [
   { value: '', label: '請選擇' },
@@ -119,6 +93,8 @@ export default function EmployeeDetailPage() {
   const [nicknames, setNicknames] = useState<Array<{ id: number; emp_nickname_value: string; emp_nickname_source: string | null }>>([]);
   const [newNickname, setNewNickname] = useState('');
   const [nicknameLoading, setNicknameLoading] = useState(false);
+  // Dynamic role options from field-options
+  const [roleOptions, setRoleOptions] = useState<Array<{ value: string; label: string }>>([]);
   // Dynamic certificate types from field-options
   const [certTypes, setCertTypes] = useState<Array<{ id: number; label: string }>>([]);
   // other_certificates JSON: { [label]: { cert_no: string, expiry_date: string } }
@@ -166,6 +142,11 @@ export default function EmployeeDetailPage() {
   useEffect(() => {
     loadData();
     companiesApi.simple().then(res => setCompanies(res.data));
+    // Load dynamic role options
+    fieldOptionsApi.getByCategory('employee_role').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
+      setRoleOptions(opts);
+    }).catch(() => {});
     // Load dynamic certificate types
     fieldOptionsApi.getByCategory('certificate_type').then(res => {
       setCertTypes((res.data || []).filter((o: any) => o.is_active));
@@ -322,7 +303,7 @@ export default function EmployeeDetailPage() {
           ) : (
             <>
               <div><p className="text-sm text-gray-500">員工編號</p><p className="font-mono font-bold">{emp?.emp_code || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">職位</p><p><span className={roleBadgeClass(emp?.role)}>{roleLabels[emp?.role] || emp?.role}</span></p></div>
+              <div><p className="text-sm text-gray-500">職位</p><p><span className="badge-gray">{emp?.role || '-'}</span></p></div>
               <div><p className="text-sm text-gray-500">狀態</p><p><span className={emp?.status === 'active' ? 'badge-green' : 'badge-red'}>{emp?.status === 'active' ? '在職' : '離職'}</span></p></div>
               <div><p className="text-sm text-gray-500">所屬公司</p><p className="font-medium">{emp?.company?.internal_prefix} - {emp?.company?.name}</p></div>
               {emp?.nickname && <div><p className="text-sm text-gray-500">別名</p><p>{emp.nickname}</p></div>}

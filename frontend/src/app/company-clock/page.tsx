@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCompanyClockAuth } from '@/lib/company-clock-auth';
 import { companyClockApi } from '@/lib/company-clock-api';
+import { fieldOptionsApi } from '@/lib/api';
 
 interface Employee {
   id: number;
@@ -12,7 +13,6 @@ interface Employee {
   name_en?: string | null;
   nickname?: string | null;
   role: string;
-  role_title?: string | null;
   phone?: string | null;
   company_id: number;
   hasStandardPhoto: boolean;
@@ -37,17 +37,13 @@ interface AttendanceRecord {
     name_zh: string;
     name_en?: string | null;
     emp_code?: string | null;
-    role_title?: string | null;
+    role?: string | null;
     employee_is_temporary?: boolean;
     company?: { name: string; internal_prefix?: string | null } | null;
   };
 }
 
 type Step = 'list' | 'camera' | 'verifying' | 'result' | 'temp_employee';
-
-const POSITION_OPTIONS = [
-  '雜工', '機手', '司機', '管工', '科文', '測量', '安全員', '其他'
-];
 
 /**
  * Reverse geocode using Nominatim with richer address formatting
@@ -144,11 +140,18 @@ export default function CompanyClockPage() {
     }
   }, [authLoading, user, router]);
 
-  // Load companies
+  // Position options from field_options API
+  const [positionOptions, setPositionOptions] = useState<string[]>([]);
+
+  // Load companies and position options
   useEffect(() => {
     if (user) {
       companyClockApi.getCompanies().then((res) => {
         setCompanies(res.data);
+      }).catch(() => {});
+      fieldOptionsApi.getByCategory('employee_role').then(res => {
+        const opts = (res.data || []).filter((o: { is_active: boolean }) => o.is_active).map((o: { label: string }) => o.label);
+        setPositionOptions(opts);
       }).catch(() => {});
     }
   }, [user]);
@@ -374,7 +377,7 @@ export default function CompanyClockPage() {
         name_en: tempNameEn || undefined,
         phone: tempPhone || undefined,
         photo_base64: photoDataUrl,
-        role_title: tempPosition || undefined,
+        role: tempPosition || undefined,
         work_notes: workNotes,
         is_mid_shift: clockType === 'clock_out' ? isMidShift : false,
         type: clockType,
@@ -521,8 +524,8 @@ export default function CompanyClockPage() {
                           {r.type === 'clock_in' ? '上班' : '下班'}
                         </span>
                         <span className="font-medium text-gray-900">{r.employee.name_zh}</span>
-                        {r.employee.role_title && (
-                          <span className="text-gray-400 text-xs">({r.employee.role_title})</span>
+                        {r.employee.role && (
+                          <span className="text-gray-400 text-xs">({r.employee.role})</span>
                         )}
                         {r.is_mid_shift && (
                           <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded font-bold">中直</span>
@@ -636,7 +639,7 @@ export default function CompanyClockPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                          {emp.role_title && <span className="text-blue-600 font-medium">{emp.role_title}</span>}
+                          {emp.role && <span className="text-blue-600 font-medium">{emp.role}</span>}
                           {emp.emp_code && <span>({emp.emp_code})</span>}
                           {emp.company?.internal_prefix && (
                             <span className="text-gray-300">| {emp.company.internal_prefix}</span>
@@ -707,7 +710,7 @@ export default function CompanyClockPage() {
                 <div>
                   <h2 className="font-bold text-gray-900">{selectedEmployee.name_zh}</h2>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    {selectedEmployee.role_title && <span className="text-blue-600 font-medium">{selectedEmployee.role_title}</span>}
+                    {selectedEmployee.role && <span className="text-blue-600 font-medium">{selectedEmployee.role}</span>}
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       clockType === 'clock_in' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
                     }`}>
@@ -973,7 +976,7 @@ export default function CompanyClockPage() {
                       className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl outline-none text-sm bg-white"
                     >
                       <option value="">選擇職位</option>
-                      {POSITION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      {positionOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </div>
                   <div>
