@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PartnersService } from './partners.service';
+import { CreatePartnerDto, UpdatePartnerDto } from './dto/create-partner.dto';
 
 @Controller('partners')
 @UseGuards(AuthGuard('jwt'))
@@ -23,7 +24,7 @@ export class PartnersController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreatePartnerDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
@@ -33,7 +34,7 @@ export class PartnersController {
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdatePartnerDto, @Request() req: any) {
     return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 

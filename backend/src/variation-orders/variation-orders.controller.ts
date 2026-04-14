@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { VariationOrdersService } from './variation-orders.service';
+import { CreateVariationOrderDto, UpdateVariationOrderDto } from './dto/create-variation-order.dto';
 
 @Controller('contracts/:contractId/variation-orders')
 @UseGuards(AuthGuard('jwt'))
@@ -13,7 +14,7 @@ export class VariationOrdersController {
   }
 
   @Post()
-  create(@Param('contractId') contractId: string, @Body() dto: any) {
+  create(@Param('contractId') contractId: string, @Body() dto: CreateVariationOrderDto) {
     return this.service.create(Number(contractId), dto);
   }
 
@@ -26,7 +27,7 @@ export class VariationOrdersController {
   update(
     @Param('contractId') contractId: string,
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: UpdateVariationOrderDto,
   ) {
     return this.service.update(Number(contractId), Number(id), dto);
   }

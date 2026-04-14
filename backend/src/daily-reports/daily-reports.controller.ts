@@ -11,6 +11,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { DailyReportsService } from './daily-reports.service';
+import { CreateDailyReportDto, UpdateDailyReportDto } from './dto/create-daily-report.dto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'daily-reports');
 if (!existsSync(UPLOAD_DIR)) {
@@ -41,7 +42,7 @@ export class DailyReportsController {
   }
 
   @Post()
-  create(@Request() req: any, @Body() dto: any) {
+  create(@Request() req: any, @Body() dto: CreateDailyReportDto) {
     return this.service.create(req.user.sub, dto);
   }
 
@@ -49,7 +50,7 @@ export class DailyReportsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
-    @Body() dto: any,
+    @Body() dto: UpdateDailyReportDto,
   ) {
     return this.service.update(id, req.user.sub, dto);
   }
@@ -59,7 +60,7 @@ export class DailyReportsController {
   adminUpdate(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
-    @Body() dto: any,
+    @Body() dto: UpdateDailyReportDto,
   ) {
     return this.service.update(id, req.user.sub, dto, true);
   }

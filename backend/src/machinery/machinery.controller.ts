@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { MachineryService } from './machinery.service';
+import { CreateMachineryDto, UpdateMachineryDto, TransferMachineryDto } from './dto/create-machinery.dto';
 
 @Controller('machinery')
 @UseGuards(AuthGuard('jwt'))
@@ -23,17 +24,17 @@ export class MachineryController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateMachineryDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateMachineryDto, @Request() req: any) {
     return this.service.update(+id, dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Post(':id/transfer')
-  transferMachinery(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  transferMachinery(@Param('id') id: number, @Body() dto: TransferMachineryDto, @Request() req: any) {
     return this.service.transferMachinery(+id, dto);
   }
 

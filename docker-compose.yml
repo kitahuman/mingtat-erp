@@ -11,6 +11,14 @@ services:
       - /opt/mingtat-erp/backend/uploads:/app/uploads
     networks:
       - mingtat-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     healthcheck:
       test: ["CMD", "node", "-e", "const http=require('http');const r=http.get('http://127.0.0.1:3001/api/health',res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>{try{const b=JSON.parse(d);process.exit(b.status==='ok'||b.status==='degraded'?0:1)}catch{process.exit(1)}})});r.on('error',()=>process.exit(1));r.setTimeout(5000,()=>{r.destroy();process.exit(1)})"]
       interval: 15s
@@ -33,6 +41,14 @@ services:
         condition: service_healthy
     networks:
       - mingtat-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 networks:
   mingtat-network:

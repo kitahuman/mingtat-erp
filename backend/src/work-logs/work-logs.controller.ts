@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { WorkLogsService } from './work-logs.service';
+import { CreateWorkLogDto, UpdateWorkLogDto } from './dto/create-work-log.dto';
 
 @Controller('work-logs')
 @UseGuards(AuthGuard('jwt'))
@@ -41,12 +42,12 @@ export class WorkLogsController {
   // ── 建立 & 更新 ──────────────────────────────────────────
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateWorkLogDto, @Request() req: any) {
     return this.service.create(dto, req.user.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: string, @Body() dto: UpdateWorkLogDto, @Request() req: any) {
     return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 

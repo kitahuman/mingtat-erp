@@ -1,6 +1,7 @@
 import { Controller, Get, Put, Delete, Param, Body, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AttendancesService } from './attendances.service';
+import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 
 @Controller('attendances')
 @UseGuards(AuthGuard('jwt'))
@@ -18,7 +19,7 @@ export class AttendancesController {
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAttendanceDto) {
     return this.service.update(id, dto);
   }
 

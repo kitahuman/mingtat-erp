@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
+import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto } from './dto/create-invoice.dto';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
@@ -18,17 +19,17 @@ export class InvoicesController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateInvoiceDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Post('from-quotation/:quotationId')
-  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: any, @Request() req: any) {
+  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: CreateInvoiceDto, @Request() req: any) {
     return this.service.createFromQuotation(Number(quotationId), dto, req.user?.id || req.user?.userId || 0);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateInvoiceDto, @Request() req: any) {
     return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
   }
 
@@ -38,7 +39,7 @@ export class InvoicesController {
   }
 
   @Post(':id/record-payment')
-  recordPayment(@Param('id') id: number, @Body() dto: any) {
+  recordPayment(@Param('id') id: number, @Body() dto: RecordPaymentDto) {
     return this.service.recordPayment(Number(id), dto);
   }
 

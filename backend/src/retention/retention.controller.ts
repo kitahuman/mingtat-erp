@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RetentionService } from './retention.service';
+import { CreateRetentionReleaseDto } from './dto/retention.dto';
 
 @Controller('contracts/:contractId/retention')
 @UseGuards(AuthGuard('jwt'))
@@ -31,7 +32,7 @@ export class RetentionController {
   @Post('release')
   createRelease(
     @Param('contractId') contractId: string,
-    @Body() body: any,
+    @Body() body: CreateRetentionReleaseDto,
   ) {
     return this.service.createRelease(+contractId, body);
   }

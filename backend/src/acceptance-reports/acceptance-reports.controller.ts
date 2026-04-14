@@ -11,6 +11,7 @@ import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { AcceptanceReportsService } from './acceptance-reports.service';
+import { CreateAcceptanceReportDto, UpdateAcceptanceReportDto } from './dto/create-acceptance-report.dto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'acceptance-reports');
 if (!existsSync(UPLOAD_DIR)) {
@@ -41,7 +42,7 @@ export class AcceptanceReportsController {
   }
 
   @Post()
-  create(@Request() req: any, @Body() dto: any) {
+  create(@Request() req: any, @Body() dto: CreateAcceptanceReportDto) {
     return this.service.create(req.user.sub, dto);
   }
 
@@ -49,7 +50,7 @@ export class AcceptanceReportsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
-    @Body() dto: any,
+    @Body() dto: UpdateAcceptanceReportDto,
   ) {
     return this.service.update(id, req.user.sub, dto);
   }

@@ -1,0 +1,82 @@
+import { IsOptional, IsString, IsNumber, IsArray, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class SubmitWorkLogDto {
+  @IsOptional() @IsString() service_type?: string;
+  @IsOptional() @IsString() scheduled_date?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsOptional() @IsString() unverified_client_name?: string;
+  @IsOptional() @IsString() machine_type?: string;
+  @IsOptional() @IsString() equipment_number?: string;
+  @IsOptional() @IsString() tonnage?: string;
+  @IsOptional() @IsString() day_night?: string;
+  @IsOptional() @IsString() start_location?: string;
+  @IsOptional() @IsString() start_time?: string;
+  @IsOptional() @IsString() end_location?: string;
+  @IsOptional() @IsString() end_time?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() quantity?: number;
+  @IsOptional() @IsString() unit?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() ot_quantity?: number;
+  @IsOptional() @IsString() ot_unit?: string;
+  @IsOptional() @IsBoolean() is_mid_shift?: boolean;
+  @IsOptional() @Type(() => Number) @IsNumber() goods_quantity?: number;
+  @IsOptional() @IsString() work_log_product_name?: string;
+  @IsOptional() @IsString() work_log_product_unit?: string;
+  @IsOptional() work_log_photo_urls?: any;
+  @IsOptional() @IsString() work_log_signature_url?: string;
+  @IsOptional() @IsString() receipt_no?: string;
+  @IsOptional() @IsString() work_order_no?: string;
+  @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
+}
+
+export class SubmitExpenseDto {
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
+  @IsOptional() @IsString() receipt_no?: string;
+  @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsArray() items?: any[];
+  @IsOptional() @IsArray() attachments?: any[];
+}
+
+export class PortalDailyReportDto {
+  @IsOptional() @IsString() daily_report_date?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() daily_report_client_id?: number;
+  @IsOptional() @IsString() daily_report_client_name?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() daily_report_project_id?: number;
+  @IsOptional() @IsString() daily_report_project_name?: string;
+  @IsOptional() @IsString() daily_report_contract_ref?: string;
+  @IsOptional() @IsString() daily_report_site_address?: string;
+  @IsOptional() @IsString() daily_report_weather?: string;
+  @IsOptional() @IsString() daily_report_supplementary_notes?: string;
+  @IsOptional() @IsString() daily_report_status?: string;
+  @IsOptional() @IsString() daily_report_client_contract_no?: string;
+  @IsOptional() @IsArray() items?: any[];
+  @IsOptional() @IsArray() attachments?: any[];
+}
+
+export class PortalAcceptanceReportDto {
+  @IsOptional() @IsString() acceptance_report_date?: string;
+  @IsOptional() @IsString() acceptance_report_acceptance_date?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() acceptance_report_client_id?: number;
+  @IsOptional() @IsString() acceptance_report_client_name?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() acceptance_report_project_id?: number;
+  @IsOptional() @IsString() acceptance_report_project_name?: string;
+  @IsOptional() @IsString() acceptance_report_contract_ref?: string;
+  @IsOptional() @IsString() acceptance_report_site_address?: string;
+  @IsOptional() @IsString() acceptance_report_items?: string;
+  @IsOptional() @IsString() acceptance_report_quantity_unit?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() acceptance_report_mingtat_inspector_id?: number;
+  @IsOptional() @IsString() acceptance_report_mingtat_inspector_name?: string;
+  @IsOptional() @IsString() acceptance_report_mingtat_inspector_title?: string;
+  @IsOptional() @IsString() acceptance_report_client_contract_no?: string;
+  @IsOptional() @IsString() acceptance_report_client_inspector_name?: string;
+  @IsOptional() @IsString() acceptance_report_client_inspector_title?: string;
+  @IsOptional() @IsString() acceptance_report_client_signature?: string;
+  @IsOptional() @IsString() acceptance_report_mingtat_signature?: string;
+  @IsOptional() @IsString() acceptance_report_supplementary_notes?: string;
+  @IsOptional() @IsString() acceptance_report_status?: string;
+  @IsOptional() @IsArray() acceptance_items?: any[];
+  @IsOptional() @IsArray() attachments?: any[];
+}

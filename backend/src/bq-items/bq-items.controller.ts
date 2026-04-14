@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BqItemsService } from './bq-items.service';
+import { CreateBqItemDto, UpdateBqItemDto } from './dto/create-bq-item.dto';
 
 @Controller('contracts/:contractId/bq-items')
 @UseGuards(AuthGuard('jwt'))
@@ -19,7 +20,7 @@ export class BqItemsController {
   }
 
   @Post()
-  create(@Param('contractId') contractId: string, @Body() dto: any) {
+  create(@Param('contractId') contractId: string, @Body() dto: CreateBqItemDto) {
     return this.service.create(Number(contractId), dto);
   }
 
@@ -37,7 +38,7 @@ export class BqItemsController {
   update(
     @Param('contractId') contractId: string,
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: UpdateBqItemDto,
   ) {
     return this.service.update(Number(contractId), Number(id), dto);
   }

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SubconRateCardsService } from './subcon-rate-cards.service';
+import { CreateSubconRateCardDto, UpdateSubconRateCardDto } from './dto/create-subcon-rate-card.dto';
 
 @Controller('subcon-rate-cards')
 @UseGuards(AuthGuard('jwt'))
@@ -18,12 +19,12 @@ export class SubconRateCardsController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateSubconRateCardDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateSubconRateCardDto, @Request() req: any) {
     return this.service.update(Number(id), dto, req.user?.id);
   }
 

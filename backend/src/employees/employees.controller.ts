@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EmployeesService } from './employees.service';
+import { CreateEmployeeDto, UpdateEmployeeDto, TransferEmployeeDto, ConvertToRegularDto, AddSalarySettingDto } from './dto/create-employee.dto';
 
 @Controller('employees')
 @UseGuards(AuthGuard('jwt'))
@@ -23,12 +24,12 @@ export class EmployeesController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateEmployeeDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateEmployeeDto, @Request() req: any) {
     return this.service.update(+id, dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
@@ -43,7 +44,7 @@ export class EmployeesController {
   }
 
   @Post(':id/salary-settings')
-  addSalarySetting(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  addSalarySetting(@Param('id') id: number, @Body() dto: AddSalarySettingDto, @Request() req: any) {
     return this.service.addSalarySetting(+id, dto);
   }
 
@@ -53,12 +54,12 @@ export class EmployeesController {
   }
 
   @Post(':id/transfer')
-  transferEmployee(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  transferEmployee(@Param('id') id: number, @Body() dto: TransferEmployeeDto, @Request() req: any) {
     return this.service.transferEmployee(+id, dto);
   }
 
   @Post(':id/convert-to-regular')
-  convertToRegular(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  convertToRegular(@Param('id') id: number, @Body() dto: ConvertToRegularDto, @Request() req: any) {
     return this.service.convertToRegular(+id, dto);
   }
 

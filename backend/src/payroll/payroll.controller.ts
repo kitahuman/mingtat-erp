@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
+import { UpdatePayrollDto, UpdatePayrollWorkLogDto } from './dto/update-payroll.dto';
 
 @Controller('payroll')
 @UseGuards(AuthGuard('jwt'))
@@ -64,7 +65,7 @@ export class PayrollController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+  update(@Param('id') id: string, @Body() body: UpdatePayrollDto, @Request() req: any) {
     return this.payrollService.update(+id, body, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
@@ -113,7 +114,7 @@ export class PayrollController {
   updatePayrollWorkLog(
     @Param('id') id: string,
     @Param('pwlId') pwlId: string,
-    @Body() body: any,
+    @Body() body: UpdatePayrollWorkLogDto,
   ) {
     return this.payrollService.updatePayrollWorkLog(+id, +pwlId, body);
   }
@@ -123,7 +124,7 @@ export class PayrollController {
   updateOriginalWorkLog(
     @Param('id') id: string,
     @Param('pwlId') pwlId: string,
-    @Body() body: any,
+    @Body() body: UpdatePayrollWorkLogDto,
   ) {
     return this.payrollService.updateOriginalWorkLog(+id, +pwlId, body);
   }

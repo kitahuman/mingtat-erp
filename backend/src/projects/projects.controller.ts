@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Param, Query, Body, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProjectsService } from './projects.service';
+import { CreateProjectDto, UpdateProjectDto } from './dto/create-project.dto';
 
 @Controller('projects')
 @UseGuards(AuthGuard('jwt'))
@@ -23,12 +24,12 @@ export class ProjectsController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateProjectDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateProjectDto, @Request() req: any) {
     return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 

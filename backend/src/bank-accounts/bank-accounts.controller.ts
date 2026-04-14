@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BankAccountsService } from './bank-accounts.service';
+import { CreateBankAccountDto, UpdateBankAccountDto } from './dto/create-bank-account.dto';
 
 @Controller('bank-accounts')
 @UseGuards(AuthGuard('jwt'))
@@ -32,12 +33,12 @@ export class BankAccountsController {
   }
 
   @Post()
-  create(@Body() body: any) {
+  create(@Body() body: CreateBankAccountDto) {
     return this.service.create(body);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
+  update(@Param('id') id: string, @Body() body: UpdateBankAccountDto) {
     return this.service.update(+id, body);
   }
 

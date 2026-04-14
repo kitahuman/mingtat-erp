@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 // Set up global SOCKS5 proxy for OpenAI API calls (bypasses HK geo-restriction)
 if (process.env.SOCKS_PROXY_URL) {
@@ -27,8 +28,8 @@ async function bootstrap() {
   // Serve uploaded files as static assets
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
+  // M-13: CORS — use CORS_ORIGIN env var; remove deprecated Render.com domain
   const defaultOrigins = [
-    'https://mingtat-erp-web.onrender.com',
     'http://localhost:3000',
   ];
 
@@ -42,8 +43,20 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
+
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: false }));
+
+  // M-07: Global exception filter — hide stack traces in production, unified error format
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // H-05: ValidationPipe with whitelist — strip unknown properties, reject non-whitelisted
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    }),
+  );
 
   const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0');

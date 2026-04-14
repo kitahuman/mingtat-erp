@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CustomFieldsService } from './custom-fields.service';
+import { CreateCustomFieldDto, UpdateCustomFieldDto, BatchUpdateValuesDto } from './dto/create-custom-field.dto';
 
 @Controller('custom-fields')
 @UseGuards(AuthGuard('jwt'))
@@ -25,12 +26,12 @@ export class CustomFieldsController {
   }
 
   @Post()
-  createField(@Body() dto: any) {
+  createField(@Body() dto: CreateCustomFieldDto) {
     return this.service.createField(dto);
   }
 
   @Put(':id')
-  updateField(@Param('id') id: number, @Body() dto: any) {
+  updateField(@Param('id') id: number, @Body() dto: UpdateCustomFieldDto) {
     return this.service.updateField(Number(id), dto);
   }
 

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CompanyProfilesService } from './company-profiles.service';
+import { CreateCompanyProfileDto, UpdateCompanyProfileDto } from './dto/create-company-profile.dto';
 
 @Controller('company-profiles')
 @UseGuards(AuthGuard('jwt'))
@@ -28,12 +29,12 @@ export class CompanyProfilesController {
   }
 
   @Post()
-  create(@Body() dto: any) {
+  create(@Body() dto: CreateCompanyProfileDto) {
     return this.service.create(dto);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateCompanyProfileDto) {
     return this.service.update(Number(id), dto);
   }
 }

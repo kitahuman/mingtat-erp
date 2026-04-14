@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { VehiclesService } from './vehicles.service';
+import { CreateVehicleDto, UpdateVehicleDto, ChangePlateDto, TransferVehicleDto } from './dto/create-vehicle.dto';
 
 @Controller('vehicles')
 @UseGuards(AuthGuard('jwt'))
@@ -23,22 +24,22 @@ export class VehiclesController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateVehicleDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateVehicleDto, @Request() req: any) {
     return this.service.update(+id, dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Post(':id/change-plate')
-  changePlate(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  changePlate(@Param('id') id: number, @Body() dto: ChangePlateDto, @Request() req: any) {
     return this.service.changePlate(+id, dto);
   }
 
   @Post(':id/transfer')
-  transferVehicle(@Param('id') id: number, @Body() dto: any, @Request() req: any) {
+  transferVehicle(@Param('id') id: number, @Body() dto: TransferVehicleDto, @Request() req: any) {
     return this.service.transferVehicle(+id, dto);
   }
 

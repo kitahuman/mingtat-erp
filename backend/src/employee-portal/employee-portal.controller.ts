@@ -27,6 +27,7 @@ import {
   MAX_FILE_SIZE,
 } from '../common/file-validation.pipe';
 import { Throttle } from '@nestjs/throttler';
+import { SubmitWorkLogDto, SubmitExpenseDto, PortalDailyReportDto, PortalAcceptanceReportDto } from './dto/employee-portal.dto';
 
 // Ensure upload directory exists
 const uploadDir = join(process.cwd(), 'uploads', 'employee-portal');
@@ -182,7 +183,7 @@ export class EmployeePortalController {
   // ── Work Logs (報工) ───────────────────────────────────────────
   @UseGuards(AuthGuard('jwt'))
   @Post('work-logs')
-  async submitWorkLog(@Request() req: any, @Body() body: any) {
+  async submitWorkLog(@Request() req: any, @Body() body: SubmitWorkLogDto) {
     return this.service.submitWorkLog(req.user.sub, body);
   }
 
@@ -198,7 +199,7 @@ export class EmployeePortalController {
   // ── Expenses (報銷) ────────────────────────────────────────────
   @UseGuards(AuthGuard('jwt'))
   @Post('expenses')
-  async submitExpense(@Request() req: any, @Body() body: any) {
+  async submitExpense(@Request() req: any, @Body() body: SubmitExpenseDto) {
     return this.service.submitExpense(req.user.sub, body);
   }
 
@@ -309,7 +310,7 @@ export class EmployeePortalController {
 
   @Post('daily-reports')
   @UseGuards(AuthGuard('jwt'))
-  async createDailyReport(@Request() req: any, @Body() dto: any) {
+  async createDailyReport(@Request() req: any, @Body() dto: PortalDailyReportDto) {
     return this.service.createDailyReport(req.user.sub, dto);
   }
 
@@ -344,7 +345,7 @@ export class EmployeePortalController {
 
   @Post('daily-reports/:id')
   @UseGuards(AuthGuard('jwt'))
-  async updateDailyReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+  async updateDailyReport(@Request() req: any, @Param('id') id: string, @Body() dto: PortalDailyReportDto) {
     return this.service.updateDailyReport(req.user.sub, +id, dto);
   }
 
@@ -389,13 +390,13 @@ export class EmployeePortalController {
 
   @Post('acceptance-reports')
   @UseGuards(AuthGuard('jwt'))
-  async createAcceptanceReport(@Request() req: any, @Body() dto: any) {
+  async createAcceptanceReport(@Request() req: any, @Body() dto: PortalAcceptanceReportDto) {
     return this.service.createAcceptanceReport(req.user.sub, dto);
   }
 
   @Post('acceptance-reports/:id')
   @UseGuards(AuthGuard('jwt'))
-  async updateAcceptanceReport(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+  async updateAcceptanceReport(@Request() req: any, @Param('id') id: string, @Body() dto: PortalAcceptanceReportDto) {
     return this.service.updateAcceptanceReport(req.user.sub, +id, dto);
   }
 

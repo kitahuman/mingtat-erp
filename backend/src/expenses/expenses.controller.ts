@@ -10,6 +10,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { ExpensesService } from './expenses.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileValidationPipe } from '../common/file-validation.pipe';
+import { CreateExpenseDto, UpdateExpenseDto, CreateExpenseItemDto } from './dto/create-expense.dto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'expenses');
 
@@ -31,12 +32,12 @@ export class ExpensesController {
   }
 
   @Post()
-  create(@Body() dto: any, @Request() req: any) {
+  create(@Body() dto: CreateExpenseDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateExpenseDto, @Request() req: any) {
     return this.service.update(id, dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
@@ -48,7 +49,7 @@ export class ExpensesController {
   // ── Expense Items ───────────────────────────────────────────────
 
   @Post(':id/items')
-  createItem(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  createItem(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateExpenseItemDto) {
     return this.service.createItem(id, dto);
   }
 
@@ -56,7 +57,7 @@ export class ExpensesController {
   updateItem(
     @Param('id', ParseIntPipe) id: number,
     @Param('itemId', ParseIntPipe) itemId: number,
-    @Body() dto: any,
+    @Body() dto: UpdateExpenseDto,
   ) {
     return this.service.updateItem(id, itemId, dto);
   }
@@ -90,7 +91,7 @@ export class ExpensesController {
   async uploadAttachment(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
-    @Body() body: any,
+    @Body() body: Record<string, any>,
   ) {
     const fileUrl = `/uploads/expenses/${file.filename}`;
     return this.service.createAttachment(id, {

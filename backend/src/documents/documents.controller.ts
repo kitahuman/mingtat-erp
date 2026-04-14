@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { FileValidationPipe } from '../common/file-validation.pipe';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 
 function getUploadDir() {
   const dir = path.join(process.cwd(), 'uploads');
@@ -75,7 +76,7 @@ export class DocumentsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: any) {
+  update(@Param('id') id: number, @Body() dto: UpdateDocumentDto) {
     return this.service.update(Number(id), dto);
   }
 

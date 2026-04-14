@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentApplicationsService } from './payment-applications.service';
+import { CreatePaymentApplicationDto, UpdatePaymentApplicationDto, PaymentMaterialDto, PaymentDeductionDto, CertifyDto, RecordPaymentDto } from './dto/payment-application.dto';
 
 @Controller('contracts/:contractId/payment-applications')
 @UseGuards(AuthGuard('jwt'))
@@ -35,7 +36,7 @@ export class PaymentApplicationsController {
   @Post()
   create(
     @Param('contractId') contractId: string,
-    @Body() body: any,
+    @Body() body: CreatePaymentApplicationDto,
   ) {
     return this.service.create(+contractId, body);
   }
@@ -45,7 +46,7 @@ export class PaymentApplicationsController {
   update(
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
-    @Body() body: any,
+    @Body() body: UpdatePaymentApplicationDto,
   ) {
     return this.service.update(+contractId, +paId, body);
   }
@@ -84,7 +85,7 @@ export class PaymentApplicationsController {
   addMaterial(
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
-    @Body() body: any,
+    @Body() body: PaymentMaterialDto,
   ) {
     return this.service.addMaterial(+contractId, +paId, body);
   }
@@ -94,7 +95,7 @@ export class PaymentApplicationsController {
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
     @Param('materialId') materialId: string,
-    @Body() body: any,
+    @Body() body: PaymentMaterialDto,
   ) {
     return this.service.updateMaterial(+contractId, +paId, +materialId, body);
   }
@@ -113,7 +114,7 @@ export class PaymentApplicationsController {
   addDeduction(
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
-    @Body() body: any,
+    @Body() body: PaymentDeductionDto,
   ) {
     return this.service.addDeduction(+contractId, +paId, body);
   }
@@ -123,7 +124,7 @@ export class PaymentApplicationsController {
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
     @Param('deductionId') deductionId: string,
-    @Body() body: any,
+    @Body() body: PaymentDeductionDto,
   ) {
     return this.service.updateDeduction(+contractId, +paId, +deductionId, body);
   }
@@ -150,7 +151,7 @@ export class PaymentApplicationsController {
   certify(
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
-    @Body() body: any,
+    @Body() body: CertifyDto,
   ) {
     return this.service.certify(+contractId, +paId, body);
   }
@@ -159,7 +160,7 @@ export class PaymentApplicationsController {
   recordPayment(
     @Param('contractId') contractId: string,
     @Param('paId') paId: string,
-    @Body() body: any,
+    @Body() body: RecordPaymentDto,
   ) {
     return this.service.recordPayment(+contractId, +paId, body);
   }
