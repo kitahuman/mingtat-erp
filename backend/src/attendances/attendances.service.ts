@@ -61,7 +61,7 @@ export class AttendancesService {
         where,
         include: {
           employee: {
-            select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
+            select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, role_title: true, employee_is_temporary: true },
           },
           mid_shift_approver: {
             select: { id: true, name_zh: true },
@@ -82,7 +82,7 @@ export class AttendancesService {
       where: { id },
       include: {
         employee: {
-          select: { id: true, name_zh: true, name_en: true, emp_code: true, role_title: true, employee_is_temporary: true },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, role_title: true, employee_is_temporary: true },
         },
         mid_shift_approver: {
           select: { id: true, name_zh: true },

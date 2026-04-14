@@ -190,10 +190,11 @@ export default function AttendancesPage() {
     {
       key: 'role_title',
       label: '職位',
-      render: (_: any, row: any) => (
-        <span className="text-sm text-blue-600 font-medium">{row.employee?.role_title || '-'}</span>
-      ),
-      exportRender: (_: any, row: any) => row.employee?.role_title || '',
+      render: (_: any, row: any) => {
+        const position = row.employee?.role_title || row.employee?.role || '-';
+        return <span className="text-sm text-blue-600 font-medium">{position}</span>;
+      },
+      exportRender: (_: any, row: any) => row.employee?.role_title || row.employee?.role || '',
     },
     {
       key: 'date',
