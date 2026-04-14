@@ -351,7 +351,7 @@ export default function FieldOptionsPage() {
   const isSearchActive = searchQuery.trim().length > 0;
 
   return (
-    <RoleGuard minRole="admin">
+    <RoleGuard pageKey="settings-field-options">
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>

@@ -226,7 +226,7 @@ function CustomFieldsPageContent() {
 
 export default function CustomFieldsPage() {
   return (
-    <RoleGuard roles={['admin']}>
+    <RoleGuard pageKey="settings-custom-fields">
       <CustomFieldsPageContent />
     </RoleGuard>
   );

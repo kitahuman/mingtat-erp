@@ -234,7 +234,7 @@ export default function ExpenseCategoriesPage() {
   const isParentLevel = editingItem ? !editingItem.parent_id : !formParentId;
 
   return (
-    <RoleGuard minRole="admin">
+    <RoleGuard pageKey="settings-expense-categories">
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>

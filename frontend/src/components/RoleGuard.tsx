@@ -4,6 +4,7 @@ import { useAuth, UserRole } from '@/lib/auth';
 interface RoleGuardProps {
   roles?: UserRole[];
   minRole?: UserRole;
+  pageKey?: string;
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
@@ -18,8 +19,8 @@ const defaultFallback = (
   </div>
 );
 
-export default function RoleGuard({ roles, minRole, children, fallback }: RoleGuardProps) {
-  const { hasRole, hasMinRole, loading } = useAuth();
+export default function RoleGuard({ roles, minRole, pageKey, children, fallback }: RoleGuardProps) {
+  const { hasRole, hasMinRole, canAccessPage, loading } = useAuth();
 
   if (loading) {
     return (
@@ -30,7 +31,10 @@ export default function RoleGuard({ roles, minRole, children, fallback }: RoleGu
   }
 
   let allowed = false;
-  if (roles) {
+  if (pageKey) {
+    // Page-level permission check (respects per-user grants/denies)
+    allowed = canAccessPage(pageKey);
+  } else if (roles) {
     allowed = hasRole(...roles);
   } else if (minRole) {
     allowed = hasMinRole(minRole);

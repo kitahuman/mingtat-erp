@@ -78,7 +78,7 @@ export default function BankAccountsPage() {
   };
 
   return (
-    <RoleGuard roles={['admin']}>
+    <RoleGuard pageKey="settings-bank-accounts">
       <div className="p-6 space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">銀行帳戶管理</h1>

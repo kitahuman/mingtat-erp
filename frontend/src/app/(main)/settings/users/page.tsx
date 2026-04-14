@@ -738,7 +738,7 @@ function UsersPageContent() {
 
 export default function UsersPage() {
   return (
-    <RoleGuard roles={['admin']}>
+    <RoleGuard pageKey="settings-users">
       <UsersPageContent />
     </RoleGuard>
   );
