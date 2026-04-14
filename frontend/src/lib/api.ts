@@ -270,8 +270,21 @@ export const payrollApi = {
   recalculate: (id: number, body?: { override_manual_rates?: boolean }) => api.post(`/payroll/${id}/recalculate`, body || {}),
   setGroupRate: (id: number, groupKey: string, rate: number) =>
     api.post(`/payroll/${id}/set-group-rate`, { group_key: groupKey, rate }),
-  addToRateCard: (id: number, pwlId: number, rate: number) =>
-    api.post(`/payroll/${id}/add-to-rate-card`, { pwl_id: pwlId, rate }),
+  addToRateCard: (id: number, formData: {
+    client_id?: number;
+    company_id?: number;
+    client_contract_no?: string;
+    service_type?: string;
+    day_night?: string;
+    tonnage?: string;
+    machine_type?: string;
+    origin?: string;
+    destination?: string;
+    rate: number;
+    unit?: string;
+    effective_date?: string;
+    remarks?: string;
+  }) => api.post(`/payroll/${id}/add-to-rate-card`, formData),
   finalize: (id: number) => api.post(`/payroll/${id}/finalize`),
   unconfirm: (id: number) => api.post(`/payroll/${id}/unconfirm`),
   remove: (id: number) => api.delete(`/payroll/${id}`),

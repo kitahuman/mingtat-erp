@@ -110,11 +110,22 @@ export class PayrollController {
   addToRateCard(
     @Param('id') id: string,
     @Body() body: {
-      pwl_id: number;
+      client_id?: number;
+      company_id?: number;
+      client_contract_no?: string;
+      service_type?: string;
+      day_night?: string;
+      tonnage?: string;
+      machine_type?: string;
+      origin?: string;
+      destination?: string;
       rate: number;
+      unit?: string;
+      effective_date?: string;
+      remarks?: string;
     },
   ) {
-    return this.payrollService.addToRateCard(+id, body.pwl_id, body.rate);
+    return this.payrollService.addToRateCard(+id, body);
   }
 
   // 確定糧單工作記錄並計算糧單（從 preparing 轉為 draft）

@@ -1983,30 +1983,37 @@ export class PayrollService {
   }
 
   // ── 將手動設定的單價加入價目表 ──────────────────────────
-  async addToRateCard(payrollId: number, pwlId: number, rate: number) {
+  async addToRateCard(payrollId: number, formData: {
+    client_id?: number;
+    company_id?: number;
+    client_contract_no?: string;
+    service_type?: string;
+    day_night?: string;
+    tonnage?: string;
+    machine_type?: string;
+    origin?: string;
+    destination?: string;
+    rate: number;
+    unit?: string;
+    effective_date?: string;
+    remarks?: string;
+  }) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
-    const pwl = await this.prisma.payrollWorkLog.findFirst({
-      where: { id: pwlId, payroll_id: payrollId },
-    });
-    if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
-
     // Check for duplicate: same client, contract, day/night, origin, destination, tonnage, machine_type, service_type
-    const duplicateWhere: any = {
-      status: 'active',
-    };
-    if (pwl.client_id) duplicateWhere.client_id = pwl.client_id;
-    if (pwl.client_contract_no) duplicateWhere.client_contract_no = pwl.client_contract_no;
-    if (pwl.day_night) duplicateWhere.day_night = pwl.day_night;
-    if (pwl.start_location) duplicateWhere.origin = pwl.start_location;
-    if (pwl.end_location) duplicateWhere.destination = pwl.end_location;
-    if (pwl.tonnage) duplicateWhere.tonnage = pwl.tonnage;
-    if (pwl.machine_type) duplicateWhere.machine_type = pwl.machine_type;
-    if (pwl.service_type) duplicateWhere.service_type = pwl.service_type;
-    if (pwl.company_id) duplicateWhere.company_id = pwl.company_id;
+    const duplicateWhere: any = { status: 'active' };
+    if (formData.client_id) duplicateWhere.client_id = formData.client_id;
+    if (formData.client_contract_no) duplicateWhere.client_contract_no = formData.client_contract_no;
+    if (formData.day_night) duplicateWhere.day_night = formData.day_night;
+    if (formData.origin) duplicateWhere.origin = formData.origin;
+    if (formData.destination) duplicateWhere.destination = formData.destination;
+    if (formData.tonnage) duplicateWhere.tonnage = formData.tonnage;
+    if (formData.machine_type) duplicateWhere.machine_type = formData.machine_type;
+    if (formData.service_type) duplicateWhere.service_type = formData.service_type;
+    if (formData.company_id) duplicateWhere.company_id = formData.company_id;
 
     const existing = await this.prisma.fleetRateCard.findFirst({
       where: duplicateWhere,
@@ -2016,24 +2023,25 @@ export class PayrollService {
       throw new BadRequestException('此價格組合已存在於價目表中');
     }
 
-    // Create new fleet rate card
-    const newCard = await this.fleetRateCardsService.create({
-      client_id: pwl.client_id || undefined,
-      company_id: pwl.company_id || undefined,
-      client_contract_no: pwl.client_contract_no || undefined,
-      service_type: pwl.service_type || undefined,
-      day_night: pwl.day_night || undefined,
-      tonnage: pwl.tonnage || undefined,
-      machine_type: pwl.machine_type || undefined,
-      origin: pwl.start_location || undefined,
-      destination: pwl.end_location || undefined,
-      rate: rate,
-      unit: pwl.matched_unit || pwl.unit || undefined,
-      status: 'active',
-      effective_date: new Date().toISOString().slice(0, 10),
-      remarks: `由糧單 #${payrollId} 手動設定後加入`,
-    });
+    // Create new fleet rate card using prisma directly to avoid DTO whitelist issues
+    const createData: any = {
+      rate: formData.rate,
+      status: formData.effective_date ? 'active' : 'active',
+      effective_date: formData.effective_date ? new Date(formData.effective_date) : new Date(),
+      remarks: formData.remarks || `由糧單 #${payrollId} 手動設定後加入`,
+    };
+    if (formData.client_id) createData.client_id = formData.client_id;
+    if (formData.company_id) createData.company_id = formData.company_id;
+    if (formData.client_contract_no) createData.client_contract_no = formData.client_contract_no;
+    if (formData.service_type) createData.service_type = formData.service_type;
+    if (formData.day_night) createData.day_night = formData.day_night;
+    if (formData.tonnage) createData.tonnage = formData.tonnage;
+    if (formData.machine_type) createData.machine_type = formData.machine_type;
+    if (formData.origin) createData.origin = formData.origin;
+    if (formData.destination) createData.destination = formData.destination;
+    if (formData.unit) createData.unit = formData.unit;
 
+    const newCard = await this.prisma.fleetRateCard.create({ data: createData });
     return newCard;
   }
 }

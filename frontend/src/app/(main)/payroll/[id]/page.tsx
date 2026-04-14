@@ -166,8 +166,15 @@ function GroupedSettlementView({
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editRate, setEditRate] = useState('');
   const [saving, setSaving] = useState(false);
-  const [addToRateCardPrompt, setAddToRateCardPrompt] = useState<{ groupKey: string; rate: number; workLogIds: number[] } | null>(null);
-  const [addingToRateCard, setAddingToRateCard] = useState(false);
+  // prompt: which group triggered add-to-rate-card
+  const [promptGroup, setPromptGroup] = useState<any | null>(null);
+  const [promptRate, setPromptRate] = useState<number>(0);
+  // modal form state
+  const [showModal, setShowModal] = useState(false);
+  const [modalForm, setModalForm] = useState<any>({});
+  const [modalSaving, setModalSaving] = useState(false);
+  // status notification after modal closes
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -176,6 +183,14 @@ function GroupedSettlementView({
       inputRef.current.select();
     }
   }, [editingIdx]);
+
+  // Auto-dismiss status notification after 4 seconds
+  useEffect(() => {
+    if (statusMsg) {
+      const t = setTimeout(() => setStatusMsg(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [statusMsg]);
 
   if (!groups || groups.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
@@ -194,26 +209,69 @@ function GroupedSettlementView({
       await payrollApi.setGroupRate(payrollId, g.group_key, rate);
       await onRateSaved();
       setEditingIdx(null);
-      // Show add-to-rate-card prompt
-      setAddToRateCardPrompt({ groupKey: g.group_key, rate, workLogIds: g.work_log_ids || [] });
+      setPromptGroup(g);
+      setPromptRate(rate);
     } catch (err: any) {
       alert(err.response?.data?.message || '設定單價失敗');
     }
     setSaving(false);
   };
 
-  const handleAddToRateCard = async () => {
-    if (!addToRateCardPrompt || !addToRateCardPrompt.workLogIds.length) return;
-    setAddingToRateCard(true);
-    try {
-      await payrollApi.addToRateCard(payrollId, addToRateCardPrompt.workLogIds[0], addToRateCardPrompt.rate);
-      alert('已成功加入價目表');
-    } catch (err: any) {
-      alert(err.response?.data?.message || '加入價目表失敗');
-    }
-    setAddingToRateCard(false);
-    setAddToRateCardPrompt(null);
+  const openModal = () => {
+    if (!promptGroup) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setModalForm({
+      client_id: promptGroup.client_id || undefined,
+      company_id: promptGroup.company_id || undefined,
+      client_contract_no: promptGroup.client_contract_no || '',
+      service_type: promptGroup.service_type || '',
+      day_night: promptGroup.day_night || '',
+      tonnage: promptGroup.tonnage || '',
+      machine_type: promptGroup.machine_type || '',
+      origin: promptGroup.start_location || '',
+      destination: promptGroup.end_location || '',
+      rate: promptRate,
+      unit: promptGroup.matched_unit || '',
+      effective_date: today,
+      remarks: `由糧單 #${payrollId} 手動設定後加入`,
+    });
+    setShowModal(true);
   };
+
+  const handleModalConfirm = async () => {
+    setModalSaving(true);
+    try {
+      await payrollApi.addToRateCard(payrollId, {
+        ...modalForm,
+        rate: Number(modalForm.rate),
+        client_id: modalForm.client_id ? Number(modalForm.client_id) : undefined,
+        company_id: modalForm.company_id ? Number(modalForm.company_id) : undefined,
+      });
+      setShowModal(false);
+      setPromptGroup(null);
+      setStatusMsg({ type: 'success', text: '已成功加入價目表' });
+    } catch (err: any) {
+      const msg = err.response?.data?.message || '加入價目表失敗';
+      setShowModal(false);
+      setPromptGroup(null);
+      if (msg.includes('已存在')) {
+        setStatusMsg({ type: 'warning', text: msg });
+      } else {
+        setStatusMsg({ type: 'error', text: msg });
+      }
+    }
+    setModalSaving(false);
+  };
+
+  const comboLabel = promptGroup ? [
+    promptGroup.service_type,
+    promptGroup.client_name,
+    promptGroup.client_contract_no,
+    promptGroup.day_night,
+    [promptGroup.tonnage, promptGroup.machine_type].filter(Boolean).join('/'),
+    [promptGroup.start_location, promptGroup.end_location].filter(Boolean).join(' → '),
+    `$${promptRate.toLocaleString()}`,
+  ].filter(Boolean).join(' / ') : '';
 
   return (
     <>
@@ -272,7 +330,7 @@ function GroupedSettlementView({
                       </div>
                     ) : (
                       <span
-                        className={`${isDraft && !hasPrice ? 'cursor-pointer hover:bg-blue-50 px-2 py-1 rounded' : ''} ${isDraft && hasPrice ? 'cursor-pointer hover:bg-blue-50 px-2 py-1 rounded' : ''}`}
+                        className={isDraft ? 'cursor-pointer hover:bg-blue-50 px-2 py-1 rounded' : ''}
                         onClick={() => {
                           if (!isDraft) return;
                           setEditingIdx(idx);
@@ -313,26 +371,179 @@ function GroupedSettlementView({
         </table>
       </div>
 
-      {/* Add to rate card prompt */}
-      {addToRateCardPrompt && (
-        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-          <div className="text-sm text-blue-800">
-            已設定單價 <span className="font-bold">${addToRateCardPrompt.rate.toLocaleString()}</span>，是否將此價格加入價目表？
+      {/* Add-to-rate-card prompt bar */}
+      {promptGroup && !showModal && (
+        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start justify-between gap-3">
+          <div className="text-sm text-blue-800 leading-relaxed">
+            <span className="font-medium">已設定單價</span>，是否將以下組合加入價目表？
+            <div className="mt-1 text-xs text-blue-700 font-mono">{comboLabel}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={handleAddToRateCard}
-              disabled={addingToRateCard}
-              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              onClick={openModal}
+              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
             >
-              {addingToRateCard ? '處理中...' : '加入價目表'}
+              加入價目表
             </button>
             <button
-              onClick={() => setAddToRateCardPrompt(null)}
+              onClick={() => setPromptGroup(null)}
               className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
             >
               不用了
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Status notification */}
+      {statusMsg && (
+        <div className={`mt-3 p-3 rounded-lg flex items-center justify-between text-sm ${
+          statusMsg.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+          statusMsg.type === 'warning' ? 'bg-orange-50 border border-orange-200 text-orange-800' :
+          'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          <span>
+            {statusMsg.type === 'success' ? '✓ ' : statusMsg.type === 'warning' ? '⚠ ' : '✗ '}
+            {statusMsg.text}
+          </span>
+          <button onClick={() => setStatusMsg(null)} className="ml-3 opacity-60 hover:opacity-100 text-lg leading-none">&times;</button>
+        </div>
+      )}
+
+      {/* Add-to-rate-card Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={(e) => { if (e.target === e.currentTarget) { setShowModal(false); setPromptGroup(null); } }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900">加入價目表</h3>
+              <button onClick={() => { setShowModal(false); setPromptGroup(null); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="px-6 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">服務類型</label>
+                  <input
+                    type="text"
+                    value={modalForm.service_type || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, service_type: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="如：運輸"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">日/夜班</label>
+                  <select
+                    value={modalForm.day_night || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, day_night: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">請選擇</option>
+                    <option value="日">日</option>
+                    <option value="夜">夜</option>
+                    <option value="中直">中直</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">客戶名稱</label>
+                  <input
+                    type="text"
+                    value={promptGroup?.client_name || ''}
+                    disabled
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-gray-50 text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">合約編號</label>
+                  <input
+                    type="text"
+                    value={modalForm.client_contract_no || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, client_contract_no: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">噸數</label>
+                  <input
+                    type="text"
+                    value={modalForm.tonnage || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, tonnage: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="如：30噸"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">車種</label>
+                  <input
+                    type="text"
+                    value={modalForm.machine_type || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, machine_type: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="如：泥頭車"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">起點</label>
+                  <input
+                    type="text"
+                    value={modalForm.origin || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, origin: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">終點</label>
+                  <input
+                    type="text"
+                    value={modalForm.destination || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, destination: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">單價 <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalForm.rate || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, rate: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">生效日期</label>
+                  <input
+                    type="date"
+                    value={modalForm.effective_date || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, effective_date: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">備註</label>
+                <input
+                  type="text"
+                  value={modalForm.remarks || ''}
+                  onChange={(e) => setModalForm({ ...modalForm, remarks: e.target.value })}
+                  className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button
+                onClick={() => { setShowModal(false); setPromptGroup(null); }}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleModalConfirm}
+                disabled={modalSaving || !modalForm.rate}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {modalSaving ? '處理中...' : '確認加入'}
+              </button>
+            </div>
           </div>
         </div>
       )}
