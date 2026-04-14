@@ -129,6 +129,7 @@ export class DailyReportsController {
     const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('zh-HK') : '-';
 
     const projectName = report.daily_report_project_name || report.project?.project_name || '-';
+    const projectLocation = report.daily_report_project_location || '-';
     const projectNo = report.project?.project_no || '-';
     const clientName = report.daily_report_client_name || (report as any).client?.name || '-';
 
@@ -224,9 +225,10 @@ export class DailyReportsController {
       <h1>明達建築工程日報</h1>
       <table class="header-table">
         <tr><td class="label">工程名稱</td><td>${projectName}</td><td class="label">工程編號</td><td>${projectNo}</td></tr>
-        <tr><td class="label">客戶</td><td>${clientName}</td><td class="label">客戶合約</td><td>${report.daily_report_client_contract_no || '-'}</td></tr>
-        <tr><td class="label">日期</td><td>${fmtDate(report.daily_report_date)}</td><td class="label">更次</td><td>${shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</td></tr>
-        <tr><td class="label">建立人</td><td>${(report as any).creator?.displayName || '-'}</td><td class="label">狀態</td><td>${report.daily_report_status === 'submitted' ? '已提交' : '草稿'}</td></tr>
+        <tr><td class="label">工程地點</td><td>${projectLocation}</td><td class="label">客戶合約</td><td>${report.daily_report_client_contract_no || '-'}</td></tr>
+        <tr><td class="label">客戶</td><td>${clientName}</td><td class="label">日期</td><td>${fmtDate(report.daily_report_date)}</td></tr>
+        <tr><td class="label">更次</td><td>${shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</td><td class="label">建立人</td><td>${(report as any).creator?.displayName || '-'}</td></tr>
+        <tr><td class="label">狀態</td><td colspan="3">${report.daily_report_status === 'submitted' ? '已提交' : '草稿'}</td></tr>
       </table>
       <div class="section"><div class="section-title">工作摘要</div><p>${(report.daily_report_work_summary || '').replace(/\n/g, '<br>')}</p></div>
       ${report.items?.length ? `<div class="section"><div class="section-title">Labour and Plant</div>${itemsHtml}</div>` : ''}

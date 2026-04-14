@@ -8,6 +8,7 @@ export class CreateDailyReportDto {
   @IsOptional() @IsString() daily_report_client_name?: string;
   @IsOptional() @Type(() => Number) @IsNumber() daily_report_project_id?: number;
   @IsOptional() @IsString() daily_report_project_name?: string;
+  @IsOptional() @IsString() daily_report_project_location?: string;
   @IsOptional() @IsString() daily_report_contract_ref?: string;
   @IsOptional() @IsString() daily_report_site_address?: string;
   @IsOptional() @IsString() daily_report_weather?: string;
@@ -26,6 +27,7 @@ export class CreateDailyReportDto {
   @IsOptional() @IsString() client_name?: string;
   @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() project_name?: string;
+  @IsOptional() @IsString() project_location?: string;
   @IsOptional() @IsString() completed_work?: string;
   @IsOptional() @IsString() signature?: string;
   @IsOptional() quotation_id?: any;

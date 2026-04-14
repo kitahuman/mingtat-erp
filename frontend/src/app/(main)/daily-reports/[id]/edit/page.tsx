@@ -361,6 +361,24 @@ export default function EditDailyReportPage() {
             )}
           </div>
 
+          {/* Project Location */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">工程地點</label>
+            <input
+              type="text"
+              list="project-location-options"
+              value={projectLocation}
+              onChange={e => setProjectLocation(e.target.value)}
+              placeholder="輸入或選擇工程地點"
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <datalist id="project-location-options">
+              {projectLocationOptions.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+          </div>
+
           {/* Quotation */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

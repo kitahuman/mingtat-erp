@@ -178,6 +178,7 @@ export default function DailyReportsAdminPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">日期</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">工程</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">工程地點</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">客戶</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">客戶合約</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">更次</th>
@@ -200,6 +201,7 @@ export default function DailyReportsAdminPage() {
                         <div className="font-medium">{report.daily_report_project_name || report.project?.project_name || '-'}</div>
                         <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
                       </td>
+                      <td className="px-4 py-3 text-sm">{report.daily_report_project_location || '-'}</td>
                       <td className="px-4 py-3 text-sm">{report.daily_report_client_name || report.client?.name || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{report.daily_report_client_contract_no || '-'}</td>
                       <td className="px-4 py-3">{shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</td>
@@ -231,9 +233,14 @@ export default function DailyReportsAdminPage() {
                       <tr key={`${report.id}-detail`}>
                         <td colSpan={9} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
-                            {report.daily_report_client_contract_no && (
-                              <div className="text-sm"><strong>客戶合約：</strong>{report.daily_report_client_contract_no}</div>
-                            )}
+                            <div className="grid grid-cols-2 gap-4">
+                              {report.daily_report_client_contract_no && (
+                                <div className="text-sm"><strong>客戶合約：</strong>{report.daily_report_client_contract_no}</div>
+                              )}
+                              {report.daily_report_project_location && (
+                                <div className="text-sm"><strong>工程地點：</strong>{report.daily_report_project_location}</div>
+                              )}
+                            </div>
                             <div>
                               <h4 className="font-medium text-gray-700 mb-1">工作摘要</h4>
                               <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_work_summary}</p>

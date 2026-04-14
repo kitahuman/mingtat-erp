@@ -34,6 +34,7 @@ export class DailyReportsService {
       where.OR = [
         { daily_report_work_summary: { contains: query.search, mode: 'insensitive' } },
         { daily_report_project_name: { contains: query.search, mode: 'insensitive' } },
+        { daily_report_project_location: { contains: query.search, mode: 'insensitive' } },
         { daily_report_client_name: { contains: query.search, mode: 'insensitive' } },
         { daily_report_client_contract_no: { contains: query.search, mode: 'insensitive' } },
         { project: { project_name: { contains: query.search, mode: 'insensitive' } } },
@@ -93,6 +94,7 @@ export class DailyReportsService {
       daily_report_client_name: rd.client_name || null,
       daily_report_client_contract_no: rd.client_contract_no || null,
       daily_report_project_name: rd.project_name || null,
+      daily_report_project_location: rd.project_location || null,
       daily_report_completed_work: rd.completed_work || null,
       daily_report_signature: rd.signature || null,
     };
@@ -144,6 +146,7 @@ export class DailyReportsService {
       daily_report_client_name: rd.client_name || null,
       daily_report_client_contract_no: rd.client_contract_no || null,
       daily_report_project_name: rd.project_name || null,
+      daily_report_project_location: rd.project_location || null,
       daily_report_completed_work: rd.completed_work || null,
       daily_report_signature: rd.signature || null,
       daily_report_quotation_id: rd.quotation_id ? Number(rd.quotation_id) : null,

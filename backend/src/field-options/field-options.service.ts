@@ -10,6 +10,7 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
   day_night: ['日', '夜', '中直'],
   product_unit: ['噸', 'M', 'M2', 'M3', '車', '次', '轉', 'trip', 'JOB', '件', '包', '桶', '箱', '板'],
   payment_method: ['支票', '現金', '銀行轉帳', 'EPS', 'FPS 轉數快', '信用卡', '網上銀行', '其他'],
+  project_location: [],
   certificate_type: [
     '駕駛執照', '建造業安全訓練證明書（平安卡）', '建造業工人註冊證（工卡）',
     '核准工人證明書', '操作搬土機證明書', '操作挖掘機證明書',

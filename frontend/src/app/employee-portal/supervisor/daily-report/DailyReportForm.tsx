@@ -60,6 +60,8 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
   const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
   const [machineTypeOptions, setMachineTypeOptions] = useState<{ value: string; label: string }[]>([]);
   const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
+  const [projectLocationOptions, setProjectLocationOptions] = useState<{ value: string; label: string }[]>([]);
+  const [recentProjectNames, setRecentProjectNames] = useState<{ value: string; label: string }[]>([]);
 
   // Form state
   const [form, setForm] = useState({
@@ -72,6 +74,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
     client_name: '',
     client_contract_no: '',
     project_name: '',
+    project_location: '',
     completed_work: '',
     signature: '',
   });
@@ -128,6 +131,20 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
     portalSharedApi.getFieldOptions('client_contract_no').then(r => {
       setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
+    portalSharedApi.getFieldOptions('project_location').then(r => {
+      setProjectLocationOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+
+    // Load recent project names from cookies
+    try {
+      const saved = localStorage.getItem('recent_project_names');
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          setRecentProjectNames(list.map(v => ({ value: v, label: v })));
+        }
+      }
+    } catch {}
   }, []);
 
   // ── Load existing report or copy from ───────────────────────────
@@ -148,6 +165,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
         client_name: r.daily_report_client_name || '',
         client_contract_no: r.daily_report_client_contract_no || '',
         project_name: r.daily_report_project_name || '',
+        project_location: r.daily_report_project_location || '',
         completed_work: r.daily_report_completed_work || '',
         signature: r.daily_report_signature || '',
       });
@@ -244,6 +262,20 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
     } catch {}
   };
 
+  const handleCreateProjectLocation = async (val: string) => {
+    setProjectLocationOptions(prev => {
+      if (prev.find(o => o.label === val)) return prev;
+      return [...prev, { value: val, label: val }];
+    });
+    try {
+      await portalSharedApi.createFieldOption({ category: 'project_location', label: val });
+    } catch {}
+  };
+
+  const handleProjectNameChange = (val: string | null) => {
+    setForm(f => ({ ...f, project_name: val || '' }));
+  };
+
   // ── Employee & Vehicle multi-select options ──────────────────────
   const employeeOptions: MultiSelectOption[] = employees.map((e: any) => ({
     id: String(e.id),
@@ -338,13 +370,25 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
         signature,
         status,
         items: items.filter(i => i.content.trim() || i.worker_type || i.employee_ids.length > 0 || i.vehicle_ids.length > 0),
-        attachments: attachments.map(a => ({ file_name: a.file_name, file_url: a.file_url, file_type: a.file_type })),
+        attachments: attachments.map(a => ({ file_name: a.file_name, file_url: a.file_url, file_type: a.file_type }))
       };
+
       if (isEdit) {
-        await employeePortalApi.updateDailyReport(reportId, payload);
+        await employeePortalApi.updateDailyReport(reportId!, payload);
       } else {
         await employeePortalApi.createDailyReport(payload);
       }
+
+      // Save project name to recent list
+      if (form.project_name) {
+        try {
+          const saved = localStorage.getItem('recent_project_names');
+          let list: string[] = saved ? JSON.parse(saved) : [];
+          list = [form.project_name, ...list.filter(x => x !== form.project_name)].slice(0, 10);
+          localStorage.setItem('recent_project_names', JSON.stringify(list));
+        } catch {}
+      }
+
       router.push('/employee-portal/supervisor/daily-report');
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -454,13 +498,26 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
         {/* Project Name (manual) */}
         <div>
           <label className="text-xs font-medium text-gray-500 mb-1 block">工程名稱</label>
-          <input
-            type="text"
-            value={form.project_name}
-            onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))}
+          <Combobox
+            value={form.project_name || null}
+            onChange={handleProjectNameChange}
+            options={recentProjectNames}
+            placeholder="選擇最近使用或輸入工程名稱"
             disabled={isSubmitted}
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
-            placeholder="手動填寫工程名稱"
+            clearable={true}
+          />
+        </div>
+
+        {/* Project Location */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">工程地點</label>
+          <Combobox
+            value={form.project_location || null}
+            onChange={val => setForm(f => ({ ...f, project_location: val || '' }))}
+            options={projectLocationOptions}
+            placeholder="選擇或輸入工程地點"
+            disabled={isSubmitted}
+            onCreateOption={handleCreateProjectLocation}
           />
         </div>
 
