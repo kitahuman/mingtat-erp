@@ -109,6 +109,7 @@ export default function VehiclesPage() {
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'vehicle_inspection_notes', label: '驗車備註', sortable: false, editable: false, render: (v: string) => v ? <span className="text-sm text-gray-700 whitespace-pre-wrap">{v}</span> : '-', filterRender: (v: string) => v || '-', exportRender: (v: string) => v || '' },
     { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'vehicle_mud_tail_expiry', label: '泥尾到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'vehicle_insurance_agent', label: '保險代理', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
