@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 import { fmtDate } from '@/lib/dateUtils';
 
 interface DocumentUploadProps {
-  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile';
+  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile' | 'subcon-fleet-driver';
   entityId: number;
   docTypes: string[];
 }

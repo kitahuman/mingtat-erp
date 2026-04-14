@@ -23,6 +23,11 @@ export class PartnersController {
     return this.service.findOne(Number(id));
   }
 
+  @Get(':id/fleet')
+  findOneWithFleet(@Param('id') id: number) {
+    return this.service.findOneWithFleet(Number(id));
+  }
+
   @Post()
   create(@Body() dto: CreatePartnerDto, @Request() req: any) {
     return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);

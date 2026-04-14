@@ -56,6 +56,42 @@ export class PartnersService {
     return partner;
   }
 
+  /** 取得判頭/街車公司的詳情，包含旗下街車列表 */
+  async findOneWithFleet(id: number) {
+    const partner = await this.prisma.partner.findUnique({ where: { id } });
+    if (!partner) throw new NotFoundException('合作單位不存在');
+
+    // 取得旗下街車司機列表
+    const fleetDrivers = await this.prisma.subcontractorFleetDriver.findMany({
+      where: { subcontractor_id: id },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // 取得旗下街車的工作紀錄統計
+    const workLogStats = await this.prisma.workLog.groupBy({
+      by: ['work_log_fleet_driver_id'],
+      where: {
+        work_log_fleet_driver_id: { in: fleetDrivers.map(d => d.id) },
+        deleted_at: null,
+      },
+      _count: { id: true },
+    });
+
+    const statsMap = new Map(
+      workLogStats.map(s => [s.work_log_fleet_driver_id, s._count.id]),
+    );
+
+    const driversWithStats = fleetDrivers.map(d => ({
+      ...d,
+      work_log_count: statsMap.get(d.id) || 0,
+    }));
+
+    return {
+      ...partner,
+      fleet_drivers: driversWithStats,
+    };
+  }
+
   async simple() {
     return this.prisma.partner.findMany({
       where: { status: 'active' },

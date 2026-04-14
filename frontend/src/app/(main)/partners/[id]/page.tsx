@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { partnersApi } from '@/lib/api';
+import { partnersApi, subconFleetDriversApi } from '@/lib/api';
+import { fmtDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
@@ -43,6 +44,24 @@ export default function PartnerDetailPage() {
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
+  // Fleet drivers state for subcontractor partners
+  interface FleetDriverItem {
+    id: number;
+    name_zh: string;
+    name_en: string | null;
+    short_name: string | null;
+    plate_no: string | null;
+    machine_type: string | null;
+    phone: string | null;
+    status: string;
+    has_d_cert: boolean;
+    is_cert_returned: boolean;
+    work_log_count: number;
+    created_at: string;
+  }
+  const [fleetDrivers, setFleetDrivers] = useState<FleetDriverItem[]>([]);
+  const [fleetLoading, setFleetLoading] = useState(false);
+
   const loadData = () => {
     partnersApi.get(Number(params.id)).then(res => {
       const data = res.data;
@@ -58,6 +77,17 @@ export default function PartnerDetailPage() {
   };
 
   useEffect(() => { loadData(); }, [params.id]);
+
+  // Load fleet drivers when partner is a subcontractor
+  useEffect(() => {
+    if (partner?.partner_type === 'subcontractor') {
+      setFleetLoading(true);
+      partnersApi.getFleet(Number(params.id)).then(res => {
+        const data = res.data as { fleet_drivers: FleetDriverItem[] };
+        setFleetDrivers(data.fleet_drivers || []);
+      }).catch(() => {}).finally(() => setFleetLoading(false));
+    }
+  }, [partner?.partner_type, params.id]);
 
   const handleSave = async () => {
     try {
@@ -261,7 +291,55 @@ export default function PartnerDetailPage() {
         <DocumentUpload entityType="partner" entityId={partner?.id} docTypes={['報價單', '發票', '合約', '保險單', '其他']} />
       </div>
 
-      {/* Placeholder for future: related records */}
+      {/* Fleet Drivers - only for subcontractor type */}
+      {partner?.partner_type === 'subcontractor' && (
+        <div className="card mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">旗下街車車隊</h2>
+            <span className="text-sm text-gray-500">共 {fleetDrivers.length} 位司機</span>
+          </div>
+          {fleetLoading ? (
+            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
+          ) : fleetDrivers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">中文姓名</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">花名</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">車牌</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">機種</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">電話</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">工作紀錄</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {fleetDrivers.map(d => (
+                    <tr key={d.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.location.href = `/subcon-fleet-drivers/${d.id}`}>
+                      <td className="px-4 py-3 text-sm font-medium text-primary-600 hover:underline">{d.name_zh}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{d.short_name || '-'}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-900">{d.plate_no || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{d.machine_type || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{d.phone || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{d.work_log_count} 筆</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={d.status === 'active' ? 'badge-green' : d.status === 'inactive' ? 'badge-red' : 'badge-yellow'}>
+                          {d.status === 'active' ? '在職' : d.status === 'inactive' ? '離職' : '暫停'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm py-8 text-center">此判頭暫無街車司機記錄</p>
+          )}
+        </div>
+      )}
+
+      {/* Related Records */}
       <div className="card">
         <h2 className="text-lg font-bold text-gray-900 mb-4">相關紀錄</h2>
         <p className="text-gray-400 text-sm py-4 text-center">工作紀錄、報價單、發票等功能將在後續階段開發</p>

@@ -1,7 +1,25 @@
-import { Controller, Get, Post, Put, Delete, Body, Query, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Query,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { SubconFleetDriversService } from './subcon-fleet-drivers.service';
 import { AuthGuard } from '@nestjs/passport';
 import { CreateSubconFleetDriverDto, UpdateSubconFleetDriverDto } from './dto/create-subcon-fleet-driver.dto';
+import { SubconFleetDriverQueryDto } from './dto/subcon-fleet-driver-query.dto';
+import {
+  CreateNicknameMappingDto,
+  UpdateNicknameMappingDto,
+  NicknameMappingQueryDto,
+} from './dto/nickname-mapping.dto';
 
 @Controller('subcon-fleet-drivers')
 @UseGuards(AuthGuard('jwt'))
@@ -18,14 +36,46 @@ export class SubconFleetDriversController {
     return this.service.simpleDrivers();
   }
 
+  // ── Nickname Mappings ──────────────────────────────────────
+
+  @Get('nickname-mappings')
+  findAllNicknameMappings(@Query() query: NicknameMappingQueryDto) {
+    return this.service.findAllNicknameMappings(query);
+  }
+
+  @Post('nickname-mappings')
+  createNicknameMapping(@Body() dto: CreateNicknameMappingDto) {
+    return this.service.createNicknameMapping(dto);
+  }
+
+  @Put('nickname-mappings/:mappingId')
+  updateNicknameMapping(
+    @Param('mappingId', ParseIntPipe) mappingId: number,
+    @Body() dto: UpdateNicknameMappingDto,
+  ) {
+    return this.service.updateNicknameMapping(mappingId, dto);
+  }
+
+  @Delete('nickname-mappings/:mappingId')
+  removeNicknameMapping(@Param('mappingId', ParseIntPipe) mappingId: number) {
+    return this.service.removeNicknameMapping(mappingId);
+  }
+
+  // ── Fleet Driver CRUD ──────────────────────────────────────
+
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: SubconFleetDriverQueryDto) {
     return this.service.findAll(query);
   }
 
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
+  }
+
+  @Get(':id/detail')
+  findOneDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findOneDetail(id);
   }
 
   @Post()

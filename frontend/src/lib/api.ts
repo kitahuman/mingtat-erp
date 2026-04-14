@@ -137,6 +137,7 @@ export const partnersApi = {
   list: (params?: any) => api.get('/partners', { params }),
   simple: () => api.get('/partners/simple'),
   get: (id: number) => api.get(`/partners/${id}`),
+  getFleet: (id: number) => api.get(`/partners/${id}/fleet`),
   create: (data: any) => api.post('/partners', data),
   update: (id: number, data: any) => api.put(`/partners/${id}`, data),
   delete: (id: number) => api.delete(`/partners/${id}`),
@@ -400,11 +401,21 @@ export function getExpiryLabel(status: string): string {
 export const subconFleetDriversApi = {
   simple: () => api.get('/subcon-fleet-drivers/simple'),
   simpleDrivers: () => api.get('/subcon-fleet-drivers/simple-drivers'),
-  list: (params?: any) => api.get('/subcon-fleet-drivers', { params }),
+  list: (params?: Record<string, string | number | undefined>) => api.get('/subcon-fleet-drivers', { params }),
   get: (id: number) => api.get(`/subcon-fleet-drivers/${id}`),
-  create: (data: any) => api.post('/subcon-fleet-drivers', data),
-  update: (id: number, data: any) => api.put(`/subcon-fleet-drivers/${id}`, data),
+  getDetail: (id: number) => api.get(`/subcon-fleet-drivers/${id}/detail`),
+  create: (data: Record<string, unknown>) => api.post('/subcon-fleet-drivers', data),
+  update: (id: number, data: Record<string, unknown>) => api.put(`/subcon-fleet-drivers/${id}`, data),
   delete: (id: number) => api.delete(`/subcon-fleet-drivers/${id}`),
+  // Nickname Mappings
+  listNicknameMappings: (params?: Record<string, string | number | undefined>) =>
+    api.get('/subcon-fleet-drivers/nickname-mappings', { params }),
+  createNicknameMapping: (data: Record<string, unknown>) =>
+    api.post('/subcon-fleet-drivers/nickname-mappings', data),
+  updateNicknameMapping: (id: number, data: Record<string, unknown>) =>
+    api.put(`/subcon-fleet-drivers/nickname-mappings/${id}`, data),
+  deleteNicknameMapping: (id: number) =>
+    api.delete(`/subcon-fleet-drivers/nickname-mappings/${id}`),
 };
 
 // Expenses (支出)
