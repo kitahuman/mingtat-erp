@@ -35,11 +35,19 @@ export const MACHINE_TYPE_OPTIONS = [
 
 // 車輛類機種（從 Vehicles 表讀取車牌）
 export const VEHICLE_MACHINE_TYPES = new Set([
+  // field_options 預設類型
   '平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車',
+  // 資料庫中實際存在的車輛類型
+  '泥頭車', '夾車', '勾斗車', '吊車', '拖架', '領航車',
 ]);
 
 // 機械類機種（從 Machinery 表讀取機械編號）
-export const MACHINERY_MACHINE_TYPES = new Set(['挖掘機', '火轆']);
+export const MACHINERY_MACHINE_TYPES = new Set([
+  // field_options 預設類型
+  '挖掘機', '火轆',
+  // 資料庫中實實際存在的機械類型
+  '鉸接式自卸卡車', '履帶式裝載機',
+]);
 
 export const DAY_NIGHT_OPTIONS = ['日', '夜', '中直'];
 

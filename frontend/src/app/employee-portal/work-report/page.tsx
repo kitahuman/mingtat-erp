@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+import { VEHICLE_MACHINE_TYPES, MACHINERY_MACHINE_TYPES } from '@/app/(main)/work-logs/constants';
 
 // Field options categories
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
@@ -485,11 +486,9 @@ export default function WorkReportPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [optionsMap, setOptionsMap] = useState<Record<string, {value: string, label: string}[]>>({});
-  const [allEquipment, setAllEquipment] = useState<{ value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet' }[]>([]);
+  const [allEquipment, setAllEquipment] = useState<{ value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null }[]>([]);
 
-  // Machine type classification (mirrors admin work-logs constants)
-  const VEHICLE_MACHINE_TYPES = new Set(['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車']);
-  const MACHINERY_MACHINE_TYPES = new Set(['挖掘機', '火轆']);
+  // Machine type classification: maps machine_type to the equipment category to show
   const getEquipmentSource = (mt: string | null | undefined): 'vehicle' | 'machinery' | null => {
     if (!mt) return null;
     if (VEHICLE_MACHINE_TYPES.has(mt)) return 'vehicle';
