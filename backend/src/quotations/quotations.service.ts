@@ -308,7 +308,7 @@ export class QuotationsService {
         });
       } catch (e) { console.error('Audit log error:', e); }
     }
-    await this.prisma.quotation.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.prisma.quotation.update({ where: { id }, data: { deleted_at: new Date(), deleted_by: userId ?? null } });
     return { success: true };
   }
 

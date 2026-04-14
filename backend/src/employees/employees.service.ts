@@ -784,7 +784,7 @@ export class EmployeesService {
     }
     await this.prisma.employee.update({
       where: { id },
-      data: { deleted_at: new Date() },
+      data: { deleted_at: new Date(), deleted_by: userId ?? null },
     });
     return { message: '刪除成功' };
   }

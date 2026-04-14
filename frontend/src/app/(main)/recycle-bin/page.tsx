@@ -3,6 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
 
+interface DeletedByUser {
+  id: number;
+  displayName: string | null;
+  username: string;
+}
+
 interface DeletedRecord {
   id: number;
   table: string;
@@ -27,6 +33,7 @@ interface DeletedRecord {
   scheduled_date?: string;
   daily_report_date?: string;
   deleted_at: string;
+  deleted_by_user?: DeletedByUser | null;
 }
 
 const TABLE_LABELS: Record<string, string> = {
@@ -168,6 +175,11 @@ export default function RecycleBinPage() {
     );
   };
 
+  const getDeletedByName = (record: DeletedRecord): string => {
+    if (!record.deleted_by_user) return '—';
+    return record.deleted_by_user.displayName || record.deleted_by_user.username;
+  };
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -210,19 +222,20 @@ export default function RecycleBinPage() {
               <th className="px-6 py-3 text-left font-semibold text-gray-700">表名</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">記錄名稱</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">刪除時間</th>
+              <th className="px-6 py-3 text-left font-semibold text-gray-700">刪除者</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">操作</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                   加載中...
                 </td>
               </tr>
             ) : records.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                   垃圾桶是空的
                 </td>
               </tr>
@@ -237,6 +250,9 @@ export default function RecycleBinPage() {
                   </td>
                   <td className="px-6 py-3 text-gray-600 text-sm">
                     {new Date(record.deleted_at).toLocaleString('zh-HK')}
+                  </td>
+                  <td className="px-6 py-3 text-gray-600 text-sm">
+                    {getDeletedByName(record)}
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex gap-2">

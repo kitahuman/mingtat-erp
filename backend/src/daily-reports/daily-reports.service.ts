@@ -206,13 +206,13 @@ export class DailyReportsService {
     return this.findOne(reportId);
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.dailyReport.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('日報不存在');
     if (existing.daily_report_status === 'submitted') {
       throw new BadRequestException('已提交的日報不可刪除');
     }
-    await this.prisma.dailyReport.update({ where: { id }, data: { daily_report_deleted_at: new Date() } });
+    await this.prisma.dailyReport.update({ where: { id }, data: { daily_report_deleted_at: new Date(), daily_report_deleted_by: userId ?? null } });
     return { success: true };
   }
 

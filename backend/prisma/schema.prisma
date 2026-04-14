@@ -26,7 +26,7 @@ model User {
   lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz
   createdBy   Int?      @map("created_by")
 
-  work_logs   WorkLog[]
+  work_logs              WorkLog[]
   employee_id            Int?      @unique @map("employee_id")
   employee               Employee? @relation(fields: [employee_id], references: [id])
   user_can_company_clock Boolean   @default(false)
@@ -35,11 +35,24 @@ model User {
   can_acceptance_report  Boolean   @default(false)
   page_permissions       Json?     @map("page_permissions")
 
-  daily_reports_created      DailyReport[]      @relation("daily_report_creator")
-  acceptance_reports_created AcceptanceReport[]  @relation("acceptance_report_creator")
-  audit_logs              AuditLog[]
+  daily_reports_created      DailyReport[]              @relation("daily_report_creator")
+  acceptance_reports_created AcceptanceReport[]         @relation("acceptance_report_creator")
+  audit_logs                 AuditLog[]
   verification_confirmations VerificationConfirmation[]
-  anomaly_resolutions AttendanceAnomaly[] @relation("anomaly_resolver")
+  anomaly_resolutions        AttendanceAnomaly[]        @relation("anomaly_resolver")
+  deleted_companies          Company[]                  @relation("CompanyDeletedBy")
+  deleted_employees          Employee[]                 @relation("EmployeeDeletedBy")
+  deleted_vehicles           Vehicle[]                  @relation("VehicleDeletedBy")
+  deleted_machinery          Machinery[]                @relation("MachineryDeletedBy")
+  deleted_partners           Partner[]                  @relation("PartnerDeletedBy")
+  deleted_contracts          Contract[]                 @relation("ContractDeletedBy")
+  deleted_projects           Project[]                  @relation("ProjectDeletedBy")
+  deleted_quotations         Quotation[]                @relation("QuotationDeletedBy")
+  deleted_rate_cards         RateCard[]                 @relation("RateCardDeletedBy")
+  deleted_expenses           Expense[]                  @relation("ExpenseDeletedBy")
+  deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
+  deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
+  deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
 
   @@map("users")
 }
@@ -49,19 +62,21 @@ model User {
 // ══════════════════════════════════════════════════════════════
 
 model Company {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   name            String
   name_en         String?
-  company_type    String   @default("internal")
-  internal_prefix String?  @unique
+  company_type    String    @default("internal")
+  internal_prefix String?   @unique
   contact_person  String?
   phone           String?
   address         String?
-  description     String?  @db.Text
-  status          String   @default("active")
-  created_at      DateTime @default(now())
-  updated_at      DateTime @default(now()) @updatedAt
+  description     String?   @db.Text
+  status          String    @default("active")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
   deleted_at      DateTime? // 軟刪除時間戳
+  deleted_by      Int?
+  deletedBy       User?     @relation("CompanyDeletedBy", fields: [deleted_by], references: [id])
 
   employees                Employee[]
   vehicles                 Vehicle[]
@@ -130,110 +145,112 @@ model CompanyProfile {
 // ══════════════════════════════════════════════════════════════
 
 model Employee {
-  id                                  Int       @id @default(autoincrement())
+  id                                  Int                     @id @default(autoincrement())
   emp_code                            String?
   name_zh                             String
   name_en                             String?
   nickname                            String?
-  role                                String    @default("worker")
+  role                                String                  @default("worker")
   phone                               String?
   emergency_contact                   String?
-  join_date                           DateTime? @db.Date
-  termination_date                    DateTime? @db.Date
-  termination_reason                  String?   @db.Text
+  join_date                           DateTime?               @db.Date
+  termination_date                    DateTime?               @db.Date
+  termination_reason                  String?                 @db.Text
   bank_name                           String?
   bank_account                        String?
   id_number                           String?
-  date_of_birth                       DateTime? @db.Date
+  date_of_birth                       DateTime?               @db.Date
   gender                              String?
-  address                             String?   @db.Text
+  address                             String?                 @db.Text
   frequent_vehicle                    String?
   mpf_plan                            String?
   mpf_account_number                  String?
-  mpf_employment_date                 DateTime? @db.Date
-  mpf_old_employment_date             DateTime? @db.Date
-  salary_notes                        String?   @db.Text
+  mpf_employment_date                 DateTime?               @db.Date
+  mpf_old_employment_date             DateTime?               @db.Date
+  salary_notes                        String?                 @db.Text
   driving_license_no                  String?
-  driving_license_expiry              DateTime? @db.Date
+  driving_license_expiry              DateTime?               @db.Date
   driving_license_class               String?
   approved_worker_cert_no             String?
-  approved_worker_cert_expiry         DateTime? @db.Date
+  approved_worker_cert_expiry         DateTime?               @db.Date
   green_card_no                       String?
-  green_card_expiry                   DateTime? @db.Date
+  green_card_expiry                   DateTime?               @db.Date
   construction_card_no                String?
-  construction_card_expiry            DateTime? @db.Date
+  construction_card_expiry            DateTime?               @db.Date
   earth_mover_cert_no                 String?
-  earth_mover_cert_expiry             DateTime? @db.Date
+  earth_mover_cert_expiry             DateTime?               @db.Date
   excavator_cert_no                   String?
-  excavator_cert_expiry               DateTime? @db.Date
+  excavator_cert_expiry               DateTime?               @db.Date
   crane_operator_cert_no              String?
-  crane_operator_cert_expiry          DateTime? @db.Date
+  crane_operator_cert_expiry          DateTime?               @db.Date
   lorry_crane_cert_no                 String?
-  lorry_crane_cert_expiry             DateTime? @db.Date
+  lorry_crane_cert_expiry             DateTime?               @db.Date
   crawler_crane_cert_no               String?
-  crawler_crane_cert_expiry           DateTime? @db.Date
+  crawler_crane_cert_expiry           DateTime?               @db.Date
   hydraulic_crane_cert_no             String?
-  hydraulic_crane_cert_expiry         DateTime? @db.Date
+  hydraulic_crane_cert_expiry         DateTime?               @db.Date
   airport_pass_no                     String?
-  airport_pass_expiry                 DateTime? @db.Date
+  airport_pass_expiry                 DateTime?               @db.Date
   gammon_pass_no                      String?
-  gammon_pass_expiry                  DateTime? @db.Date
+  gammon_pass_expiry                  DateTime?               @db.Date
   leighton_pass_no                    String?
-  leighton_pass_expiry                DateTime? @db.Date
+  leighton_pass_expiry                DateTime?               @db.Date
   confined_space_cert_no              String?
-  confined_space_cert_expiry          DateTime? @db.Date
+  confined_space_cert_expiry          DateTime?               @db.Date
   compactor_cert_no                   String?
-  compactor_cert_expiry               DateTime? @db.Date
+  compactor_cert_expiry               DateTime?               @db.Date
   slinging_silver_card_no             String?
-  slinging_silver_card_expiry         DateTime? @db.Date
+  slinging_silver_card_expiry         DateTime?               @db.Date
   craft_test_cert_no                  String?
-  craft_test_cert_expiry              DateTime? @db.Date
+  craft_test_cert_expiry              DateTime?               @db.Date
   compaction_load_cert_no             String?
-  compaction_load_cert_expiry         DateTime? @db.Date
+  compaction_load_cert_expiry         DateTime?               @db.Date
   aerial_platform_cert_no             String?
-  aerial_platform_cert_expiry         DateTime? @db.Date
+  aerial_platform_cert_expiry         DateTime?               @db.Date
   site_rigging_a12_cert_no            String?
-  site_rigging_a12_cert_expiry        DateTime? @db.Date
+  site_rigging_a12_cert_expiry        DateTime?               @db.Date
   slinging_signaler_a12s_cert_no      String?
-  slinging_signaler_a12s_cert_expiry  DateTime? @db.Date
+  slinging_signaler_a12s_cert_expiry  DateTime?               @db.Date
   zero_injury_cert_no                 String?
-  zero_injury_cert_expiry             DateTime? @db.Date
+  zero_injury_cert_expiry             DateTime?               @db.Date
   designated_trade_safety_cert_no     String?
-  designated_trade_safety_cert_expiry DateTime? @db.Date
-  small_loader_cert_expiry            DateTime? @db.Date
-  safety_supervisor_cert_expiry       DateTime? @db.Date
-  safe_work_procedure_cert_expiry     DateTime? @db.Date
-  grinding_wheel_cert_expiry          DateTime? @db.Date
-  ship_cargo_cert_expiry              DateTime? @db.Date
-  arc_welding_cert_expiry             DateTime? @db.Date
-  gas_welding_cert_expiry             DateTime? @db.Date
-  clp_safety_cert_expiry              DateTime? @db.Date
-  other_certificates                  Json?     @db.JsonB
-  cert_photos                         Json?     @db.JsonB // { "driving_license": "url", "green_card": "url", ... }
-  employee_photo_base64               String?   @db.Text
-  employee_mpf_applied                Boolean   @default(false)
-  employee_mpf_applied_date            DateTime? @db.Date
-  employee_is_temporary               Boolean   @default(false)
-  role_title                          String?   @db.VarChar(100)
+  designated_trade_safety_cert_expiry DateTime?               @db.Date
+  small_loader_cert_expiry            DateTime?               @db.Date
+  safety_supervisor_cert_expiry       DateTime?               @db.Date
+  safe_work_procedure_cert_expiry     DateTime?               @db.Date
+  grinding_wheel_cert_expiry          DateTime?               @db.Date
+  ship_cargo_cert_expiry              DateTime?               @db.Date
+  arc_welding_cert_expiry             DateTime?               @db.Date
+  gas_welding_cert_expiry             DateTime?               @db.Date
+  clp_safety_cert_expiry              DateTime?               @db.Date
+  other_certificates                  Json?                   @db.JsonB
+  cert_photos                         Json?                   @db.JsonB // { "driving_license": "url", "green_card": "url", ... }
+  employee_photo_base64               String?                 @db.Text
+  employee_mpf_applied                Boolean                 @default(false)
+  employee_mpf_applied_date           DateTime?               @db.Date
+  employee_is_temporary               Boolean                 @default(false)
+  role_title                          String?                 @db.VarChar(100)
   company_id                          Int?
-  status                              String    @default("active")
-  notes                               String?   @db.Text
-  created_at                          DateTime  @default(now())
-  updated_at                          DateTime  @default(now()) @updatedAt
+  status                              String                  @default("active")
+  notes                               String?                 @db.Text
+  created_at                          DateTime                @default(now())
+  updated_at                          DateTime                @default(now()) @updatedAt
   deleted_at                          DateTime? // 軯刪除時間時戳
-  company         Company?                @relation(fields: [company_id], references: [id])
-  salary_settings EmployeeSalarySetting[]
-  transfers       EmployeeTransfer[]
-  work_logs       WorkLog[]
-  payrolls        Payroll[]
-  expenses              Expense[]
-  attendances           EmployeeAttendance[]
-  mid_shift_approvals   EmployeeAttendance[] @relation("mid_shift_approver")
-  leaves                EmployeeLeave[]
-  user                  User?
-  acceptance_reports_inspected AcceptanceReport[] @relation("acceptance_report_inspector")
-  nicknames             EmployeeNickname[]
-  attendance_anomalies   AttendanceAnomaly[]
+  deleted_by                          Int?
+  deletedBy                           User?                   @relation("EmployeeDeletedBy", fields: [deleted_by], references: [id])
+  company                             Company?                @relation(fields: [company_id], references: [id])
+  salary_settings                     EmployeeSalarySetting[]
+  transfers                           EmployeeTransfer[]
+  work_logs                           WorkLog[]
+  payrolls                            Payroll[]
+  expenses                            Expense[]
+  attendances                         EmployeeAttendance[]
+  mid_shift_approvals                 EmployeeAttendance[]    @relation("mid_shift_approver")
+  leaves                              EmployeeLeave[]
+  user                                User?
+  acceptance_reports_inspected        AcceptanceReport[]      @relation("acceptance_report_inspector")
+  nicknames                           EmployeeNickname[]
+  attendance_anomalies                AttendanceAnomaly[]
 
   // ── Performance indexes ──
   @@index([company_id])
@@ -247,12 +264,13 @@ model Employee {
 }
 
 model EmployeeNickname {
-  id                        Int      @id @default(autoincrement())
-  emp_nickname_employee_id  Int
-  emp_nickname_value        String   @db.VarChar(50)
-  emp_nickname_source       String?  @default("manual") @db.VarChar(30) // manual | whatsapp_auto | whatsapp_manual
-  emp_nickname_created_at   DateTime @default(now())
-  employee Employee @relation(fields: [emp_nickname_employee_id], references: [id], onDelete: Cascade)
+  id                       Int      @id @default(autoincrement())
+  emp_nickname_employee_id Int
+  emp_nickname_value       String   @db.VarChar(50)
+  emp_nickname_source      String?  @default("manual") @db.VarChar(30) // manual | whatsapp_auto | whatsapp_manual
+  emp_nickname_created_at  DateTime @default(now())
+  employee                 Employee @relation(fields: [emp_nickname_employee_id], references: [id], onDelete: Cascade)
+
   @@unique([emp_nickname_employee_id, emp_nickname_value])
   @@index([emp_nickname_employee_id])
   @@index([emp_nickname_value])
@@ -316,34 +334,36 @@ model EmployeeTransfer {
 // ══════════════════════════════════════════════════════════════
 
 model Vehicle {
-  id                Int       @id @default(autoincrement())
-  plate_number      String
-  machine_type      String?
-  tonnage           Decimal?  @db.Decimal(5, 1)
-  owner_company_id  Int
-  insurance_expiry  DateTime? @db.Date
-  permit_fee_expiry DateTime? @db.Date
-  inspection_date   DateTime? @db.Date
-  license_expiry    DateTime? @db.Date
-  brand             String?
-  model             String?
-  status            String    @default("active")
-  notes             String?   @db.Text
-  vehicle_first_reg_date    DateTime?  @db.Date
-  vehicle_chassis_no        String?
-  vehicle_electronic_comm   String?
+  id                         Int       @id @default(autoincrement())
+  plate_number               String
+  machine_type               String?
+  tonnage                    Decimal?  @db.Decimal(5, 1)
+  owner_company_id           Int
+  insurance_expiry           DateTime? @db.Date
+  permit_fee_expiry          DateTime? @db.Date
+  inspection_date            DateTime? @db.Date
+  license_expiry             DateTime? @db.Date
+  brand                      String?
+  model                      String?
+  status                     String    @default("active")
+  notes                      String?   @db.Text
+  vehicle_first_reg_date     DateTime? @db.Date
+  vehicle_chassis_no         String?
+  vehicle_electronic_comm    String?
   vehicle_autotoll_collected String?
-  vehicle_autotoll          String?
-  vehicle_inspection_notes  String?    @db.Text
-  vehicle_insurance_agent   String?
-  vehicle_insurance_company String?
-  vehicle_has_gps           Boolean?
-  vehicle_mud_tail_expiry   DateTime?  @db.Date
-  vehicle_original_plate    String?
-  vehicle_owner_name        String?
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @default(now()) @updatedAt
-  deleted_at        DateTime? // 軯刪除時間時戳
+  vehicle_autotoll           String?
+  vehicle_inspection_notes   String?   @db.Text
+  vehicle_insurance_agent    String?
+  vehicle_insurance_company  String?
+  vehicle_has_gps            Boolean?
+  vehicle_mud_tail_expiry    DateTime? @db.Date
+  vehicle_original_plate     String?
+  vehicle_owner_name         String?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @default(now()) @updatedAt
+  deleted_at                 DateTime? // 軯刪除時間時戳
+  deleted_by                 Int?
+  deletedBy                  User?     @relation("VehicleDeletedBy", fields: [deleted_by], references: [id])
 
   owner_company Company               @relation(fields: [owner_company_id], references: [id])
   plate_history VehiclePlateHistory[]
@@ -402,6 +422,8 @@ model Machinery {
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
   deleted_at             DateTime? // 軯刪除時間時戳
+  deleted_by             Int?
+  deletedBy              User?     @relation("MachineryDeletedBy", fields: [deleted_by], references: [id])
 
   owner_company Company             @relation(fields: [owner_company_id], references: [id])
   transfers     MachineryTransfer[]
@@ -431,7 +453,7 @@ model MachineryTransfer {
 // ══════════════════════════════════════════════════════════════
 
 model Partner {
-  id                  Int      @id @default(autoincrement())
+  id                  Int       @id @default(autoincrement())
   code                String?
   english_code        String?
   name                String
@@ -443,36 +465,38 @@ model Partner {
   mobile              String?
   email               String?
   fax                 String?
-  address             String?  @db.Text
-  description         String?  @db.Text
-  notes               String?  @db.Text
+  address             String?   @db.Text
+  description         String?   @db.Text
+  notes               String?   @db.Text
   bank_name           String?
   bank_account        String?
   invoice_title       String?
-  invoice_description String?  @db.Text
-  quotation_remarks   String?  @db.Text
-  invoice_remarks     String?  @db.Text
-  is_subsidiary       Boolean  @default(false)
+  invoice_description String?   @db.Text
+  quotation_remarks   String?   @db.Text
+  invoice_remarks     String?   @db.Text
+  is_subsidiary       Boolean   @default(false)
   subsidiaries        String?
-  status              String   @default("active")
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now()) @updatedAt
+  status              String    @default("active")
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
   deleted_at          DateTime? // 軯刪除時間時戳
+  deleted_by          Int?
+  deletedBy           User?     @relation("PartnerDeletedBy", fields: [deleted_by], references: [id])
 
-  projects_as_client   Project[]                  @relation("project_client")
-  quotations_as_client Quotation[]                @relation("quotation_client")
-  rate_cards_as_client RateCard[]                 @relation("rate_card_client")
-  fleet_rate_cards     FleetRateCard[]
-  subcon_as_subcon     SubconRateCard[]           @relation("subcon_partner")
-  subcon_as_client     SubconRateCard[]           @relation("subcon_client")
-  work_logs            WorkLog[]
-  subcon_fleet_drivers SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
-  expenses_as_supplier Expense[]                  @relation("expense_supplier")
-  expenses_as_client   Expense[]                  @relation("expense_client")
-  contracts_as_client  Contract[]                 @relation("contract_client")
-  invoices_as_client   Invoice[]                  @relation("invoice_client")
-  acceptance_reports_client AcceptanceReport[]     @relation("acceptance_report_client")
-  daily_reports_client      DailyReport[]          @relation("daily_report_client")
+  projects_as_client        Project[]                  @relation("project_client")
+  quotations_as_client      Quotation[]                @relation("quotation_client")
+  rate_cards_as_client      RateCard[]                 @relation("rate_card_client")
+  fleet_rate_cards          FleetRateCard[]
+  subcon_as_subcon          SubconRateCard[]           @relation("subcon_partner")
+  subcon_as_client          SubconRateCard[]           @relation("subcon_client")
+  work_logs                 WorkLog[]
+  subcon_fleet_drivers      SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
+  expenses_as_supplier      Expense[]                  @relation("expense_supplier")
+  expenses_as_client        Expense[]                  @relation("expense_client")
+  contracts_as_client       Contract[]                 @relation("contract_client")
+  invoices_as_client        Invoice[]                  @relation("invoice_client")
+  acceptance_reports_client AcceptanceReport[]         @relation("acceptance_report_client")
+  daily_reports_client      DailyReport[]              @relation("daily_report_client")
 
   @@map("partners")
 }
@@ -495,6 +519,8 @@ model Contract {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
   deleted_at      DateTime? // 軯刪除時間時戳
+  deleted_by      Int?
+  deletedBy       User?     @relation("ContractDeletedBy", fields: [deleted_by], references: [id])
 
   // Phase 3: Retention settings
   retention_rate     Decimal @default(0.10) @db.Decimal(5, 4)
@@ -645,6 +671,8 @@ model Project {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @default(now()) @updatedAt
   deleted_at   DateTime? // 軯刪除時間時戳
+  deleted_by   Int?
+  deletedBy    User?     @relation("ProjectDeletedBy", fields: [deleted_by], references: [id])
 
   contract_id        Int?
   client_contract_no String?
@@ -687,25 +715,27 @@ model ProjectSequence {
 // ══════════════════════════════════════════════════════════════
 
 model Quotation {
-  id              Int      @id @default(autoincrement())
-  quotation_no    String   @unique
-  quotation_type  String   @default("project")
+  id              Int       @id @default(autoincrement())
+  quotation_no    String    @unique
+  quotation_type  String    @default("project")
   company_id      Int
   client_id       Int?
-  quotation_date  DateTime @db.Date
+  quotation_date  DateTime  @db.Date
   contract_name   String?
   project_name    String?
   project_id      Int?
-  total_amount    Decimal  @default(0) @db.Decimal(12, 2)
-  status          String   @default("draft")
-  validity_period String?  @db.Text
-  payment_terms   String?  @db.Text
-  exclusions      String?  @db.Text
-  external_remark String?  @db.Text
-  internal_remark String?  @db.Text
-  created_at      DateTime @default(now())
-  updated_at      DateTime @default(now()) @updatedAt
+  total_amount    Decimal   @default(0) @db.Decimal(12, 2)
+  status          String    @default("draft")
+  validity_period String?   @db.Text
+  payment_terms   String?   @db.Text
+  exclusions      String?   @db.Text
+  external_remark String?   @db.Text
+  internal_remark String?   @db.Text
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
   deleted_at      DateTime? // 軯刪除時間時戳
+  deleted_by      Int?
+  deletedBy       User?     @relation("QuotationDeletedBy", fields: [deleted_by], references: [id])
 
   company           Company          @relation(fields: [company_id], references: [id])
   client            Partner?         @relation("quotation_client", fields: [client_id], references: [id])
@@ -717,7 +747,7 @@ model Quotation {
   work_logs         WorkLog[]
   expenses          Expense[]
   invoices          Invoice[]
-  daily_reports     DailyReport[] @relation("daily_report_quotation")
+  daily_reports     DailyReport[]    @relation("daily_report_quotation")
 
   // ── Performance indexes ──
   @@index([company_id])
@@ -795,6 +825,8 @@ model RateCard {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
   deleted_at          DateTime? // 軯刪除時間時戳
+  deleted_by          Int?
+  deletedBy           User?     @relation("RateCardDeletedBy", fields: [deleted_by], references: [id])
 
   company          Company          @relation(fields: [company_id], references: [id])
   client           Partner          @relation("rate_card_client", fields: [client_id], references: [id])
@@ -1009,16 +1041,16 @@ model Document {
 // ══════════════════════════════════════════════════════════════
 
 model FieldOption {
-  id         Int      @id @default(autoincrement())
-  category   String
-  label      String
-  sort_order Int      @default(0)
-  is_active  Boolean  @default(true)
-  aliases    Json     @default("[]") // Array of alias names (e.g. merged location names)
+  id                     Int      @id @default(autoincrement())
+  category               String
+  label                  String
+  sort_order             Int      @default(0)
+  is_active              Boolean  @default(true)
+  aliases                Json     @default("[]") // Array of alias names (e.g. merged location names)
   field_option_latitude  Float?
   field_option_longitude Float?
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now()) @updatedAt
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
 
   @@map("field_options")
 }
@@ -1068,7 +1100,7 @@ model WorkLog {
   unverified_client_name String? // 員工自行輸入的未確認客戶名
   source                 String    @default("manual") // manual | whatsapp | report
   is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
-  ai_parsed_data         Json?     // AI 原始解析結果（WhatsApp 打卡）
+  ai_parsed_data         Json? // AI 原始解析結果（WhatsApp 打卡）
   work_log_product_name  String?   @db.Text // 商品名稱
   work_log_product_unit  String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
   work_log_photo_urls    Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
@@ -1077,23 +1109,26 @@ model WorkLog {
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
   deleted_at             DateTime? // 軯刪除時間時戳
+  deleted_by             Int?
+  deletedBy              User?     @relation("WorkLogDeletedBy", fields: [deleted_by], references: [id])
 
-  project_id Int?
+  project_id               Int?
   work_log_fleet_driver_id Int?
 
-  publisher         User?            @relation(fields: [publisher_id], references: [id])
-  company_profile   CompanyProfile?  @relation(fields: [company_profile_id], references: [id])
-  company           Company?         @relation(fields: [company_id], references: [id])
-  client            Partner?         @relation(fields: [client_id], references: [id])
-  quotation         Quotation?       @relation(fields: [quotation_id], references: [id])
-  contract          Contract?        @relation(fields: [contract_id], references: [id])
-  employee          Employee?        @relation(fields: [employee_id], references: [id])
-  project           Project?         @relation(fields: [project_id], references: [id])
-  fleet_driver      SubcontractorFleetDriver? @relation(fields: [work_log_fleet_driver_id], references: [id])
-   payroll_work_logs PayrollWorkLog[]
-  whatsapp_messages WhatsAppMessage[]
+  publisher                  User?                      @relation(fields: [publisher_id], references: [id])
+  company_profile            CompanyProfile?            @relation(fields: [company_profile_id], references: [id])
+  company                    Company?                   @relation(fields: [company_id], references: [id])
+  client                     Partner?                   @relation(fields: [client_id], references: [id])
+  quotation                  Quotation?                 @relation(fields: [quotation_id], references: [id])
+  contract                   Contract?                  @relation(fields: [contract_id], references: [id])
+  employee                   Employee?                  @relation(fields: [employee_id], references: [id])
+  project                    Project?                   @relation(fields: [project_id], references: [id])
+  fleet_driver               SubcontractorFleetDriver?  @relation(fields: [work_log_fleet_driver_id], references: [id])
+  payroll_work_logs          PayrollWorkLog[]
+  whatsapp_messages          WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
-  attendance_anomalies AttendanceAnomaly[]
+  attendance_anomalies       AttendanceAnomaly[]
+
   // ── Performance indexes ──
   @@index([scheduled_date])
   @@index([employee_id])
@@ -1122,6 +1157,7 @@ model WhatsAppMessage {
   received_at DateTime @default(now())
   work_log_id Int?
   work_log    WorkLog? @relation(fields: [work_log_id], references: [id])
+
   @@map("whatsapp_messages")
 }
 
@@ -1130,32 +1166,32 @@ model WhatsAppMessage {
 // ══════════════════════════════════════════════════════════════
 
 model Payroll {
-  id                 Int       @id @default(autoincrement())
-  period             String
-  date_from          DateTime? @db.Date
-  date_to            DateTime? @db.Date
-  employee_id        Int
-  company_profile_id Int?
-  company_id         Int?
-  salary_type        String    @default("daily")
-  base_rate          Decimal   @default(0) @db.Decimal(12, 2)
-  work_days          Decimal   @default(0) @db.Decimal(10, 2)
-  base_amount        Decimal   @default(0) @db.Decimal(12, 2)
-  allowance_total    Decimal   @default(0) @db.Decimal(12, 2)
-  ot_total           Decimal   @default(0) @db.Decimal(12, 2)
-  commission_total   Decimal   @default(0) @db.Decimal(12, 2)
-  mpf_deduction      Decimal   @default(0) @db.Decimal(12, 2)
-  mpf_plan           String?
-  mpf_employer       Decimal   @default(0) @db.Decimal(12, 2)
-  mpf_relevant_income Decimal? @db.Decimal(12, 2)
-  adjustment_total   Decimal   @default(0) @db.Decimal(12, 2)
-  net_amount         Decimal   @default(0) @db.Decimal(12, 2)
-  status             String    @default("draft")
-  payment_date       DateTime? @db.Date
-  cheque_number      String?
-  notes              String?   @db.Text
-  created_at         DateTime  @default(now())
-  updated_at         DateTime  @default(now()) @updatedAt
+  id                  Int       @id @default(autoincrement())
+  period              String
+  date_from           DateTime? @db.Date
+  date_to             DateTime? @db.Date
+  employee_id         Int
+  company_profile_id  Int?
+  company_id          Int?
+  salary_type         String    @default("daily")
+  base_rate           Decimal   @default(0) @db.Decimal(12, 2)
+  work_days           Decimal   @default(0) @db.Decimal(10, 2)
+  base_amount         Decimal   @default(0) @db.Decimal(12, 2)
+  allowance_total     Decimal   @default(0) @db.Decimal(12, 2)
+  ot_total            Decimal   @default(0) @db.Decimal(12, 2)
+  commission_total    Decimal   @default(0) @db.Decimal(12, 2)
+  mpf_deduction       Decimal   @default(0) @db.Decimal(12, 2)
+  mpf_plan            String?
+  mpf_employer        Decimal   @default(0) @db.Decimal(12, 2)
+  mpf_relevant_income Decimal?  @db.Decimal(12, 2)
+  adjustment_total    Decimal   @default(0) @db.Decimal(12, 2)
+  net_amount          Decimal   @default(0) @db.Decimal(12, 2)
+  status              String    @default("draft")
+  payment_date        DateTime? @db.Date
+  cheque_number       String?
+  notes               String?   @db.Text
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
 
   employee          Employee                @relation(fields: [employee_id], references: [id])
   company_profile   CompanyProfile?         @relation(fields: [company_profile_id], references: [id])
@@ -1192,50 +1228,50 @@ model PayrollItem {
 }
 
 model PayrollWorkLog {
-  id                     Int       @id @default(autoincrement())
-  payroll_id             Int
-  work_log_id            Int?
-  service_type           String?
-  scheduled_date         DateTime? @db.Date
-  day_night              String?
-  start_location         String?   @db.Text
-  end_location           String?   @db.Text
-  machine_type           String?
-  tonnage                String?
-  equipment_number       String?
-  quantity               Decimal?  @db.Decimal(10, 2)
-  unit                   String?
-  ot_quantity            Decimal?  @db.Decimal(10, 2)
-  ot_unit                String?
-  is_mid_shift           Boolean   @default(false)
-  remarks                String?   @db.Text
-  matched_rate_card_id   Int?
-  matched_rate           Decimal?  @db.Decimal(12, 2)
-  matched_unit           String?
-  matched_ot_rate        Decimal?  @db.Decimal(12, 2)
-  matched_mid_shift_rate Decimal?  @db.Decimal(12, 2)
-  price_match_status     String?
-  price_match_note       String?   @db.Text
-  line_amount            Decimal   @default(0) @db.Decimal(12, 2)
-  ot_line_amount         Decimal   @default(0) @db.Decimal(12, 2)
-  mid_shift_line_amount  Decimal   @default(0) @db.Decimal(12, 2)
-  group_key              String?   @db.Text
-  client_id              Int?
-  client_name            String?
-  company_profile_id     Int?
-  company_profile_name   String?
-  company_id             Int?
-  company_name           String?
-  quotation_id           Int?
-  contract_no            String?
-  client_contract_no     String?
-  payroll_work_log_product_name  String?  @db.Text
-  payroll_work_log_product_unit  String?  @db.Text
-  is_manual_rate         Boolean   @default(false)
-  is_modified            Boolean   @default(false)
-  is_excluded            Boolean   @default(false)
-  created_at             DateTime  @default(now())
-  updated_at             DateTime  @default(now()) @updatedAt
+  id                            Int       @id @default(autoincrement())
+  payroll_id                    Int
+  work_log_id                   Int?
+  service_type                  String?
+  scheduled_date                DateTime? @db.Date
+  day_night                     String?
+  start_location                String?   @db.Text
+  end_location                  String?   @db.Text
+  machine_type                  String?
+  tonnage                       String?
+  equipment_number              String?
+  quantity                      Decimal?  @db.Decimal(10, 2)
+  unit                          String?
+  ot_quantity                   Decimal?  @db.Decimal(10, 2)
+  ot_unit                       String?
+  is_mid_shift                  Boolean   @default(false)
+  remarks                       String?   @db.Text
+  matched_rate_card_id          Int?
+  matched_rate                  Decimal?  @db.Decimal(12, 2)
+  matched_unit                  String?
+  matched_ot_rate               Decimal?  @db.Decimal(12, 2)
+  matched_mid_shift_rate        Decimal?  @db.Decimal(12, 2)
+  price_match_status            String?
+  price_match_note              String?   @db.Text
+  line_amount                   Decimal   @default(0) @db.Decimal(12, 2)
+  ot_line_amount                Decimal   @default(0) @db.Decimal(12, 2)
+  mid_shift_line_amount         Decimal   @default(0) @db.Decimal(12, 2)
+  group_key                     String?   @db.Text
+  client_id                     Int?
+  client_name                   String?
+  company_profile_id            Int?
+  company_profile_name          String?
+  company_id                    Int?
+  company_name                  String?
+  quotation_id                  Int?
+  contract_no                   String?
+  client_contract_no            String?
+  payroll_work_log_product_name String?   @db.Text
+  payroll_work_log_product_unit String?   @db.Text
+  is_manual_rate                Boolean   @default(false)
+  is_modified                   Boolean   @default(false)
+  is_excluded                   Boolean   @default(false)
+  created_at                    DateTime  @default(now())
+  updated_at                    DateTime  @default(now()) @updatedAt
 
   payroll  Payroll  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
   work_log WorkLog? @relation(fields: [work_log_id], references: [id], onDelete: SetNull)
@@ -1298,7 +1334,7 @@ model SubcontractorFleetDriver {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @default(now()) @updatedAt
 
-  subcontractor Partner @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
+  subcontractor Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
   work_logs     WorkLog[]
 
   @@map("subcontractor_fleet_drivers")
@@ -1309,32 +1345,32 @@ model SubcontractorFleetDriver {
 // ══════════════════════════════════════════════════════════════
 
 model EmployeeAttendance {
-  id                              Int      @id @default(autoincrement())
-  employee_id                     Int
-  user_id                         Int?
-  type                            String // "clock_in" | "clock_out"
-  timestamp                       DateTime @default(now())
-  photo_url                       String?  @db.Text
-  attendance_photo_base64          String?  @db.Text
-  attendance_verification_method   String?  @db.VarChar(50) // "face_ai" | "first_time" | "manual"
-  attendance_verification_score    Float?
-  attendance_operator_user_id      Int?
-  latitude                        Float?
-  longitude                       Float?
-  address                         String?  @db.Text
-  remarks                         String?  @db.Text
-  is_mid_shift                    Boolean  @default(false)
-  work_notes                      String?  @db.Text
-  mid_shift_approved              Boolean  @default(false)
-  mid_shift_approved_by           Int?
-  mid_shift_approved_at           DateTime?
-  mid_shift_approval_signature    String?  @db.Text
-  created_at                      DateTime @default(now())
-  updated_at                      DateTime @default(now()) @updatedAt
+  id                             Int       @id @default(autoincrement())
+  employee_id                    Int
+  user_id                        Int?
+  type                           String // "clock_in" | "clock_out"
+  timestamp                      DateTime  @default(now())
+  photo_url                      String?   @db.Text
+  attendance_photo_base64        String?   @db.Text
+  attendance_verification_method String?   @db.VarChar(50) // "face_ai" | "first_time" | "manual"
+  attendance_verification_score  Float?
+  attendance_operator_user_id    Int?
+  latitude                       Float?
+  longitude                      Float?
+  address                        String?   @db.Text
+  remarks                        String?   @db.Text
+  is_mid_shift                   Boolean   @default(false)
+  work_notes                     String?   @db.Text
+  mid_shift_approved             Boolean   @default(false)
+  mid_shift_approved_by          Int?
+  mid_shift_approved_at          DateTime?
+  mid_shift_approval_signature   String?   @db.Text
+  created_at                     DateTime  @default(now())
+  updated_at                     DateTime  @default(now()) @updatedAt
 
-  employee             Employee  @relation(fields: [employee_id], references: [id])
-  mid_shift_approver   Employee? @relation("mid_shift_approver", fields: [mid_shift_approved_by], references: [id])
-  anomalies            AttendanceAnomaly[]
+  employee           Employee            @relation(fields: [employee_id], references: [id])
+  mid_shift_approver Employee?           @relation("mid_shift_approver", fields: [mid_shift_approved_by], references: [id])
+  anomalies          AttendanceAnomaly[]
 
   @@map("employee_attendances")
 }
@@ -1415,6 +1451,8 @@ model Expense {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
   deleted_at          DateTime? // 軯刪除時間時戳
+  deleted_by          Int?
+  deletedBy           User?     @relation("ExpenseDeletedBy", fields: [deleted_by], references: [id])
 
   company     Company?            @relation(fields: [company_id], references: [id])
   supplier    Partner?            @relation("expense_supplier", fields: [supplier_partner_id], references: [id])
@@ -1677,6 +1715,8 @@ model Invoice {
   created_at         DateTime  @default(now())
   updated_at         DateTime  @default(now()) @updatedAt
   deleted_at         DateTime? // 軯刪除時間時戳
+  deleted_by         Int?
+  deletedBy          User?     @relation("InvoiceDeletedBy", fields: [deleted_by], references: [id])
 
   client    Partner?      @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
   project   Project?      @relation(fields: [project_id], references: [id], onDelete: SetNull)
@@ -2001,24 +2041,24 @@ model VerificationOcrResult {
 
 // 8. verification_wa_message — WhatsApp 原始訊息
 model VerificationWaMessage {
-  id                   Int       @id @default(autoincrement())
-  wa_msg_remote_id     String?   @db.VarChar(100)
-  wa_msg_group_id      String?   @db.VarChar(100)
-  wa_msg_group_name    String?   @db.VarChar(200)
-  wa_msg_sender_jid    String?   @db.VarChar(100)
-  wa_msg_sender_name   String?   @db.VarChar(100)
-  wa_msg_timestamp     DateTime?
-  wa_msg_body          String?   @db.Text
-  wa_msg_type          String?   @db.VarChar(50)
-  wa_msg_is_forwarded  Boolean   @default(false)
-  wa_msg_has_media     Boolean   @default(false)
-  wa_msg_media_url     String?   @db.VarChar(500)
-  wa_msg_ai_classified String?   @db.VarChar(30) // order | chat | leave | vehicle_issue | other
-  wa_msg_ai_confidence Decimal?  @db.Decimal(5, 2)
-  wa_msg_processed     Boolean   @default(false)
-  wa_msg_pending_review Boolean  @default(false)
-  wa_msg_review_result  String?  @db.VarChar(30) // confirmed_order | confirmed_chat
-  wa_msg_created_at    DateTime  @default(now())
+  id                    Int       @id @default(autoincrement())
+  wa_msg_remote_id      String?   @db.VarChar(100)
+  wa_msg_group_id       String?   @db.VarChar(100)
+  wa_msg_group_name     String?   @db.VarChar(200)
+  wa_msg_sender_jid     String?   @db.VarChar(100)
+  wa_msg_sender_name    String?   @db.VarChar(100)
+  wa_msg_timestamp      DateTime?
+  wa_msg_body           String?   @db.Text
+  wa_msg_type           String?   @db.VarChar(50)
+  wa_msg_is_forwarded   Boolean   @default(false)
+  wa_msg_has_media      Boolean   @default(false)
+  wa_msg_media_url      String?   @db.VarChar(500)
+  wa_msg_ai_classified  String?   @db.VarChar(30) // order | chat | leave | vehicle_issue | other
+  wa_msg_ai_confidence  Decimal?  @db.Decimal(5, 2)
+  wa_msg_processed      Boolean   @default(false)
+  wa_msg_pending_review Boolean   @default(false)
+  wa_msg_review_result  String?   @db.VarChar(30) // confirmed_order | confirmed_chat
+  wa_msg_created_at     DateTime  @default(now())
 
   orders   VerificationWaOrder[]
   mod_logs VerificationWaModLog[]
@@ -2079,11 +2119,11 @@ model VerificationWaOrderItem {
   wa_item_goods_quantity  Decimal? @db.Decimal(10, 2)
   wa_item_remarks         String?  @db.Text
   wa_item_mod_status      String?  @db.VarChar(30) // cancelled | reassigned | suspended | added | null(unmodified)
-  wa_item_mod_prev_data   Json?    // snapshot of previous values before modification
+  wa_item_mod_prev_data   Json? // snapshot of previous values before modification
   wa_item_created_at      DateTime @default(now())
 
-  order          VerificationWaOrder          @relation(fields: [wa_item_order_id], references: [id], onDelete: Cascade)
-  mod_logs       VerificationWaModLog[]       @relation("ModLogItem")
+  order    VerificationWaOrder    @relation(fields: [wa_item_order_id], references: [id], onDelete: Cascade)
+  mod_logs VerificationWaModLog[] @relation("ModLogItem")
 
   @@index([wa_item_order_id])
   @@index([wa_item_driver_nickname])
@@ -2094,16 +2134,16 @@ model VerificationWaOrderItem {
 
 // 10b. verification_wa_mod_logs — WhatsApp Order 修改歷史
 model VerificationWaModLog {
-  id                  Int      @id @default(autoincrement())
-  mod_order_id        Int
-  mod_item_id         Int?
-  mod_msg_id          Int
-  mod_type            String   @db.VarChar(30) // cancel | reassign | suspend | resume | add | other
-  mod_description     String   @db.Text
-  mod_prev_value      Json?    // previous values snapshot
-  mod_new_value       Json?    // new values snapshot
-  mod_ai_confidence   Decimal? @db.Decimal(5, 2)
-  mod_created_at      DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  mod_order_id      Int
+  mod_item_id       Int?
+  mod_msg_id        Int
+  mod_type          String   @db.VarChar(30) // cancel | reassign | suspend | resume | add | other
+  mod_description   String   @db.Text
+  mod_prev_value    Json? // previous values snapshot
+  mod_new_value     Json? // new values snapshot
+  mod_ai_confidence Decimal? @db.Decimal(5, 2)
+  mod_created_at    DateTime @default(now())
 
   order   VerificationWaOrder      @relation(fields: [mod_order_id], references: [id], onDelete: Cascade)
   item    VerificationWaOrderItem? @relation("ModLogItem", fields: [mod_item_id], references: [id], onDelete: SetNull)
@@ -2157,45 +2197,47 @@ model VerificationActionLog {
 // ══════════════════════════════════════════════════════════════
 
 model DailyReport {
-  id                    Int       @id @default(autoincrement())
-  daily_report_project_id Int?
-  daily_report_date     DateTime  @db.Date
-  daily_report_shift_type String  @db.VarChar(20)
-  daily_report_work_summary String @db.Text
-  daily_report_memo     String?   @db.Text
-  daily_report_created_by Int
-  daily_report_status   String    @default("draft") @db.VarChar(20)
-  daily_report_submitted_at DateTime?
-  daily_report_created_at DateTime @default(now())
-  daily_report_updated_at DateTime @default(now()) @updatedAt
-  daily_report_deleted_at DateTime? // 軯刪除時間時戳
-  daily_report_client_id Int?
-  daily_report_client_name String? @db.VarChar(200)
-  daily_report_client_contract_no String? @db.VarChar(200)
-  daily_report_project_name String? @db.VarChar(200)
-  daily_report_project_location String? @db.VarChar(200)
-  daily_report_completed_work String? @db.Text
-  daily_report_signature String? @db.Text
-  daily_report_quotation_id Int?
+  id                              Int       @id @default(autoincrement())
+  daily_report_project_id         Int?
+  daily_report_date               DateTime  @db.Date
+  daily_report_shift_type         String    @db.VarChar(20)
+  daily_report_work_summary       String    @db.Text
+  daily_report_memo               String?   @db.Text
+  daily_report_created_by         Int
+  daily_report_status             String    @default("draft") @db.VarChar(20)
+  daily_report_submitted_at       DateTime?
+  daily_report_created_at         DateTime  @default(now())
+  daily_report_updated_at         DateTime  @default(now()) @updatedAt
+  daily_report_deleted_at         DateTime? // 軯刪除時間時戳
+  daily_report_deleted_by         Int?
+  deletedBy                       User?     @relation("DailyReportDeletedBy", fields: [daily_report_deleted_by], references: [id])
+  daily_report_client_id          Int?
+  daily_report_client_name        String?   @db.VarChar(200)
+  daily_report_client_contract_no String?   @db.VarChar(200)
+  daily_report_project_name       String?   @db.VarChar(200)
+  daily_report_project_location   String?   @db.VarChar(200)
+  daily_report_completed_work     String?   @db.Text
+  daily_report_signature          String?   @db.Text
+  daily_report_quotation_id       Int?
 
-  project   Project?   @relation(fields: [daily_report_project_id], references: [id])
-  client    Partner?   @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
-  creator   User       @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
-  quotation Quotation? @relation("daily_report_quotation", fields: [daily_report_quotation_id], references: [id])
-  items   DailyReportItem[]
+  project     Project?                @relation(fields: [daily_report_project_id], references: [id])
+  client      Partner?                @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
+  creator     User                    @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
+  quotation   Quotation?              @relation("daily_report_quotation", fields: [daily_report_quotation_id], references: [id])
+  items       DailyReportItem[]
   attachments DailyReportAttachment[]
 
   @@map("daily_reports")
 }
 
 model DailyReportAttachment {
-  id                                    Int      @id @default(autoincrement())
-  daily_report_attachment_report_id     Int
-  daily_report_attachment_file_name     String   @db.VarChar(255)
-  daily_report_attachment_file_url      String   @db.Text
-  daily_report_attachment_file_type     String   @db.VarChar(100)
-  daily_report_attachment_sort_order    Int      @default(0)
-  daily_report_attachment_created_at    DateTime @default(now())
+  id                                 Int      @id @default(autoincrement())
+  daily_report_attachment_report_id  Int
+  daily_report_attachment_file_name  String   @db.VarChar(255)
+  daily_report_attachment_file_url   String   @db.Text
+  daily_report_attachment_file_type  String   @db.VarChar(100)
+  daily_report_attachment_sort_order Int      @default(0)
+  daily_report_attachment_created_at DateTime @default(now())
 
   report DailyReport @relation(fields: [daily_report_attachment_report_id], references: [id], onDelete: Cascade)
 
@@ -2203,18 +2245,18 @@ model DailyReportAttachment {
 }
 
 model DailyReportItem {
-  id                          Int     @id @default(autoincrement())
-  daily_report_item_report_id Int
-  daily_report_item_category  String  @db.VarChar(30)
-  daily_report_item_content   String  @db.VarChar(200)
-  daily_report_item_quantity  Decimal? @db.Decimal(10, 2)
-  daily_report_item_ot_hours  Decimal? @db.Decimal(10, 2)
-  daily_report_item_name_or_plate String? @db.VarChar(200)
-  daily_report_item_sort_order Int    @default(0)
-  daily_report_item_worker_type String? @db.VarChar(100)
-  daily_report_item_with_operator Boolean? @default(false)
-  daily_report_item_employee_ids String? @db.Text
-  daily_report_item_vehicle_ids String? @db.Text
+  id                               Int      @id @default(autoincrement())
+  daily_report_item_report_id      Int
+  daily_report_item_category       String   @db.VarChar(30)
+  daily_report_item_content        String   @db.VarChar(200)
+  daily_report_item_quantity       Decimal? @db.Decimal(10, 2)
+  daily_report_item_ot_hours       Decimal? @db.Decimal(10, 2)
+  daily_report_item_name_or_plate  String?  @db.VarChar(200)
+  daily_report_item_sort_order     Int      @default(0)
+  daily_report_item_worker_type    String?  @db.VarChar(100)
+  daily_report_item_with_operator  Boolean? @default(false)
+  daily_report_item_employee_ids   String?  @db.Text
+  daily_report_item_vehicle_ids    String?  @db.Text
   daily_report_item_shift_quantity Decimal? @db.Decimal(10, 2)
 
   report DailyReport @relation(fields: [daily_report_item_report_id], references: [id], onDelete: Cascade)
@@ -2227,37 +2269,37 @@ model DailyReportItem {
 // ══════════════════════════════════════════════════════════════
 
 model AcceptanceReport {
-  id                                    Int       @id @default(autoincrement())
-  acceptance_report_date                DateTime  @db.Date
-  acceptance_report_acceptance_date     DateTime  @db.Date
-  acceptance_report_client_id           Int?
-  acceptance_report_client_name         String    @db.VarChar(200)
-  acceptance_report_project_id          Int?
-  acceptance_report_project_name        String    @db.VarChar(200)
-  acceptance_report_contract_ref        String?   @db.VarChar(200)
-  acceptance_report_site_address        String    @db.Text
-  acceptance_report_items               String    @db.Text
-  acceptance_report_quantity_unit       String?   @db.VarChar(100)
-  acceptance_report_mingtat_inspector_id Int?
-  acceptance_report_mingtat_inspector_name String? @db.VarChar(200)
-  acceptance_report_mingtat_inspector_title String @db.VarChar(100)
-  acceptance_report_client_contract_no String? @db.VarChar(200)
-  acceptance_report_client_inspector_name String  @db.VarChar(200)
-  acceptance_report_client_inspector_title String @db.VarChar(100)
-  acceptance_report_client_signature    String?   @db.Text
-  acceptance_report_mingtat_signature   String?   @db.Text
-  acceptance_report_supplementary_notes String?   @db.Text
-  acceptance_report_created_by          Int
-  acceptance_report_status              String    @default("draft") @db.VarChar(20)
-  acceptance_report_submitted_at        DateTime?
-  acceptance_report_created_at          DateTime  @default(now())
-  acceptance_report_updated_at          DateTime  @default(now()) @updatedAt
+  id                                        Int       @id @default(autoincrement())
+  acceptance_report_date                    DateTime  @db.Date
+  acceptance_report_acceptance_date         DateTime  @db.Date
+  acceptance_report_client_id               Int?
+  acceptance_report_client_name             String    @db.VarChar(200)
+  acceptance_report_project_id              Int?
+  acceptance_report_project_name            String    @db.VarChar(200)
+  acceptance_report_contract_ref            String?   @db.VarChar(200)
+  acceptance_report_site_address            String    @db.Text
+  acceptance_report_items                   String    @db.Text
+  acceptance_report_quantity_unit           String?   @db.VarChar(100)
+  acceptance_report_mingtat_inspector_id    Int?
+  acceptance_report_mingtat_inspector_name  String?   @db.VarChar(200)
+  acceptance_report_mingtat_inspector_title String    @db.VarChar(100)
+  acceptance_report_client_contract_no      String?   @db.VarChar(200)
+  acceptance_report_client_inspector_name   String    @db.VarChar(200)
+  acceptance_report_client_inspector_title  String    @db.VarChar(100)
+  acceptance_report_client_signature        String?   @db.Text
+  acceptance_report_mingtat_signature       String?   @db.Text
+  acceptance_report_supplementary_notes     String?   @db.Text
+  acceptance_report_created_by              Int
+  acceptance_report_status                  String    @default("draft") @db.VarChar(20)
+  acceptance_report_submitted_at            DateTime?
+  acceptance_report_created_at              DateTime  @default(now())
+  acceptance_report_updated_at              DateTime  @default(now()) @updatedAt
 
-  client    Partner?  @relation("acceptance_report_client", fields: [acceptance_report_client_id], references: [id])
-  project   Project?  @relation(fields: [acceptance_report_project_id], references: [id])
-  inspector Employee?  @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
-  creator   User      @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id])
-  attachments AcceptanceReportAttachment[]
+  client           Partner?                     @relation("acceptance_report_client", fields: [acceptance_report_client_id], references: [id])
+  project          Project?                     @relation(fields: [acceptance_report_project_id], references: [id])
+  inspector        Employee?                    @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
+  creator          User                         @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id])
+  attachments      AcceptanceReportAttachment[]
   acceptance_items AcceptanceReportItem[]
 
   @@map("acceptance_reports")
@@ -2265,11 +2307,11 @@ model AcceptanceReport {
 
 model AcceptanceReportAttachment {
   id                                      Int    @id @default(autoincrement())
-  acceptance_report_attachment_report_id   Int
-  acceptance_report_attachment_file_name   String @db.VarChar(255)
-  acceptance_report_attachment_file_url    String @db.Text
-  acceptance_report_attachment_file_type   String @db.VarChar(100)
-  acceptance_report_attachment_sort_order  Int    @default(0)
+  acceptance_report_attachment_report_id  Int
+  acceptance_report_attachment_file_name  String @db.VarChar(255)
+  acceptance_report_attachment_file_url   String @db.Text
+  acceptance_report_attachment_file_type  String @db.VarChar(100)
+  acceptance_report_attachment_sort_order Int    @default(0)
 
   report AcceptanceReport @relation(fields: [acceptance_report_attachment_report_id], references: [id], onDelete: Cascade)
 
@@ -2277,11 +2319,11 @@ model AcceptanceReportAttachment {
 }
 
 model AcceptanceReportItem {
-  id                                    Int    @id @default(autoincrement())
-  acceptance_report_item_report_id      Int
-  acceptance_report_item_description    String @db.Text
-  acceptance_report_item_quantity_unit  String? @db.VarChar(200)
-  acceptance_report_item_sort_order     Int    @default(0)
+  id                                   Int     @id @default(autoincrement())
+  acceptance_report_item_report_id     Int
+  acceptance_report_item_description   String  @db.Text
+  acceptance_report_item_quantity_unit String? @db.VarChar(200)
+  acceptance_report_item_sort_order    Int     @default(0)
 
   report AcceptanceReport @relation(fields: [acceptance_report_item_report_id], references: [id], onDelete: Cascade)
 
@@ -2293,16 +2335,16 @@ model AcceptanceReportItem {
 // ══════════════════════════════════════════════════════════════
 
 model AuditLog {
-  id                    Int       @id @default(autoincrement())
-  audit_user_id         Int       // 執行操作的用戶 ID
-  audit_action          String    @db.VarChar(50) // create, update, delete
-  audit_target_table    String    @db.VarChar(100) // 目標表名
-  audit_target_id       Int       // 目標記錄 ID
-  audit_changes_before  Json?     @db.JsonB // 變更前的數據
-  audit_changes_after   Json?     @db.JsonB // 變更後的數據
-  audit_ip_address      String?   @db.VarChar(45) // IPv4 或 IPv6
-  audit_timestamp       DateTime  @default(now())
-  audit_user_agent      String?   @db.Text // User-Agent 字符串
+  id                   Int      @id @default(autoincrement())
+  audit_user_id        Int // 執行操作的用戶 ID
+  audit_action         String   @db.VarChar(50) // create, update, delete
+  audit_target_table   String   @db.VarChar(100) // 目標表名
+  audit_target_id      Int // 目標記錄 ID
+  audit_changes_before Json?    @db.JsonB // 變更前的數據
+  audit_changes_after  Json?    @db.JsonB // 變更後的數據
+  audit_ip_address     String?  @db.VarChar(45) // IPv4 或 IPv6
+  audit_timestamp      DateTime @default(now())
+  audit_user_agent     String?  @db.Text // User-Agent 字符串
 
   user User @relation(fields: [audit_user_id], references: [id], onDelete: Cascade)
 
@@ -2316,11 +2358,12 @@ model AuditLog {
 // Statutory Holidays — 法定假期
 // ══════════════════════════════════════════════════════════════
 model StatutoryHoliday {
-  id          Int      @id @default(autoincrement())
-  date        DateTime @unique @db.Date
-  name        String
-  created_at  DateTime @default(now())
-  updated_at  DateTime @default(now()) @updatedAt
+  id         Int      @id @default(autoincrement())
+  date       DateTime @unique @db.Date
+  name       String
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
   @@map("statutory_holidays")
 }
 
@@ -2328,16 +2371,16 @@ model StatutoryHoliday {
 // Verification Confirmations — 人工確認配對結果
 // ══════════════════════════════════════════════════════════════
 model VerificationConfirmation {
-  id                  Int       @id @default(autoincrement())
+  id                  Int      @id @default(autoincrement())
   work_log_id         Int
-  source_code         String    @db.VarChar(50)
-  status              String    @db.VarChar(20)
+  source_code         String   @db.VarChar(50)
+  status              String   @db.VarChar(20)
   matched_record_id   Int?
-  matched_record_type String?   @db.VarChar(50)
-  notes               String?   @db.Text
+  matched_record_type String?  @db.VarChar(50)
+  notes               String?  @db.Text
   confirmed_by        Int
-  confirmed_at        DateTime  @default(now())
-  updated_at          DateTime  @default(now()) @updatedAt
+  confirmed_at        DateTime @default(now())
+  updated_at          DateTime @default(now()) @updatedAt
 
   user    User    @relation(fields: [confirmed_by], references: [id])
   workLog WorkLog @relation(fields: [work_log_id], references: [id])
@@ -2368,10 +2411,10 @@ model AttendanceAnomaly {
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
 
-  employee    Employee?            @relation(fields: [anomaly_employee_id], references: [id], onDelete: SetNull)
-  attendance  EmployeeAttendance?  @relation(fields: [anomaly_attendance_id], references: [id], onDelete: SetNull)
-  work_log    WorkLog?             @relation(fields: [anomaly_work_log_id], references: [id], onDelete: SetNull)
-  resolver    User?                @relation("anomaly_resolver", fields: [anomaly_resolved_by], references: [id], onDelete: SetNull)
+  employee   Employee?           @relation(fields: [anomaly_employee_id], references: [id], onDelete: SetNull)
+  attendance EmployeeAttendance? @relation(fields: [anomaly_attendance_id], references: [id], onDelete: SetNull)
+  work_log   WorkLog?            @relation(fields: [anomaly_work_log_id], references: [id], onDelete: SetNull)
+  resolver   User?               @relation("anomaly_resolver", fields: [anomaly_resolved_by], references: [id], onDelete: SetNull)
 
   @@index([anomaly_date])
   @@index([anomaly_type])

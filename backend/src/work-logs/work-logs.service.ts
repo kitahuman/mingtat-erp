@@ -438,7 +438,7 @@ export class WorkLogsService {
     });
     await this.prisma.workLog.update({
       where: { id },
-      data: { deleted_at: new Date() },
+      data: { deleted_at: new Date(), deleted_by: userId ?? null },
     });
     return { success: true };
   }

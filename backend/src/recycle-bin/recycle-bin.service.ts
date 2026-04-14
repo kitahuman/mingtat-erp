@@ -6,76 +6,77 @@ export class RecycleBinService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * 軟刪除記錄（標記為已刪除）
+   * 軟刪除記錄（標記為已刪除，並記錄刪除者）
    */
-  async softDelete(table: string, id: number) {
+  async softDelete(table: string, id: number, userId?: number) {
     const now = new Date();
-    
+    const deletedBy = userId ?? null;
+
     switch (table) {
       case 'companies':
         return this.prisma.company.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'employees':
         return this.prisma.employee.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'vehicles':
         return this.prisma.vehicle.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'machinery':
         return this.prisma.machinery.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'partners':
         return this.prisma.partner.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'contracts':
         return this.prisma.contract.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'projects':
         return this.prisma.project.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'quotations':
         return this.prisma.quotation.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'rate_cards':
         return this.prisma.rateCard.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'expenses':
         return this.prisma.expense.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'invoices':
         return this.prisma.invoice.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'work_logs':
         return this.prisma.workLog.update({
           where: { id },
-          data: { deleted_at: now },
+          data: { deleted_at: now, deleted_by: deletedBy },
         });
       case 'daily_reports':
         return this.prisma.dailyReport.update({
           where: { id },
-          data: { daily_report_deleted_at: now },
+          data: { daily_report_deleted_at: now, daily_report_deleted_by: deletedBy },
         });
       default:
         throw new Error(`Unsupported table: ${table}`);
@@ -193,6 +194,11 @@ export class RecycleBinService {
     }
   }
 
+  /** 共用的刪除者 select */
+  private readonly deletedBySelect = {
+    select: { id: true, displayName: true, username: true },
+  };
+
   /**
    * 查詢垃圾桶中的記錄
    */
@@ -205,16 +211,28 @@ export class RecycleBinService {
     const limit = Number(query.limit) || 25;
     const table = query.table || 'all';
 
-    const results: any[] = [];
+    const results: {
+      id: number;
+      table: string;
+      deleted_at: Date;
+      deleted_by_user: { id: number; displayName: string | null; username: string } | null;
+      [key: string]: unknown;
+    }[] = [];
     let total = 0;
 
-    const tables = table === 'all' 
+    const tables = table === 'all'
       ? ['companies', 'employees', 'vehicles', 'machinery', 'partners', 'contracts', 'projects', 'quotations', 'rate_cards', 'expenses', 'invoices', 'work_logs', 'daily_reports']
       : [table];
 
     for (const t of tables) {
       let count = 0;
-      let data: any[] = [];
+      let data: {
+        id: number;
+        deleted_at?: Date | null;
+        daily_report_deleted_at?: Date | null;
+        deletedBy?: { id: number; displayName: string | null; username: string } | null;
+        [key: string]: unknown;
+      }[] = [];
 
       try {
         switch (t) {
@@ -222,6 +240,7 @@ export class RecycleBinService {
             count = await this.prisma.company.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.company.findMany({
               where: { deleted_at: { not: null } },
+              select: { id: true, name: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -231,7 +250,7 @@ export class RecycleBinService {
             count = await this.prisma.employee.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.employee.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, name_zh: true, emp_code: true, deleted_at: true },
+              select: { id: true, name_zh: true, emp_code: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -241,7 +260,7 @@ export class RecycleBinService {
             count = await this.prisma.vehicle.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.vehicle.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, plate_number: true, machine_type: true, deleted_at: true },
+              select: { id: true, plate_number: true, machine_type: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -251,7 +270,7 @@ export class RecycleBinService {
             count = await this.prisma.machinery.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.machinery.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, machine_code: true, machine_type: true, deleted_at: true },
+              select: { id: true, machine_code: true, machine_type: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -261,7 +280,7 @@ export class RecycleBinService {
             count = await this.prisma.partner.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.partner.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, code: true, name: true, deleted_at: true },
+              select: { id: true, code: true, name: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -271,7 +290,7 @@ export class RecycleBinService {
             count = await this.prisma.contract.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.contract.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, contract_no: true, contract_name: true, deleted_at: true },
+              select: { id: true, contract_no: true, contract_name: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -281,7 +300,7 @@ export class RecycleBinService {
             count = await this.prisma.project.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.project.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, project_no: true, project_name: true, deleted_at: true },
+              select: { id: true, project_no: true, project_name: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -291,7 +310,7 @@ export class RecycleBinService {
             count = await this.prisma.quotation.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.quotation.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, quotation_no: true, quotation_date: true, deleted_at: true },
+              select: { id: true, quotation_no: true, quotation_date: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -301,7 +320,7 @@ export class RecycleBinService {
             count = await this.prisma.rateCard.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.rateCard.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, name: true, rate_card_type: true, deleted_at: true },
+              select: { id: true, name: true, rate_card_type: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -311,7 +330,7 @@ export class RecycleBinService {
             count = await this.prisma.expense.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.expense.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, item: true, date: true, deleted_at: true },
+              select: { id: true, item: true, date: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -321,7 +340,7 @@ export class RecycleBinService {
             count = await this.prisma.invoice.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.invoice.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, invoice_no: true, date: true, deleted_at: true },
+              select: { id: true, invoice_no: true, date: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -331,7 +350,7 @@ export class RecycleBinService {
             count = await this.prisma.workLog.count({ where: { deleted_at: { not: null } } });
             data = await this.prisma.workLog.findMany({
               where: { deleted_at: { not: null } },
-              select: { id: true, service_type: true, scheduled_date: true, deleted_at: true },
+              select: { id: true, service_type: true, scheduled_date: true, deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -341,7 +360,7 @@ export class RecycleBinService {
             count = await this.prisma.dailyReport.count({ where: { daily_report_deleted_at: { not: null } } });
             data = await this.prisma.dailyReport.findMany({
               where: { daily_report_deleted_at: { not: null } },
-              select: { id: true, daily_report_date: true, daily_report_deleted_at: true },
+              select: { id: true, daily_report_date: true, daily_report_deleted_at: true, deletedBy: this.deletedBySelect },
               orderBy: { daily_report_deleted_at: 'desc' },
               take: limit,
               skip: (page - 1) * limit,
@@ -349,11 +368,16 @@ export class RecycleBinService {
             break;
         }
 
-        results.push(...data.map(item => ({
-          ...item,
-          table: t,
-          deleted_at: item.deleted_at || item.daily_report_deleted_at,
-        })));
+        results.push(...data.map(item => {
+          const deletedAt = (item.deleted_at ?? item.daily_report_deleted_at) as Date;
+          const deletedByUser = (item.deletedBy as { id: number; displayName: string | null; username: string } | null | undefined) ?? null;
+          return {
+            ...item,
+            table: t,
+            deleted_at: deletedAt,
+            deleted_by_user: deletedByUser,
+          };
+        }));
         total += count;
       } catch (err) {
         console.error(`Error fetching deleted records from ${t}:`, err);

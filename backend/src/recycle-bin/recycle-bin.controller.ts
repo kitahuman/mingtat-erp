@@ -1,6 +1,21 @@
-import { Controller, Get, Post, Delete, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RecycleBinService } from './recycle-bin.service';
+
+export class SoftDeleteDto {
+  table!: string;
+  id!: number;
+}
+
+export class RestoreDto {
+  table!: string;
+  id!: number;
+}
+
+export class PermanentDeleteDto {
+  table!: string;
+  id!: number;
+}
 
 @Controller('recycle-bin')
 @UseGuards(AuthGuard('jwt'))
@@ -20,16 +35,25 @@ export class RecycleBinController {
     });
   }
 
+  @Post('soft')
+  async softDelete(
+    @Body() body: SoftDeleteDto,
+    @Request() req: { user: { id?: number; userId?: number; sub?: number } },
+  ) {
+    const userId = req.user?.id || req.user?.userId || req.user?.sub || undefined;
+    return this.service.softDelete(body.table, body.id, userId);
+  }
+
   @Post('restore')
   async restore(
-    @Body() body: { table: string; id: number },
+    @Body() body: RestoreDto,
   ) {
     return this.service.restore(body.table, body.id);
   }
 
   @Delete('permanent')
   async permanentDelete(
-    @Body() body: { table: string; id: number },
+    @Body() body: PermanentDeleteDto,
   ) {
     return this.service.permanentDelete(body.table, body.id);
   }

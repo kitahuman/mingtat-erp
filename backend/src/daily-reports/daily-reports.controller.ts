@@ -66,8 +66,8 @@ export class DailyReportsController {
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, req.user?.id || req.user?.userId || undefined);
   }
 
   // ── File Upload ─────────────────────────────────────────────────
