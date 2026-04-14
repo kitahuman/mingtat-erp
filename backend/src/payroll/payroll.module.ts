@@ -8,6 +8,7 @@ import { ExpenseCategoriesModule } from '../expense-categories/expense-categorie
 import { PricingModule } from '../common/pricing.module';
 import { StatutoryHolidaysModule } from '../statutory-holidays/statutory-holidays.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { FleetRateCardsModule } from '../fleet-rate-cards/fleet-rate-cards.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     PricingModule,
     StatutoryHolidaysModule,
     AuditLogsModule,
+    FleetRateCardsModule,
   ],
   providers: [PayrollService, PayrollCalculationService],
   controllers: [PayrollController],

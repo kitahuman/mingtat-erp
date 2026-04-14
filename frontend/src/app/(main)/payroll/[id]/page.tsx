@@ -151,63 +151,192 @@ function InlineEditCell({
   );
 }
 
-// ─── Grouped Settlement View ──────────────────────────────────────────────────
-function GroupedSettlementView({ groups }: { groups: any[] }) {
+// ─── Grouped Settlement View (with inline rate editing) ────────────────────────────────
+function GroupedSettlementView({
+  groups,
+  payrollId,
+  isDraft,
+  onRateSaved,
+}: {
+  groups: any[];
+  payrollId: number;
+  isDraft: boolean;
+  onRateSaved: () => Promise<void> | void;
+}) {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editRate, setEditRate] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [addToRateCardPrompt, setAddToRateCardPrompt] = useState<{ groupKey: string; rate: number; workLogIds: number[] } | null>(null);
+  const [addingToRateCard, setAddingToRateCard] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingIdx !== null && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingIdx]);
+
   if (!groups || groups.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有歸組結算數據</p>;
   }
+
   const totalAmount = groups.reduce((sum: number, g: any) => sum + (Number(g.total_amount) || 0), 0);
+
+  const handleSaveGroupRate = async (g: any) => {
+    const rate = Number(editRate);
+    if (isNaN(rate) || rate < 0) {
+      alert('請輸入有效的單價');
+      return;
+    }
+    setSaving(true);
+    try {
+      await payrollApi.setGroupRate(payrollId, g.group_key, rate);
+      await onRateSaved();
+      setEditingIdx(null);
+      // Show add-to-rate-card prompt
+      setAddToRateCardPrompt({ groupKey: g.group_key, rate, workLogIds: g.work_log_ids || [] });
+    } catch (err: any) {
+      alert(err.response?.data?.message || '設定單價失敗');
+    }
+    setSaving(false);
+  };
+
+  const handleAddToRateCard = async () => {
+    if (!addToRateCardPrompt || !addToRateCardPrompt.workLogIds.length) return;
+    setAddingToRateCard(true);
+    try {
+      await payrollApi.addToRateCard(payrollId, addToRateCardPrompt.workLogIds[0], addToRateCardPrompt.rate);
+      alert('已成功加入價目表');
+    } catch (err: any) {
+      alert(err.response?.data?.message || '加入價目表失敗');
+    }
+    setAddingToRateCard(false);
+    setAddToRateCardPrompt(null);
+  };
+
   return (
-    <div className="overflow-x-auto border rounded-lg">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
-            <th className="px-3 py-2 text-left font-medium text-gray-600">合約</th>
-            <th className="px-3 py-2 text-left font-medium text-gray-600">日/夜</th>
-            <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
-            <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
-            <th className="px-3 py-2 text-right font-medium text-gray-600">數量</th>
-            <th className="px-3 py-2 text-right font-medium text-gray-600">小計</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((g: any, idx: number) => {
-            const route = [g.start_location, g.end_location].filter(Boolean).join(' → ');
-            const hasPrice = g.price_match_status === 'matched' && g.matched_rate;
-            return (
-              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                <td className="px-3 py-2 font-medium">{g.client_name || '-'}</td>
-                <td className="px-3 py-2 text-gray-600">{g.contract_no || '-'}</td>
-                <td className="px-3 py-2">
-                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                    g.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
-                    g.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>{g.day_night || '日'}</span>
-                </td>
-                <td className="px-3 py-2 text-gray-600 text-xs">{route || '-'}</td>
-                <td className="px-3 py-2 text-right font-mono">
-                  {hasPrice ? `$${Number(g.matched_rate).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
-                </td>
-                <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}車</td>
-                <td className="px-3 py-2 text-right font-mono font-bold">
-                  {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : <span className="text-orange-500">未設定</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot className="border-t-2 border-gray-900">
-          <tr className="bg-gray-50">
-            <td colSpan={6} className="px-3 py-2 font-bold text-right">歸組結算合計</td>
-            <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">
-              ${totalAmount.toLocaleString()}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <>
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">合約</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">日/夜</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">數量</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">小計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g: any, idx: number) => {
+              const route = [g.start_location, g.end_location].filter(Boolean).join(' \u2192 ');
+              const hasPrice = g.price_match_status === 'matched' && g.matched_rate;
+              const isEditing = editingIdx === idx;
+              const subtotal = hasPrice ? Number(g.total_amount) : 0;
+              return (
+                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-3 py-2 font-medium">{g.client_name || '-'}</td>
+                  <td className="px-3 py-2 text-gray-600">{g.client_contract_no || '-'}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                      g.day_night === '\u591c' ? 'bg-indigo-100 text-indigo-700' :
+                      g.day_night === '\u4e2d\u76f4' ? 'bg-purple-100 text-purple-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>{g.day_night || '\u65e5'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{route || '-'}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {isEditing ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-gray-400">$</span>
+                        <input
+                          ref={inputRef}
+                          type="number"
+                          step="0.01"
+                          value={editRate}
+                          onChange={(e) => setEditRate(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveGroupRate(g);
+                            if (e.key === 'Escape') setEditingIdx(null);
+                          }}
+                          onBlur={() => {
+                            if (editRate && Number(editRate) > 0) handleSaveGroupRate(g);
+                            else setEditingIdx(null);
+                          }}
+                          className="w-24 text-xs text-right border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 font-mono"
+                          disabled={saving}
+                        />
+                      </div>
+                    ) : (
+                      <span
+                        className={`${isDraft && !hasPrice ? 'cursor-pointer hover:bg-blue-50 px-2 py-1 rounded' : ''} ${isDraft && hasPrice ? 'cursor-pointer hover:bg-blue-50 px-2 py-1 rounded' : ''}`}
+                        onClick={() => {
+                          if (!isDraft) return;
+                          setEditingIdx(idx);
+                          setEditRate(hasPrice ? String(Number(g.matched_rate)) : '');
+                        }}
+                        title={isDraft ? '\u9ede\u64ca\u7de8\u8f2f\u55ae\u50f9' : undefined}
+                      >
+                        {hasPrice ? (
+                          <span className="inline-flex items-center gap-1">
+                            ${Number(g.matched_rate).toLocaleString()}
+                            {g.is_manual_rate && <span className="text-[10px] text-blue-500" title="\u624b\u52d5\u8a2d\u5b9a">\u270f</span>}
+                          </span>
+                        ) : (
+                          <span className="text-orange-500 inline-flex items-center gap-1">
+                            \u672a\u8a2d\u5b9a
+                            {isDraft && <span className="text-blue-400 text-[10px]">\u270f</span>}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}\u8eca</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold">
+                    {hasPrice ? `$${subtotal.toLocaleString()}` : <span className="text-orange-500">\u672a\u8a2d\u5b9a</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="border-t-2 border-gray-900">
+            <tr className="bg-gray-50">
+              <td colSpan={6} className="px-3 py-2 font-bold text-right">\u6b78\u7d44\u7d50\u7b97\u5408\u8a08</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">
+                ${totalAmount.toLocaleString()}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Add to rate card prompt */}
+      {addToRateCardPrompt && (
+        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+          <div className="text-sm text-blue-800">
+            \u5df2\u8a2d\u5b9a\u55ae\u50f9 <span className="font-bold">${addToRateCardPrompt.rate.toLocaleString()}</span>\uff0c\u662f\u5426\u5c07\u6b64\u50f9\u683c\u52a0\u5165\u50f9\u76ee\u8868\uff1f
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAddToRateCard}
+              disabled={addingToRateCard}
+              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {addingToRateCard ? '\u8655\u7406\u4e2d...' : '\u52a0\u5165\u50f9\u76ee\u8868'}
+            </button>
+            <button
+              onClick={() => setAddToRateCardPrompt(null)}
+              className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              \u4e0d\u7528\u4e86
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -570,7 +699,18 @@ export default function PayrollDetailPage() {
     if (!confirm('確定要重新計算此糧單？')) return;
     try {
       const res = await payrollApi.recalculate(payroll.id);
-      setPayroll(res.data);
+      const data = res.data;
+      // Check if there are manual rate conflicts
+      if (data.has_manual_rate_conflicts) {
+        const overrideConfirmed = confirm(
+          `系統已配對到新單價，但有 ${data.conflicts.length} 筆記錄已有手動設定的單價。\n是否要用系統配對的價格覆蓋您手動設定的單價？\n\n選擇「確定」覆蓋手動單價，選擇「取消」保留手動單價`
+        );
+        // Re-call with override flag
+        const res2 = await payrollApi.recalculate(payroll.id, { override_manual_rates: overrideConfirmed });
+        setPayroll(res2.data);
+      } else {
+        setPayroll(data);
+      }
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
     }
@@ -897,9 +1037,17 @@ export default function PayrollDetailPage() {
                         <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={loadData} />
                         <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
                         <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['product_unit'] || []} onSaved={loadData} />
-                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono">
-                          {hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : '—'}
-                        </td>
+                        <InlineEditCell
+                          value={pwl.matched_rate}
+                          field="matched_rate"
+                          payrollId={payroll.id}
+                          pwlId={pwl.id}
+                          editable={canEdit}
+                          type="number"
+                          align="right"
+                          onSaved={loadData}
+                          display={hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : undefined}
+                        />
                         <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono font-bold text-primary-600">
                           ${totalLineAmount.toLocaleString()}
                         </td>
@@ -930,7 +1078,7 @@ export default function PayrollDetailPage() {
         )}
 
         {activeTab === 'grouped' && (
-          <GroupedSettlementView groups={grouped} />
+          <GroupedSettlementView groups={grouped} payrollId={payroll.id} isDraft={isDraft} onRateSaved={loadData} />
         )}
 
         {activeTab === 'daily' && (

@@ -267,7 +267,11 @@ export const payrollApi = {
   bulkConfirm: (ids: number[]) => api.post('/payroll/bulk/confirm', { ids }),
   bulkMarkPaid: (ids: number[], paymentDate?: string, chequeNumber?: string) =>
     api.post('/payroll/bulk/mark-paid', { ids, payment_date: paymentDate, cheque_number: chequeNumber }),
-  recalculate: (id: number) => api.post(`/payroll/${id}/recalculate`),
+  recalculate: (id: number, body?: { override_manual_rates?: boolean }) => api.post(`/payroll/${id}/recalculate`, body || {}),
+  setGroupRate: (id: number, groupKey: string, rate: number) =>
+    api.post(`/payroll/${id}/set-group-rate`, { group_key: groupKey, rate }),
+  addToRateCard: (id: number, pwlId: number, rate: number) =>
+    api.post(`/payroll/${id}/add-to-rate-card`, { pwl_id: pwlId, rate }),
   finalize: (id: number) => api.post(`/payroll/${id}/finalize`),
   unconfirm: (id: number) => api.post(`/payroll/${id}/unconfirm`),
   remove: (id: number) => api.delete(`/payroll/${id}`),

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdatePayrollDto {
@@ -24,6 +24,7 @@ export class UpdatePayrollDto {
 
 export class UpdatePayrollWorkLogDto {
   @IsOptional() @IsString() service_type?: string;
+  @IsOptional() @IsString() scheduled_date?: string;
   @IsOptional() @IsString() day_night?: string;
   @IsOptional() @IsString() machine_type?: string;
   @IsOptional() @IsString() tonnage?: string;
@@ -38,4 +39,10 @@ export class UpdatePayrollWorkLogDto {
   @IsOptional() @IsString() start_location?: string;
   @IsOptional() @IsString() end_location?: string;
   @IsOptional() @IsString() equipment_number?: string;
+  @IsOptional() @IsString() client_name?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsString() payroll_work_log_product_name?: string;
+  @IsOptional() @IsString() payroll_work_log_product_unit?: string;
+  @IsOptional() @IsBoolean() is_mid_shift?: boolean;
+  @IsOptional() @Type(() => Number) @IsNumber() matched_rate?: number;
 }

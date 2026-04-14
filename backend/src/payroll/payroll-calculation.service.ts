@@ -675,6 +675,8 @@ export class PayrollCalculationService {
         groups.set(key, {
           group_key: key,
           client_name: pwl.client_name || '',
+          client_id: pwl.client_id || null,
+          company_id: pwl.company_id || null,
           client_contract_no: pwl.client_contract_no || '',
           service_type: pwl.service_type || '',
           day_night: pwl.day_night || '日',
@@ -688,6 +690,7 @@ export class PayrollCalculationService {
           total_amount: Number(pwl.line_amount) || 0,
           count: 1,
           price_match_status: pwl.price_match_status || 'unmatched',
+          is_manual_rate: pwl.is_manual_rate || false,
           work_log_ids: [pwl.id],
         });
       }

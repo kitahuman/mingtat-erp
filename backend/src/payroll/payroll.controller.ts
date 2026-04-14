@@ -92,8 +92,29 @@ export class PayrollController {
   }
 
   @Post(':id/recalculate')
-  recalculate(@Param('id') id: string) {
-    return this.payrollService.recalculate(+id);
+  recalculate(@Param('id') id: string, @Body() body?: { override_manual_rates?: boolean }) {
+    return this.payrollService.recalculate(+id, body?.override_manual_rates);
+  }
+
+  // 設定歸組單價（批量更新同組工作記錄的單價）
+  @Post(':id/set-group-rate')
+  setGroupRate(
+    @Param('id') id: string,
+    @Body() body: { group_key: string; rate: number },
+  ) {
+    return this.payrollService.setGroupRate(+id, body.group_key, body.rate);
+  }
+
+  // 將手動設定的單價加入價目表
+  @Post(':id/add-to-rate-card')
+  addToRateCard(
+    @Param('id') id: string,
+    @Body() body: {
+      pwl_id: number;
+      rate: number;
+    },
+  ) {
+    return this.payrollService.addToRateCard(+id, body.pwl_id, body.rate);
   }
 
   // 確定糧單工作記錄並計算糧單（從 preparing 轉為 draft）

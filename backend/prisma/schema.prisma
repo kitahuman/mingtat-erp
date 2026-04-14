@@ -1226,6 +1226,7 @@ model PayrollWorkLog {
   client_contract_no     String?
   payroll_work_log_product_name  String?  @db.Text
   payroll_work_log_product_unit  String?  @db.Text
+  is_manual_rate         Boolean   @default(false)
   is_modified            Boolean   @default(false)
   is_excluded            Boolean   @default(false)
   created_at             DateTime  @default(now())

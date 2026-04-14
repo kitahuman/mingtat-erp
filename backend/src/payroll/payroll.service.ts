@@ -9,6 +9,7 @@ import { PricingService } from '../common/pricing.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { StatutoryHolidaysService } from '../statutory-holidays/statutory-holidays.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { FleetRateCardsService } from '../fleet-rate-cards/fleet-rate-cards.service';
 import { PayrollQuery } from '../common/types';
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
@@ -33,6 +34,7 @@ export class PayrollService {
     private readonly statutoryHolidaysService: StatutoryHolidaysService,
     private readonly auditLogsService: AuditLogsService,
     private readonly calcService: PayrollCalculationService,
+    private readonly fleetRateCardsService: FleetRateCardsService,
   ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
@@ -1096,7 +1098,7 @@ export class PayrollService {
   }
 
   // ── 重新計算糧單 ──────────────────────────────────────────────
-  async recalculate(id: number) {
+  async recalculate(id: number, overrideManualRates?: boolean) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
       include: {
@@ -1145,8 +1147,71 @@ export class PayrollService {
       orderBy: { scheduled_date: 'asc' },
     });
 
+    // Re-match prices for each work log, respecting manual rates
+    const manualRateConflicts: { pwl_id: number; group_key: string; old_rate: number; new_rate: number }[] = [];
+
+    for (const pwl of pwls) {
+      const priceInfo = await this.calcService.rematchPayrollWorkLogPrice(pwl);
+      const systemMatched = priceInfo.price_match_status === 'matched';
+      const hasManualRate = pwl.is_manual_rate === true;
+
+      if (hasManualRate && systemMatched) {
+        // Conflict: manual rate exists but system also found a match
+        if (overrideManualRates === true) {
+          // Override manual rate with system match
+          const updateData: any = {
+            ...priceInfo,
+            is_manual_rate: false,
+          };
+          const finalPwl = { ...pwl, ...updateData };
+          updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+          await this.prisma.payrollWorkLog.update({
+            where: { id: pwl.id },
+            data: updateData,
+          });
+        } else if (overrideManualRates === undefined) {
+          // First pass: detect conflicts, don't update manual rates
+          manualRateConflicts.push({
+            pwl_id: pwl.id,
+            group_key: pwl.group_key || '',
+            old_rate: Number(pwl.matched_rate) || 0,
+            new_rate: Number(priceInfo.matched_rate) || 0,
+          });
+          // Keep manual rate, don't update this pwl's price fields
+        } else {
+          // overrideManualRates === false: keep manual rate
+          // Don't update price fields for this pwl
+        }
+      } else if (!hasManualRate) {
+        // No manual rate: always use system match result
+        const updateData: any = { ...priceInfo };
+        const finalPwl = { ...pwl, ...updateData };
+        updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+        await this.prisma.payrollWorkLog.update({
+          where: { id: pwl.id },
+          data: updateData,
+        });
+      }
+      // If hasManualRate && !systemMatched, keep manual rate as is
+    }
+
+    // If there are conflicts and this is the first pass, return conflicts
+    if (manualRateConflicts.length > 0 && overrideManualRates === undefined) {
+      return {
+        has_manual_rate_conflicts: true,
+        conflicts: manualRateConflicts,
+        message: '系統已配對到新單價，但部分記錄已有手動設定的單價。是否要覆蓋？',
+      };
+    }
+
+    // Re-read updated pwls for payroll calculation
+    const updatedPwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: id, is_excluded: false },
+      orderBy: { scheduled_date: 'asc' },
+    });
+
     // Convert PayrollWorkLog to WorkLog-like objects for calculation
-    const workLogLike = pwls.map((pwl) => ({
+    const workLogLike = updatedPwls.map((pwl) => ({
       id: pwl.work_log_id,
       scheduled_date: pwl.scheduled_date,
       service_type: pwl.service_type,
@@ -1245,6 +1310,9 @@ export class PayrollService {
     });
     if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
 
+    // Check if this is a manual rate override
+    const isManualRateSet = body.matched_rate !== undefined;
+
     // Update snapshot fields
     const editableFields = [
       'service_type',
@@ -1274,29 +1342,44 @@ export class PayrollService {
       }
     }
 
-    // Re-match price if relevant fields changed
-    const priceRelatedFields = [
-      'client_id',
-      'company_profile_id',
-      'company_id',
-      'machine_type',
-      'tonnage',
-      'day_night',
-      'start_location',
-      'end_location',
-      'is_mid_shift',
-    ];
-    const hasPriceChange = priceRelatedFields.some(
-      (f) => body[f] !== undefined,
-    );
+    if (isManualRateSet) {
+      // Manual rate override: set the rate directly
+      const manualRate = body.matched_rate === null ? null : Number(body.matched_rate);
+      updateData.matched_rate = manualRate;
+      updateData.is_manual_rate = true;
+      if (manualRate !== null) {
+        updateData.price_match_status = 'matched';
+        updateData.price_match_note = '手動設定';
+      } else {
+        updateData.price_match_status = 'unmatched';
+        updateData.price_match_note = '未設定';
+        updateData.is_manual_rate = false;
+      }
+    } else {
+      // Re-match price if relevant fields changed
+      const priceRelatedFields = [
+        'client_id',
+        'company_profile_id',
+        'company_id',
+        'machine_type',
+        'tonnage',
+        'day_night',
+        'start_location',
+        'end_location',
+        'is_mid_shift',
+      ];
+      const hasPriceChange = priceRelatedFields.some(
+        (f) => body[f] !== undefined,
+      );
 
-    // Merge current data with updates for price matching
-    const mergedPwl = { ...pwl, ...updateData };
+      // Merge current data with updates for price matching
+      const mergedPwl = { ...pwl, ...updateData };
 
-    if (hasPriceChange) {
-      const priceInfo =
-        await this.calcService.rematchPayrollWorkLogPrice(mergedPwl);
-      Object.assign(updateData, priceInfo);
+      if (hasPriceChange) {
+        const priceInfo =
+          await this.calcService.rematchPayrollWorkLogPrice(mergedPwl);
+        Object.assign(updateData, priceInfo);
+      }
     }
 
     // Recalculate line amount
@@ -1855,5 +1938,102 @@ export class PayrollService {
       if (cat) return cat.id;
     }
     return null;
+  }
+
+  // ── 設定歸組單價（批量更新同組工作記錄的單價）──────────────────
+  async setGroupRate(payrollId: number, groupKey: string, rate: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    // Find all work logs in this group
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: payrollId, is_excluded: false },
+    });
+
+    const matchingPwls = pwls.filter(
+      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+    );
+
+    if (matchingPwls.length === 0) {
+      throw new NotFoundException('找不到對應的工作記錄組');
+    }
+
+    // Update each work log in the group
+    for (const pwl of matchingPwls) {
+      const updateData: any = {
+        matched_rate: rate,
+        is_manual_rate: true,
+        price_match_status: 'matched',
+        price_match_note: '手動設定',
+      };
+      const finalPwl = { ...pwl, ...updateData };
+      updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+      await this.prisma.payrollWorkLog.update({
+        where: { id: pwl.id },
+        data: updateData,
+      });
+    }
+
+    return { success: true, updated_count: matchingPwls.length };
+  }
+
+  // ── 將手動設定的單價加入價目表 ──────────────────────────
+  async addToRateCard(payrollId: number, pwlId: number, rate: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    const pwl = await this.prisma.payrollWorkLog.findFirst({
+      where: { id: pwlId, payroll_id: payrollId },
+    });
+    if (!pwl) throw new NotFoundException('PayrollWorkLog not found');
+
+    // Check for duplicate: same client, contract, day/night, origin, destination, tonnage, machine_type, service_type
+    const duplicateWhere: any = {
+      status: 'active',
+    };
+    if (pwl.client_id) duplicateWhere.client_id = pwl.client_id;
+    if (pwl.client_contract_no) duplicateWhere.client_contract_no = pwl.client_contract_no;
+    if (pwl.day_night) duplicateWhere.day_night = pwl.day_night;
+    if (pwl.start_location) duplicateWhere.origin = pwl.start_location;
+    if (pwl.end_location) duplicateWhere.destination = pwl.end_location;
+    if (pwl.tonnage) duplicateWhere.tonnage = pwl.tonnage;
+    if (pwl.machine_type) duplicateWhere.machine_type = pwl.machine_type;
+    if (pwl.service_type) duplicateWhere.service_type = pwl.service_type;
+    if (pwl.company_id) duplicateWhere.company_id = pwl.company_id;
+
+    const existing = await this.prisma.fleetRateCard.findFirst({
+      where: duplicateWhere,
+    });
+
+    if (existing) {
+      throw new BadRequestException('此價格組合已存在於價目表中');
+    }
+
+    // Create new fleet rate card
+    const newCard = await this.fleetRateCardsService.create({
+      client_id: pwl.client_id || undefined,
+      company_id: pwl.company_id || undefined,
+      client_contract_no: pwl.client_contract_no || undefined,
+      service_type: pwl.service_type || undefined,
+      day_night: pwl.day_night || undefined,
+      tonnage: pwl.tonnage || undefined,
+      machine_type: pwl.machine_type || undefined,
+      origin: pwl.start_location || undefined,
+      destination: pwl.end_location || undefined,
+      rate: rate,
+      unit: pwl.matched_unit || pwl.unit || undefined,
+      status: 'active',
+      effective_date: new Date().toISOString().slice(0, 10),
+      remarks: `由糧單 #${payrollId} 手動設定後加入`,
+    });
+
+    return newCard;
   }
 }
