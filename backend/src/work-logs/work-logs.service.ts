@@ -2,9 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
 
 // 車輛類機種
-const VEHICLE_TYPES = ['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車'];
+const VEHICLE_TYPES = [
+  '平斗',
+  '勾斗',
+  '夾斗',
+  '拖頭',
+  '車斗',
+  '貨車',
+  '輕型貨車',
+  '私家車',
+  '燈車',
+];
 // 機械類機種
 const MACHINERY_TYPES = ['挖掘機', '火轆'];
 
@@ -18,7 +29,7 @@ export class WorkLogsService {
 
   // ── 工作記錄 CRUD ─────────────────────────────────────────
 
-  async findAll(query: any) {
+  async findAll(query: WorkLogQuery) {
     const {
       page = 1,
       limit = 25,
@@ -38,21 +49,26 @@ export class WorkLogsService {
     } = query;
 
     // Helper: parse comma-separated string or single value into Prisma filter
-    const toFilter = (val: any, toNum = true) => {
+    const toFilter = (val: string | number | undefined, toNum = true) => {
       if (!val) return undefined;
-      const parts = String(val).split(',').map(s => s.trim()).filter(Boolean);
+      const parts = String(val)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (parts.length === 0) return undefined;
       if (parts.length === 1) return toNum ? Number(parts[0]) : parts[0];
       return { in: toNum ? parts.map(Number) : parts };
     };
-    const toStrFilter = (val: any) => toFilter(val, false);
+    const toStrFilter = (val: string | number | undefined) =>
+      toFilter(val, false);
 
-    const where: any = { deleted_at: null };
+    const where: WhereClause = { deleted_at: null };
     const pubFilter = toFilter(publisher_id);
     if (pubFilter !== undefined) where.publisher_id = pubFilter;
     const statusFilter = toStrFilter(status);
     if (statusFilter !== undefined) where.status = statusFilter;
-    if (company_profile_id) where.company_profile_id = Number(company_profile_id);
+    if (company_profile_id)
+      where.company_profile_id = Number(company_profile_id);
     const companyFilter = toFilter(company_id);
     if (companyFilter !== undefined) where.company_id = companyFilter;
     const clientFilter = toFilter(client_id);
@@ -66,7 +82,11 @@ export class WorkLogsService {
     if (query.project_id) where.project_id = Number(query.project_id);
     const fleetFilter = toFilter(query.fleet_driver_id);
     if (fleetFilter !== undefined) where.work_log_fleet_driver_id = fleetFilter;
-    if (equipment_number) where.equipment_number = { contains: equipment_number, mode: 'insensitive' };
+    if (equipment_number)
+      where.equipment_number = {
+        contains: equipment_number,
+        mode: 'insensitive',
+      };
     if (date_from || date_to) {
       where.scheduled_date = {};
       if (date_from) where.scheduled_date.gte = new Date(date_from);
@@ -74,27 +94,54 @@ export class WorkLogsService {
     }
 
     const allowedSort = [
-      'id', 'scheduled_date', 'status', 'service_type',
-      'machine_type', 'equipment_number', 'day_night', 'created_at',
-      'start_time', 'end_time', 'start_location', 'end_location',
-      'quantity', 'unit', 'ot_quantity', 'ot_unit',
-      'tonnage', 'work_order_no', 'receipt_no',
-      'is_mid_shift', 'is_confirmed', 'is_paid',
-      'goods_quantity', 'work_log_product_name', 'work_log_product_unit',
-      'remarks', 'source',
+      'id',
+      'scheduled_date',
+      'status',
+      'service_type',
+      'machine_type',
+      'equipment_number',
+      'day_night',
+      'created_at',
+      'start_time',
+      'end_time',
+      'start_location',
+      'end_location',
+      'quantity',
+      'unit',
+      'ot_quantity',
+      'ot_unit',
+      'tonnage',
+      'work_order_no',
+      'receipt_no',
+      'is_mid_shift',
+      'is_confirmed',
+      'is_paid',
+      'goods_quantity',
+      'work_log_product_name',
+      'work_log_product_unit',
+      'remarks',
+      'source',
     ];
     // Relation fields that need nested orderBy
     const relationSortMap: Record<string, any> = {
-      publisher: { publisher: { displayName: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      company:   { company: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      client:    { client: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      quotation: { quotation: { quotation_no: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      contract:  { contract: { contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      employee:  { employee: { name_zh: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      client_contract_no: { client_contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
+      publisher: {
+        publisher: { displayName: sortOrder === 'ASC' ? 'asc' : 'desc' },
+      },
+      company: { company: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      client: { client: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      quotation: {
+        quotation: { quotation_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
+      },
+      contract: {
+        contract: { contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
+      },
+      employee: { employee: { name_zh: sortOrder === 'ASC' ? 'asc' : 'desc' } },
+      client_contract_no: {
+        client_contract_no: sortOrder === 'ASC' ? 'asc' : 'desc',
+      },
     };
     const safeSortOrder = sortOrder === 'ASC' ? 'asc' : 'desc';
-    let orderBy: any;
+    let orderBy: OrderByClause;
     if (relationSortMap[sortBy]) {
       orderBy = relationSortMap[sortBy];
     } else if (allowedSort.includes(sortBy)) {
@@ -130,7 +177,13 @@ export class WorkLogsService {
       this.prisma.workLog.count({ where }),
     ]);
 
-    return { data, total, page: pg, limit: lm, totalPages: Math.ceil(total / lm) };
+    return {
+      data,
+      total,
+      page: pg,
+      limit: lm,
+      totalPages: Math.ceil(total / lm),
+    };
   }
 
   async findOne(id: number) {
@@ -151,13 +204,29 @@ export class WorkLogsService {
   }
 
   async create(dto: any, userId: number, ipAddress?: string) {
-    const { publisher, company_profile, company, client, quotation, contract, employee, project, payroll_work_logs, matched_rate_card, rate_card, fleet_driver, ...data } = dto;
+    const {
+      publisher,
+      company_profile,
+      company,
+      client,
+      quotation,
+      contract,
+      employee,
+      project,
+      payroll_work_logs,
+      matched_rate_card,
+      rate_card,
+      fleet_driver,
+      ...data
+    } = dto;
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
         publisher_id: data.publisher_id ?? userId,
         equipment_source: this.resolveEquipmentSource(data.machine_type),
-        scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : undefined,
+        scheduled_date: data.scheduled_date
+          ? new Date(data.scheduled_date)
+          : undefined,
       },
     });
     // Audit log
@@ -171,7 +240,9 @@ export class WorkLogsService {
           changesAfter: saved,
           ipAddress,
         });
-      } catch (e) { console.error('Audit log error:', e); }
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
     }
     // 自動匹配價格
     await this.matchAndSavePrice(saved);
@@ -181,20 +252,37 @@ export class WorkLogsService {
   async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
-      id: _id, created_at, updated_at,
-      publisher, company_profile, company, client, quotation, contract, employee,
-      project, payroll_work_logs,
-      matched_rate_card, rate_card, fleet_driver,
+      id: _id,
+      created_at,
+      updated_at,
+      publisher,
+      company_profile,
+      company,
+      client,
+      quotation,
+      contract,
+      employee,
+      project,
+      payroll_work_logs,
+      matched_rate_card,
+      rate_card,
+      fleet_driver,
       ...rest
     } = dto;
     if (rest.machine_type !== undefined) {
       rest.equipment_source = this.resolveEquipmentSource(rest.machine_type);
     }
-    if (rest.scheduled_date) rest.scheduled_date = new Date(rest.scheduled_date);
+    if (rest.scheduled_date)
+      rest.scheduled_date = new Date(rest.scheduled_date);
 
     // Remove any remaining nested objects that Prisma cannot handle
     for (const key of Object.keys(rest)) {
-      if (rest[key] !== null && typeof rest[key] === 'object' && !(rest[key] instanceof Date) && !Array.isArray(rest[key])) {
+      if (
+        rest[key] !== null &&
+        typeof rest[key] === 'object' &&
+        !(rest[key] instanceof Date) &&
+        !Array.isArray(rest[key])
+      ) {
         delete rest[key];
       }
     }
@@ -230,11 +318,25 @@ export class WorkLogsService {
           changesAfter: afterWl,
           ipAddress,
         });
-      } catch (e) { console.error('Audit log error:', e); }
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
     }
     // 自動匹配價格（如果關鍵欄位有變動）
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'machine_type', 'tonnage', 'day_night', 'start_location', 'end_location'];
-    const hasPriceChange = priceRelatedFields.some(f => f in rest);
+    const priceRelatedFields = [
+      'client_id',
+      'company_profile_id',
+      'company_id',
+      'quotation_id',
+      'contract_id',
+      'client_contract_no',
+      'machine_type',
+      'tonnage',
+      'day_night',
+      'start_location',
+      'end_location',
+    ];
+    const hasPriceChange = priceRelatedFields.some((f) => f in rest);
     if (hasPriceChange) {
       const updatedWl = await this.findOne(id);
       if (updatedWl) {
@@ -256,14 +358,19 @@ export class WorkLogsService {
           changesBefore: existing,
           ipAddress,
         });
-      } catch (e) { console.error('Audit log error:', e); }
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
     }
     // 先解除 PayrollWorkLog 的關聯
     await this.prisma.payrollWorkLog.updateMany({
       where: { work_log_id: id },
       data: { work_log_id: null },
     });
-    await this.prisma.workLog.update({ where: { id }, data: { deleted_at: new Date() } });
+    await this.prisma.workLog.update({
+      where: { id },
+      data: { deleted_at: new Date() },
+    });
     return { success: true };
   }
 
@@ -275,7 +382,9 @@ export class WorkLogsService {
 
     // Coerce every element to a proper integer (HTTP JSON may deliver strings
     // or floating-point numbers depending on the client).
-    const safeIds = ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
+    const safeIds = ids
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
     if (safeIds.length === 0) {
       return { success: true, deleted: 0 };
     }
@@ -300,17 +409,38 @@ export class WorkLogsService {
   async bulkUpdate(ids: number[], field: string, value: any) {
     // Whitelist of fields that can be batch-updated
     const ALLOWED_FIELDS = [
-      'status', 'scheduled_date', 'service_type',
-      'company_profile_id', 'company_id', 'client_id',
-      'quotation_id', 'contract_id', 'client_contract_no',
-      'employee_id', 'work_log_fleet_driver_id', 'machine_type', 'equipment_number', 'tonnage',
-      'day_night', 'start_location', 'start_time',
-      'end_location', 'end_time',
-      'quantity', 'unit', 'ot_quantity', 'ot_unit',
-      'is_mid_shift', 'goods_quantity',
-      'receipt_no', 'work_order_no',
-      'is_confirmed', 'is_paid', 'remarks',
-      'work_log_product_name', 'work_log_product_unit',
+      'status',
+      'scheduled_date',
+      'service_type',
+      'company_profile_id',
+      'company_id',
+      'client_id',
+      'quotation_id',
+      'contract_id',
+      'client_contract_no',
+      'employee_id',
+      'work_log_fleet_driver_id',
+      'machine_type',
+      'equipment_number',
+      'tonnage',
+      'day_night',
+      'start_location',
+      'start_time',
+      'end_location',
+      'end_time',
+      'quantity',
+      'unit',
+      'ot_quantity',
+      'ot_unit',
+      'is_mid_shift',
+      'goods_quantity',
+      'receipt_no',
+      'work_order_no',
+      'is_confirmed',
+      'is_paid',
+      'remarks',
+      'work_log_product_name',
+      'work_log_product_unit',
     ];
     if (!ALLOWED_FIELDS.includes(field)) {
       throw new Error(`Field "${field}" is not allowed for batch update`);
@@ -321,11 +451,27 @@ export class WorkLogsService {
     if (field === 'scheduled_date' && processedValue) {
       processedValue = new Date(processedValue);
     }
-    if (['company_profile_id', 'company_id', 'client_id', 'quotation_id', 'contract_id', 'employee_id', 'work_log_fleet_driver_id'].includes(field)) {
-      processedValue = processedValue !== null && processedValue !== '' ? Number(processedValue) : null;
+    if (
+      [
+        'company_profile_id',
+        'company_id',
+        'client_id',
+        'quotation_id',
+        'contract_id',
+        'employee_id',
+        'work_log_fleet_driver_id',
+      ].includes(field)
+    ) {
+      processedValue =
+        processedValue !== null && processedValue !== ''
+          ? Number(processedValue)
+          : null;
     }
     if (['quantity', 'ot_quantity', 'goods_quantity'].includes(field)) {
-      processedValue = processedValue !== null && processedValue !== '' ? Number(processedValue) : null;
+      processedValue =
+        processedValue !== null && processedValue !== ''
+          ? Number(processedValue)
+          : null;
     }
     if (['is_mid_shift', 'is_confirmed', 'is_paid'].includes(field)) {
       processedValue = Boolean(processedValue);
@@ -335,13 +481,21 @@ export class WorkLogsService {
       const equipmentSource = this.resolveEquipmentSource(processedValue);
       await this.prisma.workLog.updateMany({
         where: { id: { in: ids } },
-        data: { machine_type: processedValue, equipment_source: equipmentSource },
+        data: {
+          machine_type: processedValue,
+          equipment_source: equipmentSource,
+        },
       });
       // Re-match prices for affected records
       const priceRelatedFields = ['machine_type'];
       if (priceRelatedFields.includes(field)) {
-        const updatedLogs = await this.prisma.workLog.findMany({ where: { id: { in: ids } }, include: { company: true, client: true } });
-        await Promise.all(updatedLogs.map(log => this.matchAndSavePrice(log)));
+        const updatedLogs = await this.prisma.workLog.findMany({
+          where: { id: { in: ids } },
+          include: { company: true, client: true },
+        });
+        await Promise.all(
+          updatedLogs.map((log) => this.matchAndSavePrice(log)),
+        );
       }
       return { success: true, updated: ids.length };
     }
@@ -352,22 +506,42 @@ export class WorkLogsService {
     });
 
     // Re-match prices if price-related field changed
-    const priceRelatedFields = ['client_id', 'company_profile_id', 'company_id', 'quotation_id', 'contract_id', 'client_contract_no', 'tonnage', 'day_night', 'start_location', 'end_location'];
+    const priceRelatedFields = [
+      'client_id',
+      'company_profile_id',
+      'company_id',
+      'quotation_id',
+      'contract_id',
+      'client_contract_no',
+      'tonnage',
+      'day_night',
+      'start_location',
+      'end_location',
+    ];
     if (priceRelatedFields.includes(field)) {
-      const updatedLogs = await this.prisma.workLog.findMany({ where: { id: { in: ids } }, include: { company: true, client: true } });
-      await Promise.all(updatedLogs.map(log => this.matchAndSavePrice(log)));
+      const updatedLogs = await this.prisma.workLog.findMany({
+        where: { id: { in: ids } },
+        include: { company: true, client: true },
+      });
+      await Promise.all(updatedLogs.map((log) => this.matchAndSavePrice(log)));
     }
 
     return { success: true, updated: ids.length };
   }
 
   async bulkConfirm(ids: number[]) {
-    await this.prisma.workLog.updateMany({ where: { id: { in: ids } }, data: { is_confirmed: true } });
+    await this.prisma.workLog.updateMany({
+      where: { id: { in: ids } },
+      data: { is_confirmed: true },
+    });
     return { success: true, confirmed: ids.length };
   }
 
   async bulkUnconfirm(ids: number[]) {
-    await this.prisma.workLog.updateMany({ where: { id: { in: ids } }, data: { is_confirmed: false } });
+    await this.prisma.workLog.updateMany({
+      where: { id: { in: ids } },
+      data: { is_confirmed: false },
+    });
     return { success: true, unconfirmed: ids.length };
   }
 
@@ -455,17 +629,27 @@ export class WorkLogsService {
       const [vehicles, subconDrivers] = await Promise.all([
         this.prisma.vehicle.findMany({
           where,
-          select: { id: true, plate_number: true, machine_type: true, tonnage: true },
+          select: {
+            id: true,
+            plate_number: true,
+            machine_type: true,
+            tonnage: true,
+          },
           orderBy: { plate_number: 'asc' },
         }),
         this.prisma.subcontractorFleetDriver.findMany({
           where: { status: 'active', plate_no: { not: null } },
-          select: { id: true, plate_no: true, machine_type: true, subcontractor: { select: { name: true } } },
+          select: {
+            id: true,
+            plate_no: true,
+            machine_type: true,
+            subcontractor: { select: { name: true } },
+          },
           orderBy: { plate_no: 'asc' },
         }),
       ]);
 
-      const vehicleOptions = vehicles.map(v => ({
+      const vehicleOptions = vehicles.map((v) => ({
         id: v.id,
         value: v.plate_number,
         label: v.plate_number,
@@ -474,7 +658,7 @@ export class WorkLogsService {
         source: 'vehicle',
       }));
 
-      const subconOptions = subconDrivers.map(d => ({
+      const subconOptions = subconDrivers.map((d) => ({
         id: d.id,
         value: d.plate_no!,
         label: `${d.plate_no} (${d.subcontractor.name})`,
@@ -493,10 +677,15 @@ export class WorkLogsService {
       }
       const machines = await this.prisma.machinery.findMany({
         where,
-        select: { id: true, machine_code: true, machine_type: true, tonnage: true },
+        select: {
+          id: true,
+          machine_code: true,
+          machine_type: true,
+          tonnage: true,
+        },
         orderBy: { machine_code: 'asc' },
       });
-      return machines.map(m => ({
+      return machines.map((m) => ({
         id: m.id,
         value: m.machine_code,
         label: m.machine_code,
@@ -530,24 +719,26 @@ export class WorkLogsService {
 
     // 根據業務邏輯：工作記錄配對費率查 FleetRateCard（租賃價目表），用於計算員工薪酬/機械成本
     // RateCard（客戶價目表）用於開發票，SubconRateCard（供應商價目表）用於付款給供應商
-    const { card, unmatchedReason } = await this.pricingService.matchFleetRateCardFromDb(
-      workLog.client_id,
-      workLog.company_id || workLog.company_profile_id,
-      workLog.client_contract_no || null,
-      workLog.service_type,
-      workLog.day_night,
-      workLog.tonnage,
-      workLog.machine_type,
-      workLog.start_location,
-      workLog.end_location,
-    );
+    const { card, unmatchedReason } =
+      await this.pricingService.matchFleetRateCardFromDb(
+        workLog.client_id,
+        workLog.company_id || workLog.company_profile_id,
+        workLog.client_contract_no || null,
+        workLog.service_type,
+        workLog.day_night,
+        workLog.tonnage,
+        workLog.machine_type,
+        workLog.start_location,
+        workLog.end_location,
+      );
 
     if (!card) {
       await this.prisma.workLog.update({
         where: { id: workLog.id },
         data: {
           price_match_status: 'unmatched',
-          price_match_note: unmatchedReason || '找不到對應的租賃價目表，請人工處理',
+          price_match_note:
+            unmatchedReason || '找不到對應的租賃價目表，請人工處理',
           matched_rate_card_id: null,
           matched_rate: null,
           matched_unit: null,
@@ -557,7 +748,10 @@ export class WorkLogsService {
       return;
     }
 
-    const { rate, unit } = this.pricingService.resolveRate(card, workLog.day_night);
+    const { rate, unit } = this.pricingService.resolveRate(
+      card,
+      workLog.day_night,
+    );
 
     await this.prisma.workLog.update({
       where: { id: workLog.id },
@@ -586,21 +780,40 @@ export class WorkLogsService {
         results.push({ id, success: false, error: e.message });
       }
     }
-    return { results, saved: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+    return {
+      results,
+      saved: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+    };
   }
 
   // ── 編輯鎖定 (簡易在記憶體實作) ─────────────────────
 
-  private static editLocks = new Map<string, { userId: number; userName: string; timestamp: number }>();
+  private static editLocks = new Map<
+    string,
+    { userId: number; userName: string; timestamp: number }
+  >();
 
   acquireEditLock(lockKey: string, userId: number, userName: string) {
     const existing = WorkLogsService.editLocks.get(lockKey);
     const now = Date.now();
     // Lock expires after 5 minutes of no heartbeat
-    if (existing && existing.userId !== userId && (now - existing.timestamp) < 5 * 60 * 1000) {
-      return { acquired: false, lockedBy: existing.userName, lockedAt: existing.timestamp };
+    if (
+      existing &&
+      existing.userId !== userId &&
+      now - existing.timestamp < 5 * 60 * 1000
+    ) {
+      return {
+        acquired: false,
+        lockedBy: existing.userName,
+        lockedAt: existing.timestamp,
+      };
     }
-    WorkLogsService.editLocks.set(lockKey, { userId, userName, timestamp: now });
+    WorkLogsService.editLocks.set(lockKey, {
+      userId,
+      userName,
+      timestamp: now,
+    });
     return { acquired: true };
   }
 
@@ -624,7 +837,7 @@ export class WorkLogsService {
   getEditLockStatus(lockKey: string, userId: number) {
     const existing = WorkLogsService.editLocks.get(lockKey);
     const now = Date.now();
-    if (!existing || (now - existing.timestamp) >= 5 * 60 * 1000) {
+    if (!existing || now - existing.timestamp >= 5 * 60 * 1000) {
       return { locked: false };
     }
     return {
@@ -646,7 +859,9 @@ export class WorkLogsService {
 
   // ── 輔助方法 ─────────────────────────────────────────────
 
-  private resolveEquipmentSource(machineType: string | null | undefined): 'vehicle' | 'machinery' | null {
+  private resolveEquipmentSource(
+    machineType: string | null | undefined,
+  ): 'vehicle' | 'machinery' | null {
     if (!machineType) return null;
     if (VEHICLE_TYPES.includes(machineType)) return 'vehicle';
     if (MACHINERY_TYPES.includes(machineType)) return 'machinery';

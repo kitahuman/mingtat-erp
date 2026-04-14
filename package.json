@@ -1,0 +1,29 @@
+{
+  "name": "mingtat-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MingTat ERP System",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kitahuman/mingtat-erp.git"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.2"
+  },
+  "lint-staged": {
+    "backend/src/**/*.{ts,tsx}": [
+      "prettier --write --config backend/.prettierrc"
+    ],
+    "frontend/src/**/*.{ts,tsx}": [
+      "prettier --write --single-quote --trailing-comma all"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}
