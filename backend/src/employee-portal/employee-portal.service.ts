@@ -398,9 +398,14 @@ export class EmployeePortalService {
       publisher_id,
       ...workLogData
     } = data;
+    // Map ot_hours -> ot_quantity if provided
+    const { ot_hours, ...cleanWorkLogData } = workLogData as any;
+    if (ot_hours != null && cleanWorkLogData.ot_quantity == null) {
+      cleanWorkLogData.ot_quantity = Number(ot_hours);
+    }
     return this.prisma.workLog.create({
       data: {
-        ...workLogData,
+        ...cleanWorkLogData,
         employee: { connect: { id: employeeId } },
         publisher: { connect: { id: userId } },
         scheduled_date: data.scheduled_date ? new Date(data.scheduled_date) : new Date(),
@@ -416,7 +421,6 @@ export class EmployeePortalService {
       },
     });
   }
-
   async getMyWorkLogs(userId: number, query: { page?: number; limit?: number }) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
@@ -437,6 +441,50 @@ export class EmployeePortalService {
       this.prisma.workLog.count({ where: { employee_id: employeeId } }),
     ]);
     return { data, total, page, limit };
+  }
+
+  async getMyWorkLog(userId: number, id: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
+    const log = await this.prisma.workLog.findFirst({
+      where: { id, employee_id: employeeId },
+      include: { client: { select: { id: true, name: true } } },
+    });
+    if (!log) throw new BadRequestException('工作紀錄不存在');
+    return log;
+  }
+
+  async updateMyWorkLog(userId: number, id: number, data: any) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    const employeeId = await this.resolveEmployeeId(user);
+    if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
+    const existing = await this.prisma.workLog.findFirst({ where: { id, employee_id: employeeId } });
+    if (!existing) throw new BadRequestException('工作紀錄不存在');
+    const {
+      id: _id, created_at, updated_at, photo_urls, signature_url,
+      employee_id: _eid, user_id: _uid, project_id, client_id,
+      company_id, company_profile_id, quotation_id, contract_id,
+      work_log_fleet_driver_id, publisher_id, ...workLogData
+    } = data;
+    const { ot_hours, ...cleanData } = workLogData as any;
+    if (ot_hours != null && cleanData.ot_quantity == null) {
+      cleanData.ot_quantity = Number(ot_hours);
+    }
+    return this.prisma.workLog.update({
+      where: { id },
+      data: {
+        ...cleanData,
+        ...(data.scheduled_date ? { scheduled_date: new Date(data.scheduled_date) } : {}),
+        ...(photo_urls && Array.isArray(photo_urls) ? { work_log_photo_urls: photo_urls } : {}),
+        ...(signature_url ? { work_log_signature_url: signature_url } : {}),
+        ...(client_id ? { client: { connect: { id: Number(client_id) } } } : {}),
+        ...(project_id ? { project: { connect: { id: Number(project_id) } } } : {}),
+      },
+      include: { client: { select: { id: true, name: true } } },
+    });
   }
 
   // ── Expenses (報銷) ────────────────────────────────────────────

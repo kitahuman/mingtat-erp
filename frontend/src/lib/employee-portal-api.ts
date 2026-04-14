@@ -20,6 +20,12 @@ export interface WorkLogHistoryItem {
   end_time: string | null;
   quantity: string | null;
   unit: string | null;
+  ot_quantity: string | null;
+  ot_unit: string | null;
+  is_mid_shift: boolean;
+  status: string | null;
+  work_order_no: string | null;
+  receipt_no: string | null;
   remarks: string | null;
   created_at: string;
 }
@@ -125,6 +131,10 @@ export const employeePortalApi = {
   submitWorkLog: (data: SubmitWorkLogPayload) => portalApi.post('/employee-portal/work-logs', data),
   getMyWorkLogs: (params?: { page?: number; limit?: number }) =>
     portalApi.get<WorkLogListResponse>('/employee-portal/work-logs', { params }),
+  getMyWorkLog: (id: number) =>
+    portalApi.get<WorkLogHistoryItem>(`/employee-portal/work-logs/${id}`),
+  updateMyWorkLog: (id: number, data: SubmitWorkLogPayload) =>
+    portalApi.put<WorkLogHistoryItem>(`/employee-portal/work-logs/${id}`, data),
 
   // Expenses
   submitExpense: (data: any) => portalApi.post('/employee-portal/expenses', data),

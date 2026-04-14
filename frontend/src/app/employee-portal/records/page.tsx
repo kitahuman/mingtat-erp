@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
-import { employeePortalApi } from '@/lib/employee-portal-api';
+import { employeePortalApi, WorkLogHistoryItem } from '@/lib/employee-portal-api';
 
 type Tab = 'work' | 'expense' | 'leave' | 'payslip' | 'attendance';
 
@@ -21,10 +22,128 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-700',
 };
 
+// 格式化日期，加上年份
+function formatDateFull(d: string | null): string {
+  if (!d) return '-';
+  const date = new Date(d);
+  return date.toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// 格式化日期時間，加上年份
+function formatDateTimeFull(d: string): string {
+  return new Date(d).toLocaleString('zh-HK', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatAmount(n: any): string {
+  return `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 0 })}`;
+}
+
+// 工作紀錄卡片
+function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () => void }) {
+  const clientName = log.client?.name ?? log.unverified_client_name ?? null;
+  const isTransport = log.service_type === '運輸';
+
+  // 1車/1天 顯示
+  const quantityLabel = log.quantity != null
+    ? `${log.quantity}${log.unit ? ` ${log.unit}` : ''}`
+    : null;
+
+  // OT 時數
+  const otLabel = log.ot_quantity != null && Number(log.ot_quantity) > 0
+    ? `OT ${log.ot_quantity}${log.ot_unit ? log.ot_unit : '時'}`
+    : null;
+
+  // 中直
+  const midShiftLabel = log.is_mid_shift ? '中直' : null;
+
+  // 更次
+  const shiftLabel = log.day_night === 'D' ? '日更' : log.day_night === 'N' ? '夜更' : log.day_night ?? null;
+
+  // 地點
+  const locationParts = [log.start_location, log.end_location].filter(Boolean);
+  const locationLabel = locationParts.length > 0 ? locationParts.join(' → ') : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md active:scale-[0.99] transition-all"
+    >
+      {/* Header row */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+            {log.service_type ?? '工程'}
+          </span>
+          {shiftLabel && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{shiftLabel}</span>
+          )}
+          {midShiftLabel && (
+            <span className="text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">{midShiftLabel}</span>
+          )}
+          {otLabel && (
+            <span className="text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">{otLabel}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+          {log.status && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[log.status] || 'bg-gray-100 text-gray-600'}`}>
+              {log.status}
+            </span>
+          )}
+          <span className="text-gray-300 text-sm">›</span>
+        </div>
+      </div>
+
+      {/* Date */}
+      <p className="text-xs text-gray-400 mb-2">
+        {formatDateFull(log.scheduled_date ?? log.created_at)}
+      </p>
+
+      {/* Client & Contract */}
+      {(clientName || log.client_contract_no) && (
+        <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+          {clientName && (
+            <span className="text-sm font-medium text-gray-800">{clientName}</span>
+          )}
+          {log.client_contract_no && (
+            <span className="text-xs text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{log.client_contract_no}</span>
+          )}
+        </div>
+      )}
+
+      {/* Machine type & equipment */}
+      {(log.machine_type || log.equipment_number) && (
+        <p className="text-xs text-gray-600 mb-1">
+          🔧 {[log.machine_type, log.equipment_number, log.tonnage ? `${log.tonnage}噸` : null].filter(Boolean).join(' · ')}
+        </p>
+      )}
+
+      {/* Location */}
+      {locationLabel && (
+        <p className="text-xs text-gray-500 mb-1">
+          📍 {locationLabel}
+        </p>
+      )}
+
+      {/* Quantity */}
+      {quantityLabel && (
+        <p className="text-xs text-gray-500">
+          數量：{quantityLabel}
+        </p>
+      )}
+    </button>
+  );
+}
+
 export default function RecordsPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>('work');
-  const [workLogs, setWorkLogs] = useState<any[]>([]);
+  const [workLogs, setWorkLogs] = useState<WorkLogHistoryItem[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [payrolls, setPayrolls] = useState<any[]>([]);
@@ -56,24 +175,6 @@ export default function RecordsPage() {
       }
     } catch {}
     setLoading(false);
-  };
-
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' });
-  const formatDateTime = (d: string) =>
-    new Date(d).toLocaleString('zh-HK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const formatAmount = (n: any) =>
-    `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 0 })}`;
-
-  const getStatusLabel = (status: string) => {
-    const map: Record<string, string> = {
-      editing: t('editing'),
-      unassigned: t('unassigned'),
-      assigned: t('assigned'),
-      in_progress: t('inProgress'),
-      completed: t('completed'),
-      cancelled: t('cancelled'),
-    };
-    return map[status] || status;
   };
 
   const getLeaveTypeLabel = (type: string) => {
@@ -138,33 +239,11 @@ export default function RecordsPage() {
               <EmptyState icon="📋" label={t('noData')} />
             ) : (
               workLogs.map((log) => (
-                <div key={log.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="font-semibold text-gray-800 text-sm">
-                        {log.service_type || '-'} {log.machine_type ? `· ${log.machine_type}` : ''}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {log.scheduled_date ? formatDate(log.scheduled_date) : formatDate(log.created_at)}
-                        {log.client?.name ? ` · ${log.client.name}` : ''}
-                      </p>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[log.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {getStatusLabel(log.status)}
-                    </span>
-                  </div>
-                  {(log.start_location || log.end_location) && (
-                    <p className="text-xs text-gray-400">
-                      📍 {[log.start_location, log.end_location].filter(Boolean).join(' → ')}
-                    </p>
-                  )}
-                  {log.equipment_number && (
-                    <p className="text-xs text-gray-400">🔧 {log.equipment_number}</p>
-                  )}
-                  {log.remarks && (
-                    <p className="text-xs text-gray-400 mt-1 truncate">{log.remarks}</p>
-                  )}
-                </div>
+                <WorkLogCard
+                  key={log.id}
+                  log={log}
+                  onClick={() => router.push(`/employee-portal/work-report?edit=${log.id}`)}
+                />
               ))
             )
           )}
@@ -180,7 +259,7 @@ export default function RecordsPage() {
                     <div className="flex-1">
                       <p className="font-semibold text-gray-800 text-sm">{exp.item || '-'}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {formatDate(exp.date)} · {exp.category?.name || '-'}
+                        {formatDateFull(exp.date)} · {exp.category?.name || '-'}
                       </p>
                       {exp.supplier_name && <p className="text-xs text-gray-400">{exp.supplier_name}</p>}
                     </div>
@@ -216,7 +295,7 @@ export default function RecordsPage() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-500">
-                        {formatDate(leave.date_from)} – {formatDate(leave.date_to)}
+                        {formatDateFull(leave.date_from)} – {formatDateFull(leave.date_to)}
                       </p>
                       {leave.reason && <p className="text-xs text-gray-400 mt-1">{leave.reason}</p>}
                     </div>
@@ -261,7 +340,7 @@ export default function RecordsPage() {
                   </div>
                   {payroll.payment_date && (
                     <p className="text-xs text-gray-400 mt-2">
-                      {t('paymentDate')}: {formatDate(payroll.payment_date)}
+                      {t('paymentDate')}: {formatDateFull(payroll.payment_date)}
                     </p>
                   )}
                 </div>
@@ -285,7 +364,7 @@ export default function RecordsPage() {
                     <p className={`font-semibold text-sm ${record.type === 'clock_in' ? 'text-green-700' : 'text-red-700'}`}>
                       {record.type === 'clock_in' ? t('clockIn') : t('clockOut')}
                     </p>
-                    <p className="text-xs text-gray-500">{formatDateTime(record.timestamp)}</p>
+                    <p className="text-xs text-gray-500">{formatDateTimeFull(record.timestamp)}</p>
                     {record.latitude && (
                       <p className="text-xs text-gray-400">
                         📍 {Number(record.latitude).toFixed(4)}, {Number(record.longitude).toFixed(4)}

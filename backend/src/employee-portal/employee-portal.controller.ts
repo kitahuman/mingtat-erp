@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Put,
   Body,
   Query,
   Param,
@@ -194,6 +195,18 @@ export class EmployeePortalController {
     @Query() query: { page?: number; limit?: number },
   ) {
     return this.service.getMyWorkLogs(req.user.sub, query);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('work-logs/:id')
+  async getMyWorkLog(@Request() req: any, @Param('id') id: string) {
+    return this.service.getMyWorkLog(req.user.sub, Number(id));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('work-logs/:id')
+  async updateMyWorkLog(@Request() req: any, @Param('id') id: string, @Body() body: SubmitWorkLogDto) {
+    return this.service.updateMyWorkLog(req.user.sub, Number(id), body);
   }
 
   // ── Expenses (報銷) ────────────────────────────────────────────

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi, WorkLogHistoryItem } from '@/lib/employee-portal-api';
 import { VEHICLE_MACHINE_TYPES, MACHINERY_MACHINE_TYPES } from '@/app/(main)/work-logs/constants';
@@ -504,13 +505,13 @@ function HistoryCopyModal({
       .finally(() => setLoading(false));
   }, []);
 
-  const formatDate = (d: string | null) => {
+  const formatDateFull = (d: string | null) => {
     if (!d) return '-';
-    return d.slice(0, 10);
+    return new Date(d).toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   const getClientName = (log: WorkLogHistoryItem) =>
-    log.client?.name ?? log.unverified_client_name ?? '-';
+    log.client?.name ?? log.unverified_client_name ?? null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
@@ -538,30 +539,67 @@ function HistoryCopyModal({
           {!loading && logs.length === 0 && (
             <div className="text-center py-8 text-gray-400 text-sm">暫無歷史紀錄</div>
           )}
-          {!loading && logs.map((log) => (
-            <button
-              key={log.id}
-              type="button"
-              onClick={() => onSelect(log)}
-              className="w-full text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-3 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                  {log.service_type ?? '工程'}
-                </span>
-                <span className="text-xs text-gray-400">{formatDate(log.scheduled_date)}</span>
-              </div>
-              <div className="text-sm font-medium text-gray-800 truncate">
-                {getClientName(log)}
-                {log.client_contract_no ? ` · ${log.client_contract_no}` : ''}
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5 truncate">
-                {[log.machine_type, log.equipment_number, log.tonnage, log.start_location]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </div>
-            </button>
-          ))}
+          {!loading && logs.map((log) => {
+            const clientName = getClientName(log);
+            const isTransport = log.service_type === '運輸';
+            const locationParts = [log.start_location, log.end_location].filter(Boolean);
+            const otLabel = log.ot_quantity != null && Number(log.ot_quantity) > 0
+              ? `OT ${log.ot_quantity}${log.ot_unit ?? '時'}`
+              : null;
+            const shiftLabel = log.day_night === 'D' ? '日更' : log.day_night === 'N' ? '夜更' : null;
+            return (
+              <button
+                key={log.id}
+                type="button"
+                onClick={() => onSelect(log)}
+                className="w-full text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-3 transition-colors"
+              >
+                {/* Row 1: service type badges + date */}
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                      {log.service_type ?? '工程'}
+                    </span>
+                    {shiftLabel && (
+                      <span className="text-xs text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded-full">{shiftLabel}</span>
+                    )}
+                    {log.is_mid_shift && (
+                      <span className="text-xs text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded-full">中直</span>
+                    )}
+                    {otLabel && (
+                      <span className="text-xs text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full">{otLabel}</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{formatDateFull(log.scheduled_date)}</span>
+                </div>
+                {/* Row 2: client + contract */}
+                {(clientName || log.client_contract_no) && (
+                  <div className="flex items-center gap-1 mb-1 flex-wrap">
+                    {clientName && <span className="text-sm font-medium text-gray-800">{clientName}</span>}
+                    {log.client_contract_no && (
+                      <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{log.client_contract_no}</span>
+                    )}
+                  </div>
+                )}
+                {/* Row 3: machine type + equipment + tonnage */}
+                {(log.machine_type || log.equipment_number || log.tonnage) && (
+                  <p className="text-xs text-gray-500 mb-0.5">
+                    🔧 {[log.machine_type, log.equipment_number, log.tonnage ? `${log.tonnage}噸` : null].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                {/* Row 4: location */}
+                {locationParts.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    📍 {isTransport ? locationParts.join(' → ') : locationParts[0]}
+                  </p>
+                )}
+                {/* Row 5: quantity */}
+                {log.quantity && (
+                  <p className="text-xs text-gray-400">數量：{log.quantity}{log.unit ? ` ${log.unit}` : ''}</p>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Footer */}
@@ -582,6 +620,10 @@ function HistoryCopyModal({
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function WorkReportPage() {
   const { t } = useI18n();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get('edit') ? Number(searchParams.get('edit')) : null;
+  const isEditMode = editId != null;
   const [form, setForm] = useState<FormData>(defaultForm);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -604,8 +646,48 @@ export default function WorkReportPage() {
     return null;
   };
 
-  // ── 功能 1：草稿恢復 ──────────────────────────────────────────────────────
+  // ── 功能 1：草稿恢復 / 編輯模式載入 ─────────────────────────────────────
   useEffect(() => {
+    if (isEditMode && editId) {
+      // 編輯模式：從 API 載入已有紀錄
+      initializedRef.current = true;
+      employeePortalApi.getMyWorkLog(editId).then((res) => {
+        const log = res.data;
+        const isTransport = log.service_type === '運輸';
+        setForm({
+          work_type: isTransport ? 'transport' : 'engineering',
+          service_type: log.service_type ?? '',
+          scheduled_date: log.scheduled_date ? log.scheduled_date.slice(0, 10) : new Date().toISOString().split('T')[0],
+          client_id: log.client_id ? String(log.client_id) : '',
+          client_input: log.client?.name ?? log.unverified_client_name ?? '',
+          is_new_client: !log.client_id && !!log.unverified_client_name,
+          client_contract_no: log.client_contract_no ?? '',
+          tonnage: log.tonnage ?? '',
+          machine_type: log.machine_type ?? '',
+          equipment_number: isTransport ? '' : (log.equipment_number ?? ''),
+          start_location: isTransport ? '' : (log.start_location ?? ''),
+          work_content: '',
+          eng_quantity: '',
+          plate_no: isTransport ? (log.equipment_number ?? '') : '',
+          goods: '',
+          origin: isTransport ? (log.start_location ?? '') : '',
+          destination: isTransport ? (log.end_location ?? '') : '',
+          quantity: log.quantity ?? '',
+          unit: log.unit ?? '',
+          work_order_no: log.work_order_no ?? '',
+          receipt_no: log.receipt_no ?? '',
+          start_time: log.start_time ?? '',
+          end_time: log.end_time ?? '',
+          shift: (log.day_night === 'N' ? 'N' : 'D') as 'D' | 'N',
+          mid_shift: log.is_mid_shift ?? false,
+          ot_hours: log.ot_quantity ? String(log.ot_quantity) : '',
+          remarks: '',
+          photo_urls: [],
+          signature_url: '',
+        });
+      }).catch(() => {});
+      return;
+    }
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
@@ -834,12 +916,18 @@ export default function WorkReportPage() {
         payload.receipt_no = form.receipt_no || undefined;
       }
 
-      await employeePortalApi.submitWorkLog(payload as Parameters<typeof employeePortalApi.submitWorkLog>[0]);
-      // 提交成功後清除草稿
-      try { localStorage.removeItem(DRAFT_KEY); } catch {}
-      setDraftRestored(false);
-      setSuccess(t('workReportSuccess'));
-      setForm({ ...defaultForm, scheduled_date: form.scheduled_date });
+      if (isEditMode && editId) {
+        await employeePortalApi.updateMyWorkLog(editId, payload as Parameters<typeof employeePortalApi.submitWorkLog>[0]);
+        setSuccess('已更新工作紀錄');
+        setTimeout(() => router.push('/employee-portal/records'), 1200);
+      } else {
+        await employeePortalApi.submitWorkLog(payload as Parameters<typeof employeePortalApi.submitWorkLog>[0]);
+        // 提交成功後清除草稿
+        try { localStorage.removeItem(DRAFT_KEY); } catch {}
+        setDraftRestored(false);
+        setSuccess(t('workReportSuccess'));
+        setForm({ ...defaultForm, scheduled_date: form.scheduled_date });
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(axiosErr.response?.data?.message || t('error'));
@@ -856,14 +944,29 @@ export default function WorkReportPage() {
     <div className="p-4 pb-6">
       {/* Title row with history copy button */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900">{t('workReportTitle')}</h1>
-        <button
-          type="button"
-          onClick={() => setShowHistoryModal(true)}
-          className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition-colors"
-        >
-          📋 從歷史複製
-        </button>
+        <div className="flex items-center gap-2">
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={() => router.push('/employee-portal/records')}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >
+              ‹
+            </button>
+          )}
+          <h1 className="text-xl font-bold text-gray-900">
+            {isEditMode ? '編輯工作紀錄' : t('workReportTitle')}
+          </h1>
+        </div>
+        {!isEditMode && (
+          <button
+            type="button"
+            onClick={() => setShowHistoryModal(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition-colors"
+          >
+            📋 從歷史複製
+          </button>
+        )}
       </div>
 
       {/* 草稿恢復提示 */}
@@ -1308,7 +1411,7 @@ export default function WorkReportPage() {
           disabled={loading}
           className="w-full py-4 bg-blue-700 text-white font-bold rounded-2xl text-base hover:bg-blue-800 active:bg-blue-900 transition-colors disabled:opacity-50 shadow-md"
         >
-          {loading ? t('loading') : t('submitWorkReport')}
+          {loading ? t('loading') : (isEditMode ? '更新紀錄' : t('submitWorkReport'))}
         </button>
       </form>
 
