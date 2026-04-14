@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_OPTIONS: Record<string, string[]> = {
@@ -332,5 +332,133 @@ export class FieldOptionsService implements OnModuleInit {
       where: { category: 'location', is_active: true },
       orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
     });
+  }
+
+  /**
+   * 合併多個客戶合約選項為一個主合約選項。
+   * - 將被合併選項的名稱保存為主選項的別名
+   * - 更新所有引用 client_contract_no 字串的表
+   * - 刪除被合併的 FieldOption 行
+   */
+  async mergeContractOptions(dto: { primaryId: number; mergeIds: number[] }) {
+    const { primaryId, mergeIds } = dto;
+
+    if (!mergeIds || mergeIds.length === 0) {
+      throw new BadRequestException('沒有選擇要合併的合約選項');
+    }
+
+    // Fetch primary option
+    const primary = await this.prisma.fieldOption.findUnique({ where: { id: primaryId } });
+    if (!primary) throw new NotFoundException('主合約選項不存在');
+    if (primary.category !== 'client_contract_no') {
+      throw new BadRequestException('只能合併客戶合約類別的選項');
+    }
+
+    // Fetch all merge targets
+    const targets = await this.prisma.fieldOption.findMany({
+      where: { id: { in: mergeIds }, category: 'client_contract_no' },
+    });
+    if (targets.length === 0) throw new NotFoundException('找不到要合併的合約選項');
+
+    const targetLabels = targets.map(t => t.label);
+    const primaryLabel = primary.label;
+
+    // Collect existing aliases from primary + all merged targets
+    const existingAliases: string[] = Array.isArray(primary.aliases)
+      ? (primary.aliases as string[])
+      : [];
+    const newAliases: string[] = [...existingAliases];
+
+    for (const target of targets) {
+      if (target.label !== primaryLabel && !newAliases.includes(target.label)) {
+        newAliases.push(target.label);
+      }
+      const targetAliases: string[] = Array.isArray(target.aliases)
+        ? (target.aliases as string[])
+        : [];
+      for (const alias of targetAliases) {
+        if (alias !== primaryLabel && !newAliases.includes(alias)) {
+          newAliases.push(alias);
+        }
+      }
+    }
+
+    // Execute all updates in a single transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Update primary option's aliases
+      await tx.fieldOption.update({
+        where: { id: primaryId },
+        data: { aliases: newAliases },
+      });
+
+      for (const oldLabel of targetLabels) {
+        // work_logs
+        await tx.workLog.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // payroll_work_logs
+        await tx.payrollWorkLog.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // fleet_rate_cards
+        await tx.fleetRateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // rate_cards
+        await tx.rateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // subcon_rate_cards
+        await tx.subconRateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // invoices
+        await tx.invoice.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // projects
+        await tx.project.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        });
+
+        // daily_reports
+        await tx.dailyReport.updateMany({
+          where: { daily_report_client_contract_no: oldLabel },
+          data: { daily_report_client_contract_no: primaryLabel },
+        });
+
+        // acceptance_reports
+        await tx.acceptanceReport.updateMany({
+          where: { acceptance_report_client_contract_no: oldLabel },
+          data: { acceptance_report_client_contract_no: primaryLabel },
+        });
+      }
+
+      // Delete the merged FieldOption rows (exclude primary)
+      await tx.fieldOption.deleteMany({
+        where: { id: { in: mergeIds } },
+      });
+    });
+
+    return {
+      success: true,
+      primary: primaryLabel,
+      merged: targetLabels,
+      aliases: newAliases,
+      message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄。舊名稱已保留為別名。`,
+    };
   }
 }

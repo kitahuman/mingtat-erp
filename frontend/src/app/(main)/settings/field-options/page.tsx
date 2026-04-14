@@ -22,6 +22,9 @@ const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
 // Categories that support CSV import and alphabetical sort
 const CSV_IMPORT_CATEGORIES = new Set(['location', 'client_contract_no']);
 
+// Categories that support merge functionality
+const MERGE_CATEGORIES = new Set(['location', 'client_contract_no']);
+
 interface FieldOption {
   id: number;
   category: string;
@@ -153,6 +156,8 @@ export default function FieldOptionsPage() {
   }, [activeTab]);
 
   const isLocationTab = activeTab === 'location';
+  const isContractTab = activeTab === 'client_contract_no';
+  const isMergeableTab = MERGE_CATEGORIES.has(activeTab);
   const isCsvTab = CSV_IMPORT_CATEGORIES.has(activeTab);
 
   // For CSV-import tabs, display alphabetically; otherwise use sort_order
@@ -164,13 +169,13 @@ export default function FieldOptionsPage() {
     return opts;
   })();
 
-  // Apply search filter: match label or aliases (for location tab)
+  // Apply search filter: match label or aliases (for mergeable tabs)
   const currentOptions = (() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return sortedOptions;
     return sortedOptions.filter(opt => {
       if (opt.label.toLowerCase().includes(q)) return true;
-      if (isLocationTab && opt.aliases && opt.aliases.some(a => a.toLowerCase().includes(q))) return true;
+      if (isMergeableTab && opt.aliases && opt.aliases.some(a => a.toLowerCase().includes(q))) return true;
       return false;
     });
   })();
@@ -208,7 +213,7 @@ export default function FieldOptionsPage() {
     try {
       if (editingOption) {
         await fieldOptionsApi.update(editingOption.id, { label: formLabel.trim() });
-        if (isLocationTab) {
+        if (isMergeableTab) {
           await fieldOptionsApi.updateAliases(editingOption.id, formAliases);
         }
       } else {
@@ -216,8 +221,9 @@ export default function FieldOptionsPage() {
       }
       setShowModal(false);
       await load();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '儲存失敗');
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '儲存失敗';
+      alert(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -228,8 +234,9 @@ export default function FieldOptionsPage() {
     try {
       await fieldOptionsApi.remove(o.id);
       await load();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '刪除失敗');
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '刪除失敗';
+      alert(errorMessage);
     }
   };
 
@@ -267,8 +274,10 @@ export default function FieldOptionsPage() {
     });
   };
 
+  const mergeItemLabel = isContractTab ? '合約' : '地點';
+
   const openMergeModal = () => {
-    if (selectedIds.size < 2) { alert('請至少勾選 2 個地點才能合併'); return; }
+    if (selectedIds.size < 2) { alert(`請至少勾選 2 個${mergeItemLabel}才能合併`); return; }
     setPrimaryId(Array.from(selectedIds)[0]);
     setShowMergeModal(true);
   };
@@ -276,18 +285,24 @@ export default function FieldOptionsPage() {
   const handleMerge = async () => {
     if (!primaryId) return;
     const mergeIds = Array.from(selectedIds).filter(id => id !== primaryId);
-    if (mergeIds.length === 0) { alert('請選擇不同的主地點'); return; }
+    if (mergeIds.length === 0) { alert(`請選擇不同的主${mergeItemLabel}`); return; }
     setMerging(true);
     try {
-      const res = await fieldOptionsApi.mergeLocations(primaryId, mergeIds);
+      let res;
+      if (isContractTab) {
+        res = await fieldOptionsApi.mergeContractOptions(primaryId, mergeIds);
+      } else {
+        res = await fieldOptionsApi.mergeLocations(primaryId, mergeIds);
+      }
       setShowMergeModal(false);
       setMergeMode(false);
       setSelectedIds(new Set());
       setPrimaryId(null);
       await load();
       alert(res.data?.message || '合併成功');
-    } catch (err: any) {
-      alert(err.response?.data?.message || '合併失敗');
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '合併失敗';
+      alert(errorMessage);
     } finally {
       setMerging(false);
     }
@@ -321,8 +336,9 @@ export default function FieldOptionsPage() {
       const res = await fieldOptionsApi.bulkImport(activeTab, importPreview);
       setImportResult(res.data);
       await load();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '匯入失敗');
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '匯入失敗';
+      alert(errorMessage);
     } finally {
       setImporting(false);
     }
@@ -349,6 +365,19 @@ export default function FieldOptionsPage() {
   const totalCount = sortedOptions.length;
   const filteredCount = currentOptions.length;
   const isSearchActive = searchQuery.trim().length > 0;
+
+  // Merge description text based on category
+  const mergeDescription = isContractTab
+    ? '選擇保留哪一個作為主合約，其餘合約的所有引用記錄（工作紀錄、費率卡、發票、項目等）將自動更新，被合併的合約從選項中移除，舊名稱保留為別名。'
+    : '選擇保留哪一個作為主地點，其餘地點的所有引用記錄將自動更新，被合併的地點從選項中移除，舊名稱保留為別名。';
+
+  const mergePreviewNote = isContractTab
+    ? '所有工作紀錄、糧單工作紀錄、費率卡、發票、項目、日報、驗收報告中的合約引用將一併更新。此操作不可撤銷。'
+    : '所有工作紀錄、薪資紀錄、核對記錄、價目表中的地點引用將一併更新。此操作不可撤銷。';
+
+  const aliasHintText = isContractTab
+    ? '橙色標籤為別名（合併後的舊合約名稱）'
+    : '橙色標籤為別名（合併後的舊地點名稱，WhatsApp 報工時也能匹配）';
 
   return (
     <RoleGuard pageKey="settings-field-options">
@@ -381,24 +410,25 @@ export default function FieldOptionsPage() {
                     {isCsvTab
                       ? '按名稱排序顯示；可匯入 CSV 批量新增'
                       : '拖拽行可調整排序；點擊「編輯」可修改名稱'}
-                    {isLocationTab && !isCsvTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（合併後的舊地點名稱，WhatsApp 報工時也能匹配）</span>}
-                    {isLocationTab && isCsvTab && <span className="ml-1 text-amber-600">· 橙色標籤為別名（WhatsApp 報工時也能匹配）</span>}
+                    {isMergeableTab && (
+                      <span className="ml-1 text-amber-600">· {aliasHintText}</span>
+                    )}
                   </p>
                 )}
                 {mergeMode && (
                   <p className="text-xs text-blue-500 mt-0.5">
-                    勾選 2 個或以上相似地點，然後點擊「確認合併」
+                    勾選 2 個或以上相似{mergeItemLabel}，然後點擊「確認合併」
                     {selectedIds.size > 0 && <span className="ml-1">（已選 {selectedIds.size} 個）</span>}
                   </p>
                 )}
               </div>
               <div className="flex gap-2">
-                {isLocationTab && (
+                {isMergeableTab && (
                   <button onClick={toggleMergeMode}
                     className={`text-sm py-1.5 px-3 rounded-lg border transition-colors ${
                       mergeMode ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
                     }`}>
-                    {mergeMode ? '取消合併' : '⊕ 合併地點'}
+                    {mergeMode ? '取消合併' : `⊕ 合併${mergeItemLabel}`}
                   </button>
                 )}
                 {mergeMode && selectedIds.size >= 2 && (
@@ -441,7 +471,7 @@ export default function FieldOptionsPage() {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={isLocationTab ? `搜尋${CATEGORY_LABELS[activeTab]}名稱或別名…` : `搜尋${CATEGORY_LABELS[activeTab]}…`}
+                  placeholder={isMergeableTab ? `搜尋${CATEGORY_LABELS[activeTab]}名稱或別名…` : `搜尋${CATEGORY_LABELS[activeTab]}…`}
                   className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-gray-50"
                 />
                 {isSearchActive && (
@@ -474,7 +504,7 @@ export default function FieldOptionsPage() {
                       <th className="px-3 py-2 w-8"></th>
                       <th className="px-3 py-2 text-left whitespace-nowrap">
                         選項名稱
-                        {isLocationTab && !mergeMode && <span className="ml-1 text-xs font-normal text-gray-400">（含別名）</span>}
+                        {isMergeableTab && !mergeMode && <span className="ml-1 text-xs font-normal text-gray-400">（含別名）</span>}
                         {isCsvTab && <span className="ml-1 text-xs font-normal text-gray-400">（按名稱排序）</span>}
                       </th>
                       <th className="px-3 py-2 text-center w-20 whitespace-nowrap">狀態</th>
@@ -493,7 +523,7 @@ export default function FieldOptionsPage() {
                         <DraggableRow key={opt.id} option={opt} onEdit={openEdit} onDelete={handleDelete}
                           onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop}
                           mergeMode={mergeMode} checked={selectedIds.has(opt.id)} onCheck={handleCheck}
-                          showAliases={isLocationTab && !mergeMode} />
+                          showAliases={isMergeableTab && !mergeMode} />
                       ))
                     )}
                   </tbody>
@@ -517,16 +547,18 @@ export default function FieldOptionsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">選項名稱 *</label>
                   <input autoFocus type="text" value={formLabel}
                     onChange={e => setFormLabel(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !isLocationTab) handleSave(); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && !isMergeableTab) handleSave(); }}
                     className="input-field"
                     placeholder={`例如：${activeTab === 'machine_type' ? '平斗' : activeTab === 'tonnage' ? '13噸' : '輸入選項名稱'}`} />
                 </div>
 
-                {isLocationTab && editingOption && (
+                {isMergeableTab && editingOption && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      別名（舊地點名稱）
-                      <span className="ml-1 text-xs font-normal text-gray-400">— WhatsApp 報工時也能匹配</span>
+                      別名（舊{mergeItemLabel}名稱）
+                      <span className="ml-1 text-xs font-normal text-gray-400">
+                        {isLocationTab ? '— WhatsApp 報工時也能匹配' : '— 合併後的舊名稱'}
+                      </span>
                     </label>
                     {formAliases.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2">
@@ -617,7 +649,7 @@ export default function FieldOptionsPage() {
 
                     {importResult.addedLabels.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-green-700 mb-1.5">✅ 已新增：</p>
+                        <p className="text-xs font-semibold text-green-700 mb-1.5">已新增：</p>
                         <div className="max-h-36 overflow-y-auto border border-green-100 rounded-lg bg-green-50 divide-y divide-green-100">
                           {importResult.addedLabels.map((l, i) => (
                             <div key={i} className="px-3 py-1 text-sm text-green-800">{l}</div>
@@ -628,7 +660,7 @@ export default function FieldOptionsPage() {
 
                     {importResult.skippedLabels.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-1.5">⏭ 已跳過（已存在）：</p>
+                        <p className="text-xs font-semibold text-gray-500 mb-1.5">已跳過（已存在）：</p>
                         <div className="max-h-28 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 divide-y divide-gray-100">
                           {importResult.skippedLabels.map((l, i) => (
                             <div key={i} className="px-3 py-1 text-sm text-gray-500">{l}</div>
@@ -651,20 +683,20 @@ export default function FieldOptionsPage() {
           <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">合併地點</h3>
+                <h3 className="text-lg font-semibold text-gray-900">合併{mergeItemLabel}</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  選擇保留哪一個作為主地點，其餘地點的所有引用記錄將自動更新，被合併的地點從選項中移除，舊名稱保留為別名。
+                  {mergeDescription}
                 </p>
               </div>
               <div className="px-6 py-4 space-y-3">
-                <p className="text-sm font-medium text-gray-700">選擇主地點（保留的地點）：</p>
+                <p className="text-sm font-medium text-gray-700">選擇主{mergeItemLabel}（保留的{mergeItemLabel}）：</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {selectedOptions.map(opt => (
                     <label key={opt.id}
                       className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         primaryId === opt.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}>
-                      <input type="radio" name="primaryLocation" value={opt.id}
+                      <input type="radio" name="primaryOption" value={opt.id}
                         checked={primaryId === opt.id} onChange={() => setPrimaryId(opt.id)}
                         className="accent-blue-600" />
                       <div className="flex-1 min-w-0">
@@ -678,7 +710,7 @@ export default function FieldOptionsPage() {
                         )}
                       </div>
                       {primaryId === opt.id && (
-                        <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">主地點</span>
+                        <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">主{mergeItemLabel}</span>
                       )}
                     </label>
                   ))}
@@ -703,7 +735,7 @@ export default function FieldOptionsPage() {
                         </div>
                       </div>
                     )}
-                    <p className="mt-1.5 text-xs text-amber-600">所有工作紀錄、薪資紀錄、核對記錄、價目表中的地點引用將一併更新。此操作不可撤銷。</p>
+                    <p className="mt-1.5 text-xs text-amber-600">{mergePreviewNote}</p>
                   </div>
                 )}
               </div>

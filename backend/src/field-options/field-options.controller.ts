@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FieldOptionsService } from './field-options.service';
+import { MergeContractOptionsDto } from './dto/merge-contract-options.dto';
 
 @Controller('field-options')
 @UseGuards(AuthGuard('jwt'))
@@ -40,6 +41,11 @@ export class FieldOptionsController {
   @Post('merge-locations')
   mergeLocations(@Body() dto: { primaryId: number; mergeIds: number[] }) {
     return this.service.mergeLocations(dto);
+  }
+
+  @Post('merge-contract-options')
+  mergeContractOptions(@Body() dto: MergeContractOptionsDto) {
+    return this.service.mergeContractOptions(dto);
   }
 
   @Post('bulk-import')
