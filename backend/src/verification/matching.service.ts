@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from './whatsapp.service';
+import { NicknameMatchService } from './nickname-match.service';
 
 // ══════════════════════════════════════════════════════════════
 // 六來源交叉比對服務（含欄位層級匹配評分）
@@ -62,6 +63,7 @@ export class MatchingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
+    private readonly nicknameMatchService: NicknameMatchService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════
@@ -173,13 +175,46 @@ export class MatchingService {
       }
     }
 
+    // 7b. 預先查詢所有員工的 emp_nicknames（employeeId → 別名陣列）
+    const allEmployeeIds = [...new Set(
+      workLogs.map((wl: { employee_id: number | null }) => wl.employee_id).filter((id): id is number => id != null),
+    )];
+    const empNicknameRows = allEmployeeIds.length > 0
+      ? await this.prisma.employeeNickname.findMany({
+          where: { emp_nickname_employee_id: { in: allEmployeeIds } },
+          select: { emp_nickname_employee_id: true, emp_nickname_value: true },
+        })
+      : [];
+    const empNicknameMap = new Map<number, string[]>();
+    for (const row of empNicknameRows) {
+      const existing = empNicknameMap.get(row.emp_nickname_employee_id) || [];
+      existing.push(row.emp_nickname_value);
+      empNicknameMap.set(row.emp_nickname_employee_id, existing);
+    }
+
+    // 7c. 預先查詢 field_options 地點別名（label → aliases[]）
+    const locationOptions = await this.prisma.fieldOption.findMany({
+      where: { category: 'location', is_active: true },
+      select: { label: true, aliases: true },
+    });
+    const locationAliasMap = new Map<string, string[]>();
+    for (const opt of locationOptions) {
+      const label = opt.label;
+      const aliases = Array.isArray(opt.aliases)
+        ? (opt.aliases as string[])
+        : [];
+      if (label) {
+        locationAliasMap.set(label, aliases);
+      }
+    }
+
     // ── 組裝比對結果 ──────────────────────────────────────────
     const results: MatchingRow[] = [];
 
     if (group_by === 'vehicle') {
-      results.push(...this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, fleetNicknameMap));
+      results.push(...this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, fleetNicknameMap, empNicknameMap, locationAliasMap));
     } else {
-      results.push(...this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems));
+      results.push(...this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, empNicknameMap, locationAliasMap));
     }
 
     // 7. 載入確認狀態
@@ -369,6 +404,8 @@ export class MatchingService {
     attendances: any[],
     waOrderItems: any[],
     fleetNicknameMap: Map<string, string[]> = new Map(),
+    empNicknameMap: Map<number, string[]> = new Map(),
+    locationAliasMap: Map<string, string[]> = new Map(),
   ): MatchingRow[] {
     const groupMap = new Map<string, any[]>();
     for (const wl of workLogs) {
@@ -388,9 +425,14 @@ export class MatchingService {
 
       // 工作紀錄參考值（取第一筆作為比對基準）
       const refWl = wls[0];
+      const refEmployeeId: number | null = refWl.employee_id ?? null;
+      const refEmpNicknames: string[] = refEmployeeId != null
+        ? (empNicknameMap.get(refEmployeeId) || [])
+        : [];
       const ref = {
         employee: refWl.employee?.name_zh || refWl.employee?.nickname || '',
         employeeNickname: refWl.employee?.nickname || '',
+        empNicknames: refEmpNicknames,
         customer: refWl.client?.name || refWl.unverified_client_name || '',
         contract: refWl.contract?.contract_no || refWl.client_contract_no || '',
         location: `${refWl.start_location || ''} ${refWl.end_location || ''}`.trim(),
@@ -430,7 +472,7 @@ export class MatchingService {
           customer: bestReceipt.record_customer || '',
           contract: bestReceipt.record_contract_no || '',
           location: bestReceipt.record_location_from || '',
-        });
+        }, locationAliasMap);
         sources['chit'] = {
           source: '入帳票',
           status: 'found',
@@ -466,7 +508,7 @@ export class MatchingService {
           customer: bestSlip.record_customer || '',
           contract: bestSlip.record_contract_no || '',
           location: `${bestSlip.record_location_from || ''} ${bestSlip.record_location_to || ''}`.trim(),
-        });
+        }, locationAliasMap);
         sources['delivery_note'] = {
           source: '飛仔 OCR',
           status: 'found',
@@ -500,7 +542,7 @@ export class MatchingService {
           { field: '員工/司機', weight: FIELD_WEIGHTS.employee, score: 0, ref_value: ref.employee, src_value: '—（GPS 無此欄位）' },
           { field: '客戶名稱', weight: FIELD_WEIGHTS.customer, score: 0, ref_value: ref.customer, src_value: '—（GPS 無此欄位）' },
           { field: '合約號碼', weight: FIELD_WEIGHTS.contract, score: 0, ref_value: ref.contract, src_value: '—（GPS 無此欄位）' },
-          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatch(ref.location, gpsLocations), ref_value: ref.location, src_value: gpsLocations || '—' },
+          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatchWithAliases(ref.location, gpsLocations, locationAliasMap), ref_value: ref.location, src_value: gpsLocations || '—' },
         ];
         // GPS 特殊處理：只有地點可比對，所以只用地點的分數（不除以全部權重）
         const locationScore = fieldScores[3].score;
@@ -538,7 +580,7 @@ export class MatchingService {
           { field: '員工/司機', weight: FIELD_WEIGHTS.employee, score: 100, ref_value: ref.employee, src_value: matchedAttendances[0].employee?.name_zh || '—' },
           { field: '客戶名稱', weight: FIELD_WEIGHTS.customer, score: 0, ref_value: ref.customer, src_value: '—（打卡無此欄位）' },
           { field: '合約號碼', weight: FIELD_WEIGHTS.contract, score: 0, ref_value: ref.contract, src_value: '—（打卡無此欄位）' },
-          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatch(ref.location, matchedAttendances[0].address || ''), ref_value: ref.location, src_value: matchedAttendances[0].address || '—' },
+          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatchWithAliases(ref.location, matchedAttendances[0].address || '', locationAliasMap), ref_value: ref.location, src_value: matchedAttendances[0].address || '—' },
         ];
         sources['attendance'] = {
           source: '打卡紀錄',
@@ -575,7 +617,7 @@ export class MatchingService {
           customer: bestWa.wa_item_customer || '',
           contract: bestWa.wa_item_contract_no || '',
           location: bestWa.wa_item_location || '',
-        });
+        }, locationAliasMap);
         sources['whatsapp_order'] = {
           source: 'WhatsApp Order',
           status: 'found',
@@ -632,6 +674,8 @@ export class MatchingService {
     gpsSummaries: any[],
     attendances: any[],
     waOrderItems: any[],
+    empNicknameMap: Map<number, string[]> = new Map(),
+    locationAliasMap: Map<string, string[]> = new Map(),
   ): MatchingRow[] {
     const groupMap = new Map<string, any[]>();
     for (const wl of workLogs) {
@@ -653,9 +697,11 @@ export class MatchingService {
       const employeeNickname = employee?.nickname || '';
 
       const refWl = wls[0];
+      const refEmpNicknames: string[] = empNicknameMap.get(employeeId) || [];
       const ref = {
         employee: employeeName,
         employeeNickname,
+        empNicknames: refEmpNicknames,
         customer: refWl.client?.name || refWl.unverified_client_name || '',
         contract: refWl.contract?.contract_no || refWl.client_contract_no || '',
         location: `${refWl.start_location || ''} ${refWl.end_location || ''}`.trim(),
@@ -699,7 +745,7 @@ export class MatchingService {
           customer: best.record_customer || '',
           contract: best.record_contract_no || '',
           location: best.record_location_from || '',
-        });
+        }, locationAliasMap);
         sources['chit'] = {
           source: '入帳票',
           status: 'found',
@@ -724,7 +770,8 @@ export class MatchingService {
         (r: any) =>
           r.record_work_date?.toISOString().slice(0, 10) === date &&
           (vehicleNos.includes(this.normalizeVehicle(r.record_vehicle_no)) ||
-            this.nameMatch(r.record_driver_name, employeeName, employeeNickname)),
+            this.nameMatch(r.record_driver_name, employeeName, employeeNickname) ||
+            refEmpNicknames.some((nick) => this.nameMatch(r.record_driver_name, nick, nick))),
       );
       if (matchedSlips.length > 0) {
         const best = matchedSlips[0];
@@ -733,7 +780,7 @@ export class MatchingService {
           customer: best.record_customer || '',
           contract: best.record_contract_no || '',
           location: `${best.record_location_from || ''} ${best.record_location_to || ''}`.trim(),
-        });
+        }, locationAliasMap);
         sources['delivery_note'] = {
           source: '飛仔 OCR',
           status: 'found',
@@ -763,7 +810,7 @@ export class MatchingService {
           { field: '員工/司機', weight: FIELD_WEIGHTS.employee, score: 0, ref_value: ref.employee, src_value: '—（GPS 無此欄位）' },
           { field: '客戶名稱', weight: FIELD_WEIGHTS.customer, score: 0, ref_value: ref.customer, src_value: '—（GPS 無此欄位）' },
           { field: '合約號碼', weight: FIELD_WEIGHTS.contract, score: 0, ref_value: ref.contract, src_value: '—（GPS 無此欄位）' },
-          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatch(ref.location, gpsLocations), ref_value: ref.location, src_value: gpsLocations || '—' },
+          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatchWithAliases(ref.location, gpsLocations, locationAliasMap), ref_value: ref.location, src_value: gpsLocations || '—' },
         ];
         sources['gps'] = {
           source: 'GPS 追蹤',
@@ -792,7 +839,7 @@ export class MatchingService {
           { field: '員工/司機', weight: FIELD_WEIGHTS.employee, score: 100, ref_value: ref.employee, src_value: matchedAttendances[0].employee?.name_zh || '—' },
           { field: '客戶名稱', weight: FIELD_WEIGHTS.customer, score: 0, ref_value: ref.customer, src_value: '—（打卡無此欄位）' },
           { field: '合約號碼', weight: FIELD_WEIGHTS.contract, score: 0, ref_value: ref.contract, src_value: '—（打卡無此欄位）' },
-          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatch(ref.location, matchedAttendances[0].address || ''), ref_value: ref.location, src_value: matchedAttendances[0].address || '—' },
+          { field: '地點/路線', weight: FIELD_WEIGHTS.location, score: this.fuzzyMatchWithAliases(ref.location, matchedAttendances[0].address || '', locationAliasMap), ref_value: ref.location, src_value: matchedAttendances[0].address || '—' },
         ];
         sources['attendance'] = {
           source: '打卡紀錄',
@@ -812,12 +859,14 @@ export class MatchingService {
       }
 
       // 6. WhatsApp Order
+      // 除了車牌和主昵名比對，也檢查 emp_nicknames 別名
       const matchedWa = waOrderItems.filter(
         (item: any) =>
           item.order_date === date &&
           (vehicleNos.includes(this.normalizeVehicle(item.wa_item_vehicle_no)) ||
             vehicleNos.includes(this.normalizeVehicle(item.wa_item_machine_code)) ||
-            this.nameMatch(item.wa_item_driver_nickname, employeeName, employeeNickname)),
+            this.nameMatch(item.wa_item_driver_nickname, employeeName, employeeNickname) ||
+            refEmpNicknames.some((nick) => this.nameMatch(item.wa_item_driver_nickname, nick, nick))),
       );
       if (matchedWa.length > 0) {
         const bestWa = matchedWa[0];
@@ -826,7 +875,7 @@ export class MatchingService {
           customer: bestWa.wa_item_customer || '',
           contract: bestWa.wa_item_contract_no || '',
           location: bestWa.wa_item_location || '',
-        });
+        }, locationAliasMap);
         sources['whatsapp_order'] = {
           source: 'WhatsApp Order',
           status: 'found',
@@ -876,16 +925,20 @@ export class MatchingService {
 
   /**
    * 計算四個欄位的匹配分數
+   * @param ref 工作紀錄參考值（可包含 empNicknames 別名陣列和 locationAliasMap）
+   * @param src 來源比對值
+   * @param locationAliasMap 地點別名對映（可選）
    */
   private computeFieldScores(
-    ref: { employee: string; employeeNickname?: string; customer: string; contract: string; location: string },
+    ref: { employee: string; employeeNickname?: string; empNicknames?: string[]; customer: string; contract: string; location: string },
     src: { employee: string; customer: string; contract: string; location: string },
+    locationAliasMap: Map<string, string[]> = new Map(),
   ): FieldScore[] {
     return [
       {
         field: '員工/司機',
         weight: FIELD_WEIGHTS.employee,
-        score: this.employeeMatch(ref.employee, ref.employeeNickname || '', src.employee),
+        score: this.employeeMatchWithNicknames(ref.employee, ref.employeeNickname || '', ref.empNicknames || [], src.employee),
         ref_value: ref.employee || '—',
         src_value: src.employee || '—',
       },
@@ -906,7 +959,7 @@ export class MatchingService {
       {
         field: '地點/路線',
         weight: FIELD_WEIGHTS.location,
-        score: this.fuzzyMatch(ref.location, src.location),
+        score: this.fuzzyMatchWithAliases(ref.location, src.location, locationAliasMap),
         ref_value: ref.location || '—',
         src_value: src.location || '—',
       },
@@ -1023,6 +1076,82 @@ export class MatchingService {
     if (similarity >= 50) return Math.round(similarity);
 
     return 0;
+  }
+
+  /**
+   * 員工/司機匹配（支援花名、全名、暴稱，以及 emp_nicknames 別名陣列）
+   * 在原有 employeeMatch 基礎上，額外檢查 emp_nicknames 表的所有別名
+   */
+  private employeeMatchWithNicknames(
+    refName: unknown,
+    refNickname: unknown,
+    empNicknames: string[],
+    srcName: unknown,
+  ): number {
+    // 先用原有邏輯比對主名和暴稱
+    const baseScore = this.employeeMatch(refName, refNickname, srcName);
+    if (baseScore > 0) return baseScore;
+
+    // 再用 emp_nicknames 別名陣列逐一比對
+    if (empNicknames.length === 0) return 0;
+    const srcNameStr = (srcName == null) ? '' : String(srcName).trim();
+    if (!srcNameStr) return 0;
+
+    let bestScore = 0;
+    for (const nick of empNicknames) {
+      const score = this.employeeMatch(nick, '', srcNameStr);
+      if (score > bestScore) bestScore = score;
+    }
+    return bestScore;
+  }
+
+  /**
+   * 地點模糊匹配（包含 field_options aliases 別名比對）
+   * 除了原有文字比對，如果 ref 或 src 在 locationAliasMap 中有對應的別名，也一並比對
+   */
+  private fuzzyMatchWithAliases(
+    ref: unknown,
+    src: unknown,
+    locationAliasMap: Map<string, string[]>,
+  ): number {
+    // 先用原有文字比對
+    const baseScore = this.fuzzyMatch(ref, src);
+    if (baseScore >= 80) return baseScore; // 已是高分，不需要別名
+
+    if (locationAliasMap.size === 0) return baseScore;
+
+    const refStr = (ref == null || ref === '') ? '' : String(ref).trim();
+    const srcStr = (src == null || src === '') ? '' : String(src).trim();
+    if (!refStr || !srcStr) return baseScore;
+
+    // 收集 ref 的全部候選名稱（原始文字 + 別名）
+    const refCandidates = new Set<string>([refStr]);
+    for (const [label, aliases] of locationAliasMap) {
+      if (label === refStr || aliases.includes(refStr)) {
+        refCandidates.add(label);
+        for (const a of aliases) refCandidates.add(a);
+      }
+    }
+
+    // 收集 src 的全部候選名稱（原始文字 + 別名）
+    const srcCandidates = new Set<string>([srcStr]);
+    for (const [label, aliases] of locationAliasMap) {
+      if (label === srcStr || aliases.includes(srcStr)) {
+        srcCandidates.add(label);
+        for (const a of aliases) srcCandidates.add(a);
+      }
+    }
+
+    // 對所有候選組合進行比對，取最高分
+    let bestScore = baseScore;
+    for (const r of refCandidates) {
+      for (const s of srcCandidates) {
+        if (r === refStr && s === srcStr) continue; // 已經計算過
+        const score = this.fuzzyMatch(r, s);
+        if (score > bestScore) bestScore = score;
+      }
+    }
+    return bestScore;
   }
 
   /**
