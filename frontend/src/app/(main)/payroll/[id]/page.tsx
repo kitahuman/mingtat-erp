@@ -232,7 +232,7 @@ function GroupedSettlementView({
           </thead>
           <tbody>
             {groups.map((g: any, idx: number) => {
-              const route = [g.start_location, g.end_location].filter(Boolean).join(' \u2192 ');
+              const route = [g.start_location, g.end_location].filter(Boolean).join(' → ');
               const hasPrice = g.price_match_status === 'matched' && g.matched_rate;
               const isEditing = editingIdx === idx;
               const subtotal = hasPrice ? Number(g.total_amount) : 0;
@@ -242,10 +242,10 @@ function GroupedSettlementView({
                   <td className="px-3 py-2 text-gray-600">{g.client_contract_no || '-'}</td>
                   <td className="px-3 py-2">
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                      g.day_night === '\u591c' ? 'bg-indigo-100 text-indigo-700' :
-                      g.day_night === '\u4e2d\u76f4' ? 'bg-purple-100 text-purple-700' :
+                      g.day_night === '夜' ? 'bg-indigo-100 text-indigo-700' :
+                      g.day_night === '中直' ? 'bg-purple-100 text-purple-700' :
                       'bg-yellow-100 text-yellow-700'
-                    }`}>{g.day_night || '\u65e5'}</span>
+                    }`}>{g.day_night || '日'}</span>
                   </td>
                   <td className="px-3 py-2 text-gray-600 text-xs">{route || '-'}</td>
                   <td className="px-3 py-2 text-right font-mono">
@@ -278,25 +278,25 @@ function GroupedSettlementView({
                           setEditingIdx(idx);
                           setEditRate(hasPrice ? String(Number(g.matched_rate)) : '');
                         }}
-                        title={isDraft ? '\u9ede\u64ca\u7de8\u8f2f\u55ae\u50f9' : undefined}
+                        title={isDraft ? '點擊編輯單價' : undefined}
                       >
                         {hasPrice ? (
                           <span className="inline-flex items-center gap-1">
                             ${Number(g.matched_rate).toLocaleString()}
-                            {g.is_manual_rate && <span className="text-[10px] text-blue-500" title="\u624b\u52d5\u8a2d\u5b9a">\u270f</span>}
+                            {g.is_manual_rate && <span className="text-[10px] text-blue-500" title="手動設定">✏</span>}
                           </span>
                         ) : (
                           <span className="text-orange-500 inline-flex items-center gap-1">
-                            \u672a\u8a2d\u5b9a
-                            {isDraft && <span className="text-blue-400 text-[10px]">\u270f</span>}
+                            未設定
+                            {isDraft && <span className="text-blue-400 text-[10px]">✏</span>}
                           </span>
                         )}
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}\u8eca</td>
+                  <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}車</td>
                   <td className="px-3 py-2 text-right font-mono font-bold">
-                    {hasPrice ? `$${subtotal.toLocaleString()}` : <span className="text-orange-500">\u672a\u8a2d\u5b9a</span>}
+                    {hasPrice ? `$${subtotal.toLocaleString()}` : <span className="text-orange-500">未設定</span>}
                   </td>
                 </tr>
               );
@@ -304,7 +304,7 @@ function GroupedSettlementView({
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={6} className="px-3 py-2 font-bold text-right">\u6b78\u7d44\u7d50\u7b97\u5408\u8a08</td>
+              <td colSpan={6} className="px-3 py-2 font-bold text-right">歸組結算合計</td>
               <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">
                 ${totalAmount.toLocaleString()}
               </td>
@@ -317,7 +317,7 @@ function GroupedSettlementView({
       {addToRateCardPrompt && (
         <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
           <div className="text-sm text-blue-800">
-            \u5df2\u8a2d\u5b9a\u55ae\u50f9 <span className="font-bold">${addToRateCardPrompt.rate.toLocaleString()}</span>\uff0c\u662f\u5426\u5c07\u6b64\u50f9\u683c\u52a0\u5165\u50f9\u76ee\u8868\uff1f
+            已設定單價 <span className="font-bold">${addToRateCardPrompt.rate.toLocaleString()}</span>，是否將此價格加入價目表？
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -325,13 +325,13 @@ function GroupedSettlementView({
               disabled={addingToRateCard}
               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
-              {addingToRateCard ? '\u8655\u7406\u4e2d...' : '\u52a0\u5165\u50f9\u76ee\u8868'}
+              {addingToRateCard ? '處理中...' : '加入價目表'}
             </button>
             <button
               onClick={() => setAddToRateCardPrompt(null)}
               className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
             >
-              \u4e0d\u7528\u4e86
+              不用了
             </button>
           </div>
         </div>
