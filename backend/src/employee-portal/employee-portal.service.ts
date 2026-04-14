@@ -432,6 +432,7 @@ export class EmployeePortalService {
         orderBy: { scheduled_date: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: { client: { select: { id: true, name: true } } },
       }),
       this.prisma.workLog.count({ where: { employee_id: employeeId } }),
     ]);

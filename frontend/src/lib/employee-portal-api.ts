@@ -1,6 +1,63 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
+// ── Work Log Types ────────────────────────────────────────────────────────────
+export interface WorkLogHistoryItem {
+  id: number;
+  service_type: string | null;
+  scheduled_date: string | null;
+  client_id: number | null;
+  client: { id: number; name: string } | null;
+  unverified_client_name: string | null;
+  client_contract_no: string | null;
+  machine_type: string | null;
+  equipment_number: string | null;
+  tonnage: string | null;
+  start_location: string | null;
+  end_location: string | null;
+  day_night: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  quantity: string | null;
+  unit: string | null;
+  remarks: string | null;
+  created_at: string;
+}
+
+export interface WorkLogListResponse {
+  data: WorkLogHistoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface SubmitWorkLogPayload {
+  service_type?: string;
+  scheduled_date?: string;
+  client_id?: string | number;
+  unverified_client_name?: string;
+  client_contract_no?: string;
+  machine_type?: string;
+  equipment_number?: string;
+  tonnage?: string;
+  day_night?: string;
+  start_location?: string;
+  end_location?: string;
+  start_time?: string;
+  end_time?: string;
+  quantity?: string;
+  unit?: string;
+  ot_hours?: number;
+  is_mid_shift?: boolean;
+  goods_quantity?: number;
+  work_order_no?: string;
+  receipt_no?: string;
+  remarks?: string;
+  photo_urls?: string[];
+  signature_url?: string;
+  eng_quantity?: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 const portalApi = axios.create({
@@ -65,9 +122,9 @@ export const employeePortalApi = {
   },
 
   // Work logs
-  submitWorkLog: (data: any) => portalApi.post('/employee-portal/work-logs', data),
+  submitWorkLog: (data: SubmitWorkLogPayload) => portalApi.post('/employee-portal/work-logs', data),
   getMyWorkLogs: (params?: { page?: number; limit?: number }) =>
-    portalApi.get('/employee-portal/work-logs', { params }),
+    portalApi.get<WorkLogListResponse>('/employee-portal/work-logs', { params }),
 
   // Expenses
   submitExpense: (data: any) => portalApi.post('/employee-portal/expenses', data),

@@ -22,7 +22,7 @@ export class SubmitWorkLogDto {
   @IsOptional() @Type(() => Number) @IsNumber() goods_quantity?: number;
   @IsOptional() @IsString() work_log_product_name?: string;
   @IsOptional() @IsString() work_log_product_unit?: string;
-  @IsOptional() work_log_photo_urls?: any;
+  @IsOptional() @IsArray() @IsString({ each: true }) work_log_photo_urls?: string[];
   @IsOptional() @IsString() work_log_signature_url?: string;
   @IsOptional() @IsString() receipt_no?: string;
   @IsOptional() @IsString() work_order_no?: string;
