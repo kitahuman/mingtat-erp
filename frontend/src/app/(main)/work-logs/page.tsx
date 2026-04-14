@@ -169,6 +169,12 @@ export default function WorkLogsPage() {
   const [confirmations, setConfirmations] = useState<Map<number, Record<string, { status: string; confirmed_by: string; confirmed_at: string }>>>(new Map());
   const [confirmActionLoading, setConfirmActionLoading] = useState<string | null>(null);
 
+  // ── Attendance Match Detail ──────────────────────────────────────
+  const [attMatchData, setAttMatchData] = useState<Map<number, { loading: boolean; data: any; error: string | null }>>(new Map());
+  const [attManualPicker, setAttManualPicker] = useState<{ workLogId: number; employeeId: number; date: string } | null>(null);
+  const [attManualResults, setAttManualResults] = useState<any[]>([]);
+  const [attManualLoading, setAttManualLoading] = useState(false);
+
   // ── Manual Match Popup ──────────────────────────────────────────
   const [manualMatchPopup, setManualMatchPopup] = useState<{
     workLogId: number;
@@ -190,13 +196,17 @@ export default function WorkLogsPage() {
     // 如果已有資料則不重新載入
     if (verifyData.has(workLogId) && !verifyData.get(workLogId)?.error) return;
     setVerifyData(prev => new Map(prev).set(workLogId, { loading: true, data: null, error: null }));
+    // 同時載入打卡配對詳情
+    setAttMatchData(prev => new Map(prev).set(workLogId, { loading: true, data: null, error: null }));
     try {
-      const { verificationApi } = await import('@/lib/api');
-      const [matchRes, confRes] = await Promise.all([
+      const { verificationApi, attendancesApi } = await import('@/lib/api');
+      const [matchRes, confRes, attMatchRes] = await Promise.all([
         verificationApi.matchSingle(workLogId),
         verificationApi.getConfirmations(workLogId),
+        attendancesApi.matchDetail(workLogId).catch(() => ({ data: null })),
       ]);
       setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: matchRes.data, error: null }));
+      setAttMatchData(prev => new Map(prev).set(workLogId, { loading: false, data: attMatchRes.data, error: null }));
       // 把確認狀態存到 Map
       const confMap: Record<string, any> = {};
       if (Array.isArray(confRes.data)) {
@@ -205,6 +215,7 @@ export default function WorkLogsPage() {
       setConfirmations(prev => new Map(prev).set(workLogId, confMap));
     } catch (e: any) {
       setVerifyData(prev => new Map(prev).set(workLogId, { loading: false, data: null, error: e?.message || '載入失敗' }));
+      setAttMatchData(prev => new Map(prev).set(workLogId, { loading: false, data: null, error: e?.message || '載入失敗' }));
     }
   };
 
@@ -1607,14 +1618,55 @@ export default function WorkLogsPage() {
                                             {d.locations && d.locations !== '—' && <div>📍 {d.locations}</div>}
                                           </div>
                                         );
-                                        if (key === 'attendance') return (
-                                          <div className="space-y-0.5 text-gray-600">
-                                            {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
-                                            {d.type && d.type !== '—' && <div>⏰ {d.type}</div>}
-                                            {d.address && d.address !== '—' && <div>📍 {d.address}</div>}
-                                            {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
-                                          </div>
-                                        );
+                                        if (key === 'attendance') {
+                                          const amd = attMatchData.get(row.id);
+                                          return (
+                                            <div className="space-y-1 text-gray-600">
+                                              {/* 基本打卡資訊 */}
+                                              {d.employee && d.employee !== '—' && <div>👤 {d.employee}</div>}
+                                              {d.type && d.type !== '—' && <div>⏰ {d.type}</div>}
+                                              {d.address && d.address !== '—' && <div>📍 {d.address}</div>}
+                                              {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
+                                              {/* 增強版打卡配對詳情 */}
+                                              {amd?.data && amd.data.matched && (
+                                                <div className="mt-1.5 pt-1.5 border-t border-teal-200 space-y-1">
+                                                  {amd.data.clock_in && (
+                                                    <div className="text-teal-700">⬆ 上班: {new Date(amd.data.clock_in.time).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                  )}
+                                                  {amd.data.clock_out && (
+                                                    <div className="text-teal-700">⬇ 下班: {new Date(amd.data.clock_out.time).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                  )}
+                                                  {amd.data.is_mid_shift && <div className="text-orange-600">🔄 中直</div>}
+                                                  {amd.data.clock_in?.address && <div className="text-gray-500">📍 {amd.data.clock_in.address}</div>}
+                                                  {/* 逐項核對 */}
+                                                  {amd.data.checks && amd.data.checks.length > 0 && (
+                                                    <div className="mt-1 space-y-0.5">
+                                                      <div className="text-[10px] font-semibold text-gray-500 uppercase">核對結果</div>
+                                                      {amd.data.checks.map((ck: any, ci: number) => (
+                                                        <div key={ci} className="flex items-center gap-1">
+                                                          <span className={`w-4 text-center font-bold ${ck.result === 'O' ? 'text-green-600' : ck.result === 'X' ? 'text-red-600' : 'text-gray-400'}`}>
+                                                            {ck.result === 'O' ? '○' : ck.result === 'X' ? '✕' : '—'}
+                                                          </span>
+                                                          <span className="text-gray-500">{ck.item}:</span>
+                                                          <span className="truncate" title={`工作紀錄: ${ck.work_log_value} / 打卡: ${ck.attendance_value}`}>
+                                                            {ck.attendance_value}
+                                                          </span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                  {/* GPS 位置配對 */}
+                                                  {amd.data.location_match && amd.data.location_match.distance_meters !== null && (
+                                                    <div className={`mt-1 text-[10px] px-1.5 py-0.5 rounded ${amd.data.location_match.is_within_range ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                      {amd.data.location_match.is_within_range ? '✓' : '✗'} GPS {amd.data.location_match.matched_location || '未知地點'} ({amd.data.location_match.distance_meters}m)
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {amd?.loading && <div className="text-[10px] text-teal-400">載入核對詳情…</div>}
+                                            </div>
+                                          );
+                                        }
                                         if (key === 'whatsapp_order') return (
                                           <div className="space-y-0.5 text-gray-600">
                                             {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
@@ -1630,21 +1682,49 @@ export default function WorkLogsPage() {
                                       })()}
                                       {!found && (
                                         <div className="space-y-2">
-                                          <div className="text-gray-400 text-xs">未找到對應資料</div>
-                                          {/* 所有來源（非 work_log）在 missing 且無確認記錄或已拒絕時，均顯示手動配對 */}
-                                          {key !== 'work_log' && (!conf || conf.status === 'rejected') && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const dateStr = row.scheduled_date
-                                                  ? new Date(row.scheduled_date).toISOString().slice(0, 10)
-                                                  : new Date().toISOString().slice(0, 10);
-                                                openManualMatchPopup(row.id, dateStr, key);
-                                              }}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200"
-                                            >
-                                              🔗 手動配對
-                                            </button>
+                                          {key === 'attendance' ? (
+                                            <>
+                                              <div className="text-amber-600 text-xs font-medium">⚠ 未找到打卡記錄</div>
+                                              {row.employee_id && (!conf || conf.status === 'rejected') && (
+                                                <button
+                                                  onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    const dateStr = row.scheduled_date
+                                                      ? new Date(row.scheduled_date).toISOString().slice(0, 10)
+                                                      : new Date().toISOString().slice(0, 10);
+                                                    setAttManualPicker({ workLogId: row.id, employeeId: row.employee_id, date: dateStr });
+                                                    setAttManualLoading(true);
+                                                    try {
+                                                      const { attendancesApi } = await import('@/lib/api');
+                                                      const res = await attendancesApi.employeeDay(row.employee_id, dateStr);
+                                                      setAttManualResults(res.data || []);
+                                                    } catch { setAttManualResults([]); }
+                                                    finally { setAttManualLoading(false); }
+                                                  }}
+                                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-700 border border-teal-300 hover:bg-teal-200"
+                                                >
+                                                  🔍 查看該員工當天打卡記錄
+                                                </button>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <>
+                                              <div className="text-gray-400 text-xs">未找到對應資料</div>
+                                              {key !== 'work_log' && (!conf || conf.status === 'rejected') && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const dateStr = row.scheduled_date
+                                                      ? new Date(row.scheduled_date).toISOString().slice(0, 10)
+                                                      : new Date().toISOString().slice(0, 10);
+                                                    openManualMatchPopup(row.id, dateStr, key);
+                                                  }}
+                                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200"
+                                                >
+                                                  🔗 手動配對
+                                                </button>
+                                              )}
+                                            </>
                                           )}
                                         </div>
                                       )}
@@ -1752,9 +1832,51 @@ export default function WorkLogsPage() {
           <button onClick={() => changePage(totalPages)} disabled={page >= totalPages}
             className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">»</button>
         </div>
-      </div>
+      </div>      {/* ── Attendance Manual Picker Popup ──────────────────────────────── */}
+      {attManualPicker && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setAttManualPicker(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between rounded-t-xl">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">⏰ 員工當天打卡記錄</h2>
+                <p className="text-xs text-gray-500 mt-0.5">日期: {attManualPicker.date}，工作紀錄 #{attManualPicker.workLogId}</p>
+              </div>
+              <button onClick={() => setAttManualPicker(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+              {attManualLoading && <div className="text-center text-gray-400 py-8 text-sm">載入中...</div>}
+              {!attManualLoading && attManualResults.length === 0 && (
+                <div className="text-center text-gray-400 py-8 text-sm">該員工當天沒有任何打卡記錄</div>
+              )}
+              {!attManualLoading && attManualResults.map((att: any) => (
+                <div key={att.id} className="rounded-lg border border-gray-200 p-3 text-sm hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        att.type === 'clock_in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {att.type === 'clock_in' ? '上班' : '下班'}
+                      </span>
+                      <span className="text-gray-700 font-medium">
+                        {new Date(att.timestamp).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <span className="text-gray-400 text-xs">#{att.id}</span>
+                  </div>
+                  {att.address && <div className="text-gray-500 text-xs mt-1">📍 {att.address}</div>}
+                  {att.is_mid_shift && <div className="text-orange-600 text-xs mt-0.5">🔄 中直</div>}
+                  {att.employee?.name_zh && <div className="text-gray-500 text-xs mt-0.5">👤 {att.employee.name_zh}</div>}
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 px-5 py-3 flex justify-end bg-gray-50 rounded-b-xl">
+              <button onClick={() => setAttManualPicker(null)} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100">關閉</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-       {/* ── Manual Match Popup ──────────────────────────────────────── */}
+       {/* ── Manual Match Popup ────────────────────────────────────────── */}
       {manualMatchPopup && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setManualMatchPopup(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>

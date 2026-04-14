@@ -51,4 +51,17 @@ export class FieldOptionsController {
   updateAliases(@Param('id') id: number, @Body() dto: { aliases: string[] }) {
     return this.service.updateAliases(Number(id), dto.aliases);
   }
+
+  @Put(':id/gps')
+  updateGps(
+    @Param('id') id: number,
+    @Body() dto: { field_option_latitude: number; field_option_longitude: number },
+  ) {
+    return this.service.updateGps(Number(id), dto);
+  }
+
+  @Get('locations/with-gps')
+  getLocationsWithGps() {
+    return this.service.getLocationsWithGps();
+  }
 }

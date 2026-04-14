@@ -39,6 +39,7 @@ model User {
   acceptance_reports_created AcceptanceReport[]  @relation("acceptance_report_creator")
   audit_logs              AuditLog[]
   verification_confirmations VerificationConfirmation[]
+  anomaly_resolutions AttendanceAnomaly[] @relation("anomaly_resolver")
 
   @@map("users")
 }
@@ -232,6 +233,7 @@ model Employee {
   user                  User?
   acceptance_reports_inspected AcceptanceReport[] @relation("acceptance_report_inspector")
   nicknames             EmployeeNickname[]
+  attendance_anomalies   AttendanceAnomaly[]
 
   // ── Performance indexes ──
   @@index([company_id])
@@ -1013,6 +1015,8 @@ model FieldOption {
   sort_order Int      @default(0)
   is_active  Boolean  @default(true)
   aliases    Json     @default("[]") // Array of alias names (e.g. merged location names)
+  field_option_latitude  Float?
+  field_option_longitude Float?
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
@@ -1089,6 +1093,7 @@ model WorkLog {
    payroll_work_logs PayrollWorkLog[]
   whatsapp_messages WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
+  attendance_anomalies AttendanceAnomaly[]
   // ── Performance indexes ──
   @@index([scheduled_date])
   @@index([employee_id])
@@ -1329,6 +1334,7 @@ model EmployeeAttendance {
 
   employee             Employee  @relation(fields: [employee_id], references: [id])
   mid_shift_approver   Employee? @relation("mid_shift_approver", fields: [mid_shift_approved_by], references: [id])
+  anomalies            AttendanceAnomaly[]
 
   @@map("employee_attendances")
 }
@@ -2341,4 +2347,35 @@ model VerificationConfirmation {
   @@index([status])
   @@index([confirmed_at])
   @@map("verification_confirmations")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Attendance Anomalies (打卡異常記錄)
+// ══════════════════════════════════════════════════════════════
+
+model AttendanceAnomaly {
+  id                     Int       @id @default(autoincrement())
+  anomaly_date           DateTime  @db.Date
+  anomaly_type           String    @db.VarChar(50) // "no_work_log" | "no_attendance" | "shift_mismatch" | "location_mismatch"
+  anomaly_employee_id    Int?
+  anomaly_attendance_id  Int?
+  anomaly_work_log_id    Int?
+  anomaly_description    String    @db.Text
+  anomaly_is_resolved    Boolean   @default(false)
+  anomaly_resolved_by    Int?
+  anomaly_resolved_at    DateTime?
+  anomaly_resolved_notes String?   @db.Text
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @default(now()) @updatedAt
+
+  employee    Employee?            @relation(fields: [anomaly_employee_id], references: [id], onDelete: SetNull)
+  attendance  EmployeeAttendance?  @relation(fields: [anomaly_attendance_id], references: [id], onDelete: SetNull)
+  work_log    WorkLog?             @relation(fields: [anomaly_work_log_id], references: [id], onDelete: SetNull)
+  resolver    User?                @relation("anomaly_resolver", fields: [anomaly_resolved_by], references: [id], onDelete: SetNull)
+
+  @@index([anomaly_date])
+  @@index([anomaly_type])
+  @@index([anomaly_employee_id])
+  @@index([anomaly_is_resolved])
+  @@map("attendance_anomalies")
 }

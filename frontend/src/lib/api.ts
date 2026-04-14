@@ -208,6 +208,9 @@ export const fieldOptionsApi = {
   mergeLocations: (primaryId: number, mergeIds: number[]) => api.post('/field-options/merge-locations', { primaryId, mergeIds }),
   updateAliases: (id: number, aliases: string[]) => api.put(`/field-options/${id}/aliases`, { aliases }),
   bulkImport: (category: string, labels: string[]) => api.post('/field-options/bulk-import', { category, labels }),
+  updateGps: (id: number, data: { field_option_latitude: number; field_option_longitude: number }) =>
+    api.put(`/field-options/${id}/gps`, data),
+  getLocationsWithGps: () => api.get('/field-options/locations/with-gps'),
 };
 
 // Rate Cards (客戶價目表)
@@ -438,6 +441,20 @@ export const attendancesApi = {
   get: (id: number) => api.get(`/attendances/${id}`),
   update: (id: number, data: any) => api.put(`/attendances/${id}`, data),
   delete: (id: number) => api.delete(`/attendances/${id}`),
+
+  // 打卡配對增強
+  matchDetail: (workLogId: number) => api.get(`/attendances/match-detail/${workLogId}`),
+  employeeDay: (employeeId: number, date: string) =>
+    api.get(`/attendances/employee-day/${employeeId}/${date}`),
+
+  // 異常記錄
+  anomalies: (params?: any) => api.get('/attendances/anomalies', { params }),
+  scanAnomalies: (data: { date_from: string; date_to: string }) =>
+    api.post('/attendances/anomalies/scan', data),
+  resolveAnomaly: (id: number, data?: { anomaly_resolved_notes?: string }) =>
+    api.post(`/attendances/anomalies/${id}/resolve`, data || {}),
+  unresolveAnomaly: (id: number) =>
+    api.post(`/attendances/anomalies/${id}/unresolve`),
 };
 
 // Leaves (請假紀錄) - Admin view

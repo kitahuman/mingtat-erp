@@ -308,4 +308,29 @@ export class FieldOptionsService implements OnModuleInit {
       message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄。舊名稱已保留為別名。`,
     };
   }
+
+  /**
+   * 更新 FieldOption 的 GPS 座標
+   */
+  async updateGps(id: number, dto: { field_option_latitude: number; field_option_longitude: number }) {
+    const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('選項不存在');
+    return this.prisma.fieldOption.update({
+      where: { id },
+      data: {
+        field_option_latitude: dto.field_option_latitude,
+        field_option_longitude: dto.field_option_longitude,
+      },
+    });
+  }
+
+  /**
+   * 取得所有 location 類別的 FieldOption（包含 GPS 座標資訊）
+   */
+  async getLocationsWithGps() {
+    return this.prisma.fieldOption.findMany({
+      where: { category: 'location', is_active: true },
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+  }
 }
