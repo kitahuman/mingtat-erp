@@ -645,12 +645,16 @@ export default function WorkReportPage() {
       .catch(() => {});
 
     // Fetch field options
+    // Note: FieldOption schema has { id, label, sort_order } — no value field.
+    // Use label as value since work-log fields store the label text directly.
     Promise.all(FIELD_OPTION_CATEGORIES.map(cat =>
       portalSharedApi.getFieldOptions(cat).then(res => ({ cat, data: res.data }))
     )).then(results => {
       const newMap: Record<string, { value: string; label: string }[]> = {};
       results.forEach(r => {
-        newMap[r.cat] = (r.data as { value: string; label: string }[]).map((o) => ({ value: o.value, label: o.label }));
+        newMap[r.cat] = (r.data as { id: number; label: string; sort_order: number; is_active?: boolean }[])
+          .filter((o) => o.is_active !== false)
+          .map((o) => ({ value: o.label, label: o.label }));
       });
       setOptionsMap(newMap);
     }).catch(() => {});
