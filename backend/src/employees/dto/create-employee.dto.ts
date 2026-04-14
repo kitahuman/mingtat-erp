@@ -2,6 +2,10 @@ import { IsOptional, IsString, IsNumber, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateEmployeeDto {
+  @IsOptional() @IsString() base_salary?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() from_company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() to_company_id?: number;
   @IsOptional() @IsString() emp_code?: string;
   @IsOptional() @IsString() name_zh?: string;
   @IsOptional() @IsString() name_en?: string;
@@ -25,7 +29,6 @@ export class CreateEmployeeDto {
   @IsOptional() @IsString() driving_license_expiry?: string;
   @IsOptional() @IsString() driving_license_class?: string;
   @IsOptional() @IsString() role_title?: string;
-  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsBoolean() employee_is_temporary?: boolean;

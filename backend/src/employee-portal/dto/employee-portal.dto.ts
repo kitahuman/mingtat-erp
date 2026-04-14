@@ -41,6 +41,7 @@ export class SubmitExpenseDto {
 }
 
 export class PortalDailyReportDto {
+  // Long-form field names (original DTO definition)
   @IsOptional() @IsString() daily_report_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() daily_report_client_id?: number;
   @IsOptional() @IsString() daily_report_client_name?: string;
@@ -52,11 +53,28 @@ export class PortalDailyReportDto {
   @IsOptional() @IsString() daily_report_supplementary_notes?: string;
   @IsOptional() @IsString() daily_report_status?: string;
   @IsOptional() @IsString() daily_report_client_contract_no?: string;
+
+  // Short-form field names (used by employee-portal frontend)
+  @IsOptional() @IsString() report_date?: string;
+  @IsOptional() @IsString() shift_type?: string;
+  @IsOptional() @IsString() work_summary?: string;
+  @IsOptional() @IsString() memo?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() project_id?: string;
+  @IsOptional() @IsString() client_id?: string;
+  @IsOptional() @IsString() client_name?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsString() project_name?: string;
+  @IsOptional() @IsString() completed_work?: string;
+  @IsOptional() @IsString() signature?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
+
   @IsOptional() @IsArray() items?: any[];
   @IsOptional() @IsArray() attachments?: any[];
 }
 
 export class PortalAcceptanceReportDto {
+  // Long-form field names (original DTO definition)
   @IsOptional() @IsString() acceptance_report_date?: string;
   @IsOptional() @IsString() acceptance_report_acceptance_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() acceptance_report_client_id?: number;
@@ -77,6 +95,29 @@ export class PortalAcceptanceReportDto {
   @IsOptional() @IsString() acceptance_report_mingtat_signature?: string;
   @IsOptional() @IsString() acceptance_report_supplementary_notes?: string;
   @IsOptional() @IsString() acceptance_report_status?: string;
-  @IsOptional() @IsArray() acceptance_items?: any[];
+
+  // Short-form field names (used by employee-portal frontend)
+  @IsOptional() @IsString() report_date?: string;
+  @IsOptional() @IsString() acceptance_date?: string;
+  @IsOptional() @IsString() client_id?: string;
+  @IsOptional() @IsString() client_name?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsString() project_id?: string;
+  @IsOptional() @IsString() project_name?: string;
+  @IsOptional() @IsString() contract_ref?: string;
+  @IsOptional() @IsString() site_address?: string;
+  @IsOptional() @IsString() acceptance_items?: string;
+  @IsOptional() @IsString() quantity_unit?: string;
+  @IsOptional() @IsString() mingtat_inspector_id?: string;
+  @IsOptional() @IsString() mingtat_inspector_name?: string;
+  @IsOptional() @IsString() mingtat_inspector_title?: string;
+  @IsOptional() @IsString() client_inspector_name?: string;
+  @IsOptional() @IsString() client_inspector_title?: string;
+  @IsOptional() @IsString() client_signature?: string;
+  @IsOptional() @IsString() mingtat_signature?: string;
+  @IsOptional() @IsString() supplementary_notes?: string;
+  @IsOptional() @IsString() status?: string;
+
+  @IsOptional() @IsArray() acceptance_items_list?: any[];
   @IsOptional() @IsArray() attachments?: any[];
 }

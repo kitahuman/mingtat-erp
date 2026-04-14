@@ -2,6 +2,9 @@ import { IsOptional, IsString, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateBqItemDto {
+  @IsOptional() @IsString() item_no?: string;
+  @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsString() status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() contract_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() section_id?: number;
   @IsOptional() @IsString() item_ref?: string;

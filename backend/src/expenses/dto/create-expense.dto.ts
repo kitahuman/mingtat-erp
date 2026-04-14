@@ -2,6 +2,9 @@ import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateExpenseDto {
+  @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() quantity?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() unit_price?: number;
   @IsOptional() @IsString() date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() supplier_name?: string;

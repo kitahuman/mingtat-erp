@@ -2,6 +2,26 @@ import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateAcceptanceReportDto {
+  @IsOptional() @IsString() acceptance_date?: string;
+  @IsOptional() @IsArray() acceptance_items_list?: any[];
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsOptional() @IsString() client_inspector_name?: string;
+  @IsOptional() @IsString() client_inspector_title?: string;
+  @IsOptional() @IsString() client_name?: string;
+  @IsOptional() @IsString() client_signature?: string;
+  @IsOptional() @IsString() contract_ref?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() mingtat_inspector_id?: number;
+  @IsOptional() @IsString() mingtat_inspector_name?: string;
+  @IsOptional() @IsString() mingtat_inspector_title?: string;
+  @IsOptional() @IsString() mingtat_signature?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
+  @IsOptional() @IsString() project_name?: string;
+  @IsOptional() @IsString() quantity_unit?: string;
+  @IsOptional() @IsString() report_date?: string;
+  @IsOptional() @IsString() site_address?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() supplementary_notes?: string;
   @IsOptional() @IsString() acceptance_report_date?: string;
   @IsOptional() @IsString() acceptance_report_acceptance_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() acceptance_report_client_id?: number;

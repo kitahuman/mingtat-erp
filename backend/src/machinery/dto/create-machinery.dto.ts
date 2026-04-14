@@ -2,6 +2,8 @@ import { IsOptional, IsString, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateMachineryDto {
+  @IsOptional() @Type(() => Number) @IsNumber() from_company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() to_company_id?: number;
   @IsOptional() @IsString() machine_code?: string;
   @IsOptional() @IsString() machine_type?: string;
   @IsOptional() @IsString() brand?: string;

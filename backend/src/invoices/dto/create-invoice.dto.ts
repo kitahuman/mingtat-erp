@@ -12,6 +12,7 @@ export class CreateInvoiceDto {
   @IsOptional() @IsString() invoice_title?: string;
   @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() status?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() subtotal?: number;
   @IsOptional() @Type(() => Number) @IsNumber() tax_rate?: number;
   @IsOptional() @Type(() => Number) @IsNumber() tax_amount?: number;
