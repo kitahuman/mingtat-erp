@@ -442,4 +442,10 @@ export class EmployeePortalController {
   async getFieldOptions(@Query('category') category: string) {
     return this.service.getFieldOptionsByCategory(category);
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('shared/all-equipment')
+  async getAllEquipmentSimple() {
+    return this.service.getAllEquipmentSimple();
+  }
 }

@@ -485,7 +485,7 @@ export default function WorkReportPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [optionsMap, setOptionsMap] = useState<Record<string, {value: string, label: string}[]>>({});
-  const [allEquipment, setAllEquipment] = useState<{value: string; label: string; category?: string}[]>([]);
+  const [allEquipment, setAllEquipment] = useState<{ value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet' }[]>([]);
 
   // Machine type classification (mirrors admin work-logs constants)
   const VEHICLE_MACHINE_TYPES = new Set(['平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車']);
@@ -514,20 +514,15 @@ export default function WorkReportPage() {
       setOptionsMap(newMap);
     }).catch(() => {});
 
-    // Fetch equipment lists (vehicles + machinery + street fleet)
-    Promise.all([
-      portalSharedApi.getVehiclesSimple().catch(() => ({ data: [] })),
-      portalSharedApi.getMachinerySimple().catch(() => ({ data: [] })),
-      portalSharedApi.getSubconFleetSimple().catch(() => ({ data: [] })),
-    ]).then(([veh, mach, subcon]) => {
-      const combined = [
-        ...(veh.data || []),
-        ...(mach.data || []),
-        ...(subcon.data || []),
-      ];
-      // Filter out entries with null/undefined value or label to prevent .trim()/.toLowerCase() errors
-      setAllEquipment(combined.filter(e => e && e.value != null && e.label != null));
-    }).catch(() => {});
+    // Fetch all equipment (vehicles + machinery + subcon fleet) from unified endpoint
+    portalSharedApi
+      .getAllEquipmentSimple()
+      .then((res) => {
+        const items = Array.isArray(res.data) ? res.data : [];
+        // Filter out entries with null/undefined value or label to prevent .trim()/.toLowerCase() errors
+        setAllEquipment(items.filter((e) => e && e.value != null && e.label != null));
+      })
+      .catch(() => {});
   }, []);
 
   const tonnageOptions = optionsMap['tonnage'] || [];

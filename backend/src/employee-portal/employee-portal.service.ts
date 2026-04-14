@@ -1430,6 +1430,67 @@ export class EmployeePortalService {
     return machinery;
   }
 
+  /** 統一返回所有可用機號：公司車 + 機械設備 + 街車 */
+  async getAllEquipmentSimple(): Promise<{ value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[]> {
+    const [vehicles, machinery, subconDrivers] = await Promise.all([
+      this.prisma.vehicle.findMany({
+        where: { status: 'active', deleted_at: null },
+        select: { plate_number: true, machine_type: true, tonnage: true },
+        orderBy: { plate_number: 'asc' },
+      }),
+      this.prisma.machinery.findMany({
+        where: { status: 'active', deleted_at: null },
+        select: { machine_code: true, machine_type: true, tonnage: true },
+        orderBy: { machine_code: 'asc' },
+      }),
+      this.prisma.subcontractorFleetDriver.findMany({
+        where: {
+          status: 'active',
+          plate_no: { not: null },
+          subcontractor: { partner_type: 'subcontractor', status: 'active' },
+        },
+        select: {
+          plate_no: true,
+          machine_type: true,
+          name_zh: true,
+          subcontractor: { select: { name: true } },
+        },
+        orderBy: { plate_no: 'asc' },
+      }),
+    ]);
+
+    const vehicleItems: { value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[] =
+      vehicles.map((v) => ({
+        value: v.plate_number,
+        label: `${v.plate_number} (公司車)`,
+        category: 'vehicle' as const,
+        type: v.machine_type ?? null,
+        tonnage: v.tonnage != null ? String(v.tonnage) : null,
+      }));
+
+    const machineryItems: { value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[] =
+      machinery.map((m) => ({
+        value: m.machine_code,
+        label: `${m.machine_code} (機械)`,
+        category: 'machinery' as const,
+        type: m.machine_type ?? null,
+        tonnage: m.tonnage != null ? String(m.tonnage) : null,
+      }));
+
+    const subconItems: { value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[] =
+      subconDrivers
+        .filter((d): d is typeof d & { plate_no: string } => d.plate_no != null)
+        .map((d) => ({
+          value: d.plate_no,
+          label: `${d.plate_no} (${d.subcontractor?.name ?? '街車'})`,
+          category: 'subcon_fleet' as const,
+          type: d.machine_type ?? null,
+          tonnage: null,
+        }));
+
+    return [...vehicleItems, ...machineryItems, ...subconItems];
+  }
+
   async getPartnersSimple() {
     const partners = await this.prisma.partner.findMany({
       where: { status: 'active' },

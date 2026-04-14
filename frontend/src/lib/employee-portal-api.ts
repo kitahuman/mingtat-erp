@@ -182,4 +182,6 @@ export const portalSharedApi = {
     sharedApi.get('/employee-portal/shared/field-options', { params: { category } }),
   createFieldOption: (data: { category: string; label: string }) =>
     sharedApi.post('/field-options', data),
+  getAllEquipmentSimple: () =>
+    sharedApi.get<{ value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[]>('/employee-portal/shared/all-equipment'),
 };
