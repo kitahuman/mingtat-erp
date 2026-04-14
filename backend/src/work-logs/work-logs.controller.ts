@@ -34,6 +34,11 @@ export class WorkLogsController {
     return this.service.getEquipmentOptions(machineType, tonnage);
   }
 
+  @Get('filter-options/:column')
+  getFilterOptions(@Param('column') column: string) {
+    return this.service.getFilterOptions(column);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(Number(id));

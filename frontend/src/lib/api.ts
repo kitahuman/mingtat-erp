@@ -355,6 +355,8 @@ export const workLogsApi = {
     api.get('/work-logs/edit-lock/status', { params: { lockKey } }),
   confirmLocation: (id: number) =>
     api.post(`/work-logs/${id}/confirm-location`),
+  filterOptions: (column: string) =>
+    api.get(`/work-logs/filter-options/${column}`),
 };
 
 // CSV Import (CSV 匯入)

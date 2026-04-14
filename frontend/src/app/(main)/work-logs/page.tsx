@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth';
 import EditableCell from './EditableCell';
 import SearchableSelect from './SearchableSelect';
 import MultiSearchableSelect from './MultiSearchableSelect';
-import Combobox from '@/components/Combobox';
+import ColumnFilter from '@/components/ColumnFilter';
 import { STATUS_OPTIONS, STATUS_COLORS, getStatusLabel, getEquipmentSource } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -128,11 +128,8 @@ export default function WorkLogsPage() {
   const [filterEquipment, setFilterEquipment] = useState('');
   const [filterDateFrom,  setFilterDateFrom]  = useState('');
   const [filterDateTo,    setFilterDateTo]    = useState('');
-  const [filterStartLocation, setFilterStartLocation] = useState('');
-  const [filterEndLocation, setFilterEndLocation] = useState('');
-  const [filterWorkOrderNo, setFilterWorkOrderNo] = useState('');
-  const [filterReceiptNo, setFilterReceiptNo] = useState('');
-  const [filterProductName, setFilterProductName] = useState('');
+  // ── Column header filters (漏斗圖標篩選器) ─────────────────
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   // ── Dirty tracking (Airtable-style) ─────────────────────────
   // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields
@@ -455,11 +452,12 @@ export default function WorkLogsPage() {
       if (filterEquipment) params.equipment_number = filterEquipment;
       if (filterDateFrom)  params.date_from        = filterDateFrom;
       if (filterDateTo)    params.date_to          = filterDateTo;
-      if (filterStartLocation) params.start_location = filterStartLocation;
-      if (filterEndLocation)   params.end_location   = filterEndLocation;
-      if (filterWorkOrderNo)   params.work_order_no  = filterWorkOrderNo;
-      if (filterReceiptNo)     params.receipt_no     = filterReceiptNo;
-      if (filterProductName)   params.work_log_product_name = filterProductName;
+      // Column header filters → backend filter_* params
+      for (const [col, vals] of Object.entries(columnFilters)) {
+        if (vals && vals.size > 0) {
+          params[`filter_${col}`] = Array.from(vals).join(',');
+        }
+      }
 
       const res = await workLogsApi.list(params);
       setRows(res.data?.data || []);
@@ -472,7 +470,7 @@ export default function WorkLogsPage() {
     }
   }, [page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, showToast,
       filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo,
-      filterStartLocation, filterEndLocation, filterWorkOrderNo, filterReceiptNo, filterProductName]);
+      columnFilters]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -806,13 +804,13 @@ export default function WorkLogsPage() {
     setFilterPublisher([]); setFilterStatus([]);  setFilterCompany([]);
     setFilterClient([]);    setFilterQuotation([]); setFilterContract([]); setFilterEmployee([]);
     setFilterEquipment('');   setFilterDateFrom('');   setFilterDateTo('');
-    setFilterStartLocation(''); setFilterEndLocation(''); setFilterWorkOrderNo(''); setFilterReceiptNo(''); setFilterProductName('');
+    setColumnFilters({});
     setPage(1);
   };
 
   const hasFilters = !!(filterPublisher.length || filterStatus.length || filterCompany.length || filterClient.length ||
     filterQuotation.length || filterContract.length || filterEmployee.length || filterEquipment || filterDateFrom || filterDateTo ||
-    filterStartLocation || filterEndLocation || filterWorkOrderNo || filterReceiptNo || filterProductName);
+    Object.keys(columnFilters).length > 0);
 
   // ── Helper: get display value for relation fields ───────────
   const getDisplayValue = (row: any, field: string): string => {
@@ -1273,51 +1271,6 @@ export default function WorkLogsPage() {
       <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
-            {/* ── Combobox Filters Row ── */}
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="sticky left-0 z-30 bg-gray-50 border-r border-gray-200"></th>
-              <th className="sticky left-10 z-30 bg-gray-50 border-r border-gray-200"></th>
-              <th className="border-r border-gray-200"></th>
-              {(visibleColumns as any[]).map((col: any) => {
-                const isTarget = ['start_location', 'end_location', 'work_order_no', 'receipt_no', 'work_log_product_name'].includes(col.key);
-                if (!isTarget) return <th key={`filter-${col.key}`} className="border-r border-gray-200"></th>;
-
-                let val = '';
-                let setVal: (v: string) => void = () => {};
-                let options: any[] = [];
-
-                if (col.key === 'start_location') {
-                  val = filterStartLocation;
-                  setVal = (v) => { setFilterStartLocation(v || ''); setPage(1); };
-                  options = fieldOptions['location'] || [];
-                } else if (col.key === 'end_location') {
-                  val = filterEndLocation;
-                  setVal = (v) => { setFilterEndLocation(v || ''); setPage(1); };
-                  options = fieldOptions['location'] || [];
-                } else if (col.key === 'work_order_no') {
-                  val = filterWorkOrderNo;
-                  setVal = (v) => { setFilterWorkOrderNo(v || ''); setPage(1); };
-                } else if (col.key === 'receipt_no') {
-                  val = filterReceiptNo;
-                  setVal = (v) => { setFilterReceiptNo(v || ''); setPage(1); };
-                } else if (col.key === 'work_log_product_name') {
-                  val = filterProductName;
-                  setVal = (v) => { setFilterProductName(v || ''); setPage(1); };
-                }
-
-                return (
-                  <th key={`filter-${col.key}`} className="px-1 py-1 border-r border-gray-200 font-normal">
-                    <Combobox
-                      value={val}
-                      onChange={setVal}
-                      options={options}
-                      placeholder="篩選..."
-                      className="w-full"
-                    />
-                  </th>
-                );
-              })}
-            </tr>
             <tr>
               {/* 行數編號 – sticky left */}
               <th className="sticky left-0 z-30 bg-gray-100 px-2 py-2 border-r border-gray-300 w-10 text-center font-semibold text-gray-500">
@@ -1340,6 +1293,7 @@ export default function WorkLogsPage() {
               {(visibleColumns as any[]).map((col: any) => {
                 const sortField = COLUMN_SORT_FIELD[col.key];
                 const isActive = sortField && sortBy === sortField;
+                const isFilterable = ['start_location', 'end_location', 'work_order_no', 'receipt_no', 'work_log_product_name'].includes(col.key);
                 return (
                   <th key={col.key}
                     onClick={sortField ? () => handleSort(sortField) : undefined}
@@ -1352,6 +1306,26 @@ export default function WorkLogsPage() {
                         <span className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}>
                           {isActive ? (sortOrder === 'ASC' ? '▲' : '▼') : '▲▼'}
                         </span>
+                      )}
+                      {isFilterable && (
+                        <ColumnFilter
+                          columnKey={col.key}
+                          data={rows}
+                          activeFilters={columnFilters}
+                          onFilterChange={(key, vals) => {
+                            setColumnFilters(prev => {
+                              const next = { ...prev };
+                              if (vals === null) { delete next[key]; } else { next[key] = vals; }
+                              return next;
+                            });
+                            setPage(1);
+                          }}
+                          serverSide={true}
+                          onFetchOptions={async (key) => {
+                            const res = await workLogsApi.filterOptions(key);
+                            return res.data as string[];
+                          }}
+                        />
                       )}
                     </span>
                   </th>

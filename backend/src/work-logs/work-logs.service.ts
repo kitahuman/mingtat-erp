@@ -114,6 +114,26 @@ export class WorkLogsService {
       where.work_log_product_name = { contains: String(work_log_product_name), mode: 'insensitive' };
     }
 
+    // 欄標題漏斗圖標篩選器：filter_<field>=val1,val2 → Prisma IN 模式
+    const columnFilterFields = [
+      'start_location',
+      'end_location',
+      'work_order_no',
+      'receipt_no',
+      'work_log_product_name',
+    ];
+    for (const field of columnFilterFields) {
+      const raw = (query as any)[`filter_${field}`];
+      if (raw) {
+        const vals = String(raw).split(',').map((v) => v.trim()).filter(Boolean);
+        if (vals.length === 1) {
+          where[field] = vals[0];
+        } else if (vals.length > 1) {
+          where[field] = { in: vals };
+        }
+      }
+    }
+
     const allowedSort = [
       'id',
       'scheduled_date',
@@ -205,6 +225,34 @@ export class WorkLogsService {
       limit: lm,
       totalPages: Math.ceil(total / lm),
     };
+  }
+
+  /**
+   * 取得指定欄位的不重複值清單，供前端欄標題篩選器使用。
+   * 支援欄位：start_location, end_location, work_order_no, receipt_no, work_log_product_name
+   */
+  async getFilterOptions(column: string): Promise<string[]> {
+    const allowedColumns = [
+      'start_location',
+      'end_location',
+      'work_order_no',
+      'receipt_no',
+      'work_log_product_name',
+    ];
+    if (!allowedColumns.includes(column)) return [];
+
+    const results = await this.prisma.workLog.findMany({
+      where: { deleted_at: null, [column]: { not: null } },
+      select: { [column]: true },
+      distinct: [column as any],
+      orderBy: { [column]: 'asc' },
+      take: 500,
+    });
+
+    return results
+      .map((r: any) => r[column])
+      .filter((v: any) => v != null && v !== '')
+      .sort((a: string, b: string) => a.localeCompare(b, 'zh-Hant'));
   }
 
   async findOne(id: number) {
