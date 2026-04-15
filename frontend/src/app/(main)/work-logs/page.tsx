@@ -925,7 +925,7 @@ export default function WorkLogsPage() {
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['day_night'] || []} isDirty={dirty} disabled={!!isLocked} />;
       case 'start_location':
       case 'end_location': {
-        const isWhatsappNewLoc = row.source === 'whatsapp' && row.is_location_new;
+        const isWhatsappNewLoc = (row.source === 'whatsapp' || row.source === 'whatsapp_clockin') && row.is_location_new;
         return (
           <div className={`relative group ${isWhatsappNewLoc ? 'bg-yellow-100 ring-1 ring-yellow-300 rounded' : ''}`}>
             <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={!!isLocked} />
@@ -997,6 +997,7 @@ export default function WorkLogsPage() {
       case 'source': {
         const sourceLabels: Record<string, { text: string; cls: string }> = {
           whatsapp: { text: 'WA', cls: 'bg-green-100 text-green-700' },
+          whatsapp_clockin: { text: 'WA', cls: 'bg-green-100 text-green-700' },
           report: { text: '報表', cls: 'bg-blue-100 text-blue-700' },
           manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
         };
@@ -1210,7 +1211,7 @@ export default function WorkLogsPage() {
 
       {/* ── WhatsApp New Location Banner ── */}
       {(() => {
-        const newLocCount = rows.filter(r => r.source === 'whatsapp' && r.is_location_new).length;
+        const newLocCount = rows.filter(r => (r.source === 'whatsapp' || r.source === 'whatsapp_clockin') && r.is_location_new).length;
         if (newLocCount === 0) return null;
         return (
           <div className="bg-yellow-50 border-b border-yellow-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
