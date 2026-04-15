@@ -258,6 +258,7 @@ export class WhatsappClockinService {
               ot_quantity: entry.ot_quantity > 0 ? entry.ot_quantity : null,
               ot_unit: entry.ot_quantity > 0 ? (entry.ot_unit || '小時') : null,
               is_mid_shift: entry.is_mid_shift || false,
+              work_content: entry.work_content || null,
               work_log_product_name: entry.product_name || null,
               remarks: `[WhatsApp 打卡]\n群組: ${groupName || groupInfo.department}\n日期時間: ${msgTimeStr}\n原始訊息: ${text}`,
               ai_parsed_data: {

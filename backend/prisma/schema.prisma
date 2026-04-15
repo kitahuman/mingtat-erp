@@ -1101,6 +1101,7 @@ model WorkLog {
   source                 String    @default("manual") // manual | whatsapp | report
   is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
   ai_parsed_data         Json? // AI 原始解析結果（WhatsApp 打卡）
+  work_content           String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
   work_log_product_name  String?   @db.Text // 商品名稱
   work_log_product_unit  String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
   work_log_photo_urls    Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
