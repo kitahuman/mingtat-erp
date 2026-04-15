@@ -165,7 +165,7 @@ export class WhatsappClockinService {
           select: { id: true, machine_code: true, brand: true, model: true, machine_type: true, tonnage: true },
         }),
         this.prisma.vehicle.findMany({
-          select: { id: true, plate_number: true, machine_type: true },
+          select: { id: true, plate_number: true, machine_type: true, tonnage: true },
         }),
         this.prisma.partner.findMany({
           where: { partner_type: 'client' },
@@ -949,7 +949,7 @@ ${refs.contractRef}
   private matchEquipment(
     equipmentNo: string,
     machinery: { id: number; machine_code: string | null; brand: string | null; model: string | null; machine_type: string | null; tonnage: unknown }[],
-    vehicles: { id: number; plate_number: string | null; machine_type: string | null }[],
+    vehicles: { id: number; plate_number: string | null; machine_type: string | null; tonnage: unknown }[],
   ): { type: string; source: 'machinery' | 'vehicle'; tonnage: string | null } | null {
     if (!equipmentNo) return null;
     const eq = equipmentNo.trim().toUpperCase().replace(/\s+/g, '');
@@ -966,7 +966,7 @@ ${refs.contractRef}
     for (const v of vehicles) {
       const plate = (v.plate_number || '').toUpperCase().replace(/\s+/g, '');
       if (plate && (plate === eq || plate.includes(eq) || eq.includes(plate))) {
-        return { type: v.machine_type || '車輛', source: 'vehicle', tonnage: null };
+        return { type: v.machine_type || '車輛', source: 'vehicle', tonnage: v.tonnage != null ? String(v.tonnage) : null };
       }
     }
 
