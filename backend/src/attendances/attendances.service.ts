@@ -96,8 +96,24 @@ export class AttendancesService {
   async update(id: number, dto: any) {
     const existing = await this.prisma.employeeAttendance.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('打卡記錄不存在');
-    const { id: _id, created_at, updated_at, employee, ...updateData } = dto;
-    return this.prisma.employeeAttendance.update({ where: { id }, data: updateData });
+    const { id: _id, created_at, updated_at, employee, mid_shift_approver, ...updateData } = dto;
+    // Convert timestamp string to Date if provided
+    if (updateData.timestamp && typeof updateData.timestamp === 'string') {
+      updateData.timestamp = new Date(updateData.timestamp);
+    }
+    // Ensure employee_id is a number if provided
+    if (updateData.employee_id !== undefined) {
+      updateData.employee_id = Number(updateData.employee_id);
+    }
+    return this.prisma.employeeAttendance.update({
+      where: { id },
+      data: updateData,
+      include: {
+        employee: {
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, employee_is_temporary: true },
+        },
+      },
+    });
   }
 
   async remove(id: number) {

@@ -494,18 +494,36 @@ export class EmployeePortalService {
     const employeeId = await this.resolveEmployeeId(user);
     if (!employeeId) throw new BadRequestException('找不到對應的員工記錄');
 
-    const { id, created_at, updated_at, items, ...expenseData } = data;
+    const { id, created_at, updated_at, items, attachments, ...expenseData } = data;
+    // Normalize date field: portal sends 'date' (YYYY-MM-DD), schema uses 'date'
+    const dateValue = expenseData.date ? new Date(expenseData.date) : new Date();
+    // Remove raw string date to avoid conflict
+    delete expenseData.date;
+    // Normalize numeric fields
+    if (expenseData.category_id) expenseData.category_id = Number(expenseData.category_id);
+    if (expenseData.total_amount) expenseData.total_amount = Number(expenseData.total_amount);
+    const lineItems = Array.isArray(items) ? items : [];
     return this.prisma.expense.create({
       data: {
         ...expenseData,
+        date: dateValue,
         employee_id: employeeId,
-        expense_date: data.expense_date ? new Date(data.expense_date) : new Date(),
-        items: {
-          create: items.map((item: any) => ({
-            ...item,
-            amount: Number(item.amount),
-          })),
-        },
+        source: 'employee_portal',
+        ...(lineItems.length > 0 ? {
+          items: {
+            create: lineItems.map((item: any) => ({
+              description: item.description || '',
+              quantity: Number(item.quantity) || 1,
+              unit_price: Number(item.unit_price) || 0,
+              amount: Number(item.amount) || 0,
+              sort_order: item.sort_order || 0,
+            })),
+          },
+        } : {}),
+      },
+      include: {
+        category: { select: { id: true, name: true } },
+        items: true,
       },
     });
   }
@@ -522,6 +540,10 @@ export class EmployeePortalService {
     const [data, total] = await Promise.all([
       this.prisma.expense.findMany({
         where: { employee_id: employeeId },
+        include: {
+          category: { select: { id: true, name: true, parent: { select: { id: true, name: true } } } },
+          items: { orderBy: { sort_order: 'asc' } },
+        },
         orderBy: { date: 'desc' },
         skip: (page - 1) * limit,
         take: limit,

@@ -1,7 +1,8 @@
-import { IsOptional, IsString, IsNumber, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateAttendanceDto {
+  @IsOptional() @Type(() => Number) @IsInt() employee_id?: number;
   @IsOptional() @IsString() type?: string;
   @IsOptional() @IsString() timestamp?: string;
   @IsOptional() @IsString() photo_url?: string;

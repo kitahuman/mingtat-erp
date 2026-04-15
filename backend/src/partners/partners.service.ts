@@ -113,6 +113,10 @@ export class PartnersService {
   }
 
   async create(dto: any, userId?: number, ipAddress?: string) {
+    // Ensure partner_type has a default value (DB requires it)
+    if (!dto.partner_type) {
+      dto.partner_type = 'client';
+    }
     if (dto.name) {
       const dup = await this.prisma.partner.findFirst({
         where: { name: { equals: dto.name, mode: 'insensitive' } },

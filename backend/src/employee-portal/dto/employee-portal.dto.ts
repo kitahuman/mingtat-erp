@@ -43,6 +43,12 @@ export class SubmitExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
   @IsOptional() @IsString() receipt_no?: string;
   @IsOptional() @IsString() remarks?: string;
+  // Portal expense fields
+  @IsOptional() @Type(() => Number) @IsNumber() category_id?: number;
+  @IsOptional() @IsString() item?: string;
+  @IsOptional() @IsString() supplier_name?: string;
+  @IsOptional() @IsString() payment_method?: string;
+  @IsOptional() @IsString() payment_ref?: string;
   @IsOptional() @IsArray() items?: any[];
   @IsOptional() @IsArray() attachments?: any[];
 }

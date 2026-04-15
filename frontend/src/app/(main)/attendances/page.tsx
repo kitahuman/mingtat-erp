@@ -6,6 +6,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import AttendanceEditModal from './AttendanceEditModal';
 
 // Lazy load MiniMap to avoid SSR issues
 const MiniMap = lazy(() => import('@/components/MiniMap'));
@@ -83,6 +84,15 @@ export default function AttendancesPage() {
 
   // Photo modal state
   const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string }>({ open: false, src: '' });
+
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRecordId, setEditRecordId] = useState<number | null>(null);
+
+  const handleEdit = (id: number) => {
+    setEditRecordId(id);
+    setEditModalOpen(true);
+  };
 
   const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } =
     useColumnConfig('attendances', DEFAULT_COLUMNS);
@@ -337,12 +347,20 @@ export default function AttendancesPage() {
       key: '_actions',
       label: '操作',
       render: (_: any, row: any) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
-          className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
-        >
-          刪除
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleEdit(row.id); }}
+            className="text-blue-500 hover:text-blue-700 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+          >
+            編輯
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+            className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+          >
+            刪除
+          </button>
+        </div>
       ),
       exportRender: () => '',
     },
@@ -601,6 +619,14 @@ export default function AttendancesPage() {
               />
             </div>
           </Modal>
+
+          {/* Edit Modal */}
+          <AttendanceEditModal
+            isOpen={editModalOpen}
+            recordId={editRecordId}
+            onClose={() => { setEditModalOpen(false); setEditRecordId(null); }}
+            onSaved={() => load()}
+          />
         </>
       )}
 

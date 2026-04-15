@@ -548,6 +548,7 @@ export default function ExpensesPage() {
                 <option value="PAYROLL">薪資</option>
                 <option value="SUBCON">分判</option>
                 <option value="CONTRA">對沖</option>
+                <option value="employee_portal">員工報銷</option>
               </select>
               <select value={projectFilter} onChange={e => { setProjectFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部工程</option>
