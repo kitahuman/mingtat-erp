@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { WhatsappClockinModule } from '../whatsapp-clockin/whatsapp-clockin.module';
 import { VerificationService } from './verification.service';
 import { OcrService } from './ocr.service';
 import { GpsService } from './gps.service';
@@ -13,7 +14,7 @@ import { ConfirmationController } from './confirmation.controller';
 import { NicknameMatchService } from './nickname-match.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, WhatsappClockinModule],
   providers: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],
   controllers: [VerificationController, WhatsappController, MatchingController, ConfirmationController],
   exports: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],

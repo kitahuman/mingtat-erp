@@ -7,5 +7,6 @@ import { WhatsappClockinService } from './whatsapp-clockin.service';
   imports: [PrismaModule],
   controllers: [WhatsappClockinController],
   providers: [WhatsappClockinService],
+  exports: [WhatsappClockinService],
 })
 export class WhatsappClockinModule {}

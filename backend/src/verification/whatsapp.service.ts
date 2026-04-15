@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
 import { NicknameMatchService } from './nickname-match.service';
+import { WhatsappClockinService } from '../whatsapp-clockin/whatsapp-clockin.service';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -174,7 +175,8 @@ export class WhatsappService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly nicknameMatchService: NicknameMatchService
+    private readonly nicknameMatchService: NicknameMatchService,
+    private readonly clockinService: WhatsappClockinService,
   ) {
     this.openai = createOpenAIClient();
   }
@@ -332,6 +334,39 @@ export class WhatsappService {
         wa_msg_processed: false,
       },
     });
+
+    // 1.5 報工群組直接走 clockin 流程
+    if (WhatsappClockinService.isClockinGroup(chatId)) {
+      this.logger.log(`Routing message ${waMessage.id} to clockin handler (group: ${chatId})`);
+      try {
+        const clockinResult = await this.clockinService.processClockIn({
+          chatId,
+          sender,
+          text,
+          groupName,
+          messageId: waMessage.id,
+        });
+        return {
+          processed: true,
+          message_type: 'clockin',
+          message_id: waMessage.id,
+          clockin_success: clockinResult.success,
+          work_log_ids: clockinResult.workLogIds || [],
+          error: clockinResult.error,
+        };
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Clockin processing failed for message ${waMessage.id}: ${errMsg}`);
+        await this.prisma.verificationWaMessage.update({
+          where: { id: waMessage.id },
+          data: {
+            wa_msg_ai_classified: 'clockin_error',
+            wa_msg_processed: true,
+          },
+        });
+        return { processed: false, reason: 'clockin_error', message_id: waMessage.id, error: errMsg };
+      }
+    }
 
     // 2. 用 AI 判斷訊息類型並解析
     let classification: AiClassification;

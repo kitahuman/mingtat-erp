@@ -12,7 +12,7 @@ import { WhatsappClockinService, ParsedClockIn } from './whatsapp-clockin.servic
 
 interface ClockInResponse {
   success: boolean;
-  workLogId?: number;
+  workLogIds?: number[];
   parsed?: ParsedClockIn;
   error?: string;
 }
@@ -44,7 +44,7 @@ export class WhatsappClockinController {
 
     return {
       success: result.success,
-      workLogId: result.workLogId,
+      workLogIds: result.workLogIds,
       parsed: result.parsed,
       error: result.error,
     };
