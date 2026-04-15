@@ -246,6 +246,8 @@ function GroupedSettlementView({
         rate: Number(modalForm.rate),
         client_id: modalForm.client_id ? Number(modalForm.client_id) : undefined,
         company_id: modalForm.company_id ? Number(modalForm.company_id) : undefined,
+        ot_rate: modalForm.ot_rate ? Number(modalForm.ot_rate) : undefined,
+        mid_shift_rate: modalForm.mid_shift_rate ? Number(modalForm.mid_shift_rate) : undefined,
       });
       setShowModal(false);
       setPromptGroup(null);
@@ -507,6 +509,38 @@ function GroupedSettlementView({
                     value={modalForm.rate || ''}
                     onChange={(e) => setModalForm({ ...modalForm, rate: e.target.value })}
                     className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">單位</label>
+                  <input
+                    type="text"
+                    value={modalForm.unit || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, unit: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="如：車/日/次"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">OT 費率</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalForm.ot_rate || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, ot_rate: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">中直費率</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalForm.mid_shift_rate || ''}
+                    onChange={(e) => setModalForm({ ...modalForm, mid_shift_rate: e.target.value })}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                    placeholder="0.00"
                   />
                 </div>
                 <div>
@@ -995,6 +1029,60 @@ export default function PayrollDetailPage() {
     setEditSaving(false);
   };
 
+  // ── Cancel Payment ──
+  const handleCancelPayment = async () => {
+    if (!confirm('確定要取消付款？糧單將恢復為已確認狀態。')) return;
+    try {
+      await payrollApi.cancelPayment(payroll.id);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
+  // ── Payroll Payment actions ──
+  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [newPaymentDate, setNewPaymentDate] = useState('');
+  const [newPaymentAmount, setNewPaymentAmount] = useState('');
+  const [newPaymentRef, setNewPaymentRef] = useState('');
+  const [newPaymentBank, setNewPaymentBank] = useState('');
+  const [newPaymentRemarks, setNewPaymentRemarks] = useState('');
+  const [paymentSaving, setPaymentSaving] = useState(false);
+
+  const handleAddPayrollPayment = async () => {
+    if (!newPaymentDate || !newPaymentAmount) return;
+    setPaymentSaving(true);
+    try {
+      await payrollApi.addPayrollPayment(payroll.id, {
+        payroll_payment_date: newPaymentDate,
+        payroll_payment_amount: Number(newPaymentAmount),
+        payroll_payment_reference_no: newPaymentRef || undefined,
+        payroll_payment_bank_account: newPaymentBank || undefined,
+        payroll_payment_remarks: newPaymentRemarks || undefined,
+      });
+      setShowAddPayment(false);
+      setNewPaymentDate('');
+      setNewPaymentAmount('');
+      setNewPaymentRef('');
+      setNewPaymentBank('');
+      setNewPaymentRemarks('');
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '新增付款記錄失敗');
+    }
+    setPaymentSaving(false);
+  };
+
+  const handleRemovePayrollPayment = async (paymentId: number) => {
+    if (!confirm('確定要刪除此付款記錄？')) return;
+    try {
+      await payrollApi.removePayrollPayment(payroll.id, paymentId);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '刪除失敗');
+    }
+  };
+
   // ── Adjustment actions ──
   const handleAddAdjustment = async () => {
     if (!adjName || !adjAmount) return;
@@ -1110,7 +1198,12 @@ export default function PayrollDetailPage() {
           {payroll.status === 'confirmed' && (
             <>
               <button onClick={handleUnconfirm} className="btn-secondary text-sm">撤銷確認</button>
-              <button onClick={() => setShowPayment(true)} className="btn-primary text-sm">記錄付款</button>
+              <button onClick={() => setShowPayment(true)} className="btn-primary text-sm">已付款</button>
+            </>
+          )}
+          {payroll.status === 'paid' && (
+            <>
+              <button onClick={handleCancelPayment} className="btn-secondary text-sm">取消付款</button>
             </>
           )}
         </div>
@@ -1587,40 +1680,125 @@ export default function PayrollDetailPage() {
       {!isPreparing && <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">付款記錄</h2>
-          {payroll.status !== 'paid' && (
-            <button onClick={() => setShowPayment(true)} className="text-sm text-primary-600 hover:underline">記錄付款</button>
-          )}
+          <button onClick={() => setShowAddPayment(true)} className="text-sm text-primary-600 hover:underline">+ 新增付款記錄</button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-sm text-gray-500">付款日期</p>
-            <p className="font-medium">{payroll.payment_date ? fmtDate(payroll.payment_date) : '未付款'}</p>
+
+        {/* Payment summary cards */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500">總金額（淨額）</p>
+            <p className="font-bold text-lg font-mono text-primary-600">${Number(payroll.net_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">支票號碼</p>
-            <p className="font-medium font-mono">{payroll.cheque_number || '-'}</p>
+          <div className="p-3 bg-green-50 rounded-lg">
+            <p className="text-xs text-gray-500">已付金額</p>
+            <p className="font-bold text-lg font-mono text-green-600">${Number(payroll.paid_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">出糧日</p>
-            <p className="text-sm text-gray-400">翌月7日前</p>
+          <div className="p-3 bg-orange-50 rounded-lg">
+            <p className="text-xs text-gray-500">未付金額</p>
+            <p className={`font-bold text-lg font-mono ${Number(payroll.outstanding_amount || 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              ${Number(payroll.outstanding_amount ?? payroll.net_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
+
+        {/* Payment records table */}
+        {(payroll.payroll_payments || []).length > 0 ? (
+          <div className="overflow-x-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">付款日期</th>
+                  <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">參考號碼</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">銀行賬戶</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">付款記錄頁</th>
+                  <th className="px-4 py-2 text-center font-medium text-gray-600">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(payroll.payroll_payments || []).map((p: any) => (
+                  <tr key={p.id} className="border-b">
+                    <td className="px-4 py-2">{fmtDate(p.payroll_payment_date)}</td>
+                    <td className="px-4 py-2 text-right font-mono font-bold text-green-600">
+                      ${Number(p.payroll_payment_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-gray-600">{p.payroll_payment_reference_no || '-'}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.payroll_payment_bank_account || '-'}</td>
+                    <td className="px-4 py-2 text-gray-500 text-xs">{p.payroll_payment_remarks || '-'}</td>
+                    <td className="px-4 py-2">
+                      {p.payment_out ? (
+                        <Link href={`/payment-out`} className="text-primary-600 hover:underline text-xs">
+                          查看付款記錄 #{p.payment_out.id}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <button onClick={() => handleRemovePayrollPayment(p.id)} className="text-xs text-red-500 hover:underline">刪除</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-4">尚無付款記錄</p>
+        )}
       </div>}
 
-      {/* ── Payment Modal ── */}
-      <Modal isOpen={showPayment} onClose={() => setShowPayment(false)} title="記錄付款">
+      {/* ── Mark as Paid Modal ── */}
+      <Modal isOpen={showPayment} onClose={() => setShowPayment(false)} title="確認已付款">
         <div className="space-y-4">
+          <p className="text-sm text-gray-600">確認將此糧單標記為「已付款」？標記後糧單將被鎖定，不可再編輯。</p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
             <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="input-field" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">支票號碼</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">支票號碼（可選）</label>
             <input value={chequeNumber} onChange={e => setChequeNumber(e.target.value)} className="input-field" placeholder="例：SCB237081" />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowPayment(false)} className="btn-secondary">取消</button>
-            <button onClick={handleSavePayment} className="btn-primary">確認付款</button>
+            <button onClick={handleSavePayment} className="btn-primary">確認已付款</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Add Payroll Payment Modal ── */}
+      <Modal isOpen={showAddPayment} onClose={() => setShowAddPayment(false)} title="新增付款記錄">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">付款日期 *</label>
+              <input type="date" value={newPaymentDate} onChange={e => setNewPaymentDate(e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">付款金額 *</label>
+              <input type="number" step="0.01" value={newPaymentAmount} onChange={e => setNewPaymentAmount(e.target.value)} className="input-field font-mono" placeholder="0.00" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">參考號碼（支票/交易號）</label>
+              <input value={newPaymentRef} onChange={e => setNewPaymentRef(e.target.value)} className="input-field" placeholder="例：SCB237081" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
+              <input value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field" placeholder="例：滙豐" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+            <input value={newPaymentRemarks} onChange={e => setNewPaymentRemarks(e.target.value)} className="input-field" placeholder="可選" />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setShowAddPayment(false)} className="btn-secondary">取消</button>
+            <button onClick={handleAddPayrollPayment} disabled={!newPaymentDate || !newPaymentAmount || paymentSaving} className="btn-primary">
+              {paymentSaving ? '儲存中...' : '確認新增'}
+            </button>
           </div>
         </div>
       </Modal>

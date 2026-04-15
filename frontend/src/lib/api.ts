@@ -288,11 +288,14 @@ export const payrollApi = {
     destination?: string;
     rate: number;
     unit?: string;
+    ot_rate?: number;
+    mid_shift_rate?: number;
     effective_date?: string;
     remarks?: string;
   }) => api.post(`/payroll/${id}/add-to-rate-card`, formData),
   finalize: (id: number) => api.post(`/payroll/${id}/finalize`),
   unconfirm: (id: number) => api.post(`/payroll/${id}/unconfirm`),
+  cancelPayment: (id: number) => api.post(`/payroll/${id}/cancel-payment`),
   remove: (id: number) => api.delete(`/payroll/${id}`),
   summary: (params?: any) => api.get('/payroll/summary', { params }),
 
@@ -322,6 +325,18 @@ export const payrollApi = {
     date: string;
     allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
   }) => api.post(`/payroll/${payrollId}/daily-allowances/batch`, data),
+
+  // ── 糧單付款記錄管理 ──
+  addPayrollPayment: (payrollId: number, data: {
+    payroll_payment_date: string;
+    payroll_payment_amount: number;
+    payroll_payment_reference_no?: string;
+    payroll_payment_bank_account?: string;
+    payroll_payment_remarks?: string;
+    payroll_payment_payment_out_id?: number;
+  }) => api.post(`/payroll/${payrollId}/payments`, data),
+  removePayrollPayment: (payrollId: number, paymentId: number) =>
+    api.delete(`/payroll/${payrollId}/payments/${paymentId}`),
 };
 
 // Enums (系統枚舉)

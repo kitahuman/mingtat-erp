@@ -1201,6 +1201,7 @@ model Payroll {
   payroll_work_logs PayrollWorkLog[]
   adjustments       PayrollAdjustment[]
   daily_allowances  PayrollDailyAllowance[]
+  payroll_payments  PayrollPayment[]
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1309,6 +1310,25 @@ model PayrollDailyAllowance {
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 
   @@map("payroll_daily_allowances")
+}
+
+model PayrollPayment {
+  id                             Int       @id @default(autoincrement())
+  payroll_payment_payroll_id     Int
+  payroll_payment_date           DateTime  @db.Date
+  payroll_payment_amount         Decimal   @db.Decimal(14, 2)
+  payroll_payment_reference_no   String?   @db.VarChar(100)
+  payroll_payment_bank_account   String?   @db.VarChar(100)
+  payroll_payment_remarks        String?   @db.Text
+  payroll_payment_payment_out_id Int?
+  payroll_payment_created_at     DateTime  @default(now())
+  payroll_payment_updated_at     DateTime  @default(now()) @updatedAt
+
+  payroll     Payroll     @relation(fields: [payroll_payment_payroll_id], references: [id], onDelete: Cascade)
+  payment_out PaymentOut? @relation(fields: [payroll_payment_payment_out_id], references: [id], onDelete: SetNull)
+
+  @@index([payroll_payment_payroll_id])
+  @@map("payroll_payments")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1680,9 +1700,9 @@ model PaymentOut {
   created_at   DateTime @default(now())
   updated_at   DateTime @default(now()) @updatedAt
 
-  expense Expense? @relation(fields: [expense_id], references: [id], onDelete: SetNull)
-  project Project? @relation(fields: [project_id], references: [id], onDelete: SetNull)
-
+  expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
+  project          Project?          @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  payroll_payments PayrollPayment[]
   @@map("payment_outs")
 }
 

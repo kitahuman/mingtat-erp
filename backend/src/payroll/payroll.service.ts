@@ -100,6 +100,10 @@ export class PayrollService {
         items: { orderBy: { sort_order: 'asc' } },
         adjustments: { orderBy: { sort_order: 'asc' } },
         daily_allowances: true,
+        payroll_payments: {
+          include: { payment_out: true },
+          orderBy: { payroll_payment_created_at: 'asc' },
+        },
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
@@ -158,6 +162,14 @@ export class PayrollService {
       return sum + (amt < 0 ? amt : 0);
     }, 0);
 
+    // Calculate payment summary
+    const payments = payroll.payroll_payments || [];
+    const paidAmount = payments.reduce(
+      (sum: number, p: any) => sum + Number(p.payroll_payment_amount),
+      0,
+    );
+    const outstandingAmount = Number(payroll.net_amount) - paidAmount;
+
     return {
       ...payroll,
       gross_amount: grossAmount,
@@ -167,6 +179,8 @@ export class PayrollService {
       daily_calculation: dailyCalc,
       allowance_options: allowanceOptions,
       salary_setting: salarySetting,
+      paid_amount: paidAmount,
+      outstanding_amount: outstandingAmount,
     };
   }
 
@@ -1079,6 +1093,7 @@ export class PayrollService {
       where: { payroll_id: id },
     });
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+    await this.prisma.payrollPayment.deleteMany({ where: { payroll_payment_payroll_id: id } });
     if (userId) {
       try {
         await this.auditLogsService.log({
@@ -1995,6 +2010,8 @@ export class PayrollService {
     destination?: string;
     rate: number;
     unit?: string;
+    ot_rate?: number;
+    mid_shift_rate?: number;
     effective_date?: string;
     remarks?: string;
   }) {
@@ -2040,8 +2057,79 @@ export class PayrollService {
     if (formData.origin) createData.origin = formData.origin;
     if (formData.destination) createData.destination = formData.destination;
     if (formData.unit) createData.unit = formData.unit;
+    if (formData.ot_rate !== undefined && formData.ot_rate !== null) createData.ot_rate = formData.ot_rate;
+    if (formData.mid_shift_rate !== undefined && formData.mid_shift_rate !== null) createData.mid_shift_rate = formData.mid_shift_rate;
 
     const newCard = await this.prisma.fleetRateCard.create({ data: createData });
     return newCard;
+  }
+
+  // ── 取消付款（從 paid 回到 confirmed）──────────────────────────────────
+  async cancelPayment(id: number) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'paid') {
+      throw new BadRequestException('只能取消已付款狀態的糧單');
+    }
+
+    await this.prisma.payroll.update({
+      where: { id },
+      data: { status: 'confirmed' },
+    });
+
+    return { success: true, message: '已取消付款，糧單已恢復為已確認狀態' };
+  }
+
+  // ── 新增糧單付款記錄 ──────────────────────────────────────
+  async addPayrollPayment(
+    payrollId: number,
+    body: {
+      payroll_payment_date: string;
+      payroll_payment_amount: number;
+      payroll_payment_reference_no?: string;
+      payroll_payment_bank_account?: string;
+      payroll_payment_remarks?: string;
+      payroll_payment_payment_out_id?: number;
+    },
+  ) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    if (body.payroll_payment_amount <= 0) {
+      throw new BadRequestException('付款金額必須大於 0');
+    }
+
+    const saved = await this.prisma.payrollPayment.create({
+      data: {
+        payroll_payment_payroll_id: payrollId,
+        payroll_payment_date: new Date(body.payroll_payment_date),
+        payroll_payment_amount: body.payroll_payment_amount,
+        payroll_payment_reference_no: body.payroll_payment_reference_no || null,
+        payroll_payment_bank_account: body.payroll_payment_bank_account || null,
+        payroll_payment_remarks: body.payroll_payment_remarks || null,
+        payroll_payment_payment_out_id: body.payroll_payment_payment_out_id || null,
+      },
+    });
+
+    return saved;
+  }
+
+  // ── 刪除糧單付款記錄 ──────────────────────────────────────
+  async removePayrollPayment(payrollId: number, paymentId: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    const payment = await this.prisma.payrollPayment.findFirst({
+      where: { id: paymentId, payroll_payment_payroll_id: payrollId },
+    });
+    if (!payment) throw new NotFoundException('Payment record not found');
+
+    await this.prisma.payrollPayment.delete({ where: { id: paymentId } });
+
+    return { success: true };
   }
 }

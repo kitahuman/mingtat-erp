@@ -6,6 +6,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
 import { UpdatePayrollDto, UpdatePayrollWorkLogDto } from './dto/update-payroll.dto';
+import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
 
 @Controller('payroll')
 @UseGuards(AuthGuard('jwt'))
@@ -91,6 +92,12 @@ export class PayrollController {
     return this.payrollService.unconfirm(+id);
   }
 
+  // 取消付款（從 paid 回到 confirmed）
+  @Post(':id/cancel-payment')
+  cancelPayment(@Param('id') id: string) {
+    return this.payrollService.cancelPayment(+id);
+  }
+
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string, @Body() body?: { override_manual_rates?: boolean }) {
     return this.payrollService.recalculate(+id, body?.override_manual_rates);
@@ -109,21 +116,7 @@ export class PayrollController {
   @Post(':id/add-to-rate-card')
   addToRateCard(
     @Param('id') id: string,
-    @Body() body: {
-      client_id?: number;
-      company_id?: number;
-      client_contract_no?: string;
-      service_type?: string;
-      day_night?: string;
-      tonnage?: string;
-      machine_type?: string;
-      origin?: string;
-      destination?: string;
-      rate: number;
-      unit?: string;
-      effective_date?: string;
-      remarks?: string;
-    },
+    @Body() body: AddToRateCardDto,
   ) {
     return this.payrollService.addToRateCard(+id, body);
   }
@@ -242,5 +235,25 @@ export class PayrollController {
   async getAllowanceOptions(@Param('id') id: string) {
     const payroll = await this.payrollService.findOne(+id);
     return payroll.allowance_options;
+  }
+
+  // ── 糧單付款記錄管理 ──────────────────────────────────────
+
+  // 新增付款記錄
+  @Post(':id/payments')
+  addPayrollPayment(
+    @Param('id') id: string,
+    @Body() body: CreatePayrollPaymentDto,
+  ) {
+    return this.payrollService.addPayrollPayment(+id, body);
+  }
+
+  // 刪除付款記錄
+  @Delete(':id/payments/:paymentId')
+  removePayrollPayment(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    return this.payrollService.removePayrollPayment(+id, +paymentId);
   }
 }
