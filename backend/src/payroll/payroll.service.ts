@@ -2094,6 +2094,7 @@ export class PayrollService {
   ) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
+      include: { employee: { select: { name_zh: true, name_en: true } } },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
@@ -2101,16 +2102,36 @@ export class PayrollService {
       throw new BadRequestException('付款金額必須大於 0');
     }
 
-    const saved = await this.prisma.payrollPayment.create({
-      data: {
-        payroll_payment_payroll_id: payrollId,
-        payroll_payment_date: new Date(body.payroll_payment_date),
-        payroll_payment_amount: body.payroll_payment_amount,
-        payroll_payment_reference_no: body.payroll_payment_reference_no || null,
-        payroll_payment_bank_account: body.payroll_payment_bank_account || null,
-        payroll_payment_remarks: body.payroll_payment_remarks || null,
-        payroll_payment_payment_out_id: body.payroll_payment_payment_out_id || null,
-      },
+    // Use a transaction to ensure both records are created atomically
+    const saved = await this.prisma.$transaction(async (tx) => {
+      // 1. Create the PaymentOut record so it appears in the payment-out list
+      const employeeName = payroll.employee?.name_zh || payroll.employee?.name_en || '';
+      const paymentOut = await tx.paymentOut.create({
+        data: {
+          date: new Date(body.payroll_payment_date),
+          amount: body.payroll_payment_amount,
+          bank_account: body.payroll_payment_bank_account || null,
+          reference_no: body.payroll_payment_reference_no || null,
+          remarks: body.payroll_payment_remarks
+            ? `[糧單] ${employeeName} ${payroll.period} - ${body.payroll_payment_remarks}`
+            : `[糧單] ${employeeName} ${payroll.period}`,
+        },
+      });
+
+      // 2. Create the PayrollPayment record linked to the PaymentOut
+      const payrollPayment = await tx.payrollPayment.create({
+        data: {
+          payroll_payment_payroll_id: payrollId,
+          payroll_payment_date: new Date(body.payroll_payment_date),
+          payroll_payment_amount: body.payroll_payment_amount,
+          payroll_payment_reference_no: body.payroll_payment_reference_no || null,
+          payroll_payment_bank_account: body.payroll_payment_bank_account || null,
+          payroll_payment_remarks: body.payroll_payment_remarks || null,
+          payroll_payment_payment_out_id: paymentOut.id,
+        },
+      });
+
+      return payrollPayment;
     });
 
     return saved;
@@ -2128,7 +2149,20 @@ export class PayrollService {
     });
     if (!payment) throw new NotFoundException('Payment record not found');
 
-    await this.prisma.payrollPayment.delete({ where: { id: paymentId } });
+    // Use a transaction to delete both records atomically
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Delete the PayrollPayment first (it references PaymentOut)
+      await tx.payrollPayment.delete({ where: { id: paymentId } });
+
+      // 2. Delete the linked PaymentOut record if it exists
+      if (payment.payroll_payment_payment_out_id) {
+        await tx.paymentOut.delete({
+          where: { id: payment.payroll_payment_payment_out_id },
+        }).catch(() => {
+          // PaymentOut may have been deleted independently; ignore
+        });
+      }
+    });
 
     return { success: true };
   }
