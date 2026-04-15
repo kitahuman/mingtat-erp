@@ -309,8 +309,9 @@ export class WhatsappService {
     sender: string;
     text: string;
     groupName?: string;
+    timestamp?: string | number;
   }) {
-    const { chatId, sender, text, groupName } = payload;
+    const { chatId, sender, text, groupName, timestamp } = payload;
 
     if (!text || text.trim().length < 3) {
       return { processed: false, reason: 'message_too_short' };
@@ -324,7 +325,7 @@ export class WhatsappService {
         wa_msg_group_name: groupName || null,
         wa_msg_sender_jid: null,
         wa_msg_sender_name: sender,
-        wa_msg_timestamp: new Date(),
+        wa_msg_timestamp: timestamp ? new Date(timestamp) : new Date(),
         wa_msg_body: text,
         wa_msg_type: 'text',
         wa_msg_is_forwarded: false,
@@ -345,6 +346,7 @@ export class WhatsappService {
           text,
           groupName,
           messageId: waMessage.id,
+          timestamp: timestamp,
         });
         return {
           processed: true,

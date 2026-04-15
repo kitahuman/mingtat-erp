@@ -90,7 +90,7 @@ export class WhatsappController {
   @Post('whatsapp-webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
-    @Body() body: { chatId: string; sender: string; text: string; groupName?: string },
+    @Body() body: { chatId: string; sender: string; text: string; groupName?: string; timestamp?: string | number },
     @Headers('x-webhook-secret') webhookSecret?: string,
   ) {
     this.validateWebhookSecret(webhookSecret);
@@ -104,6 +104,7 @@ export class WhatsappController {
       sender: body.sender,
       text: body.text,
       groupName: body.groupName,
+      timestamp: body.timestamp,
     });
   }
 

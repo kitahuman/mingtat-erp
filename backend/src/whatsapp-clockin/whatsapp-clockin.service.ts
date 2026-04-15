@@ -13,6 +13,7 @@ interface ClockInPayload {
   text: string;
   groupName?: string;
   messageId?: number; // 如果從 processWebhookMessage 呼叫，帶入已存的 message id
+  timestamp?: string | number | Date; // 訊息原始時間
 }
 
 /** AI 解析後的單筆報工資料 */
@@ -96,7 +97,7 @@ export class WhatsappClockinService {
     parsed?: ParsedClockIn;
     error?: string;
   }> {
-    const { chatId, sender, text, groupName, messageId } = payload;
+    const { chatId, sender, text, groupName, messageId, timestamp } = payload;
 
     // 1. 群組檢查
     const groupInfo = CLOCKIN_GROUP_MAP[chatId];
@@ -114,7 +115,7 @@ export class WhatsappClockinService {
             wa_msg_group_id: chatId,
             wa_msg_group_name: groupName || groupInfo.department,
             wa_msg_sender_name: sender.split('@')[0],
-            wa_msg_timestamp: new Date(),
+            wa_msg_timestamp: timestamp ? new Date(timestamp) : new Date(),
             wa_msg_body: text,
             wa_msg_type: 'text',
             wa_msg_is_forwarded: false,
@@ -133,6 +134,24 @@ export class WhatsappClockinService {
     // 3. 過濾非文字訊息
     if (!text || text.trim() === '' || text.startsWith('[非文字訊息')) {
       return { success: false, error: 'Non-text message, skipped' };
+    }
+
+    // 3.5 獲取訊息時間戳 (用於 remarks)
+    let msgTimeStr = '';
+    if (timestamp) {
+      const d = new Date(timestamp);
+      msgTimeStr = d.toISOString().replace('T', ' ').split('.')[0];
+    } else if (waMessageId) {
+      const msg = await this.prisma.verificationWaMessage.findUnique({
+        where: { id: waMessageId },
+        select: { wa_msg_timestamp: true },
+      });
+      if (msg?.wa_msg_timestamp) {
+        msgTimeStr = msg.wa_msg_timestamp.toISOString().replace('T', ' ').split('.')[0];
+      }
+    }
+    if (!msgTimeStr) {
+      msgTimeStr = new Date().toISOString().replace('T', ' ').split('.')[0];
     }
 
     try {
@@ -239,7 +258,7 @@ export class WhatsappClockinService {
               ot_unit: entry.ot_quantity > 0 ? (entry.ot_unit || '小時') : null,
               is_mid_shift: entry.is_mid_shift || false,
               work_log_product_name: entry.product_name || null,
-              remarks: `[WhatsApp 打卡]\n群組: ${groupName || groupInfo.department}\n電話: ${sender}\n原始訊息: ${text}`,
+              remarks: `[WhatsApp 打卡]\n群組: ${groupName || groupInfo.department}\n日期時間: ${msgTimeStr}\n原始訊息: ${text}`,
               ai_parsed_data: {
                 ...entry,
                 raw_name: entry.name,
