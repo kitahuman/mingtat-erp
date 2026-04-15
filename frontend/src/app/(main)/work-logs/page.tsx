@@ -117,7 +117,7 @@ export default function WorkLogsPage() {
   const [loading, setLoading] = useState(false);
 
   // ── Sort state ───────────────────────────────────────────────
-  const [sortBy, setSortBy]       = useState('scheduled_date');
+  const [sortBy, setSortBy]       = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
    // ── Filters ───────────────────────────────────────────────
