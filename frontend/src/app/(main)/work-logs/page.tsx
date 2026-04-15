@@ -56,6 +56,7 @@ const COLUMN_SORT_FIELD: Record<string, string> = {
   is_paid:                'is_paid',
   source:                 'source',
   remarks:                'remarks',
+  work_content:           'work_content',
 };
 
 const COLUMNS = [
@@ -63,6 +64,7 @@ const COLUMNS = [
   { key: 'status',           label: '狀態',      width: 'w-20' },
   { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },
   { key: 'service_type',     label: '服務類型',  width: 'w-28' },
+  { key: 'work_content',     label: '工作內容',  width: 'w-40' },
   { key: 'company',          label: '公司',      width: 'w-24' },
   { key: 'client',           label: '客戶公司',  width: 'w-28' },
   { key: 'quotation',        label: '報價單',    width: 'w-32' },
@@ -91,6 +93,7 @@ const COLUMNS = [
   { key: 'is_paid',          label: '已付款',    width: 'w-20' },
   { key: 'source',            label: '來源',      width: 'w-16' },
   { key: 'remarks',          label: '備註',      width: 'w-36' },
+  { key: 'attachments',      label: '附件',      width: 'w-16' },
 ];
 
 export default function WorkLogsPage() {
@@ -963,9 +966,34 @@ export default function WorkLogsPage() {
       case 'is_paid':
         return <EditableCell value={val} onChange={onChange} type="checkbox" isDirty={dirty} disabled={!!isLocked} />;
       case 'receipt_no':
+      case 'work_log_product_name':
+      case 'work_log_product_unit':
       case 'work_order_no':
+      case 'work_content':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
       case 'remarks':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
+      case 'attachments': {
+        const photos = Array.isArray(row.work_log_photo_urls) ? row.work_log_photo_urls : [];
+        const hasSig = !!row.work_log_signature_url;
+        const total = photos.length + (hasSig ? 1 : 0);
+        if (total === 0) return <span className="text-gray-300 text-xs">—</span>;
+        return (
+          <button
+            onClick={() => {
+              setViewingAttachments({
+                photos,
+                signature: row.work_log_signature_url || null,
+              });
+              setAttachmentViewerOpen(true);
+            }}
+            className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium whitespace-nowrap"
+            title="點擊查看附件"
+          >
+            📎 {total}
+          </button>
+        );
+      }
       case 'source': {
         const sourceLabels: Record<string, { text: string; cls: string }> = {
           whatsapp: { text: 'WA', cls: 'bg-green-100 text-green-700' },
@@ -1036,7 +1064,10 @@ export default function WorkLogsPage() {
       case 'is_paid':
         return <EditableCell value={val} onChange={onChange} type="checkbox" />;
       case 'receipt_no':
+      case 'work_log_product_name':
+      case 'work_log_product_unit':
       case 'work_order_no':
+      case 'work_content':
       case 'remarks':
         return <EditableCell value={val} onChange={onChange} type="text" />;
       default:
@@ -1052,6 +1083,7 @@ export default function WorkLogsPage() {
     contract: 'contract_id',
     employee: 'employee_id',
     publisher: 'publisher_id',
+    work_content: 'work_content',
   };
 
   return (
@@ -1293,7 +1325,7 @@ export default function WorkLogsPage() {
               {(visibleColumns as any[]).map((col: any) => {
                 const sortField = COLUMN_SORT_FIELD[col.key];
                 const isActive = sortField && sortBy === sortField;
-                const isFilterable = ['start_location', 'end_location', 'work_order_no', 'receipt_no', 'work_log_product_name'].includes(col.key);
+                const isFilterable = ['start_location', 'end_location', 'work_order_no', 'receipt_no', 'work_log_product_name', 'work_content'].includes(col.key);
                 return (
                   <th key={col.key}
                     onClick={sortField ? () => handleSort(sortField) : undefined}

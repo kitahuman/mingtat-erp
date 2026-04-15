@@ -121,6 +121,7 @@ export class WorkLogsService {
       'work_order_no',
       'receipt_no',
       'work_log_product_name',
+      'work_content',
     ];
     for (const field of columnFilterFields) {
       const raw = (query as any)[`filter_${field}`];
@@ -159,6 +160,7 @@ export class WorkLogsService {
       'is_paid',
       'goods_quantity',
       'work_log_product_name',
+      'work_content',
       'work_log_product_unit',
       'remarks',
       'source',
@@ -238,6 +240,7 @@ export class WorkLogsService {
       'work_order_no',
       'receipt_no',
       'work_log_product_name',
+      'work_content',
     ];
     if (!allowedColumns.includes(column)) return [];
 
@@ -509,6 +512,7 @@ export class WorkLogsService {
       'is_paid',
       'remarks',
       'work_log_product_name',
+      'work_content',
       'work_log_product_unit',
     ];
     if (!ALLOWED_FIELDS.includes(field)) {

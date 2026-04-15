@@ -23,6 +23,11 @@ export interface WorkLogHistoryItem {
   ot_quantity: string | null;
   ot_unit: string | null;
   is_mid_shift: boolean;
+  goods_quantity: number | null;
+  work_log_product_name: string | null;
+  work_log_product_unit: string | null;
+  work_log_photo_urls: string[] | null;
+  work_log_signature_url: string | null;
   status: string | null;
   work_order_no: string | null;
   receipt_no: string | null;
@@ -51,17 +56,19 @@ export interface SubmitWorkLogPayload {
   end_location?: string;
   start_time?: string;
   end_time?: string;
-  quantity?: string;
+  quantity?: string | number;
   unit?: string;
   ot_hours?: number;
+  ot_quantity?: number;
   is_mid_shift?: boolean;
   goods_quantity?: number;
+  work_log_product_name?: string;
+  work_log_product_unit?: string;
   work_order_no?: string;
   receipt_no?: string;
   remarks?: string;
   photo_urls?: string[];
   signature_url?: string;
-  eng_quantity?: string;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';

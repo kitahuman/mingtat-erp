@@ -29,7 +29,7 @@ interface FormData {
   eng_quantity: string;          // engineering quantity in days
   // Transport
   plate_no: string;
-  goods: string;
+  goods: string;                 // 貨物名稱 -> maps to work_log_product_name
   origin: string;
   destination: string;
   quantity: string;
@@ -666,14 +666,19 @@ export default function WorkReportPage() {
           machine_type: log.machine_type ?? '',
           equipment_number: isTransport ? '' : (log.equipment_number ?? ''),
           start_location: isTransport ? '' : (log.start_location ?? ''),
-          work_content: '',
-          eng_quantity: '',
+          // 工程模式：quantity 儲存天數，work_content 從 remarks 解析
+          work_content: (() => {
+            if (!log.remarks) return '';
+            const match = log.remarks.match(/工作內容：([^\n]*)/);
+            return match ? match[1].trim() : '';
+          })(),
+          eng_quantity: !isTransport ? (log.quantity ?? '') : '',
           plate_no: isTransport ? (log.equipment_number ?? '') : '',
-          goods: '',
+          goods: isTransport ? (log.work_log_product_name ?? '') : '',
           origin: isTransport ? (log.start_location ?? '') : '',
           destination: isTransport ? (log.end_location ?? '') : '',
-          quantity: log.quantity ?? '',
-          unit: log.unit ?? '',
+          quantity: isTransport ? (log.quantity ?? '') : '',
+          unit: isTransport ? (log.unit ?? '') : '',
           work_order_no: log.work_order_no ?? '',
           receipt_no: log.receipt_no ?? '',
           start_time: log.start_time ?? '',
@@ -681,9 +686,17 @@ export default function WorkReportPage() {
           shift: (log.day_night === 'N' ? 'N' : 'D') as 'D' | 'N',
           mid_shift: log.is_mid_shift ?? false,
           ot_hours: log.ot_quantity ? String(log.ot_quantity) : '',
-          remarks: '',
-          photo_urls: [],
-          signature_url: '',
+          remarks: (() => {
+            if (!log.remarks) return '';
+            // 移除工作內容、更次、中直、超時行，保留其餘為備註
+            return log.remarks
+              .split('\n')
+              .filter(line => !/^工作內容：|^更次：|^中直：|^超時：/.test(line))
+              .join('\n')
+              .trim();
+          })(),
+          photo_urls: Array.isArray(log.work_log_photo_urls) ? log.work_log_photo_urls : [],
+          signature_url: log.work_log_signature_url ?? '',
         });
       }).catch(() => {});
       return;
@@ -877,13 +890,15 @@ export default function WorkReportPage() {
         start_time: form.start_time || undefined,
         end_time: form.end_time || undefined,
         day_night: form.shift,
+        is_mid_shift: form.mid_shift,
+        work_content: form.work_content || undefined,
         // OT hours
         ot_hours: form.ot_hours ? Number(form.ot_hours) : undefined,
         // Attachments
         photo_urls: form.photo_urls && form.photo_urls.length > 0 ? form.photo_urls : undefined,
         signature_url: form.signature_url || undefined,
         remarks: [
-          form.work_content ? `工作內容：${form.work_content}` : '',
+          
           `更次：${shiftLabel}`,
           `中直：${midShiftLabel}`,
           form.ot_hours ? `超時：${form.ot_hours}小時` : '',
@@ -902,8 +917,9 @@ export default function WorkReportPage() {
         payload.machine_type = form.machine_type || undefined;
         payload.equipment_number = form.equipment_number || undefined;
         payload.start_location = form.start_location || undefined;
-        // Engineering quantity in days
-        payload.eng_quantity = form.eng_quantity || undefined;
+        // Engineering quantity stored as quantity field (days)
+        payload.quantity = form.eng_quantity || undefined;
+        payload.unit = form.eng_quantity ? '日' : undefined;
       } else {
         payload.machine_type = form.machine_type || undefined;
         payload.equipment_number = form.plate_no || undefined;
@@ -911,6 +927,8 @@ export default function WorkReportPage() {
         payload.end_location = form.destination || undefined;
         payload.quantity = form.quantity || undefined;
         payload.unit = form.unit || undefined;
+        // 貨物名稱儲存到 work_log_product_name
+        payload.work_log_product_name = form.goods || undefined;
         payload.goods_quantity = form.goods ? 1 : undefined;
         payload.work_order_no = form.work_order_no || undefined;
         payload.receipt_no = form.receipt_no || undefined;

@@ -3,9 +3,11 @@ import { Type } from 'class-transformer';
 
 export class SubmitWorkLogDto {
   @IsOptional() @IsString() service_type?: string;
+  @IsOptional() @IsString() work_content?: string;
   @IsOptional() @IsString() scheduled_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
   @IsOptional() @IsString() unverified_client_name?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() machine_type?: string;
   @IsOptional() @IsString() equipment_number?: string;
   @IsOptional() @IsString() tonnage?: string;
@@ -28,6 +30,11 @@ export class SubmitWorkLogDto {
   @IsOptional() @IsString() work_order_no?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
+  // photo_urls and signature_url are aliases handled in service layer
+  @IsOptional() @IsArray() @IsString({ each: true }) photo_urls?: string[];
+  @IsOptional() @IsString() signature_url?: string;
+  // ot_hours is an alias for ot_quantity handled in service layer
+  @IsOptional() @Type(() => Number) @IsNumber() ot_hours?: number;
 }
 
 export class SubmitExpenseDto {
