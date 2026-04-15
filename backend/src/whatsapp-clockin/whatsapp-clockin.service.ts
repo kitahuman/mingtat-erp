@@ -239,7 +239,7 @@ export class WhatsappClockinService {
               ot_unit: entry.ot_quantity > 0 ? (entry.ot_unit || '小時') : null,
               is_mid_shift: entry.is_mid_shift || false,
               work_log_product_name: entry.product_name || null,
-              remarks: entry.remarks || null,
+              remarks: `[WhatsApp 打卡]\n群組: ${groupName || groupInfo.department}\n電話: ${sender}\n原始訊息: ${text}`,
               ai_parsed_data: {
                 ...entry,
                 raw_name: entry.name,
