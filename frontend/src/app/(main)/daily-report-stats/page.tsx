@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { dailyReportStatsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { dailyReportStatsApi, dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import ExportButton from '@/components/ExportButton';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const categoryLabels: Record<string, string> = {
   worker: '工人',
@@ -29,10 +30,9 @@ export default function DailyReportStatsPage() {
   // Filter state
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [filterProjectId, setFilterProjectId] = useState('');
-  const [filterClientId, setFilterClientId] = useState('');
-  const [filterClientName, setFilterClientName] = useState('');
-  const [filterContractNo, setFilterContractNo] = useState('');
+  const [filterProjectName, setFilterProjectName] = useState<string | null>(null);
+  const [filterClient, setFilterClient] = useState<string | null>(null);
+  const [filterContractNo, setFilterContractNo] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState('submitted');
 
   // Data state
@@ -43,16 +43,28 @@ export default function DailyReportStatsPage() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   // Reference data
-  const [projects, setProjects] = useState<any[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
-  const [contractOptions, setContractOptions] = useState<string[]>([]);
+  const [projectNameOptions, setProjectNameOptions] = useState<{ value: string; label: string }[]>([]);
+  const [partnerOptions, setPartnerOptions] = useState<{ value: string; label: string }[]>([]);
+  const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
+  const statusOptions = [
+    { value: 'submitted', label: '已提交' },
+    { value: 'draft', label: '草稿' },
+    { value: '', label: '全部' },
+  ];
 
   // Load reference data
   useEffect(() => {
-    projectsApi.simple().then(res => setProjects(res.data || [])).catch(() => {});
-    partnersApi.simple().then(res => setPartners(res.data || [])).catch(() => {});
+    dailyReportsApi.projectNames().then(res => {
+      const names: string[] = res.data || [];
+      setProjectNameOptions(names.map(n => ({ value: n, label: n })));
+    }).catch(() => {});
+    partnersApi.simple().then(res => {
+      const list: any[] = res.data || [];
+      setPartnerOptions(list.map((p: any) => ({ value: `id:${p.id}`, label: p.name })));
+    }).catch(() => {});
     fieldOptionsApi.getByCategory('client_contract_no').then(res => {
-      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
   }, []);
 
@@ -62,9 +74,11 @@ export default function DailyReportStatsPage() {
       const params: any = {};
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
-      if (filterProjectId) params.project_id = filterProjectId;
-      if (filterClientId) params.client_id = filterClientId;
-      if (filterClientName) params.client_name = filterClientName;
+      if (filterProjectName) params.project_name = filterProjectName;
+      if (filterClient) {
+        if (filterClient.startsWith('id:')) params.client_id = filterClient.slice(3);
+        else if (filterClient.startsWith('name:')) params.client_name = filterClient.slice(5);
+      }
       if (filterContractNo) params.client_contract_no = filterContractNo;
       if (filterStatus) params.status = filterStatus;
 
@@ -76,7 +90,7 @@ export default function DailyReportStatsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus]);
+  }, [dateFrom, dateTo, filterProjectName, filterClient, filterContractNo, filterStatus]);
 
   useEffect(() => {
     loadData();
@@ -98,16 +112,6 @@ export default function DailyReportStatsPage() {
       else next.add(key);
       return next;
     });
-  };
-
-  const handleClientChange = (val: string) => {
-    setFilterClientId(val);
-    if (val) setFilterClientName('');
-  };
-
-  const handleClientNameChange = (val: string) => {
-    setFilterClientName(val);
-    if (val) setFilterClientId('');
   };
 
   // Export columns for flat data
@@ -132,9 +136,11 @@ export default function DailyReportStatsPage() {
     const params: any = {};
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
-    if (filterProjectId) params.project_id = filterProjectId;
-    if (filterClientId) params.client_id = filterClientId;
-    if (filterClientName) params.client_name = filterClientName;
+    if (filterProjectName) params.project_name = filterProjectName;
+    if (filterClient) {
+      if (filterClient.startsWith('id:')) params.client_id = filterClient.slice(3);
+      else if (filterClient.startsWith('name:')) params.client_name = filterClient.slice(5);
+    }
     if (filterContractNo) params.client_contract_no = filterContractNo;
     if (filterStatus) params.status = filterStatus;
 
@@ -181,66 +187,42 @@ export default function DailyReportStatsPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">工程</label>
-            <select
-              value={filterProjectId}
-              onChange={e => setFilterProjectId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">全部工程</option>
-              {projects.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={filterProjectName}
+              onChange={val => setFilterProjectName(val as string | null)}
+              options={projectNameOptions}
+              placeholder="全部工程"
+            />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">客戶</label>
-            <select
-              value={filterClientId}
-              onChange={e => handleClientChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">全部客戶</option>
-              {partners.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={filterClient}
+              onChange={val => setFilterClient(val as string | null)}
+              options={partnerOptions}
+              placeholder="全部客戶"
+            />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">客戶合約</label>
-            <select
+            <SearchableSelect
               value={filterContractNo}
-              onChange={e => setFilterContractNo(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">全部合約</option>
-              {contractOptions.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+              onChange={val => setFilterContractNo(val as string | null)}
+              options={contractOptions}
+              placeholder="全部合約"
+            />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">客戶名稱搜尋</label>
-            <input
-              type="text"
-              value={filterClientName}
-              onChange={e => handleClientNameChange(e.target.value)}
-              placeholder="輸入客戶名稱..."
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-          <div>
             <label className="block text-xs text-gray-500 mb-1">狀態</label>
-            <select
+            <SearchableSelect
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="submitted">已提交</option>
-              <option value="draft">草稿</option>
-              <option value="">全部</option>
-            </select>
+              onChange={val => setFilterStatus((val as string) ?? 'submitted')}
+              options={statusOptions}
+              placeholder="全部狀態"
+              clearable={false}
+            />
           </div>
         </div>
       </div>

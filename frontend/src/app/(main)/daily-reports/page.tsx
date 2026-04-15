@@ -97,6 +97,19 @@ export default function DailyReportsAdminPage() {
     window.open(`${apiBase}/daily-reports/${id}/export`, '_blank');
   };
 
+  const handleDelete = async (e: React.MouseEvent, report: any) => {
+    e.stopPropagation();
+    const label = report.daily_report_project_name || `#${report.id}`;
+    const confirmed = window.confirm(`確定要刪除日報表「${label}」（${report.daily_report_date?.split('T')[0] || ''}）？\n\n此操作不可復原。`);
+    if (!confirmed) return;
+    try {
+      await dailyReportsApi.delete(report.id);
+      loadData();
+    } catch {
+      alert('刪除失敗，請重試');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -221,6 +234,13 @@ export default function DailyReportsAdminPage() {
                             className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                           >
                             列印
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(e, report)}
+                            className="text-red-500 hover:text-red-700 text-xs font-medium"
+                            title="刪除"
+                          >
+                            刪除
                           </button>
                         </div>
                       </td>

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { dailyReportsApi, projectsApi, quotationsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { dailyReportsApi, quotationsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const categoryLabels: Record<string, string> = {
   worker: '工人',
@@ -58,16 +59,27 @@ export default function EditDailyReportPage() {
   const [memo, setMemo] = useState('');
   const [status, setStatus] = useState('submitted');
   const [items, setItems] = useState<EditItem[]>([]);
+  const [projectLocation, setProjectLocation] = useState('');
 
-  // Reference data
-  const [projects, setProjects] = useState<any[]>([]);
+  // Reference data as SearchableSelect options
+  const [projectNameOptions, setProjectNameOptions] = useState<{ value: string; label: string }[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [filteredQuotations, setFilteredQuotations] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
-  const [workerTypes, setWorkerTypes] = useState<string[]>([]);
-  const [contractOptions, setContractOptions] = useState<string[]>([]);
-  const [projectLocation, setProjectLocation] = useState('');
-  const [projectLocationOptions, setProjectLocationOptions] = useState<string[]>([]);
+  const [partnerOptions, setPartnerOptions] = useState<{ value: string; label: string }[]>([]);
+  const [workerTypeOptions, setWorkerTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
+  const [projectLocationOptions, setProjectLocationOptions] = useState<{ value: string; label: string }[]>([]);
+
+  const shiftOptions = [
+    { value: 'day', label: '日更' },
+    { value: 'night', label: '夜更' },
+  ];
+  const statusOptions = [
+    { value: 'submitted', label: '已提交' },
+    { value: 'draft', label: '草稿' },
+  ];
+  const categoryOptions = CATEGORIES.map(c => ({ value: c, label: categoryLabels[c] }));
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -77,21 +89,37 @@ export default function EditDailyReportPage() {
 
   // Load reference data
   useEffect(() => {
-    projectsApi.simple().then(res => setProjects(res.data || [])).catch(() => {});
-    partnersApi.simple().then(res => setPartners(res.data || [])).catch(() => {});
+    // Project names (distinct from daily_reports + projects table)
+    dailyReportsApi.projectNames().then(res => {
+      const names: string[] = res.data || [];
+      setProjectNameOptions(names.map(n => ({ value: n, label: n })));
+    }).catch(() => {});
+
+    partnersApi.simple().then(res => {
+      const list: any[] = res.data || [];
+      setPartners(list);
+      setPartnerOptions(list.map((p: any) => ({ value: String(p.id), label: p.name })));
+    }).catch(() => {});
+
     quotationsApi.list({ limit: 500, status: 'accepted' }).then(res => {
       const q = res.data?.data || [];
       setQuotations(q);
       setFilteredQuotations(q);
     }).catch(() => {});
+
     fieldOptionsApi.getByCategory('worker_type').then(res => {
-      setWorkerTypes((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setWorkerTypeOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
+
     fieldOptionsApi.getByCategory('client_contract_no').then(res => {
-      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
+
     fieldOptionsApi.getByCategory('project_location').then(res => {
-      setProjectLocationOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setProjectLocationOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
   }, []);
 
@@ -110,6 +138,7 @@ export default function EditDailyReportPage() {
       setClientId(r.daily_report_client_id ? String(r.daily_report_client_id) : '');
       setClientName(r.daily_report_client_name || r.client?.name || '');
       setClientContractNo(r.daily_report_client_contract_no || '');
+      setProjectLocation(r.daily_report_project_location || '');
       setWorkSummary(r.daily_report_work_summary || '');
       setCompletedWork(r.daily_report_completed_work || '');
       setMemo(r.daily_report_memo || '');
@@ -128,35 +157,18 @@ export default function EditDailyReportPage() {
     }).catch(() => setError('載入日報失敗')).finally(() => setLoading(false));
   }, [reportId]);
 
-  // When project changes, filter quotations and auto-fill client
-  const handleProjectChange = useCallback((pid: string) => {
-    setProjectId(pid);
+  // When project name changes (from combobox), try to match a project_id
+  const handleProjectNameChange = useCallback((name: string | null) => {
+    setProjectName(name || '');
+    // No project_id binding since we now use free-text project name
+    setProjectId('');
     setQuotationId('');
-    if (pid) {
-      const proj = projects.find((p: any) => String(p.id) === pid);
-      if (proj) {
-        setProjectName(proj.project_name);
-        // Filter quotations by project
-        const filtered = quotations.filter((q: any) => String(q.project_id) === pid);
-        setFilteredQuotations(filtered.length > 0 ? filtered : quotations);
-        // Auto-fill client from project
-        if (proj.client_id && !clientId) {
-          const partner = partners.find((p: any) => p.id === proj.client_id);
-          if (partner) {
-            setClientId(String(partner.id));
-            setClientName(partner.name);
-          }
-        }
-      }
-    } else {
-      setProjectName('');
-      setFilteredQuotations(quotations);
-    }
-  }, [projects, quotations, partners, clientId]);
+    setFilteredQuotations(quotations);
+  }, [quotations]);
 
   // When quotation changes, auto-fill client and contract info
-  const handleQuotationChange = useCallback((qid: string) => {
-    setQuotationId(qid);
+  const handleQuotationChange = useCallback((qid: string | null) => {
+    setQuotationId(qid || '');
     if (qid) {
       const q = quotations.find((q: any) => String(q.id) === qid);
       if (q) {
@@ -167,15 +179,15 @@ export default function EditDailyReportPage() {
         if (q.contract_name) setClientContractNo(q.contract_name);
         if (q.project_id && !projectId) {
           setProjectId(String(q.project_id));
-          const proj = projects.find((p: any) => p.id === q.project_id);
-          if (proj) setProjectName(proj.project_name);
+          const proj = { project_name: q.project_name };
+          if (proj) setProjectName(q.project_name || '');
         }
       }
     }
-  }, [quotations, projects, projectId]);
+  }, [quotations, projectId]);
 
-  const handleClientChange = (cid: string) => {
-    setClientId(cid);
+  const handleClientChange = (cid: string | null) => {
+    setClientId(cid || '');
     if (cid) {
       const partner = partners.find((p: any) => String(p.id) === cid);
       if (partner) setClientName(partner.name);
@@ -219,6 +231,7 @@ export default function EditDailyReportPage() {
         shift_type: shiftType,
         project_id: projectId || null,
         project_name: projectName || null,
+        project_location: projectLocation || null,
         quotation_id: quotationId || null,
         client_id: clientId || null,
         client_name: clientName || null,
@@ -256,6 +269,12 @@ export default function EditDailyReportPage() {
       </div>
     );
   }
+
+  // Build quotation options
+  const quotationOptions = filteredQuotations.map((q: any) => ({
+    value: String(q.id),
+    label: `${q.quotation_no}${q.contract_name ? ` - ${q.contract_name}` : ''}${q.project_name ? ` (${q.project_name})` : ''}`,
+  }));
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -312,25 +331,23 @@ export default function EditDailyReportPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">更次</label>
-            <select
+            <SearchableSelect
               value={shiftType}
-              onChange={e => setShiftType(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="day">日更</option>
-              <option value="night">夜更</option>
-            </select>
+              onChange={val => setShiftType((val as string) || 'day')}
+              options={shiftOptions}
+              placeholder="選擇更次"
+              clearable={false}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
-            <select
+            <SearchableSelect
               value={status}
-              onChange={e => setStatus(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="submitted">已提交</option>
-              <option value="draft">草稿</option>
-            </select>
+              onChange={val => setStatus((val as string) || 'submitted')}
+              options={statusOptions}
+              placeholder="選擇狀態"
+              clearable={false}
+            />
           </div>
         </div>
       </div>
@@ -339,89 +356,65 @@ export default function EditDailyReportPage() {
       <div className="bg-white rounded-lg shadow-sm border p-6 space-y-4">
         <h2 className="font-semibold text-gray-700 border-b pb-2">工程資訊</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Project */}
+          {/* Project name (searchable combobox from distinct project names) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">工程</label>
-            <select
-              value={projectId}
-              onChange={e => handleProjectChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- 選擇工程 --</option>
-              {projects.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
-              ))}
-            </select>
-            {!projectId && (
-              <input
-                type="text"
-                value={projectName}
-                onChange={e => setProjectName(e.target.value)}
-                placeholder="或直接輸入工程名稱"
-                className="mt-2 w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )}
-            {projectId && (
-              <p className="mt-1 text-xs text-gray-500">已選擇工程：{projectName}</p>
-            )}
+            <SearchableSelect
+              value={projectName || null}
+              onChange={val => handleProjectNameChange(val as string | null)}
+              options={projectNameOptions}
+              placeholder="選擇或搜尋工程名稱"
+            />
+            {/* Allow free-text input if not in the list */}
+            <input
+              type="text"
+              value={projectName}
+              onChange={e => { setProjectName(e.target.value); setProjectId(''); }}
+              placeholder="或直接輸入工程名稱"
+              className="mt-2 w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           {/* Project Location */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">工程地點</label>
+            <SearchableSelect
+              value={projectLocation || null}
+              onChange={val => setProjectLocation((val as string) || '')}
+              options={projectLocationOptions}
+              placeholder="選擇或搜尋工程地點"
+            />
             <input
               type="text"
-              list="project-location-options"
               value={projectLocation}
               onChange={e => setProjectLocation(e.target.value)}
-              placeholder="輸入或選擇工程地點"
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="或直接輸入工程地點"
+              className="mt-2 w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <datalist id="project-location-options">
-              {projectLocationOptions.map(opt => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
           </div>
 
           {/* Quotation */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               報價單 / 合約
-              {projectId && <span className="text-xs text-gray-400 ml-1">（已按工程篩選）</span>}
             </label>
-            <select
-              value={quotationId}
-              onChange={e => handleQuotationChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- 選擇報價單 --</option>
-              {filteredQuotations.map((q: any) => (
-                <option key={q.id} value={q.id}>
-                  {q.quotation_no}{q.contract_name ? ` - ${q.contract_name}` : ''}{q.project_name ? ` (${q.project_name})` : ''}
-                </option>
-              ))}
-            </select>
-            {quotationId && (
-              <p className="mt-1 text-xs text-gray-500">
-                已選擇：{quotations.find(q => String(q.id) === quotationId)?.quotation_no}
-              </p>
-            )}
+            <SearchableSelect
+              value={quotationId || null}
+              onChange={val => handleQuotationChange(val as string | null)}
+              options={quotationOptions}
+              placeholder="選擇報價單"
+            />
           </div>
 
           {/* Client */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
-            <select
-              value={clientId}
-              onChange={e => handleClientChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- 選擇客戶 --</option>
-              {partners.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={clientId || null}
+              onChange={val => handleClientChange(val as string | null)}
+              options={partnerOptions}
+              placeholder="選擇客戶"
+            />
             {!clientId && (
               <input
                 type="text"
@@ -436,16 +429,12 @@ export default function EditDailyReportPage() {
           {/* Client Contract No */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
-            <select
-              value={clientContractNo}
-              onChange={e => setClientContractNo(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- 選擇合約 --</option>
-              {contractOptions.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={clientContractNo || null}
+              onChange={val => setClientContractNo((val as string) || '')}
+              options={contractOptions}
+              placeholder="選擇合約"
+            />
             <input
               type="text"
               value={clientContractNo}
@@ -531,30 +520,26 @@ export default function EditDailyReportPage() {
               <div key={item._key} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg px-2 py-2">
                 {/* Category */}
                 <div className="col-span-1">
-                  <select
+                  <SearchableSelect
                     value={item.category}
-                    onChange={e => updateItem(item._key, 'category', e.target.value)}
-                    className="w-full px-1 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    {CATEGORIES.map(c => (
-                      <option key={c} value={c}>{categoryLabels[c]}</option>
-                    ))}
-                  </select>
+                    onChange={val => updateItem(item._key, 'category', val || 'worker')}
+                    options={categoryOptions}
+                    placeholder="類別"
+                    clearable={false}
+                    className="text-xs"
+                  />
                 </div>
 
                 {/* Worker type */}
                 <div className="col-span-2">
                   {item.category === 'worker' ? (
-                    <select
-                      value={item.worker_type}
-                      onChange={e => updateItem(item._key, 'worker_type', e.target.value)}
-                      className="w-full px-1 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">-- 工種 --</option>
-                      {workerTypes.map(wt => (
-                        <option key={wt} value={wt}>{wt}</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={item.worker_type || null}
+                      onChange={val => updateItem(item._key, 'worker_type', val || '')}
+                      options={workerTypeOptions}
+                      placeholder="工種"
+                      className="text-xs"
+                    />
                   ) : (item.category === 'vehicle' || item.category === 'machinery') ? (
                     <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
                       <input
