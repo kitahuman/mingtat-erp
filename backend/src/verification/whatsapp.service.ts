@@ -45,6 +45,8 @@ interface AiClassification {
   message_type: 'order' | 'modification' | 'chat';
   confidence: number;
   order_date?: string; // YYYY-MM-DD
+  order_date_start?: string; // YYYY-MM-DD (日期範圍起始，如 14-15/4/2026 → 2026-04-14)
+  order_date_end?: string; // YYYY-MM-DD (日期範圍結束，如 14-15/4/2026 → 2026-04-15)
   shift?: 'day' | 'night'; // day (default) or night
   is_update: boolean;
   order_status: 'tentative' | 'confirmed';
@@ -384,11 +386,20 @@ export class WhatsappService {
     }
 
     // 5. 處理完 order 或 modification 後，同步每日總結到 verification_records
-    const targetDate = classification.order_date
+    const targetShift = classification.shift || 'day';
+    // 支持日期範圍：如果有 order_date_start/order_date_end，同步每一天
+    const syncDateStart = classification.order_date_start
+      || classification.order_date
       || (classification.modifications?.[0]?.target_date)
       || new Date().toISOString().slice(0, 10);
-    const targetShift = classification.shift || 'day';
-    await this.syncDailySummaryToVerificationRecords(targetDate, targetShift);
+    const syncDateEnd = classification.order_date_end || syncDateStart;
+    const syncStart = new Date(syncDateStart);
+    const syncEnd = new Date(syncDateEnd);
+    const syncCurrent = new Date(syncStart);
+    while (syncCurrent <= syncEnd) {
+      await this.syncDailySummaryToVerificationRecords(syncCurrent.toISOString().slice(0, 10), targetShift);
+      syncCurrent.setDate(syncCurrent.getDate() + 1);
+    }
 
     return result;
   }
@@ -436,113 +447,142 @@ export class WhatsappService {
     sender: string,
     text: string,
   ) {
-    const orderDate = classification.order_date
-      ? new Date(classification.order_date)
-      : new Date();
     const shift = classification.shift || 'day';
 
-    // 版本管理：檢查同一天 + 同一班次是否已有 order
-    const dateStart = new Date(orderDate);
-    dateStart.setHours(0, 0, 0, 0);
-    const dateEnd = new Date(orderDate);
-    dateEnd.setHours(23, 59, 59, 999);
+    // 日期範圍處理：如果有 order_date_start 和 order_date_end，遍歷日期範圍為每一天各建一筆 order
+    const dateStartStr = classification.order_date_start || classification.order_date || new Date().toISOString().slice(0, 10);
+    const dateEndStr = classification.order_date_end || dateStartStr;
 
-    const existingOrders = await this.prisma.verificationWaOrder.findMany({
-      where: {
-        wa_order_date: { gte: dateStart, lte: dateEnd },
-        wa_order_shift: shift,
-      },
-      orderBy: { wa_order_version: 'desc' },
-      take: 1,
-    });
+    const datesToCreate: Date[] = [];
+    const startDate = new Date(dateStartStr);
+    const endDate = new Date(dateEndStr);
+    // 遍歷日期範圍（含頭尾）
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      datesToCreate.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    // 安全檢查：如果沒有日期（異常情況），至少建一天
+    if (datesToCreate.length === 0) {
+      datesToCreate.push(classification.order_date ? new Date(classification.order_date) : new Date());
+    }
 
-    const version = existingOrders.length > 0
-      ? existingOrders[0].wa_order_version + 1
-      : 1;
+    const createdOrders: Array<{ orderId: number; orderDate: string; version: number }> = [];
 
-    const waOrder = await this.prisma.verificationWaOrder.create({
-      data: {
-        wa_order_msg_id: messageId,
-        wa_order_date: orderDate,
-        wa_order_shift: shift,
-        wa_order_status: classification.order_status,
-        wa_order_version: version,
-        wa_order_sender_name: sender,
-        wa_order_sender_role: null,
-        wa_order_raw_text: text,
-        wa_order_item_count: classification.items.length,
-        wa_order_ai_model: 'gpt-4.1-mini',
-        wa_order_ai_confidence: classification.confidence,
-      },
-    });
+    for (const orderDate of datesToCreate) {
+      // 版本管理：檢查同一天 + 同一班次是否已有 order
+      const dayStart = new Date(orderDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(orderDate);
+      dayEnd.setHours(23, 59, 59, 999);
 
-    // 存入 order items
-    if (classification.items.length > 0) {
-      await this.prisma.verificationWaOrderItem.createMany({
-        data: classification.items.map((item, idx) => {
-          // 組合 remarks：staff_list + team_leader + 原始 remarks
-          const remarkParts: string[] = [];
-          if (item.team_leader) remarkParts.push(`[leader]帶隊: ${item.team_leader}`);
-          if (item.staff_list && item.staff_list.length > 0) remarkParts.push(`[staff]員工: ${item.staff_list.join('、')}`);
-          if (item.remarks) remarkParts.push(item.remarks);
-          const combinedRemarks = remarkParts.length > 0 ? remarkParts.join('\n') : null;
-
-          return {
-            wa_item_order_id: waOrder.id,
-            wa_item_seq: item.seq || idx + 1,
-            wa_item_order_type: item.order_type || null,
-            wa_item_contract_no: item.contract_no || null,
-            wa_item_customer: item.customer || null,
-            wa_item_work_desc: item.work_description || null,
-            wa_item_location: item.location || null,
-            // transport/machinery: 司機/操作員花名; manpower: 帶隊人
-            wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
-            wa_item_driver_id: null, // We'll update this in the next step
-            wa_item_vehicle_no: item.vehicle_no || null,
-            wa_item_machine_code: item.machine_code || null,
-            wa_item_contact_person: item.contact_person || null,
-            wa_item_slip_write_as: item.slip_write_as || null,
-            wa_item_is_suspended: item.is_suspended || false,
-            wa_item_product_name: item.product_name || null,
-            wa_item_product_unit: item.product_unit || null,
-            wa_item_goods_quantity: item.goods_quantity ?? null,
-            wa_item_remarks: combinedRemarks,
-            wa_item_mod_status: null,
-            wa_item_mod_prev_data: undefined,
-          };
-        }),
+      const existingOrders = await this.prisma.verificationWaOrder.findMany({
+        where: {
+          wa_order_date: { gte: dayStart, lte: dayEnd },
+          wa_order_shift: shift,
+        },
+        orderBy: { wa_order_version: 'desc' },
+        take: 1,
       });
 
-      // Match nicknames to employee IDs
-      const createdItems = await this.prisma.verificationWaOrderItem.findMany({
-        where: { wa_item_order_id: waOrder.id }
+      const version = existingOrders.length > 0
+        ? existingOrders[0].wa_order_version + 1
+        : 1;
+
+      const waOrder = await this.prisma.verificationWaOrder.create({
+        data: {
+          wa_order_msg_id: messageId,
+          wa_order_date: orderDate,
+          wa_order_shift: shift,
+          wa_order_status: classification.order_status,
+          wa_order_version: version,
+          wa_order_sender_name: sender,
+          wa_order_sender_role: null,
+          wa_order_raw_text: text,
+          wa_order_item_count: classification.items.length,
+          wa_order_ai_model: 'gpt-4.1-mini',
+          wa_order_ai_confidence: classification.confidence,
+        },
       });
 
-      for (const createdItem of createdItems) {
-        if (createdItem.wa_item_driver_nickname) {
-          const empId = await this.nicknameMatchService.matchNickname(createdItem.wa_item_driver_nickname);
-          if (empId) {
-            await this.prisma.verificationWaOrderItem.update({
-              where: { id: createdItem.id },
-              data: { wa_item_driver_id: empId }
-            });
+      // 存入 order items
+      if (classification.items.length > 0) {
+        await this.prisma.verificationWaOrderItem.createMany({
+          data: classification.items.map((item, idx) => {
+            // 組合 remarks：staff_list + team_leader + 原始 remarks
+            const remarkParts: string[] = [];
+            if (item.team_leader) remarkParts.push(`[leader]帶隊: ${item.team_leader}`);
+            if (item.staff_list && item.staff_list.length > 0) remarkParts.push(`[staff]員工: ${item.staff_list.join('、')}`);
+            if (item.remarks) remarkParts.push(item.remarks);
+            const combinedRemarks = remarkParts.length > 0 ? remarkParts.join('\n') : null;
+
+            return {
+              wa_item_order_id: waOrder.id,
+              wa_item_seq: item.seq || idx + 1,
+              wa_item_order_type: item.order_type || null,
+              wa_item_contract_no: item.contract_no || null,
+              wa_item_customer: item.customer || null,
+              wa_item_work_desc: item.work_description || null,
+              wa_item_location: item.location || null,
+              // transport/machinery: 司機/操作員花名; manpower: 帶隊人
+              wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
+              wa_item_driver_id: null, // We'll update this in the next step
+              wa_item_vehicle_no: item.vehicle_no || null,
+              wa_item_machine_code: item.machine_code || null,
+              wa_item_contact_person: item.contact_person || null,
+              wa_item_slip_write_as: item.slip_write_as || null,
+              wa_item_is_suspended: item.is_suspended || false,
+              wa_item_product_name: item.product_name || null,
+              wa_item_product_unit: item.product_unit || null,
+              wa_item_goods_quantity: item.goods_quantity ?? null,
+              wa_item_remarks: combinedRemarks,
+              wa_item_mod_status: null,
+              wa_item_mod_prev_data: undefined,
+            };
+          }),
+        });
+
+        // Match nicknames to employee IDs
+        const createdItems = await this.prisma.verificationWaOrderItem.findMany({
+          where: { wa_item_order_id: waOrder.id }
+        });
+
+        for (const createdItem of createdItems) {
+          if (createdItem.wa_item_driver_nickname) {
+            const empId = await this.nicknameMatchService.matchNickname(createdItem.wa_item_driver_nickname);
+            if (empId) {
+              await this.prisma.verificationWaOrderItem.update({
+                where: { id: createdItem.id },
+                data: { wa_item_driver_id: empId }
+              });
+            }
           }
         }
       }
+
+      createdOrders.push({
+        orderId: waOrder.id,
+        orderDate: orderDate.toISOString().slice(0, 10),
+        version,
+      });
     }
 
+    // 回傳結果（向後兼容：保留 order_id 指向第一筆）
     return {
       processed: true,
       message_type: 'order',
       is_order: true,
       message_id: messageId,
-      order_id: waOrder.id,
-      order_date: classification.order_date,
+      order_id: createdOrders[0].orderId,
+      order_date: dateStartStr,
+      order_date_start: dateStartStr,
+      order_date_end: dateEndStr,
       shift,
-      version,
+      version: createdOrders[0].version,
       item_count: classification.items.length,
       leave_count: classification.leave_list.length,
       confidence: classification.confidence,
+      orders_created: createdOrders,
     };
   }
 
@@ -1055,10 +1095,147 @@ export class WhatsappService {
 - add: 新增工作項目
 - other: 其他修改
 
+## 系統已有的機械列表（有效 DC 編號參考）
+以下是系統中所有已登記的機械，DC 編號是唯一識別碼：
+- DC01: 洋馬仔 3噸 (inactive)
+- DC02: Kubota U-30-6 3噸
+- DC03: Kato 308 8噸
+- DC04: Kobelco SK75 7噸
+- DC05: Sumitomo SH135X 13噸
+- DC06: Kobelco SK135 13噸
+- DC07: Kobelco SK135 13噸
+- DC08: Kato 820 20噸
+- DC09: Kobelco SK225 22噸
+- DC10: 日立 330 33噸
+- DC11: 日立 350 35噸
+- DC12: 日立 350 35噸
+- DC13: Hitachi Ex490 49噸
+- DC14: 日立 350 35噸
+- DC15: Kato 513 13噸
+- DC16: 洋馬仔 3噸
+- DC17: Kato 308 8噸
+- DC18: 日立 350 35噸
+- DC19: 日立 225 22噸
+- DC20: 小松 PC228 22噸
+- DC21: BELL B45E 41噸 (鉸接式自卸卡車)
+- DC22: Canycom S160 0.6噸 (履帶式裝載機)
+
+## ⛔⛔⛔ 機械 ORDER 識別（最重要！）
+以下格式的訊息是機械 order（machinery order），絕對不是 chat！
+特徵：
+1. 以「D-M-YYYY(暫定)」或「D-M-YYYY」開頭（如 14-4-2026(暫定)、15-4-2026(暫定)）
+2. 用數字編號分組（如「1:明達」「3: 3802(3跑東面金門地盤)」「8:維修保養～」）
+3. 包含大量 DC 編號（DC 14、D C 14、DC14、D C13 等各種格式）
+4. 每個 DC 編號後面可能有操作員花名
+
+⛔ 只要訊息以日期開頭並包含多個 DC 編號，就是 machinery order，confidence 應該 >= 0.85！
+
+完整機械 ORDER 範例：
+原文：
+15-4-2026(暫定)
+1:明達
+
+3310WH-X451
+9號閘轉彎位
+D C 14 ～小濤
+
+T24w022 飛機扣X4位
+DC 14
+DC 20
+DC 03
+X 4位完工
+
+T23w021 撈花坭及出花坭
+D C13 ～暫停
+
+PA13114新位剃頭
+出草頭
+DC06 机手韋仔
+DC04～文𠎀
+
+T23w006
+DC 16
+DC 03
+D C 22 暫停
+
+3: 3802(3跑東面金門地盤)       租機
+     DC 07泉
+     DC 15光仔
+     DC08平
+     DC02肥仔麟
+
+打鼓嶺剃頭
+DC 09～平哥
+DC 12～村頭
+安全、機械～雜項～
+
+力哥架步清場
+暫停
+
+8:維修保養～
+
+請假～強
+
+DC17
+DC05
+DC12
+DC11
+DC 18
+係3跑西架步
+DC19喺水澗石倉
+
+→ 解析結果（約 22 筆 items）：
+客戶分組「1:明達」→ customer: "明達"，後續項目都屬於明達，直到下一個客戶分組
+客戶分組「3: 3802(3跑東面金門地盤)」→ customer: "金門"（或 "3802"），contract_no: "3802"，location: "3跑東面金門地盤"
+客戶分組「8:維修保養～」→ 維修保養區段
+
+各區段解析：
+- 3310WH-X451 / 9號閘轉彎位 / D C 14 ～小濤
+  → {order_type:"machinery", customer:"明達", contract_no:"3310WH-X451", work_description:"9號閘轉彎位", machine_code:"DC14", driver_nickname:"小濤"}
+
+- T24w022 飛機扣X4位 / DC 14 / DC 20 / DC 03 / X 4位完工
+  → 3 筆 items，每個 DC 一筆，contract_no:"T24w022", work_description:"飛機扣X4位", remarks:"X 4位完工"
+  注意：DC14 在不同合約下可以重複出現（同一台機在不同工地工作）
+
+- T23w021 撈花坭及出花坭 / D C13 ～暫停
+  → {order_type:"machinery", customer:"明達", contract_no:"T23w021", work_description:"撈花坭及出花坭", machine_code:"DC13", is_suspended:true}
+
+- PA13114新位剃頭 / 出草頭 / DC06 机手韋仔 / DC04～文𠎀
+  → 2 筆：DC06(driver_nickname:"韋仔", remarks:"机手韋仔") + DC04(driver_nickname:"文𠎀")
+  contract_no:"PA13114", work_description:"新位剃頭 出草頭"
+
+- T23w006 / DC 16 / DC 03 / D C 22 暫停
+  → 3 筆：DC16 + DC03 (is_suspended:false) + DC22 (is_suspended:true, 因為「暫停」只跟在 DC22 後面)
+  contract_no:"T23w006"
+
+- 3802(3跑東面金門地盤) 租機 / DC 07泉 / DC 15光仔 / DC08平 / DC02肥仔麟
+  → 4 筆，contract_no:"3802", location:"3跑東面金門地盤", work_description:"租機"
+
+- 打鼓嶺剃頭 / DC 09～平哥 / DC 12～村頭
+  → 2 筆，work_description:"打鼓嶺剃頭"（仍屬於客戶分組 3 的範圍）
+
+- 安全、機械～雜項～ → {order_type:"notice", remarks:"安全、機械～雜項～"}
+
+- 力哥架步清場 / 暫停 → {order_type:"notice", work_description:"力哥架步清場", is_suspended:true}
+
+- 請假～強 → leave_list: ["強"]
+
+- 8:維修保養～ 後面的 DC17 / DC05 / DC12 / DC11 / DC 18 / 係3跑西架步 / DC19喺水澗石倉
+  → 維修保養中的機械：
+  DC17, DC05, DC12, DC11, DC18 → 各一筆 {order_type:"machinery", work_description:"維修保養", location:"3跑西架步"}
+  DC19 → {order_type:"machinery", work_description:"維修保養", location:"水澗石倉", remarks:"喺水澗石倉"}
+
 ## 日期處理
 - 日期格式：D-M-YYYY 或 D-M-YYYY(暫定) 或 D-M-YYYY（星期X）暫定/更新
-- ⛔ 夜間 order 格式：D-M-YYYY(夜) 或 D-M-YYYY（夜）→ shift: "night"（日期後面帶「(夜)」或「（夜）」表示夜間班次）
-- 如果日期後面沒有「(夜)」或「（夜）」，則 shift: "day"（日間班次，預設值）
+- ⛔ 日期範圍格式：D-D/M/YYYY 或 D-D/M-YYYY（如 14-15/4/2026 表示 14/4 和 15/4 兩天）
+  - 如果是日期範圍，回傳 order_date_start 和 order_date_end 兩個欄位
+  - order_date_start = 範圍起始日（YYYY-MM-DD），order_date_end = 範圍結束日（YYYY-MM-DD）
+  - order_date = order_date_start（向後兼容）
+  - 例如「14-15/4/2026 [夜]」→ order_date:"2026-04-14", order_date_start:"2026-04-14", order_date_end:"2026-04-15", shift:"night"
+- ⛔ 如果只有單一日期（非範圍），order_date_start 和 order_date_end 都等於該日期
+  - 例如「15-4-2026(暫定)」→ order_date:"2026-04-15", order_date_start:"2026-04-15", order_date_end:"2026-04-15"
+- ⛔ 夜間 order 格式：D-M-YYYY(夜) 或 D-M-YYYY（夜）或 D-D/M/YYYY [夜] → shift: "night"
+- 如果日期後面沒有「(夜)」「（夜）」「[夜]」，則 shift: "day"（日間班次，預設值）
 - 夜間 order 的內容格式與日間相同，只是日期標記不同
 - 全形數字（４）= 半形數字（4）
 - 「暫定」→ order_status: "tentative"；「更新」→ is_update: true, order_status: "confirmed"
@@ -1071,7 +1248,9 @@ export class WhatsappService {
   "message_type": "order",
   "confidence": 0.0-1.0,
   "order_date": "YYYY-MM-DD",
-  "shift": "day" 或 "night",  // ⛔ 必填！日期帶(夜)/(夜）→ "night"，否則 "day"
+  "order_date_start": "YYYY-MM-DD",  // ⛔ 必填！日期範圍起始日，單一日期時 = order_date
+  "order_date_end": "YYYY-MM-DD",  // ⛔ 必填！日期範圍結束日，單一日期時 = order_date
+  "shift": "day" 或 "night",  // ⛔ 必填！日期帶(夜)/(夜）/[夜]→ "night"，否則 "day"
   "is_update": true/false,
   "order_status": "tentative" 或 "confirmed",
   "items": [
@@ -1149,7 +1328,7 @@ export class WhatsappService {
         { role: 'user', content: `請分析以下 WhatsApp 訊息：\n\n${text}` },
       ],
       temperature: 0.1,
-      max_tokens: 4000,
+      max_tokens: 8000,
     });
 
     const content = response.choices[0]?.message?.content || '';
