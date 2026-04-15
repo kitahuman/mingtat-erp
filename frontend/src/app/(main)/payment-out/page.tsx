@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { paymentOutApi, projectsApi, expensesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
@@ -10,6 +11,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function PaymentOutPage() {
+  const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -237,6 +239,7 @@ export default function PaymentOutPage() {
         onColumnConfigReset={handleReset}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
+        onRowClick={(row: any) => router.push(`/payment-out/${row.id}`)}
       />
 
       {/* Create Modal */}

@@ -61,14 +61,49 @@ export class PaymentOutService {
             item: true,
             total_amount: true,
             supplier_name: true,
+            is_paid: true,
+            date: true,
+            remarks: true,
             category: { select: { id: true, name: true } },
+            project: { select: { id: true, project_no: true, project_name: true } },
           },
         },
         project: { select: { id: true, project_no: true, project_name: true } },
+        payroll_payments: {
+          include: {
+            payroll: {
+              select: {
+                id: true,
+                period: true,
+                date_from: true,
+                date_to: true,
+                employee: {
+                  select: { id: true, name_zh: true, name_en: true },
+                },
+              },
+            },
+          },
+          orderBy: { payroll_payment_date: 'desc' },
+        },
       },
     });
     if (!record) throw new NotFoundException('付款記錄不存在');
-    return record;
+
+    // Fetch matched bank transactions (月結單配對記錄)
+    const matchedBankTransactions = await this.prisma.bankTransaction.findMany({
+      where: {
+        matched_type: 'payment_out',
+        matched_id: id,
+      },
+      include: {
+        bank_account: {
+          select: { id: true, account_name: true, bank_name: true, account_no: true },
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    return { ...record, matched_bank_transactions: matchedBankTransactions };
   }
 
   async create(dto: {

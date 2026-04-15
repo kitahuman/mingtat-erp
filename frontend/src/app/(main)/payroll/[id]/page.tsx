@@ -1728,7 +1728,7 @@ export default function PayrollDetailPage() {
                     <td className="px-4 py-2 text-gray-500 text-xs">{p.payroll_payment_remarks || '-'}</td>
                     <td className="px-4 py-2">
                       {p.payment_out ? (
-                        <Link href={`/payment-out`} className="text-primary-600 hover:underline text-xs">
+                        <Link href={`/payment-out/${p.payment_out.id}`} className="text-primary-600 hover:underline text-xs">
                           查看付款記錄 #{p.payment_out.id}
                         </Link>
                       ) : (
