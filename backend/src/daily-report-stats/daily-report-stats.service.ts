@@ -14,10 +14,13 @@ export interface StatsQuery {
 export interface ItemSummary {
   category: string;
   worker_type: string | null;
+  machine_type: string | null;
+  tonnage: number | null;
   content: string;
   total_quantity: number;
   total_shift_quantity: number;
   total_ot_hours: number;
+  total_tonnage: number;
   report_count: number;
 }
 
@@ -29,6 +32,8 @@ export interface DailyDetail {
   items: {
     category: string;
     worker_type: string | null;
+    machine_type: string | null;
+    tonnage: number | null;
     content: string;
     quantity: number | null;
     shift_quantity: number | null;
@@ -154,15 +159,18 @@ export class DailyReportStatsService {
 
       for (const report of groupReports) {
         for (const item of report.items) {
-          const itemKey = `${item.daily_report_item_category}||${item.daily_report_item_worker_type || ''}||${item.daily_report_item_content}`;
+          const itemKey = `${item.daily_report_item_category}||${item.daily_report_item_worker_type || ''}||${item.daily_report_item_machine_type || ''}||${item.daily_report_item_content}`;
           if (!itemMap.has(itemKey)) {
             itemMap.set(itemKey, {
               category: item.daily_report_item_category,
               worker_type: item.daily_report_item_worker_type,
+              machine_type: item.daily_report_item_machine_type || null,
+              tonnage: item.daily_report_item_tonnage ? this.toNum(item.daily_report_item_tonnage) : null,
               content: item.daily_report_item_content,
               total_quantity: 0,
               total_shift_quantity: 0,
               total_ot_hours: 0,
+              total_tonnage: 0,
               report_count: 0,
             });
           }
@@ -170,6 +178,10 @@ export class DailyReportStatsService {
           summary.total_quantity += this.toNum(item.daily_report_item_quantity);
           summary.total_shift_quantity += this.toNum(item.daily_report_item_shift_quantity);
           summary.total_ot_hours += this.toNum(item.daily_report_item_ot_hours);
+          // total_tonnage = quantity × tonnage per unit (if tonnage is set)
+          if (item.daily_report_item_tonnage) {
+            summary.total_tonnage += this.toNum(item.daily_report_item_quantity) * this.toNum(item.daily_report_item_tonnage);
+          }
           summary.report_count += 1;
         }
       }
@@ -183,6 +195,8 @@ export class DailyReportStatsService {
         items: report.items.map((item: any) => ({
           category: item.daily_report_item_category,
           worker_type: item.daily_report_item_worker_type,
+          machine_type: item.daily_report_item_machine_type || null,
+          tonnage: item.daily_report_item_tonnage ? this.toNum(item.daily_report_item_tonnage) : null,
           content: item.daily_report_item_content,
           quantity: this.toNum(item.daily_report_item_quantity) || null,
           shift_quantity: this.toNum(item.daily_report_item_shift_quantity) || null,
@@ -331,6 +345,8 @@ export class DailyReportStatsService {
             shift_quantity: this.toNum(item.daily_report_item_shift_quantity),
             ot_hours: this.toNum(item.daily_report_item_ot_hours),
             name_or_plate: item.daily_report_item_name_or_plate || '-',
+            machine_type: item.daily_report_item_machine_type || '-',
+            tonnage: item.daily_report_item_tonnage ? this.toNum(item.daily_report_item_tonnage) : null,
           });
         }
       }

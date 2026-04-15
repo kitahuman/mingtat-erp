@@ -370,11 +370,10 @@ function ProjectRow({
                 {workers.length > 0 && (
                   <CategoryTable title="工人" items={workers} showWorkerType />
                 )}
-                {vehicles.length > 0 && (
-                  <CategoryTable title="車輛" items={vehicles} />
+                {vehicles.length > 0 && (                   <CategoryTable title="車轆" items={vehicles} showMachineType />
                 )}
                 {machinery.length > 0 && (
-                  <CategoryTable title="機械" items={machinery} />
+                   <CategoryTable title="機械" items={machinery} showMachineType />
                 )}
                 {tools.length > 0 && (
                   <CategoryTable title="工具" items={tools} />
@@ -469,27 +468,39 @@ function CategoryTable({
   title,
   items,
   showWorkerType = false,
+  showMachineType = false,
 }: {
   title: string;
   items: any[];
   showWorkerType?: boolean;
+  showMachineType?: boolean;
 }) {
   const totalQty = items.reduce((sum: number, i: any) => sum + (i.total_quantity || 0), 0);
   const totalShift = items.reduce((sum: number, i: any) => sum + (i.total_shift_quantity || 0), 0);
   const totalOt = items.reduce((sum: number, i: any) => sum + (i.total_ot_hours || 0), 0);
+  const totalTonnage = items.reduce((sum: number, i: any) => sum + (i.total_tonnage || 0), 0);
+  const hasTonnage = showMachineType && items.some((i: any) => i.total_tonnage > 0);
 
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-sm font-medium text-gray-700">{title}</span>
         <span className="text-xs text-gray-400">({items.length} 項)</span>
+        {hasTonnage && (
+          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+            總噸數 {fmtNum(totalTonnage)} T
+          </span>
+        )}
       </div>
       <table className="w-full text-xs border rounded overflow-hidden">
         <thead className="bg-gray-100">
           <tr>
             {showWorkerType && <th className="px-3 py-1.5 text-left">工種</th>}
+            {showMachineType && <th className="px-3 py-1.5 text-left">機種</th>}
+            {showMachineType && <th className="px-3 py-1.5 text-right">噸數(T)</th>}
             <th className="px-3 py-1.5 text-left">內容</th>
             <th className="px-3 py-1.5 text-right">總數量</th>
+            {hasTonnage && <th className="px-3 py-1.5 text-right">總噸數(T)</th>}
             <th className="px-3 py-1.5 text-right">總中直</th>
             <th className="px-3 py-1.5 text-right">總 OT 時數</th>
             <th className="px-3 py-1.5 text-right">出現次數</th>
@@ -499,8 +510,11 @@ function CategoryTable({
           {items.map((item: any, idx: number) => (
             <tr key={idx} className="hover:bg-gray-50">
               {showWorkerType && <td className="px-3 py-1.5 font-medium">{item.worker_type || '-'}</td>}
+              {showMachineType && <td className="px-3 py-1.5 text-orange-700 font-medium">{item.machine_type || '-'}</td>}
+              {showMachineType && <td className="px-3 py-1.5 text-right text-gray-600">{item.tonnage != null ? `${item.tonnage}T` : '-'}</td>}
               <td className="px-3 py-1.5">{item.content}</td>
               <td className="px-3 py-1.5 text-right font-medium">{fmtNum(item.total_quantity)}</td>
+              {hasTonnage && <td className="px-3 py-1.5 text-right font-medium text-orange-700">{item.total_tonnage > 0 ? fmtNum(item.total_tonnage) : '-'}</td>}
               <td className="px-3 py-1.5 text-right">{fmtNum(item.total_shift_quantity)}</td>
               <td className="px-3 py-1.5 text-right">{fmtNum(item.total_ot_hours)}</td>
               <td className="px-3 py-1.5 text-right text-gray-500">{item.report_count}</td>
@@ -510,8 +524,11 @@ function CategoryTable({
         <tfoot className="bg-gray-50 font-medium">
           <tr>
             {showWorkerType && <td className="px-3 py-1.5">合計</td>}
-            <td className="px-3 py-1.5">{!showWorkerType && '合計'}</td>
+            {showMachineType && <td className="px-3 py-1.5">{!showWorkerType && '合計'}</td>}
+            {showMachineType && <td className="px-3 py-1.5"></td>}
+            <td className="px-3 py-1.5">{!showWorkerType && !showMachineType && '合計'}</td>
             <td className="px-3 py-1.5 text-right">{fmtNum(totalQty)}</td>
+            {hasTonnage && <td className="px-3 py-1.5 text-right text-orange-700">{fmtNum(totalTonnage)}</td>}
             <td className="px-3 py-1.5 text-right">{fmtNum(totalShift)}</td>
             <td className="px-3 py-1.5 text-right">{fmtNum(totalOt)}</td>
             <td className="px-3 py-1.5 text-right"></td>
