@@ -123,18 +123,27 @@ export default function PaymentOutPage() {
       label: '日期',
       sortable: true,
       editType: 'date',
+      minWidth: 110,
       render: (v: any) => fmtDate(v),
     },
     {
       key: 'payment_out_description',
       label: '項目',
       editType: 'text',
+      minWidth: 160,
       render: (v: any, row: any) => {
-        if (v) return <span className="text-sm">{v}</span>;
-        // Fallback: show expense or payroll info
-        if (row.expense) return <span className="text-xs text-gray-500">#{row.expense.id} {row.expense.item || row.expense.supplier_name || '-'}</span>;
-        if (row.payroll) return <span className="text-xs text-indigo-600">糧單 #{row.payroll.id} {row.payroll.employee?.name_zh || ''}</span>;
-        return <span className="text-gray-400">-</span>;
+        const text = v
+          || (row.expense ? `#${row.expense.id} ${row.expense.item || row.expense.supplier_name || '-'}` : null)
+          || (row.payroll ? `糧單 #${row.payroll.id} ${row.payroll.employee?.name_zh || ''}` : null);
+        if (!text) return <span className="text-gray-400">-</span>;
+        return (
+          <span
+            className="text-sm block max-w-[200px] truncate"
+            title={text}
+          >
+            {text}
+          </span>
+        );
       },
     },
     {
@@ -142,12 +151,15 @@ export default function PaymentOutPage() {
       label: '金額',
       sortable: true,
       editType: 'number',
-      render: (v: any) => <span className="font-mono">{fmt$(v)}</span>,
+      minWidth: 110,
+      // Prisma returns Decimal as string; convert explicitly
+      render: (v: any) => <span className="font-mono whitespace-nowrap">{fmt$(v != null ? String(v) : 0)}</span>,
     },
     {
       key: 'company',
       label: '公司',
       editable: false,
+      minWidth: 100,
       render: (_: any, row: any) => row.company ? (
         <span className="text-xs text-gray-700">{row.company.name}</span>
       ) : <span className="text-gray-400">-</span>,

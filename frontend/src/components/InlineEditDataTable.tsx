@@ -13,6 +13,7 @@ export interface InlineColumn {
   exportRender?: (value: any, row: any) => string;
   filterRender?: (value: any, row: any) => string;
   _width?: number;
+  minWidth?: number; // explicit min-width override (passed through to DataTable)
   // Inline edit config
   editable?: boolean;       // default: true (set false to explicitly disable)
   editType?: 'text' | 'number' | 'select' | 'date';
