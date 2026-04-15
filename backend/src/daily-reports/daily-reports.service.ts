@@ -20,6 +20,7 @@ export class DailyReportsService {
     const where: any = { daily_report_deleted_at: null };
 
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
+    if (query.project_name) where.daily_report_project_name = { contains: query.project_name, mode: 'insensitive' };
     if (query.status) where.daily_report_status = query.status;
     if (query.created_by) where.daily_report_created_by = Number(query.created_by);
     if (query.client_id) where.daily_report_client_id = Number(query.client_id);
@@ -214,6 +215,36 @@ export class DailyReportsService {
     }
     await this.prisma.dailyReport.update({ where: { id }, data: { daily_report_deleted_at: new Date(), daily_report_deleted_by: userId ?? null } });
     return { success: true };
+  }
+
+  async getDistinctProjectNames(): Promise<string[]> {
+    // Get distinct non-null project names from daily_reports
+    const rows = await this.prisma.dailyReport.findMany({
+      where: {
+        daily_report_deleted_at: null,
+        daily_report_project_name: { not: null },
+      },
+      select: { daily_report_project_name: true },
+      distinct: ['daily_report_project_name'],
+      orderBy: { daily_report_project_name: 'asc' },
+    });
+    const fromReports = rows
+      .map((r) => r.daily_report_project_name as string)
+      .filter(Boolean);
+
+    // Also include project names from the projects table
+    const projects = await this.prisma.project.findMany({
+      where: { deleted_at: null },
+      select: { project_name: true },
+      orderBy: { project_name: 'asc' },
+    });
+    const fromProjects = projects.map((p) => p.project_name).filter(Boolean) as string[];
+
+    // Merge and deduplicate, sorted alphabetically
+    const merged = Array.from(new Set([...fromProjects, ...fromReports])).sort((a, b) =>
+      a.localeCompare(b, 'zh-HK'),
+    );
+    return merged;
   }
 
   async findByProject(projectId: number, query?: any) {

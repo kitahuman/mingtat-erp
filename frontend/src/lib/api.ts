@@ -900,6 +900,7 @@ export const dailyReportsApi = {
   delete: (id: number) => api.delete(`/daily-reports/${id}`),
   byProject: (projectId: number, params?: any) => api.get(`/daily-reports/by-project/${projectId}`, { params }),
   exportPdf: (id: number) => api.get(`/daily-reports/${id}/pdf`, { responseType: 'blob' }),
+  projectNames: () => api.get('/daily-reports/project-names'),
 };
 
 // Acceptance Reports (工程收貨報告) - Admin

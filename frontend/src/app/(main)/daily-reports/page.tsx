@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { dailyReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
 const statusColors: Record<string, string> = { draft: 'badge-yellow', submitted: 'badge-green' };
@@ -16,14 +17,22 @@ export default function DailyReportsAdminPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
-  const [contractOptions, setContractOptions] = useState<string[]>([]);
-  const [filterProjectId, setFilterProjectId] = useState('');
-  const [filterClientId, setFilterClientId] = useState('');
-  const [filterClientName, setFilterClientName] = useState('');
-  const [filterContractNo, setFilterContractNo] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+
+  // Filter option lists
+  const [projectNameOptions, setProjectNameOptions] = useState<{ value: string; label: string }[]>([]);
+  const [partnerOptions, setPartnerOptions] = useState<{ value: string; label: string }[]>([]);
+  const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
+  const statusOptions = [
+    { value: 'draft', label: '草稿' },
+    { value: 'submitted', label: '已提交' },
+  ];
+
+  // Filter state
+  const [filterProjectName, setFilterProjectName] = useState<string | null>(null);
+  // Client filter: value is "id:<id>" for partner or "name:<text>" for free-text
+  const [filterClient, setFilterClient] = useState<string | null>(null);
+  const [filterContractNo, setFilterContractNo] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [search, setSearch] = useState('');
@@ -34,9 +43,14 @@ export default function DailyReportsAdminPage() {
     try {
       setLoading(true);
       const params: any = { page, limit };
-      if (filterProjectId) params.project_id = filterProjectId;
-      if (filterClientId) params.client_id = filterClientId;
-      if (filterClientName) params.client_name = filterClientName;
+      if (filterProjectName) params.project_name = filterProjectName;
+      if (filterClient) {
+        if (filterClient.startsWith('id:')) {
+          params.client_id = filterClient.slice(3);
+        } else if (filterClient.startsWith('name:')) {
+          params.client_name = filterClient.slice(5);
+        }
+      }
       if (filterContractNo) params.client_contract_no = filterContractNo;
       if (filterStatus) params.status = filterStatus;
       if (filterDateFrom) params.date_from = filterDateFrom;
@@ -53,34 +67,34 @@ export default function DailyReportsAdminPage() {
   };
 
   useEffect(() => {
-    projectsApi.simple().then(res => setProjects(res.data || [])).catch(() => {});
-    partnersApi.simple().then(res => setPartners(res.data || [])).catch(() => {});
+    // Load project names (distinct from daily_reports + projects table)
+    dailyReportsApi.projectNames().then(res => {
+      const names: string[] = res.data || [];
+      setProjectNameOptions(names.map(n => ({ value: n, label: n })));
+    }).catch(() => {});
+
+    // Load partners for client filter
+    partnersApi.simple().then(res => {
+      const list: any[] = res.data || [];
+      setPartnerOptions(list.map((p: any) => ({ value: `id:${p.id}`, label: p.name })));
+    }).catch(() => {});
+
+    // Load contract options from field_options
     fieldOptionsApi.getByCategory('client_contract_no').then(res => {
-      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
   }, []);
 
   useEffect(() => {
     loadData();
-  }, [page, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search]);
+  }, [page, filterProjectName, filterClient, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search]);
 
   const totalPages = Math.ceil(total / limit);
 
   const handleExport = (id: number) => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.open(`${apiBase}/daily-reports/${id}/export`, '_blank');
-  };
-
-  const handleClientChange = (val: string) => {
-    setFilterClientId(val);
-    if (val) { setFilterClientName(''); setPage(1); }
-    else setPage(1);
-  };
-
-  const handleClientNameChange = (val: string) => {
-    setFilterClientName(val);
-    if (val) { setFilterClientId(''); }
-    setPage(1);
   };
 
   return (
@@ -101,15 +115,13 @@ export default function DailyReportsAdminPage() {
             placeholder="搜尋工作摘要/工程/客戶/合約..."
             className="px-3 py-2 border rounded-lg text-sm"
           />
-          <select
+          <SearchableSelect
             value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="">全部狀態</option>
-            <option value="draft">草稿</option>
-            <option value="submitted">已提交</option>
-          </select>
+            onChange={val => { setFilterStatus(val as string | null); setPage(1); }}
+            options={statusOptions}
+            placeholder="全部狀態"
+            className="text-sm"
+          />
           <input
             type="date"
             value={filterDateFrom}
@@ -124,44 +136,28 @@ export default function DailyReportsAdminPage() {
           />
         </div>
         {/* Row 2: project + client + contract */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select
-            value={filterProjectId}
-            onChange={e => { setFilterProjectId(e.target.value); setPage(1); }}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="">全部工程</option>
-            {projects.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
-            ))}
-          </select>
-          <select
-            value={filterClientId}
-            onChange={e => handleClientChange(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="">全部客戶（選擇）</option>
-            {partners.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={filterClientName}
-            onChange={e => handleClientNameChange(e.target.value)}
-            placeholder="客戶名稱搜尋"
-            className="px-3 py-2 border rounded-lg text-sm"
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <SearchableSelect
+            value={filterProjectName}
+            onChange={val => { setFilterProjectName(val as string | null); setPage(1); }}
+            options={projectNameOptions}
+            placeholder="全部工程"
+            className="text-sm"
           />
-          <select
+          <SearchableSelect
+            value={filterClient}
+            onChange={val => { setFilterClient(val as string | null); setPage(1); }}
+            options={partnerOptions}
+            placeholder="全部客戶"
+            className="text-sm"
+          />
+          <SearchableSelect
             value={filterContractNo}
-            onChange={e => { setFilterContractNo(e.target.value); setPage(1); }}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            <option value="">全部客戶合約</option>
-            {contractOptions.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            onChange={val => { setFilterContractNo(val as string | null); setPage(1); }}
+            options={contractOptions}
+            placeholder="全部客戶合約"
+            className="text-sm"
+          />
         </div>
       </div>
 
@@ -231,7 +227,7 @@ export default function DailyReportsAdminPage() {
                     </tr>
                     {expandedId === report.id && (
                       <tr key={`${report.id}-detail`}>
-                        <td colSpan={9} className="px-4 py-4 bg-blue-50/50">
+                        <td colSpan={10} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-4">
                               {report.daily_report_client_contract_no && (
@@ -247,51 +243,44 @@ export default function DailyReportsAdminPage() {
                             </div>
                             {report.items?.length > 0 && (
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-2">Labour and Plant</h4>
-                                <table className="w-full text-xs border rounded-lg overflow-hidden">
-                                  <thead className="bg-gray-100">
-                                    <tr>
-                                      <th className="px-2 py-1.5 text-left">類別</th>
-                                      <th className="px-2 py-1.5 text-left">工種</th>
-                                      <th className="px-2 py-1.5 text-left">內容</th>
-                                      <th className="px-2 py-1.5 text-right">數量</th>
-                                      <th className="px-2 py-1.5 text-right">中直</th>
-                                      <th className="px-2 py-1.5 text-right">OT</th>
-                                      <th className="px-2 py-1.5 text-left">員工/車牌</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-100">
-                                    {report.items.map((item: any) => (
-                                      <tr key={item.id}>
-                                        <td className="px-2 py-1.5">{categoryLabels[item.daily_report_item_category] || item.daily_report_item_category}</td>
-                                        <td className="px-2 py-1.5">{item.daily_report_item_worker_type || '-'}</td>
-                                        <td className="px-2 py-1.5">{item.daily_report_item_content}</td>
-                                        <td className="px-2 py-1.5 text-right">{item.daily_report_item_quantity || '-'}</td>
-                                        <td className="px-2 py-1.5 text-right">{item.daily_report_item_shift_quantity || '-'}</td>
-                                        <td className="px-2 py-1.5 text-right">{item.daily_report_item_ot_hours || '-'}</td>
-                                        <td className="px-2 py-1.5">{item.daily_report_item_name_or_plate || '-'}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                <h4 className="font-medium text-gray-700 mb-2">日報項目</h4>
+                                <div className="space-y-1">
+                                  {report.items.map((item: any) => (
+                                    <div key={item.id} className="flex items-center gap-3 text-sm bg-white rounded px-3 py-1.5 border border-gray-100">
+                                      <span className="text-xs text-gray-400 w-16 shrink-0">{categoryLabels[item.daily_report_item_category] || item.daily_report_item_category}</span>
+                                      <span className="font-medium">{item.daily_report_item_content}</span>
+                                      {item.daily_report_item_name_or_plate && (
+                                        <span className="text-gray-500">({item.daily_report_item_name_or_plate})</span>
+                                      )}
+                                      {item.daily_report_item_quantity != null && (
+                                        <span className="text-blue-600">×{item.daily_report_item_quantity}</span>
+                                      )}
+                                      {item.daily_report_item_ot_hours != null && item.daily_report_item_ot_hours > 0 && (
+                                        <span className="text-orange-500 text-xs">OT {item.daily_report_item_ot_hours}h</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )}
-                            {report.daily_report_completed_work && (
+                            {report.attachments?.length > 0 && (
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-1">完成的工作</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_completed_work}</p>
+                                <h4 className="font-medium text-gray-700 mb-2">附件</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {report.attachments.map((att: any) => (
+                                    <a
+                                      key={att.id}
+                                      href={att.daily_report_attachment_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded"
+                                    >
+                                      {att.daily_report_attachment_name || '附件'}
+                                    </a>
+                                  ))}
+                                </div>
                               </div>
                             )}
-                            {report.daily_report_memo && (
-                              <div>
-                                <h4 className="font-medium text-gray-700 mb-1">備忘錄</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.daily_report_memo}</p>
-                              </div>
-                            )}
-                            <div className="text-xs text-gray-400">
-                              建立時間: {new Date(report.daily_report_created_at).toLocaleString('zh-HK')}
-                              {report.daily_report_submitted_at && ` | 提交時間: ${new Date(report.daily_report_submitted_at).toLocaleString('zh-HK')}`}
-                            </div>
                           </div>
                         </td>
                       </tr>
@@ -306,24 +295,22 @@ export default function DailyReportsAdminPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">第 {page} / {totalPages} 頁</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
-            >
-              上一頁
-            </button>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
-            >
-              下一頁
-            </button>
-          </div>
+        <div className="flex justify-center items-center gap-2">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-40"
+          >
+            上一頁
+          </button>
+          <span className="text-sm text-gray-600">{page} / {totalPages}</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-40"
+          >
+            下一頁
+          </button>
         </div>
       )}
     </div>

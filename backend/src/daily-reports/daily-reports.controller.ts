@@ -28,6 +28,11 @@ export class DailyReportsController {
     return this.service.findAll(query);
   }
 
+  @Get('project-names')
+  getDistinctProjectNames() {
+    return this.service.getDistinctProjectNames();
+  }
+
   @Get('by-project/:projectId')
   findByProject(
     @Param('projectId', ParseIntPipe) projectId: number,
