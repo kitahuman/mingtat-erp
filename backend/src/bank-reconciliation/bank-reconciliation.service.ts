@@ -238,7 +238,7 @@ export class BankReconciliationService {
           date: { gte: dateFrom, lte: dateTo },
           amount: { gte: amount.mul(0.9), lte: amount.mul(1.1) },
         },
-        include: { project: { select: { project_name: true, project_no: true } } },
+        include: { company: { select: { name: true, name_en: true } } },
         orderBy: { date: 'desc' },
         take: 20,
       });

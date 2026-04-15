@@ -2121,9 +2121,9 @@ export class PayrollService {
           amount: body.payroll_payment_amount,
           bank_account: body.payroll_payment_bank_account || null,
           reference_no: body.payroll_payment_reference_no || null,
-          remarks: body.payroll_payment_remarks
-            ? `${baseRemarks} - ${body.payroll_payment_remarks}`
-            : baseRemarks,
+          payment_out_description: baseRemarks,
+          payment_out_status: 'paid',
+          remarks: body.payroll_payment_remarks || null,
           payroll_id: payrollId,
           company_id: payroll.company_id || null,
         },

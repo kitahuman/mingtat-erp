@@ -685,11 +685,8 @@ model Project {
   expenses             Expense[]
   work_logs            WorkLog[]
   payment_applications PaymentApplication[]
-
   // Phase 4
   payment_ins  PaymentIn[]
-  payment_outs PaymentOut[]
-
   // Phase 5
   invoices Invoice[]
 
@@ -1690,21 +1687,21 @@ model PaymentIn {
 // ══════════════════════════════════════════════════════════════
 
 model PaymentOut {
-  id           Int      @id @default(autoincrement())
-  date         DateTime @db.Date
-  amount       Decimal  @db.Decimal(14, 2)
-  expense_id   Int?
-  project_id   Int?
-  payroll_id   Int?     // 關聯糧單（從糧單建立時設定）
-  company_id   Int?     // 所屬公司（自動從糧單或支出帶入）
-  bank_account String?  @db.VarChar(100)
-  reference_no String?  @db.VarChar(100) // 支票號碼 / 交易號碼
-  remarks      String?  @db.Text
-  created_at   DateTime @default(now())
-  updated_at   DateTime @default(now()) @updatedAt
+  id                      Int      @id @default(autoincrement())
+  date                    DateTime @db.Date
+  amount                  Decimal  @db.Decimal(14, 2)
+  expense_id              Int?
+  payroll_id              Int?     // 關聯糧單（從糧單建立時設定）
+  company_id              Int?     // 所屬公司（自動從糧單或支出帶入）
+  payment_out_description String?  @db.VarChar(255) // 付款項目描述，例如「2026年4月 張三的糧單」
+  payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | paid | cancelled
+  bank_account            String?  @db.VarChar(100)
+  reference_no            String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  remarks                 String?  @db.Text
+  created_at              DateTime @default(now())
+  updated_at              DateTime @default(now()) @updatedAt
 
   expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
-  project          Project?          @relation(fields: [project_id], references: [id], onDelete: SetNull)
   payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
   company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]

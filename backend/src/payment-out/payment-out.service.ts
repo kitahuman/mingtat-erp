@@ -8,9 +8,9 @@ export class PaymentOutService {
   async findAll(query: {
     page?: number;
     limit?: number;
-    project_id?: number;
     expense_id?: number;
     company_id?: number;
+    payment_out_status?: string;
     date_from?: string;
     date_to?: string;
   }) {
@@ -19,9 +19,9 @@ export class PaymentOutService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (query.project_id) where.project_id = query.project_id;
     if (query.expense_id) where.expense_id = query.expense_id;
     if (query.company_id) where.company_id = query.company_id;
+    if (query.payment_out_status) where.payment_out_status = query.payment_out_status;
     if (query.date_from || query.date_to) {
       where.date = {};
       if (query.date_from) where.date.gte = new Date(query.date_from);
@@ -41,7 +41,6 @@ export class PaymentOutService {
               category: { select: { id: true, name: true } },
             },
           },
-          project: { select: { id: true, project_no: true, project_name: true } },
           payroll: {
             select: {
               id: true,
@@ -78,7 +77,6 @@ export class PaymentOutService {
             project: { select: { id: true, project_no: true, project_name: true } },
           },
         },
-        project: { select: { id: true, project_no: true, project_name: true } },
         payroll: {
           select: {
             id: true,
@@ -131,9 +129,10 @@ export class PaymentOutService {
     date: string;
     amount: number;
     expense_id?: number;
-    project_id?: number;
     payroll_id?: number;
     company_id?: number;
+    payment_out_description?: string;
+    payment_out_status?: string;
     bank_account?: string;
     reference_no?: string;
     remarks?: string;
@@ -164,9 +163,10 @@ export class PaymentOutService {
         date: new Date(dto.date),
         amount: dto.amount,
         expense_id: dto.expense_id || null,
-        project_id: dto.project_id || null,
         payroll_id: dto.payroll_id || null,
         company_id: companyId,
+        payment_out_description: dto.payment_out_description || null,
+        payment_out_status: dto.payment_out_status || 'unpaid',
         bank_account: dto.bank_account || null,
         reference_no: dto.reference_no || null,
         remarks: dto.remarks || null,
@@ -181,7 +181,6 @@ export class PaymentOutService {
             category: { select: { id: true, name: true } },
           },
         },
-        project: { select: { id: true, project_no: true, project_name: true } },
         payroll: {
           select: {
             id: true,
@@ -205,9 +204,10 @@ export class PaymentOutService {
       data.amount = dto.amount;
     }
     if (dto.expense_id !== undefined) data.expense_id = dto.expense_id || null;
-    if (dto.project_id !== undefined) data.project_id = dto.project_id || null;
     if (dto.payroll_id !== undefined) data.payroll_id = dto.payroll_id || null;
     if (dto.company_id !== undefined) data.company_id = dto.company_id || null;
+    if (dto.payment_out_description !== undefined) data.payment_out_description = dto.payment_out_description;
+    if (dto.payment_out_status !== undefined) data.payment_out_status = dto.payment_out_status;
     if (dto.bank_account !== undefined) data.bank_account = dto.bank_account;
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
@@ -225,7 +225,6 @@ export class PaymentOutService {
             category: { select: { id: true, name: true } },
           },
         },
-        project: { select: { id: true, project_no: true, project_name: true } },
         payroll: {
           select: {
             id: true,

@@ -22,16 +22,18 @@ export class PaymentOutController {
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('project_id') project_id?: string,
     @Query('expense_id') expense_id?: string,
+    @Query('company_id') company_id?: string,
+    @Query('payment_out_status') payment_out_status?: string,
     @Query('date_from') date_from?: string,
     @Query('date_to') date_to?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : undefined,
       limit: limit ? +limit : undefined,
-      project_id: project_id ? +project_id : undefined,
       expense_id: expense_id ? +expense_id : undefined,
+      company_id: company_id ? +company_id : undefined,
+      payment_out_status: payment_out_status || undefined,
       date_from,
       date_to,
     });

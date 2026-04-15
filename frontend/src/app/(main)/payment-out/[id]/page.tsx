@@ -2,12 +2,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { paymentOutApi, projectsApi, expensesApi } from '@/lib/api';
-import { fmtDate, toInputDate } from '@/lib/dateUtils';
+import { paymentOutApi, expensesApi } from '@/lib/api';
+import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const STATUS_MAP: Record<string, { label: string; color: string }> = {
+  unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
+  paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
+  cancelled: { label: '已取消', color: 'bg-red-100 text-red-700' },
+};
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -31,7 +37,6 @@ export default function PaymentOutDetailPage() {
   const [form, setForm] = useState<any>({});
 
   // Reference data
-  const [projects, setProjects] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
 
   const loadRecord = useCallback(() => {
@@ -51,14 +56,8 @@ export default function PaymentOutDetailPage() {
   }, [loadRecord]);
 
   useEffect(() => {
-    projectsApi.list({ limit: 500 }).then((r) => setProjects(r.data?.data || [])).catch(() => {});
     expensesApi.list({ limit: 500 }).then((r) => setExpenses(r.data?.data || [])).catch(() => {});
   }, []);
-
-  const projectOptions = useMemo(
-    () => projects.map((p) => ({ value: p.id, label: `${p.project_no} ${p.project_name}` })),
-    [projects],
-  );
 
   const expenseOptions = useMemo(
     () =>
@@ -74,11 +73,12 @@ export default function PaymentOutDetailPage() {
       date: r.date ? r.date.slice(0, 10) : '',
       amount: r.amount != null ? Number(r.amount) : '',
       expense_id: r.expense_id || '',
-      project_id: r.project_id || '',
+      payment_out_description: r.payment_out_description || '',
+      payment_out_status: r.payment_out_status || 'unpaid',
       bank_account: r.bank_account || '',
       reference_no: r.reference_no || '',
       remarks: r.remarks || '',
-      // read-only fields preserved for display
+      // read-only fields preserved
       payroll_id: r.payroll_id || null,
       company_id: r.company_id || null,
     };
@@ -92,7 +92,8 @@ export default function PaymentOutDetailPage() {
         date: form.date,
         amount: parseFloat(form.amount),
         expense_id: form.expense_id ? Number(form.expense_id) : null,
-        project_id: form.project_id ? Number(form.project_id) : null,
+        payment_out_description: form.payment_out_description || null,
+        payment_out_status: form.payment_out_status || 'unpaid',
         bank_account: form.bank_account || null,
         reference_no: form.reference_no || null,
         remarks: form.remarks || null,
@@ -139,6 +140,8 @@ export default function PaymentOutDetailPage() {
     );
   }
 
+  const statusInfo = STATUS_MAP[record.payment_out_status] || STATUS_MAP.unpaid;
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -153,7 +156,12 @@ export default function PaymentOutDetailPage() {
             </svg>
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">付款記錄 #{record.id}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">付款記錄 #{record.id}</h1>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                {statusInfo.label}
+              </span>
+            </div>
             <p className="text-gray-500 text-sm mt-0.5">
               建立於 {fmtDate(record.created_at)} · 更新於 {fmtDate(record.updated_at)}
             </p>
@@ -217,22 +225,36 @@ export default function PaymentOutDetailPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">項目描述</label>
+                <input
+                  type="text"
+                  value={form.payment_out_description}
+                  onChange={(e) => setForm({ ...form, payment_out_description: e.target.value })}
+                  className="input-field"
+                  placeholder="例如：2026年4月 張三的糧單"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                <select
+                  value={form.payment_out_status}
+                  onChange={(e) => setForm({ ...form, payment_out_status: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="unpaid">未付款</option>
+                  <option value="paid">已付款</option>
+                  <option value="cancelled">已取消</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">關聯支出</label>
                 <SearchableSelect
                   value={form.expense_id ? Number(form.expense_id) : null}
                   onChange={(v: any) => setForm({ ...form, expense_id: v || '' })}
                   options={expenseOptions}
                   placeholder="選擇支出"
-                  clearable
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">項目</label>
-                <SearchableSelect
-                  value={form.project_id ? Number(form.project_id) : null}
-                  onChange={(v: any) => setForm({ ...form, project_id: v || '' })}
-                  options={projectOptions}
-                  placeholder="選擇項目"
                   clearable
                 />
               </div>
@@ -244,6 +266,14 @@ export default function PaymentOutDetailPage() {
             <Field label="金額">
               <span className="text-lg font-semibold text-gray-900 font-mono">{fmt$(record.amount)}</span>
             </Field>
+            <Field label="狀態">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                {statusInfo.label}
+              </span>
+            </Field>
+            <Field label="項目描述">
+              {record.payment_out_description || null}
+            </Field>
             <Field label="公司">
               {record.company ? (
                 <span className="text-gray-900">{record.company.name}</span>
@@ -254,25 +284,25 @@ export default function PaymentOutDetailPage() {
                 <Link href={`/expenses/${record.expense.id}`} className="text-primary-600 hover:underline">
                   #{record.expense.id} {record.expense.item || record.expense.supplier_name || '未命名'}
                 </Link>
-              ) : record.payroll ? (
+              ) : null}
+            </Field>
+            <Field label="關聯糧單">
+              {record.payroll ? (
                 <Link href={`/payroll/${record.payroll.id}`} className="text-indigo-600 hover:underline">
                   糧單 #{record.payroll.id}　{record.payroll.employee?.name_zh || record.payroll.employee?.name_en || ''}　{record.payroll.period}
                 </Link>
               ) : null}
             </Field>
-            <Field label="項目">
-              {record.project ? (
-                <Link href={`/projects/${record.project.id}`} className="text-primary-600 hover:underline">
-                  {record.project.project_no} {record.project.project_name}
-                </Link>
-              ) : null}
-            </Field>
-            <Field label="支出類別">
-              {record.expense?.category?.name || null}
-            </Field>
-            <Field label="支出金額">
-              {record.expense ? fmt$(record.expense.total_amount) : null}
-            </Field>
+            {record.expense && (
+              <>
+                <Field label="支出類別">
+                  {record.expense?.category?.name || null}
+                </Field>
+                <Field label="支出金額">
+                  {record.expense ? fmt$(record.expense.total_amount) : null}
+                </Field>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -421,9 +451,7 @@ export default function PaymentOutDetailPage() {
                       )}
                     </td>
                     <td className="py-2 px-3 text-xs">
-                      {pp.payroll
-                        ? pp.payroll.period || '—'
-                        : '—'}
+                      {pp.payroll ? pp.payroll.period || '—' : '—'}
                     </td>
                     <td className="py-2 px-3 text-right font-mono">
                       {fmt$(pp.payroll_payment_amount)}

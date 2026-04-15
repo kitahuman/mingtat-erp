@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { paymentOutApi, projectsApi, expensesApi, companiesApi } from '@/lib/api';
+import { paymentOutApi, expensesApi, companiesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
@@ -9,6 +9,12 @@ import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const STATUS_MAP: Record<string, { label: string; color: string }> = {
+  unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
+  paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
+  cancelled: { label: '已取消', color: 'bg-red-100 text-red-700' },
+};
 
 export default function PaymentOutPage() {
   const router = useRouter();
@@ -21,13 +27,12 @@ export default function PaymentOutPage() {
   const [creating, setCreating] = useState(false);
 
   // Filters
-  const [projectFilter, setProjectFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
   // Reference data
-  const [projects, setProjects] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
 
@@ -36,7 +41,8 @@ export default function PaymentOutPage() {
     date: new Date().toISOString().slice(0, 10),
     amount: '',
     expense_id: '',
-    project_id: '',
+    payment_out_description: '',
+    payment_out_status: 'unpaid',
     bank_account: '',
     reference_no: '',
     remarks: '',
@@ -47,8 +53,8 @@ export default function PaymentOutPage() {
     setLoading(true);
     try {
       const params: any = { page, limit: 50 };
-      if (projectFilter) params.project_id = projectFilter;
       if (companyFilter) params.company_id = companyFilter;
+      if (statusFilter) params.payment_out_status = statusFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       const res = await paymentOutApi.list(params);
@@ -59,22 +65,16 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, projectFilter, companyFilter, dateFrom, dateTo]);
+  }, [page, companyFilter, statusFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   useEffect(() => {
-    projectsApi.list({ limit: 500 }).then(r => setProjects(r.data?.data || [])).catch(() => {});
     expensesApi.list({ limit: 500 }).then(r => setExpenses(r.data?.data || [])).catch(() => {});
     companiesApi.list({ limit: 200 }).then(r => setCompanies(r.data?.data || [])).catch(() => {});
   }, []);
-
-  const projectOptions = useMemo(() =>
-    projects.map(p => ({ value: p.id, label: `${p.project_no} ${p.project_name}` })),
-    [projects]
-  );
 
   const expenseOptions = useMemo(() =>
     expenses.map(e => ({
@@ -92,7 +92,6 @@ export default function PaymentOutPage() {
         ...form,
         amount: parseFloat(form.amount as string),
         expense_id: form.expense_id ? Number(form.expense_id) : null,
-        project_id: form.project_id ? Number(form.project_id) : null,
       });
       setShowCreate(false);
       setForm(defaultForm);
@@ -107,7 +106,6 @@ export default function PaymentOutPage() {
   const handleSave = async (id: number, updated: any) => {
     const payload: any = { ...updated };
     if (payload.amount !== undefined) payload.amount = parseFloat(payload.amount);
-    if (payload.project_id !== undefined) payload.project_id = payload.project_id ? Number(payload.project_id) : null;
     if (payload.expense_id !== undefined) payload.expense_id = payload.expense_id ? Number(payload.expense_id) : null;
     await paymentOutApi.update(id, payload);
     fetchData();
@@ -128,6 +126,18 @@ export default function PaymentOutPage() {
       render: (v: any) => fmtDate(v),
     },
     {
+      key: 'payment_out_description',
+      label: '項目',
+      editType: 'text',
+      render: (v: any, row: any) => {
+        if (v) return <span className="text-sm">{v}</span>;
+        // Fallback: show expense or payroll info
+        if (row.expense) return <span className="text-xs text-gray-500">#{row.expense.id} {row.expense.item || row.expense.supplier_name || '-'}</span>;
+        if (row.payroll) return <span className="text-xs text-indigo-600">糧單 #{row.payroll.id} {row.payroll.employee?.name_zh || ''}</span>;
+        return <span className="text-gray-400">-</span>;
+      },
+    },
+    {
       key: 'amount',
       label: '金額',
       sortable: true,
@@ -143,26 +153,22 @@ export default function PaymentOutPage() {
       ) : <span className="text-gray-400">-</span>,
     },
     {
-      key: 'expense',
-      label: '關聯支出',
-      editable: false,
-      render: (_: any, row: any) => row.expense ? (
-        <span className="text-xs">
-          #{row.expense.id} {row.expense.item || row.expense.supplier_name || '-'}
-        </span>
-      ) : row.payroll ? (
-        <span className="text-xs text-indigo-600">
-          糧單 #{row.payroll.id} {row.payroll.employee?.name_zh || ''}
-        </span>
-      ) : <span className="text-gray-400">-</span>,
-    },
-    {
-      key: 'project',
-      label: '項目',
-      editable: false,
-      render: (_: any, row: any) => row.project ? (
-        <span className="text-xs">{row.project.project_no}</span>
-      ) : <span className="text-gray-400">-</span>,
+      key: 'payment_out_status',
+      label: '狀態',
+      editType: 'select',
+      editOptions: [
+        { value: 'unpaid', label: '未付款' },
+        { value: 'paid', label: '已付款' },
+        { value: 'cancelled', label: '已取消' },
+      ],
+      render: (v: any) => {
+        const s = STATUS_MAP[v] || STATUS_MAP.unpaid;
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
+            {s.label}
+          </span>
+        );
+      },
     },
     {
       key: 'bank_account',
@@ -186,7 +192,7 @@ export default function PaymentOutPage() {
 
   const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } = useColumnConfig('payment-out', columns);
 
-  const hasFilters = !!(projectFilter || companyFilter || dateFrom || dateTo);
+  const hasFilters = !!(companyFilter || statusFilter || dateFrom || dateTo);
 
   const filters = (
     <div className="flex flex-wrap gap-2 items-center">
@@ -201,14 +207,14 @@ export default function PaymentOutPage() {
         ))}
       </select>
       <select
-        value={projectFilter}
-        onChange={e => { setProjectFilter(e.target.value); setPage(1); }}
+        value={statusFilter}
+        onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
-        <option value="">全部項目</option>
-        {projectOptions.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
+        <option value="">全部狀態</option>
+        <option value="unpaid">未付款</option>
+        <option value="paid">已付款</option>
+        <option value="cancelled">已取消</option>
       </select>
       <div className="flex items-center gap-1 text-sm">
         <input
@@ -227,7 +233,7 @@ export default function PaymentOutPage() {
       </div>
       {hasFilters && (
         <button
-          onClick={() => { setProjectFilter(''); setCompanyFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+          onClick={() => { setCompanyFilter(''); setStatusFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
           className="text-xs text-gray-500 hover:text-red-500"
         >
           清除篩選
@@ -241,7 +247,7 @@ export default function PaymentOutPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">付款記錄</h1>
-          <p className="text-gray-500 text-sm mt-1">管理所有付款記錄，關聯支出項目</p>
+          <p className="text-gray-500 text-sm mt-1">管理所有付款記錄，關聯支出及糧單</p>
         </div>
         <button onClick={() => setShowCreate(true)} className="btn-primary">
           + 新增付款
@@ -297,22 +303,22 @@ export default function PaymentOutPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">項目描述</label>
+              <input
+                type="text"
+                value={form.payment_out_description}
+                onChange={e => setForm({ ...form, payment_out_description: e.target.value })}
+                className="input-field"
+                placeholder="例如：2026年4月 張三的糧單"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">關聯支出</label>
               <SearchableSelect
                 value={form.expense_id ? Number(form.expense_id) : null}
                 onChange={(v: any) => setForm({ ...form, expense_id: v || '' })}
                 options={expenseOptions}
                 placeholder="選擇支出"
-                clearable
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">項目</label>
-              <SearchableSelect
-                value={form.project_id ? Number(form.project_id) : null}
-                onChange={(v: any) => setForm({ ...form, project_id: v || '' })}
-                options={projectOptions}
-                placeholder="選擇項目"
                 clearable
               />
             </div>
@@ -339,15 +345,29 @@ export default function PaymentOutPage() {
               />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
-            <input
-              type="text"
-              value={form.remarks}
-              onChange={e => setForm({ ...form, remarks: e.target.value })}
-              className="input-field"
-              placeholder="選填"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+              <select
+                value={form.payment_out_status}
+                onChange={e => setForm({ ...form, payment_out_status: e.target.value })}
+                className="input-field"
+              >
+                <option value="unpaid">未付款</option>
+                <option value="paid">已付款</option>
+                <option value="cancelled">已取消</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+              <input
+                type="text"
+                value={form.remarks}
+                onChange={e => setForm({ ...form, remarks: e.target.value })}
+                className="input-field"
+                placeholder="選填"
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setShowCreate(false)} className="btn-secondary">取消</button>
