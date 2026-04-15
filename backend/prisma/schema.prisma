@@ -2259,6 +2259,8 @@ model DailyReportItem {
   daily_report_item_employee_ids   String?  @db.Text
   daily_report_item_vehicle_ids    String?  @db.Text
   daily_report_item_shift_quantity Decimal? @db.Decimal(10, 2)
+  daily_report_item_machine_type   String?  @db.VarChar(100)
+  daily_report_item_tonnage        Decimal? @db.Decimal(5, 1)
 
   report DailyReport @relation(fields: [daily_report_item_report_id], references: [id], onDelete: Cascade)
 

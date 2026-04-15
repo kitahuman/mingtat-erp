@@ -130,6 +130,8 @@ export default function DailyReportStatsPage() {
     { key: 'shift_quantity', label: '中直' },
     { key: 'ot_hours', label: 'OT 時數' },
     { key: 'name_or_plate', label: '員工/車牌' },
+    { key: 'machine_type', label: '機種' },
+    { key: 'tonnage', label: '噸數(T)' },
   ];
 
   const fetchExportData = async (): Promise<any[]> => {
@@ -418,6 +420,8 @@ function ProjectRow({
                                   <th className="px-2 py-1.5 text-right">中直</th>
                                   <th className="px-2 py-1.5 text-right">OT</th>
                                   <th className="px-2 py-1.5 text-left">員工/車牌</th>
+                                  <th className="px-2 py-1.5 text-left">機種</th>
+                                  <th className="px-2 py-1.5 text-right">噸數(T)</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
@@ -439,6 +443,8 @@ function ProjectRow({
                                     <td className="px-2 py-1.5 text-right">{fmtNum(item.shift_quantity)}</td>
                                     <td className="px-2 py-1.5 text-right">{fmtNum(item.ot_hours)}</td>
                                     <td className="px-2 py-1.5">{item.name_or_plate || '-'}</td>
+                                    <td className="px-2 py-1.5">{item.machine_type || '-'}</td>
+                                    <td className="px-2 py-1.5 text-right">{item.tonnage != null ? item.tonnage : '-'}</td>
                                   </tr>
                                 ))}
                               </tbody>

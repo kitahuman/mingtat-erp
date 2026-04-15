@@ -78,6 +78,8 @@ export class DailyReportsService {
       daily_report_item_employee_ids: item.employee_ids ? (typeof item.employee_ids === 'string' ? item.employee_ids : JSON.stringify(item.employee_ids)) : null,
       daily_report_item_vehicle_ids: item.vehicle_ids ? (typeof item.vehicle_ids === 'string' ? item.vehicle_ids : JSON.stringify(item.vehicle_ids)) : null,
       daily_report_item_shift_quantity: item.shift_quantity ? Number(item.shift_quantity) : null,
+      daily_report_item_machine_type: item.machine_type || null,
+      daily_report_item_tonnage: item.tonnage ? Number(item.tonnage) : null,
     };
   }
 

@@ -24,6 +24,8 @@ interface EditItem {
   ot_hours: string;
   name_or_plate: string;
   with_operator: boolean;
+  machine_type: string;
+  tonnage: string;
 }
 
 function newItem(category = 'worker'): EditItem {
@@ -37,6 +39,8 @@ function newItem(category = 'worker'): EditItem {
     ot_hours: '',
     name_or_plate: '',
     with_operator: false,
+    machine_type: '',
+    tonnage: '',
   };
 }
 
@@ -68,6 +72,8 @@ export default function EditDailyReportPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [partnerOptions, setPartnerOptions] = useState<{ value: string; label: string }[]>([]);
   const [workerTypeOptions, setWorkerTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [machineTypeOptions, setMachineTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
   const [contractOptions, setContractOptions] = useState<{ value: string; label: string }[]>([]);
   const [projectLocationOptions, setProjectLocationOptions] = useState<{ value: string; label: string }[]>([]);
 
@@ -112,6 +118,16 @@ export default function EditDailyReportPage() {
       setWorkerTypeOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
 
+    fieldOptionsApi.getByCategory('machine_type').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setMachineTypeOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+
+    fieldOptionsApi.getByCategory('tonnage').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active !== false);
+      setTonnageOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
+    }).catch(() => {});
+
     fieldOptionsApi.getByCategory('client_contract_no').then(res => {
       const opts = (res.data || []).filter((o: any) => o.is_active !== false);
       setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
@@ -153,6 +169,8 @@ export default function EditDailyReportPage() {
         ot_hours: item.daily_report_item_ot_hours != null ? String(item.daily_report_item_ot_hours) : '',
         name_or_plate: item.daily_report_item_name_or_plate || '',
         with_operator: item.daily_report_item_with_operator || false,
+        machine_type: item.daily_report_item_machine_type || '',
+        tonnage: item.daily_report_item_tonnage != null ? String(item.daily_report_item_tonnage) : '',
       })));
     }).catch(() => setError('載入日報失敗')).finally(() => setLoading(false));
   }, [reportId]);
@@ -249,6 +267,8 @@ export default function EditDailyReportPage() {
           ot_hours: item.ot_hours ? Number(item.ot_hours) : null,
           name_or_plate: item.name_or_plate || null,
           with_operator: item.with_operator,
+          machine_type: item.machine_type || null,
+          tonnage: item.tonnage ? Number(item.tonnage) : null,
           sort_order: idx,
         })),
       };
@@ -508,16 +528,18 @@ export default function EditDailyReportPage() {
             <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-500 px-2">
               <div className="col-span-1">類別</div>
               <div className="col-span-2">工種</div>
-              <div className="col-span-3">內容</div>
+              <div className="col-span-2">內容</div>
               <div className="col-span-1 text-center">數量</div>
               <div className="col-span-1 text-center">中直</div>
               <div className="col-span-1 text-center">OT</div>
-              <div className="col-span-2">員工/車牌</div>
+              <div className="col-span-1">員工/車牌</div>
+              <div className="col-span-1">機種</div>
+              <div className="col-span-1 text-center">噸數</div>
               <div className="col-span-1 text-center">操作</div>
             </div>
 
             {items.map((item, idx) => (
-              <div key={item._key} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg px-2 py-2">
+              <div key={item._key} className="grid grid-cols-12 gap-2 items-start bg-gray-50 rounded-lg px-2 py-2">
                 {/* Category */}
                 <div className="col-span-1">
                   <SearchableSelect
@@ -556,7 +578,7 @@ export default function EditDailyReportPage() {
                 </div>
 
                 {/* Content */}
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <input
                     type="text"
                     value={item.content}
@@ -606,7 +628,7 @@ export default function EditDailyReportPage() {
                 </div>
 
                 {/* Name or plate */}
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <input
                     type="text"
                     value={item.name_or_plate}
@@ -614,6 +636,36 @@ export default function EditDailyReportPage() {
                     placeholder="員工/車牌"
                     className="w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
+                </div>
+
+                {/* Machine type */}
+                <div className="col-span-1">
+                  {(item.category === 'vehicle' || item.category === 'machinery') ? (
+                    <SearchableSelect
+                      value={item.machine_type || null}
+                      onChange={val => updateItem(item._key, 'machine_type', val || '')}
+                      options={machineTypeOptions}
+                      placeholder="機種"
+                      className="text-xs"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-300">-</span>
+                  )}
+                </div>
+
+                {/* Tonnage */}
+                <div className="col-span-1">
+                  {(item.category === 'vehicle' || item.category === 'machinery') ? (
+                    <SearchableSelect
+                      value={item.tonnage || null}
+                      onChange={val => updateItem(item._key, 'tonnage', val || '')}
+                      options={tonnageOptions}
+                      placeholder="噸數"
+                      className="text-xs"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-300">-</span>
+                  )}
                 </div>
 
                 {/* Actions */}
