@@ -117,7 +117,7 @@ export default function EditDailyReportPage() {
       setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
 
-    fieldOptionsApi.getByCategory('project_location').then(res => {
+    fieldOptionsApi.getByCategory('location').then(res => {
       const opts = (res.data || []).filter((o: any) => o.is_active !== false);
       setProjectLocationOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
