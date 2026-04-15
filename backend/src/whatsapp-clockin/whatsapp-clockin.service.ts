@@ -395,8 +395,8 @@ XR662
 工作地點： 北跑
 工作內容：換花泥
 工作時間：23:00～06:00
-→ date:"2026-04-14", date_end:"2026-04-15", name:"蘇金平", equipment_no:"DC11", company:"明達", contract_no:"T23W021", start_location:"北跑", work_content:"換花泥", start_time:"23:00", end_time:"06:00", day_night:"夜"
-注意：14-15-4-2026 = 日期範圍 4月14日到15日，要拆成兩天各建一筆
+→ date:"2026-04-14", name:"蘇金平", equipment_no:"DC11", company:"明達", contract_no:"T23W021", start_location:"北跑", work_content:"換花泥", start_time:"23:00", end_time:"06:00", day_night:"夜"
+注意：14-15-4-2026 = 夜班日期範圍，只取第一天（夜班開始日）作為 date，不要輸出 date_end，只建一筆 work_log
 
 範例4（無標籤簡短格式）：
 14-4‐2026
@@ -485,13 +485,25 @@ XR662
 
 範例7（租車一天）：
 日期：13-4-2026（日更）
-車牌：Y丅6383
+車牌：Y亅6383
 公司：明達
-地點；连麻坑一內运
+地點；连麻坤一內运
 車數：租車一天
 姓名：冯回生
-→ date:"2026-04-13", name:"馮回生", equipment_no:"YT6383", company:"明達", contract_no:"", start_location:"蓮麻坑", work_content:"內運", start_time:"", end_time:"", day_night:"日", quantity:1, unit:"天"
-注意：「Y丅6383」→ 「YT6383」（丅是T）；「连麻坑」=「蓮麻坑」；「租車一天」→ quantity:1, unit:"天"
+→ date:"2026-04-13", name:"馮回生", equipment_no:"YT6383", company:"明達", contract_no:"", start_location:"蓮麻坤", work_content:"內遁", start_time:"", end_time:"", day_night:"日", quantity:1, unit:"天"
+注意：「Y亅6383」→ 「YT6383」（久是T）；「连麻坤」=「蓮麻坤」；「租車一天」→ quantity:1, unit:"天"
+
+範例8（上午/下午不同地點 → 兩筆 entries）：
+日期：15-4-2026（日更）
+車牌：WC987
+姓名：蘇啟泰
+上午：公司：明達T23W021 地點：東邊存倉-北跑 車數：3車
+下午：公司：金門3802 地點：三跑山地-屬區內 車數：5車
+→ entries: [
+  { date:"2026-04-15", name:"蘇啟泰", equipment_no:"WC987", company:"明達", contract_no:"T23W021", start_location:"東邊存倉", end_location:"北跑", start_time:"", end_time:"", day_night:"日", quantity:3, unit:"車" },
+  { date:"2026-04-15", name:"蘇啟泰", equipment_no:"WC987", company:"金門", contract_no:"3802", start_location:"三跑山地", end_location:"屬區內", start_time:"", end_time:"", day_night:"日", quantity:5, unit:"車" }
+]
+注意：同一天同一車牌但上午/下午地點不同，要拆成兩筆 entries，共用同一天和姓名。適用於運輸部。
 
 ## 輸出 JSON 格式
 
@@ -500,7 +512,6 @@ XR662
   "entries": [
     {
       "date": "YYYY-MM-DD",
-      "date_end": "YYYY-MM-DD 或空字串（日期範圍時使用）",
       "name": "員工中文姓名",
       "equipment_no": "機械編號或車牌",
       "company": "客戶/公司名稱",
@@ -527,7 +538,9 @@ XR662
 ### 日期
 - 格式：D-M-YYYY、DD-MM-YYYY、D-MM-YYYY（日-月-年，最常見）
 - M-D-YYYY（如 4-14-2026，月在前，當日>12時可判斷）
-- D-D-M-YYYY（如 14-15-4-2026，日期範圍，拆成 date + date_end）
+- D-D-M-YYYY（如 14-15-4-2026，日期範圍）→ **只取第一天作為 date，不要輸出 date_end**，只建一筆 work_log
+  - 理由：夜班日期範圍是「第一天晚上開始、第二天早上結束」，屬於同一筆工作
+  - 不同於 Order（Order 日期範圍會建多筆）
 - 全形數字轉半形
 - 今天是 ${todayStr}
 
@@ -597,7 +610,10 @@ ${refs.partnerRef}
 ## ERP 合約列表
 ${refs.contractRef}
 
-請僅輸出乾淨 JSON，不要加 \`\`\`json 標記。一條訊息通常只有一筆報工（一個 entry），但如果有多人報工或日期範圍，可以有多筆。`;
+請僅輸出乾淨 JSON，不要加 \`\`\`json 標記。一條訊息通常只有一筆報工（一個 entry）。以下情況可以有多個 entries：
+1. 同一條訊息包含多人報工
+2. 運輸部同一天上午/下午到不同地點（地點不同、車數分開列出）
+日期範圍（如 13-14-4-2026）不要拆成多筆，只取第一天作為 date。`;
 
     try {
       const response = await this.openai.chat.completions.create({
@@ -751,31 +767,18 @@ ${refs.contractRef}
   }
 
   // ────────────────────────────────────────────────────────────
-  // 日期範圍展開
+  // 日期解析（Clockin 只取第一天）
   // ────────────────────────────────────────────────────────────
 
-  private expandDateRange(dateStr: string, dateEndStr?: string): Date[] {
+  /**
+   * Clockin 日期範圍只取起始日（第一天）。
+   * 例如「13-14-4-2026（夜班）」= 13/4 晚上開始，scheduled_date = 2026-04-13。
+   * 與 Order 不同，Order 會拆成多筆；Clockin 只建一筆。
+   */
+  private expandDateRange(dateStr: string, _dateEndStr?: string): Date[] {
     const start = this.parseDate(dateStr);
     if (!start) return [new Date()];
-
-    if (!dateEndStr) return [start];
-
-    const end = this.parseDate(dateEndStr);
-    if (!end) return [start];
-
-    const dates: Date[] = [];
-    const current = new Date(start);
-    while (current <= end) {
-      dates.push(new Date(current));
-      current.setDate(current.getDate() + 1);
-    }
-
-    // 安全限制：最多 7 天
-    if (dates.length > 7) {
-      return dates.slice(0, 7);
-    }
-
-    return dates.length > 0 ? dates : [start];
+    return [start];
   }
 
   private parseDate(dateStr: string): Date | null {
