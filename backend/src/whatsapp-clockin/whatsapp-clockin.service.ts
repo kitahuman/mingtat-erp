@@ -162,7 +162,7 @@ export class WhatsappClockinService {
           select: { id: true, nickname: true, name_zh: true, name_en: true },
         }),
         this.prisma.machinery.findMany({
-          select: { id: true, machine_code: true, brand: true, model: true, machine_type: true },
+          select: { id: true, machine_code: true, brand: true, model: true, machine_type: true, tonnage: true },
         }),
         this.prisma.vehicle.findMany({
           select: { id: true, plate_number: true, machine_type: true },
@@ -243,6 +243,7 @@ export class WhatsappClockinService {
               equipment_number: entry.equipment_no || null,
               machine_type: equipmentMatch?.type || null,
               equipment_source: equipmentMatch?.source || null,
+              tonnage: equipmentMatch?.tonnage || null,
               client_id: matchedClient?.id || null,
               contract_id: matchedContract?.id || null,
               client_contract_no: entry.contract_no || null,
@@ -947,9 +948,9 @@ ${refs.contractRef}
 
   private matchEquipment(
     equipmentNo: string,
-    machinery: { id: number; machine_code: string | null; brand: string | null; model: string | null; machine_type: string | null }[],
+    machinery: { id: number; machine_code: string | null; brand: string | null; model: string | null; machine_type: string | null; tonnage: unknown }[],
     vehicles: { id: number; plate_number: string | null; machine_type: string | null }[],
-  ): { type: string; source: 'machinery' | 'vehicle' } | null {
+  ): { type: string; source: 'machinery' | 'vehicle'; tonnage: string | null } | null {
     if (!equipmentNo) return null;
     const eq = equipmentNo.trim().toUpperCase().replace(/\s+/g, '');
 
@@ -957,7 +958,7 @@ ${refs.contractRef}
     for (const m of machinery) {
       const code = (m.machine_code || '').toUpperCase().replace(/\s+/g, '');
       if (code && (code === eq || code.includes(eq) || eq.includes(code))) {
-        return { type: m.machine_type || '機械', source: 'machinery' };
+        return { type: m.machine_type || '機械', source: 'machinery', tonnage: m.tonnage != null ? String(m.tonnage) : null };
       }
     }
 
@@ -965,13 +966,13 @@ ${refs.contractRef}
     for (const v of vehicles) {
       const plate = (v.plate_number || '').toUpperCase().replace(/\s+/g, '');
       if (plate && (plate === eq || plate.includes(eq) || eq.includes(plate))) {
-        return { type: v.machine_type || '車輛', source: 'vehicle' };
+        return { type: v.machine_type || '車輛', source: 'vehicle', tonnage: null };
       }
     }
 
     // 根據編號前綴推斷
-    if (/^DC\d/i.test(eq)) return { type: '挖掘機', source: 'machinery' };
-    if (/^[A-Z]{2,3}\d{3,4}$/i.test(eq)) return { type: '泥頭車', source: 'vehicle' };
+    if (/^DC\d/i.test(eq)) return { type: '挖掘機', source: 'machinery', tonnage: null };
+    if (/^[A-Z]{2,3}\d{3,4}$/i.test(eq)) return { type: '泥頭車', source: 'vehicle', tonnage: null };
 
     return null;
   }

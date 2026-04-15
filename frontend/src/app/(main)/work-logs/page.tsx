@@ -836,7 +836,7 @@ export default function WorkLogsPage() {
     }
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
-    if (field === 'company_id') return row.company?.name || row.company_profile?.code || companies.find(o => o.value === row.company_id)?.label || '—';
+    if (field === 'company_id') return row.company?.name || row.company_profile?.chinese_name || companies.find(o => o.value === row.company_id)?.label || '—';
     if (field === 'client_id') return (row.client_id ? (row.client?.name || row.client?.code) : null) || row.unverified_client_name || clients.find(o => o.value === row.client_id)?.label || '—';
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
@@ -1141,7 +1141,7 @@ export default function WorkLogsPage() {
           <ExportButton
             columns={COLUMNS.map(col => ({ key: col.key, label: col.label, exportRender: (val: any, row: any) => {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
-              if (col.key === 'company') return row.company?.name || row.company_profile?.code || '';
+              if (col.key === 'company') return row.company?.name || row.company_profile?.chinese_name || '';
               if (col.key === 'client') return row.client?.name || '';
               if (col.key === 'quotation') return row.quotation?.quotation_no || '';
               if (col.key === 'contract') return row.contract?.contract_no || '';
