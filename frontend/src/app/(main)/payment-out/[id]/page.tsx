@@ -78,6 +78,9 @@ export default function PaymentOutDetailPage() {
       bank_account: r.bank_account || '',
       reference_no: r.reference_no || '',
       remarks: r.remarks || '',
+      // read-only fields preserved for display
+      payroll_id: r.payroll_id || null,
+      company_id: r.company_id || null,
     };
   }
 
@@ -93,6 +96,9 @@ export default function PaymentOutDetailPage() {
         bank_account: form.bank_account || null,
         reference_no: form.reference_no || null,
         remarks: form.remarks || null,
+        // preserve payroll_id and company_id on update
+        payroll_id: form.payroll_id || null,
+        company_id: form.company_id || null,
       };
       await paymentOutApi.update(recordId, payload);
       setEditMode(false);
@@ -238,10 +244,19 @@ export default function PaymentOutDetailPage() {
             <Field label="金額">
               <span className="text-lg font-semibold text-gray-900 font-mono">{fmt$(record.amount)}</span>
             </Field>
+            <Field label="公司">
+              {record.company ? (
+                <span className="text-gray-900">{record.company.name}</span>
+              ) : null}
+            </Field>
             <Field label="關聯支出">
               {record.expense ? (
                 <Link href={`/expenses/${record.expense.id}`} className="text-primary-600 hover:underline">
                   #{record.expense.id} {record.expense.item || record.expense.supplier_name || '未命名'}
+                </Link>
+              ) : record.payroll ? (
+                <Link href={`/payroll/${record.payroll.id}`} className="text-indigo-600 hover:underline">
+                  糧單 #{record.payroll.id}　{record.payroll.employee?.name_zh || record.payroll.employee?.name_en || ''}　{record.payroll.period}
                 </Link>
               ) : null}
             </Field>

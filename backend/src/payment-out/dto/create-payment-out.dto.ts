@@ -6,6 +6,8 @@ export class CreatePaymentOutDto {
   @Type(() => Number) @IsNumber() amount: number;
   @IsOptional() @Type(() => Number) @IsNumber() expense_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() payroll_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() bank_account?: string;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
@@ -16,6 +18,8 @@ export class UpdatePaymentOutDto {
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() expense_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() payroll_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() bank_account?: string;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;

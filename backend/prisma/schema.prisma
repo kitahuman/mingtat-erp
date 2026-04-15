@@ -97,7 +97,7 @@ model Company {
   subcon_rate_cards        SubconRateCard[]
   work_logs                WorkLog[]
   payrolls                 Payroll[]
-
+  payment_outs             PaymentOut[]
   @@map("companies")
 }
 
@@ -1202,6 +1202,7 @@ model Payroll {
   adjustments       PayrollAdjustment[]
   daily_allowances  PayrollDailyAllowance[]
   payroll_payments  PayrollPayment[]
+  payment_outs      PaymentOut[]
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1694,6 +1695,8 @@ model PaymentOut {
   amount       Decimal  @db.Decimal(14, 2)
   expense_id   Int?
   project_id   Int?
+  payroll_id   Int?     // 關聯糧單（從糧單建立時設定）
+  company_id   Int?     // 所屬公司（自動從糧單或支出帶入）
   bank_account String?  @db.VarChar(100)
   reference_no String?  @db.VarChar(100) // 支票號碼 / 交易號碼
   remarks      String?  @db.Text
@@ -1702,6 +1705,8 @@ model PaymentOut {
 
   expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
   project          Project?          @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
+  company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]
   @@map("payment_outs")
 }

@@ -2102,10 +2102,19 @@ export class PayrollService {
       throw new BadRequestException('付款金額必須大於 0');
     }
 
+    // Format period "2026-04" -> "2026年4月"
+    const formatPeriod = (period: string): string => {
+      const [y, m] = period.split('-');
+      if (!y || !m) return period;
+      return `${y}年${parseInt(m, 10)}月`;
+    };
+
     // Use a transaction to ensure both records are created atomically
     const saved = await this.prisma.$transaction(async (tx) => {
       // 1. Create the PaymentOut record so it appears in the payment-out list
       const employeeName = payroll.employee?.name_zh || payroll.employee?.name_en || '';
+      const periodLabel = formatPeriod(payroll.period);
+      const baseRemarks = `${periodLabel} ${employeeName}的糧單`;
       const paymentOut = await tx.paymentOut.create({
         data: {
           date: new Date(body.payroll_payment_date),
@@ -2113,8 +2122,10 @@ export class PayrollService {
           bank_account: body.payroll_payment_bank_account || null,
           reference_no: body.payroll_payment_reference_no || null,
           remarks: body.payroll_payment_remarks
-            ? `[糧單] ${employeeName} ${payroll.period} - ${body.payroll_payment_remarks}`
-            : `[糧單] ${employeeName} ${payroll.period}`,
+            ? `${baseRemarks} - ${body.payroll_payment_remarks}`
+            : baseRemarks,
+          payroll_id: payrollId,
+          company_id: payroll.company_id || null,
         },
       });
 

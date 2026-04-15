@@ -10,6 +10,7 @@ export class PaymentOutService {
     limit?: number;
     project_id?: number;
     expense_id?: number;
+    company_id?: number;
     date_from?: string;
     date_to?: string;
   }) {
@@ -20,6 +21,7 @@ export class PaymentOutService {
     const where: any = {};
     if (query.project_id) where.project_id = query.project_id;
     if (query.expense_id) where.expense_id = query.expense_id;
+    if (query.company_id) where.company_id = query.company_id;
     if (query.date_from || query.date_to) {
       where.date = {};
       if (query.date_from) where.date.gte = new Date(query.date_from);
@@ -40,6 +42,14 @@ export class PaymentOutService {
             },
           },
           project: { select: { id: true, project_no: true, project_name: true } },
+          payroll: {
+            select: {
+              id: true,
+              period: true,
+              employee: { select: { id: true, name_zh: true, name_en: true } },
+            },
+          },
+          company: { select: { id: true, name: true, name_en: true } },
         },
         orderBy: { date: 'desc' },
         skip,
@@ -69,6 +79,17 @@ export class PaymentOutService {
           },
         },
         project: { select: { id: true, project_no: true, project_name: true } },
+        payroll: {
+          select: {
+            id: true,
+            period: true,
+            date_from: true,
+            date_to: true,
+            net_amount: true,
+            employee: { select: { id: true, name_zh: true, name_en: true } },
+          },
+        },
+        company: { select: { id: true, name: true, name_en: true } },
         payroll_payments: {
           include: {
             payroll: {
@@ -111,6 +132,8 @@ export class PaymentOutService {
     amount: number;
     expense_id?: number;
     project_id?: number;
+    payroll_id?: number;
+    company_id?: number;
     bank_account?: string;
     reference_no?: string;
     remarks?: string;
@@ -118,12 +141,32 @@ export class PaymentOutService {
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException('金額必須大於 0');
     }
+
+    // Auto-derive company_id from linked expense or payroll if not provided
+    let companyId = dto.company_id || null;
+    if (!companyId && dto.expense_id) {
+      const expense = await this.prisma.expense.findUnique({
+        where: { id: dto.expense_id },
+        select: { company_id: true },
+      });
+      companyId = expense?.company_id || null;
+    }
+    if (!companyId && dto.payroll_id) {
+      const payroll = await this.prisma.payroll.findUnique({
+        where: { id: dto.payroll_id },
+        select: { company_id: true },
+      });
+      companyId = payroll?.company_id || null;
+    }
+
     return this.prisma.paymentOut.create({
       data: {
         date: new Date(dto.date),
         amount: dto.amount,
         expense_id: dto.expense_id || null,
         project_id: dto.project_id || null,
+        payroll_id: dto.payroll_id || null,
+        company_id: companyId,
         bank_account: dto.bank_account || null,
         reference_no: dto.reference_no || null,
         remarks: dto.remarks || null,
@@ -139,6 +182,14 @@ export class PaymentOutService {
           },
         },
         project: { select: { id: true, project_no: true, project_name: true } },
+        payroll: {
+          select: {
+            id: true,
+            period: true,
+            employee: { select: { id: true, name_zh: true, name_en: true } },
+          },
+        },
+        company: { select: { id: true, name: true, name_en: true } },
       },
     });
   }
@@ -155,6 +206,8 @@ export class PaymentOutService {
     }
     if (dto.expense_id !== undefined) data.expense_id = dto.expense_id || null;
     if (dto.project_id !== undefined) data.project_id = dto.project_id || null;
+    if (dto.payroll_id !== undefined) data.payroll_id = dto.payroll_id || null;
+    if (dto.company_id !== undefined) data.company_id = dto.company_id || null;
     if (dto.bank_account !== undefined) data.bank_account = dto.bank_account;
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
@@ -173,6 +226,14 @@ export class PaymentOutService {
           },
         },
         project: { select: { id: true, project_no: true, project_name: true } },
+        payroll: {
+          select: {
+            id: true,
+            period: true,
+            employee: { select: { id: true, name_zh: true, name_en: true } },
+          },
+        },
+        company: { select: { id: true, name: true, name_en: true } },
       },
     });
   }

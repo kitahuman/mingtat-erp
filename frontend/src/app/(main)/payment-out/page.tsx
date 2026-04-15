@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { paymentOutApi, projectsApi, expensesApi } from '@/lib/api';
+import { paymentOutApi, projectsApi, expensesApi, companiesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
@@ -22,12 +22,14 @@ export default function PaymentOutPage() {
 
   // Filters
   const [projectFilter, setProjectFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
   // Reference data
   const [projects, setProjects] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
 
   // Create form
   const defaultForm = {
@@ -46,6 +48,7 @@ export default function PaymentOutPage() {
     try {
       const params: any = { page, limit: 50 };
       if (projectFilter) params.project_id = projectFilter;
+      if (companyFilter) params.company_id = companyFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       const res = await paymentOutApi.list(params);
@@ -56,7 +59,7 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, projectFilter, dateFrom, dateTo]);
+  }, [page, projectFilter, companyFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchData();
@@ -65,6 +68,7 @@ export default function PaymentOutPage() {
   useEffect(() => {
     projectsApi.list({ limit: 500 }).then(r => setProjects(r.data?.data || [])).catch(() => {});
     expensesApi.list({ limit: 500 }).then(r => setExpenses(r.data?.data || [])).catch(() => {});
+    companiesApi.list({ limit: 200 }).then(r => setCompanies(r.data?.data || [])).catch(() => {});
   }, []);
 
   const projectOptions = useMemo(() =>
@@ -131,12 +135,24 @@ export default function PaymentOutPage() {
       render: (v: any) => <span className="font-mono">{fmt$(v)}</span>,
     },
     {
+      key: 'company',
+      label: '公司',
+      editable: false,
+      render: (_: any, row: any) => row.company ? (
+        <span className="text-xs text-gray-700">{row.company.name}</span>
+      ) : <span className="text-gray-400">-</span>,
+    },
+    {
       key: 'expense',
       label: '關聯支出',
       editable: false,
       render: (_: any, row: any) => row.expense ? (
         <span className="text-xs">
           #{row.expense.id} {row.expense.item || row.expense.supplier_name || '-'}
+        </span>
+      ) : row.payroll ? (
+        <span className="text-xs text-indigo-600">
+          糧單 #{row.payroll.id} {row.payroll.employee?.name_zh || ''}
         </span>
       ) : <span className="text-gray-400">-</span>,
     },
@@ -170,8 +186,20 @@ export default function PaymentOutPage() {
 
   const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } = useColumnConfig('payment-out', columns);
 
+  const hasFilters = !!(projectFilter || companyFilter || dateFrom || dateTo);
+
   const filters = (
     <div className="flex flex-wrap gap-2 items-center">
+      <select
+        value={companyFilter}
+        onChange={e => { setCompanyFilter(e.target.value); setPage(1); }}
+        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+      >
+        <option value="">全部公司</option>
+        {companies.map(c => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
       <select
         value={projectFilter}
         onChange={e => { setProjectFilter(e.target.value); setPage(1); }}
@@ -197,9 +225,9 @@ export default function PaymentOutPage() {
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
-      {(projectFilter || dateFrom || dateTo) && (
+      {hasFilters && (
         <button
-          onClick={() => { setProjectFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+          onClick={() => { setProjectFilter(''); setCompanyFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
           className="text-xs text-gray-500 hover:text-red-500"
         >
           清除篩選
