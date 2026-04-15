@@ -967,10 +967,11 @@ export default function WorkLogsPage() {
         return <EditableCell value={val} onChange={onChange} type="checkbox" isDirty={dirty} disabled={!!isLocked} />;
       case 'receipt_no':
       case 'work_log_product_name':
-      case 'work_log_product_unit':
       case 'work_order_no':
       case 'work_content':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
+      case 'work_log_product_unit':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['product_unit'] || []} isDirty={dirty} disabled={!!isLocked} />;
       case 'remarks':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={!!isLocked} />;
       case 'attachments': {
@@ -1066,11 +1067,12 @@ export default function WorkLogsPage() {
         return <EditableCell value={val} onChange={onChange} type="checkbox" />;
       case 'receipt_no':
       case 'work_log_product_name':
-      case 'work_log_product_unit':
       case 'work_order_no':
       case 'work_content':
       case 'remarks':
         return <EditableCell value={val} onChange={onChange} type="text" />;
+      case 'work_log_product_unit':
+        return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['product_unit'] || []} />;
       default:
         return <EditableCell value={val} onChange={() => {}} type="readonly" />;
     }
