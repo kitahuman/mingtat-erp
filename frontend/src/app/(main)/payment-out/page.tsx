@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { paymentOutApi, expensesApi, companiesApi } from '@/lib/api';
+import { paymentOutApi, expensesApi, companiesApi, bankAccountsApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
@@ -35,6 +35,7 @@ export default function PaymentOutPage() {
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
 
   // Create form
   const defaultForm = {
@@ -43,7 +44,7 @@ export default function PaymentOutPage() {
     expense_id: '',
     payment_out_description: '',
     payment_out_status: 'unpaid',
-    bank_account: '',
+    bank_account_id: '',
     reference_no: '',
     remarks: '',
   };
@@ -74,6 +75,7 @@ export default function PaymentOutPage() {
   useEffect(() => {
     expensesApi.list({ limit: 500 }).then(r => setExpenses(r.data?.data || [])).catch(() => {});
     companiesApi.list({ limit: 200 }).then(r => setCompanies(r.data?.data || [])).catch(() => {});
+    bankAccountsApi.simple().then(r => setBankAccounts(r.data || [])).catch(() => {});
   }, []);
 
   const expenseOptions = useMemo(() =>
@@ -84,6 +86,14 @@ export default function PaymentOutPage() {
     [expenses]
   );
 
+  const bankAccountOptions = useMemo(() =>
+    bankAccounts.map(ba => ({
+      value: ba.id,
+      label: `${ba.bank_name} - ${ba.account_name} (${ba.account_no})`,
+    })),
+    [bankAccounts]
+  );
+
   const handleCreate = async () => {
     if (!form.date || !form.amount) return alert('請填寫日期和金額');
     setCreating(true);
@@ -92,6 +102,7 @@ export default function PaymentOutPage() {
         ...form,
         amount: parseFloat(form.amount as string),
         expense_id: form.expense_id ? Number(form.expense_id) : null,
+        bank_account_id: form.bank_account_id ? Number(form.bank_account_id) : null,
       });
       setShowCreate(false);
       setForm(defaultForm);
@@ -107,6 +118,7 @@ export default function PaymentOutPage() {
     const payload: any = { ...updated };
     if (payload.amount !== undefined) payload.amount = parseFloat(payload.amount);
     if (payload.expense_id !== undefined) payload.expense_id = payload.expense_id ? Number(payload.expense_id) : null;
+    if (payload.bank_account_id !== undefined) payload.bank_account_id = payload.bank_account_id ? Number(payload.bank_account_id) : null;
     await paymentOutApi.update(id, payload);
     fetchData();
   };
@@ -152,7 +164,6 @@ export default function PaymentOutPage() {
       sortable: true,
       editType: 'number',
       minWidth: 110,
-      // Prisma returns Decimal as string; convert explicitly
       render: (v: any) => <span className="font-mono whitespace-nowrap">{fmt$(v != null ? String(v) : 0)}</span>,
     },
     {
@@ -212,10 +223,13 @@ export default function PaymentOutPage() {
       },
     },
     {
-      key: 'bank_account',
+      key: 'bank_account_id',
       label: '銀行帳戶',
-      editType: 'text',
-      render: (v: any) => v || <span className="text-gray-400">-</span>,
+      editType: 'select',
+      editOptions: [{ value: '', label: '（未指定）' }, ...bankAccountOptions],
+      render: (_: any, row: any) => row.bank_account ? (
+        <span className="text-xs">{row.bank_account.bank_name} - {row.bank_account.account_no}</span>
+      ) : <span className="text-gray-400">-</span>,
     },
     {
       key: 'reference_no',
@@ -367,12 +381,12 @@ export default function PaymentOutPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
-              <input
-                type="text"
-                value={form.bank_account}
-                onChange={e => setForm({ ...form, bank_account: e.target.value })}
-                className="input-field"
-                placeholder="選填"
+              <SearchableSelect
+                value={form.bank_account_id ? Number(form.bank_account_id) : null}
+                onChange={(v: any) => setForm({ ...form, bank_account_id: v || '' })}
+                options={bankAccountOptions}
+                placeholder="選擇銀行帳戶"
+                clearable
               />
             </div>
             <div>

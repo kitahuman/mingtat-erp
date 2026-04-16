@@ -9,7 +9,7 @@ export class CreatePaymentOutDto {
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() payment_out_description?: string;
   @IsOptional() @IsString() payment_out_status?: string;
-  @IsOptional() @IsString() bank_account?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
 }
@@ -22,7 +22,7 @@ export class UpdatePaymentOutDto {
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() payment_out_description?: string;
   @IsOptional() @IsString() payment_out_status?: string;
-  @IsOptional() @IsString() bank_account?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
 }

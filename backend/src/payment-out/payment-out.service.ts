@@ -49,6 +49,7 @@ export class PaymentOutService {
             },
           },
           company: { select: { id: true, name: true, name_en: true } },
+          bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
         },
         orderBy: { date: 'desc' },
         skip,
@@ -88,6 +89,7 @@ export class PaymentOutService {
           },
         },
         company: { select: { id: true, name: true, name_en: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
         payroll_payments: {
           include: {
             payroll: {
@@ -133,7 +135,7 @@ export class PaymentOutService {
     company_id?: number;
     payment_out_description?: string;
     payment_out_status?: string;
-    bank_account?: string;
+    bank_account_id?: number;
     reference_no?: string;
     remarks?: string;
   }) {
@@ -167,7 +169,7 @@ export class PaymentOutService {
         company_id: companyId,
         payment_out_description: dto.payment_out_description || null,
         payment_out_status: dto.payment_out_status || 'unpaid',
-        bank_account: dto.bank_account || null,
+        bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
         remarks: dto.remarks || null,
       },
@@ -189,6 +191,7 @@ export class PaymentOutService {
           },
         },
         company: { select: { id: true, name: true, name_en: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
       },
     });
   }
@@ -208,7 +211,7 @@ export class PaymentOutService {
     if (dto.company_id !== undefined) data.company_id = dto.company_id || null;
     if (dto.payment_out_description !== undefined) data.payment_out_description = dto.payment_out_description;
     if (dto.payment_out_status !== undefined) data.payment_out_status = dto.payment_out_status;
-    if (dto.bank_account !== undefined) data.bank_account = dto.bank_account;
+    if (dto.bank_account_id !== undefined) data.bank_account_id = dto.bank_account_id || null;
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
@@ -233,6 +236,7 @@ export class PaymentOutService {
           },
         },
         company: { select: { id: true, name: true, name_en: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
       },
     });
   }

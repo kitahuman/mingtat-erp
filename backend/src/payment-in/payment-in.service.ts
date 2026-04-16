@@ -34,6 +34,7 @@ export class PaymentInService {
         include: {
           project: { select: { id: true, project_no: true, project_name: true } },
           contract: { select: { id: true, contract_no: true, contract_name: true } },
+          bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
         },
         orderBy: { date: 'desc' },
         skip,
@@ -51,6 +52,7 @@ export class PaymentInService {
       include: {
         project: { select: { id: true, project_no: true, project_name: true } },
         contract: { select: { id: true, contract_no: true, contract_name: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
       },
     });
     if (!record) throw new NotFoundException('收款記錄不存在');
@@ -64,7 +66,7 @@ export class PaymentInService {
     source_ref_id?: number;
     project_id?: number;
     contract_id?: number;
-    bank_account?: string;
+    bank_account_id?: number;
     reference_no?: string;
     remarks?: string;
   }) {
@@ -79,13 +81,14 @@ export class PaymentInService {
         source_ref_id: dto.source_ref_id || null,
         project_id: dto.project_id || null,
         contract_id: dto.contract_id || null,
-        bank_account: dto.bank_account || null,
+        bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
         remarks: dto.remarks || null,
       },
       include: {
         project: { select: { id: true, project_no: true, project_name: true } },
         contract: { select: { id: true, contract_no: true, contract_name: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
       },
     });
   }
@@ -104,7 +107,7 @@ export class PaymentInService {
     if (dto.source_ref_id !== undefined) data.source_ref_id = dto.source_ref_id;
     if (dto.project_id !== undefined) data.project_id = dto.project_id || null;
     if (dto.contract_id !== undefined) data.contract_id = dto.contract_id || null;
-    if (dto.bank_account !== undefined) data.bank_account = dto.bank_account;
+    if (dto.bank_account_id !== undefined) data.bank_account_id = dto.bank_account_id || null;
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
@@ -114,6 +117,7 @@ export class PaymentInService {
       include: {
         project: { select: { id: true, project_no: true, project_name: true } },
         contract: { select: { id: true, contract_no: true, contract_name: true } },
+        bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
       },
     });
   }

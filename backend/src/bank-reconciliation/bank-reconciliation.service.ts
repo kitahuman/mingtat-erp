@@ -102,52 +102,106 @@ export class BankReconciliationService {
       const txAmount = tx.amount.abs();
       const isCredit = tx.amount.greaterThanOrEqualTo(0);
 
-      // Rule 1: Exact Reference No Match
+      // Rule 1: Exact Reference No Match (限制同銀行帳戶)
       if (tx.reference_no) {
         if (isCredit) {
           const match = await this.prisma.paymentIn.findFirst({
-            where: { reference_no: tx.reference_no, amount: txAmount },
+            where: {
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              bank_account_id: bankAccountId, // 限制同銀行帳戶
+            },
           });
           if (match) {
             await this.applyMatch(tx.id, 'payment_in', match.id);
             continue;
           }
+          // Fallback: match by reference_no only (跨帳戶)
+          const fallback = await this.prisma.paymentIn.findFirst({
+            where: { reference_no: tx.reference_no, amount: txAmount },
+          });
+          if (fallback) {
+            await this.applyMatch(tx.id, 'payment_in', fallback.id);
+            continue;
+          }
         } else {
           const match = await this.prisma.paymentOut.findFirst({
-            where: { reference_no: tx.reference_no, amount: txAmount },
+            where: {
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              bank_account_id: bankAccountId, // 限制同銀行帳戶
+            },
           });
           if (match) {
             await this.applyMatch(tx.id, 'payment_out', match.id);
             continue;
           }
+          // Fallback: match by reference_no only (跨帳戶)
+          const fallback = await this.prisma.paymentOut.findFirst({
+            where: { reference_no: tx.reference_no, amount: txAmount },
+          });
+          if (fallback) {
+            await this.applyMatch(tx.id, 'payment_out', fallback.id);
+            continue;
+          }
         }
       }
 
-      // Rule 2: Amount + Date Range (+/- 3 days)
+      // Rule 2: Amount + Date Range (+/- 3 days) — 優先同銀行帳戶
       const dateFrom = new Date(tx.date);
       dateFrom.setDate(dateFrom.getDate() - 3);
       const dateTo = new Date(tx.date);
       dateTo.setDate(dateTo.getDate() + 3);
 
       if (isCredit) {
-        const matches = await this.prisma.paymentIn.findMany({
+        // First try same bank account
+        let matches = await this.prisma.paymentIn.findMany({
           where: {
             amount: txAmount,
             date: { gte: dateFrom, lte: dateTo },
+            bank_account_id: bankAccountId,
           },
         });
         if (matches.length === 1) {
           await this.applyMatch(tx.id, 'payment_in', matches[0].id);
+          continue;
+        }
+        // Fallback: any bank account
+        if (matches.length === 0) {
+          matches = await this.prisma.paymentIn.findMany({
+            where: {
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (matches.length === 1) {
+            await this.applyMatch(tx.id, 'payment_in', matches[0].id);
+          }
         }
       } else {
-        const matches = await this.prisma.paymentOut.findMany({
+        // First try same bank account
+        let matches = await this.prisma.paymentOut.findMany({
           where: {
             amount: txAmount,
             date: { gte: dateFrom, lte: dateTo },
+            bank_account_id: bankAccountId,
           },
         });
         if (matches.length === 1) {
           await this.applyMatch(tx.id, 'payment_out', matches[0].id);
+          continue;
+        }
+        // Fallback: any bank account
+        if (matches.length === 0) {
+          matches = await this.prisma.paymentOut.findMany({
+            where: {
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (matches.length === 1) {
+            await this.applyMatch(tx.id, 'payment_out', matches[0].id);
+          }
         }
       }
     }
@@ -215,6 +269,7 @@ export class BankReconciliationService {
 
     const amount = tx.amount.abs();
     const isCredit = tx.amount.greaterThanOrEqualTo(0);
+    const bankAccountId = tx.bank_account_id;
 
     // Find candidates within 30 days
     const dateFrom = new Date(tx.date);
@@ -226,9 +281,16 @@ export class BankReconciliationService {
       return this.prisma.paymentIn.findMany({
         where: {
           date: { gte: dateFrom, lte: dateTo },
-          amount: { gte: amount.mul(0.9), lte: amount.mul(1.1) }, // Allow small variation for manual matching
+          amount: { gte: amount.mul(0.9), lte: amount.mul(1.1) },
+          OR: [
+            { bank_account_id: bankAccountId }, // 優先同帳戶
+            { bank_account_id: null },           // 或未指定帳戶
+          ],
         },
-        include: { project: { select: { project_name: true, project_no: true } } },
+        include: {
+          project: { select: { project_name: true, project_no: true } },
+          bank_account: { select: { id: true, bank_name: true, account_no: true } },
+        },
         orderBy: { date: 'desc' },
         take: 20,
       });
@@ -237,8 +299,15 @@ export class BankReconciliationService {
         where: {
           date: { gte: dateFrom, lte: dateTo },
           amount: { gte: amount.mul(0.9), lte: amount.mul(1.1) },
+          OR: [
+            { bank_account_id: bankAccountId }, // 優先同帳戶
+            { bank_account_id: null },           // 或未指定帳戶
+          ],
         },
-        include: { company: { select: { name: true, name_en: true } } },
+        include: {
+          company: { select: { name: true, name_en: true } },
+          bank_account: { select: { id: true, bank_name: true, account_no: true } },
+        },
         orderBy: { date: 'desc' },
         take: 20,
       });

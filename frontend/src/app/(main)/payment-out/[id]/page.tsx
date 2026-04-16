@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { paymentOutApi, expensesApi } from '@/lib/api';
+import { paymentOutApi, expensesApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 
@@ -38,6 +38,7 @@ export default function PaymentOutDetailPage() {
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
 
   const loadRecord = useCallback(() => {
     setLoading(true);
@@ -57,6 +58,7 @@ export default function PaymentOutDetailPage() {
 
   useEffect(() => {
     expensesApi.list({ limit: 500 }).then((r) => setExpenses(r.data?.data || [])).catch(() => {});
+    bankAccountsApi.simple().then((r) => setBankAccounts(r.data || [])).catch(() => {});
   }, []);
 
   const expenseOptions = useMemo(
@@ -68,6 +70,15 @@ export default function PaymentOutDetailPage() {
     [expenses],
   );
 
+  const bankAccountOptions = useMemo(
+    () =>
+      bankAccounts.map((ba) => ({
+        value: ba.id,
+        label: `${ba.bank_name} - ${ba.account_name} (${ba.account_no})`,
+      })),
+    [bankAccounts],
+  );
+
   function toForm(r: any) {
     return {
       date: r.date ? r.date.slice(0, 10) : '',
@@ -75,7 +86,7 @@ export default function PaymentOutDetailPage() {
       expense_id: r.expense_id || '',
       payment_out_description: r.payment_out_description || '',
       payment_out_status: r.payment_out_status || 'unpaid',
-      bank_account: r.bank_account || '',
+      bank_account_id: r.bank_account_id || '',
       reference_no: r.reference_no || '',
       remarks: r.remarks || '',
       // read-only fields preserved
@@ -94,7 +105,7 @@ export default function PaymentOutDetailPage() {
         expense_id: form.expense_id ? Number(form.expense_id) : null,
         payment_out_description: form.payment_out_description || null,
         payment_out_status: form.payment_out_status || 'unpaid',
-        bank_account: form.bank_account || null,
+        bank_account_id: form.bank_account_id ? Number(form.bank_account_id) : null,
         reference_no: form.reference_no || null,
         remarks: form.remarks || null,
         // preserve payroll_id and company_id on update
@@ -282,7 +293,7 @@ export default function PaymentOutDetailPage() {
             <Field label="關聯支出">
               {record.expense ? (
                 <Link href={`/expenses/${record.expense.id}`} className="text-primary-600 hover:underline">
-                  #{record.expense.id} {record.expense.item || record.expense.supplier_name || '未命名'}
+                  #{record.expense.id} {record.expense.item || record.expense.supplier_name || '—'}
                 </Link>
               ) : null}
             </Field>
@@ -314,12 +325,12 @@ export default function PaymentOutDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
-              <input
-                type="text"
-                value={form.bank_account}
-                onChange={(e) => setForm({ ...form, bank_account: e.target.value })}
-                className="input-field"
-                placeholder="選填"
+              <SearchableSelect
+                value={form.bank_account_id ? Number(form.bank_account_id) : null}
+                onChange={(v: any) => setForm({ ...form, bank_account_id: v || '' })}
+                options={bankAccountOptions}
+                placeholder="選擇銀行帳戶"
+                clearable
               />
             </div>
             <div>
@@ -335,7 +346,11 @@ export default function PaymentOutDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="銀行帳戶">{record.bank_account}</Field>
+            <Field label="銀行帳戶">
+              {record.bank_account ? (
+                <span>{record.bank_account.bank_name} - {record.bank_account.account_name} ({record.bank_account.account_no})</span>
+              ) : null}
+            </Field>
             <Field label="支票 / 交易號碼">
               {record.reference_no ? (
                 <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded">{record.reference_no}</span>

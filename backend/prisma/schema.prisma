@@ -98,6 +98,7 @@ model Company {
   work_logs                WorkLog[]
   payrolls                 Payroll[]
   payment_outs             PaymentOut[]
+  bank_accounts            BankAccount[]
   @@map("companies")
 }
 
@@ -1663,21 +1664,22 @@ model PaymentMaterial {
 // ══════════════════════════════════════════════════════════════
 
 model PaymentIn {
-  id            Int      @id @default(autoincrement())
-  date          DateTime @db.Date
-  amount        Decimal  @db.Decimal(14, 2)
-  source_type   String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
-  source_ref_id Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
-  project_id    Int?
-  contract_id   Int?
-  bank_account  String?  @db.VarChar(100)
-  reference_no  String?  @db.VarChar(100) // 支票號碼 / 交易號碼
-  remarks       String?  @db.Text
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now()) @updatedAt
+  id              Int      @id @default(autoincrement())
+  date            DateTime @db.Date
+  amount          Decimal  @db.Decimal(14, 2)
+  source_type     String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
+  source_ref_id   Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
+  project_id      Int?
+  contract_id     Int?
+  bank_account_id Int?     // 關聯銀行帳戶
+  reference_no    String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  remarks         String?  @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now()) @updatedAt
 
-  project  Project?  @relation(fields: [project_id], references: [id], onDelete: SetNull)
-  contract Contract? @relation(fields: [contract_id], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  contract     Contract?    @relation(fields: [contract_id], references: [id], onDelete: SetNull)
+  bank_account BankAccount? @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
 
   @@map("payment_ins")
 }
@@ -1695,7 +1697,7 @@ model PaymentOut {
   company_id              Int?     // 所屬公司（自動從糧單或支出帶入）
   payment_out_description String?  @db.VarChar(255) // 付款項目描述，例如「2026年4月 張三的糧單」
   payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | paid | cancelled
-  bank_account            String?  @db.VarChar(100)
+  bank_account_id         Int?     // 關聯銀行帳戶
   reference_no            String?  @db.VarChar(100) // 支票號碼 / 交易號碼
   remarks                 String?  @db.Text
   created_at              DateTime @default(now())
@@ -1704,6 +1706,7 @@ model PaymentOut {
   expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
   payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
   company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
+  bank_account     BankAccount?      @relation("PaymentOutBankAccount", fields: [bank_account_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]
   @@map("payment_outs")
 }
@@ -1836,12 +1839,16 @@ model BankAccount {
   bank_name    String   @db.VarChar(200) // 銀行名稱
   account_no   String   @db.VarChar(100) // 帳號
   currency     String   @default("HKD") @db.VarChar(10) // 幣種
+  company_id   Int?     // 所屬公司
   is_active    Boolean  @default(true)
   remarks      String?  @db.Text
   created_at   DateTime @default(now())
   updated_at   DateTime @default(now()) @updatedAt
 
+  company      Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   transactions BankTransaction[]
+  payment_ins  PaymentIn[]
+  payment_outs PaymentOut[]      @relation("PaymentOutBankAccount")
 
   @@map("bank_accounts")
 }

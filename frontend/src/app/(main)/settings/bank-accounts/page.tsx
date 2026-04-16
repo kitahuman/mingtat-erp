@@ -1,12 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { bankAccountsApi } from '@/lib/api';
+import { useState, useEffect, useMemo } from 'react';
+import { bankAccountsApi, companiesApi } from '@/lib/api';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import RoleGuard from '@/components/RoleGuard';
 
 export default function BankAccountsPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companies, setCompanies] = useState<any[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -22,7 +23,22 @@ export default function BankAccountsPage() {
 
   useEffect(() => {
     loadData();
+    companiesApi.list({ limit: 200 }).then(r => {
+      const list = r.data?.data || r.data || [];
+      setCompanies(list);
+    }).catch(() => {});
   }, []);
+
+  const companyOptions = useMemo(() => [
+    { label: '（未指定）', value: '' },
+    ...companies.map((c: any) => ({ label: c.name, value: c.id })),
+  ], [companies]);
+
+  const companyMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    companies.forEach((c: any) => { map[c.id] = c.name; });
+    return map;
+  }, [companies]);
 
   const columns: InlineColumn[] = [
     { key: 'bank_name', label: '銀行名稱', editable: true },
@@ -38,6 +54,17 @@ export default function BankAccountsPage() {
         { label: 'USD', value: 'USD' },
         { label: 'RMB', value: 'RMB' },
       ] 
+    },
+    {
+      key: 'company_id',
+      label: '所屬公司',
+      editable: true,
+      editType: 'select',
+      editOptions: companyOptions,
+      render: (val: any) => {
+        if (!val) return <span className="text-gray-400">—</span>;
+        return <span className="text-sm">{companyMap[val] || `#${val}`}</span>;
+      },
     },
     { 
       key: 'is_active', 
@@ -55,10 +82,17 @@ export default function BankAccountsPage() {
 
   const handleSave = async (id: number, row: any) => {
     try {
-      if (id === 0) {
-        await bankAccountsApi.create(row);
+      const payload = { ...row };
+      // Convert company_id: empty string → null, string → number
+      if (payload.company_id === '' || payload.company_id === null || payload.company_id === undefined) {
+        payload.company_id = null;
       } else {
-        await bankAccountsApi.update(id, row);
+        payload.company_id = Number(payload.company_id);
+      }
+      if (id === 0) {
+        await bankAccountsApi.create(payload);
+      } else {
+        await bankAccountsApi.update(id, payload);
       }
       loadData();
     } catch (err: any) {
@@ -83,7 +117,7 @@ export default function BankAccountsPage() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">銀行帳戶管理</h1>
           <button 
-            onClick={() => setData([{ id: 0, bank_name: '', account_name: '', account_no: '', currency: 'HKD', is_active: true }, ...data])}
+            onClick={() => setData([{ id: 0, bank_name: '', account_name: '', account_no: '', currency: 'HKD', company_id: '', is_active: true }, ...data])}
             className="btn-primary"
           >
             + 新增帳戶

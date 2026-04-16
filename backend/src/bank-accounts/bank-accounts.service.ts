@@ -9,6 +9,7 @@ export class BankAccountsService {
     return this.prisma.bankAccount.findMany({
       orderBy: { id: 'asc' },
       include: {
+        company: { select: { id: true, name: true, name_en: true } },
         _count: { select: { transactions: true } },
       },
     });
@@ -18,6 +19,7 @@ export class BankAccountsService {
     const account = await this.prisma.bankAccount.findUnique({
       where: { id },
       include: {
+        company: { select: { id: true, name: true, name_en: true } },
         _count: { select: { transactions: true } },
       },
     });
@@ -30,9 +32,22 @@ export class BankAccountsService {
     bank_name: string;
     account_no: string;
     currency?: string;
+    company_id?: number;
     remarks?: string;
   }) {
-    return this.prisma.bankAccount.create({ data });
+    return this.prisma.bankAccount.create({
+      data: {
+        account_name: data.account_name,
+        bank_name: data.bank_name,
+        account_no: data.account_no,
+        currency: data.currency || 'HKD',
+        company_id: data.company_id || null,
+        remarks: data.remarks || null,
+      },
+      include: {
+        company: { select: { id: true, name: true, name_en: true } },
+      },
+    });
   }
 
   async update(
@@ -42,12 +57,24 @@ export class BankAccountsService {
       bank_name?: string;
       account_no?: string;
       currency?: string;
+      company_id?: number;
       is_active?: boolean;
       remarks?: string;
     },
   ) {
     await this.findOne(id);
-    return this.prisma.bankAccount.update({ where: { id }, data });
+    const updateData: any = { ...data };
+    // Allow explicitly setting company_id to null
+    if ('company_id' in data) {
+      updateData.company_id = data.company_id || null;
+    }
+    return this.prisma.bankAccount.update({
+      where: { id },
+      data: updateData,
+      include: {
+        company: { select: { id: true, name: true, name_en: true } },
+      },
+    });
   }
 
   async remove(id: number) {
@@ -66,7 +93,15 @@ export class BankAccountsService {
   async simple() {
     return this.prisma.bankAccount.findMany({
       where: { is_active: true },
-      select: { id: true, account_name: true, bank_name: true, account_no: true, currency: true },
+      select: {
+        id: true,
+        account_name: true,
+        bank_name: true,
+        account_no: true,
+        currency: true,
+        company_id: true,
+        company: { select: { id: true, name: true } },
+      },
       orderBy: { id: 'asc' },
     });
   }
