@@ -165,6 +165,35 @@ export default function PaymentOutPage() {
       ) : <span className="text-gray-400">-</span>,
     },
     {
+      key: '_source',
+      label: '關聯來源',
+      editable: false,
+      minWidth: 80,
+      render: (_: any, row: any) => {
+        if (row.payroll_id) {
+          return (
+            <button
+              className="text-xs text-indigo-600 hover:underline font-medium"
+              onClick={(e) => { e.stopPropagation(); router.push(`/payroll/${row.payroll_id}`); }}
+            >
+              糧單
+            </button>
+          );
+        }
+        if (row.expense_id) {
+          return (
+            <button
+              className="text-xs text-blue-600 hover:underline font-medium"
+              onClick={(e) => { e.stopPropagation(); router.push(`/expenses/${row.expense_id}`); }}
+            >
+              支出
+            </button>
+          );
+        }
+        return <span className="text-gray-400">-</span>;
+      },
+    },
+    {
       key: 'payment_out_status',
       label: '狀態',
       editType: 'select',
