@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi } from '@/lib/api';
+import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi, paymentInApi, bankAccountsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
@@ -43,9 +43,12 @@ export default function InvoiceDetailPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
 
+  // Bank accounts
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+
   // Payment modal
   const [showPayment, setShowPayment] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account: '', reference_no: '', remarks: '' });
+  const [paymentForm, setPaymentForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account_id: '', reference_no: '', remarks: '' });
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
 
@@ -71,8 +74,8 @@ export default function InvoiceDetailPage() {
 
   const loadPayments = async () => {
     try {
-      const res = await invoicesApi.getPayments(invoiceId);
-      setPayments(res.data || []);
+      const res = await paymentInApi.list({ source_type: 'INVOICE', source_ref_id: invoiceId, limit: 200 });
+      setPayments(res.data?.data || []);
     } catch { }
   };
 
@@ -83,6 +86,7 @@ export default function InvoiceDetailPage() {
     companiesApi.simple().then(res => setCompanies(res.data || []));
     projectsApi.list({ limit: 500 }).then(res => setProjects(res.data?.data || res.data || []));
     quotationsApi.list({ limit: 500 }).then(res => setQuotations(res.data?.data || res.data || [])).catch(() => {});
+    bankAccountsApi.simple().then(res => setBankAccounts(res.data || [])).catch(() => {});
   }, [invoiceId]);
 
   const clientPartners = partners.filter((p: any) => p.partner_type === 'client');
@@ -162,12 +166,19 @@ export default function InvoiceDetailPage() {
     if (!paymentForm.amount || Number(paymentForm.amount) <= 0) { alert('請輸入有效的收款金額'); return; }
     setRecordingPayment(true);
     try {
-      await invoicesApi.recordPayment(invoiceId, {
-        date: paymentForm.date, amount: Number(paymentForm.amount),
-        bank_account: paymentForm.bank_account, reference_no: paymentForm.reference_no, remarks: paymentForm.remarks,
+      await paymentInApi.create({
+        date: paymentForm.date,
+        amount: Number(paymentForm.amount),
+        source_type: 'INVOICE',
+        source_ref_id: invoiceId,
+        project_id: invoice.project_id || undefined,
+        bank_account_id: paymentForm.bank_account_id ? Number(paymentForm.bank_account_id) : undefined,
+        reference_no: paymentForm.reference_no || undefined,
+        remarks: paymentForm.remarks || `發票 ${invoice.invoice_no} 收款`,
+        payment_in_status: 'paid',
       });
       setShowPayment(false);
-      setPaymentForm({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account: '', reference_no: '', remarks: '' });
+      setPaymentForm({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account_id: '', reference_no: '', remarks: '' });
       await loadInvoice();
       await loadPayments();
     } catch (err: any) {
@@ -180,11 +191,22 @@ export default function InvoiceDetailPage() {
   const handleDeletePayment = async (paymentId: number) => {
     if (!confirm('確定要刪除此收款記錄嗎？')) return;
     try {
-      await invoicesApi.deletePayment(invoiceId, paymentId);
+      await paymentInApi.delete(paymentId);
       await loadInvoice();
       await loadPayments();
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
+    }
+  };
+
+  const handleTogglePaymentStatus = async (paymentId: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
+    try {
+      await paymentInApi.updateStatus(paymentId, newStatus);
+      await loadInvoice();
+      await loadPayments();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新狀態失敗');
     }
   };
 
@@ -323,7 +345,7 @@ export default function InvoiceDetailPage() {
             <button onClick={() => handleStatusChange('issued')} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">開立發票</button>
           )}
           {['issued', 'partially_paid'].includes(invoice.status) && (
-            <button onClick={() => { setPaymentForm({ date: new Date().toISOString().slice(0, 10), amount: String(Number(invoice.outstanding)), bank_account: '', reference_no: '', remarks: '' }); setShowPayment(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">記錄收款</button>
+            <button onClick={() => { setPaymentForm({ date: new Date().toISOString().slice(0, 10), amount: String(Number(invoice.outstanding)), bank_account_id: '', reference_no: '', remarks: '' }); setShowPayment(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">記錄收款</button>
           )}
           {invoice.status !== 'void' && invoice.status !== 'paid' && (
             <button onClick={() => handleStatusChange('void')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">作廢</button>
@@ -574,7 +596,7 @@ export default function InvoiceDetailPage() {
             <div className="text-xl font-bold text-red-900">{fmt$(invoice.outstanding)}</div>
           </div>
         </div>
-        {payments.length > 0 && (
+        {payments.length > 0 ? (
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">收款記錄</h3>
             <table className="min-w-full divide-y divide-gray-200">
@@ -585,25 +607,39 @@ export default function InvoiceDetailPage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">銀行帳戶</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">參考編號</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">備註</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: 60 }}>操作</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">狀態</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: 120 }}>操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {payments.map((p: any) => (
-                  <tr key={p.id}>
+                  <tr key={p.id} className={p.payment_in_status === 'unpaid' ? 'bg-gray-50 opacity-70' : ''}>
                     <td className="px-4 py-2 text-sm">{fmtDate(p.date)}</td>
-                    <td className="px-4 py-2 text-sm text-right font-medium text-green-600">{fmt$(p.amount)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{p.bank_account || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-right font-medium text-green-600 font-mono">{fmt$(p.amount)}</td>
+                    <td className="px-4 py-2 text-sm text-gray-500">{p.bank_account?.account_name ? `${p.bank_account.bank_name} - ${p.bank_account.account_no}` : '—'}</td>
                     <td className="px-4 py-2 text-sm text-gray-500">{p.reference_no || '—'}</td>
                     <td className="px-4 py-2 text-sm text-gray-500">{p.remarks || '—'}</td>
                     <td className="px-4 py-2 text-center">
-                      <button onClick={() => handleDeletePayment(p.id)} className="text-red-500 hover:text-red-700 text-xs">刪除</button>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${p.payment_in_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {p.payment_in_status === 'paid' ? '已收款' : '未收款'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-center space-x-1">
+                      <button
+                        onClick={() => handleTogglePaymentStatus(p.id, p.payment_in_status)}
+                        className={`text-xs px-2 py-1 rounded ${p.payment_in_status === 'paid' ? 'text-yellow-700 bg-yellow-50 hover:bg-yellow-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}
+                      >
+                        {p.payment_in_status === 'paid' ? '取消收款' : '已收款'}
+                      </button>
+                      <button onClick={() => handleDeletePayment(p.id)} className="text-red-500 hover:text-red-700 text-xs px-2 py-1">刪除</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          <p className="text-sm text-gray-400">尚無收款記錄</p>
         )}
       </div>
 
@@ -624,7 +660,12 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
-              <input type="text" value={paymentForm.bank_account} onChange={e => setPaymentForm({ ...paymentForm, bank_account: e.target.value })} className="input-field" placeholder="銀行名稱 / 帳戶號碼" />
+              <select value={paymentForm.bank_account_id} onChange={e => setPaymentForm({ ...paymentForm, bank_account_id: e.target.value })} className="input-field">
+                <option value="">請選擇銀行帳戶</option>
+                {bankAccounts.map((ba: any) => (
+                  <option key={ba.id} value={ba.id}>{ba.bank_name} - {ba.account_name} ({ba.account_no})</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">參考編號</label>

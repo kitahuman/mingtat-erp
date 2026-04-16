@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Param,
   Body,
@@ -11,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentInService } from './payment-in.service';
-import { CreatePaymentInDto, UpdatePaymentInDto } from './dto/create-payment-in.dto';
+import { CreatePaymentInDto, UpdatePaymentInDto, UpdatePaymentInStatusDto } from './dto/create-payment-in.dto';
 
 @Controller('payment-in')
 @UseGuards(AuthGuard('jwt'))
@@ -23,6 +24,7 @@ export class PaymentInController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('source_type') source_type?: string,
+    @Query('source_ref_id') source_ref_id?: string,
     @Query('project_id') project_id?: string,
     @Query('contract_id') contract_id?: string,
     @Query('date_from') date_from?: string,
@@ -32,6 +34,7 @@ export class PaymentInController {
       page: page ? +page : undefined,
       limit: limit ? +limit : undefined,
       source_type,
+      source_ref_id: source_ref_id ? +source_ref_id : undefined,
       project_id: project_id ? +project_id : undefined,
       contract_id: contract_id ? +contract_id : undefined,
       date_from,
@@ -52,6 +55,11 @@ export class PaymentInController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdatePaymentInDto) {
     return this.service.update(+id, body);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body() body: UpdatePaymentInStatusDto) {
+    return this.service.updateStatus(+id, body);
   }
 
   @Delete(':id')

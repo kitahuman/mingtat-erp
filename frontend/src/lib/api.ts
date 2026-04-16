@@ -591,6 +591,7 @@ export const paymentInApi = {
   get: (id: number) => api.get(`/payment-in/${id}`),
   create: (data: any) => api.post('/payment-in', data),
   update: (id: number, data: any) => api.put(`/payment-in/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/payment-in/${id}/status`, { payment_in_status: status }),
   delete: (id: number) => api.delete(`/payment-in/${id}`),
 };
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { paymentApplicationsApi } from '@/lib/api';
+import { paymentApplicationsApi, paymentInApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 
@@ -11,12 +11,13 @@ const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFra
 const fmtQty = (v: any) => { const n = Number(v); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(4).replace(/0+$/, ''); };
 
 const IPA_STATUS_LABELS: Record<string, string> = {
-  draft: '草稿', submitted: '已提交', certified: '已認證', paid: '已收款', void: '已作廢',
+  draft: '草稿', submitted: '已提交', certified: '已認證', partially_paid: '部分收款', paid: '已收款', void: '已作廢',
 };
 const IPA_STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
   submitted: 'bg-blue-100 text-blue-700',
   certified: 'bg-green-100 text-green-700',
+  partially_paid: 'bg-yellow-100 text-yellow-700',
   paid: 'bg-purple-100 text-purple-700',
   void: 'bg-red-100 text-red-700',
 };
@@ -48,9 +49,16 @@ export default function IpaDetailPage() {
   const [clientAmount, setClientAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
 
+  // Payment records
+  const [payments, setPayments] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+
   // Payment modal state
   const [paidAmount, setPaidAmount] = useState('');
   const [paidDate, setPaidDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
+  const [paymentReferenceNo, setPaymentReferenceNo] = useState('');
+  const [paymentRemarks, setPaymentRemarks] = useState('');
 
   // Material/Deduction form
   const [materialForm, setMaterialForm] = useState({ description: '', amount: '', remarks: '' });
@@ -72,7 +80,18 @@ export default function IpaDetailPage() {
     }
   }, [contractId, paId]);
 
-  useEffect(() => { fetchIpa(); }, [fetchIpa]);
+  const loadPayments = useCallback(async () => {
+    try {
+      const res = await paymentInApi.list({ source_type: 'IPA', source_ref_id: paId, limit: 200 });
+      setPayments(res.data?.data || []);
+    } catch { }
+  }, [paId]);
+
+  useEffect(() => {
+    fetchIpa();
+    loadPayments();
+    bankAccountsApi.simple().then(res => setBankAccounts(res.data || [])).catch(() => {});
+  }, [fetchIpa, loadPayments]);
 
   const editable = ipa?.status === 'draft';
 
@@ -157,15 +176,53 @@ export default function IpaDetailPage() {
   };
 
   const handleRecordPayment = async () => {
+    const amount = parseFloat(paidAmount);
+    if (!amount || amount <= 0) { window.alert('請輸入有效的收款金額'); return; }
     try {
-      await paymentApplicationsApi.recordPayment(contractId, paId, {
-        paid_amount: parseFloat(paidAmount) || 0,
-        paid_date: paidDate,
+      await paymentInApi.create({
+        date: paidDate,
+        amount,
+        source_type: 'IPA',
+        source_ref_id: paId,
+        contract_id: contractId,
+        project_id: ipa?.project_id || undefined,
+        bank_account_id: paymentBankAccountId ? Number(paymentBankAccountId) : undefined,
+        reference_no: paymentReferenceNo || undefined,
+        remarks: paymentRemarks || `IPA #${ipa?.pa_no} 收款`,
+        payment_in_status: 'paid',
       });
       setShowPaymentModal(false);
-      fetchIpa();
+      setPaidAmount('');
+      setPaidDate(new Date().toISOString().split('T')[0]);
+      setPaymentBankAccountId('');
+      setPaymentReferenceNo('');
+      setPaymentRemarks('');
+      await fetchIpa();
+      await loadPayments();
     } catch (err: any) {
       window.alert(err.response?.data?.message || '收款記錄失敗');
+    }
+  };
+
+  const handleTogglePaymentStatus = async (paymentId: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
+    try {
+      await paymentInApi.updateStatus(paymentId, newStatus);
+      await fetchIpa();
+      await loadPayments();
+    } catch (err: any) {
+      window.alert(err.response?.data?.message || '更新狀態失敗');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: number) => {
+    if (!confirm('確定要刪除此收款記錄嗎？')) return;
+    try {
+      await paymentInApi.delete(paymentId);
+      await fetchIpa();
+      await loadPayments();
+    } catch (err: any) {
+      window.alert(err.response?.data?.message || '刪除失敗');
     }
   };
 
@@ -322,8 +379,13 @@ export default function IpaDetailPage() {
               </button>
             </>
           )}
-          {ipa.status === 'certified' && (
-            <button onClick={() => { setPaidAmount(String(Number(ipa.client_current_due ?? ipa.current_due))); setShowPaymentModal(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
+          {['certified', 'partially_paid'].includes(ipa.status) && (
+            <button onClick={() => {
+              const totalDue = Number(ipa.client_current_due ?? ipa.current_due);
+              const alreadyPaid = Number(ipa.paid_amount || 0);
+              setPaidAmount(String(Math.max(0, totalDue - alreadyPaid)));
+              setShowPaymentModal(true);
+            }} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
               記錄收款
             </button>
           )}
@@ -617,14 +679,69 @@ export default function IpaDetailPage() {
               </tbody>
             </table>
           </div>
-          {/* Payment info */}
-          {ipa.status === 'paid' && (
-            <div className="mt-4 p-4 bg-purple-50 rounded-lg">
-              <p className="text-sm text-purple-800">
-                <strong>已收款：</strong>{fmt$(ipa.paid_amount)} ・ 收款日期：{fmtDate(ipa.paid_date)}
-              </p>
+          {/* Payment Summary & Records */}
+          <div className="mt-6 border-t pt-4">
+            <h3 className="text-md font-bold text-gray-900 mb-3">收款狀況</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="text-xs text-blue-600 font-medium mb-1">當期應付金額</div>
+                <div className="text-xl font-bold text-blue-900">{fmt$(ipa.client_current_due ?? ipa.current_due)}</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4">
+                <div className="text-xs text-green-600 font-medium mb-1">已收金額</div>
+                <div className="text-xl font-bold text-green-900">{fmt$(ipa.paid_amount || 0)}</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-4">
+                <div className="text-xs text-red-600 font-medium mb-1">未收金額</div>
+                <div className="text-xl font-bold text-red-900">{fmt$(Math.max(0, Number(ipa.client_current_due ?? ipa.current_due) - Number(ipa.paid_amount || 0)))}</div>
+              </div>
             </div>
-          )}
+            {payments.length > 0 ? (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">收款記錄</h4>
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">金額</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">銀行帳戶</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">參考編號</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">備註</th>
+                      <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">狀態</th>
+                      <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: 120 }}>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {payments.map((p: any) => (
+                      <tr key={p.id} className={p.payment_in_status === 'unpaid' ? 'bg-gray-50 opacity-70' : ''}>
+                        <td className="px-4 py-2 text-sm">{fmtDate(p.date)}</td>
+                        <td className="px-4 py-2 text-sm text-right font-medium text-green-600 font-mono">{fmt$(p.amount)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{p.bank_account?.account_name ? `${p.bank_account.bank_name} - ${p.bank_account.account_no}` : '—'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{p.reference_no || '—'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{p.remarks || '—'}</td>
+                        <td className="px-4 py-2 text-center">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${p.payment_in_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {p.payment_in_status === 'paid' ? '已收款' : '未收款'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-center space-x-1">
+                          <button
+                            onClick={() => handleTogglePaymentStatus(p.id, p.payment_in_status)}
+                            className={`text-xs px-2 py-1 rounded ${p.payment_in_status === 'paid' ? 'text-yellow-700 bg-yellow-50 hover:bg-yellow-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}
+                          >
+                            {p.payment_in_status === 'paid' ? '取消收款' : '已收款'}
+                          </button>
+                          <button onClick={() => handleDeletePayment(p.id)} className="text-red-500 hover:text-red-700 text-xs px-2 py-1">刪除</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">尚無收款記錄</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -664,16 +781,36 @@ export default function IpaDetailPage() {
           <div className="rounded bg-green-50 p-3 text-sm">
             <span className="text-gray-600">當期應付：</span>
             <span className="font-semibold text-green-800">HKD {fmt$(ipa.client_current_due ?? ipa.current_due)}</span>
+            {Number(ipa.paid_amount || 0) > 0 && (
+              <span className="ml-2 text-gray-500">已收：{fmt$(ipa.paid_amount)}</span>
+            )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">收款金額</label>
-            <input type="number" step="0.01" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className="input-field" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">收款日期</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">收款日期 <span className="text-red-500">*</span></label>
             <input type="date" value={paidDate} onChange={e => setPaidDate(e.target.value)} className="input-field" />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">收款金額 <span className="text-red-500">*</span></label>
+            <input type="number" step="0.01" min="0" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className="input-field" placeholder="0.00" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
+            <select value={paymentBankAccountId} onChange={e => setPaymentBankAccountId(e.target.value)} className="input-field">
+              <option value="">請選擇銀行帳戶</option>
+              {bankAccounts.map((ba: any) => (
+                <option key={ba.id} value={ba.id}>{ba.bank_name} - {ba.account_name} ({ba.account_no})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">參考編號</label>
+            <input type="text" value={paymentReferenceNo} onChange={e => setPaymentReferenceNo(e.target.value)} className="input-field" placeholder="支票號碼 / 交易號碼" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+            <textarea value={paymentRemarks} onChange={e => setPaymentRemarks(e.target.value)} className="input-field" rows={2} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t">
             <button onClick={() => setShowPaymentModal(false)} className="btn-secondary">取消</button>
             <button onClick={handleRecordPayment} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">確認收款</button>
           </div>

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaymentInService } from '../payment-in/payment-in.service';
 import { WhereClause } from '../common/types';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class InvoicesService {
   constructor(
     private prisma: PrismaService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly paymentInService: PaymentInService,
   ) {}
 
   // ── helpers ──────────────────────────────────────────────────
@@ -112,41 +114,11 @@ export class InvoicesService {
   }
 
   /**
-   * Recalculate paid_amount and outstanding from PaymentIn records
+   * Recalculate paid_amount and outstanding from PaymentIn records.
+   * Delegates to the shared recalculatePaymentStatus in PaymentInService.
    */
   private async recalcPayments(invoiceId: number) {
-    const payments = await this.prisma.paymentIn.findMany({
-      where: { source_type: 'invoice', source_ref_id: invoiceId },
-    });
-    const paidAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
-    });
-    if (!invoice) return;
-
-    const totalAmount = Number(invoice.total_amount);
-    const outstanding = Math.round((totalAmount - paidAmount) * 100) / 100;
-
-    let status = invoice.status;
-    if (status !== 'void' && status !== 'draft') {
-      if (paidAmount >= totalAmount && totalAmount > 0) {
-        status = 'paid';
-      } else if (paidAmount > 0) {
-        status = 'partially_paid';
-      } else {
-        status = 'issued';
-      }
-    }
-
-    await this.prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        paid_amount: Math.round(paidAmount * 100) / 100,
-        outstanding: outstanding < 0 ? 0 : outstanding,
-        status,
-      },
-    });
+    await this.paymentInService.recalculatePaymentStatus('INVOICE', invoiceId);
   }
 
   // ── CRUD ─────────────────────────────────────────────────────
@@ -588,7 +560,7 @@ export class InvoicesService {
       data: {
         date: new Date(dto.date),
         amount: dto.amount,
-        source_type: 'invoice',
+        source_type: 'INVOICE',
         source_ref_id: invoiceId,
         project_id: invoice.project_id || null,
         bank_account_id: dto.bank_account_id || null,
@@ -627,7 +599,10 @@ export class InvoicesService {
    */
   async getPayments(invoiceId: number) {
     return this.prisma.paymentIn.findMany({
-      where: { source_type: 'invoice', source_ref_id: invoiceId },
+      where: {
+        source_type: { in: ['INVOICE', 'invoice'] },
+        source_ref_id: invoiceId,
+      },
       orderBy: { date: 'desc' },
     });
   }

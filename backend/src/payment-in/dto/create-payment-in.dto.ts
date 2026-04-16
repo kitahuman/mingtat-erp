@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreatePaymentInDto {
@@ -11,6 +11,7 @@ export class CreatePaymentInDto {
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsString() payment_in_status?: string;
 }
 
 export class UpdatePaymentInDto {
@@ -23,4 +24,11 @@ export class UpdatePaymentInDto {
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsString() payment_in_status?: string;
+}
+
+export class UpdatePaymentInStatusDto {
+  @IsString()
+  @IsIn(['paid', 'unpaid'])
+  payment_in_status: string;
 }

@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaymentInService } from '../payment-in/payment-in.service';
 
 @Injectable()
 export class PaymentApplicationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly paymentInService: PaymentInService,
+  ) {}
 
   // ═══════════════════════════════════════════════════════════
   // Helpers
@@ -658,36 +662,31 @@ export class PaymentApplicationsService {
       where: { id: paId, contract_id: contractId },
     });
     if (!pa) throw new NotFoundException('IPA 不存在');
-    if (pa.status !== 'certified') {
-      throw new BadRequestException('僅已認證狀態可以記錄收款');
+    if (pa.status !== 'certified' && pa.status !== 'partially_paid') {
+      throw new BadRequestException('僅已認證或部分付款狀態可以記錄收款');
     }
 
     const paidAmount = parseFloat(Number(dto.paid_amount).toFixed(2));
     const paidDate = dto.paid_date ? new Date(dto.paid_date) : new Date();
 
-    await this.prisma.paymentApplication.update({
-      where: { id: paId },
-      data: {
-        status: 'paid',
-        paid_amount: paidAmount,
-        paid_date: paidDate,
-      },
-    });
-
-    // Phase 4: Auto-create PaymentIn record
+    // Create PaymentIn record with IPA source_type
     await this.prisma.paymentIn.create({
       data: {
         date: paidDate,
         amount: paidAmount,
-        source_type: 'payment_certificate',
+        source_type: 'IPA',
         source_ref_id: paId,
         contract_id: contractId,
         project_id: pa.project_id || null,
         bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
-        remarks: `IPA #${pa.pa_no} 收款`,
+        remarks: dto.remarks || `IPA #${pa.pa_no} 收款`,
+        payment_in_status: 'paid',
       },
     });
+
+    // Recalculate IPA paid_amount/status from all PaymentIn records
+    await this.paymentInService.recalculatePaymentStatus('IPA', paId);
 
     // Phase 6: Sync retention tracking
     try {
