@@ -46,14 +46,20 @@ export class BankReconciliationController {
   @Get('summary/:bankAccountId')
   getSummary(
     @Param('bankAccountId') bankAccountId: string,
-    @Query('month') month?: string,
+    @Query('date_from') date_from?: string,
+    @Query('date_to') date_to?: string,
   ) {
-    return this.service.getSummary(+bankAccountId, month);
+    return this.service.getSummary(+bankAccountId, date_from, date_to);
   }
 
   @Get('candidates/:txId')
   findCandidates(@Param('txId') txId: string) {
     return this.service.findMatchCandidates(+txId);
+  }
+
+  @Post('auto-match/:bankAccountId')
+  autoMatchAll(@Param('bankAccountId') bankAccountId: string) {
+    return this.service.autoMatchAll(+bankAccountId);
   }
 
   @Post('match/:txId')
