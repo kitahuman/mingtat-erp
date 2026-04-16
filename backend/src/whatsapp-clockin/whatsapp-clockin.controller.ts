@@ -27,7 +27,7 @@ export class WhatsappClockinController {
   @HttpCode(HttpStatus.OK)
   async handleClockIn(
     @Headers('x-webhook-secret') webhookSecret: string,
-    @Body() body: { chatId: string; sender: string; text: string; groupName?: string },
+    @Body() body: { chatId: string; sender: string; text: string; groupName?: string; messageId?: string; timestamp?: string | number },
   ): Promise<ClockInResponse> {
     // 驗證 webhook secret
     const expectedSecret = process.env.WHATSAPP_CLOCKIN_SECRET;
@@ -40,7 +40,14 @@ export class WhatsappClockinController {
       `Received clock-in from group=${body.chatId}, sender=${body.sender}, text=${(body.text || '').substring(0, 50)}...`,
     );
 
-    const result = await this.service.processClockIn(body);
+    const result = await this.service.processClockIn({
+      chatId: body.chatId,
+      sender: body.sender,
+      text: body.text,
+      groupName: body.groupName,
+      remoteMessageId: body.messageId,
+      timestamp: body.timestamp,
+    });
 
     return {
       success: result.success,

@@ -2114,7 +2114,7 @@ model VerificationWaMessage {
   @@index([wa_msg_group_id])
   @@index([wa_msg_timestamp])
   @@index([wa_msg_ai_classified])
-  @@index([wa_msg_remote_id])
+  @@unique([wa_msg_remote_id])
   @@map("verification_wa_messages")
 }
 

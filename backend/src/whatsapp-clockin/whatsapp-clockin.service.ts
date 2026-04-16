@@ -13,6 +13,7 @@ interface ClockInPayload {
   text: string;
   groupName?: string;
   messageId?: number; // 如果從 processWebhookMessage 呼叫，帶入已存的 message id
+  remoteMessageId?: string; // WhatsApp 原始訊息 ID（用於去重）
   timestamp?: string | number | Date; // 訊息原始時間
 }
 
@@ -97,7 +98,18 @@ export class WhatsappClockinService {
     parsed?: ParsedClockIn;
     error?: string;
   }> {
-    const { chatId, sender, text, groupName, messageId, timestamp } = payload;
+    const { chatId, sender, text, groupName, messageId, remoteMessageId, timestamp } = payload;
+
+    // 0. 去重檢查：如果 Bot 傳來了 WhatsApp 原始訊息 ID，先查是否已處理過
+    if (remoteMessageId) {
+      const existing = await this.prisma.verificationWaMessage.findFirst({
+        where: { wa_msg_remote_id: remoteMessageId },
+      });
+      if (existing) {
+        this.logger.warn(`Duplicate clockin webhook detected (remote_id=${remoteMessageId}), skipping`);
+        return { success: false, error: 'duplicate_message' };
+      }
+    }
 
     // 1. 群組檢查
     const groupInfo = CLOCKIN_GROUP_MAP[chatId];
@@ -112,6 +124,7 @@ export class WhatsappClockinService {
       try {
         const waMessage = await this.prisma.verificationWaMessage.create({
           data: {
+            wa_msg_remote_id: remoteMessageId || null,
             wa_msg_group_id: chatId,
             wa_msg_group_name: groupName || groupInfo.department,
             wa_msg_sender_name: sender.split('@')[0],

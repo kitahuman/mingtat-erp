@@ -310,17 +310,29 @@ export class WhatsappService {
     text: string;
     groupName?: string;
     timestamp?: string | number;
+    messageId?: string;
   }) {
-    const { chatId, sender, text, groupName, timestamp } = payload;
+    const { chatId, sender, text, groupName, timestamp, messageId } = payload;
 
     if (!text || text.trim().length < 3) {
       return { processed: false, reason: 'message_too_short' };
     }
 
+    // 0. 去重檢查：如果 Bot 傳來了 WhatsApp 原始訊息 ID，先查是否已處理過
+    if (messageId) {
+      const existing = await this.prisma.verificationWaMessage.findFirst({
+        where: { wa_msg_remote_id: messageId },
+      });
+      if (existing) {
+        this.logger.warn(`Duplicate webhook detected (remote_id=${messageId}), skipping`);
+        return { processed: false, reason: 'duplicate_message', message_id: existing.id };
+      }
+    }
+
     // 1. 儲存原始訊息
     const waMessage = await this.prisma.verificationWaMessage.create({
       data: {
-        wa_msg_remote_id: null,
+        wa_msg_remote_id: messageId || null,
         wa_msg_group_id: chatId,
         wa_msg_group_name: groupName || null,
         wa_msg_sender_jid: null,
