@@ -81,6 +81,7 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [paidFilter, setPaidFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [paymentMethodTypeFilter, setPaymentMethodTypeFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
@@ -122,6 +123,7 @@ export default function ExpensesPage() {
     contract_id: '',
     project_id: '',
     quotation_id: '',
+    expense_payment_method: 'SELF_PAID',
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
 
@@ -137,6 +139,7 @@ export default function ExpensesPage() {
         payment_status: paidFilter !== '' ? paidFilter : undefined,
         source: sourceFilter || undefined,
         project_id: projectFilter || undefined,
+        expense_payment_method: paymentMethodTypeFilter || undefined,
         sortBy,
         sortOrder,
       })
@@ -145,7 +148,7 @@ export default function ExpensesPage() {
         setTotal(res.data.total);
       })
       .finally(() => setLoading(false));
-  }, [page, search, companyFilter, categoryFilter, paidFilter, sourceFilter, projectFilter, sortBy, sortOrder]);
+  }, [page, search, companyFilter, categoryFilter, paidFilter, sourceFilter, projectFilter, paymentMethodTypeFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -462,6 +465,24 @@ export default function ExpensesPage() {
       filterRender: (_: any, row: any) => row.quotation?.quotation_no || '-',
     },
     {
+      key: 'expense_payment_method',
+      label: '付款類型',
+      sortable: true,
+      editable: true,
+      editType: 'select',
+      editOptions: [
+        { value: 'SELF_PAID', label: '本人代付' },
+        { value: 'COMPANY_PAID', label: '公司付款' },
+      ],
+      render: (v: any) => {
+        if (!v) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">本人代付</span>;
+        return v === 'COMPANY_PAID'
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">公司付款</span>
+          : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">本人代付</span>;
+      },
+      exportRender: (v: any) => v === 'COMPANY_PAID' ? '公司付款' : '本人代付',
+    },
+    {
       key: 'source',
       label: '來源',
       sortable: true,
@@ -565,6 +586,11 @@ export default function ExpensesPage() {
               <select value={projectFilter} onChange={e => { setProjectFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部工程</option>
                 {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_no} {p.project_name || ''}</option>)}
+              </select>
+              <select value={paymentMethodTypeFilter} onChange={e => { setPaymentMethodTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部付款類型</option>
+                <option value="SELF_PAID">本人代付</option>
+                <option value="COMPANY_PAID">公司付款</option>
               </select>
             </div>
           }
@@ -731,6 +757,14 @@ export default function ExpensesPage() {
                 placeholder="搜尋報價單..."
                 className="w-full"
               />
+            </div>
+            {/* Expense Payment Method */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">付款類型</label>
+              <select value={form.expense_payment_method} onChange={e => setForm({ ...form, expense_payment_method: e.target.value })} className="input-field">
+                <option value="SELF_PAID">本人代付（員工墊付，公司報銷）</option>
+                <option value="COMPANY_PAID">公司付款（公司直接支付）</option>
+              </select>
             </div>
             {/* Remarks */}
             <div className="md:col-span-2">

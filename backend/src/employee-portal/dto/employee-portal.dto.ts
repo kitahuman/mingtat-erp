@@ -49,6 +49,8 @@ export class SubmitExpenseDto {
   @IsOptional() @IsString() supplier_name?: string;
   @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() payment_ref?: string;
+  /** 付款方式：SELF_PAID（本人代付）| COMPANY_PAID（公司付款） */
+  @IsOptional() @IsString() expense_payment_method?: string;
   @IsOptional() @IsArray() items?: any[];
   @IsOptional() @IsArray() attachments?: any[];
 }

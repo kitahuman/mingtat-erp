@@ -42,6 +42,7 @@ export class ExpensesService {
     project_id?: number;
     is_paid?: string;
     source?: string;
+    expense_payment_method?: string;
     sortBy?: string;
     sortOrder?: string;
   }) {
@@ -60,6 +61,10 @@ export class ExpensesService {
     if (query.source && query.source !== '') {
       where.source = query.source;
     }
+    // expense_payment_method filter
+    if (query.expense_payment_method && query.expense_payment_method !== '') {
+      where.expense_payment_method = query.expense_payment_method;
+    }
     if (query.search) {
       where.OR = [
         { item: { contains: query.search, mode: 'insensitive' } },
@@ -74,6 +79,7 @@ export class ExpensesService {
       'id', 'date', 'company_id', 'supplier_name', 'category_id',
       'employee_id', 'item', 'total_amount', 'is_paid',
       'payment_date', 'payment_ref', 'machine_code', 'created_at', 'source',
+      'expense_payment_method',
     ];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
     const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';

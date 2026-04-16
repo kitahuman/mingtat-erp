@@ -21,6 +21,7 @@ interface ExpenseForm {
   payment_ref: string;
   remarks: string;
   receipt_url: string;
+  expense_payment_method: 'SELF_PAID' | 'COMPANY_PAID';
   items: LineItem[];
 }
 
@@ -34,6 +35,7 @@ const defaultForm: ExpenseForm = {
   payment_ref: '',
   remarks: '',
   receipt_url: '',
+  expense_payment_method: 'SELF_PAID',
   items: [],
 };
 
@@ -133,6 +135,7 @@ export default function ExpensePage() {
         payment_method: form.payment_method || undefined,
         payment_ref: form.payment_ref || undefined,
         remarks: remarkParts.join('\n') || undefined,
+        expense_payment_method: form.expense_payment_method,
       };
 
       // Add line items if any
@@ -178,6 +181,9 @@ export default function ExpensePage() {
   };
   const formatAmount = (n: any) =>
     `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 2 })}`;
+
+  const paymentMethodLabel = (method: 'SELF_PAID' | 'COMPANY_PAID') =>
+    method === 'SELF_PAID' ? '本人代付' : '公司付款';
 
   return (
     <div className="p-4 pb-6">
@@ -270,6 +276,53 @@ export default function ExpensePage() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
               <h3 className="font-semibold text-gray-800 text-sm">付款資料</h3>
 
+              {/* Expense Payment Method (SELF_PAID / COMPANY_PAID) */}
+              <div>
+                <label className={labelClass}>付款類型 *</label>
+                <div className="flex gap-3">
+                  <label
+                    className={`flex-1 flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      form.expense_payment_method === 'SELF_PAID'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="expense_payment_method"
+                      value="SELF_PAID"
+                      checked={form.expense_payment_method === 'SELF_PAID'}
+                      onChange={() => set('expense_payment_method', 'SELF_PAID')}
+                      className="accent-blue-600"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">本人代付</p>
+                      <p className="text-xs text-gray-500">由本人先墊付，公司報銷</p>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex-1 flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      form.expense_payment_method === 'COMPANY_PAID'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="expense_payment_method"
+                      value="COMPANY_PAID"
+                      checked={form.expense_payment_method === 'COMPANY_PAID'}
+                      onChange={() => set('expense_payment_method', 'COMPANY_PAID')}
+                      className="accent-green-600"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">公司付款</p>
+                      <p className="text-xs text-gray-500">由公司直接支付</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {/* Payment Method */}
               <div>
                 <label className={labelClass}>{t('expensePaymentMethod')}</label>
@@ -295,7 +348,6 @@ export default function ExpensePage() {
                 )}
               </div>
 
-              {/* Payment Reference */}
               <div>
                 <label className={labelClass}>{t('expensePaymentRef')}</label>
                 <input
@@ -484,6 +536,17 @@ export default function ExpensePage() {
                         付款：{exp.payment_method}
                         {exp.payment_ref ? ` (${exp.payment_ref})` : ''}
                       </p>
+                    )}
+                    {exp.expense_payment_method && (
+                      <span
+                        className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 ${
+                          exp.expense_payment_method === 'SELF_PAID'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {paymentMethodLabel(exp.expense_payment_method)}
+                      </span>
                     )}
                     {exp.items && exp.items.length > 0 && (
                       <p className="text-xs text-blue-500 mt-0.5">{exp.items.length} 項明細</p>

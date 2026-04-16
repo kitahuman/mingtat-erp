@@ -119,6 +119,7 @@ export default function ExpenseDetailPage() {
       contract_id: e.contract_id || '',
       project_id: e.project_id || '',
       quotation_id: e.quotation_id || '',
+      expense_payment_method: e.expense_payment_method || 'SELF_PAID',
     };
   }
 
@@ -345,6 +346,13 @@ export default function ExpenseDetailPage() {
               <label className="block text-xs font-medium text-gray-600 mb-1">報價單</label>
               <SearchableSelect value={form.quotation_id || null} onChange={v => setForm({ ...form, quotation_id: v })} options={quotationOptions} placeholder="搜尋報價單..." />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">付款類型</label>
+              <select value={form.expense_payment_method} onChange={e => setForm({ ...form, expense_payment_method: e.target.value })} className="input-field text-sm">
+                <option value="SELF_PAID">本人代付</option>
+                <option value="COMPANY_PAID">公司付款</option>
+              </select>
+            </div>
             <div className="md:col-span-2 lg:col-span-3">
               <label className="block text-xs font-medium text-gray-600 mb-1">備註</label>
               <textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} className="input-field text-sm" rows={2} />
@@ -362,6 +370,11 @@ export default function ExpenseDetailPage() {
               <span className="font-semibold text-base">HK$ {Number(expense.total_amount).toLocaleString('en', { minimumFractionDigits: 2 })}</span>
             </Field>
             <Field label="付款狀態"><PaymentStatusBadge status={expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')} /></Field>
+            <Field label="付款類型">
+              {expense.expense_payment_method === 'COMPANY_PAID'
+                ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">公司付款</span>
+                : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">本人代付</span>}
+            </Field>
             <Field label="機號">{expense.machinery?.machine_code || expense.machine_code}</Field>
             <Field label="客戶">{expense.client?.name}</Field>
             <Field label="工程編號">{expense.project?.project_no}</Field>

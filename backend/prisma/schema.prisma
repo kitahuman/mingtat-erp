@@ -1472,6 +1472,7 @@ model Expense {
   remarks             String?   @db.Text
   source              String?   @default("MANUAL") // MANUAL | PURCHASE | PAYROLL | SUBCON | CONTRA
   source_ref_id       Int? // 關聯到來源記錄的 ID
+  expense_payment_method String @default("SELF_PAID") @db.VarChar(20) // SELF_PAID | COMPANY_PAID
   machine_code        String?
   machinery_id        Int?
   vehicle_id          Int?

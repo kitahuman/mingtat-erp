@@ -1,5 +1,8 @@
-import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsArray, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export const EXPENSE_PAYMENT_METHODS = ['SELF_PAID', 'COMPANY_PAID'] as const;
+export type ExpensePaymentMethod = typeof EXPENSE_PAYMENT_METHODS[number];
 
 export class CreateExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
@@ -28,6 +31,8 @@ export class CreateExpenseDto {
   @IsOptional() @IsString() expense_type?: string;
   @IsOptional() @IsString() cheque_number?: string;
   @IsOptional() @IsString() cheque_date?: string;
+  /** 付款方式：SELF_PAID（本人代付）| COMPANY_PAID（公司付款） */
+  @IsOptional() @IsString() @IsIn(EXPENSE_PAYMENT_METHODS) expense_payment_method?: ExpensePaymentMethod;
   @IsOptional() @IsArray() items?: any[];
   @IsOptional() @IsArray() attachments?: any[];
 }
