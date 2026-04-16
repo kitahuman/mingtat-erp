@@ -1303,7 +1303,8 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Table ────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto">
+      {/* overflow-auto + max-height 讓水平滾動條固定在視窗內，不需要全域修改 */}
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>
