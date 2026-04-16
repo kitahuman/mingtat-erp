@@ -692,6 +692,20 @@ export const companyProfitLossApi = {
 };
 
 // ══════════════════════════════════════════════════════════════
+// Equipment Profit (機械/車輛損益)
+// ══════════════════════════════════════════════════════════════
+
+export const equipmentProfitApi = {
+  getReport: (params?: { date_from?: string; date_to?: string; equipment_type?: string; equipment_id?: number }) =>
+    api.get('/equipment-profit/report', { params }),
+  getDetails: (type: string, id: number, params?: { date_from?: string; date_to?: string }) =>
+    api.get(`/equipment-profit/report/${type}/${id}/details`, { params }),
+  getSettings: () => api.get('/equipment-profit/settings'),
+  updateCommission: (equipmentType: string, equipmentId: number, commissionPercentage: number) =>
+    api.put(`/equipment-profit/settings/${equipmentType}/${equipmentId}`, { commission_percentage: commissionPercentage }),
+};
+
+// ══════════════════════════════════════════════════════════════
 // Subcon Payroll (供應商計糧)
 // ══════════════════════════════════════════════════════════════
 

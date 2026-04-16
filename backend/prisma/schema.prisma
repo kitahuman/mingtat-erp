@@ -369,6 +369,8 @@ model Vehicle {
   owner_company Company               @relation(fields: [owner_company_id], references: [id])
   plate_history VehiclePlateHistory[]
   transfers     VehicleTransfer[]
+  work_logs     WorkLog[]              @relation("work_log_vehicle")
+  expenses      Expense[]              @relation("expense_vehicle")
 
   @@map("vehicles")
 }
@@ -429,6 +431,7 @@ model Machinery {
   owner_company Company             @relation(fields: [owner_company_id], references: [id])
   transfers     MachineryTransfer[]
   expenses      Expense[]
+  work_logs     WorkLog[]            @relation("work_log_machinery")
 
   @@map("machinery")
 }
@@ -1113,6 +1116,8 @@ model WorkLog {
 
   project_id               Int?
   work_log_fleet_driver_id Int?
+  work_log_machinery_id    Int?
+  work_log_vehicle_id      Int?
 
   publisher                  User?                      @relation(fields: [publisher_id], references: [id])
   company_profile            CompanyProfile?            @relation(fields: [company_profile_id], references: [id])
@@ -1123,6 +1128,8 @@ model WorkLog {
   employee                   Employee?                  @relation(fields: [employee_id], references: [id])
   project                    Project?                   @relation(fields: [project_id], references: [id])
   fleet_driver               SubcontractorFleetDriver?  @relation(fields: [work_log_fleet_driver_id], references: [id])
+  work_log_machinery         Machinery?                 @relation("work_log_machinery", fields: [work_log_machinery_id], references: [id], onDelete: SetNull)
+  work_log_vehicle           Vehicle?                   @relation("work_log_vehicle", fields: [work_log_vehicle_id], references: [id], onDelete: SetNull)
   payroll_work_logs          PayrollWorkLog[]
   whatsapp_messages          WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
@@ -1144,6 +1151,8 @@ model WorkLog {
   @@index([equipment_number])
   @@index([scheduled_date, employee_id])
   @@index([scheduled_date, company_id])
+  @@index([work_log_machinery_id])
+  @@index([work_log_vehicle_id])
   @@map("work_logs")
 }
 
@@ -1465,6 +1474,7 @@ model Expense {
   source_ref_id       Int? // 關聯到來源記錄的 ID
   machine_code        String?
   machinery_id        Int?
+  vehicle_id          Int?
   client_id           Int?
   contract_id         Int?
   project_id          Int?
@@ -1480,6 +1490,7 @@ model Expense {
   category    ExpenseCategory?    @relation(fields: [category_id], references: [id])
   employee    Employee?           @relation(fields: [employee_id], references: [id])
   machinery   Machinery?          @relation(fields: [machinery_id], references: [id])
+  vehicle     Vehicle?            @relation("expense_vehicle", fields: [vehicle_id], references: [id], onDelete: SetNull)
   client      Partner?            @relation("expense_client", fields: [client_id], references: [id])
   contract    Contract?           @relation(fields: [contract_id], references: [id])
   project     Project?            @relation(fields: [project_id], references: [id])
@@ -2521,4 +2532,20 @@ model SubconPayrollItem {
   @@index([subcon_payroll_item_work_log_id])
   @@index([subcon_payroll_item_driver_id])
   @@map("subcon_payroll_items")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Equipment Profit Settings (機械/車輛分成設定)
+// ══════════════════════════════════════════════════════════════
+
+model EquipmentProfitSetting {
+  id                                    Int      @id @default(autoincrement())
+  equipment_profit_equipment_type       String   @db.VarChar(20) // 'machinery' | 'vehicle'
+  equipment_profit_equipment_id         Int
+  equipment_profit_commission_percentage Decimal  @default(100) @db.Decimal(5, 2)
+  created_at                            DateTime @default(now())
+  updated_at                            DateTime @default(now()) @updatedAt
+
+  @@unique([equipment_profit_equipment_type, equipment_profit_equipment_id])
+  @@map("equipment_profit_settings")
 }

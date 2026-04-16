@@ -62,6 +62,7 @@ import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays.module';
 import { HealthModule } from './health/health.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { EquipmentProfitModule } from './equipment-profit/equipment-profit.module';
 
 @Module({
   imports: [
@@ -149,6 +150,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
     RecycleBinModule,
     HealthModule,
     SystemSettingsModule,
+    EquipmentProfitModule,
   ],
   providers: [
     {

@@ -112,6 +112,7 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/profit-loss', label: '工程損益總覽', icon: '📊', pageKey: 'profit-loss' },
       { href: '/company-profit-loss', label: '公司損益表', icon: '📈', pageKey: 'company-profit-loss' },
+      { href: '/equipment-profit', label: '機械收支', icon: '🔧', pageKey: 'equipment-profit' },
     ],
   },
   {
