@@ -13,6 +13,7 @@ import ColumnFilter from '@/components/ColumnFilter';
 import { STATUS_OPTIONS, STATUS_COLORS, getStatusLabel, getEquipmentSource } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
+import MissingPriceTab from './MissingPriceTab';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
@@ -1089,9 +1090,11 @@ export default function WorkLogsPage() {
     work_content: 'work_content',
   };
 
+  const [activeTab, setActiveTab] = useState<'records' | 'missing-price'>('records');
+
   return (
     <div className="flex flex-col h-full bg-gray-50 -m-4 sm:-m-6">
-      {/* ── Page Header ────────────────────────────────────────────── */}
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 gap-2">
         <div className="shrink-0">
           <h1 className="text-lg sm:text-xl font-bold text-gray-900">工作記錄</h1>
@@ -1172,8 +1175,43 @@ export default function WorkLogsPage() {
         </div>
       </div>
 
-      {/* ── Batch Edit Dialog ──────────────────────────────────── */}
-      <BatchEditDialog
+      {/* ── Tab Bar ──────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-gray-200 shrink-0">
+        <div className="flex px-4 sm:px-6">
+          <button
+            onClick={() => setActiveTab('records')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'records'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            工作記錄
+          </button>
+          <button
+            onClick={() => setActiveTab('missing-price')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'missing-price'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            缺單價
+          </button>
+        </div>
+      </div>
+
+      {/* ── Tab Content: Missing Price ────────────────────────────── */}
+      {activeTab === 'missing-price' && (
+        <div className="flex-1 overflow-hidden">
+          <MissingPriceTab />
+        </div>
+      )}
+
+      {/* ── Tab Content: Work Records (existing content) ────────── */}
+      {activeTab === 'records' && (<>
+
+      {/* ── Batch Edit Dialog ────────────────────────────────────── */}     <BatchEditDialog
         open={batchEditOpen}
         onClose={() => setBatchEditOpen(false)}
         selectedRows={rows.filter(r => selected.has(r.id))}
@@ -2115,6 +2153,9 @@ export default function WorkLogsPage() {
           ))}
         </div>
       )}
+
+      {/* End of records tab */}
+      </>)}
     </div>
   );
 }

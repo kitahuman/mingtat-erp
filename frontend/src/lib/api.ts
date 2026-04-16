@@ -374,6 +374,10 @@ export const workLogsApi = {
     api.post(`/work-logs/${id}/confirm-location`),
   filterOptions: (column: string) =>
     api.get(`/work-logs/filter-options/${column}`),
+  unmatchedCombinations: (params?: Record<string, string | number | undefined>) =>
+    api.get('/work-logs/unmatched-combinations', { params }),
+  addRateAndRematch: (data: Record<string, unknown>) =>
+    api.post('/work-logs/add-rate-and-rematch', data),
 };
 
 // CSV Import (CSV 匯入)

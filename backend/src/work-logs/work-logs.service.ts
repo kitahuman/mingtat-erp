@@ -3,6 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
+import {
+  UnmatchedCombinationsQueryDto,
+  AddRateAndRematchDto,
+  UnmatchedCombinationRow,
+  UnmatchedCombinationsResult,
+} from './dto/unmatched-combinations.dto';
 
 // 車輛類機種
 const VEHICLE_TYPES = [
@@ -928,6 +934,225 @@ export class WorkLogsService {
       data: { is_location_new: false },
     });
     return { success: true };
+  }
+
+  // ── 缺單價組合 ─────────────────────────────────────────────
+
+  async getUnmatchedCombinations(
+    query: UnmatchedCombinationsQueryDto,
+  ): Promise<UnmatchedCombinationsResult> {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 50;
+
+    // Build WHERE conditions for filtering
+    const conditions: string[] = [
+      `wl.deleted_at IS NULL`,
+      `wl.price_match_status = 'unmatched'`,
+    ];
+    const params: (string | number)[] = [];
+    let paramIdx = 1;
+
+    if (query.company_id) {
+      conditions.push(`COALESCE(wl.company_id, wl.company_profile_id) = $${paramIdx++}`);
+      params.push(Number(query.company_id));
+    }
+    if (query.client_id) {
+      conditions.push(`wl.client_id = $${paramIdx++}`);
+      params.push(Number(query.client_id));
+    }
+    if (query.client_contract_no) {
+      conditions.push(`wl.client_contract_no = $${paramIdx++}`);
+      params.push(query.client_contract_no);
+    }
+    if (query.service_type) {
+      conditions.push(`wl.service_type = $${paramIdx++}`);
+      params.push(query.service_type);
+    }
+    if (query.quotation_id) {
+      conditions.push(`wl.quotation_id = $${paramIdx++}`);
+      params.push(Number(query.quotation_id));
+    }
+    if (query.day_night) {
+      conditions.push(`wl.day_night = $${paramIdx++}`);
+      params.push(query.day_night);
+    }
+    if (query.tonnage) {
+      conditions.push(`wl.tonnage = $${paramIdx++}`);
+      params.push(query.tonnage);
+    }
+    if (query.machine_type) {
+      conditions.push(`wl.machine_type = $${paramIdx++}`);
+      params.push(query.machine_type);
+    }
+    if (query.start_location) {
+      conditions.push(`wl.start_location = $${paramIdx++}`);
+      params.push(query.start_location);
+    }
+    if (query.end_location) {
+      conditions.push(`wl.end_location = $${paramIdx++}`);
+      params.push(query.end_location);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Allowed sort columns
+    const allowedSorts: Record<string, string> = {
+      company_name: 'company_name',
+      client_name: 'client_name',
+      client_contract_no: 'client_contract_no',
+      service_type: 'service_type',
+      quotation_no: 'quotation_no',
+      day_night: 'day_night',
+      tonnage: 'tonnage',
+      machine_type: 'machine_type',
+      start_location: 'start_location',
+      end_location: 'end_location',
+      count: 'count',
+    };
+    const sortCol = allowedSorts[query.sort_by || ''] || 'count';
+    const sortDir = query.sort_order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const groupByCols = `
+      COALESCE(wl.company_id, wl.company_profile_id),
+      wl.client_id,
+      wl.client_contract_no,
+      wl.service_type,
+      wl.quotation_id,
+      wl.day_night,
+      wl.tonnage,
+      wl.machine_type,
+      wl.start_location,
+      wl.end_location`;
+
+    const selectCols = `
+      COALESCE(wl.company_id, wl.company_profile_id) AS company_id,
+      MAX(COALESCE(co.name, cp.name)) AS company_name,
+      wl.client_id,
+      MAX(cl.name) AS client_name,
+      wl.client_contract_no,
+      wl.service_type,
+      wl.quotation_id,
+      MAX(q.quotation_no) AS quotation_no,
+      wl.day_night,
+      wl.tonnage,
+      wl.machine_type,
+      wl.start_location,
+      wl.end_location,
+      COUNT(*)::int AS count`;
+
+    const fromClause = `
+      FROM work_logs wl
+      LEFT JOIN companies co ON co.id = wl.company_id
+      LEFT JOIN companies cp ON cp.id = wl.company_profile_id
+      LEFT JOIN partners cl ON cl.id = wl.client_id
+      LEFT JOIN quotations q ON q.id = wl.quotation_id`;
+
+    // Count total distinct combinations
+    const countSql = `SELECT COUNT(*) AS total FROM (SELECT 1 ${fromClause} WHERE ${whereClause} GROUP BY ${groupByCols}) sub`;
+    const countResult = await this.prisma.$queryRawUnsafe<{ total: number }[]>(countSql, ...params);
+    const total = Number(countResult[0]?.total || 0);
+
+    // Count total unmatched work_logs
+    const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND wl.price_match_status = 'unmatched'`;
+    const unmatchedResult = await this.prisma.$queryRawUnsafe<{ cnt: number }[]>(unmatchedCountSql);
+    const totalUnmatched = Number(unmatchedResult[0]?.cnt || 0);
+
+    // Main query with pagination
+    const offset = (page - 1) * limit;
+    const dataSql = `SELECT ${selectCols} ${fromClause} WHERE ${whereClause} GROUP BY ${groupByCols} ORDER BY ${sortCol} ${sortDir} NULLS LAST LIMIT ${limit} OFFSET ${offset}`;
+    const rawRows = await this.prisma.$queryRawUnsafe<Record<string, unknown>[]>(dataSql, ...params);
+
+    const data: UnmatchedCombinationRow[] = rawRows.map((r) => ({
+      company_id: r.company_id != null ? Number(r.company_id) : null,
+      company_name: (r.company_name as string) || null,
+      client_id: r.client_id != null ? Number(r.client_id) : null,
+      client_name: (r.client_name as string) || null,
+      client_contract_no: (r.client_contract_no as string) || null,
+      service_type: (r.service_type as string) || null,
+      quotation_id: r.quotation_id != null ? Number(r.quotation_id) : null,
+      quotation_no: (r.quotation_no as string) || null,
+      day_night: (r.day_night as string) || null,
+      tonnage: (r.tonnage as string) || null,
+      machine_type: (r.machine_type as string) || null,
+      start_location: (r.start_location as string) || null,
+      end_location: (r.end_location as string) || null,
+      count: Number(r.count),
+    }));
+
+    return {
+      data,
+      total,
+      totalUnmatched,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async addRateAndRematch(dto: AddRateAndRematchDto): Promise<{
+    rateCard: { id: number };
+    rematchedCount: number;
+  }> {
+    // 1. Create fleet_rate_card
+    const rateCardData: Record<string, unknown> = {
+      client_id: dto.client_id || undefined,
+      company_id: dto.company_id || undefined,
+      client_contract_no: dto.client_contract_no || undefined,
+      service_type: dto.service_type || undefined,
+      source_quotation_id: dto.quotation_id || undefined,
+      day_night: dto.day_night || undefined,
+      tonnage: dto.tonnage || undefined,
+      machine_type: dto.machine_type || undefined,
+      origin: dto.start_location || undefined,
+      destination: dto.end_location || undefined,
+      rate: dto.rate,
+      unit: dto.unit || '日',
+      effective_date: dto.effective_date ? new Date(dto.effective_date) : new Date(),
+      status: 'active',
+    };
+
+    // Remove undefined keys
+    const cleanData: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rateCardData)) {
+      if (v !== undefined) cleanData[k] = v;
+    }
+
+    const saved = await this.prisma.fleetRateCard.create({ data: cleanData as never });
+
+    // 2. Find affected unmatched work_logs with matching conditions
+    const where: Record<string, unknown> = {
+      deleted_at: null,
+      price_match_status: 'unmatched',
+    };
+    if (dto.client_id) where.client_id = dto.client_id;
+    if (dto.company_id) {
+      where.OR = [
+        { company_id: dto.company_id },
+        { company_profile_id: dto.company_id },
+      ];
+    }
+    if (dto.client_contract_no) where.client_contract_no = dto.client_contract_no;
+    if (dto.service_type) where.service_type = dto.service_type;
+    if (dto.quotation_id) where.quotation_id = dto.quotation_id;
+    if (dto.day_night) where.day_night = dto.day_night;
+    if (dto.tonnage) where.tonnage = dto.tonnage;
+    if (dto.machine_type) where.machine_type = dto.machine_type;
+    if (dto.start_location) where.start_location = dto.start_location;
+    if (dto.end_location) where.end_location = dto.end_location;
+
+    const affectedLogs = await this.prisma.workLog.findMany({
+      where: where as never,
+      include: { company: true, client: true },
+    });
+
+    // 3. Re-match each affected work_log
+    let rematchedCount = 0;
+    for (const log of affectedLogs) {
+      await this.matchAndSavePrice(log);
+      rematchedCount++;
+    }
+
+    return { rateCard: { id: saved.id }, rematchedCount };
   }
 
   // ── 輔助方法 ─────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { WorkLogsService } from './work-logs.service';
 import { CreateWorkLogDto, UpdateWorkLogDto } from './dto/create-work-log.dto';
+import { UnmatchedCombinationsQueryDto, AddRateAndRematchDto } from './dto/unmatched-combinations.dto';
 
 @Controller('work-logs')
 @UseGuards(AuthGuard('jwt'))
@@ -37,6 +38,18 @@ export class WorkLogsController {
   @Get('filter-options/:column')
   getFilterOptions(@Param('column') column: string) {
     return this.service.getFilterOptions(column);
+  }
+
+  // ── 缺單價組合 ─────────────────────────────────────────────
+
+  @Get('unmatched-combinations')
+  getUnmatchedCombinations(@Query() query: UnmatchedCombinationsQueryDto) {
+    return this.service.getUnmatchedCombinations(query);
+  }
+
+  @Post('add-rate-and-rematch')
+  addRateAndRematch(@Body() dto: AddRateAndRematchDto) {
+    return this.service.addRateAndRematch(dto);
   }
 
   @Get(':id')
