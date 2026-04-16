@@ -2,19 +2,35 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Param,
   Body,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { BankReconciliationService } from './bank-reconciliation.service';
+import { PdfParserService } from './pdf-parser.service';
+
+const UPLOAD_DIR = join(process.cwd(), 'uploads', 'bank-statements');
+if (!existsSync(UPLOAD_DIR)) {
+  mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 @Controller('bank-reconciliation')
 @UseGuards(AuthGuard('jwt'))
 export class BankReconciliationController {
-  constructor(private readonly service: BankReconciliationService) {}
+  constructor(
+    private readonly service: BankReconciliationService,
+    private readonly pdfParser: PdfParserService,
+  ) {}
 
   @Get('transactions')
   findTransactions(
@@ -41,6 +57,44 @@ export class BankReconciliationController {
     @Body('rows') rows: any[],
   ) {
     return this.service.importTransactions(+bankAccountId, rows);
+  }
+
+  /**
+   * Upload a PDF bank statement and parse it using AI vision.
+   * Returns parsed transactions for preview before importing.
+   */
+  @Post('parse-pdf')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: UPLOAD_DIR,
+      filename: (_req, file, cb) => {
+        cb(null, `${uuidv4()}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === 'application/pdf' || extname(file.originalname).toLowerCase() === '.pdf') {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException('只接受 PDF 文件') as any, false);
+      }
+    },
+  }))
+  async parsePdf(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('請上傳 PDF 文件');
+    }
+    try {
+      const result = await this.pdfParser.parsePdf(file.path);
+      return result;
+    } finally {
+      // Clean up uploaded PDF after parsing
+      try {
+        if (existsSync(file.path)) {
+          unlinkSync(file.path);
+        }
+      } catch {}
+    }
   }
 
   @Get('summary/:bankAccountId')

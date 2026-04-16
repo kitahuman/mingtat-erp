@@ -125,7 +125,26 @@ export class BankReconciliationService {
     return results;
   }
 
+  /**
+   * Auto-match logic:
+   *
+   * REQUIRED conditions: company (via BankAccount.company_id) + date range (+/- 3 days) + amount
+   * OPTIONAL conditions (boost confidence): reference_no / cheque_no
+   *
+   * Priority order:
+   * 1. Same bank account + reference_no + amount + date range  (highest confidence)
+   * 2. Same company + reference_no + amount + date range
+   * 3. Same bank account + amount + date range (no ref no, unique match only)
+   * 4. Same company + amount + date range (no ref no, unique match only)
+   */
   async autoMatch(bankAccountId: number, batchId?: string) {
+    // Get the bank account to find its company_id
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: { id: true, company_id: true },
+    });
+    const companyId = bankAccount?.company_id ?? null;
+
     const where: Prisma.BankTransactionWhereInput = {
       bank_account_id: bankAccountId,
       match_status: 'unmatched',
@@ -139,100 +158,148 @@ export class BankReconciliationService {
       const txAmount = tx.amount.abs();
       const isCredit = tx.amount.greaterThanOrEqualTo(0);
 
-      // Rule 1: Exact Reference No Match (限制同銀行帳戶)
-      if (tx.reference_no) {
-        if (isCredit) {
-          const match = await this.prisma.paymentIn.findFirst({
-            where: {
-              reference_no: tx.reference_no,
-              amount: txAmount,
-              bank_account_id: bankAccountId,
-            },
-          });
-          if (match) {
-            await this.applyMatch(tx.id, 'payment_in', match.id);
-            matchedCount++;
-            continue;
-          }
-          const fallback = await this.prisma.paymentIn.findFirst({
-            where: { reference_no: tx.reference_no, amount: txAmount },
-          });
-          if (fallback) {
-            await this.applyMatch(tx.id, 'payment_in', fallback.id);
-            matchedCount++;
-            continue;
-          }
-        } else {
-          const match = await this.prisma.paymentOut.findFirst({
-            where: {
-              reference_no: tx.reference_no,
-              amount: txAmount,
-              bank_account_id: bankAccountId,
-            },
-          });
-          if (match) {
-            await this.applyMatch(tx.id, 'payment_out', match.id);
-            matchedCount++;
-            continue;
-          }
-          const fallback = await this.prisma.paymentOut.findFirst({
-            where: { reference_no: tx.reference_no, amount: txAmount },
-          });
-          if (fallback) {
-            await this.applyMatch(tx.id, 'payment_out', fallback.id);
-            matchedCount++;
-            continue;
-          }
-        }
-      }
-
-      // Rule 2: Amount + Date Range (+/- 3 days)
+      // Date range: +/- 3 days
       const dateFrom = new Date(tx.date);
       dateFrom.setDate(dateFrom.getDate() - 3);
       const dateTo = new Date(tx.date);
       dateTo.setDate(dateTo.getDate() + 3);
 
+      let matched = false;
+
       if (isCredit) {
-        let matches = await this.prisma.paymentIn.findMany({
-          where: {
-            amount: txAmount,
-            date: { gte: dateFrom, lte: dateTo },
-            bank_account_id: bankAccountId,
-          },
-        });
-        if (matches.length === 1) {
-          await this.applyMatch(tx.id, 'payment_in', matches[0].id);
-          matchedCount++;
-          continue;
-        }
-        if (matches.length === 0) {
-          matches = await this.prisma.paymentIn.findMany({
-            where: { amount: txAmount, date: { gte: dateFrom, lte: dateTo } },
+        // === PaymentIn matching ===
+        // PaymentIn has bank_account_id but no direct company_id
+        // Company is inferred via project.company_id
+
+        // Priority 1: Same bank account + reference_no + amount + date range
+        if (!matched && tx.reference_no) {
+          const m = await this.prisma.paymentIn.findFirst({
+            where: {
+              bank_account_id: bankAccountId,
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
           });
-          if (matches.length === 1) {
-            await this.applyMatch(tx.id, 'payment_in', matches[0].id);
+          if (m) {
+            await this.applyMatch(tx.id, 'payment_in', m.id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 2: Same company (via project) + reference_no + amount + date range
+        if (!matched && tx.reference_no && companyId) {
+          const m = await this.prisma.paymentIn.findFirst({
+            where: {
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+              project: { company_id: companyId },
+            },
+          });
+          if (m) {
+            await this.applyMatch(tx.id, 'payment_in', m.id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 3: Same bank account + amount + date range (unique match only)
+        if (!matched) {
+          const candidates = await this.prisma.paymentIn.findMany({
+            where: {
+              bank_account_id: bankAccountId,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (candidates.length === 1) {
+            await this.applyMatch(tx.id, 'payment_in', candidates[0].id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 4: Same company (via project) + amount + date range (unique match only)
+        if (!matched && companyId) {
+          const candidates = await this.prisma.paymentIn.findMany({
+            where: {
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+              project: { company_id: companyId },
+            },
+          });
+          if (candidates.length === 1) {
+            await this.applyMatch(tx.id, 'payment_in', candidates[0].id);
             matchedCount++;
           }
         }
       } else {
-        let matches = await this.prisma.paymentOut.findMany({
-          where: {
-            amount: txAmount,
-            date: { gte: dateFrom, lte: dateTo },
-            bank_account_id: bankAccountId,
-          },
-        });
-        if (matches.length === 1) {
-          await this.applyMatch(tx.id, 'payment_out', matches[0].id);
-          matchedCount++;
-          continue;
-        }
-        if (matches.length === 0) {
-          matches = await this.prisma.paymentOut.findMany({
-            where: { amount: txAmount, date: { gte: dateFrom, lte: dateTo } },
+        // === PaymentOut matching ===
+        // PaymentOut has both bank_account_id and company_id
+
+        // Priority 1: Same bank account + reference_no + amount + date range
+        if (!matched && tx.reference_no) {
+          const m = await this.prisma.paymentOut.findFirst({
+            where: {
+              bank_account_id: bankAccountId,
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
           });
-          if (matches.length === 1) {
-            await this.applyMatch(tx.id, 'payment_out', matches[0].id);
+          if (m) {
+            await this.applyMatch(tx.id, 'payment_out', m.id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 2: Same company + reference_no + amount + date range
+        if (!matched && tx.reference_no && companyId) {
+          const m = await this.prisma.paymentOut.findFirst({
+            where: {
+              company_id: companyId,
+              reference_no: tx.reference_no,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (m) {
+            await this.applyMatch(tx.id, 'payment_out', m.id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 3: Same bank account + amount + date range (unique match only)
+        if (!matched) {
+          const candidates = await this.prisma.paymentOut.findMany({
+            where: {
+              bank_account_id: bankAccountId,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (candidates.length === 1) {
+            await this.applyMatch(tx.id, 'payment_out', candidates[0].id);
+            matchedCount++;
+            matched = true;
+          }
+        }
+
+        // Priority 4: Same company + amount + date range (unique match only)
+        if (!matched && companyId) {
+          const candidates = await this.prisma.paymentOut.findMany({
+            where: {
+              company_id: companyId,
+              amount: txAmount,
+              date: { gte: dateFrom, lte: dateTo },
+            },
+          });
+          if (candidates.length === 1) {
+            await this.applyMatch(tx.id, 'payment_out', candidates[0].id);
             matchedCount++;
           }
         }
@@ -294,55 +361,85 @@ export class BankReconciliationService {
       matched_count: txs.filter(t => t.match_status === 'matched').length,
       unmatched_count: txs.filter(t => t.match_status === 'unmatched').length,
       excluded_count: txs.filter(t => t.match_status === 'excluded').length,
-      total_withdrawals: txs.filter(t => t.amount.lessThan(0)).reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
-      total_deposits: txs.filter(t => t.amount.greaterThanOrEqualTo(0)).reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0)),
-      matched_amount: txs.filter(t => t.match_status === 'matched').reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
-      unmatched_amount: txs.filter(t => t.match_status === 'unmatched').reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
+      total_withdrawals: txs
+        .filter(t => t.amount.lessThan(0))
+        .reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
+      total_deposits: txs
+        .filter(t => t.amount.greaterThanOrEqualTo(0))
+        .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0)),
+      matched_amount: txs
+        .filter(t => t.match_status === 'matched')
+        .reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
+      unmatched_amount: txs
+        .filter(t => t.match_status === 'unmatched')
+        .reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
     };
 
     return summary;
   }
 
   async findMatchCandidates(txId: number) {
-    const tx = await this.prisma.bankTransaction.findUnique({ where: { id: txId } });
+    const tx = await this.prisma.bankTransaction.findUnique({
+      where: { id: txId },
+      include: {
+        bank_account: { select: { id: true, company_id: true } },
+      },
+    });
     if (!tx) throw new NotFoundException('Transaction not found');
 
     const amount = tx.amount.abs();
     const isCredit = tx.amount.greaterThanOrEqualTo(0);
     const bankAccountId = tx.bank_account_id;
+    const companyId = (tx as any).bank_account?.company_id ?? null;
 
+    // Date range: +/- 30 days for manual matching
     const dateFrom = new Date(tx.date);
     dateFrom.setDate(dateFrom.getDate() - 30);
     const dateTo = new Date(tx.date);
     dateTo.setDate(dateTo.getDate() + 30);
 
     if (isCredit) {
-      return this.prisma.paymentIn.findMany({
+      const orConditions: any[] = [{ bank_account_id: bankAccountId }];
+      if (companyId) {
+        orConditions.push({ project: { company_id: companyId } });
+      }
+      orConditions.push({ bank_account_id: null });
+
+      const candidates = await this.prisma.paymentIn.findMany({
         where: {
           date: { gte: dateFrom, lte: dateTo },
           amount: { gte: amount.mul(0.8), lte: amount.mul(1.2) },
-          OR: [
-            { bank_account_id: bankAccountId },
-            { bank_account_id: null },
-          ],
+          OR: orConditions,
         },
         include: {
-          project: { select: { id: true, project_name: true, project_no: true } },
+          project: { select: { id: true, project_name: true, project_no: true, company_id: true } },
           contract: { select: { id: true, contract_no: true, contract_name: true } },
           bank_account: { select: { id: true, bank_name: true, account_no: true } },
         },
         orderBy: [{ date: 'desc' }],
         take: 30,
       });
+
+      // Sort: same bank account first, then same company, then others
+      return candidates.sort((a, b) => {
+        const aScore = (a.bank_account_id === bankAccountId ? 2 : 0) +
+          (companyId && (a.project as any)?.company_id === companyId ? 1 : 0);
+        const bScore = (b.bank_account_id === bankAccountId ? 2 : 0) +
+          (companyId && (b.project as any)?.company_id === companyId ? 1 : 0);
+        return bScore - aScore;
+      });
     } else {
-      return this.prisma.paymentOut.findMany({
+      const orConditions: any[] = [{ bank_account_id: bankAccountId }];
+      if (companyId) {
+        orConditions.push({ company_id: companyId });
+      }
+      orConditions.push({ bank_account_id: null });
+
+      const candidates = await this.prisma.paymentOut.findMany({
         where: {
           date: { gte: dateFrom, lte: dateTo },
           amount: { gte: amount.mul(0.8), lte: amount.mul(1.2) },
-          OR: [
-            { bank_account_id: bankAccountId },
-            { bank_account_id: null },
-          ],
+          OR: orConditions,
         },
         include: {
           expense: {
@@ -358,6 +455,15 @@ export class BankReconciliationService {
         },
         orderBy: [{ date: 'desc' }],
         take: 30,
+      });
+
+      // Sort: same bank account first, then same company, then others
+      return candidates.sort((a, b) => {
+        const aScore = (a.bank_account_id === bankAccountId ? 2 : 0) +
+          (companyId && a.company_id === companyId ? 1 : 0);
+        const bScore = (b.bank_account_id === bankAccountId ? 2 : 0) +
+          (companyId && b.company_id === companyId ? 1 : 0);
+        return bScore - aScore;
       });
     }
   }

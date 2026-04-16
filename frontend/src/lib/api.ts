@@ -650,6 +650,14 @@ export const bankAccountsApi = {
 export const bankReconciliationApi = {
   findTransactions: (params: any) => api.get('/bank-reconciliation/transactions', { params }),
   importTransactions: (bankAccountId: number, rows: any[]) => api.post(`/bank-reconciliation/import/${bankAccountId}`, { rows }),
+  parsePdf: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/bank-reconciliation/parse-pdf', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000, // 3 minutes for AI processing
+    });
+  },
   getSummary: (bankAccountId: number, params?: { date_from?: string; date_to?: string }) => api.get(`/bank-reconciliation/summary/${bankAccountId}`, { params }),
   findCandidates: (txId: number) => api.get(`/bank-reconciliation/candidates/${txId}`),
   autoMatchAll: (bankAccountId: number) => api.post(`/bank-reconciliation/auto-match/${bankAccountId}`),
