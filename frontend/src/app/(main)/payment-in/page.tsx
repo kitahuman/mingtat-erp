@@ -9,6 +9,13 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const PAYMENT_IN_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  unpaid: { label: '未收款', color: 'bg-yellow-100 text-yellow-700' },
+  partially_paid: { label: '部分收款', color: 'bg-blue-100 text-blue-700' },
+  paid: { label: '已收款', color: 'bg-green-100 text-green-700' },
+  cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
+};
+
 const SOURCE_TYPE_OPTIONS = [
   { value: 'payment_certificate', label: 'Payment Certificate' },
   { value: 'invoice', label: '發票' },
@@ -40,6 +47,7 @@ export default function PaymentInPage() {
   const [creating, setCreating] = useState(false);
 
   // Filters
+  const [statusFilter, setStatusFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [contractFilter, setContractFilter] = useState('');
@@ -61,6 +69,7 @@ export default function PaymentInPage() {
     contract_id: '',
     bank_account_id: '',
     reference_no: '',
+    payment_in_status: 'unpaid',
     remarks: '',
   };
   const [form, setForm] = useState(defaultForm);
@@ -69,6 +78,7 @@ export default function PaymentInPage() {
     setLoading(true);
     try {
       const params: any = { page, limit: 50 };
+      if (statusFilter) params.payment_in_status = statusFilter;
       if (sourceFilter) params.source_type = sourceFilter;
       if (projectFilter) params.project_id = projectFilter;
       if (contractFilter) params.contract_id = contractFilter;
@@ -208,6 +218,25 @@ export default function PaymentInPage() {
       render: (v: any) => v ? <span className="font-mono text-xs">{v}</span> : <span className="text-gray-400">-</span>,
     },
     {
+      key: 'payment_in_status',
+      label: '狀態',
+      editType: 'select',
+      editOptions: [
+        { value: 'unpaid', label: '未收款' },
+        { value: 'partially_paid', label: '部分收款' },
+        { value: 'paid', label: '已收款' },
+        { value: 'cancelled', label: '取消' },
+      ],
+      render: (v: any) => {
+        const s = PAYMENT_IN_STATUS_MAP[v] || PAYMENT_IN_STATUS_MAP.unpaid;
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
+            {s.label}
+          </span>
+        );
+      },
+    },
+    {
       key: 'remarks',
       label: '備註',
       editType: 'text',
@@ -219,6 +248,17 @@ export default function PaymentInPage() {
 
   const filters = (
     <div className="flex flex-wrap gap-2 items-center">
+      <select
+        value={statusFilter}
+        onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+      >
+        <option value="">全部狀態</option>
+        <option value="unpaid">未收款</option>
+        <option value="partially_paid">部分收款</option>
+        <option value="paid">已收款</option>
+        <option value="cancelled">取消</option>
+      </select>
       <select
         value={sourceFilter}
         onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
@@ -264,9 +304,9 @@ export default function PaymentInPage() {
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
-      {(sourceFilter || projectFilter || contractFilter || dateFrom || dateTo) && (
+      {(statusFilter || sourceFilter || projectFilter || contractFilter || dateFrom || dateTo) && (
         <button
-          onClick={() => { setSourceFilter(''); setProjectFilter(''); setContractFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+          onClick={() => { setStatusFilter(''); setSourceFilter(''); setProjectFilter(''); setContractFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
           className="text-xs text-gray-500 hover:text-red-500"
         >
           清除篩選
@@ -401,15 +441,30 @@ export default function PaymentInPage() {
               />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
-            <input
-              type="text"
-              value={form.remarks}
-              onChange={e => setForm({ ...form, remarks: e.target.value })}
-              className="input-field"
-              placeholder="選填"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+              <select
+                value={form.payment_in_status}
+                onChange={e => setForm({ ...form, payment_in_status: e.target.value })}
+                className="input-field"
+              >
+                <option value="unpaid">未收款</option>
+                <option value="partially_paid">部分收款</option>
+                <option value="paid">已收款</option>
+                <option value="cancelled">取消</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+              <input
+                type="text"
+                value={form.remarks}
+                onChange={e => setForm({ ...form, remarks: e.target.value })}
+                className="input-field"
+                placeholder="選填"
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setShowCreate(false)} className="btn-secondary">取消</button>

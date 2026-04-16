@@ -111,7 +111,7 @@ export default function ExpensesPage() {
     employee_id: '',
     item: '',
     total_amount: '',
-    is_paid: false,
+    payment_status: 'unpaid',
     payment_method: '',
     payment_date: '',
     payment_ref: '',
@@ -134,7 +134,7 @@ export default function ExpensesPage() {
         search: search || undefined,
         company_id: companyFilter || undefined,
         category_id: categoryFilter || undefined,
-        is_paid: paidFilter !== '' ? paidFilter : undefined,
+        payment_status: paidFilter !== '' ? paidFilter : undefined,
         source: sourceFilter || undefined,
         project_id: projectFilter || undefined,
         sortBy,
@@ -206,7 +206,7 @@ export default function ExpensesPage() {
       }
       if (!payload.payment_date) delete payload.payment_date;
       if (payload.total_amount) payload.total_amount = Number(payload.total_amount);
-      payload.is_paid = Boolean(payload.is_paid);
+      // payment_status is already a string, no conversion needed
 
       await expensesApi.create(payload);
       setShowModal(false);
@@ -226,7 +226,7 @@ export default function ExpensesPage() {
       if (f in payload) payload[f] = payload[f] ? Number(payload[f]) : null;
     }
     if ('total_amount' in payload) payload.total_amount = Number(payload.total_amount) || 0;
-    if ('is_paid' in payload) payload.is_paid = Boolean(payload.is_paid);
+    // payment_status is already a string, no conversion needed
     await expensesApi.update(id, payload);
     load();
   };
@@ -320,27 +320,37 @@ export default function ExpensesPage() {
       exportRender: (v: any) => v != null ? Number(v).toFixed(2) : '',
     },
     {
-      key: 'is_paid',
-      label: '已付款',
+      key: 'payment_status',
+      label: '付款狀態',
       sortable: true,
       editable: true,
-      editRender: (value: any, onChange: (v: any) => void) => (
-        <div className="flex justify-center" onClick={e => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={e => onChange(e.target.checked)}
-            className="w-4 h-4 accent-green-600 cursor-pointer"
-          />
-        </div>
-      ),
-      render: (v: any) => (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${v ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-          {v ? '已付款' : '未付款'}
-        </span>
-      ),
-      exportRender: (v: any) => v ? '已付款' : '未付款',
-      filterRender: (v: any) => v ? '已付款' : '未付款',
+      editType: 'select',
+      editOptions: [
+        { value: 'unpaid', label: '未付款' },
+        { value: 'partially_paid', label: '部分付款' },
+        { value: 'paid', label: '已付款' },
+        { value: 'cancelled', label: '取消' },
+      ],
+      render: (v: any) => {
+        const statusMap: Record<string, { label: string; color: string }> = {
+          unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
+          partially_paid: { label: '部分付款', color: 'bg-blue-100 text-blue-700' },
+          paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
+          cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
+        };
+        // Backward compat: if v is boolean (old is_paid), convert
+        const key = typeof v === 'boolean' ? (v ? 'paid' : 'unpaid') : (v || 'unpaid');
+        const s = statusMap[key] || statusMap.unpaid;
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
+            {s.label}
+          </span>
+        );
+      },
+      exportRender: (v: any) => {
+        const map: Record<string, string> = { unpaid: '未付款', partially_paid: '部分付款', paid: '已付款', cancelled: '取消' };
+        return map[v] || (v ? '已付款' : '未付款');
+      },
     },
     {
       key: 'payment_method',
@@ -538,8 +548,10 @@ export default function ExpensesPage() {
               </select>
               <select value={paidFilter} onChange={e => { setPaidFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部狀態</option>
-                <option value="true">已付款</option>
-                <option value="false">未付款</option>
+                <option value="unpaid">未付款</option>
+                <option value="partially_paid">部分付款</option>
+                <option value="paid">已付款</option>
+                <option value="cancelled">取消</option>
               </select>
               <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} className="input-field w-auto">
                 <option value="">全部來源</option>
@@ -635,10 +647,19 @@ export default function ExpensesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">總金額</label>
               <input type="number" step="0.01" value={form.total_amount} onChange={e => setForm({ ...form, total_amount: e.target.value })} className="input-field" />
             </div>
-            {/* Is Paid */}
-            <div className="flex items-center gap-3 pt-6">
-              <input type="checkbox" id="create-is-paid" checked={form.is_paid} onChange={e => setForm({ ...form, is_paid: e.target.checked })} className="w-4 h-4 accent-green-600 cursor-pointer" />
-              <label htmlFor="create-is-paid" className="text-sm font-medium text-gray-700 cursor-pointer">已付款</label>
+            {/* Payment Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">付款狀態</label>
+              <select
+                value={form.payment_status}
+                onChange={e => setForm({ ...form, payment_status: e.target.value })}
+                className="input-field"
+              >
+                <option value="unpaid">未付款</option>
+                <option value="partially_paid">部分付款</option>
+                <option value="paid">已付款</option>
+                <option value="cancelled">取消</option>
+              </select>
             </div>
             {/* Payment Method */}
             <div>

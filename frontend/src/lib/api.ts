@@ -937,3 +937,10 @@ export const acceptanceReportsApi = {
   byProject: (projectId: number, params?: any) => api.get(`/acceptance-reports/by-project/${projectId}`, { params }),
   exportPdf: (id: number) => api.get(`/acceptance-reports/${id}/pdf`, { responseType: 'blob' }),
 };
+
+// System Settings (系統設定)
+export const systemSettingsApi = {
+  getAll: () => api.get('/system-settings'),
+  setMany: (settings: { key: string; value: string; description?: string }[]) =>
+    api.put('/system-settings', { settings }),
+};

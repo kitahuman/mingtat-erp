@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BankReconciliationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private systemSettings: SystemSettingsService,
+  ) {}
 
   async findTransactions(params: {
     bank_account_id: number;
@@ -158,11 +162,12 @@ export class BankReconciliationService {
       const txAmount = tx.amount.abs();
       const isCredit = tx.amount.greaterThanOrEqualTo(0);
 
-      // Date range: +/- 3 days
+      // Date range: +/- N days (configurable via system settings, default 3)
+      const toleranceDays = await this.systemSettings.getNumber('bank_reconciliation_date_tolerance', 3);
       const dateFrom = new Date(tx.date);
-      dateFrom.setDate(dateFrom.getDate() - 3);
+      dateFrom.setDate(dateFrom.getDate() - toleranceDays);
       const dateTo = new Date(tx.date);
-      dateTo.setDate(dateTo.getDate() + 3);
+      dateTo.setDate(dateTo.getDate() + toleranceDays);
 
       let matched = false;
 

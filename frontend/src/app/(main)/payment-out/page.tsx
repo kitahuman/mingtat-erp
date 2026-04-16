@@ -12,8 +12,9 @@ const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFra
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
+  partially_paid: { label: '部分付款', color: 'bg-blue-100 text-blue-700' },
   paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
-  cancelled: { label: '已取消', color: 'bg-red-100 text-red-700' },
+  cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
 };
 
 export default function PaymentOutPage() {
@@ -210,8 +211,9 @@ export default function PaymentOutPage() {
       editType: 'select',
       editOptions: [
         { value: 'unpaid', label: '未付款' },
+        { value: 'partially_paid', label: '部分付款' },
         { value: 'paid', label: '已付款' },
-        { value: 'cancelled', label: '已取消' },
+        { value: 'cancelled', label: '取消' },
       ],
       render: (v: any) => {
         const s = STATUS_MAP[v] || STATUS_MAP.unpaid;
@@ -268,8 +270,9 @@ export default function PaymentOutPage() {
       >
         <option value="">全部狀態</option>
         <option value="unpaid">未付款</option>
+        <option value="partially_paid">部分付款</option>
         <option value="paid">已付款</option>
-        <option value="cancelled">已取消</option>
+        <option value="cancelled">取消</option>
       </select>
       <div className="flex items-center gap-1 text-sm">
         <input
@@ -409,8 +412,9 @@ export default function PaymentOutPage() {
                 className="input-field"
               >
                 <option value="unpaid">未付款</option>
+                <option value="partially_paid">部分付款</option>
                 <option value="paid">已付款</option>
-                <option value="cancelled">已取消</option>
+                <option value="cancelled">取消</option>
               </select>
             </div>
             <div>

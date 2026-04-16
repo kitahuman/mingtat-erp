@@ -1456,6 +1456,7 @@ model Expense {
   item                String?
   total_amount        Decimal   @default(0) @db.Decimal(12, 2)
   is_paid             Boolean   @default(false)
+  payment_status      String    @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
   payment_method      String?
   payment_date        DateTime? @db.Date
   payment_ref         String?
@@ -1664,18 +1665,19 @@ model PaymentMaterial {
 // ══════════════════════════════════════════════════════════════
 
 model PaymentIn {
-  id              Int      @id @default(autoincrement())
-  date            DateTime @db.Date
-  amount          Decimal  @db.Decimal(14, 2)
-  source_type     String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
-  source_ref_id   Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
-  project_id      Int?
-  contract_id     Int?
-  bank_account_id Int?     // 關聯銀行帳戶
-  reference_no    String?  @db.VarChar(100) // 支票號碼 / 交易號碼
-  remarks         String?  @db.Text
-  created_at      DateTime @default(now())
-  updated_at      DateTime @default(now()) @updatedAt
+  id                   Int      @id @default(autoincrement())
+  date                 DateTime @db.Date
+  amount               Decimal  @db.Decimal(14, 2)
+  source_type          String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
+  source_ref_id        Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
+  project_id           Int?
+  contract_id          Int?
+  bank_account_id      Int?     // 關聯銀行帳戶
+  reference_no         String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  payment_in_status    String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
+  remarks              String?  @db.Text
+  created_at           DateTime @default(now())
+  updated_at           DateTime @default(now()) @updatedAt
 
   project      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
   contract     Contract?    @relation(fields: [contract_id], references: [id], onDelete: SetNull)
@@ -1696,7 +1698,7 @@ model PaymentOut {
   payroll_id              Int?     // 關聯糧單（從糧單建立時設定）
   company_id              Int?     // 所屬公司（自動從糧單或支出帶入）
   payment_out_description String?  @db.VarChar(255) // 付款項目描述，例如「2026年4月 張三的糧單」
-  payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | paid | cancelled
+  payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
   bank_account_id         Int?     // 關聯銀行帳戶
   reference_no            String?  @db.VarChar(100) // 支票號碼 / 交易號碼
   remarks                 String?  @db.Text
@@ -2453,4 +2455,17 @@ model AttendanceAnomaly {
   @@index([anomaly_employee_id])
   @@index([anomaly_is_resolved])
   @@map("attendance_anomalies")
+}
+
+// ══════════════════════════════════════════════════════════════
+// System Settings (系統設定)
+// ══════════════════════════════════════════════════════════════
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique @db.VarChar(100)
+  value       String   @db.Text
+  description String?  @db.VarChar(255)
+  updated_at  DateTime @default(now()) @updatedAt
+
+  @@map("system_settings")
 }

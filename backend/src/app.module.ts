@@ -61,6 +61,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays.module';
 import { HealthModule } from './health/health.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
 
 @Module({
   imports: [
@@ -147,6 +148,7 @@ import { HealthModule } from './health/health.module';
     StatutoryHolidaysModule,
     RecycleBinModule,
     HealthModule,
+    SystemSettingsModule,
   ],
   providers: [
     {
