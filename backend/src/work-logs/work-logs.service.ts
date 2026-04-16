@@ -1106,6 +1106,8 @@ export class WorkLogsService {
       origin: dto.start_location || undefined,
       destination: dto.end_location || undefined,
       rate: dto.rate,
+      ot_rate: dto.ot_rate ?? 0,
+      mid_shift_rate: dto.mid_shift_rate ?? 0,
       unit: dto.unit || '日',
       effective_date: dto.effective_date ? new Date(dto.effective_date) : new Date(),
       status: 'active',

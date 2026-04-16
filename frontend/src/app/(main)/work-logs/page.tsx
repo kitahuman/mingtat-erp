@@ -1196,7 +1196,7 @@ export default function WorkLogsPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            缺單價
+            客戶價目缺價表
           </button>
         </div>
       </div>

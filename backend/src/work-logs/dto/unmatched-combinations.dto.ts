@@ -35,6 +35,8 @@ export class AddRateAndRematchDto {
   @IsOptional() @IsString() end_location?: string | null;
 
   @Type(() => Number) @IsNumber() rate!: number;
+  @IsOptional() @Type(() => Number) @IsNumber() ot_rate?: number | null;
+  @IsOptional() @Type(() => Number) @IsNumber() mid_shift_rate?: number | null;
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsString() effective_date?: string;
 }
