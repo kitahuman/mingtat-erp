@@ -683,7 +683,7 @@ export class PaymentApplicationsService {
         source_ref_id: paId,
         contract_id: contractId,
         project_id: pa.project_id || null,
-        bank_account: dto.bank_account || null,
+        bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
         remarks: `IPA #${pa.pa_no} 收款`,
       },

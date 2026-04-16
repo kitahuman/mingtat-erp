@@ -2087,7 +2087,7 @@ export class PayrollService {
       payroll_payment_date: string;
       payroll_payment_amount: number;
       payroll_payment_reference_no?: string;
-      payroll_payment_bank_account?: string;
+      payroll_payment_bank_account?: number | null;
       payroll_payment_remarks?: string;
       payroll_payment_payment_out_id?: number;
     },
@@ -2119,7 +2119,7 @@ export class PayrollService {
         data: {
           date: new Date(body.payroll_payment_date),
           amount: body.payroll_payment_amount,
-          bank_account: body.payroll_payment_bank_account || null,
+          bank_account_id: body.payroll_payment_bank_account || null,
           reference_no: body.payroll_payment_reference_no || null,
           payment_out_description: baseRemarks,
           payment_out_status: 'paid',
@@ -2136,7 +2136,7 @@ export class PayrollService {
           payroll_payment_date: new Date(body.payroll_payment_date),
           payroll_payment_amount: body.payroll_payment_amount,
           payroll_payment_reference_no: body.payroll_payment_reference_no || null,
-          payroll_payment_bank_account: body.payroll_payment_bank_account || null,
+          payroll_payment_bank_account: body.payroll_payment_bank_account ? String(body.payroll_payment_bank_account) : null,
           payroll_payment_remarks: body.payroll_payment_remarks || null,
           payroll_payment_payment_out_id: paymentOut.id,
         },

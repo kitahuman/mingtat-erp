@@ -567,7 +567,7 @@ export class InvoicesService {
     dto: {
       date: string;
       amount: number;
-      bank_account?: string;
+      bank_account_id?: number | null;
       reference_no?: string;
       remarks?: string;
     },
@@ -591,7 +591,7 @@ export class InvoicesService {
         source_type: 'invoice',
         source_ref_id: invoiceId,
         project_id: invoice.project_id || null,
-        bank_account: dto.bank_account || null,
+        bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
         remarks: dto.remarks || `發票 ${invoice.invoice_no} 收款`,
       },
