@@ -142,6 +142,8 @@ export class ConfirmationService {
             { wa_item_driver_nickname: { contains: params.search, mode: 'insensitive' } },
             { wa_item_customer: { contains: params.search, mode: 'insensitive' } },
             { wa_item_contract_no: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_location: { contains: params.search, mode: 'insensitive' } },
+            { wa_item_remarks: { contains: params.search, mode: 'insensitive' } },
           ];
         }
         return this.prisma.verificationWaOrderItem.findMany({
