@@ -17,7 +17,7 @@ export class CompanyProfitLossService {
   // Company P&L Report
   // ═══════════════════════════════════════════════════════════
   async getCompanyProfitLoss(params: {
-    period?: string;       // month | quarter | year
+    period?: string;       // month | quarter | year | financial_year | fy_quarter
     year?: number;
     month?: number;
     quarter?: number;
@@ -34,6 +34,9 @@ export class CompanyProfitLossService {
     // ─── Costs ──────────────────────────────────────────────
     const costs = await this.calcCosts(dateFrom, dateTo, company_id);
 
+    // ─── Payroll costs (direct from payroll, not yet in expenses) ───
+    const payrollCosts = await this.calcPayrollCosts(dateFrom, dateTo, company_id);
+
     // ─── P&L Calculation ────────────────────────────────────
     const totalRevenue = revenue.total_revenue;
     const directCostTotal = costs.direct_cost_total;
@@ -49,6 +52,7 @@ export class CompanyProfitLossService {
       period: { period, year, month, quarter, date_from: dateFrom, date_to: dateTo },
       revenue,
       costs,
+      payroll_costs: payrollCosts,
       profit_loss: {
         gross_profit: this.round2(grossProfit),
         gross_profit_rate: this.round2(grossProfitRate),
@@ -94,6 +98,8 @@ export class CompanyProfitLossService {
 
   // ═══════════════════════════════════════════════════════════
   // Build date range from period params
+  // Supports: month | quarter | year | financial_year | fy_quarter
+  // Financial year: April to next March (e.g. year=2025 → 2025-04-01 to 2026-03-31)
   // ═══════════════════════════════════════════════════════════
   private buildDateRange(
     period?: string,
@@ -120,6 +126,34 @@ export class CompanyProfitLossService {
       const dateFrom = new Date(year, 0, 1);
       const dateTo = new Date(year, 11, 31, 23, 59, 59, 999);
       return { dateFrom, dateTo };
+    }
+
+    // Financial year: April of `year` to March of `year + 1`
+    // e.g. year=2025 → 2025-04-01 to 2026-03-31
+    if (period === 'financial_year') {
+      const dateFrom = new Date(year, 3, 1); // April 1
+      const dateTo = new Date(year + 1, 2, 31, 23, 59, 59, 999); // March 31 next year
+      return { dateFrom, dateTo };
+    }
+
+    // Financial year quarter:
+    // FQ1: Apr-Jun, FQ2: Jul-Sep, FQ3: Oct-Dec, FQ4: Jan-Mar (next year)
+    if (period === 'fy_quarter' && quarter) {
+      if (quarter >= 1 && quarter <= 3) {
+        // FQ1: Apr-Jun (month 3,4,5 → 0-indexed)
+        // FQ2: Jul-Sep (month 6,7,8)
+        // FQ3: Oct-Dec (month 9,10,11)
+        const startMonth = 3 + (quarter - 1) * 3; // FQ1=3(Apr), FQ2=6(Jul), FQ3=9(Oct)
+        const dateFrom = new Date(year, startMonth, 1);
+        const dateTo = new Date(year, startMonth + 3, 0, 23, 59, 59, 999);
+        return { dateFrom, dateTo };
+      }
+      if (quarter === 4) {
+        // FQ4: Jan-Mar of next year
+        const dateFrom = new Date(year + 1, 0, 1); // Jan 1 next year
+        const dateTo = new Date(year + 1, 2, 31, 23, 59, 59, 999); // Mar 31 next year
+        return { dateFrom, dateTo };
+      }
     }
 
     return { dateFrom: null, dateTo: null };
@@ -170,9 +204,10 @@ export class CompanyProfitLossService {
       }
     }
 
-    // 2. Invoice revenue
+    // 2. Invoice revenue (exclude soft-deleted)
     const invoiceWhere: any = {
       status: { notIn: ['void', 'draft'] },
+      deleted_at: null,
     };
     if (companyId) invoiceWhere.company_id = companyId;
     if (dateFrom || dateTo) {
@@ -239,9 +274,10 @@ export class CompanyProfitLossService {
     if (dateFrom) dateFilter.gte = dateFrom;
     if (dateTo) dateFilter.lte = dateTo;
 
-    // All expenses with project (project costs)
+    // All expenses with project (project costs) — exclude soft-deleted
     const projectExpenseWhere: any = {
       project_id: { not: null },
+      deleted_at: null,
     };
     if (companyId) projectExpenseWhere.company_id = companyId;
     if (dateFrom || dateTo) projectExpenseWhere.date = dateFilter;
@@ -272,9 +308,10 @@ export class CompanyProfitLossService {
       }
     }
 
-    // Operating expenses (project_id is null = company overhead)
+    // Operating expenses (project_id is null = company overhead) — exclude soft-deleted
     const opExpenseWhere: any = {
       project_id: null,
+      deleted_at: null,
     };
     if (companyId) opExpenseWhere.company_id = companyId;
     if (dateFrom || dateTo) opExpenseWhere.date = dateFilter;
@@ -298,10 +335,10 @@ export class CompanyProfitLossService {
 
     const totalCost = directCostTotal + indirectCostTotal + operatingExpenseTotal;
 
-    // Accounts payable
+    // Accounts payable — use company_id directly (PaymentOut has company_id, not project relation)
     const paymentOutWhere: any = {};
     if (companyId) {
-      paymentOutWhere.project = { company_id: companyId };
+      paymentOutWhere.company_id = companyId;
     }
     if (dateFrom || dateTo) {
       paymentOutWhere.date = dateFilter;
@@ -335,6 +372,60 @@ export class CompanyProfitLossService {
       total_cost: this.round2(totalCost),
       total_paid: this.round2(totalPaid),
       accounts_payable: this.round2(accountsPayable),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Payroll costs summary (for reference display)
+  // Shows how much of the expense total comes from payroll
+  // ═══════════════════════════════════════════════════════════
+  private async calcPayrollCosts(dateFrom: Date | null, dateTo: Date | null, companyId?: number) {
+    const dateFilter: any = {};
+    if (dateFrom) dateFilter.gte = dateFrom;
+    if (dateTo) dateFilter.lte = dateTo;
+
+    // Payroll-generated expenses (source = 'PAYROLL') — exclude soft-deleted
+    const payrollExpenseWhere: any = {
+      source: 'PAYROLL',
+      deleted_at: null,
+    };
+    if (companyId) payrollExpenseWhere.company_id = companyId;
+    if (dateFrom || dateTo) payrollExpenseWhere.date = dateFilter;
+
+    const payrollExpenseAgg = await this.prisma.expense.aggregate({
+      where: payrollExpenseWhere,
+      _sum: { total_amount: true },
+    });
+    const payrollExpenseTotal = this.toNum(payrollExpenseAgg._sum.total_amount);
+
+    // Count of confirmed payrolls in the period
+    const payrollWhere: any = {
+      status: { in: ['confirmed', 'paid'] },
+    };
+    if (companyId) payrollWhere.company_id = companyId;
+    if (dateFrom || dateTo) {
+      payrollWhere.date_to = dateFilter;
+    }
+    const payrollCount = await this.prisma.payroll.count({ where: payrollWhere });
+
+    // Total payroll payment out
+    const payrollPaymentOutWhere: any = {
+      payroll_id: { not: null },
+    };
+    if (companyId) payrollPaymentOutWhere.company_id = companyId;
+    if (dateFrom || dateTo) payrollPaymentOutWhere.date = dateFilter;
+
+    const payrollPaymentOutAgg = await this.prisma.paymentOut.aggregate({
+      where: payrollPaymentOutWhere,
+      _sum: { amount: true },
+    });
+    const payrollPaidTotal = this.toNum(payrollPaymentOutAgg._sum.amount);
+
+    return {
+      payroll_expense_total: this.round2(payrollExpenseTotal),
+      payroll_count: payrollCount,
+      payroll_paid_total: this.round2(payrollPaidTotal),
+      payroll_outstanding: this.round2(payrollExpenseTotal - payrollPaidTotal),
     };
   }
 }

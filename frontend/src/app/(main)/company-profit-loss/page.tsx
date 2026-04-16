@@ -25,12 +25,44 @@ const QUARTERS = [
   { value: 4, label: 'Q4 (10-12月)' },
 ];
 
+const FY_QUARTERS = [
+  { value: 1, label: 'FQ1 (4-6月)' },
+  { value: 2, label: 'FQ2 (7-9月)' },
+  { value: 3, label: 'FQ3 (10-12月)' },
+  { value: 4, label: 'FQ4 (1-3月)' },
+];
+
+/**
+ * 計算當前會計年度的起始年份
+ * 會計年度：4月至翌年3月
+ * 例如 2026年1月 → 會計年度 2025/26 → 返回 2025
+ * 例如 2026年4月 → 會計年度 2026/27 → 返回 2026
+ */
+function getCurrentFinancialYear(): number {
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-12
+  return month >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+}
+
+/**
+ * 計算當前會計季度
+ * FQ1: 4-6月, FQ2: 7-9月, FQ3: 10-12月, FQ4: 1-3月
+ */
+function getCurrentFyQuarter(): number {
+  const month = new Date().getMonth() + 1;
+  if (month >= 4 && month <= 6) return 1;
+  if (month >= 7 && month <= 9) return 2;
+  if (month >= 10 && month <= 12) return 3;
+  return 4; // Jan-Mar
+}
+
 export default function CompanyProfitLossPage() {
   const now = new Date();
-  const [period, setPeriod] = useState<string>('year');
-  const [year, setYear] = useState<number>(now.getFullYear());
+  const [period, setPeriod] = useState<string>('financial_year');
+  const [year, setYear] = useState<number>(getCurrentFinancialYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [quarter, setQuarter] = useState<number>(Math.ceil((now.getMonth() + 1) / 3));
+  const [fyQuarter, setFyQuarter] = useState<number>(getCurrentFyQuarter());
   const [companyId, setCompanyId] = useState<string>('');
   const [companies, setCompanies] = useState<any[]>([]);
   const [data, setData] = useState<any>(null);
@@ -43,7 +75,7 @@ export default function CompanyProfitLossPage() {
 
   useEffect(() => {
     loadData();
-  }, [period, year, month, quarter, companyId]);
+  }, [period, year, month, quarter, fyQuarter, companyId]);
 
   const loadData = async () => {
     try {
@@ -51,6 +83,7 @@ export default function CompanyProfitLossPage() {
       const params: any = { period, year };
       if (period === 'month') params.month = month;
       if (period === 'quarter') params.quarter = quarter;
+      if (period === 'fy_quarter') params.quarter = fyQuarter;
       if (companyId) params.company_id = companyId;
 
       const [plRes, trendRes] = await Promise.all([
@@ -73,6 +106,38 @@ export default function CompanyProfitLossPage() {
   const years: number[] = [];
   for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--) years.push(y);
 
+  // Generate financial year options
+  const fyYears: number[] = [];
+  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--) fyYears.push(y);
+
+  // When period changes, adjust the year accordingly
+  const handlePeriodChange = (newPeriod: string) => {
+    setPeriod(newPeriod);
+    if (newPeriod === 'financial_year' || newPeriod === 'fy_quarter') {
+      setYear(getCurrentFinancialYear());
+    } else {
+      setYear(now.getFullYear());
+    }
+  };
+
+  // Period display text for print header
+  const getPeriodDisplayText = () => {
+    if (period === 'month') return `${year}年${month}月`;
+    if (period === 'quarter') return `${year}年第${quarter}季`;
+    if (period === 'year') return `${year}年度`;
+    if (period === 'financial_year') return `${year}/${(year + 1).toString().slice(-2)}會計年度（${year}年4月 - ${year + 1}年3月）`;
+    if (period === 'fy_quarter') {
+      const qLabels: Record<number, string> = {
+        1: `${year}年4-6月`,
+        2: `${year}年7-9月`,
+        3: `${year}年10-12月`,
+        4: `${year + 1}年1-3月`,
+      };
+      return `${year}/${(year + 1).toString().slice(-2)}會計年度 FQ${fyQuarter}（${qLabels[fyQuarter]}）`;
+    }
+    return '';
+  };
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -84,6 +149,7 @@ export default function CompanyProfitLossPage() {
   const revenue = data?.revenue || {};
   const costs = data?.costs || {};
   const pl = data?.profit_loss || {};
+  const payrollCosts = data?.payroll_costs || {};
 
   // Trend chart calculations
   const maxTrendVal = Math.max(...trendData.map(t => Math.max(t.revenue, t.cost)), 1);
@@ -112,24 +178,38 @@ export default function CompanyProfitLossPage() {
           {/* Period selector */}
           <select
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            onChange={(e) => handlePeriodChange(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
+            <option value="financial_year">會計年度（4月-翌年3月）</option>
+            <option value="fy_quarter">會計季度</option>
             <option value="month">月度</option>
-            <option value="quarter">季度</option>
-            <option value="year">年度</option>
+            <option value="quarter">自然季度</option>
+            <option value="year">自然年度</option>
           </select>
 
-          {/* Year selector */}
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          >
-            {years.map(y => (
-              <option key={y} value={y}>{y}年</option>
-            ))}
-          </select>
+          {/* Year selector — for financial year, show FY format */}
+          {(period === 'financial_year' || period === 'fy_quarter') ? (
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              {fyYears.map(y => (
+                <option key={y} value={y}>{y}/{(y + 1).toString().slice(-2)}年度</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              {years.map(y => (
+                <option key={y} value={y}>{y}年</option>
+              ))}
+            </select>
+          )}
 
           {/* Month selector */}
           {period === 'month' && (
@@ -157,6 +237,19 @@ export default function CompanyProfitLossPage() {
             </select>
           )}
 
+          {/* Financial Year Quarter selector */}
+          {period === 'fy_quarter' && (
+            <select
+              value={fyQuarter}
+              onChange={(e) => setFyQuarter(parseInt(e.target.value))}
+              className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              {FY_QUARTERS.map(q => (
+                <option key={q.value} value={q.value}>{q.label}</option>
+              ))}
+            </select>
+          )}
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm transition-colors"
@@ -173,10 +266,18 @@ export default function CompanyProfitLossPage() {
       <div className="hidden print:block mb-6">
         <h1 className="text-xl font-bold text-center">公司損益表</h1>
         <p className="text-center text-sm text-gray-600 mt-1">
-          {period === 'month' && `${year}年${month}月`}
-          {period === 'quarter' && `${year}年第${quarter}季`}
-          {period === 'year' && `${year}年度`}
+          {getPeriodDisplayText()}
         </p>
+      </div>
+
+      {/* Period Info Banner */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 text-sm text-indigo-800 print:hidden">
+        <span className="font-medium">報表期間：</span>{getPeriodDisplayText()}
+        {data?.period?.date_from && data?.period?.date_to && (
+          <span className="ml-2 text-indigo-600">
+            （{new Date(data.period.date_from).toLocaleDateString('zh-HK')} 至 {new Date(data.period.date_to).toLocaleDateString('zh-HK')}）
+          </span>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -272,6 +373,26 @@ export default function CompanyProfitLossPage() {
           </table>
         </div>
       </div>
+
+      {/* Payroll Summary */}
+      {(payrollCosts.payroll_expense_total > 0 || payrollCosts.payroll_count > 0) && (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="px-6 py-4 border-b bg-amber-50">
+            <h2 className="text-lg font-semibold text-amber-900">糧單摘要</h2>
+            <p className="text-xs text-amber-600 mt-0.5">糧單確認後自動產生的支出已包含在上方成本明細中</p>
+          </div>
+          <div className="p-6">
+            <table className="w-full text-sm">
+              <tbody>
+                <ReportRow label="糧單數量" value={payrollCosts.payroll_count || 0} isCount />
+                <ReportRow label="糧單支出總額（已計入成本）" value={payrollCosts.payroll_expense_total || 0} />
+                <ReportRow label="已付糧單款項" value={payrollCosts.payroll_paid_total || 0} />
+                <ReportRow label="未付糧單款項" value={payrollCosts.payroll_outstanding || 0} bold highlight />
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* P&L Calculation */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -379,13 +500,14 @@ function SummaryCard({ label, value, sub, color }: {
   );
 }
 
-function ReportRow({ label, value, bold, indent, highlight, negative }: {
+function ReportRow({ label, value, bold, indent, highlight, negative, isCount }: {
   label: string;
   value: number;
   bold?: boolean;
   indent?: boolean;
   highlight?: boolean;
   negative?: boolean;
+  isCount?: boolean;
 }) {
   return (
     <tr className={highlight ? 'bg-gray-50' : ''}>
@@ -393,7 +515,7 @@ function ReportRow({ label, value, bold, indent, highlight, negative }: {
         {label}
       </td>
       <td className={`py-1.5 text-right pr-2 font-mono ${bold ? 'font-semibold' : ''} ${negative ? 'text-red-600' : ''}`}>
-        {formatMoney(value)}
+        {isCount ? value : formatMoney(value)}
       </td>
     </tr>
   );
