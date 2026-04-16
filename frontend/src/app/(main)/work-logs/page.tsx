@@ -1302,8 +1302,8 @@ export default function WorkLogsPage() {
         </div>
       </div>
 
-      {/* ── Table ────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto">
+      {/* ── Table ────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto pb-16">
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>
@@ -1798,7 +1798,7 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Bottom bar: Save + Pagination ────────────────────── */}
-      <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-[0_-2px_6px_rgba(0,0,0,0.06)]">
         <div className="flex items-center gap-3">
           {hasDirty && (
             <button onClick={handleSaveAll} disabled={saving}
