@@ -61,9 +61,14 @@ export default function BankAccountsPage() {
       editable: true,
       editType: 'select',
       editOptions: companyOptions,
-      render: (val: any) => {
-        if (!val) return <span className="text-gray-400">—</span>;
-        return <span className="text-sm">{companyMap[val] || `#${val}`}</span>;
+      render: (val: any, row: any) => {
+        // First try: use the included company relation (most reliable)
+        if (row?.company?.name) return <span className="text-sm">{row.company.name}</span>;
+        // Second try: look up by id (support both number and string)
+        if (!val && val !== 0) return <span className="text-gray-400">—</span>;
+        const name = companyMap[Number(val)] || companyMap[val];
+        if (name) return <span className="text-sm">{name}</span>;
+        return <span className="text-gray-400">—</span>;
       },
     },
     { 
