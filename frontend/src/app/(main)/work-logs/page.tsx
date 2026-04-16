@@ -1798,48 +1798,93 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Bottom bar: Save + Pagination ────────────────────── */}
-      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-[0_-2px_6px_rgba(0,0,0,0.06)]">
-        <div className="flex items-center gap-3">
-          {hasDirty && (
-            <button onClick={handleSaveAll} disabled={saving}
-              className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 font-medium">
-              {saving ? '儲存中…' : `💾 儲存 ${dirtyRows.size} 筆修改`}
-            </button>
-          )}
-          <span className="text-sm text-gray-600">每頁顯示</span>
-          <select
-            value={limit}
-            onChange={e => changeLimit(Number(e.target.value))}
-            className="px-2 py-1 text-sm border border-gray-300 rounded"
-          >
-            {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l} 筆</option>)}
-          </select>
-          <span className="text-sm text-gray-500">
-            第 {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} 筆，共 {total} 筆
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => changePage(1)} disabled={page === 1}
-            className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">«</button>
-          <button onClick={() => changePage(Math.max(1, page - 1))} disabled={page === 1}
-            className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">‹ 上一頁</button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let p: number;
-            if (totalPages <= 5)       p = i + 1;
-            else if (page <= 3)        p = i + 1;
-            else if (page >= totalPages - 2) p = totalPages - 4 + i;
-            else                       p = page - 2 + i;
-            return (
-              <button key={p} onClick={() => changePage(p)}
-                className={`px-3 py-1 text-sm border rounded ${p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}>
-                {p}
+      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 shrink-0 shadow-[0_-2px_6px_rgba(0,0,0,0.06)]">
+        {/* 手機版：單行精簡分頁欄 */}
+        <div className="flex sm:hidden items-center justify-between gap-1 px-3 py-2 overflow-hidden">
+          <div className="flex items-center gap-1 shrink-0">
+            {hasDirty && (
+              <button onClick={handleSaveAll} disabled={saving}
+                className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50 font-medium whitespace-nowrap">
+                {saving ? '儲存中…' : `💾 ${dirtyRows.size}`}
               </button>
-            );
-          })}
-          <button onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-            className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">下一頁 ›</button>
-          <button onClick={() => changePage(totalPages)} disabled={page >= totalPages}
-            className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">»</button>
+            )}
+            <select
+              value={limit}
+              onChange={e => changeLimit(Number(e.target.value))}
+              className="px-1 py-1 text-xs border border-gray-300 rounded w-16"
+            >
+              {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l}筆</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => changePage(1)} disabled={page === 1}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40">«</button>
+            <button onClick={() => changePage(Math.max(1, page - 1))} disabled={page === 1}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40">‹</button>
+            {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
+              let p: number;
+              if (totalPages <= 3)           p = i + 1;
+              else if (page <= 2)            p = i + 1;
+              else if (page >= totalPages - 1) p = totalPages - 2 + i;
+              else                           p = page - 1 + i;
+              return (
+                <button key={p} onClick={() => changePage(p)}
+                  className={`px-2 py-1 text-xs border rounded ${p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300'}`}>
+                  {p}
+                </button>
+              );
+            })}
+            <button onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40">›</button>
+            <button onClick={() => changePage(totalPages)} disabled={page >= totalPages}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40">»</button>
+          </div>
+          <span className="text-xs text-gray-400 shrink-0 whitespace-nowrap">{page}/{totalPages}</span>
+        </div>
+        {/* 桌面版：完整分頁欄 */}
+        <div className="hidden sm:flex items-center justify-between px-6 py-3">
+          <div className="flex items-center gap-3">
+            {hasDirty && (
+              <button onClick={handleSaveAll} disabled={saving}
+                className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 font-medium">
+                {saving ? '儲存中…' : `💾 儲存 ${dirtyRows.size} 筆修改`}
+              </button>
+            )}
+            <span className="text-sm text-gray-600">每頁顯示</span>
+            <select
+              value={limit}
+              onChange={e => changeLimit(Number(e.target.value))}
+              className="px-2 py-1 text-sm border border-gray-300 rounded"
+            >
+              {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l} 筆</option>)}
+            </select>
+            <span className="text-sm text-gray-500">
+              第 {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} 筆，共 {total} 筆
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => changePage(1)} disabled={page === 1}
+              className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">«</button>
+            <button onClick={() => changePage(Math.max(1, page - 1))} disabled={page === 1}
+              className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">‹ 上一頁</button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let p: number;
+              if (totalPages <= 5)       p = i + 1;
+              else if (page <= 3)        p = i + 1;
+              else if (page >= totalPages - 2) p = totalPages - 4 + i;
+              else                       p = page - 2 + i;
+              return (
+                <button key={p} onClick={() => changePage(p)}
+                  className={`px-3 py-1 text-sm border rounded ${p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}>
+                  {p}
+                </button>
+              );
+            })}
+            <button onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+              className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">下一頁 ›</button>
+            <button onClick={() => changePage(totalPages)} disabled={page >= totalPages}
+              className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50">»</button>
+          </div>
         </div>
       </div>      {/* ── Attendance Manual Picker Popup ──────────────────────────────── */}
       {attManualPicker && (
