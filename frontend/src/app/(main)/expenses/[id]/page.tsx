@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
+import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -27,10 +28,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Badge({ paid }: { paid: boolean }) {
+const PAYMENT_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
+  partially_paid: { label: '部分付款', color: 'bg-blue-100 text-blue-700' },
+  paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
+  cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
+};
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  const s = PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_MAP.unpaid;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-      {paid ? '✓ 已付款' : '○ 未付款'}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.color}`}>
+      {s.label}
     </span>
   );
 }
@@ -103,10 +112,6 @@ export default function ExpenseDetailPage() {
       employee_id: e.employee_id || '',
       item: e.item || '',
       total_amount: e.total_amount != null ? Number(e.total_amount) : '',
-      is_paid: Boolean(e.is_paid),
-      payment_method: e.payment_method || '',
-      payment_date: e.payment_date ? e.payment_date.slice(0, 10) : '',
-      payment_ref: e.payment_ref || '',
       remarks: e.remarks || '',
       machine_code: e.machine_code || '',
       machinery_id: e.machinery_id || '',
@@ -126,9 +131,7 @@ export default function ExpenseDetailPage() {
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : null;
       }
-      if (!payload.payment_date) payload.payment_date = null;
       if (payload.total_amount !== '') payload.total_amount = Number(payload.total_amount);
-      payload.is_paid = Boolean(payload.is_paid);
       await expensesApi.update(expenseId, payload);
       await loadExpense();
       setEditMode(false);
@@ -151,7 +154,6 @@ export default function ExpenseDetailPage() {
   const machineryOptions = machineryList.map((m: any) => ({ value: m.id, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` }));
   const projectOptions = projects.map((p: any) => ({ value: p.id, label: `${p.project_no} ${p.project_name || ''}`.trim() }));
   const quotationOptions = quotations.map((q: any) => ({ value: q.id, label: q.quotation_no }));
-  const paymentMethodOptions = paymentMethods.filter((m: any) => m.is_active).map((m: any) => ({ value: m.label, label: m.label }));
 
   // ── Items ──────────────────────────────────────────────────────────────────
   const calcItemAmount = (qty: string, up: string) => {
@@ -269,7 +271,7 @@ export default function ExpenseDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge paid={expense.is_paid} />
+          <PaymentStatusBadge status={expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')} />
           {editMode ? (
             <>
               <button onClick={() => { setEditMode(false); setForm(toForm(expense)); }} className="btn-secondary text-sm">取消</button>
@@ -327,25 +329,6 @@ export default function ExpenseDetailPage() {
               <label className="block text-xs font-medium text-gray-600 mb-1">總金額</label>
               <input type="number" step="0.01" value={form.total_amount} onChange={e => setForm({ ...form, total_amount: e.target.value })} className="input-field text-sm" />
             </div>
-            <div className="flex items-center gap-3 pt-5">
-              <input type="checkbox" id="edit-is-paid" checked={form.is_paid} onChange={e => setForm({ ...form, is_paid: e.target.checked })} className="w-4 h-4 accent-green-600 cursor-pointer" />
-              <label htmlFor="edit-is-paid" className="text-sm font-medium text-gray-700 cursor-pointer">已付款</label>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款方法</label>
-              <input type="text" list="edit-payment-methods" value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })} className="input-field text-sm" placeholder="選擇或輸入" />
-              <datalist id="edit-payment-methods">
-                {paymentMethodOptions.map(o => <option key={String(o.value)} value={String(o.value)} />)}
-              </datalist>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
-              <input type="date" value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款內容</label>
-              <input type="text" value={form.payment_ref} onChange={e => setForm({ ...form, payment_ref: e.target.value })} className="input-field text-sm" />
-            </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">機號</label>
               <SearchableSelect value={form.machinery_id || null} onChange={v => setForm({ ...form, machinery_id: v })} options={machineryOptions} placeholder="搜尋機號..." />
@@ -378,15 +361,15 @@ export default function ExpenseDetailPage() {
             <Field label="總金額">
               <span className="font-semibold text-base">HK$ {Number(expense.total_amount).toLocaleString('en', { minimumFractionDigits: 2 })}</span>
             </Field>
-            <Field label="付款狀態"><Badge paid={expense.is_paid} /></Field>
-            <Field label="付款方法">{expense.payment_method}</Field>
-            <Field label="付款日期">{fmtDate(expense.payment_date)}</Field>
-            <Field label="付款內容">{expense.payment_ref}</Field>
+            <Field label="付款狀態"><PaymentStatusBadge status={expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')} /></Field>
             <Field label="機號">{expense.machinery?.machine_code || expense.machine_code}</Field>
             <Field label="客戶">{expense.client?.name}</Field>
             <Field label="工程編號">{expense.project?.project_no}</Field>
             <Field label="報價單">{expense.quotation?.quotation_no}</Field>
             <Field label="合約">{expense.contract_id}</Field>
+            {expense.source && expense.source !== 'MANUAL' && (
+              <Field label="來源">{expense.source}{expense.source_ref_id ? ` #${expense.source_ref_id}` : ''}</Field>
+            )}
             {expense.remarks && (
               <div className="col-span-2 md:col-span-3 lg:col-span-4">
                 <Field label="備註">{expense.remarks}</Field>
@@ -444,7 +427,7 @@ export default function ExpenseDetailPage() {
                       <td className="py-2.5 pr-3 text-gray-800">{item.description}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.quantity)}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.unit_price) > 0 ? Number(item.unit_price).toLocaleString('en', { minimumFractionDigits: 2 }) : '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-medium text-gray-900">HK$ {Number(item.amount).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-gray-800">HK$ {Number(item.amount).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
                       <td className="py-2.5 pl-3">
                         <div className="flex gap-2">
                           <button onClick={() => { setEditingItemId(item.id); setEditingItemForm({ description: item.description, quantity: String(Number(item.quantity)), unit_price: String(Number(item.unit_price)), amount: String(Number(item.amount)) }); }} className="text-xs text-blue-600 hover:text-blue-800">編輯</button>
@@ -560,6 +543,14 @@ export default function ExpenseDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Payment Records Block */}
+      <PaymentOutBlock
+        sourceType="expense"
+        sourceRefId={expenseId}
+        totalAmount={Number(expense.total_amount) || 0}
+        onStatusChange={loadExpense}
+      />
 
       {/* Meta info */}
       <div className="text-xs text-gray-400 text-right">

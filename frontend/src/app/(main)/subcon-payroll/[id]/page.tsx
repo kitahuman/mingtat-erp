@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { subconPayrollApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
+import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -30,7 +31,7 @@ export default function SubconPayrollDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const loadPayroll = useCallback(() => {
     if (!id) return;
     setLoading(true);
     subconPayrollApi.get(id)
@@ -38,6 +39,8 @@ export default function SubconPayrollDetailPage() {
       .catch(err => setError(err.response?.data?.message || '載入失敗'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => { loadPayroll(); }, [loadPayroll]);
 
   const handleDelete = async () => {
     if (!confirm('確定要刪除此糧單嗎？此操作將同時刪除關聯的支出記錄，且不可恢復。')) return;
@@ -275,20 +278,13 @@ export default function SubconPayrollDetailPage() {
         </span>
       </div>
 
-      {/* Payment Records Placeholder */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-4 py-3 border-b">
-          <h2 className="font-bold text-gray-700">付款紀錄</h2>
-        </div>
-        <div className="p-8 text-center text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <p className="text-sm">付款紀錄功能即將推出</p>
-          <p className="text-xs text-gray-300 mt-1">此區塊將顯示與此糧單關聯的付款記錄</p>
-        </div>
-      </div>
+      {/* Payment Records Block - replaced placeholder with PaymentOutBlock */}
+      <PaymentOutBlock
+        sourceType="subcon_payroll"
+        sourceRefId={id}
+        totalAmount={Number(payroll.subcon_payroll_total_amount) || 0}
+        onStatusChange={loadPayroll}
+      />
     </div>
   );
 }

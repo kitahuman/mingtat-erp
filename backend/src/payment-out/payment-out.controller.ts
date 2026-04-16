@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Param,
   Body,
@@ -11,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentOutService } from './payment-out.service';
-import { CreatePaymentOutDto, UpdatePaymentOutDto } from './dto/create-payment-out.dto';
+import { CreatePaymentOutDto, UpdatePaymentOutDto, UpdatePaymentOutStatusDto } from './dto/create-payment-out.dto';
 
 @Controller('payment-out')
 @UseGuards(AuthGuard('jwt'))
@@ -23,6 +24,7 @@ export class PaymentOutController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('expense_id') expense_id?: string,
+    @Query('subcon_payroll_id') subcon_payroll_id?: string,
     @Query('company_id') company_id?: string,
     @Query('payment_out_status') payment_out_status?: string,
     @Query('date_from') date_from?: string,
@@ -32,6 +34,7 @@ export class PaymentOutController {
       page: page ? +page : undefined,
       limit: limit ? +limit : undefined,
       expense_id: expense_id ? +expense_id : undefined,
+      subcon_payroll_id: subcon_payroll_id ? +subcon_payroll_id : undefined,
       company_id: company_id ? +company_id : undefined,
       payment_out_status: payment_out_status || undefined,
       date_from,
@@ -52,6 +55,11 @@ export class PaymentOutController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdatePaymentOutDto) {
     return this.service.update(+id, body);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body() body: UpdatePaymentOutStatusDto) {
+    return this.service.updateStatus(+id, body.payment_out_status);
   }
 
   @Delete(':id')

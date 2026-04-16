@@ -283,6 +283,12 @@ export class SubconPayrollService {
       where: { id },
       include: {
         subcontractor: { select: { id: true, name: true, code: true } },
+        payment_outs: {
+          include: {
+            bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
+          },
+          orderBy: { date: 'desc' },
+        },
         items: {
           include: {
             driver: { select: { id: true, name_zh: true, plate_no: true } },

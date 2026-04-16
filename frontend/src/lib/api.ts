@@ -599,6 +599,7 @@ export const paymentOutApi = {
   get: (id: number) => api.get(`/payment-out/${id}`),
   create: (data: any) => api.post('/payment-out', data),
   update: (id: number, data: any) => api.put(`/payment-out/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/payment-out/${id}/status`, { payment_out_status: status }),
   delete: (id: number) => api.delete(`/payment-out/${id}`),
 };
 

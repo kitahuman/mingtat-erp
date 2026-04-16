@@ -1696,6 +1696,7 @@ model PaymentOut {
   amount                  Decimal  @db.Decimal(14, 2)
   expense_id              Int?
   payroll_id              Int?     // 關聯糧單（從糧單建立時設定）
+  subcon_payroll_id       Int?     // 關聯判頭糧單
   company_id              Int?     // 所屬公司（自動從糧單或支出帶入）
   payment_out_description String?  @db.VarChar(255) // 付款項目描述，例如「2026年4月 張三的糧單」
   payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
@@ -1707,6 +1708,7 @@ model PaymentOut {
 
   expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
   payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
+  subcon_payroll   SubconPayroll?    @relation(fields: [subcon_payroll_id], references: [id], onDelete: SetNull)
   company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   bank_account     BankAccount?      @relation("PaymentOutBankAccount", fields: [bank_account_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]
@@ -2488,6 +2490,7 @@ model SubconPayroll {
 
   subcontractor Partner            @relation("subcon_payroll_partner", fields: [subcon_payroll_subcontractor_id], references: [id], onDelete: Restrict)
   items         SubconPayrollItem[]
+  payment_outs  PaymentOut[]
 
   @@index([subcon_payroll_subcontractor_id])
   @@index([subcon_payroll_month])

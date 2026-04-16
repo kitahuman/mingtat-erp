@@ -13,6 +13,12 @@ const EXPENSE_INCLUDE = {
   quotation: true,
   items: { orderBy: { sort_order: 'asc' as const } },
   attachments: { orderBy: { uploaded_at: 'asc' as const } },
+  payment_outs: {
+    include: {
+      bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
+    },
+    orderBy: { date: 'desc' as const },
+  },
 };
 
 // Valid expense source types
