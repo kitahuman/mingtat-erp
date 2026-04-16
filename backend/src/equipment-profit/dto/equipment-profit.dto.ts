@@ -1,11 +1,15 @@
-import { IsOptional, IsString, IsNumber, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsNumber, IsIn, IsBoolean } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class EquipmentProfitReportQueryDto {
   @IsOptional() @IsString() date_from?: string;
   @IsOptional() @IsString() date_to?: string;
   @IsOptional() @IsString() @IsIn(['machinery', 'vehicle']) equipment_type?: string;
   @IsOptional() @Type(() => Number) @IsNumber() equipment_id?: number;
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  include_inactive?: boolean;
 }
 
 export class UpdateCommissionDto {

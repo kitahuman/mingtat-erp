@@ -27,8 +27,9 @@ export class EquipmentProfitService {
     date_to?: string;
     equipment_type?: string;
     equipment_id?: number;
+    include_inactive?: boolean;
   }): Promise<{ data: EquipmentProfitSummary[] }> {
-    const { date_from, date_to, equipment_type, equipment_id } = params;
+    const { date_from, date_to, equipment_type, equipment_id, include_inactive } = params;
 
     // Build date filter
     const dateFilter: { gte?: Date; lte?: Date } = {};
@@ -40,6 +41,9 @@ export class EquipmentProfitService {
     // ─── Machinery ─────────────────────────────────────────
     if (!equipment_type || equipment_type === 'machinery') {
       const machineryWhere: Record<string, unknown> = { deleted_at: null };
+      if (!include_inactive) {
+        machineryWhere.status = 'active';
+      }
       if (equipment_type === 'machinery' && equipment_id) {
         machineryWhere.id = equipment_id;
       }
@@ -108,6 +112,9 @@ export class EquipmentProfitService {
     // ─── Vehicles ──────────────────────────────────────────
     if (!equipment_type || equipment_type === 'vehicle') {
       const vehicleWhere: Record<string, unknown> = { deleted_at: null };
+      if (!include_inactive) {
+        vehicleWhere.status = 'active';
+      }
       if (equipment_type === 'vehicle' && equipment_id) {
         vehicleWhere.id = equipment_id;
       }

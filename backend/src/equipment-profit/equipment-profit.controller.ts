@@ -27,6 +27,7 @@ export class EquipmentProfitController {
       date_to: query.date_to,
       equipment_type: query.equipment_type,
       equipment_id: query.equipment_id,
+      include_inactive: query.include_inactive,
     });
   }
 

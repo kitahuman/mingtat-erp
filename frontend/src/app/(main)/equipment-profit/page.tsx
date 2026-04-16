@@ -42,6 +42,7 @@ export default function EquipmentProfitPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [sortBy, setSortBy] = useState<SortField>('equipment_code');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -56,6 +57,7 @@ export default function EquipmentProfitPage() {
         date_from: dateFrom,
         date_to: dateTo,
         equipment_type: typeFilter || undefined,
+        include_inactive: includeInactive || undefined,
       });
       setData(res.data.data || []);
     } catch (err) {
@@ -67,7 +69,7 @@ export default function EquipmentProfitPage() {
 
   useEffect(() => {
     loadData();
-  }, [typeFilter]);
+  }, [typeFilter, includeInactive]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -163,6 +165,23 @@ export default function EquipmentProfitPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-48"
             />
+          </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => setIncludeInactive(!includeInactive)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  includeInactive ? 'bg-primary-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    includeInactive ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </div>
+              <span className="text-sm font-medium text-gray-700">顯示已停用</span>
+            </label>
           </div>
         </div>
       </div>

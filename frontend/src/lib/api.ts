@@ -696,7 +696,7 @@ export const companyProfitLossApi = {
 // ══════════════════════════════════════════════════════════════
 
 export const equipmentProfitApi = {
-  getReport: (params?: { date_from?: string; date_to?: string; equipment_type?: string; equipment_id?: number }) =>
+  getReport: (params?: { date_from?: string; date_to?: string; equipment_type?: string; equipment_id?: number; include_inactive?: boolean }) =>
     api.get('/equipment-profit/report', { params }),
   getDetails: (type: string, id: number, params?: { date_from?: string; date_to?: string }) =>
     api.get(`/equipment-profit/report/${type}/${id}/details`, { params }),
