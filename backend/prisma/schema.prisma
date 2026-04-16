@@ -498,7 +498,7 @@ model Partner {
   invoices_as_client        Invoice[]                  @relation("invoice_client")
   acceptance_reports_client AcceptanceReport[]         @relation("acceptance_report_client")
   daily_reports_client      DailyReport[]              @relation("daily_report_client")
-
+  subcon_payrolls           SubconPayroll[]            @relation("subcon_payroll_partner")
   @@map("partners")
 }
 
@@ -1127,7 +1127,7 @@ model WorkLog {
   whatsapp_messages          WhatsAppMessage[]
   verification_confirmations VerificationConfirmation[]
   attendance_anomalies       AttendanceAnomaly[]
-
+  subcon_payroll_items       SubconPayrollItem[]
   // ── Performance indexes ──
   @@index([scheduled_date])
   @@index([employee_id])
@@ -1356,7 +1356,7 @@ model SubcontractorFleetDriver {
 
   subcontractor Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
   work_logs     WorkLog[]
-
+  subcon_payroll_items SubconPayrollItem[]
   @@map("subcontractor_fleet_drivers")
 }
 
@@ -2470,4 +2470,52 @@ model SystemSetting {
   updated_at  DateTime @default(now()) @updatedAt
 
   @@map("system_settings")
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// Subcon Payroll (判頭糧單)
+// ══════════════════════════════════════════════════════════════
+model SubconPayroll {
+  id                                Int       @id @default(autoincrement()) @map("subcon_payroll_id")
+  subcon_payroll_subcontractor_id   Int
+  subcon_payroll_month              DateTime  @db.Date
+  subcon_payroll_total_amount       Decimal   @default(0) @db.Decimal(14, 2)
+  subcon_payroll_status             String    @default("draft") @db.VarChar(30) // draft | confirmed | paid | partially_paid | cancelled
+  subcon_payroll_confirmed_at       DateTime?
+  subcon_payroll_created_at         DateTime  @default(now())
+  subcon_payroll_updated_at         DateTime  @default(now()) @updatedAt
+
+  subcontractor Partner            @relation("subcon_payroll_partner", fields: [subcon_payroll_subcontractor_id], references: [id], onDelete: Restrict)
+  items         SubconPayrollItem[]
+
+  @@index([subcon_payroll_subcontractor_id])
+  @@index([subcon_payroll_month])
+  @@index([subcon_payroll_status])
+  @@index([subcon_payroll_subcontractor_id, subcon_payroll_month])
+  @@map("subcon_payrolls")
+}
+
+model SubconPayrollItem {
+  id                                  Int       @id @default(autoincrement()) @map("subcon_payroll_item_id")
+  subcon_payroll_item_payroll_id      Int
+  subcon_payroll_item_driver_id       Int?
+  subcon_payroll_item_driver_name     String    @db.VarChar(100)
+  subcon_payroll_item_work_date       DateTime  @db.Date
+  subcon_payroll_item_work_content    String?   @db.Text
+  subcon_payroll_item_quantity        Decimal   @default(1) @db.Decimal(10, 2)
+  subcon_payroll_item_unit            String    @db.VarChar(20)
+  subcon_payroll_item_unit_price      Decimal   @default(0) @db.Decimal(12, 2)
+  subcon_payroll_item_subtotal        Decimal   @default(0) @db.Decimal(12, 2)
+  subcon_payroll_item_work_log_id     Int?
+  subcon_payroll_item_created_at      DateTime  @default(now())
+
+  payroll   SubconPayroll            @relation(fields: [subcon_payroll_item_payroll_id], references: [id], onDelete: Cascade)
+  driver    SubcontractorFleetDriver? @relation(fields: [subcon_payroll_item_driver_id], references: [id], onDelete: SetNull)
+  work_log  WorkLog?                 @relation(fields: [subcon_payroll_item_work_log_id], references: [id], onDelete: SetNull)
+
+  @@index([subcon_payroll_item_payroll_id])
+  @@index([subcon_payroll_item_work_log_id])
+  @@index([subcon_payroll_item_driver_id])
+  @@map("subcon_payroll_items")
 }

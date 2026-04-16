@@ -696,6 +696,17 @@ export const companyProfitLossApi = {
 export const subconPayrollApi = {
   preview: (data: { subcon_id: number; date_from: string; date_to: string; company_id?: number }) =>
     api.post('/subcon-payroll/preview', data),
+  confirm: (data: {
+    subcon_id: number;
+    date_from: string;
+    date_to: string;
+    company_id?: number;
+    extra_items?: { name: string; amount: number }[];
+  }) => api.post('/subcon-payroll/confirm', data),
+  list: (params?: { subcon_id?: number; month?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/subcon-payroll/list', { params }),
+  get: (id: number) => api.get(`/subcon-payroll/${id}`),
+  remove: (id: number) => api.delete(`/subcon-payroll/${id}`),
 };
 
 // ══════════════════════════════════════════════════════════════

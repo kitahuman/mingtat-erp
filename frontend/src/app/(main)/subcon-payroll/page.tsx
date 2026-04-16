@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { subconPayrollApi, partnersApi, companiesApi, subconRateCardsApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate } from '@/lib/dateUtils';
@@ -143,6 +144,8 @@ function GroupedView({ groups, extraItems }: { groups: any[]; extraItems: ExtraI
 
 // ─── Main Page ────────────────────────────────────────────────
 export default function SubconPayrollPage() {
+  const router = useRouter();
+
   // ── Selection state ──
   const [subcons, setSubcons] = useState<Option[]>([]);
   const [companies, setCompanies] = useState<Option[]>([]);
@@ -153,6 +156,7 @@ export default function SubconPayrollPage() {
 
   // ── Result state ──
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
 
@@ -200,6 +204,36 @@ export default function SubconPayrollPage() {
     }
   };
 
+  const handleConfirm = async () => {
+    if (!selectedSubcon || !dateFrom || !dateTo || !result) return;
+
+    const validExtras = extraItems
+      .filter(e => e.name && e.amount)
+      .map(e => ({ name: e.name, amount: Number(e.amount) }));
+
+    if (!confirm(`確定要確認此糧單嗎？\n總金額：$${grandTotal.toLocaleString()}\n確認後將自動產生支出記錄。`)) {
+      return;
+    }
+
+    setConfirming(true);
+    setError('');
+    try {
+      const res = await subconPayrollApi.confirm({
+        subcon_id: selectedSubcon,
+        date_from: dateFrom,
+        date_to: dateTo,
+        company_id: selectedCompany || undefined,
+        extra_items: validExtras.length > 0 ? validExtras : undefined,
+      });
+      // Navigate to the detail page
+      router.push(`/subcon-payroll/${res.data.id}`);
+    } catch (err: any) {
+      setError(err.response?.data?.message || '確認失敗');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const handleAddRateCard = async (wl: any) => {
     try {
       await subconRateCardsApi.create({
@@ -238,7 +272,15 @@ export default function SubconPayrollPage() {
 
   return (
     <div className="p-6 max-w-full">
-      <h1 className="text-2xl font-bold mb-6">供應商計糧</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">供應商計糧</h1>
+        <button
+          onClick={() => router.push('/subcon-payroll/records')}
+          className="text-sm text-primary-600 hover:text-primary-700 border border-primary-300 rounded px-3 py-1.5 hover:bg-primary-50"
+        >
+          查看糧單記錄
+        </button>
+      </div>
 
       {/* ── Selection Panel ── */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -312,7 +354,7 @@ export default function SubconPayrollPage() {
               </div>
               {extraItems.length > 1 && (
                 <button onClick={() => removeExtraItem(idx)}
-                  className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+                  className="text-red-400 hover:text-red-600 text-lg leading-none">&times;</button>
               )}
             </div>
           ))}
@@ -355,6 +397,24 @@ export default function SubconPayrollPage() {
                 ${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
             </div>
+          </div>
+
+          {/* Confirm Button */}
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={handleConfirm}
+              disabled={confirming || grandTotal === 0}
+              className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-sm shadow-sm flex items-center gap-2"
+            >
+              {confirming ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  確認中...
+                </>
+              ) : (
+                '確認糧單'
+              )}
+            </button>
           </div>
 
           {/* Tabs */}
@@ -447,10 +507,10 @@ export default function SubconPayrollPage() {
                         </td>
                         <td className="px-3 py-2">
                           {wl._price_match_status === 'matched' ? (
-                            <span className="text-green-600 text-xs">✓ 已匹配</span>
+                            <span className="text-green-600 text-xs">&#10003; 已匹配</span>
                           ) : (
                             <div className="flex items-center gap-1">
-                              <span className="text-red-500 text-xs">✗ 未匹配</span>
+                              <span className="text-red-500 text-xs">&#10007; 未匹配</span>
                               <button
                                 onClick={() => handleAddRateCard(wl)}
                                 className="text-xs text-blue-600 hover:underline ml-1"

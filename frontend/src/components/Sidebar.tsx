@@ -78,6 +78,7 @@ const navEntries: NavEntry[] = [
       { href: '/payroll', label: '計糧管理', icon: '🧮', pageKey: 'payroll' },
       { href: '/payroll-records', label: '糧單記錄', icon: '📄', pageKey: 'payroll-records' },
       { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', pageKey: 'subcon-payroll' },
+      { href: '/subcon-payroll/records', label: '判頭糧單記錄', icon: '📋', pageKey: 'subcon-payroll-records' },
       { href: '/clock-in', label: '公司打卡', icon: '📸', pageKey: 'clock-in' },
       { href: '/attendances', label: '打卡紀錄', icon: '🕐', pageKey: 'attendances' },
       { href: '/leaves', label: '請假紀錄', icon: '📅', pageKey: 'leaves' },
