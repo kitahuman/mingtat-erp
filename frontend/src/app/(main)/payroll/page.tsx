@@ -75,7 +75,8 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
 }
 
 // ─── Daily Calculation View ───────────────────────────────────
-function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
+function DailyCalculationPreview({ dailyCalc, salaryType }: { dailyCalc: any[]; salaryType?: string }) {
+  const isDaily = salaryType === 'daily' || !salaryType;
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   if (!dailyCalc || dailyCalc.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
@@ -86,8 +87,8 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
     <div className="space-y-1">
       <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
         <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
-        <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter((d: any) => d.needs_top_up).length}天</span></div>
-        <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>
+        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter((d: any) => d.needs_top_up).length}天</span></div>}
+        {isDaily && <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>}
         <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
       </div>
       <div className="overflow-x-auto border rounded-lg">
@@ -97,8 +98,8 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
               <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>
+              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>}
+              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>}
               <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
             </tr>
           </thead>
@@ -108,7 +109,7 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
               return (
                 <>
-                  <tr key={day.date} className={`border-b ${day.needs_top_up ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <tr key={day.date} className={`border-b ${day.needs_top_up && isDaily ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
                         {isExpanded ? '▼' : '▶'}
@@ -119,17 +120,17 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
                       {day.work_logs?.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">${Number(day.work_income).toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right font-mono text-gray-500">${Number(day.base_salary).toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right font-mono">
+                    {isDaily && <td className="px-3 py-2 text-right font-mono text-gray-500">${Number(day.base_salary).toLocaleString()}</td>}
+                    {isDaily && <td className="px-3 py-2 text-right font-mono">
                       {day.needs_top_up
                         ? <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
                         : <span className="text-green-600">-</span>}
-                    </td>
+                    </td>}
                     <td className="px-3 py-2 text-right font-mono font-bold">${Number(day.day_total).toLocaleString()}</td>
                   </tr>
                   {isExpanded && (
                     <tr key={`exp-${day.date}`} className="bg-gray-50 border-b">
-                      <td colSpan={6} className="px-6 py-2">
+                      <td colSpan={isDaily ? 6 : 4} className="px-6 py-2">
                         <div className="text-xs space-y-2">
                           {(day.work_logs || []).map((wl: any, wIdx: number) => {
                             const wlRoute = [wl.start_location, wl.end_location].filter(Boolean).join(' → ');
@@ -165,7 +166,7 @@ function DailyCalculationPreview({ dailyCalc }: { dailyCalc: any[] }) {
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={5} className="px-3 py-2 font-bold text-right">逐日合計</td>
+              <td colSpan={isDaily ? 5 : 3} className="px-3 py-2 font-bold text-right">逐日合計</td>
               <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">${grandTotal.toLocaleString()}</td>
             </tr>
           </tfoot>
@@ -647,7 +648,7 @@ export default function PayrollPage() {
 
           {/* Daily tab */}
           {activeTab === 'daily' && (
-            <DailyCalculationPreview dailyCalc={preview.daily_calculation} />
+            <DailyCalculationPreview dailyCalc={preview.daily_calculation} salaryType={preview.salary_setting?.salary_type} />
           )}
 
           {/* Unmatched tab */}

@@ -285,8 +285,11 @@ export class PayrollCalculationService {
       let totalEmployeeContrib = 0;
       let totalEmployerContrib = 0;
       for (const [, workIncome] of dayIncomeMap) {
+        // Only apply daily base guarantee for daily salary; monthly salary has no per-day minimum
         const effectiveIncome =
-          baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+          salaryType === 'daily' && baseSalary > 0
+            ? Math.max(workIncome, baseSalary)
+            : workIncome;
         const tier =
           MPF_INDUSTRY_TIERS.find(
             (t) => effectiveIncome > t.min && effectiveIncome <= t.max,
@@ -482,9 +485,12 @@ export class PayrollCalculationService {
     salarySetting: any | null,
     dailyAllowances: any[],
   ): any[] {
-    const baseSalary = salarySetting
-      ? Number(salarySetting.base_salary) || 0
-      : 0;
+    const salaryType = salarySetting?.salary_type || 'daily';
+    // For monthly salary, do NOT apply daily base guarantee / top-up
+    const baseSalary =
+      salaryType === 'daily'
+        ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
+        : 0;
     const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
       const date = toDateStr(pwl.scheduled_date);
@@ -571,9 +577,12 @@ export class PayrollCalculationService {
     salarySetting: any | null,
     dailyAllowances: any[],
   ): any[] {
-    const baseSalary = salarySetting
-      ? Number(salarySetting.base_salary) || 0
-      : 0;
+    const salaryType = salarySetting?.salary_type || 'daily';
+    // For monthly salary, do NOT apply daily base guarantee / top-up
+    const baseSalary =
+      salaryType === 'daily'
+        ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
+        : 0;
     const dateMap = new Map<string, any[]>();
     for (const wl of workLogs) {
       const date = toDateStr(wl.scheduled_date);

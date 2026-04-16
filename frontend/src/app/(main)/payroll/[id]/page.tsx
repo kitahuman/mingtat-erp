@@ -591,6 +591,7 @@ function DailyCalculationView({
   allowanceOptions,
   payrollId,
   isDraft,
+  salaryType,
   onAddAllowance,
   onRemoveAllowance,
 }: {
@@ -598,9 +599,11 @@ function DailyCalculationView({
   allowanceOptions: any[];
   payrollId: number;
   isDraft: boolean;
+  salaryType?: string;
   onAddAllowance: (date: string, key: string, name: string, amount: number) => Promise<void>;
   onRemoveAllowance: (daId: number) => Promise<void>;
 }) {
+  const isDaily = salaryType === 'daily' || !salaryType;
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState('');
@@ -627,8 +630,8 @@ function DailyCalculationView({
       {/* Summary bar */}
       <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
         <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
-        <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => d.needs_top_up).length}天</span></div>
-        <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>
+        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => d.needs_top_up).length}天</span></div>}
+        {isDaily && <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>}
         <div><span className="text-gray-500">每日津貼合計：</span><span className="font-bold text-blue-600">${totalAllowances.toLocaleString()}</span></div>
         <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
       </div>
@@ -641,8 +644,8 @@ function DailyCalculationView({
               <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>
+              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>}
+              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>}
               <th className="px-3 py-2 text-center font-medium text-gray-600">每日津貼</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
               {isDraft && <th className="px-3 py-2 text-center font-medium text-gray-600 w-20">操作</th>}
@@ -669,16 +672,16 @@ function DailyCalculationView({
                     <td className="px-3 py-2 text-right font-mono">
                       ${Number(day.work_income).toLocaleString()}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-gray-500">
+                    {isDaily && <td className="px-3 py-2 text-right font-mono text-gray-500">
                       ${Number(day.base_salary).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
+                    </td>}
+                    {isDaily && <td className="px-3 py-2 text-right font-mono">
                       {day.needs_top_up ? (
                         <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
                       ) : (
                         <span className="text-green-600">-</span>
                       )}
-                    </td>
+                    </td>}
                     <td className="px-3 py-2 text-center">
                       {day.daily_allowances && day.daily_allowances.length > 0 ? (
                         <div className="flex flex-wrap gap-1 justify-center">
@@ -1391,6 +1394,7 @@ export default function PayrollDetailPage() {
             allowanceOptions={allowanceOptions}
             payrollId={payroll.id}
             isDraft={isDraft}
+            salaryType={payroll.salary_type}
             onAddAllowance={handleAddDailyAllowance}
             onRemoveAllowance={handleRemoveDailyAllowance}
           />
