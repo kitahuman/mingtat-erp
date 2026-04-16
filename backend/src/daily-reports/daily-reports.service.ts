@@ -252,7 +252,7 @@ export class DailyReportsService {
   async findByProject(projectId: number, query?: any) {
     const page = Number(query?.page) || 1;
     const limit = Number(query?.limit) || 50;
-    const where = { daily_report_project_id: projectId };
+    const where: any = { daily_report_project_id: projectId, daily_report_deleted_at: null };
 
     const [data, total] = await Promise.all([
       this.prisma.dailyReport.findMany({

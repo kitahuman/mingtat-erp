@@ -1166,7 +1166,7 @@ export class EmployeePortalService {
     if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = { daily_report_created_by: userId };
+    const where: any = { daily_report_created_by: userId, daily_report_deleted_at: null };
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.client_id) where.daily_report_client_id = Number(query.client_id);
     if (query.client_name) where.daily_report_client_name = { contains: query.client_name, mode: 'insensitive' };
@@ -1269,7 +1269,7 @@ export class EmployeePortalService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     if (!(user as any).can_daily_report) throw new UnauthorizedException('您沒有權限填寫工程日報');
-    const where: any = { daily_report_created_by: userId };
+    const where: any = { daily_report_created_by: userId, daily_report_deleted_at: null };
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.client_id) where.daily_report_client_id = Number(query.client_id);
     if (query.client_contract_no) where.daily_report_client_contract_no = { contains: query.client_contract_no, mode: 'insensitive' };
