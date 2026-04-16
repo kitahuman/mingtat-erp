@@ -1303,7 +1303,7 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Table ────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto pb-16">
+      <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>

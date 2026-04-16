@@ -52,17 +52,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-full flex">
       <Sidebar onCollapse={setSidebarCollapsed} />
       {/* Main content: shifts right by sidebar width, fills remaining space */}
       <main
         className={`
-          flex-1 min-w-0 transition-all duration-300
+          flex-1 min-w-0 h-full overflow-hidden transition-all duration-300
           pt-16 lg:pt-0
           ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
         `}
       >
-        <div className="p-4 sm:p-6 h-full">
+        <div className="p-4 sm:p-6 h-full overflow-hidden">
           {accessDenied ? (
             <div className="min-h-[60vh] flex items-center justify-center">
               <div className="text-center">
