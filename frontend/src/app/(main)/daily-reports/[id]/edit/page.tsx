@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { dailyReportsApi, quotationsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { dailyReportsApi, quotationsApi, partnersApi, fieldOptionsApi, projectsApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 
 const categoryLabels: Record<string, string> = {
@@ -66,7 +66,10 @@ export default function EditDailyReportPage() {
   const [projectLocation, setProjectLocation] = useState('');
 
   // Reference data as SearchableSelect options
+  // projectNameOptions: merged list from projects table + daily_reports history, value = project_name string
   const [projectNameOptions, setProjectNameOptions] = useState<{ value: string; label: string }[]>([]);
+  // projectsByName: map from project_name -> project_id (only for projects in the projects table)
+  const [projectsByName, setProjectsByName] = useState<Map<string, number>>(new Map());
   const [quotations, setQuotations] = useState<any[]>([]);
   const [filteredQuotations, setFilteredQuotations] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
@@ -95,11 +98,29 @@ export default function EditDailyReportPage() {
 
   // Load reference data
   useEffect(() => {
-    // Project names (distinct from daily_reports + projects table)
-    dailyReportsApi.projectNames().then(res => {
-      const names: string[] = res.data || [];
-      setProjectNameOptions(names.map(n => ({ value: n, label: n })));
-    }).catch(() => {});
+    // Load both sources for project name dropdown:
+    // 1. projects table (with IDs) + 2. daily_reports history (distinct names)
+    Promise.all([
+      projectsApi.simple().catch(() => ({ data: [] })),
+      dailyReportsApi.projectNames().catch(() => ({ data: [] })),
+    ]).then(([projRes, namesRes]) => {
+      const projects: any[] = projRes.data || [];
+      const historyNames: string[] = namesRes.data || [];
+
+      // Build name -> project_id map from projects table
+      const nameToId = new Map<string, number>();
+      projects.forEach((p: any) => {
+        if (p.project_name) nameToId.set(p.project_name, p.id);
+      });
+      setProjectsByName(nameToId);
+
+      // Merge: start with project names from projects table, then add history names not already present
+      const projectNames = projects.map((p: any) => p.project_name).filter(Boolean) as string[];
+      const allNames = Array.from(new Set([...projectNames, ...historyNames])).sort((a, b) =>
+        a.localeCompare(b, 'zh-HK')
+      );
+      setProjectNameOptions(allNames.map(n => ({ value: n, label: n })));
+    });
 
     partnersApi.simple().then(res => {
       const list: any[] = res.data || [];
@@ -175,14 +196,22 @@ export default function EditDailyReportPage() {
     }).catch(() => setError('載入日報失敗')).finally(() => setLoading(false));
   }, [reportId]);
 
-  // When project name changes (from combobox), try to match a project_id
+  // When project name is selected from dropdown:
+  // - if the name matches a project in the projects table, auto-set project_id
+  // - if not matched (history-only name or free text), leave project_id as null
   const handleProjectNameChange = useCallback((name: string | null) => {
-    setProjectName(name || '');
-    // No project_id binding since we now use free-text project name
-    setProjectId('');
+    const selectedName = name || '';
+    setProjectName(selectedName);
+    if (selectedName && projectsByName.has(selectedName)) {
+      // Matched a project in the projects table — set project_id
+      setProjectId(String(projectsByName.get(selectedName)));
+    } else {
+      // No match — clear project_id (history name or free text)
+      setProjectId('');
+    }
     setQuotationId('');
     setFilteredQuotations(quotations);
-  }, [quotations]);
+  }, [quotations, projectsByName]);
 
   // When quotation changes, auto-fill client and contract info
   const handleQuotationChange = useCallback((qid: string | null) => {
@@ -376,7 +405,7 @@ export default function EditDailyReportPage() {
       <div className="bg-white rounded-lg shadow-sm border p-6 space-y-4">
         <h2 className="font-semibold text-gray-700 border-b pb-2">工程資訊</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Project name (searchable combobox from distinct project names) */}
+          {/* Project name (merged from projects table + daily_reports history) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">工程</label>
             <SearchableSelect
@@ -385,14 +414,26 @@ export default function EditDailyReportPage() {
               options={projectNameOptions}
               placeholder="選擇或搜尋工程名稱"
             />
-            {/* Allow free-text input if not in the list */}
+            {/* Allow free-text input if project is not in the list */}
             <input
               type="text"
               value={projectName}
-              onChange={e => { setProjectName(e.target.value); setProjectId(''); }}
+              onChange={e => {
+                const name = e.target.value;
+                setProjectName(name);
+                // Auto-match project_id when typing; clear if no match
+                if (name && projectsByName.has(name)) {
+                  setProjectId(String(projectsByName.get(name)));
+                } else {
+                  setProjectId('');
+                }
+              }}
               placeholder="或直接輸入工程名稱"
               className="mt-2 w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {projectId && (
+              <p className="text-xs text-green-600 mt-1">✓ 已匹配工程 ID: {projectId}</p>
+            )}
           </div>
 
           {/* Project Location */}
