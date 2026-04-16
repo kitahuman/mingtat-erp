@@ -1943,12 +1943,13 @@ export class PayrollService {
    * 查找「薪資」支出類別 ID
    */
   private async findSalaryCategoryId(): Promise<number | null> {
-    // Try to find a category matching salary-related names
-    const salaryNames = ['出糧支出', '薪資', '薪金', '工資'];
+    // Try to find the '員工薪酬' sub-category under '人事費用' first,
+    // then fall back to other salary-related names for backward compatibility
+    const salaryNames = ['員工薪酬', '人事費用', '出糧支出', '薪資', '薪金', '工資'];
     for (const name of salaryNames) {
       const cat = await this.prisma.expenseCategory.findFirst({
         where: { name: { contains: name }, is_active: true },
-        orderBy: { parent_id: 'asc' }, // prefer parent categories
+        orderBy: { parent_id: 'desc' }, // prefer child categories (sub-categories have higher parent_id)
       });
       if (cat) return cat.id;
     }

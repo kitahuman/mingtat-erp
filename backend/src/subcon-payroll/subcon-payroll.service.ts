@@ -393,11 +393,13 @@ export class SubconPayrollService {
 
   // ── 查找判頭支出類別 ─────────────────────────────────────────
   private async findSubconCategoryId(): Promise<number | null> {
-    const names = ['判頭支出', '判頭費用', '供應商費用', '出糧支出', '薪資'];
+    // Try to find the '員工薪酬' sub-category under '人事費用' first,
+    // then fall back to other salary-related names for backward compatibility
+    const names = ['員工薪酬', '人事費用', '判頭支出', '判頭費用', '供應商費用', '出糧支出', '薪資'];
     for (const name of names) {
       const cat = await this.prisma.expenseCategory.findFirst({
         where: { name: { contains: name }, is_active: true },
-        orderBy: { parent_id: 'asc' },
+        orderBy: { parent_id: 'desc' }, // prefer child categories (sub-categories have higher parent_id)
       });
       if (cat) return cat.id;
     }
