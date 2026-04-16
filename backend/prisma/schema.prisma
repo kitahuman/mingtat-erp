@@ -1873,6 +1873,8 @@ model BankTransaction {
   matched_id      Int? // 配對的 PaymentIn.id 或 PaymentOut.id
   import_batch    String?  @db.VarChar(100) // 匯入批次識別
   remarks         String?  @db.Text
+  bank_txn_source String   @default("csv") @db.VarChar(20) // csv | pdf | manual
+  bank_txn_remark String?  @db.Text
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now()) @updatedAt
 

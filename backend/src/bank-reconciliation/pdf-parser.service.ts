@@ -23,6 +23,11 @@ export interface PdfParseResult {
   statement_period?: string;  // e.g. "2026年2月1日 至 2026年2月28日"
   transactions: ParsedTransaction[];
   raw_text?: string;
+  // AI-identified company and account info
+  identified_company_name?: string;
+  identified_company_id?: number;
+  identified_bank_account_id?: number;
+  identified_bank_account_label?: string;
 }
 
 @Injectable()
@@ -32,8 +37,13 @@ export class PdfParserService {
   /**
    * Parse a bank statement PDF using AI vision.
    * Converts each page to an image, then sends to GPT-4.1 vision.
+   * Optionally receives company and bank account lists for auto-identification.
    */
-  async parsePdf(filePath: string): Promise<PdfParseResult> {
+  async parsePdf(
+    filePath: string,
+    companies: any[] = [],
+    bankAccounts: any[] = [],
+  ): Promise<PdfParseResult> {
     // Convert PDF pages to images
     const pageImages = await this.pdfToImages(filePath);
 
@@ -53,6 +63,26 @@ export class PdfParserService {
       },
     }));
 
+    // Build company and bank account context for AI identification
+    let identificationContext = '';
+    if (companies.length > 0 || bankAccounts.length > 0) {
+      identificationContext = `\n\n## 公司和銀行帳戶識別
+
+請根據月結單上的帳戶持有人名稱、帳號、銀行名稱等資訊，嘗試識別這份月結單屬於哪間公司和哪個銀行帳戶。
+
+系統中已有的公司列表：
+${companies.map((c: any) => `- ID: ${c.id}, 名稱: ${c.name}${c.name_en ? ` (${c.name_en})` : ''}`).join('\n')}
+
+系統中已有的銀行帳戶列表：
+${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名: ${a.account_name}, 帳號: ${a.account_no}, 公司ID: ${a.company_id || '無'}`).join('\n')}
+
+在 JSON 回應中請額外包含：
+- "identified_company_name": "識別到的公司名稱（如有）",
+- "identified_company_id": 對應的公司ID（如能匹配，否則 null）,
+- "identified_bank_account_id": 對應的銀行帳戶ID（如能匹配，否則 null）,
+- "identified_bank_account_label": "識別到的銀行帳戶描述（如 HSBC - 123-456789-001）"`;
+    }
+
     const systemPrompt = `你是一個專業的銀行月結單解析助手。你的任務是從銀行月結單圖片中提取所有交易記錄。
 
 支援的銀行格式：
@@ -68,6 +98,7 @@ export class PdfParserService {
 - 支票號碼（如 CHEQUE 312928、CHQ NO.001618、CLEARING CHEQUE 200331）提取為 reference_no
 - 如果同一日期有多筆交易，每筆都要單獨列出
 - 日期統一轉換為 YYYY-MM-DD 格式（如 "2-Feb" 需根據月結單期間判斷年份）
+${identificationContext}
 
 請返回以下 JSON 格式（不要加 markdown 代碼塊標記）：
 {
@@ -75,7 +106,11 @@ export class PdfParserService {
   "account_no": "帳號（如有）",
   "statement_date": "月結單截止日期 YYYY-MM-DD（如有）",
   "statement_period": "月結單期間（如 2026年2月1日 至 2026年2月28日）",
-  "transactions": [
+  ${companies.length > 0 || bankAccounts.length > 0 ? `"identified_company_name": "識別到的公司名稱或 null",
+  "identified_company_id": 數字或null,
+  "identified_bank_account_id": 數字或null,
+  "identified_bank_account_label": "識別到的銀行帳戶描述或 null",
+  ` : ''}"transactions": [
     {
       "date": "YYYY-MM-DD",
       "raw_date": "原始日期字串",

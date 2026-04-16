@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Put,
+  Delete,
   Param,
   Body,
   Query,
@@ -51,12 +53,75 @@ export class BankReconciliationController {
     });
   }
 
+  /** Create a manual transaction */
+  @Post('transactions')
+  createTransaction(
+    @Body() body: {
+      bank_account_id: number;
+      date: string;
+      description: string;
+      amount: number;
+      reference_no?: string;
+      balance?: number;
+      bank_txn_remark?: string;
+    },
+  ) {
+    return this.service.createTransaction(body);
+  }
+
+  /** Update a transaction */
+  @Put('transactions/:id')
+  updateTransaction(
+    @Param('id') id: string,
+    @Body() body: {
+      date?: string;
+      description?: string;
+      amount?: number;
+      reference_no?: string;
+      balance?: number;
+      bank_txn_remark?: string;
+    },
+  ) {
+    return this.service.updateTransaction(+id, body);
+  }
+
+  /** Delete a single transaction */
+  @Delete('transactions/:id')
+  deleteTransaction(@Param('id') id: string) {
+    return this.service.deleteTransaction(+id);
+  }
+
+  /** Update remark for a transaction */
+  @Put('transactions/:id/remark')
+  updateRemark(
+    @Param('id') id: string,
+    @Body('bank_txn_remark') remark: string,
+  ) {
+    return this.service.updateRemark(+id, remark);
+  }
+
+  /** Batch delete transactions */
+  @Post('batch-delete')
+  batchDelete(@Body('ids') ids: number[]) {
+    return this.service.batchDelete(ids);
+  }
+
+  /** Batch move transactions to another bank account */
+  @Post('batch-move')
+  batchMove(
+    @Body('ids') ids: number[],
+    @Body('target_bank_account_id') targetBankAccountId: number,
+  ) {
+    return this.service.batchMove(ids, targetBankAccountId);
+  }
+
   @Post('import/:bankAccountId')
   importTransactions(
     @Param('bankAccountId') bankAccountId: string,
     @Body('rows') rows: any[],
+    @Body('source') source?: string,
   ) {
-    return this.service.importTransactions(+bankAccountId, rows);
+    return this.service.importTransactions(+bankAccountId, rows, source || 'csv');
   }
 
   /**
@@ -80,12 +145,24 @@ export class BankReconciliationController {
       }
     },
   }))
-  async parsePdf(@UploadedFile() file: Express.Multer.File) {
+  async parsePdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('companies') companiesJson?: string,
+    @Body('bank_accounts') bankAccountsJson?: string,
+  ) {
     if (!file) {
       throw new BadRequestException('請上傳 PDF 文件');
     }
+    // Parse company and bank account lists if provided
+    let companies: any[] = [];
+    let bankAccounts: any[] = [];
     try {
-      const result = await this.pdfParser.parsePdf(file.path);
+      if (companiesJson) companies = JSON.parse(companiesJson);
+      if (bankAccountsJson) bankAccounts = JSON.parse(bankAccountsJson);
+    } catch {}
+
+    try {
+      const result = await this.pdfParser.parsePdf(file.path, companies, bankAccounts);
       return result;
     } finally {
       // Clean up uploaded PDF after parsing

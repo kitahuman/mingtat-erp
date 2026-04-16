@@ -18,7 +18,7 @@ interface ParsedRow {
   _selected: boolean;
 }
 
-export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess }: any) {
+export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess, companies, bankAccounts }: any) {
   const [mode, setMode] = useState<ImportMode>('csv');
   const [step, setStep] = useState<Step>('upload');
   const [csvText, setCsvText] = useState('');
@@ -32,6 +32,12 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
+  // AI-identified company/account
+  const [identifiedCompanyName, setIdentifiedCompanyName] = useState<string>('');
+  const [identifiedCompanyId, setIdentifiedCompanyId] = useState<number | null>(null);
+  const [identifiedBankAccountId, setIdentifiedBankAccountId] = useState<number | null>(null);
+  const [identifiedBankAccountLabel, setIdentifiedBankAccountLabel] = useState<string>('');
+
   const reset = () => {
     setStep('upload');
     setCsvText('');
@@ -41,6 +47,10 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
     setStatementPeriod('');
     setError('');
     setImportResult(null);
+    setIdentifiedCompanyName('');
+    setIdentifiedCompanyId(null);
+    setIdentifiedBankAccountId(null);
+    setIdentifiedBankAccountLabel('');
   };
 
   const handleClose = () => {
@@ -153,7 +163,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
     setLoading(true);
     setError('');
     try {
-      const res = await bankReconciliationApi.parsePdf(pdfFile);
+      const res = await bankReconciliationApi.parsePdf(pdfFile, companies, bankAccounts);
       const data = res.data;
       if (!data.transactions || data.transactions.length === 0) {
         setError('AI 未能從 PDF 中提取任何交易記錄，請確認 PDF 格式正確');
@@ -161,6 +171,13 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
       }
       setBankName(data.bank_name || '');
       setStatementPeriod(data.statement_period || '');
+
+      // Set AI-identified company and account
+      if (data.identified_company_name) setIdentifiedCompanyName(data.identified_company_name);
+      if (data.identified_company_id) setIdentifiedCompanyId(data.identified_company_id);
+      if (data.identified_bank_account_id) setIdentifiedBankAccountId(data.identified_bank_account_id);
+      if (data.identified_bank_account_label) setIdentifiedBankAccountLabel(data.identified_bank_account_label);
+
       const rows: ParsedRow[] = data.transactions.map((t: any) => ({
         date: t.date,
         description: t.description || '',
@@ -195,7 +212,8 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
         amount: r.amount,
         balance: r.balance ?? null,
       }));
-      const res = await bankReconciliationApi.importTransactions(bankAccountId, rows);
+      const source = mode === 'pdf' ? 'pdf' : 'csv';
+      const res = await bankReconciliationApi.importTransactions(bankAccountId, rows, source);
       setImportResult(res.data);
       setStep('done');
       onSuccess();
@@ -271,7 +289,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
             {mode === 'csv' && (
               <div className="space-y-3">
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-                  <strong>CSV 格式：</strong>第一行為標題，欄位包含 Date, Description, Ref No（可選）, Withdrawals/Debit, Deposits/Credit, Balance（可選）
+                  <strong>CSV 格式：</strong>第一行為標題，欄位包含 Date, Description, Withdrawals, Deposits, Balance 等
                 </div>
                 <div
                   className="border border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors"
@@ -320,7 +338,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
             {mode === 'pdf' && (
               <div className="space-y-3">
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-                  <strong>支援銀行：</strong>HSBC、上海商業銀行、中國銀行（BOC）、OCBC
+                  <strong>支援銀行：</strong>HSBC、上海商業銀行、中國銀行（BOC）、OCBC。AI 將自動辨識公司和銀行帳戶。
                 </div>
                 <div
                   className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors"
@@ -387,6 +405,29 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess 
                 {bankName && <span><strong>銀行：</strong>{bankName}</span>}
                 {statementPeriod && <span><strong>對帳期間：</strong>{statementPeriod}</span>}
                 <span className="ml-auto text-blue-600 text-xs">AI 辨識結果，請核對後確認匯入</span>
+              </div>
+            )}
+
+            {/* AI-identified company and account info */}
+            {(identifiedCompanyName || identifiedBankAccountLabel) && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-1">
+                <div className="flex items-center gap-1 text-green-800 font-medium">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                  AI 自動辨識結果
+                </div>
+                {identifiedCompanyName && (
+                  <div className="text-green-700">
+                    <strong>公司：</strong>{identifiedCompanyName}
+                    {identifiedCompanyId && <span className="text-xs text-green-500 ml-1">(已匹配 ID: {identifiedCompanyId})</span>}
+                  </div>
+                )}
+                {identifiedBankAccountLabel && (
+                  <div className="text-green-700">
+                    <strong>銀行帳戶：</strong>{identifiedBankAccountLabel}
+                    {identifiedBankAccountId && <span className="text-xs text-green-500 ml-1">(已匹配 ID: {identifiedBankAccountId})</span>}
+                  </div>
+                )}
+                <p className="text-xs text-green-600">以上為 AI 辨識結果，匯入時仍使用您選擇的帳戶。如需更改，請關閉此視窗後切換帳戶再匯入。</p>
               </div>
             )}
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { Prisma } from '@prisma/client';
@@ -80,7 +80,119 @@ export class BankReconciliationService {
     return { items: enriched, total, page, limit };
   }
 
-  async importTransactions(bankAccountId: number, rows: any[]) {
+  // ── Single Transaction CRUD ──
+
+  /** Create a manual transaction */
+  async createTransaction(data: {
+    bank_account_id: number;
+    date: string;
+    description: string;
+    amount: number;
+    reference_no?: string;
+    balance?: number;
+    bank_txn_remark?: string;
+  }) {
+    const amount = new Prisma.Decimal(data.amount);
+    return this.prisma.bankTransaction.create({
+      data: {
+        bank_account_id: data.bank_account_id,
+        date: new Date(data.date),
+        description: data.description,
+        amount,
+        debit_credit: amount.greaterThanOrEqualTo(0) ? 'credit' : 'debit',
+        balance: data.balance != null ? new Prisma.Decimal(data.balance) : null,
+        reference_no: data.reference_no || null,
+        bank_txn_source: 'manual',
+        bank_txn_remark: data.bank_txn_remark || null,
+        match_status: 'unmatched',
+      },
+    });
+  }
+
+  /** Update a transaction */
+  async updateTransaction(
+    id: number,
+    data: {
+      date?: string;
+      description?: string;
+      amount?: number;
+      reference_no?: string;
+      balance?: number;
+      bank_txn_remark?: string;
+    },
+  ) {
+    const tx = await this.prisma.bankTransaction.findUnique({ where: { id } });
+    if (!tx) throw new NotFoundException('交易記錄不存在');
+
+    const updateData: any = {};
+    if (data.date !== undefined) updateData.date = new Date(data.date);
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.amount !== undefined) {
+      const amount = new Prisma.Decimal(data.amount);
+      updateData.amount = amount;
+      updateData.debit_credit = amount.greaterThanOrEqualTo(0) ? 'credit' : 'debit';
+    }
+    if (data.reference_no !== undefined) updateData.reference_no = data.reference_no || null;
+    if (data.balance !== undefined) updateData.balance = data.balance != null ? new Prisma.Decimal(data.balance) : null;
+    if (data.bank_txn_remark !== undefined) updateData.bank_txn_remark = data.bank_txn_remark || null;
+
+    return this.prisma.bankTransaction.update({
+      where: { id },
+      data: updateData,
+    });
+  }
+
+  /** Delete a single transaction */
+  async deleteTransaction(id: number) {
+    const tx = await this.prisma.bankTransaction.findUnique({ where: { id } });
+    if (!tx) throw new NotFoundException('交易記錄不存在');
+    return this.prisma.bankTransaction.delete({ where: { id } });
+  }
+
+  /** Update remark for a transaction */
+  async updateRemark(id: number, remark: string | null) {
+    const tx = await this.prisma.bankTransaction.findUnique({ where: { id } });
+    if (!tx) throw new NotFoundException('交易記錄不存在');
+    return this.prisma.bankTransaction.update({
+      where: { id },
+      data: { bank_txn_remark: remark || null },
+    });
+  }
+
+  // ── Batch Operations ──
+
+  /** Delete multiple transactions */
+  async batchDelete(ids: number[]) {
+    if (!ids || ids.length === 0) throw new BadRequestException('請選擇至少一筆交易');
+    const result = await this.prisma.bankTransaction.deleteMany({
+      where: { id: { in: ids } },
+    });
+    return { deleted: result.count };
+  }
+
+  /** Move multiple transactions to a different bank account */
+  async batchMove(ids: number[], targetBankAccountId: number) {
+    if (!ids || ids.length === 0) throw new BadRequestException('請選擇至少一筆交易');
+    // Verify target bank account exists
+    const account = await this.prisma.bankAccount.findUnique({ where: { id: targetBankAccountId } });
+    if (!account) throw new NotFoundException('目標銀行帳戶不存在');
+
+    // Unmatch all moved transactions (since they are changing accounts)
+    const result = await this.prisma.bankTransaction.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        bank_account_id: targetBankAccountId,
+        match_status: 'unmatched',
+        matched_type: null,
+        matched_id: null,
+      },
+    });
+    return { moved: result.count };
+  }
+
+  // ── Import ──
+
+  async importTransactions(bankAccountId: number, rows: any[], source: string = 'csv') {
     const batchId = `import_${Date.now()}`;
     const results = { imported: 0, skipped: 0 };
 
@@ -116,6 +228,7 @@ export class BankReconciliationService {
           reference_no,
           import_batch: batchId,
           match_status: 'unmatched',
+          bank_txn_source: source,
         },
       });
       results.imported++;
@@ -173,10 +286,6 @@ export class BankReconciliationService {
 
       if (isCredit) {
         // === PaymentIn matching ===
-        // PaymentIn has bank_account_id but no direct company_id
-        // Company is inferred via project.company_id
-
-        // Priority 1: Same bank account + reference_no + amount + date range
         if (!matched && tx.reference_no) {
           const m = await this.prisma.paymentIn.findFirst({
             where: {
@@ -193,7 +302,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 2: Same company (via project) + reference_no + amount + date range
         if (!matched && tx.reference_no && companyId) {
           const m = await this.prisma.paymentIn.findFirst({
             where: {
@@ -210,7 +318,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 3: Same bank account + amount + date range (unique match only)
         if (!matched) {
           const candidates = await this.prisma.paymentIn.findMany({
             where: {
@@ -226,7 +333,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 4: Same company (via project) + amount + date range (unique match only)
         if (!matched && companyId) {
           const candidates = await this.prisma.paymentIn.findMany({
             where: {
@@ -242,9 +348,6 @@ export class BankReconciliationService {
         }
       } else {
         // === PaymentOut matching ===
-        // PaymentOut has both bank_account_id and company_id
-
-        // Priority 1: Same bank account + reference_no + amount + date range
         if (!matched && tx.reference_no) {
           const m = await this.prisma.paymentOut.findFirst({
             where: {
@@ -261,7 +364,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 2: Same company + reference_no + amount + date range
         if (!matched && tx.reference_no && companyId) {
           const m = await this.prisma.paymentOut.findFirst({
             where: {
@@ -278,7 +380,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 3: Same bank account + amount + date range (unique match only)
         if (!matched) {
           const candidates = await this.prisma.paymentOut.findMany({
             where: {
@@ -294,7 +395,6 @@ export class BankReconciliationService {
           }
         }
 
-        // Priority 4: Same company + amount + date range (unique match only)
         if (!matched && companyId) {
           const candidates = await this.prisma.paymentOut.findMany({
             where: {
@@ -425,7 +525,6 @@ export class BankReconciliationService {
         take: 30,
       });
 
-      // Sort: same bank account first, then same company, then others
       return candidates.sort((a, b) => {
         const aScore = (a.bank_account_id === bankAccountId ? 2 : 0) +
           (companyId && (a.project as any)?.company_id === companyId ? 1 : 0);
@@ -462,7 +561,6 @@ export class BankReconciliationService {
         take: 30,
       });
 
-      // Sort: same bank account first, then same company, then others
       return candidates.sort((a, b) => {
         const aScore = (a.bank_account_id === bankAccountId ? 2 : 0) +
           (companyId && a.company_id === companyId ? 1 : 0);

@@ -649,10 +649,18 @@ export const bankAccountsApi = {
 
 export const bankReconciliationApi = {
   findTransactions: (params: any) => api.get('/bank-reconciliation/transactions', { params }),
-  importTransactions: (bankAccountId: number, rows: any[]) => api.post(`/bank-reconciliation/import/${bankAccountId}`, { rows }),
-  parsePdf: (file: File) => {
+  importTransactions: (bankAccountId: number, rows: any[], source?: string) => api.post(`/bank-reconciliation/import/${bankAccountId}`, { rows, source }),
+  createTransaction: (data: any) => api.post('/bank-reconciliation/transactions', data),
+  updateTransaction: (id: number, data: any) => api.put(`/bank-reconciliation/transactions/${id}`, data),
+  deleteTransaction: (id: number) => api.delete(`/bank-reconciliation/transactions/${id}`),
+  updateRemark: (id: number, remark: string) => api.put(`/bank-reconciliation/transactions/${id}/remark`, { bank_txn_remark: remark }),
+  batchDelete: (ids: number[]) => api.post('/bank-reconciliation/batch-delete', { ids }),
+  batchMove: (ids: number[], targetBankAccountId: number) => api.post('/bank-reconciliation/batch-move', { ids, target_bank_account_id: targetBankAccountId }),
+  parsePdf: (file: File, companies?: any[], bankAccounts?: any[]) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (companies) formData.append('companies', JSON.stringify(companies));
+    if (bankAccounts) formData.append('bank_accounts', JSON.stringify(bankAccounts));
     return api.post('/bank-reconciliation/parse-pdf', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 180000, // 3 minutes for AI processing
