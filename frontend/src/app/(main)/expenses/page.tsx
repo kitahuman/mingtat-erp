@@ -491,15 +491,15 @@ export default function ExpensesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">費用報銷</h1>
-          <p className="text-gray-500 text-sm mt-1">管理公司各項支出記錄（包括員工報銷），點擊行可查看詳情</p>
+          <h1 className="text-2xl font-bold text-gray-900">支出管理</h1>
+          <p className="text-gray-500 text-sm mt-1">管理公司各項支出記錄，點擊行可查看詳情</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn-primary">新增支出</button>
       </div>
 
       <div className="card">
         <InlineEditDataTable
-          exportFilename="支出記錄列表"
+          exportFilename="支出管理列表"
           columns={visibleColumns as any}
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}

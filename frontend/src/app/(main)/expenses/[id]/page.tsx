@@ -75,7 +75,7 @@ export default function ExpenseDetailPage() {
         setExpense(r.data);
         setForm(toForm(r.data));
       })
-      .catch(() => setError('無法載入支出記錄'))
+      .catch(() => setError('無法載入支出管理記錄'))
       .finally(() => setLoading(false));
   }, [expenseId]);
 
@@ -264,7 +264,7 @@ export default function ExpenseDetailPage() {
             ← 返回
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">支出詳情 #{expense.id}</h1>
+            <h1 className="text-xl font-bold text-gray-900">支出管理詳情 #{expense.id}</h1>
             <p className="text-gray-500 text-sm">{fmtDate(expense.date)} · {expense.item || '無項目描述'}</p>
           </div>
         </div>

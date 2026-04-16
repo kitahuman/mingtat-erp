@@ -87,7 +87,7 @@ const navEntries: NavEntry[] = [
     label: '會計部門',
     icon: '💵',
     items: [
-      { href: '/expenses', label: '費用報銷', icon: '💸', pageKey: 'expenses' },
+      { href: '/expenses', label: '支出管理', icon: '💸', pageKey: 'expenses' },
       { href: '/invoices', label: '發票管理', icon: '🧾', pageKey: 'invoices' },
       { href: '/payment-in', label: '收款記錄', icon: '💰', pageKey: 'payment-in' },
       { href: '/payment-out', label: '付款記錄', icon: '💳', pageKey: 'payment-out' },
