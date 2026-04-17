@@ -1,8 +1,9 @@
 // 明達建築 ERP - Service Worker
 // 策略：靜態資源 Cache First，API 請求 Network First
+// 支援 Web Push 通知（WhatsApp Console）
 
-const CACHE_NAME = 'mingtat-erp-v1';
-const STATIC_CACHE_NAME = 'mingtat-erp-static-v1';
+const CACHE_NAME = 'mingtat-erp-v2';
+const STATIC_CACHE_NAME = 'mingtat-erp-static-v2';
 
 // 預先快取的靜態資源
 const PRECACHE_ASSETS = [
@@ -12,6 +13,9 @@ const PRECACHE_ASSETS = [
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/manifest.json',
+  '/whatsapp-console/icon-192.png',
+  '/whatsapp-console/icon-512.png',
+  '/whatsapp-console/notification.mp3',
 ];
 
 // ── Install：預先快取靜態資源 ──────────────────────────────────────────────
@@ -74,6 +78,68 @@ self.addEventListener('fetch', (event) => {
 
   // 其餘請求 → Network First
   event.respondWith(networkFirst(request));
+});
+
+// ── Web Push 通知接收 ──────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: 'WhatsApp 新訊息', body: event.data.text() };
+  }
+
+  const title = payload.title || 'WhatsApp 遙控台';
+  const options = {
+    body: payload.body || '您有新訊息',
+    icon: payload.icon || '/whatsapp-console/icon-192.png',
+    badge: payload.badge || '/whatsapp-console/badge-72.png',
+    tag: payload.tag || 'whatsapp-message',
+    data: payload.data || {},
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    silent: false,
+    // iOS Safari 支援的額外選項
+    timestamp: Date.now(),
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+// ── 通知點擊處理 ───────────────────────────────────────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const url = data.url || '/whatsapp-console';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 尋找已開啟的 WhatsApp Console 視窗
+      for (const client of windowClients) {
+        if (client.url.includes('/whatsapp-console')) {
+          client.focus();
+          // 傳送訊息給頁面，讓它選擇對應的對話
+          if (data.chatId) {
+            client.postMessage({ type: 'OPEN_CHAT', chatId: data.chatId });
+          }
+          return;
+        }
+      }
+      // 沒有開啟的視窗，開新視窗
+      return clients.openWindow(url);
+    })
+  );
+});
+
+// ── 通知關閉處理 ───────────────────────────────────────────────────────────
+self.addEventListener('notificationclose', (event) => {
+  // 可以在這裡記錄通知被關閉的事件
+  console.log('[SW] Notification closed:', event.notification.tag);
 });
 
 // ── Cache First 策略 ───────────────────────────────────────────────────────

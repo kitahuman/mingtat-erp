@@ -53,6 +53,7 @@ model User {
   deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
   deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
+  web_push_subscriptions     WebPushSubscription[]
 
   @@map("users")
 }
@@ -2575,4 +2576,22 @@ model EquipmentProfitSetting {
 
   @@unique([equipment_profit_equipment_type, equipment_profit_equipment_id])
   @@map("equipment_profit_settings")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Web Push Subscriptions (WhatsApp Console 推送通知訂閱)
+// ══════════════════════════════════════════════════════════════
+model WebPushSubscription {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  endpoint    String   @db.Text
+  p256dh      String   @db.Text
+  auth        String   @db.VarChar(255)
+  user_agent  String?  @db.VarChar(500)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  @@unique([user_id, endpoint])
+  @@index([user_id])
+  @@map("web_push_subscriptions")
 }

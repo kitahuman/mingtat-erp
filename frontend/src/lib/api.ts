@@ -993,3 +993,24 @@ export const systemSettingsApi = {
   setMany: (settings: { key: string; value: string; description?: string }[]) =>
     api.put('/system-settings', { settings }),
 };
+
+// WhatsApp Console API
+export const whatsappConsoleApi = {
+  getStatus: () => api.get('/whatsapp-console/status'),
+  getChats: () => api.get('/whatsapp-console/chats'),
+  getMessages: (chatId: string, limit?: number) =>
+    api.get(`/whatsapp-console/messages/${encodeURIComponent(chatId)}`, { params: { limit } }),
+  sendMessage: (chatId: string, text: string) =>
+    api.post('/whatsapp-console/send-message', { chatId, text }),
+  sendImage: (chatId: string, imageBase64: string, caption?: string, mimeType?: string) =>
+    api.post('/whatsapp-console/send-image', { chatId, imageBase64, caption, mimeType }),
+  sendVoice: (chatId: string, audioBase64: string, mimeType?: string) =>
+    api.post('/whatsapp-console/send-voice', { chatId, audioBase64, mimeType }),
+  getMediaUrl: (messageId: string, chatId: string) =>
+    `/api/whatsapp-console/media/${encodeURIComponent(messageId)}?chatId=${encodeURIComponent(chatId)}`,
+  getVapidKey: () => api.get('/whatsapp-console/push/vapid-key'),
+  subscribePush: (subscription: PushSubscriptionJSON) =>
+    api.post('/whatsapp-console/push/subscribe', { subscription }),
+  unsubscribePush: (endpoint: string) =>
+    api.delete('/whatsapp-console/push/subscribe', { data: { endpoint } }),
+};

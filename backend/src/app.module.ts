@@ -63,6 +63,7 @@ import { StatutoryHolidaysModule } from './statutory-holidays/statutory-holidays
 import { HealthModule } from './health/health.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { EquipmentProfitModule } from './equipment-profit/equipment-profit.module';
+import { WhatsappConsoleModule } from './whatsapp-console/whatsapp-console.module';
 
 @Module({
   imports: [
@@ -151,6 +152,7 @@ import { EquipmentProfitModule } from './equipment-profit/equipment-profit.modul
     HealthModule,
     SystemSettingsModule,
     EquipmentProfitModule,
+    WhatsappConsoleModule,
   ],
   providers: [
     {
