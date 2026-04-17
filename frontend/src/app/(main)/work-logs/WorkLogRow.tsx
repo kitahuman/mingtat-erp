@@ -154,7 +154,7 @@ export default function WorkLogRow({
     return (
       <tr
         className={`cursor-pointer border-b border-gray-100 text-xs ${
-          hasUnverifiedClient ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-blue-50'
+          hasUnverifiedClient ? 'bg-amber-50 hover:bg-amber-200' : 'hover:bg-blue-100'
         }`}
         onClick={onEdit}
       >

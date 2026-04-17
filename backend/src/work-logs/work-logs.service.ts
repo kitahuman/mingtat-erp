@@ -732,7 +732,7 @@ export class WorkLogsService {
         id: v.id,
         value: v.plate_number,
         label: v.plate_number,
-        tonnage: v.tonnage,
+        tonnage: v.tonnage != null ? `${v.tonnage}噸` : null,
         type: v.machine_type,
         source: 'vehicle',
       }));
@@ -768,7 +768,7 @@ export class WorkLogsService {
         id: m.id,
         value: m.machine_code,
         label: m.machine_code,
-        tonnage: m.tonnage,
+        tonnage: m.tonnage != null ? `${m.tonnage}噸` : null,
         type: m.machine_type,
         source: 'machinery',
       }));

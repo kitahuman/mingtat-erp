@@ -1536,7 +1536,7 @@ export class EmployeePortalService {
         label: `${v.plate_number} (公司車)`,
         category: 'vehicle' as const,
         type: v.machine_type ?? null,
-        tonnage: v.tonnage != null ? String(v.tonnage) : null,
+        tonnage: v.tonnage != null ? `${v.tonnage}噸` : null,
       }));
 
     const machineryItems: { value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[] =
@@ -1545,7 +1545,7 @@ export class EmployeePortalService {
         label: `${m.machine_code} (機械)`,
         category: 'machinery' as const,
         type: m.machine_type ?? null,
-        tonnage: m.tonnage != null ? String(m.tonnage) : null,
+        tonnage: m.tonnage != null ? `${m.tonnage}噸` : null,
       }));
 
     const subconItems: { value: string; label: string; category: 'vehicle' | 'machinery' | 'subcon_fleet'; type: string | null; tonnage: string | null }[] =

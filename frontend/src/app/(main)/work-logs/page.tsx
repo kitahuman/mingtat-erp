@@ -1480,7 +1480,7 @@ export default function WorkLogsPage() {
                   <>
                   <tr key={row.id}
                     className={`border-b border-gray-100 text-xs ${
-                      rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-50/30'
+                      rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-100'
                     }`}
                   >
                     {/* 行數編號 - sticky left */}
