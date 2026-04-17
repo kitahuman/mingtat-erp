@@ -7,6 +7,7 @@ import { ChatList } from './components/ChatList';
 import { MessageView } from './components/MessageView';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { useWhatsappSSE } from './hooks/useWhatsappSSE';
+import { useContactStore } from './hooks/useContactStore';
 
 export interface WaMessage {
   id: string;
@@ -42,6 +43,9 @@ export default function WhatsappConsolePage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null); // null = 尚未檢查
   const notificationSound = useRef<HTMLAudioElement | null>(null);
+
+  // 自訂備註名稱 & pin 置頂
+  const { notes, pins, setNote, getDisplayName, togglePin } = useContactStore();
 
   // 初始化通知音效
   useEffect(() => {
@@ -240,8 +244,10 @@ export default function WhatsappConsolePage() {
   const filteredChats = searchQuery.trim()
     ? chats.filter(c => {
         const q = searchQuery.toLowerCase();
-        // 搜尋顯示名稱、電話號碼（phone 欄位）、以及 chat id（包含 @s.whatsapp.net 的完整 JID）
+        // 搜尋自訂備註、顯示名稱、電話號碼、chat id
+        const displayName = getDisplayName(c.id, c.name !== c.phone ? c.name : null, c.phone);
         return (
+          displayName.toLowerCase().includes(q) ||
           c.name.toLowerCase().includes(q) ||
           (c.phone && c.phone.includes(q)) ||
           c.id.toLowerCase().includes(q)
@@ -340,6 +346,11 @@ export default function WhatsappConsolePage() {
           unreadCounts={unreadCounts}
           loading={loadingChats}
           onSelectChat={handleSelectChat}
+          notes={notes}
+          pins={pins}
+          onSetNote={setNote}
+          onTogglePin={togglePin}
+          getDisplayName={getDisplayName}
         />
       </div>
 

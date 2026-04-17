@@ -19,7 +19,8 @@ interface MessageViewProps {
 
 function formatMessageTime(timestamp: number): string {
   if (!timestamp) return '';
-  const date = new Date(timestamp * 1000);
+  // Bot 已將時間戳轉為毫秒，直接使用
+  const date = new Date(timestamp);
   return date.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
@@ -99,7 +100,8 @@ function MessageBubble({ msg }: { msg: WaMessage }) {
 }
 
 function DateDivider({ timestamp }: { timestamp: number }) {
-  const date = new Date(timestamp * 1000);
+  // Bot 已將時間戳轉為毫秒，直接使用
+  const date = new Date(timestamp);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -205,7 +207,8 @@ export function MessageView({
   let currentGroup: WaMessage[] = [];
 
   messages.forEach(msg => {
-    const date = new Date(msg.timestamp * 1000);
+    // Bot 已將時間戳轉為毫秒，直接使用
+    const date = new Date(msg.timestamp);
     const dateStr = date.toDateString();
     if (dateStr !== currentDate) {
       if (currentGroup.length > 0) {
