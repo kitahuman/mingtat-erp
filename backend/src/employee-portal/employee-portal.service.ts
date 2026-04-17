@@ -1482,7 +1482,15 @@ export class EmployeePortalService {
       },
       orderBy: { plate_number: 'asc' },
     });
-    return vehicles;
+    return vehicles.map(v => ({
+      id: v.id,
+      value: v.plate_number,
+      label: v.plate_number,
+      type: v.machine_type,
+      tonnage: v.tonnage != null ? `${v.tonnage}噸` : null,
+      brand: v.brand,
+      model: v.model,
+    }));
   }
 
   async getMachinerySimple() {
@@ -1498,7 +1506,15 @@ export class EmployeePortalService {
       },
       orderBy: { machine_code: 'asc' },
     });
-    return machinery;
+    return machinery.map(m => ({
+      id: m.id,
+      value: m.machine_code,
+      label: m.machine_code,
+      type: m.machine_type,
+      tonnage: m.tonnage != null ? `${m.tonnage}噸` : null,
+      brand: m.brand,
+      model: m.model,
+    }));
   }
 
   /** 統一返回所有可用機號：公司車 + 機械設備 + 街車 */
