@@ -988,6 +988,16 @@ export class WhatsappService {
   // AI 分類和解析（支援 order / modification / chat 三種類型）
   // ══════════════════════════════════════════════════════════════
   private async classifyAndParseMessage(text: string): Promise<AiClassification> {
+    // ── 文字預處理：修復常見格式問題 ──
+    // 1. 修復日期中的空格：「1 7-4-2026」→「17-4-2026」、「2 2-4-2026」→「22-4-2026」
+    //    匹配模式：行首或換行後，單個數字 + 空格 + 數字 + 連字號 + 數字 + 連字號 + 4位年份
+    text = text.replace(/(?:^|\n)(\d)\s+(\d{1,2})-(\d{1,2})-(\d{4})/g, (match, d1, d2, m, y) => {
+      const prefix = match.startsWith('\n') ? '\n' : '';
+      return `${prefix}${d1}${d2}-${m}-${y}`;
+    });
+    // 2. 修復 DC 編號中的空格：「D C 14」→「DC14」、「D C13」→「DC13」
+    text = text.replace(/D\s+C\s*(\d+)/gi, 'DC$1');
+
     const today = new Date().toISOString().slice(0, 10);
     const systemPrompt = `你是一個專門分析香港建築運輸公司 WhatsApp 群組訊息的 AI 助手。
 你的任務是：
@@ -1275,6 +1285,7 @@ DC19喺水澗石倉
   DC19 → {order_type:"machinery", work_description:"維修保養", location:"水澗石倉", remarks:"喺水澗石倉"}
 
 ## 日期處理
+- ⛔ 日期中可能有多餘空格！例如「1 7-4-2026」實際是「17-4-2026」，「2 2-4-2026」實際是「22-4-2026」。解析時必須先去除數字之間的空格再識別日期。
 - 日期格式：D-M-YYYY 或 D-M-YYYY(暫定) 或 D-M-YYYY（星期X）暫定/更新
 - ⛔ 日期範圍格式：D-D/M/YYYY 或 D-D/M-YYYY（如 14-15/4/2026 表示 14/4 和 15/4 兩天）
   - 如果是日期範圍，回傳 order_date_start 和 order_date_end 兩個欄位
