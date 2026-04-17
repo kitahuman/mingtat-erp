@@ -38,6 +38,7 @@ export default function WhatsappConsolePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [botStatus, setBotStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const notificationSound = useRef<HTMLAudioElement | null>(null);
 
   // 初始化通知音效
@@ -46,11 +47,13 @@ export default function WhatsappConsolePage() {
     notificationSound.current.volume = 0.5;
   }, []);
 
-  // 檢查登入狀態
+  // 檢查登入狀態 — 必須在任何 API 請求之前完成
   useEffect(() => {
     const token = Cookies.get('token');
     if (!token) {
       window.location.href = '/login?redirect=/whatsapp-console';
+    } else {
+      setIsAuthenticated(true);
     }
   }, []);
 
@@ -98,11 +101,12 @@ export default function WhatsappConsolePage() {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     loadChats();
     checkBotStatus();
     const interval = setInterval(checkBotStatus, 30000);
     return () => clearInterval(interval);
-  }, [loadChats, checkBotStatus]);
+  }, [isAuthenticated, loadChats, checkBotStatus]);
 
   useEffect(() => {
     if (selectedChatId) {
@@ -218,6 +222,15 @@ export default function WhatsappConsolePage() {
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+
+  // 尚未驗證登入狀態時，顯示載入畫面
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen bg-[#111b21] items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00a884]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#111b21] text-white overflow-hidden" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>

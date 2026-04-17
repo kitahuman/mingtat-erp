@@ -24,7 +24,10 @@ api.interceptors.response.use(
       Cookies.remove('token');
       Cookies.remove('user');
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+        const currentPath = window.location.pathname;
+        // For whatsapp-console, redirect back to it after login
+        const redirectParam = currentPath !== '/' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
+        window.location.href = `/login${redirectParam}`;
       }
     }
     return Promise.reject(error);
