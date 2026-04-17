@@ -1,10 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { workLogsApi, fleetRateCardsApi } from '@/lib/api';
+import {
+  workLogsApi, companiesApi, partnersApi, quotationsApi, fieldOptionsApi,
+} from '@/lib/api';
 import ColumnFilter from '@/components/ColumnFilter';
+import SearchableSelect from '@/components/SearchableSelect';
+import Combobox from '@/components/Combobox';
+import ClientContractCombobox from '@/components/ClientContractCombobox';
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+interface Option { value: string | number; label: string; }
 
 interface UnmatchedRow {
   company_id: number | null;
@@ -49,24 +56,24 @@ interface ColDef {
 // ── Column definitions ─────────────────────────────────────────────────────
 
 const COLS: ColDef[] = [
-  { key: 'company_name',       label: '公司',     sortKey: 'company_name',       filterKey: 'company_name',       width: 'w-28' },
-  { key: 'client_name',        label: '客戶',     sortKey: 'client_name',        filterKey: 'client_name',        width: 'w-36' },
-  { key: 'client_contract_no', label: '客戶合約', sortKey: 'client_contract_no', filterKey: 'client_contract_no', width: 'w-28' },
-  { key: 'service_type',       label: '服務類型', sortKey: 'service_type',       filterKey: 'service_type',       width: 'w-24' },
-  { key: 'quotation_no',       label: '報價單',   sortKey: 'quotation_no',       filterKey: 'quotation_no',       width: 'w-36' },
-  { key: 'day_night',          label: '日夜',     sortKey: 'day_night',          filterKey: 'day_night',          width: 'w-16' },
-  { key: 'tonnage',            label: '噸數',     sortKey: 'tonnage',            filterKey: 'tonnage',            width: 'w-20' },
-  { key: 'machine_type',       label: '機種',     sortKey: 'machine_type',       filterKey: 'machine_type',       width: 'w-24' },
-  { key: 'start_location',     label: '起點',     sortKey: 'start_location',     filterKey: 'start_location',     width: 'w-28' },
-  { key: 'end_location',       label: '終點',     sortKey: 'end_location',       filterKey: 'end_location',       width: 'w-28' },
-  { key: 'count',              label: '受影響筆數', sortKey: 'count',            filterKey: '',                   width: 'w-20' },
+  { key: 'company_name',       label: '公司',     sortKey: 'company_name',       filterKey: 'company_name',       width: 'min-w-[7rem]' },
+  { key: 'client_name',        label: '客戶',     sortKey: 'client_name',        filterKey: 'client_name',        width: 'min-w-[9rem]' },
+  { key: 'client_contract_no', label: '客戶合約', sortKey: 'client_contract_no', filterKey: 'client_contract_no', width: 'min-w-[7rem]' },
+  { key: 'service_type',       label: '服務類型', sortKey: 'service_type',       filterKey: 'service_type',       width: 'min-w-[6rem]' },
+  { key: 'quotation_no',       label: '報價單',   sortKey: 'quotation_no',       filterKey: 'quotation_no',       width: 'min-w-[9rem]' },
+  { key: 'day_night',          label: '日夜',     sortKey: 'day_night',          filterKey: 'day_night',          width: 'min-w-[4rem]' },
+  { key: 'tonnage',            label: '噸數',     sortKey: 'tonnage',            filterKey: 'tonnage',            width: 'min-w-[5rem]' },
+  { key: 'machine_type',       label: '機種',     sortKey: 'machine_type',       filterKey: 'machine_type',       width: 'min-w-[6rem]' },
+  { key: 'start_location',     label: '起點',     sortKey: 'start_location',     filterKey: 'start_location',     width: 'min-w-[7rem]' },
+  { key: 'end_location',       label: '終點',     sortKey: 'end_location',       filterKey: 'end_location',       width: 'min-w-[7rem]' },
+  { key: 'count',              label: '受影響筆數', sortKey: 'count',            filterKey: '',                   width: 'min-w-[5rem]' },
 ];
 
 const RATE_COLS = [
-  { key: 'rate',           label: '費率',     required: true  },
-  { key: 'ot_rate',        label: 'OT費率',   required: false },
-  { key: 'mid_shift_rate', label: '中直費率', required: false },
-] as const;
+  { key: 'rate'          as const, label: '費率',     required: true  },
+  { key: 'ot_rate'       as const, label: 'OT費率',   required: false },
+  { key: 'mid_shift_rate'as const, label: '中直費率', required: false },
+];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -82,64 +89,120 @@ function emptyRates(): RateInputs {
   return { rate: '', ot_rate: '', mid_shift_rate: '' };
 }
 
+// ── EditDraft type ─────────────────────────────────────────────────────────
+
+interface EditDraft {
+  company_id: number | null;
+  client_id: number | null;
+  client_contract_no: string | null;
+  service_type: string | null;
+  quotation_id: number | null;
+  day_night: string | null;
+  tonnage: string | null;
+  machine_type: string | null;
+  start_location: string | null;
+  end_location: string | null;
+}
+
+function rowToEditDraft(row: UnmatchedRow): EditDraft {
+  return {
+    company_id: row.company_id,
+    client_id: row.client_id,
+    client_contract_no: row.client_contract_no,
+    service_type: row.service_type,
+    quotation_id: row.quotation_id,
+    day_night: row.day_night,
+    tonnage: row.tonnage,
+    machine_type: row.machine_type,
+    start_location: row.start_location,
+    end_location: row.end_location,
+  };
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function MissingPriceTab() {
-  // Data state
-  const [data, setData]                   = useState<UnmatchedRow[]>([]);
-  const [total, setTotal]                 = useState(0);
+  // ── Reference data ────────────────────────────────────────────────────────
+  const [companies, setCompanies]   = useState<Option[]>([]);
+  const [clients, setClients]       = useState<Option[]>([]);
+  const [quotations, setQuotations] = useState<Option[]>([]);
+  const [fieldOptions, setFieldOptions] = useState<Record<string, Option[]>>({});
+
+  // ── Table data ────────────────────────────────────────────────────────────
+  const [data, setData]                     = useState<UnmatchedRow[]>([]);
+  const [total, setTotal]                   = useState(0);
   const [totalUnmatched, setTotalUnmatched] = useState(0);
-  const [page, setPage]                   = useState(1);
-  const [totalPages, setTotalPages]       = useState(0);
-  const [loading, setLoading]             = useState(false);
+  const [page, setPage]                     = useState(1);
+  const [totalPages, setTotalPages]         = useState(0);
+  const [loading, setLoading]               = useState(false);
   const LIMIT = 50;
 
-  // Sort state
+  // ── Sort ──────────────────────────────────────────────────────────────────
   const [sortBy, setSortBy]       = useState('count');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
-  // ColumnFilter state: Record<columnKey, Set<string> | undefined>
-  // null means "all selected" (no filter), Set means specific values selected
+  // ── Column filters ────────────────────────────────────────────────────────
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
-  // Inline edit state: which row is being edited (by rowKey), and its draft values
+  // ── Inline edit ───────────────────────────────────────────────────────────
   const [editingKey, setEditingKey]   = useState<string | null>(null);
-  const [editDraft, setEditDraft]     = useState<Partial<UnmatchedRow>>({});
+  const [editDraft, setEditDraft]     = useState<EditDraft | null>(null);
   const [editRates, setEditRates]     = useState<RateInputs>(emptyRates());
   const [savingEdit, setSavingEdit]   = useState(false);
 
-  // "Add new rate" state: per-row rate inputs (for rows not yet in edit mode)
+  // ── Quick-add rate inputs (per row, when not editing) ─────────────────────
   const [rateInputs, setRateInputs]   = useState<Record<string, RateInputs>>({});
   const [submitting, setSubmitting]   = useState<Record<string, boolean>>({});
   const [successRows, setSuccessRows] = useState<Set<string>>(new Set());
 
-  // Toast
+  // ── Toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
+  // ── Load reference data ───────────────────────────────────────────────────
+  useEffect(() => {
+    Promise.all([
+      companiesApi.simple(),
+      partnersApi.simple(),
+      quotationsApi.list({ limit: 500 }),
+      fieldOptionsApi.getAll(),
+    ]).then(([cp, pt, qt, fo]) => {
+      setCompanies((cp.data || []).map((c: Record<string, unknown>) => ({
+        value: c.id as number,
+        label: c.internal_prefix ? `${c.internal_prefix} ${c.name}` : c.name as string,
+      })));
+      setClients((pt.data || []).map((p: Record<string, unknown>) => ({
+        value: p.id as number,
+        label: p.name as string,
+      })));
+      const qoData: Record<string, unknown>[] = qt.data?.data || qt.data || [];
+      setQuotations(qoData.map((q) => ({
+        value: q.id as number,
+        label: (q.quotation_no as string) + (q.contract_name ? ` ${q.contract_name}` : ''),
+      })));
+      const grouped: Record<string, Option[]> = {};
+      for (const [cat, opts] of Object.entries(fo.data || {})) {
+        grouped[cat] = (opts as Record<string, unknown>[]).map((o) => ({ value: o.label as string, label: o.label as string }));
+      }
+      setFieldOptions(grouped);
+    }).catch(console.error);
+  }, []);
 
+  // ── Fetch table data ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Build params: convert columnFilters to API filter params
       const params: Record<string, string | number> = {
         page,
         limit: LIMIT,
         sort_by: sortBy,
         sort_order: sortOrder,
       };
-      // Map column filter keys to API query params
       const filterKeyToParam: Record<string, string> = {
-        company_name:       'company_name',
-        client_name:        'client_name',
-        client_contract_no: 'client_contract_no',
-        service_type:       'service_type',
-        quotation_no:       'quotation_no',
-        day_night:          'day_night',
-        tonnage:            'tonnage',
-        machine_type:       'machine_type',
-        start_location:     'start_location',
-        end_location:       'end_location',
+        company_name: 'company_name', client_name: 'client_name',
+        client_contract_no: 'client_contract_no', service_type: 'service_type',
+        quotation_no: 'quotation_no', day_night: 'day_night',
+        tonnage: 'tonnage', machine_type: 'machine_type',
+        start_location: 'start_location', end_location: 'end_location',
       };
       for (const [col, vals] of Object.entries(columnFilters)) {
         const param = filterKeyToParam[col];
@@ -163,15 +226,13 @@ export default function MissingPriceTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Toast ────────────────────────────────────────────────────────────────
-
+  // ── Toast ─────────────────────────────────────────────────────────────────
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   }
 
-  // ── Sort ─────────────────────────────────────────────────────────────────
-
+  // ── Sort ──────────────────────────────────────────────────────────────────
   function handleSort(col: string) {
     if (sortBy === col) {
       setSortOrder((p) => (p === 'ASC' ? 'DESC' : 'ASC'));
@@ -182,8 +243,7 @@ export default function MissingPriceTab() {
     setPage(1);
   }
 
-  // ── ColumnFilter change ───────────────────────────────────────────────────
-
+  // ── Column filter change ──────────────────────────────────────────────────
   function handleColumnFilterChange(key: string, vals: Set<string> | null) {
     setColumnFilters((prev) => {
       const next = { ...prev };
@@ -193,12 +253,10 @@ export default function MissingPriceTab() {
     setPage(1);
   }
 
-  // ── Add new rate (for rows not yet edited) ────────────────────────────────
-
+  // ── Quick-add helpers ─────────────────────────────────────────────────────
   function getRateInputs(key: string): RateInputs {
     return rateInputs[key] ?? emptyRates();
   }
-
   function setRateField(key: string, field: keyof RateInputs, value: string) {
     setRateInputs((prev) => ({ ...prev, [key]: { ...getRateInputs(key), [field]: value } }));
   }
@@ -242,21 +300,18 @@ export default function MissingPriceTab() {
   }
 
   // ── Inline edit ───────────────────────────────────────────────────────────
-
   function startEdit(row: UnmatchedRow) {
-    const key = rowKey(row);
-    setEditingKey(key);
-    setEditDraft({ ...row });
+    setEditingKey(rowKey(row));
+    setEditDraft(rowToEditDraft(row));
     setEditRates(emptyRates());
   }
-
   function cancelEdit() {
     setEditingKey(null);
-    setEditDraft({});
+    setEditDraft(null);
     setEditRates(emptyRates());
   }
-
-  async function saveEdit(row: UnmatchedRow) {
+  async function saveEdit() {
+    if (!editDraft) return;
     const rate = Number(editRates.rate);
     if (!editRates.rate || isNaN(rate) || rate <= 0) {
       showToast('請輸入有效的費率（必填）', 'error');
@@ -264,18 +319,8 @@ export default function MissingPriceTab() {
     }
     setSavingEdit(true);
     try {
-      // Build the fleet_rate_card payload from edited draft + rates
       const payload: Record<string, unknown> = {
-        company_id: editDraft.company_id,
-        client_id: editDraft.client_id,
-        client_contract_no: editDraft.client_contract_no,
-        service_type: editDraft.service_type,
-        quotation_id: editDraft.quotation_id,
-        day_night: editDraft.day_night,
-        tonnage: editDraft.tonnage,
-        machine_type: editDraft.machine_type,
-        start_location: editDraft.start_location,
-        end_location: editDraft.end_location,
+        ...editDraft,
         rate,
         ot_rate: editRates.ot_rate ? Number(editRates.ot_rate) : 0,
         mid_shift_rate: editRates.mid_shift_rate ? Number(editRates.mid_shift_rate) : 0,
@@ -293,12 +338,129 @@ export default function MissingPriceTab() {
     }
   }
 
-  // ── Render cell value ─────────────────────────────────────────────────────
-
-  function getCellValue(row: UnmatchedRow, key: string): string {
+  // ── Render display value ──────────────────────────────────────────────────
+  function getDisplayValue(row: UnmatchedRow, key: string): string {
     const val = row[key as keyof UnmatchedRow];
     if (val == null) return '-';
     return String(val);
+  }
+
+  // ── Render inline edit cell ───────────────────────────────────────────────
+  function renderEditCell(key: string): React.ReactNode {
+    if (!editDraft) return null;
+    const cls = 'w-full text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400';
+
+    switch (key) {
+      case 'company_name':
+        return (
+          <select
+            value={editDraft.company_id ?? ''}
+            onChange={(e) => setEditDraft((d) => d ? { ...d, company_id: e.target.value ? Number(e.target.value) : null } : d)}
+            className={`${cls} px-1.5 py-0.5`}
+          >
+            <option value="">請選擇</option>
+            {companies.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        );
+
+      case 'client_name':
+        return (
+          <SearchableSelect
+            value={editDraft.client_id}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, client_id: val ? Number(val) : null } : d)}
+            options={clients}
+            placeholder="搜尋客戶..."
+            clearable
+            className="text-xs"
+          />
+        );
+
+      case 'client_contract_no':
+        return (
+          <ClientContractCombobox
+            value={editDraft.client_contract_no ?? ''}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, client_contract_no: val || null } : d)}
+            placeholder="客戶合約"
+          />
+        );
+
+      case 'service_type':
+        return (
+          <Combobox
+            value={editDraft.service_type}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, service_type: val || null } : d)}
+            options={fieldOptions['service_type'] || []}
+            placeholder="服務類型"
+          />
+        );
+
+      case 'quotation_no':
+        return (
+          <SearchableSelect
+            value={editDraft.quotation_id}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, quotation_id: val ? Number(val) : null } : d)}
+            options={quotations}
+            placeholder="搜尋報價單..."
+            clearable
+            className="text-xs"
+          />
+        );
+
+      case 'day_night':
+        return (
+          <Combobox
+            value={editDraft.day_night}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, day_night: val || null } : d)}
+            options={fieldOptions['day_night'] || [{ value: '日', label: '日' }, { value: '夜', label: '夜' }]}
+            placeholder="日夜"
+          />
+        );
+
+      case 'tonnage':
+        return (
+          <Combobox
+            value={editDraft.tonnage}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, tonnage: val || null } : d)}
+            options={fieldOptions['tonnage'] || []}
+            placeholder="噸數"
+          />
+        );
+
+      case 'machine_type':
+        return (
+          <Combobox
+            value={editDraft.machine_type}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, machine_type: val || null } : d)}
+            options={fieldOptions['machine_type'] || []}
+            placeholder="機種"
+          />
+        );
+
+      case 'start_location':
+        return (
+          <Combobox
+            value={editDraft.start_location}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, start_location: val || null } : d)}
+            options={fieldOptions['location'] || []}
+            placeholder="起點"
+          />
+        );
+
+      case 'end_location':
+        return (
+          <Combobox
+            value={editDraft.end_location}
+            onChange={(val) => setEditDraft((d) => d ? { ...d, end_location: val || null } : d)}
+            options={fieldOptions['location'] || []}
+            placeholder="終點"
+          />
+        );
+
+      default:
+        return null;
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -361,11 +523,11 @@ export default function MissingPriceTab() {
                 );
               })}
               {RATE_COLS.map((rc) => (
-                <th key={rc.key} className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap w-24">
+                <th key={rc.key} className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[5rem]">
                   {rc.label}{rc.required && <span className="text-red-500 ml-0.5">*</span>}
                 </th>
               ))}
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap w-28">操作</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[7rem]">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -411,29 +573,20 @@ export default function MissingPriceTab() {
                         );
                       }
                       if (isEditing) {
-                        // Editable text input for combination fields
-                        const draftVal = String(editDraft[col.key as keyof UnmatchedRow] ?? '');
                         return (
-                          <td key={col.key} className="px-1 py-1">
-                            <input
-                              type="text"
-                              value={draftVal === 'null' ? '' : draftVal}
-                              onChange={(e) =>
-                                setEditDraft((prev) => ({ ...prev, [col.key]: e.target.value || null }))
-                              }
-                              className="w-full px-1.5 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
+                          <td key={col.key} className="px-1 py-1 align-top">
+                            {renderEditCell(col.key)}
                           </td>
                         );
                       }
                       return (
                         <td
                           key={col.key}
-                          className="px-2 py-1.5 text-gray-700 whitespace-nowrap cursor-pointer"
+                          className="px-2 py-1.5 text-gray-700 whitespace-nowrap cursor-pointer hover:text-blue-600"
                           onClick={() => startEdit(row)}
                           title="點擊編輯"
                         >
-                          {getCellValue(row, col.key)}
+                          {getDisplayValue(row, col.key)}
                         </td>
                       );
                     })}
@@ -442,7 +595,7 @@ export default function MissingPriceTab() {
                     {RATE_COLS.map((rc) => {
                       if (isEditing) {
                         return (
-                          <td key={rc.key} className="px-1 py-1">
+                          <td key={rc.key} className="px-1 py-1 align-top">
                             <input
                               type="number"
                               step="0.01"
@@ -458,7 +611,7 @@ export default function MissingPriceTab() {
                         );
                       }
                       return (
-                        <td key={rc.key} className="px-1 py-1">
+                        <td key={rc.key} className="px-1 py-1 align-top">
                           <input
                             type="number"
                             step="0.01"
@@ -474,11 +627,11 @@ export default function MissingPriceTab() {
                     })}
 
                     {/* ── Action column ── */}
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-1.5 align-top">
                       {isEditing ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 pt-0.5">
                           <button
-                            onClick={() => saveEdit(row)}
+                            onClick={() => saveEdit()}
                             disabled={savingEdit}
                             className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
                           >
@@ -495,7 +648,7 @@ export default function MissingPriceTab() {
                       ) : isSuccess ? (
                         <span className="text-xs text-green-600 font-medium">✅ 已新增</span>
                       ) : (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 pt-0.5">
                           <button
                             onClick={() => handleAddRate(row)}
                             disabled={!!submitting[key] || !inputs.rate}
