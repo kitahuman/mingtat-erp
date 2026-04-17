@@ -104,6 +104,17 @@ export class PayrollService {
           include: { payment_out: true },
           orderBy: { payroll_payment_created_at: 'asc' },
         },
+        payroll_expenses: {
+          include: {
+            expense: {
+              include: {
+                category: { include: { parent: true } },
+                employee: true,
+              },
+            },
+          },
+          orderBy: { payroll_expense_created_at: 'asc' },
+        },
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
@@ -181,6 +192,10 @@ export class PayrollService {
       salary_setting: salarySetting,
       paid_amount: paidAmount,
       outstanding_amount: outstandingAmount,
+      reimbursement_total: (payroll.payroll_expenses || []).reduce(
+        (sum: number, pe: { expense: { total_amount: any } }) => sum + Number(pe.expense.total_amount || 0),
+        0,
+      ),
     };
   }
 
@@ -1017,6 +1032,9 @@ export class PayrollService {
     // Auto-generate expenses
     const expenseCount = await this.generateExpensesFromPayroll(payroll);
 
+    // Mark attached reimbursement expenses as settled
+    await this.settlePayrollExpenses(id);
+
     return { confirmed: true, expenses_generated: expenseCount };
   }
 
@@ -1033,6 +1051,9 @@ export class PayrollService {
       'PAYROLL',
       id,
     );
+
+    // Unsettle attached reimbursement expenses
+    await this.unsettlePayrollExpenses(id);
 
     // Revert status to draft
     await this.prisma.payroll.update({
@@ -1786,6 +1807,147 @@ export class PayrollService {
         adjustment_total: adjustmentTotal,
         net_amount: grossIncome - mpfDeduction + adjustmentTotal,
       },
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 員工報銷管理 (Payroll Reimbursement)
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * 取得該員工未結算的 SELF_PAID 報銷項目
+   * 排除已附加到當前糧單的項目
+   */
+  async getUnsettledExpenses(payrollId: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+      include: { payroll_expenses: true },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    // Get expense IDs already attached to this payroll
+    const attachedIds = payroll.payroll_expenses.map(
+      (pe) => pe.payroll_expense_expense_id,
+    );
+
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        employee_id: payroll.employee_id,
+        expense_payment_method: 'SELF_PAID',
+        expense_settled_payroll_id: null,
+        deleted_at: null,
+        id: attachedIds.length > 0 ? { notIn: attachedIds } : undefined,
+      },
+      include: {
+        category: { include: { parent: true } },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    return expenses;
+  }
+
+  /**
+   * 將報銷項目附加到糧單
+   */
+  async attachExpenses(payrollId: number, expenseIds: number[]) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能在草稿或準備中狀態的糧單新增報銷');
+    }
+
+    // Validate expenses belong to the same employee and are SELF_PAID + unsettled
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        id: { in: expenseIds },
+        employee_id: payroll.employee_id,
+        expense_payment_method: 'SELF_PAID',
+        expense_settled_payroll_id: null,
+        deleted_at: null,
+      },
+    });
+
+    if (expenses.length === 0) {
+      throw new BadRequestException('沒有可附加的報銷項目');
+    }
+
+    const validIds = expenses.map((e) => e.id);
+
+    // Create payroll_expenses records (skip duplicates)
+    for (const expenseId of validIds) {
+      await this.prisma.payrollExpense.upsert({
+        where: {
+          payroll_expense_payroll_id_payroll_expense_expense_id: {
+            payroll_expense_payroll_id: payrollId,
+            payroll_expense_expense_id: expenseId,
+          },
+        },
+        create: {
+          payroll_expense_payroll_id: payrollId,
+          payroll_expense_expense_id: expenseId,
+        },
+        update: {},
+      });
+    }
+
+    return { success: true, attached_count: validIds.length };
+  }
+
+  /**
+   * 從糧單移除報銷項目
+   */
+  async detachExpense(payrollId: number, expenseId: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能在草稿或準備中狀態的糧單移除報銷');
+    }
+
+    const pe = await this.prisma.payrollExpense.findFirst({
+      where: {
+        payroll_expense_payroll_id: payrollId,
+        payroll_expense_expense_id: expenseId,
+      },
+    });
+    if (!pe) throw new NotFoundException('報銷項目未附加到此糧單');
+
+    await this.prisma.payrollExpense.delete({ where: { id: pe.id } });
+
+    return { success: true };
+  }
+
+  /**
+   * 糧單確認時，標記附加的報銷為已結算
+   */
+  private async settlePayrollExpenses(payrollId: number): Promise<void> {
+    const payrollExpenses = await this.prisma.payrollExpense.findMany({
+      where: { payroll_expense_payroll_id: payrollId },
+    });
+
+    if (payrollExpenses.length === 0) return;
+
+    const expenseIds = payrollExpenses.map(
+      (pe) => pe.payroll_expense_expense_id,
+    );
+
+    await this.prisma.expense.updateMany({
+      where: { id: { in: expenseIds } },
+      data: { expense_settled_payroll_id: payrollId },
+    });
+  }
+
+  /**
+   * 糧單撤銷確認時，清除報銷的已結算標記
+   */
+  private async unsettlePayrollExpenses(payrollId: number): Promise<void> {
+    await this.prisma.expense.updateMany({
+      where: { expense_settled_payroll_id: payrollId },
+      data: { expense_settled_payroll_id: null },
     });
   }
 

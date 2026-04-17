@@ -7,6 +7,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
 import { UpdatePayrollDto, UpdatePayrollWorkLogDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
+import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
 
 @Controller('payroll')
 @UseGuards(AuthGuard('jwt'))
@@ -132,7 +133,33 @@ export class PayrollController {
     return this.payrollService.remove(+id, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
-  // ── 糧單工作記錄管理 ──────────────────────────────────────
+  // ── 員工報銷管理 ──────────────────────────────────────────────────
+
+  // 取得該員工未結算的 SELF_PAID 報銷項目
+  @Get(':id/unsettled-expenses')
+  getUnsettledExpenses(@Param('id') id: string) {
+    return this.payrollService.getUnsettledExpenses(+id);
+  }
+
+  // 將報銷項目附加到糧單
+  @Post(':id/expenses')
+  attachExpenses(
+    @Param('id') id: string,
+    @Body() body: AttachPayrollExpensesDto,
+  ) {
+    return this.payrollService.attachExpenses(+id, body.expense_ids);
+  }
+
+  // 從糧單移除報銷項目
+  @Delete(':id/expenses/:expenseId')
+  detachExpense(
+    @Param('id') id: string,
+    @Param('expenseId') expenseId: string,
+  ) {
+    return this.payrollService.detachExpense(+id, +expenseId);
+  }
+
+  // ── 糧單工作記錄管理 ──────────────────────────────────────────────────
 
   // 編輯糧單工作記錄（只改糧單記錄）
   @Put(':id/work-logs/:pwlId')

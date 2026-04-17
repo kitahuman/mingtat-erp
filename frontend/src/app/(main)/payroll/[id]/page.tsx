@@ -879,6 +879,12 @@ export default function PayrollDetailPage() {
   // Field options for inline editing dropdowns
   const [fieldOptions, setFieldOptions] = useState<Record<string, { value: string; label: string }[]>>({});
 
+  // Reimbursement (員工報銷)
+  const [showReimbursement, setShowReimbursement] = useState(false);
+  const [unsettledExpenses, setUnsettledExpenses] = useState<any[]>([]);
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<number[]>([]);
+  const [reimbursementLoading, setReimbursementLoading] = useState(false);
+
   const loadData = async () => {
     try {
       const res = await payrollApi.get(Number(params.id));
@@ -1139,6 +1145,48 @@ export default function PayrollDetailPage() {
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
     }
+  };
+
+  // ── 員工報銷 handlers ──
+  const handleOpenReimbursement = async () => {
+    setReimbursementLoading(true);
+    setSelectedExpenseIds([]);
+    try {
+      const res = await payrollApi.getUnsettledExpenses(payroll.id);
+      setUnsettledExpenses(res.data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '載入報銷項目失敗');
+    }
+    setReimbursementLoading(false);
+    setShowReimbursement(true);
+  };
+
+  const handleAttachExpenses = async () => {
+    if (selectedExpenseIds.length === 0) return;
+    try {
+      await payrollApi.attachExpenses(payroll.id, { expense_ids: selectedExpenseIds });
+      setShowReimbursement(false);
+      setSelectedExpenseIds([]);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '新增報銷失敗');
+    }
+  };
+
+  const handleDetachExpense = async (expenseId: number) => {
+    if (!confirm('確定要從糧單移除此報銷項目？')) return;
+    try {
+      await payrollApi.detachExpense(payroll.id, expenseId);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '移除報銷失敗');
+    }
+  };
+
+  const toggleExpenseSelection = (id: number) => {
+    setSelectedExpenseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   const handlePrint = () => {
@@ -1609,8 +1657,69 @@ export default function PayrollDetailPage() {
 
       }
 
+      {/* ── Employee Reimbursement (員工報銷) ── */}
+      {!isPreparing && <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">員工報銷</h2>
+          {isDraft && (
+            <button onClick={handleOpenReimbursement} className="text-sm text-primary-600 hover:underline">+ 增加</button>
+          )}
+        </div>
+        {(payroll.payroll_expenses || []).length > 0 ? (
+          <div className="overflow-x-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">日期</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">類別</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">說明</th>
+                  <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
+                  {isDraft && <th className="px-4 py-2 text-center font-medium text-gray-600">操作</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {(payroll.payroll_expenses || []).map((pe: any) => {
+                  const exp = pe.expense;
+                  const catName = exp.category
+                    ? (exp.category.parent ? `${exp.category.parent.name} / ${exp.category.name}` : exp.category.name)
+                    : '-';
+                  return (
+                    <tr key={pe.id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2 whitespace-nowrap">{fmtDate(exp.date)}</td>
+                      <td className="px-4 py-2">{catName}</td>
+                      <td className="px-4 py-2 text-gray-600 text-xs">{exp.description || exp.item || '-'}</td>
+                      <td className="px-4 py-2 text-right font-mono font-bold text-blue-600">
+                        ${Number(exp.total_amount).toLocaleString()}
+                      </td>
+                      {isDraft && (
+                        <td className="px-4 py-2 text-center">
+                          <button onClick={() => handleDetachExpense(exp.id)} className="text-xs text-red-500 hover:underline">移除</button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="border-t">
+                <tr className="bg-blue-50">
+                  <td colSpan={isDraft ? 3 : 3} className="px-4 py-2 font-bold text-right">報銷總額</td>
+                  <td className="px-4 py-2 text-right font-mono font-bold text-blue-600">
+                    ${Number(payroll.reimbursement_total || 0).toLocaleString()}
+                  </td>
+                  {isDraft && <td></td>}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-4">沒有員工報銷項目</p>
+        )}
+        <p className="text-xs text-gray-400 mt-2">ℹ 員工報銷獨立於薪金計算，不影響淨薪金</p>
+      </div>
+      }
+
       {/* ── Summary Cards (bottom) ── */}
-      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="card">
           <p className="text-xs text-gray-500">應收總額</p>
           <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
@@ -1626,8 +1735,12 @@ export default function PayrollDetailPage() {
           </p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">淨額</p>
+          <p className="text-xs text-gray-500">淨薪金</p>
           <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">員工報銷</p>
+          <p className="font-bold text-lg text-blue-600 font-mono">${Number(payroll.reimbursement_total || 0).toLocaleString()}</p>
         </div>
       </div>
 
@@ -1934,6 +2047,99 @@ export default function PayrollDetailPage() {
             <button onClick={() => setEditingPwl(null)} className="btn-secondary">取消</button>
             <button onClick={handleSaveEditWorkLog} disabled={editSaving} className="btn-primary">
               {editSaving ? '儲存中...' : '確認修改'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Reimbursement Selection Modal ── */}
+      <Modal isOpen={showReimbursement} onClose={() => setShowReimbursement(false)} title="選擇員工報銷項目" size="lg">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">以下是該員工所有未結算的「本人代付」報銷項目，請勾選要加入此糧單的項目。</p>
+          {reimbursementLoading ? (
+            <p className="text-center text-gray-400 py-8">載入中...</p>
+          ) : unsettledExpenses.length === 0 ? (
+            <p className="text-center text-gray-400 py-8">沒有未結算的報銷項目</p>
+          ) : (
+            <div className="overflow-x-auto border rounded-lg max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedExpenseIds.length === unsettledExpenses.length && unsettledExpenses.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedExpenseIds(unsettledExpenses.map((ex: any) => ex.id));
+                          } else {
+                            setSelectedExpenseIds([]);
+                          }
+                        }}
+                        className="rounded"
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">類別</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">說明</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-600">金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unsettledExpenses.map((exp: any) => {
+                    const catName = exp.category
+                      ? (exp.category.parent ? `${exp.category.parent.name} / ${exp.category.name}` : exp.category.name)
+                      : '-';
+                    const isSelected = selectedExpenseIds.includes(exp.id);
+                    return (
+                      <tr
+                        key={exp.id}
+                        className={`border-b cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => toggleExpenseSelection(exp.id)}
+                      >
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleExpenseSelection(exp.id)}
+                            className="rounded"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtDate(exp.date)}</td>
+                        <td className="px-3 py-2">{catName}</td>
+                        <td className="px-3 py-2 text-gray-600 text-xs">{exp.description || exp.item || '-'}</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-blue-600">
+                          ${Number(exp.total_amount).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {selectedExpenseIds.length > 0 && (
+            <div className="bg-blue-50 rounded-lg px-4 py-2 flex items-center justify-between">
+              <span className="text-sm text-blue-700">
+                已選擇 {selectedExpenseIds.length} 筆，合計：
+                <span className="font-bold font-mono ml-1">
+                  ${unsettledExpenses
+                    .filter((e: any) => selectedExpenseIds.includes(e.id))
+                    .reduce((sum: number, e: any) => sum + Number(e.total_amount || 0), 0)
+                    .toLocaleString()}
+                </span>
+              </span>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setShowReimbursement(false)} className="btn-secondary">取消</button>
+            <button
+              onClick={handleAttachExpenses}
+              disabled={selectedExpenseIds.length === 0}
+              className="btn-primary"
+            >
+              確認加入 ({selectedExpenseIds.length})
             </button>
           </div>
         </div>

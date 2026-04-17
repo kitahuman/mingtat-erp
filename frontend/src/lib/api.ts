@@ -337,6 +337,14 @@ export const payrollApi = {
   }) => api.post(`/payroll/${payrollId}/payments`, data),
   removePayrollPayment: (payrollId: number, paymentId: number) =>
     api.delete(`/payroll/${payrollId}/payments/${paymentId}`),
+
+  // ── 員工報銷管理 ──
+  getUnsettledExpenses: (payrollId: number) =>
+    api.get(`/payroll/${payrollId}/unsettled-expenses`),
+  attachExpenses: (payrollId: number, data: { expense_ids: number[] }) =>
+    api.post(`/payroll/${payrollId}/expenses`, data),
+  detachExpense: (payrollId: number, expenseId: number) =>
+    api.delete(`/payroll/${payrollId}/expenses/${expenseId}`),
 };
 
 // Enums (系統枚舉)

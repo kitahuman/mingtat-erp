@@ -1210,6 +1210,8 @@ model Payroll {
   daily_allowances  PayrollDailyAllowance[]
   payroll_payments  PayrollPayment[]
   payment_outs      PaymentOut[]
+  payroll_expenses  PayrollExpense[]
+  settled_expenses  Expense[]               @relation("expense_settled_payroll")
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1502,7 +1504,31 @@ model Expense {
   // Phase 4
   payment_outs PaymentOut[]
 
+  // Reimbursement settlement
+  expense_settled_payroll_id Int?
+  settled_payroll            Payroll?         @relation("expense_settled_payroll", fields: [expense_settled_payroll_id], references: [id], onDelete: SetNull)
+  payroll_expenses           PayrollExpense[]
+
   @@map("expenses")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Payroll Expenses (糧單報銷關聯)
+// ══════════════════════════════════════════════════════════════
+
+model PayrollExpense {
+  id                          Int      @id @default(autoincrement())
+  payroll_expense_payroll_id  Int
+  payroll_expense_expense_id  Int
+  payroll_expense_created_at  DateTime @default(now())
+
+  payroll Payroll @relation(fields: [payroll_expense_payroll_id], references: [id], onDelete: Cascade)
+  expense Expense @relation(fields: [payroll_expense_expense_id], references: [id], onDelete: Cascade)
+
+  @@unique([payroll_expense_payroll_id, payroll_expense_expense_id])
+  @@index([payroll_expense_payroll_id])
+  @@index([payroll_expense_expense_id])
+  @@map("payroll_expenses")
 }
 
 // ══════════════════════════════════════════════════════════════
