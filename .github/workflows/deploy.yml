@@ -198,6 +198,13 @@ jobs:
             cd /opt/mingtat-erp
             docker compose pull
 
+            echo "=== [3.5/5] Resolve any failed Prisma migrations ==="
+            # If a previous migration was marked as failed in the DB, resolve it before deploying.
+            # This is a one-time recovery step for the 20260515000000_add_director_role migration
+            # that failed due to an invalid COMMENT ON COLUMN statement.
+            docker compose run --rm --no-deps backend sh -c \
+              "npx prisma migrate resolve --rolled-back 20260515000000_add_director_role 2>&1 || true"
+
             echo "=== [4/5] Start containers ==="
             # Run without -e so we can capture logs before failing
             docker compose up -d --remove-orphans || {
