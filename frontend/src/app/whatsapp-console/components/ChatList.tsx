@@ -10,6 +10,11 @@ interface ChatListProps {
   onSelectChat: (chatId: string) => void;
 }
 
+// 判斷字串是否為純電話號碼
+function isPhoneNumber(str: string): boolean {
+  return /^[\d+\-\s()]+$/.test(str.trim());
+}
+
 function formatTime(timestamp: number): string {
   if (!timestamp) return '';
   const date = new Date(timestamp * 1000);
@@ -109,6 +114,10 @@ export function ChatList({ chats, selectedChatId, unreadCounts, loading, onSelec
                   {time}
                 </span>
               </div>
+              {/* 如果顯示名稱不是電話號碼，則在名稱下方顯示電話號碼 */}
+              {!chat.isGroup && chat.phone && !isPhoneNumber(chat.name) && (
+                <div className="text-[#8696a0] text-xs mb-0.5 truncate">{chat.phone}</div>
+              )}
               <div className="flex items-center justify-between">
                 <p className="text-[#8696a0] text-xs truncate flex-1">
                   {chat.lastMessage?.fromMe && <span className="text-[#8696a0]">✓✓ </span>}

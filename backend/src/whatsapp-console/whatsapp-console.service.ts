@@ -18,6 +18,7 @@ export interface WaMessage {
 export interface WaChat {
   id: string;
   name: string;
+  phone?: string | null; // 電話號碼（私聊才有）
   isGroup: boolean;
   lastMessage?: WaMessage | null;
   unreadCount: number;

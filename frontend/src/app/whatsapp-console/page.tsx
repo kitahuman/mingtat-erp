@@ -24,6 +24,7 @@ export interface WaMessage {
 export interface WaChat {
   id: string;
   name: string;
+  phone?: string | null; // 電話號碼（私聊才有）
   isGroup: boolean;
   lastMessage?: WaMessage | null;
   unreadCount: number;
@@ -39,6 +40,7 @@ export default function WhatsappConsolePage() {
   const [botStatus, setBotStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null); // null = 尚未檢查
   const notificationSound = useRef<HTMLAudioElement | null>(null);
 
   // 初始化通知音效
@@ -47,13 +49,30 @@ export default function WhatsappConsolePage() {
     notificationSound.current.volume = 0.5;
   }, []);
 
-  // 檢查登入狀態 — 必須在任何 API 請求之前完成
+  // 檢查登入狀態和角色 — 必須在任何 API 請求之前完成
   useEffect(() => {
     const token = Cookies.get('token');
     if (!token) {
       window.location.href = '/login?redirect=/whatsapp-console';
-    } else {
-      setIsAuthenticated(true);
+      return;
+    }
+    // 檢查用戶角色（從 cookie 讀取）
+    try {
+      const userStr = Cookies.get('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === 'admin') {
+          setIsAdmin(true);
+          setIsAuthenticated(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } else {
+        // 沒有 user cookie，認為無權限
+        setIsAdmin(false);
+      }
+    } catch {
+      setIsAdmin(false);
     }
   }, []);
 
@@ -218,16 +237,47 @@ export default function WhatsappConsolePage() {
   }, [selectedChatId]);
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
-  const filteredChats = chats.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredChats = searchQuery.trim()
+    ? chats.filter(c => {
+        const q = searchQuery.toLowerCase();
+        // 搜尋顯示名稱、電話號碼（phone 欄位）、以及 chat id（包含 @s.whatsapp.net 的完整 JID）
+        return (
+          c.name.toLowerCase().includes(q) ||
+          (c.phone && c.phone.includes(q)) ||
+          c.id.toLowerCase().includes(q)
+        );
+      })
+    : chats;
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
   // 尚未驗證登入狀態時，顯示載入畫面
-  if (!isAuthenticated) {
+  if (!isAuthenticated && isAdmin === null) {
     return (
       <div className="flex h-screen bg-[#111b21] items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00a884]"></div>
+      </div>
+    );
+  }
+
+  // 非 admin 角色，顯示無權限提示
+  if (isAdmin === false) {
+    return (
+      <div className="flex h-screen bg-[#111b21] items-center justify-center">
+        <div className="text-center px-8">
+          <div className="w-20 h-20 rounded-full bg-[#2a3942] flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-[#e9edef] mb-2">無權限訪問</h2>
+          <p className="text-[#8696a0] text-sm mb-6">此頁面僅限 Admin 角色的帳號訪問</p>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            className="px-6 py-2 bg-[#00a884] text-white rounded-lg text-sm hover:bg-[#008f72] transition-colors"
+          >
+            返回主頁
+          </button>
+        </div>
       </div>
     );
   }

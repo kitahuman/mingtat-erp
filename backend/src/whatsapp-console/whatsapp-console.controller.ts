@@ -21,11 +21,15 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Observable, map } from 'rxjs';
 import type { Response } from 'express';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../auth/user-role.enum';
 import { WhatsappConsoleService } from './whatsapp-console.service';
 import { WebPushService } from './web-push.service';
 
 @Controller('whatsapp-console')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
+@Roles(UserRole.ADMIN)
 @SkipThrottle()
 export class WhatsappConsoleController {
   private readonly logger = new Logger(WhatsappConsoleController.name);
@@ -144,39 +148,4 @@ export class WhatsappConsoleController {
     return { success: true };
   }
 
-  // ── 接收 Bot 推送的新訊息（Bot → ERP → 廣播給 SSE 客戶端 + Web Push）
-  // 這個端點不需要 JWT，用 webhook secret 驗證
-  @Post('webhook/message')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards() // 覆蓋 class-level guard，不需要 JWT
-  async receiveWebhookMessage(
-    @Headers('x-webhook-secret') secret: string,
-    @Body() body: any,
-  ) {
-    const expectedSecret = process.env.WHATSAPP_BOT_API_SECRET || 'mingtat-bot-api-2026';
-    if (secret !== expectedSecret) {
-      throw new UnauthorizedException('Invalid webhook secret');
-    }
-    // 廣播給 SSE 客戶端
-    if (body.type === 'message' && body.message) {
-      this.service.events$.next({ type: 'message', message: body.message });
-      // 發送 Web Push 通知給所有訂閱用戶
-      const msg = body.message;
-      if (!msg.fromMe) {
-        const senderName = msg.senderName || msg.chatName || msg.sender?.replace('@s.whatsapp.net', '') || '未知';
-        const preview = msg.text || (msg.hasMedia ? '[媒體訊息]' : '[訊息]');
-        await this.webPushService.broadcast({
-          title: `WhatsApp: ${senderName}`,
-          body: preview.length > 100 ? preview.slice(0, 97) + '...' : preview,
-          icon: '/whatsapp-console/icon-192.png',
-          badge: '/whatsapp-console/badge-72.png',
-          tag: `wa-msg-${msg.chatId}`,
-          data: { chatId: msg.chatId, messageId: msg.id, url: '/whatsapp-console' },
-        });
-      }
-    } else if (body.type === 'status') {
-      this.service.events$.next({ type: 'status', status: body.status });
-    }
-    return { success: true };
-  }
 }
