@@ -1,6 +1,7 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AiChatService } from './ai-chat.service';
+import { DirectorWritable } from '../auth/director-writable.decorator';
 
 @Controller('ai-chat')
 @UseGuards(AuthGuard('jwt'))
@@ -8,6 +9,7 @@ export class AiChatController {
   constructor(private readonly service: AiChatService) {}
 
   @Post()
+  @DirectorWritable()
   async chat(@Body('messages') messages: any[]) {
     console.log('[AI Chat] Request received, messages count:', messages?.length ?? 0);
 

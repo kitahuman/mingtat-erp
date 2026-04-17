@@ -10,7 +10,7 @@ const typeLabels: Record<string, string> = { internal: '內部公司', client: '
 
 export default function CompaniesPage() {
   const router = useRouter();
-  const { hasMinRole } = useAuth();
+  const { hasMinRole , isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companiesApi } from '@/lib/api';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 const typeLabels: Record<string, string> = { internal: '內部公司', client: '客戶', subcontractor: '外判' };
 
@@ -10,6 +11,7 @@ const typeLabels: Record<string, string> = { internal: '內部公司', client: '
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [company, setCompany] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

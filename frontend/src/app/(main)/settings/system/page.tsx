@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { systemSettingsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/auth';
 
 interface SettingField {
   key: string;
@@ -28,6 +29,7 @@ const SETTING_FIELDS: SettingField[] = [
 ];
 
 export default function SystemSettingsPage() {
+  const { isReadOnly } = useAuth();
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

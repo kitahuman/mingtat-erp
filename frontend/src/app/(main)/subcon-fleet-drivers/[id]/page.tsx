@@ -6,6 +6,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ const statusBadgeClass = (s: string) => {
 export default function SubconFleetDriverDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [driver, setDriver] = useState<FleetDriverDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FleetDriverForm>({

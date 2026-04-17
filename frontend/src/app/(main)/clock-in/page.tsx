@@ -70,7 +70,7 @@ interface AttendanceRecord {
 type Step = 'list' | 'camera' | 'verifying' | 'result' | 'temp_employee';
 
 export default function CompanyClockPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading , isReadOnly } = useAuth();
   const router = useRouter();
 
   // Employee list state

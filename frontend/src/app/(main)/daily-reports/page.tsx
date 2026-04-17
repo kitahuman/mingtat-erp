@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/components/SearchableSelect';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
 const statusColors: Record<string, string> = { draft: 'badge-yellow', submitted: 'badge-green' };
@@ -13,6 +14,7 @@ const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車
 
 export default function DailyReportsAdminPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [reports, setReports] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

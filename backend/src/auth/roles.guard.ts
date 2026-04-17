@@ -23,6 +23,29 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    return requiredRoles.includes(user.role);
+    // Direct role match
+    if (requiredRoles.includes(user.role)) {
+      return true;
+    }
+
+    // DIRECTOR inherits ADMIN page-access for read operations,
+    // but the actual write restriction is handled by DirectorReadOnlyGuard.
+    // Here we grant DIRECTOR access to any endpoint that requires ADMIN or MANAGER,
+    // EXCEPT for whatsapp-console which is admin-only.
+    if (user.role === UserRole.DIRECTOR) {
+      // Block whatsapp-console endpoints for director
+      const request = context.switchToHttp().getRequest();
+      const path = request.route?.path || request.url || '';
+      if (path.includes('whatsapp-console')) {
+        return false;
+      }
+
+      const hasAdminOrManager = requiredRoles.some(
+        r => r === UserRole.ADMIN || r === UserRole.MANAGER,
+      );
+      return hasAdminOrManager;
+    }
+
+    return false;
   }
 }

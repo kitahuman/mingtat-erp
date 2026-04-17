@@ -7,6 +7,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import AttendanceEditModal from './AttendanceEditModal';
+import { useAuth } from '@/lib/auth';
 
 // Lazy load MiniMap to avoid SSR issues
 const MiniMap = lazy(() => import('@/components/MiniMap'));
@@ -52,6 +53,7 @@ const DEFAULT_COLUMNS = [
 
 export default function AttendancesPage() {
   // ── Tab state ──
+  const { isReadOnly } = useAuth();
   const [activeTab, setActiveTab] = useState<'records' | 'anomalies'>('records');
 
   // ══════════════════════════════════════════════════════════════

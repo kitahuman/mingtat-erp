@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { fieldOptionsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/auth';
 
 const CATEGORY_LABELS: Record<string, string> = {
   employee_role: '員工職位',
@@ -108,6 +109,7 @@ function DraggableRow({
 }
 
 export default function FieldOptionsPage() {
+  const { isReadOnly } = useAuth();
   const [activeTab, setActiveTab] = useState(CATEGORY_KEYS[0]);
   const [allOptions, setAllOptions] = useState<Record<string, FieldOption[]>>({});
   const [loading, setLoading] = useState(true);

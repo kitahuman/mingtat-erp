@@ -13,6 +13,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { DirectorWritable } from '../auth/director-writable.decorator';
 
 @Controller('profile')
 @UseGuards(AuthGuard('jwt'))
@@ -36,6 +37,7 @@ export class ProfileController {
    * Update current user's profile (displayName, email, phone)
    */
   @Put()
+  @DirectorWritable()
   async updateProfile(@Request() req: any, @Body() dto: UpdateProfileDto) {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user) throw new UnauthorizedException();
@@ -55,6 +57,7 @@ export class ProfileController {
    * Change current user's password (requires old password)
    */
   @Post('change-password')
+  @DirectorWritable()
   async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user) throw new UnauthorizedException();

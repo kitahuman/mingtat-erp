@@ -91,6 +91,9 @@ export const ALL_PAGE_KEYS = ALL_PAGES.map(p => p.key);
 
 const ADMIN_PAGES = ALL_PAGE_KEYS; // admin can access everything
 
+// Director can access all pages EXCEPT whatsapp-console (same as admin otherwise)
+const DIRECTOR_PAGES = ALL_PAGE_KEYS;
+
 const MANAGER_PAGES = ALL_PAGE_KEYS.filter(k => !k.startsWith('settings-'));
 
 const CLERK_PAGES = ALL_PAGE_KEYS.filter(k => !k.startsWith('settings-'));
@@ -104,6 +107,8 @@ export function getRoleDefaultPages(role: string): string[] {
   switch (role) {
     case 'admin':
       return [...ADMIN_PAGES];
+    case 'director':
+      return [...DIRECTOR_PAGES];
     case 'manager':
       return [...MANAGER_PAGES];
     case 'clerk':
@@ -113,6 +118,20 @@ export function getRoleDefaultPages(role: string): string[] {
     default:
       return [];
   }
+}
+
+/**
+ * Pages where the director role has write (edit/create/delete) permission.
+ * By default empty — director is read-only on all pages.
+ * Add page keys here to selectively grant write access.
+ */
+export const DIRECTOR_WRITABLE_PAGES: string[] = [];
+
+/**
+ * Check if a director has write permission on a specific page.
+ */
+export function isDirectorWritablePage(pageKey: string): boolean {
+  return DIRECTOR_WRITABLE_PAGES.includes(pageKey);
 }
 
 /**

@@ -6,6 +6,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import ProjectCostAnalysis from '@/components/ProjectCostAnalysis';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -19,6 +20,7 @@ const qStatusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badg
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

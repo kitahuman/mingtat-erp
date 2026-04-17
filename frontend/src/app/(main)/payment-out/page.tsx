@@ -7,6 +7,7 @@ import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTa
 import Modal from '@/components/Modal';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -19,6 +20,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 
 export default function PaymentOutPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

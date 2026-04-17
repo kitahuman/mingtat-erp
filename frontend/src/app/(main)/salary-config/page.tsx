@@ -7,6 +7,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -36,6 +37,7 @@ type TabType = 'active' | 'inactive';
 
 export default function SalaryConfigPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

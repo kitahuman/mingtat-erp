@@ -5,9 +5,11 @@ import { format } from 'date-fns';
 import ImportModal from './ImportModal';
 import MatchModal from './MatchModal';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 export default function BankReconciliationPage() {
   // ── Filter state ──
+  const { isReadOnly } = useAuth();
   const [companies, setCompanies] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [filteredAccounts, setFilteredAccounts] = useState<any[]>([]);

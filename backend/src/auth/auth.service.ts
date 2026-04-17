@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { computeEffectivePages, ALL_PAGES } from './page-permissions';
+import { computeEffectivePages, ALL_PAGES, DIRECTOR_WRITABLE_PAGES } from './page-permissions';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +49,7 @@ export class AuthService {
         department: user.department,
         isActive: user.isActive,
         allowedPages,
+        ...(user.role === 'director' ? { directorWritablePages: DIRECTOR_WRITABLE_PAGES } : {}),
       },
     };
   }
@@ -73,6 +74,7 @@ export class AuthService {
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       allowedPages,
+      ...(user.role === 'director' ? { directorWritablePages: DIRECTOR_WRITABLE_PAGES } : {}),
     };
   }
 

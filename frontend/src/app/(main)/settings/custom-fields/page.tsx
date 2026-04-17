@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { customFieldsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/auth';
 
 const MODULES = [
   { value: 'company', label: '公司資料' },
@@ -32,6 +33,7 @@ const emptyForm = {
 };
 
 function CustomFieldsPageContent() {
+  const { isReadOnly } = useAuth();
   const [fields, setFields] = useState<any[]>([]);
   const [selectedModule, setSelectedModule] = useState('company');
   const [loading, setLoading] = useState(true);
@@ -225,6 +227,7 @@ function CustomFieldsPageContent() {
 }
 
 export default function CustomFieldsPage() {
+  const { isReadOnly } = useAuth();
   return (
     <RoleGuard pageKey="settings-custom-fields">
       <CustomFieldsPageContent />

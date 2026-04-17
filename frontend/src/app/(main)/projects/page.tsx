@@ -7,6 +7,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -17,6 +18,7 @@ const statusColors: Record<string, string> = {
 
 export default function ProjectsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

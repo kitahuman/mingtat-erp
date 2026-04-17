@@ -15,6 +15,7 @@ import {
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
+import { useAuth } from '@/lib/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -50,6 +51,7 @@ export default function ExpenseDetailPage() {
   const router = useRouter();
   const expenseId = Number(id);
 
+  const { isReadOnly } = useAuth();
   const [expense, setExpense] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

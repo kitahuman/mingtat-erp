@@ -7,6 +7,7 @@ import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 // Fallback vehicle types
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
@@ -24,6 +25,7 @@ function isExpired(date: string | null) {
 export default function VehicleDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [vehicle, setVehicle] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

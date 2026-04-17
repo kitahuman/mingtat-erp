@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { subconPayrollApi, partnersApi, companiesApi, subconRateCardsApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 type Option = { value: any; label: string };
 type ExtraItem = { name: string; amount: string };
@@ -147,6 +148,7 @@ export default function SubconPayrollPage() {
   const router = useRouter();
 
   // ── Selection state ──
+  const { isReadOnly } = useAuth();
   const [subcons, setSubcons] = useState<Option[]>([]);
   const [companies, setCompanies] = useState<Option[]>([]);
   const [selectedSubcon, setSelectedSubcon] = useState<number | null>(null);

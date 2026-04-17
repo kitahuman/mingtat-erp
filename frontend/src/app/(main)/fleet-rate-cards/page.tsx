@@ -10,11 +10,13 @@ import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { useAuth } from '@/lib/auth';
 
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
 export default function FleetRateCardsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

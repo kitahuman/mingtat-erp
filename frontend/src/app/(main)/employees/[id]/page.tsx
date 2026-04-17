@@ -8,6 +8,7 @@ import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import EmployeePhotoSection from '@/components/EmployeePhotoSection';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 
 
@@ -77,6 +78,7 @@ function calcAge(dob: string | null): string {
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [emp, setEmp] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

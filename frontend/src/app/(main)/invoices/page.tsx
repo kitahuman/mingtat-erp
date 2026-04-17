@@ -5,6 +5,7 @@ import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi } fr
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -54,6 +55,7 @@ const defaultForm = {
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

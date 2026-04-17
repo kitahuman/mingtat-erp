@@ -11,6 +11,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { useAuth } from '@/lib/auth';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -19,6 +20,7 @@ const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'location'];
 
 export default function RateCardsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

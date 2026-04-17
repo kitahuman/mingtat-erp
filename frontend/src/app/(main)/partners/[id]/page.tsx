@@ -6,6 +6,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 const partnerTypes = [
   { value: 'client', label: '客戶' },
@@ -39,6 +40,7 @@ function SubsidiaryTags({ values }: { values: string[] | string | null }) {
 export default function PartnerDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [partner, setPartner] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth';
 
 interface PreviewRow {
   _rowNumber: number;
@@ -55,6 +56,7 @@ const SOURCE_GROUPS = [
 
 export default function VerificationUploadPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sources

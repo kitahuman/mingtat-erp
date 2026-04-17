@@ -7,6 +7,7 @@ import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
 const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
@@ -77,6 +78,7 @@ function GroupedSettlementView({ groups }: { groups: any[] }) {
 // ─── Daily Calculation View ───────────────────────────────────
 function DailyCalculationPreview({ dailyCalc, salaryType }: { dailyCalc: any[]; salaryType?: string }) {
   const isDaily = salaryType === 'daily' || !salaryType;
+  const { isReadOnly } = useAuth();
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   if (!dailyCalc || dailyCalc.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
@@ -227,6 +229,7 @@ export default function PayrollPage() {
   const router = useRouter();
 
   // ── Selection state ──
+  const { isReadOnly } = useAuth();
   const [companies, setCompanies] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);

@@ -29,7 +29,7 @@ const EMPTY_CONVERT_FORM = {
 export default function EmployeesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasMinRole } = useAuth();
+  const { hasMinRole , isReadOnly } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('active');
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);

@@ -35,6 +35,7 @@ const ALL_SETTINGS_KEYS = ['settings-users', 'settings-custom-fields', 'settings
 function getRoleDefaultPages(role: string, allPageKeys: string[]): string[] {
   switch (role) {
     case 'admin': return [...allPageKeys];
+    case 'director': return [...allPageKeys];
     case 'manager': return allPageKeys.filter(k => !k.startsWith('settings-'));
     case 'clerk': return allPageKeys.filter(k => !k.startsWith('settings-'));
     case 'worker': return [];
@@ -58,6 +59,7 @@ function computeEffectivePages(role: string, allPageKeys: string[], pagePermissi
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'admin', label: '管理員' },
+  { value: 'director', label: '董事' },
   { value: 'manager', label: '主管' },
   { value: 'clerk', label: '文員' },
   { value: 'worker', label: '司機/工人' },
@@ -79,7 +81,7 @@ const emptyForm = {
 };
 
 function UsersPageContent() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser , isReadOnly } = useAuth();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -370,6 +372,7 @@ function UsersPageContent() {
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                        u.role === 'director' ? 'bg-amber-100 text-amber-800' :
                         u.role === 'manager' ? 'bg-blue-100 text-blue-800' :
                         u.role === 'clerk' ? 'bg-green-100 text-green-800' :
                         'bg-gray-100 text-gray-800'
@@ -737,6 +740,7 @@ function UsersPageContent() {
 }
 
 export default function UsersPage() {
+  const { isReadOnly } = useAuth();
   return (
     <RoleGuard pageKey="settings-users">
       <UsersPageContent />

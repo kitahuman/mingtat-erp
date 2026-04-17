@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 interface BatchItem {
   id: number;
@@ -41,6 +42,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function VerificationBatchesPage() {
+  const { isReadOnly } = useAuth();
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, total_pages: 0 });
   const [loading, setLoading] = useState(true);

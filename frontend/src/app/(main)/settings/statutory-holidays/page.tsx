@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { statutoryHolidaysApi } from '@/lib/api';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 const HK_STATUTORY_HOLIDAYS = [
   { name: '元旦', month: 1, day: 1 },
@@ -28,6 +29,7 @@ function fmtDate(d: string) {
 }
 
 export default function StatutoryHolidaysPage() {
+  const { isReadOnly } = useAuth();
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());

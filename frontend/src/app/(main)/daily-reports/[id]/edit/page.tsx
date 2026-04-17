@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { dailyReportsApi, quotationsApi, partnersApi, fieldOptionsApi, projectsApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
+import { useAuth } from '@/lib/auth';
 
 const categoryLabels: Record<string, string> = {
   worker: '工人',
@@ -50,6 +51,7 @@ export default function EditDailyReportPage() {
   const reportId = Number(params.id);
 
   // Form state
+  const { isReadOnly } = useAuth();
   const [reportDate, setReportDate] = useState('');
   const [shiftType, setShiftType] = useState('day');
   const [projectId, setProjectId] = useState('');

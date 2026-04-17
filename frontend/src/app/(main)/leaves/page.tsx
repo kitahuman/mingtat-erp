@@ -4,6 +4,7 @@ import { leavesApi, employeesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   sick: '病假',
@@ -45,6 +46,7 @@ const DEFAULT_COLUMNS = [
 ];
 
 export default function LeavesPage() {
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

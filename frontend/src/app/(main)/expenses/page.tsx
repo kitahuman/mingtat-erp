@@ -17,6 +17,7 @@ import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTa
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
+import { useAuth } from '@/lib/auth';
 
 // ── Inline Combobox helper (free-text + searchable) ─────────────────────────
 function InlineCombobox({
@@ -30,6 +31,7 @@ function InlineCombobox({
   options: { value: string | number; label: string }[];
   placeholder?: string;
 }) {
+  const { isReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
 
@@ -73,6 +75,7 @@ function InlineCombobox({
 
 export default function ExpensesPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

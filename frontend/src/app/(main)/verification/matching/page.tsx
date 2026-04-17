@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -136,6 +137,7 @@ function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' 
 
 export default function MatchingPage() {
   const defaultRange = getDefaultDateRange();
+  const { isReadOnly } = useAuth();
   const [dateFrom, setDateFrom] = useState(defaultRange.from);
   const [dateTo, setDateTo] = useState(defaultRange.to);
   const [groupBy, setGroupBy] = useState<'vehicle' | 'employee'>('vehicle');

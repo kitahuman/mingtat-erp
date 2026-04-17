@@ -64,6 +64,7 @@ import { HealthModule } from './health/health.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { EquipmentProfitModule } from './equipment-profit/equipment-profit.module';
 import { WhatsappConsoleModule } from './whatsapp-console/whatsapp-console.module';
+import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
 @Module({
   imports: [
@@ -158,6 +159,10 @@ import { WhatsappConsoleModule } from './whatsapp-console/whatsapp-console.modul
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: DirectorReadOnlyGuard,
     },
   ],
 })

@@ -5,6 +5,7 @@ import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api'
 import AuditHistory from '@/components/AuditHistory';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const SERVICE_TYPES = ['工程', '人工', '物料', '服務'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -12,6 +13,7 @@ const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','�
 export default function ProjectRateCardDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [record, setRecord] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

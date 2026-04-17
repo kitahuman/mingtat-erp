@@ -11,6 +11,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { useAuth } from '@/lib/auth';
 
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
@@ -22,6 +23,7 @@ const STATUS_OPTIONS = [
 
 export default function RentalRateCardsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

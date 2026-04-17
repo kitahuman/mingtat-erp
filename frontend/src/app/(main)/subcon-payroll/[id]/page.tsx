@@ -5,6 +5,7 @@ import { subconPayrollApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
 import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
+import { useAuth } from '@/lib/auth';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -27,6 +28,7 @@ export default function SubconPayrollDetailPage() {
   const router = useRouter();
   const id = Number(params.id);
 
+  const { isReadOnly } = useAuth();
   const [payroll, setPayroll] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

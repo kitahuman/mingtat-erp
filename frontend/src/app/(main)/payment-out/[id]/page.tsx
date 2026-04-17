@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { paymentOutApi, expensesApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
+import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -29,6 +30,7 @@ export default function PaymentOutDetailPage() {
   const router = useRouter();
   const recordId = Number(id);
 
+  const { isReadOnly } = useAuth();
   const [record, setRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

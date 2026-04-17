@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 // ══════════════════════════════════════════════════════════════
 // 類型定義
@@ -113,6 +114,7 @@ function getImageSrc(item: { ocr_image_base64?: string | null; ocr_image_url?: s
 // 主頁面元件
 // ══════════════════════════════════════════════════════════════
 export default function VerificationOcrPage() {
+  const { isReadOnly } = useAuth();
   const [results, setResults] = useState<OcrResultItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, total_pages: 0 });
   const [loading, setLoading] = useState(true);

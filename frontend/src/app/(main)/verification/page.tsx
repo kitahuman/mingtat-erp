@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 // ── 狀態圖標 ──────────────────────────────────────────────
 const STATUS_ICON: Record<string, string> = {
@@ -115,6 +116,7 @@ function DetailPopup({ workRecordId, sourceKey, onClose }: {
   sourceKey: string;
   onClose: () => void;
 }) {
+  const { isReadOnly } = useAuth();
   const [matchData, setMatchData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -218,6 +220,7 @@ function DetailPopup({ workRecordId, sourceKey, onClose }: {
 
 // ── 主頁面 ──────────────────────────────────────────────────
 export default function VerificationWorkbenchPage() {
+  const { isReadOnly } = useAuth();
   const [records, setRecords] = useState<WorkbenchRecord[]>([]);
   const [summary, setSummary] = useState<Summary>({ total_records: 0, matched_count: 0, diff_count: 0, missing_count: 0, unverified_count: 0 });
   const [pagination, setPagination] = useState<Pagination>({ page: 1, page_size: 20, total_pages: 0, total: 0 });

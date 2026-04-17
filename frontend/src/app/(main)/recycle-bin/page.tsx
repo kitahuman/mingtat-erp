@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
+import { useAuth } from '@/lib/auth';
 
 interface DeletedByUser {
   id: number;
@@ -70,6 +71,7 @@ const TABLES = [
 ];
 
 export default function RecycleBinPage() {
+  const { isReadOnly } = useAuth();
   const [records, setRecords] = useState<DeletedRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

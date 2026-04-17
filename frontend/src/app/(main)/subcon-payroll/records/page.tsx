@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { subconPayrollApi, partnersApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -25,6 +26,7 @@ type Option = { value: any; label: string };
 
 export default function SubconPayrollRecordsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

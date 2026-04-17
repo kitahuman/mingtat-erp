@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { expenseCategoriesApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/auth';
 
 interface Category {
   id: number;
@@ -83,6 +84,7 @@ function DraggableRow({
 }
 
 export default function ExpenseCategoriesPage() {
+  const { isReadOnly } = useAuth();
   const [tree, setTree] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 

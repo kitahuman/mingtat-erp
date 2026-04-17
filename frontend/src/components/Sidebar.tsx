@@ -220,7 +220,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onCollapse }: SidebarProps) {
   const pathname = usePathname();
-  const { user, logout, hasRole, hasMinRole, canAccessPage } = useAuth();
+  const { user, logout, hasRole, hasMinRole, canAccessPage, isReadOnly } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -426,10 +426,12 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
           })}
         </nav>
 
-        {/* WhatsApp Bot Status */}
-        <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
-          <WhatsAppBotStatus collapsed={collapsed} />
-        </div>
+        {/* WhatsApp Bot Status — only visible to admin */}
+        {user?.role === 'admin' && (
+          <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
+            <WhatsAppBotStatus collapsed={collapsed} />
+          </div>
+        )}
 
         {/* Version Badge */}
         {!collapsed && (

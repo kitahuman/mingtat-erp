@@ -9,6 +9,7 @@ import Combobox from '@/components/Combobox';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -18,6 +19,7 @@ const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'day_night', 'locati
 export default function FleetRateCardDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [record, setRecord] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

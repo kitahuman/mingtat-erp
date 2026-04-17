@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { verificationApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -528,6 +529,7 @@ function AddItemModal({ orderType, orderId, onSave, onCancel, saving }: {
   onCancel: () => void;
   saving: boolean;
 }) {
+  const { isReadOnly } = useAuth();
   const [form, setForm] = useState<EditingItem>(emptyEditingItem(orderType));
   const update = (field: keyof EditingItem, value: any) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -1294,6 +1296,7 @@ function MobileItemCard({ item, expandedItemLogs, toggleItemLog, onEdit, onDelet
 // ══════════════════════════════════════════════════════════════
 
 export default function WhatsAppDailySummaryPage() {
+  const { isReadOnly } = useAuth();
   const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, total_pages: 0 });
   const [loading, setLoading] = useState(true);

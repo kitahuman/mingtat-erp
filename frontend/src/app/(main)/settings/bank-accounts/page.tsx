@@ -3,8 +3,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { bankAccountsApi, companiesApi } from '@/lib/api';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/auth';
 
 export default function BankAccountsPage() {
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);

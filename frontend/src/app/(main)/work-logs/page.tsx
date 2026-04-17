@@ -98,7 +98,7 @@ const COLUMNS = [
 ];
 
 export default function WorkLogsPage() {
-  const { user } = useAuth();
+  const { user , isReadOnly } = useAuth();
 
   // ── Reference data ──────────────────────────────────────────
   const [companies, setCompanies] = useState<Option[]>([]);

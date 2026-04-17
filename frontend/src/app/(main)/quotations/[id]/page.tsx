@@ -6,6 +6,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
@@ -17,6 +18,7 @@ const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
 
 // Searchable client dropdown
 function ClientSearchSelect({ value, onChange, partners }: { value: any; onChange: (v: any) => void; partners: any[] }) {
+  const { isReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -70,6 +72,7 @@ function ClientSearchSelect({ value, onChange, partners }: { value: any; onChang
 }
 
 export default function QuotationDetailPage() {
+  const { isReadOnly } = useAuth();
   const params = useParams();
   const router = useRouter();
   const [quotation, setQuotation] = useState<any>(null);

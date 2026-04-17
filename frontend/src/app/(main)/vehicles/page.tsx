@@ -15,7 +15,7 @@ const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '�
 export default function VehiclesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasMinRole } = useAuth();
+  const { hasMinRole , isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

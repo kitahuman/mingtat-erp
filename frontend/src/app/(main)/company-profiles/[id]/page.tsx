@@ -6,10 +6,12 @@ import DocumentUpload from '@/components/DocumentUpload';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 
 export default function CompanyProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

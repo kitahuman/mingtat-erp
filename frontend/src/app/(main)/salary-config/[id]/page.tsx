@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -32,6 +33,7 @@ const OT_FIELDS = [
 export default function SalaryConfigDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [record, setRecord] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

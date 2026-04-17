@@ -7,6 +7,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import IpaTabContent from '@/components/payment/IpaTabContent';
 import RetentionTabContent from '@/components/retention/RetentionTabContent';
+import { useAuth } from '@/lib/auth';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -27,6 +28,7 @@ export default function ContractDetailPage() {
   const params = useParams();
   const router = useRouter();
   const contractId = Number(params.id);
+  const { isReadOnly } = useAuth();
   const [contract, setContract] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

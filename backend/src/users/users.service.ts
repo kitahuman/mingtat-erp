@@ -40,6 +40,7 @@ export class UsersService {
     const ROLE_PRIORITY: Record<string, number> = {
       superadmin: 0,
       admin: 0,
+      director: 0,
       manager: 1,
       clerk: 2,
       driver: 3,

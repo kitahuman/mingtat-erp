@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { acceptanceReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
 const statusColors: Record<string, string> = { draft: 'badge-yellow', submitted: 'badge-green' };
 
 export default function AcceptanceReportsAdminPage() {
+  const { isReadOnly } = useAuth();
   const [reports, setReports] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

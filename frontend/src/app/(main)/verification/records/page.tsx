@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { verificationApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 // ══════════════════════════════════════════════════════════════
 // 來源類型 Tab 定義
@@ -127,6 +128,7 @@ function getSourceBadgeColor(sourceCode: string): string {
 export default function VerificationRecordsPage() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'all';
+  const { isReadOnly } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({

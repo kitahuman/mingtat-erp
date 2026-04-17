@@ -7,6 +7,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕',
@@ -25,6 +26,7 @@ const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個'
 
 // Searchable client dropdown component
 function ClientSearchSelect({ value, onChange, partners }: { value: string; onChange: (v: string) => void; partners: any[] }) {
+  const { isReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -79,6 +81,7 @@ function ClientSearchSelect({ value, onChange, partners }: { value: string; onCh
 
 export default function QuotationsPage() {
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

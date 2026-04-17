@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { paymentApplicationsApi, paymentInApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtQty = (v: any) => { const n = Number(v); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(4).replace(/0+$/, ''); };
@@ -28,6 +29,7 @@ export default function IpaDetailPage() {
   const contractId = Number(params.id);
   const paId = Number(params.paId);
 
+  const { isReadOnly } = useAuth();
   const [ipa, setIpa] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

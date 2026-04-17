@@ -5,6 +5,7 @@ import { payrollApi, fieldOptionsApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
+import { useAuth } from '@/lib/auth';
 
 function formatDateDisplay(dateStr: string): string {
   return fmtDate(dateStr);
@@ -56,6 +57,7 @@ function InlineEditCell({
   onSaved: () => Promise<void> | void;
   display?: string;
 }) {
+  const { isReadOnly } = useAuth();
   const [editing, setEditing] = useState(false);
   const [localVal, setLocalVal] = useState(value ?? '');
   const [saving, setSaving] = useState(false);
@@ -854,6 +856,7 @@ function PrintGroupedSettlement({ groups }: { groups: any[] }) {
 export default function PayrollDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { isReadOnly } = useAuth();
   const [payroll, setPayroll] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
