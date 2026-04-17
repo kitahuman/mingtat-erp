@@ -199,7 +199,14 @@ jobs:
             docker compose pull
 
             echo "=== [4/5] Start containers ==="
-            docker compose up -d --remove-orphans
+            # Run without -e so we can capture logs before failing
+            docker compose up -d --remove-orphans || {
+              echo "=== [ERROR] docker compose up failed — dumping backend logs ==="
+              docker logs mingtat-erp-backend --tail 100 2>&1 || true
+              echo "=== [ERROR] docker compose ps ==="
+              docker compose ps
+              exit 1
+            }
 
             echo "=== [5/5] Verify deployment ==="
             sleep 15
