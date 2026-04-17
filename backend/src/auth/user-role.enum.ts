@@ -4,4 +4,3 @@ export enum UserRole {
   MANAGER = 'manager',
   USER = 'user',
 }
-# trigger rebuild Fri Apr 17 01:47:46 EDT 2026
