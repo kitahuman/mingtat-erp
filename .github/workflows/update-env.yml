@@ -1,0 +1,53 @@
+name: Update EC2 Backend Env (One-time)
+on:
+  workflow_dispatch:
+
+jobs:
+  update-env:
+    name: Update Backend .env on EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update .env and restart backend via SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 3m
+          script: |
+            ENV_FILE="/opt/mingtat-erp/backend/.env"
+            
+            # 檢查並加入各環境變數（如果不存在）
+            add_env_var() {
+              local key="$1"
+              local value="$2"
+              if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+                echo "✓ ${key} already exists, skipping"
+              else
+                echo "${key}=${value}" >> "$ENV_FILE"
+                echo "✓ Added ${key}"
+              fi
+            }
+            
+            add_env_var "VAPID_PUBLIC_KEY" "BJBtuKQvzxtGGkJKyRBNB3IYnOThLfaTs5E96HR9vyAPkFDcmQdFRvas9r_11Z-tv8eynx_2gZv33h1i4U3FPCM"
+            add_env_var "VAPID_PRIVATE_KEY" "7LLVJfSFyEZv8CaPhkROMN78trZZ3hd5OCe3o79K-Qg"
+            add_env_var "VAPID_SUBJECT" "mailto:admin@dickyconstruction.com"
+            add_env_var "BOT_API_URL" "http://147.182.233.182:3002"
+            add_env_var "BOT_API_SECRET" "mingtat-bot-api-2026"
+            
+            echo "=== Current VAPID/BOT settings ==="
+            grep -E "VAPID|BOT_API" "$ENV_FILE"
+            
+            echo "=== Restarting backend container ==="
+            cd /opt/mingtat-erp
+            docker compose restart backend
+            
+            echo "=== Waiting 15s for backend to start ==="
+            sleep 15
+            
+            echo "=== Backend health check ==="
+            curl -sf http://localhost:3001/api/health || echo "Health check pending..."
+            
+            echo "=== Done ==="
