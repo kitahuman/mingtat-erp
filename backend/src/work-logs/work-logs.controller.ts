@@ -47,6 +47,11 @@ export class WorkLogsController {
     return this.service.getUnmatchedCombinations(query);
   }
 
+  @Get('unmatched-combinations/filter-options/:column')
+  getUnmatchedFilterOptions(@Param('column') column: string) {
+    return this.service.getUnmatchedFilterOptions(column);
+  }
+
   @Post('add-rate-and-rematch')
   addRateAndRematch(@Body() dto: AddRateAndRematchDto) {
     return this.service.addRateAndRematch(dto);

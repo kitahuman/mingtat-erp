@@ -376,6 +376,8 @@ export const workLogsApi = {
     api.get(`/work-logs/filter-options/${column}`),
   unmatchedCombinations: (params?: Record<string, string | number | undefined>) =>
     api.get('/work-logs/unmatched-combinations', { params }),
+  unmatchedFilterOptions: (column: string) =>
+    api.get(`/work-logs/unmatched-combinations/filter-options/${column}`),
   addRateAndRematch: (data: Record<string, unknown>) =>
     api.post('/work-logs/add-rate-and-rematch', data),
 };

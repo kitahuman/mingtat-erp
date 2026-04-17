@@ -1157,6 +1157,39 @@ export class WorkLogsService {
     return { rateCard: { id: saved.id }, rematchedCount };
   }
 
+  // ── 缺單價組合筛選選項 ─────────────────────────────────────
+
+  async getUnmatchedFilterOptions(column: string): Promise<string[]> {
+    const COLUMN_MAP: Record<string, string> = {
+      company_name: `COALESCE(co.name, cp.name)`,
+      client_name: `cl.name`,
+      client_contract_no: `wl.client_contract_no`,
+      service_type: `wl.service_type`,
+      quotation_no: `q.quotation_no`,
+      day_night: `wl.day_night`,
+      tonnage: `wl.tonnage`,
+      machine_type: `wl.machine_type`,
+      start_location: `wl.start_location`,
+      end_location: `wl.end_location`,
+    };
+    const expr = COLUMN_MAP[column];
+    if (!expr) return [];
+    const sql = `
+      SELECT DISTINCT ${expr} AS val
+      FROM work_logs wl
+      LEFT JOIN companies co ON co.id = wl.company_id
+      LEFT JOIN companies cp ON cp.id = wl.company_profile_id
+      LEFT JOIN partners cl ON cl.id = wl.client_id
+      LEFT JOIN quotations q ON q.id = wl.quotation_id
+      WHERE wl.deleted_at IS NULL AND wl.price_match_status = 'unmatched'
+        AND ${expr} IS NOT NULL
+      ORDER BY val ASC
+      LIMIT 500
+    `;
+    const rows = await this.prisma.$queryRawUnsafe<{ val: string }[]>(sql);
+    return rows.map((r) => String(r.val)).filter(Boolean);
+  }
+
   // ── 輔助方法 ─────────────────────────────────────────────
 
   private resolveEquipmentSource(
