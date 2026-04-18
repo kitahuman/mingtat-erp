@@ -2595,3 +2595,25 @@ model WebPushSubscription {
   @@index([user_id])
   @@map("web_push_subscriptions")
 }
+
+// ══════════════════════════════════════════════════════════════
+// Error Logs (錯誤日誌)
+// ══════════════════════════════════════════════════════════════
+model ErrorLog {
+  id                       Int      @id @default(autoincrement())
+  error_log_timestamp      DateTime @default(now()) @db.Timestamptz
+  error_log_method         String   @db.VarChar(10)  // GET, POST, PUT, DELETE, PATCH
+  error_log_path           String   @db.VarChar(500) // API 路徑
+  error_log_status_code    Int                        // HTTP status code
+  error_log_message        String   @db.Text          // 錯誤訊息
+  error_log_stack          String?  @db.Text          // Stack trace
+  error_log_user_id        Int?                       // 請求的用戶 ID（如果有登入）
+  error_log_username       String?  @db.VarChar(100)  // 用戶名
+  error_log_request_body   Json?    @db.JsonB         // 請求 body（脫敏後）
+  error_log_notified       Boolean  @default(false)   // 是否已發送 WhatsApp 通知
+
+  @@index([error_log_timestamp])
+  @@index([error_log_status_code])
+  @@index([error_log_path])
+  @@map("error_logs")
+}

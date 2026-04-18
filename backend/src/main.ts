@@ -6,6 +6,7 @@ import { Logger as PinoLogger } from 'nestjs-pino';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { ErrorLogsService } from './error-logs/error-logs.service';
 
 // Set up global SOCKS5 proxy for OpenAI API calls (bypasses HK geo-restriction)
 if (process.env.SOCKS_PROXY_URL) {
@@ -54,7 +55,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // M-07: Global exception filter — hide stack traces in production, unified error format
-  app.useGlobalFilters(new AllExceptionsFilter());
+  // Inject ErrorLogsService for database logging & WhatsApp notifications
+  const errorLogsService = app.get(ErrorLogsService);
+  app.useGlobalFilters(new AllExceptionsFilter(errorLogsService));
 
   // H-05: ValidationPipe with whitelist — strip unknown properties, reject non-whitelisted
   app.useGlobalPipes(

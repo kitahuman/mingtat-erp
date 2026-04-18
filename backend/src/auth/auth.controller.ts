@@ -1,9 +1,12 @@
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { DirectorWritable } from './director-writable.decorator';
+import { LoginDto } from './login.dto';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -11,7 +14,11 @@ export class AuthController {
   @Post('login')
   @DirectorWritable()
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
-  async login(@Body() body: { username: string; password: string }) {
+  @ApiOperation({ summary: '用戶登入' })
+  async login(@Body() body: LoginDto) {
+    if (!body.username || !body.password) {
+      throw new BadRequestException('用戶名和密碼不能為空');
+    }
     return this.authService.login(body.username, body.password);
   }
 
