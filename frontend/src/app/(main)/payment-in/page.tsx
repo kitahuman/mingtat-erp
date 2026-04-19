@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { paymentInApi, projectsApi, contractsApi, bankAccountsApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
@@ -39,6 +40,7 @@ const SOURCE_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function PaymentInPage() {
+  const router = useRouter();
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -342,6 +344,7 @@ export default function PaymentInPage() {
         loading={loading}
         onSave={handleSave}
         onDelete={handleDelete}
+        onRowClick={(row: any) => router.push(`/payment-in/${row.id}`)}
         exportFilename="收款記錄"
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}

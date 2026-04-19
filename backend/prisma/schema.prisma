@@ -1710,6 +1710,10 @@ model PaymentIn {
   id                   Int      @id @default(autoincrement())
   date                 DateTime @db.Date
   amount               Decimal  @db.Decimal(14, 2)
+  // NOTE: source_type / source_ref_id are deprecated (legacy polymorphic link).
+  // For PaymentIn↔Invoice, new code should use the PaymentInAllocation many-to-many
+  // table below. source_type='IPA'/'payment_certificate'/'retention_release'/'other'
+  // still use the legacy polymorphic mechanism.
   source_type          String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
   source_ref_id        Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
   project_id           Int?
@@ -1724,8 +1728,32 @@ model PaymentIn {
   project      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
   contract     Contract?    @relation(fields: [contract_id], references: [id], onDelete: SetNull)
   bank_account BankAccount? @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
+  allocations  PaymentInAllocation[]
 
   @@map("payment_ins")
+}
+
+// ══════════════════════════════════════════════════════════════
+// PaymentIn Allocations (收款分配 - 多對多中間表)
+// 一筆 PaymentIn 可分配給多張 Invoice；一張 Invoice 也可被多筆
+// PaymentIn 分配（分期收款）。
+// ══════════════════════════════════════════════════════════════
+
+model PaymentInAllocation {
+  id                                  Int      @id @default(autoincrement())
+  payment_in_allocation_payment_in_id Int
+  payment_in_allocation_invoice_id    Int?
+  payment_in_allocation_amount        Decimal  @db.Decimal(14, 2)
+  payment_in_allocation_remarks       String?  @db.Text
+  created_at                          DateTime @default(now())
+  updated_at                          DateTime @default(now()) @updatedAt
+
+  payment_in PaymentIn @relation(fields: [payment_in_allocation_payment_in_id], references: [id], onDelete: Cascade)
+  invoice    Invoice?  @relation("InvoicePaymentInAllocations", fields: [payment_in_allocation_invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([payment_in_allocation_payment_in_id])
+  @@index([payment_in_allocation_invoice_id])
+  @@map("payment_in_allocations")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1827,6 +1855,7 @@ model Invoice {
   quotation Quotation?    @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
   company   Company       @relation(fields: [company_id], references: [id])
   items     InvoiceItem[]
+  payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
 
   // ── Performance indexes ──
   @@index([client_id])

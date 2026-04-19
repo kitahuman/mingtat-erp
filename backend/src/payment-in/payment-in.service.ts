@@ -1,39 +1,84 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreatePaymentInDto, UpdatePaymentInDto, UpdatePaymentInStatusDto } from './dto/create-payment-in.dto';
+import {
+  CreatePaymentInDto,
+  UpdatePaymentInDto,
+  UpdatePaymentInStatusDto,
+} from './dto/create-payment-in.dto';
+import { PaymentInAllocationService } from './payment-in-allocation.service';
+
+interface FindAllQuery {
+  page?: number;
+  limit?: number;
+  source_type?: string;
+  source_ref_id?: number;
+  project_id?: number;
+  contract_id?: number;
+  date_from?: string;
+  date_to?: string;
+}
 
 @Injectable()
 export class PaymentInService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => PaymentInAllocationService))
+    private allocationService: PaymentInAllocationService,
+  ) {}
 
-  // ── Shared include for queries ──
-  private includeRelations = {
+  // ── Shared include for list queries ──
+  private readonly listInclude = {
     project: { select: { id: true, project_no: true, project_name: true } },
-    contract: { select: { id: true, contract_no: true, contract_name: true } },
-    bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
-  };
+    contract: {
+      select: { id: true, contract_no: true, contract_name: true },
+    },
+    bank_account: {
+      select: {
+        id: true,
+        account_name: true,
+        bank_name: true,
+        account_no: true,
+      },
+    },
+    allocations: {
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            invoice_no: true,
+            invoice_title: true,
+            total_amount: true,
+            paid_amount: true,
+            outstanding: true,
+            status: true,
+            date: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' as const },
+    },
+  } satisfies Prisma.PaymentInInclude;
 
-  async findAll(query: {
-    page?: number;
-    limit?: number;
-    source_type?: string;
-    source_ref_id?: number;
-    project_id?: number;
-    contract_id?: number;
-    date_from?: string;
-    date_to?: string;
-  }) {
+  async findAll(query: FindAllQuery) {
     const page = query.page || 1;
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
+    const where: Prisma.PaymentInWhereInput = {};
     if (query.source_type) where.source_type = query.source_type;
     if (query.source_ref_id) where.source_ref_id = query.source_ref_id;
     if (query.project_id) where.project_id = query.project_id;
     if (query.contract_id) where.contract_id = query.contract_id;
     if (query.date_from || query.date_to) {
-      const dateFilter: Record<string, Date> = {};
+      const dateFilter: Prisma.DateTimeFilter = {};
       if (query.date_from) dateFilter.gte = new Date(query.date_from);
       if (query.date_to) dateFilter.lte = new Date(query.date_to);
       where.date = dateFilter;
@@ -42,7 +87,7 @@ export class PaymentInService {
     const [data, total] = await Promise.all([
       this.prisma.paymentIn.findMany({
         where,
-        include: this.includeRelations,
+        include: this.listInclude,
         orderBy: { date: 'desc' },
         skip,
         take: limit,
@@ -56,7 +101,7 @@ export class PaymentInService {
   async findOne(id: number) {
     const record = await this.prisma.paymentIn.findUnique({
       where: { id },
-      include: this.includeRelations,
+      include: this.listInclude,
     });
     if (!record) throw new NotFoundException('收款記錄不存在');
     return record;
@@ -79,10 +124,11 @@ export class PaymentInService {
         remarks: dto.remarks || null,
         payment_in_status: dto.payment_in_status || 'paid',
       },
-      include: this.includeRelations,
+      include: this.listInclude,
     });
-    // Auto-recalculate source document
+    // Auto-recalculate source document (legacy path + allocations)
     await this.recalculatePaymentStatus(record.source_type, record.source_ref_id);
+    await this.recalculateAllocationTargets(record.id);
     return record;
   }
 
@@ -90,7 +136,7 @@ export class PaymentInService {
     const existing = await this.prisma.paymentIn.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('收款記錄不存在');
 
-    const data: Record<string, unknown> = {};
+    const data: Prisma.PaymentInUpdateInput = {};
     if (dto.date !== undefined) data.date = new Date(dto.date);
     if (dto.amount !== undefined) {
       if (dto.amount <= 0) throw new BadRequestException('金額必須大於 0');
@@ -98,29 +144,71 @@ export class PaymentInService {
     }
     if (dto.source_type !== undefined) data.source_type = dto.source_type;
     if (dto.source_ref_id !== undefined) data.source_ref_id = dto.source_ref_id;
-    if (dto.project_id !== undefined) data.project_id = dto.project_id || null;
-    if (dto.contract_id !== undefined) data.contract_id = dto.contract_id || null;
-    if (dto.bank_account_id !== undefined) data.bank_account_id = dto.bank_account_id || null;
+    if (dto.project_id !== undefined) {
+      data.project = dto.project_id
+        ? { connect: { id: dto.project_id } }
+        : { disconnect: true };
+    }
+    if (dto.contract_id !== undefined) {
+      data.contract = dto.contract_id
+        ? { connect: { id: dto.contract_id } }
+        : { disconnect: true };
+    }
+    if (dto.bank_account_id !== undefined) {
+      data.bank_account = dto.bank_account_id
+        ? { connect: { id: dto.bank_account_id } }
+        : { disconnect: true };
+    }
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
-    if (dto.payment_in_status !== undefined) data.payment_in_status = dto.payment_in_status;
+    if (dto.payment_in_status !== undefined)
+      data.payment_in_status = dto.payment_in_status;
 
     const record = await this.prisma.paymentIn.update({
       where: { id },
       data,
-      include: this.includeRelations,
+      include: this.listInclude,
     });
-    // Auto-recalculate source document
+    // Recalculate both legacy source (old + new) and any allocation targets.
+    if (
+      existing.source_type !== record.source_type ||
+      existing.source_ref_id !== record.source_ref_id
+    ) {
+      await this.recalculatePaymentStatus(
+        existing.source_type,
+        existing.source_ref_id,
+      );
+    }
     await this.recalculatePaymentStatus(record.source_type, record.source_ref_id);
+    await this.recalculateAllocationTargets(record.id);
     return record;
   }
 
   async remove(id: number) {
     const existing = await this.prisma.paymentIn.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('收款記錄不存在');
+
+    // Snapshot allocation targets before cascading delete wipes them.
+    const allocs = await this.prisma.paymentInAllocation.findMany({
+      where: { payment_in_allocation_payment_in_id: id },
+      select: { payment_in_allocation_invoice_id: true },
+    });
+
     await this.prisma.paymentIn.delete({ where: { id } });
-    // Auto-recalculate source document
-    await this.recalculatePaymentStatus(existing.source_type, existing.source_ref_id);
+
+    // Legacy recompute
+    await this.recalculatePaymentStatus(
+      existing.source_type,
+      existing.source_ref_id,
+    );
+    // Allocation targets recompute
+    for (const a of allocs) {
+      if (a.payment_in_allocation_invoice_id) {
+        await this.allocationService.recalculateInvoice(
+          a.payment_in_allocation_invoice_id,
+        );
+      }
+    }
     return { message: '已刪除' };
   }
 
@@ -134,10 +222,11 @@ export class PaymentInService {
     const record = await this.prisma.paymentIn.update({
       where: { id },
       data: { payment_in_status: dto.payment_in_status },
-      include: this.includeRelations,
+      include: this.listInclude,
     });
-    // Auto-recalculate source document
+    // Auto-recalculate source document + allocation targets
     await this.recalculatePaymentStatus(record.source_type, record.source_ref_id);
+    await this.recalculateAllocationTargets(record.id);
     return record;
   }
 
@@ -148,6 +237,10 @@ export class PaymentInService {
   /**
    * Recalculate paid_amount / outstanding / status for the source document
    * (Invoice or IPA) based on all related PaymentIn records with status='paid'.
+   *
+   * For Invoice we now delegate to the allocation-aware path so legacy
+   * polymorphic rows and new allocation rows are combined without
+   * double-counting.
    */
   async recalculatePaymentStatus(
     sourceType: string,
@@ -155,63 +248,59 @@ export class PaymentInService {
   ): Promise<void> {
     if (!sourceRefId) return;
 
-    // Sum only 'paid' payment-in records
-    const payments = await this.prisma.paymentIn.findMany({
-      where: {
-        source_type: sourceType,
-        source_ref_id: sourceRefId,
-        payment_in_status: 'paid',
-      },
-    });
-    const paidAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const roundedPaid = Math.round(paidAmount * 100) / 100;
-
-    // Find latest paid date
-    const latestPaidDate = payments.length > 0
-      ? payments.reduce((latest, p) => {
-          const d = new Date(p.date);
-          return d > latest ? d : latest;
-        }, new Date(payments[0].date))
-      : null;
-
     if (sourceType === 'INVOICE' || sourceType === 'invoice') {
-      await this.recalcInvoice(sourceRefId, roundedPaid);
-    } else if (sourceType === 'IPA' || sourceType === 'payment_certificate') {
+      await this.allocationService.recalculateInvoice(sourceRefId);
+      return;
+    }
+
+    if (sourceType === 'IPA' || sourceType === 'payment_certificate') {
+      // Sum only 'paid' payment-in records for the IPA case
+      const payments = await this.prisma.paymentIn.findMany({
+        where: {
+          source_type: sourceType,
+          source_ref_id: sourceRefId,
+          payment_in_status: 'paid',
+        },
+      });
+      const paidAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const roundedPaid = Math.round(paidAmount * 100) / 100;
+      const latestPaidDate =
+        payments.length > 0
+          ? payments.reduce(
+              (latest, p) => {
+                const d = new Date(p.date);
+                return d > latest ? d : latest;
+              },
+              new Date(payments[0].date),
+            )
+          : null;
       await this.recalcIpa(sourceRefId, roundedPaid, latestPaidDate);
     }
   }
 
-  private async recalcInvoice(invoiceId: number, paidAmount: number) {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
+  /**
+   * When a PaymentIn changes, also recompute every invoice target attached
+   * via allocations.
+   */
+  private async recalculateAllocationTargets(paymentInId: number) {
+    const allocs = await this.prisma.paymentInAllocation.findMany({
+      where: { payment_in_allocation_payment_in_id: paymentInId },
+      select: { payment_in_allocation_invoice_id: true },
     });
-    if (!invoice) return;
-
-    const totalAmount = Number(invoice.total_amount);
-    const outstanding = Math.round((totalAmount - paidAmount) * 100) / 100;
-
-    let status = invoice.status;
-    if (status !== 'void' && status !== 'draft') {
-      if (paidAmount >= totalAmount && totalAmount > 0) {
-        status = 'paid';
-      } else if (paidAmount > 0) {
-        status = 'partially_paid';
-      } else {
-        status = 'issued';
+    for (const a of allocs) {
+      if (a.payment_in_allocation_invoice_id) {
+        await this.allocationService.recalculateInvoice(
+          a.payment_in_allocation_invoice_id,
+        );
       }
     }
-
-    await this.prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        paid_amount: paidAmount,
-        outstanding: outstanding < 0 ? 0 : outstanding,
-        status,
-      },
-    });
   }
 
-  private async recalcIpa(paId: number, paidAmount: number, latestPaidDate: Date | null) {
+  private async recalcIpa(
+    paId: number,
+    paidAmount: number,
+    latestPaidDate: Date | null,
+  ) {
     const pa = await this.prisma.paymentApplication.findUnique({
       where: { id: paId },
     });

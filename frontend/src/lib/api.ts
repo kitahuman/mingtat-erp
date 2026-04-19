@@ -668,6 +668,57 @@ export const paymentOutAllocationApi = {
 };
 
 // ══════════════════════════════════════════════════════════════
+// PaymentIn Allocations (收款分配 - 多對多中間表)
+// ══════════════════════════════════════════════════════════════
+
+export interface PaymentInAllocationCandidate {
+  kind: 'invoice';
+  id: number;
+  doc_no: string;
+  description: string;
+  total_amount: number;
+  allocated_amount: number;
+  outstanding_amount: number;
+  date: string | null;
+}
+
+export interface CreatePaymentInAllocationPayload {
+  payment_in_allocation_payment_in_id: number;
+  payment_in_allocation_invoice_id?: number;
+  payment_in_allocation_amount: number;
+  payment_in_allocation_remarks?: string;
+}
+
+export const paymentInAllocationApi = {
+  listByPaymentIn: (paymentInId: number) =>
+    api.get(`/payment-in-allocations/by-payment-in/${paymentInId}`),
+  search: (params: {
+    kind?: 'invoice';
+    q?: string;
+    limit?: number;
+    unpaid_only?: boolean;
+  }) =>
+    api.get<PaymentInAllocationCandidate[]>('/payment-in-allocations/search', {
+      params: {
+        kind: params.kind || 'invoice',
+        q: params.q,
+        limit: params.limit,
+        unpaid_only: params.unpaid_only === false ? 'false' : 'true',
+      },
+    }),
+  create: (data: CreatePaymentInAllocationPayload) =>
+    api.post('/payment-in-allocations', data),
+  update: (
+    id: number,
+    data: {
+      payment_in_allocation_amount?: number;
+      payment_in_allocation_remarks?: string;
+    },
+  ) => api.put(`/payment-in-allocations/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-in-allocations/${id}`),
+};
+
+// ══════════════════════════════════════════════════════════════
 // Phase 6: Retention (扣留金追蹤)
 // ══════════════════════════════════════════════════════════════
 
