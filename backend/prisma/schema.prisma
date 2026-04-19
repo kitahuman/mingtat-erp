@@ -1213,6 +1213,7 @@ model Payroll {
   payment_outs      PaymentOut[]
   payroll_expenses  PayrollExpense[]
   settled_expenses  Expense[]               @relation("expense_settled_payroll")
+  payment_out_allocations PaymentOutAllocation[] @relation("PayrollPaymentOutAllocations")
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1504,6 +1505,8 @@ model Expense {
 
   // Phase 4
   payment_outs PaymentOut[]
+  // Many-to-many payment allocations (new)
+  payment_out_allocations PaymentOutAllocation[] @relation("ExpensePaymentOutAllocations")
 
   // Reimbursement settlement
   expense_settled_payroll_id Int?
@@ -1745,13 +1748,45 @@ model PaymentOut {
   created_at              DateTime @default(now())
   updated_at              DateTime @default(now()) @updatedAt
 
+  // NOTE: expense_id / payroll_id / subcon_payroll_id are deprecated (legacy direct links).
+  // New code should use the PaymentOutAllocation many-to-many table below.
   expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
   payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
   subcon_payroll   SubconPayroll?    @relation(fields: [subcon_payroll_id], references: [id], onDelete: SetNull)
   company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   bank_account     BankAccount?      @relation("PaymentOutBankAccount", fields: [bank_account_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]
+  allocations      PaymentOutAllocation[]
   @@map("payment_outs")
+}
+
+// ══════════════════════════════════════════════════════════════
+// PaymentOut Allocations (付款分配 - 多對多中間表)
+// 一筆 PaymentOut 可分配給多張 Expense / Payroll / SubconPayroll；
+// 一張單也可被多筆 PaymentOut 分配。
+// ══════════════════════════════════════════════════════════════
+
+model PaymentOutAllocation {
+  id                                       Int      @id @default(autoincrement())
+  payment_out_allocation_payment_out_id    Int
+  payment_out_allocation_expense_id        Int?
+  payment_out_allocation_payroll_id        Int?
+  payment_out_allocation_subcon_payroll_id Int?
+  payment_out_allocation_amount            Decimal  @db.Decimal(14, 2)
+  payment_out_allocation_remarks           String?  @db.Text
+  created_at                               DateTime @default(now())
+  updated_at                               DateTime @default(now()) @updatedAt
+
+  payment_out    PaymentOut     @relation(fields: [payment_out_allocation_payment_out_id], references: [id], onDelete: Cascade)
+  expense        Expense?       @relation("ExpensePaymentOutAllocations", fields: [payment_out_allocation_expense_id], references: [id], onDelete: Cascade)
+  payroll        Payroll?       @relation("PayrollPaymentOutAllocations", fields: [payment_out_allocation_payroll_id], references: [id], onDelete: Cascade)
+  subcon_payroll SubconPayroll? @relation("SubconPayrollPaymentOutAllocations", fields: [payment_out_allocation_subcon_payroll_id], references: [id], onDelete: Cascade)
+
+  @@index([payment_out_allocation_payment_out_id])
+  @@index([payment_out_allocation_expense_id])
+  @@index([payment_out_allocation_payroll_id])
+  @@index([payment_out_allocation_subcon_payroll_id])
+  @@map("payment_out_allocations")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2530,6 +2565,7 @@ model SubconPayroll {
   subcontractor Partner            @relation("subcon_payroll_partner", fields: [subcon_payroll_subcontractor_id], references: [id], onDelete: Restrict)
   items         SubconPayrollItem[]
   payment_outs  PaymentOut[]
+  payment_out_allocations PaymentOutAllocation[] @relation("SubconPayrollPaymentOutAllocations")
 
   @@index([subcon_payroll_subcontractor_id])
   @@index([subcon_payroll_month])

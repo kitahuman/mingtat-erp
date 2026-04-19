@@ -1,9 +1,48 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaymentOutAllocationService } from './payment-out-allocation.service';
+
+interface FindAllQuery {
+  page?: number;
+  limit?: number;
+  expense_id?: number;
+  subcon_payroll_id?: number;
+  company_id?: number;
+  payment_out_status?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+interface CreatePaymentOutInput {
+  date: string;
+  amount: number;
+  expense_id?: number;
+  payroll_id?: number;
+  subcon_payroll_id?: number;
+  company_id?: number;
+  payment_out_description?: string;
+  payment_out_status?: string;
+  bank_account_id?: number;
+  reference_no?: string;
+  remarks?: string;
+}
+
+interface UpdatePaymentOutInput extends Partial<CreatePaymentOutInput> {}
 
 @Injectable()
 export class PaymentOutService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => PaymentOutAllocationService))
+    private allocationService: PaymentOutAllocationService,
+  ) {}
 
   // ── Shared include for list queries ──────────────────────────────
   private readonly listInclude = {
@@ -33,32 +72,48 @@ export class PaymentOutService {
     },
     company: { select: { id: true, name: true, name_en: true } },
     bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
-  };
+    allocations: {
+      include: {
+        expense: {
+          select: { id: true, item: true, total_amount: true, supplier_name: true },
+        },
+        payroll: {
+          select: {
+            id: true,
+            period: true,
+            net_amount: true,
+            employee: { select: { id: true, name_zh: true, name_en: true } },
+          },
+        },
+        subcon_payroll: {
+          select: {
+            id: true,
+            subcon_payroll_month: true,
+            subcon_payroll_total_amount: true,
+            subcontractor: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' as const },
+    },
+  } satisfies Prisma.PaymentOutInclude;
 
-  // ── List / Query ─────────────────────────────────────────────────
-  async findAll(query: {
-    page?: number;
-    limit?: number;
-    expense_id?: number;
-    subcon_payroll_id?: number;
-    company_id?: number;
-    payment_out_status?: string;
-    date_from?: string;
-    date_to?: string;
-  }) {
+  // ── List / Query ──────────────────────────────────
+  async findAll(query: FindAllQuery) {
     const page = query.page || 1;
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.PaymentOutWhereInput = {};
     if (query.expense_id) where.expense_id = query.expense_id;
     if (query.subcon_payroll_id) where.subcon_payroll_id = query.subcon_payroll_id;
     if (query.company_id) where.company_id = query.company_id;
     if (query.payment_out_status) where.payment_out_status = query.payment_out_status;
     if (query.date_from || query.date_to) {
-      where.date = {};
-      if (query.date_from) where.date.gte = new Date(query.date_from);
-      if (query.date_to) where.date.lte = new Date(query.date_to);
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (query.date_from) dateFilter.gte = new Date(query.date_from);
+      if (query.date_to) dateFilter.lte = new Date(query.date_to);
+      where.date = dateFilter;
     }
 
     const [data, total] = await Promise.all([
@@ -130,6 +185,36 @@ export class PaymentOutService {
           },
           orderBy: { payroll_payment_date: 'desc' },
         },
+        allocations: {
+          include: {
+            expense: {
+              select: {
+                id: true,
+                item: true,
+                total_amount: true,
+                supplier_name: true,
+                date: true,
+              },
+            },
+            payroll: {
+              select: {
+                id: true,
+                period: true,
+                net_amount: true,
+                employee: { select: { id: true, name_zh: true, name_en: true } },
+              },
+            },
+            subcon_payroll: {
+              select: {
+                id: true,
+                subcon_payroll_month: true,
+                subcon_payroll_total_amount: true,
+                subcontractor: { select: { id: true, name: true } },
+              },
+            },
+          },
+          orderBy: { id: 'asc' },
+        },
       },
     });
     if (!record) throw new NotFoundException('付款記錄不存在');
@@ -151,20 +236,8 @@ export class PaymentOutService {
     return { ...record, matched_bank_transactions: matchedBankTransactions };
   }
 
-  // ── Create ───────────────────────────────────────────────────────
-  async create(dto: {
-    date: string;
-    amount: number;
-    expense_id?: number;
-    payroll_id?: number;
-    subcon_payroll_id?: number;
-    company_id?: number;
-    payment_out_description?: string;
-    payment_out_status?: string;
-    bank_account_id?: number;
-    reference_no?: string;
-    remarks?: string;
-  }) {
+  //    // ── Create ────────────────────────────────────────────────
+  async create(dto: CreatePaymentOutInput) {
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException('金額必須大於 0');
     }
@@ -209,24 +282,44 @@ export class PaymentOutService {
     return created;
   }
 
-  // ── Update ───────────────────────────────────────────────────────
-  async update(id: number, dto: any) {
+  //   // ── Update ────────────────────────────────────────────────
+  async update(id: number, dto: UpdatePaymentOutInput) {
     const existing = await this.prisma.paymentOut.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('付款記錄不存在');
 
-    const data: any = {};
+    const data: Prisma.PaymentOutUpdateInput = {};
     if (dto.date !== undefined) data.date = new Date(dto.date);
     if (dto.amount !== undefined) {
       if (dto.amount <= 0) throw new BadRequestException('金額必須大於 0');
       data.amount = dto.amount;
     }
-    if (dto.expense_id !== undefined) data.expense_id = dto.expense_id || null;
-    if (dto.payroll_id !== undefined) data.payroll_id = dto.payroll_id || null;
-    if (dto.subcon_payroll_id !== undefined) data.subcon_payroll_id = dto.subcon_payroll_id || null;
-    if (dto.company_id !== undefined) data.company_id = dto.company_id || null;
+    if (dto.expense_id !== undefined) {
+      data.expense = dto.expense_id
+        ? { connect: { id: dto.expense_id } }
+        : { disconnect: true };
+    }
+    if (dto.payroll_id !== undefined) {
+      data.payroll = dto.payroll_id
+        ? { connect: { id: dto.payroll_id } }
+        : { disconnect: true };
+    }
+    if (dto.subcon_payroll_id !== undefined) {
+      data.subcon_payroll = dto.subcon_payroll_id
+        ? { connect: { id: dto.subcon_payroll_id } }
+        : { disconnect: true };
+    }
+    if (dto.company_id !== undefined) {
+      data.company = dto.company_id
+        ? { connect: { id: dto.company_id } }
+        : { disconnect: true };
+    }
     if (dto.payment_out_description !== undefined) data.payment_out_description = dto.payment_out_description;
     if (dto.payment_out_status !== undefined) data.payment_out_status = dto.payment_out_status;
-    if (dto.bank_account_id !== undefined) data.bank_account_id = dto.bank_account_id || null;
+    if (dto.bank_account_id !== undefined) {
+      data.bank_account = dto.bank_account_id
+        ? { connect: { id: dto.bank_account_id } }
+        : { disconnect: true };
+    }
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
@@ -261,14 +354,47 @@ export class PaymentOutService {
     return updated;
   }
 
-  // ── Delete ───────────────────────────────────────────────────────
+    // ── Delete ────────────────────────────────────────────
   async remove(id: number) {
     const existing = await this.prisma.paymentOut.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('付款記錄不存在');
+
+    // Capture allocation targets before cascading delete wipes them.
+    const allocs = await this.prisma.paymentOutAllocation.findMany({
+      where: { payment_out_allocation_payment_out_id: id },
+      select: {
+        payment_out_allocation_expense_id: true,
+        payment_out_allocation_payroll_id: true,
+        payment_out_allocation_subcon_payroll_id: true,
+      },
+    });
+
     await this.prisma.paymentOut.delete({ where: { id } });
 
-    // Recalculate linked source payment status after deletion
-    await this.recalculateLinkedStatus(existing);
+    // Recalculate legacy direct-fk targets first
+    await this.recalculateLinkedStatus({
+      expense_id: existing.expense_id,
+      payroll_id: existing.payroll_id,
+      subcon_payroll_id: existing.subcon_payroll_id,
+    });
+    // Recalculate allocation targets that were attached to this PaymentOut
+    for (const a of allocs) {
+      if (a.payment_out_allocation_expense_id) {
+        await this.allocationService.recalculateExpense(
+          a.payment_out_allocation_expense_id,
+        );
+      }
+      if (a.payment_out_allocation_payroll_id) {
+        await this.allocationService.recalculatePayroll(
+          a.payment_out_allocation_payroll_id,
+        );
+      }
+      if (a.payment_out_allocation_subcon_payroll_id) {
+        await this.allocationService.recalculateSubconPayroll(
+          a.payment_out_allocation_subcon_payroll_id,
+        );
+      }
+    }
 
     return { message: '已刪除' };
   }
@@ -279,107 +405,65 @@ export class PaymentOutService {
 
   /**
    * Given a PaymentOut record (or its snapshot), recalculate the payment status
-   * for the linked Expense or SubconPayroll.
+   * for every linked target (legacy direct fk + every allocation).
    */
   private async recalculateLinkedStatus(record: {
+    id?: number;
     expense_id?: number | null;
+    payroll_id?: number | null;
     subcon_payroll_id?: number | null;
   }) {
+    // 1) legacy direct foreign-key targets
     if (record.expense_id) {
-      await this.recalculateExpensePaymentStatus(record.expense_id);
+      await this.allocationService.recalculateExpense(record.expense_id);
+    }
+    if (record.payroll_id) {
+      await this.allocationService.recalculatePayroll(record.payroll_id);
     }
     if (record.subcon_payroll_id) {
-      await this.recalculateSubconPayrollStatus(record.subcon_payroll_id);
-    }
-  }
-
-  /**
-   * Recalculate Expense payment_status and is_paid from its PaymentOut records.
-   * - Sum of paid PaymentOut amounts = 0 → unpaid
-   * - 0 < sum < total_amount → partially_paid
-   * - sum >= total_amount → paid
-   */
-  async recalculateExpensePaymentStatus(expenseId: number) {
-    const expense = await this.prisma.expense.findUnique({
-      where: { id: expenseId },
-      select: { total_amount: true },
-    });
-    if (!expense) return;
-
-    const paidPayments = await this.prisma.paymentOut.findMany({
-      where: {
-        expense_id: expenseId,
-        payment_out_status: 'paid',
-      },
-      select: { amount: true },
-    });
-
-    const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const totalAmount = Number(expense.total_amount) || 0;
-
-    let paymentStatus: string;
-    let isPaid: boolean;
-
-    if (paidTotal <= 0) {
-      paymentStatus = 'unpaid';
-      isPaid = false;
-    } else if (paidTotal < totalAmount) {
-      paymentStatus = 'partially_paid';
-      isPaid = false;
-    } else {
-      paymentStatus = 'paid';
-      isPaid = true;
+      await this.allocationService.recalculateSubconPayroll(record.subcon_payroll_id);
     }
 
-    await this.prisma.expense.update({
-      where: { id: expenseId },
-      data: { payment_status: paymentStatus, is_paid: isPaid },
-    });
-  }
-
-  /**
-   * Recalculate SubconPayroll status from its PaymentOut records.
-   * Only changes between confirmed/partially_paid/paid based on payment amounts.
-   * Does not touch draft or cancelled status.
-   */
-  async recalculateSubconPayrollStatus(subconPayrollId: number) {
-    const payroll = await this.prisma.subconPayroll.findUnique({
-      where: { id: subconPayrollId },
-      select: { subcon_payroll_total_amount: true, subcon_payroll_status: true },
-    });
-    if (!payroll) return;
-
-    // Don't recalculate for draft or cancelled
-    if (payroll.subcon_payroll_status === 'draft' || payroll.subcon_payroll_status === 'cancelled') {
-      return;
-    }
-
-    const paidPayments = await this.prisma.paymentOut.findMany({
-      where: {
-        subcon_payroll_id: subconPayrollId,
-        payment_out_status: 'paid',
-      },
-      select: { amount: true },
-    });
-
-    const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const totalAmount = Number(payroll.subcon_payroll_total_amount) || 0;
-
-    let newStatus: string;
-
-    if (paidTotal <= 0) {
-      newStatus = 'confirmed';
-    } else if (paidTotal < totalAmount) {
-      newStatus = 'partially_paid';
-    } else {
-      newStatus = 'paid';
-    }
-
-    if (newStatus !== payroll.subcon_payroll_status) {
-      await this.prisma.subconPayroll.update({
-        where: { id: subconPayrollId },
-        data: { subcon_payroll_status: newStatus },
+    // 2) allocation targets attached to this PaymentOut (if any)
+    if (record.id) {
+      const allocs = await this.prisma.paymentOutAllocation.findMany({
+        where: { payment_out_allocation_payment_out_id: record.id },
+        select: {
+          payment_out_allocation_expense_id: true,
+          payment_out_allocation_payroll_id: true,
+          payment_out_allocation_subcon_payroll_id: true,
+        },
       });
+      for (const a of allocs) {
+        if (a.payment_out_allocation_expense_id) {
+          await this.allocationService.recalculateExpense(
+            a.payment_out_allocation_expense_id,
+          );
+        }
+        if (a.payment_out_allocation_payroll_id) {
+          await this.allocationService.recalculatePayroll(
+            a.payment_out_allocation_payroll_id,
+          );
+        }
+        if (a.payment_out_allocation_subcon_payroll_id) {
+          await this.allocationService.recalculateSubconPayroll(
+            a.payment_out_allocation_subcon_payroll_id,
+          );
+        }
+      }
     }
+  }
+
+  /**
+   * Backward-compatible thin wrappers that delegate to the new
+   * allocation-aware logic in PaymentOutAllocationService.
+   * Existing callers (e.g. other services) keep working.
+   */
+  async recalculateExpensePaymentStatus(expenseId: number): Promise<void> {
+    await this.allocationService.recalculateExpense(expenseId);
+  }
+
+  async recalculateSubconPayrollStatus(subconPayrollId: number): Promise<void> {
+    await this.allocationService.recalculateSubconPayroll(subconPayrollId);
   }
 }

@@ -621,6 +621,52 @@ export const paymentOutApi = {
   delete: (id: number) => api.delete(`/payment-out/${id}`),
 };
 
+export interface PaymentOutAllocationCandidate {
+  kind: 'expense' | 'payroll' | 'subcon_payroll';
+  id: number;
+  doc_no: string;
+  description: string;
+  total_amount: number;
+  allocated_amount: number;
+  outstanding_amount: number;
+  date: string | null;
+}
+
+export interface CreatePaymentOutAllocationPayload {
+  payment_out_allocation_payment_out_id: number;
+  payment_out_allocation_expense_id?: number;
+  payment_out_allocation_payroll_id?: number;
+  payment_out_allocation_subcon_payroll_id?: number;
+  payment_out_allocation_amount: number;
+  payment_out_allocation_remarks?: string;
+}
+
+export const paymentOutAllocationApi = {
+  listByPaymentOut: (paymentOutId: number) =>
+    api.get(`/payment-out-allocations/by-payment-out/${paymentOutId}`),
+  search: (params: {
+    kind: 'expense' | 'payroll' | 'subcon_payroll';
+    q?: string;
+    limit?: number;
+    unpaid_only?: boolean;
+  }) =>
+    api.get<PaymentOutAllocationCandidate[]>('/payment-out-allocations/search', {
+      params: {
+        kind: params.kind,
+        q: params.q,
+        limit: params.limit,
+        unpaid_only: params.unpaid_only === false ? 'false' : 'true',
+      },
+    }),
+  create: (data: CreatePaymentOutAllocationPayload) =>
+    api.post('/payment-out-allocations', data),
+  update: (
+    id: number,
+    data: { payment_out_allocation_amount?: number; payment_out_allocation_remarks?: string },
+  ) => api.put(`/payment-out-allocations/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-out-allocations/${id}`),
+};
+
 // ══════════════════════════════════════════════════════════════
 // Phase 6: Retention (扣留金追蹤)
 // ══════════════════════════════════════════════════════════════

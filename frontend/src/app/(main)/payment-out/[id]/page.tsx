@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { paymentOutApi, expensesApi, bankAccountsApi } from '@/lib/api';
+import AllocationsCard from './AllocationsCard';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
@@ -378,6 +379,15 @@ export default function PaymentOutDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Allocations (多對多關聯單據) */}
+      <AllocationsCard
+        paymentOutId={record.id}
+        paymentOutAmount={Number(record.amount) || 0}
+        initialAllocations={record.allocations || []}
+        onChange={loadRecord}
+        readOnly={isReadOnly()}
+      />
 
       {/* Linked Bank Transactions (月結單配對) */}
       <div className="card p-6 mb-6">
