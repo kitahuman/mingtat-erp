@@ -486,7 +486,7 @@ function UsersPageContent() {
           <h1 className="text-2xl font-bold text-gray-900">用戶管理</h1>
           <p className="text-sm text-gray-500 mt-1">管理系統用戶帳號和權限</p>
         </div>
-        {!isReadOnly && (
+        {!isReadOnly() && (
           <button
             onClick={openCreate}
             className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
@@ -604,7 +604,7 @@ function UsersPageContent() {
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(u.lastLoginAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {!isReadOnly && (
+                        {!isReadOnly() && (
                           <button
                             onClick={() => openEdit(u)}
                             className="text-primary-600 hover:text-primary-800 text-xs font-medium"
@@ -612,7 +612,7 @@ function UsersPageContent() {
                             編輯
                           </button>
                         )}
-                        {!isReadOnly && u.role !== 'admin' && (
+                        {!isReadOnly() && u.role !== 'admin' && (
                           <button
                             onClick={() => openPermissions(u)}
                             className="text-amber-600 hover:text-amber-800 text-xs font-medium"
@@ -620,7 +620,7 @@ function UsersPageContent() {
                             權限
                           </button>
                         )}
-                        {!isReadOnly && u.id !== currentUser?.id && (
+                        {!isReadOnly() && u.id !== currentUser?.id && (
                           <button
                             onClick={() => handleToggleActive(u)}
                             className={`text-xs font-medium ${
@@ -630,7 +630,7 @@ function UsersPageContent() {
                             {u.isActive ? '停用' : '啟用'}
                           </button>
                         )}
-                        {!isReadOnly && u.id !== currentUser?.id && (
+                        {!isReadOnly() && u.id !== currentUser?.id && (
                           <button
                             onClick={() => openDelete(u)}
                             className="text-red-600 hover:text-red-800 text-xs font-medium"
