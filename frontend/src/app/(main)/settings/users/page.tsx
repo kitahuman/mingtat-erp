@@ -1,9 +1,19 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { usersApi, authApi } from '@/lib/api';
 import { useAuth, UserRole, ROLE_LABELS, DEPARTMENT_OPTIONS } from '@/lib/auth';
 import RoleGuard from '@/components/RoleGuard';
 import Modal from '@/components/Modal';
+
+interface LinkedEmployee {
+  id: number;
+  name_zh: string;
+  name_en: string | null;
+  emp_code: string | null;
+  role?: string | null;
+  company_id?: number | null;
+  phone?: string | null;
+}
 
 interface UserItem {
   id: number;
@@ -21,6 +31,7 @@ interface UserItem {
   page_permissions: { grant?: string[]; deny?: string[] } | null;
   lastLoginAt: string | null;
   createdAt: string;
+  employee?: LinkedEmployee | null;
 }
 
 interface PageDef {
@@ -30,8 +41,46 @@ interface PageDef {
   path: string;
 }
 
+interface UpdatePayload {
+  username?: string;
+  displayName?: string;
+  role?: UserRole;
+  email?: string;
+  phone?: string;
+  department?: string;
+  isActive?: boolean;
+  user_can_company_clock?: boolean;
+  can_approve_mid_shift?: boolean;
+  can_daily_report?: boolean;
+  can_acceptance_report?: boolean;
+  password?: string;
+  page_permissions?: { grant?: string[]; deny?: string[] } | null;
+  sync_employee_phone?: boolean;
+}
+
+interface EmployeePhonePendingSync {
+  employee_id: number;
+  employee_name: string;
+  old_phone: string | null;
+  new_phone: string | null;
+}
+
+interface UpdateUserResponse {
+  user: UserItem;
+  employee_phone_pending_sync: EmployeePhonePendingSync | null;
+}
+
+interface DeleteCheckResponse {
+  user_id: number;
+  username: string;
+  display_name: string;
+  related: Record<string, number>;
+  total: number;
+  can_hard_delete: boolean;
+  linked_employee: LinkedEmployee | null;
+}
+
 // Role default pages (must match backend page-permissions.ts)
-const ALL_SETTINGS_KEYS = ['settings-users', 'settings-custom-fields', 'settings-field-options', 'settings-expense-categories', 'settings-bank-accounts'];
 function getRoleDefaultPages(role: string, allPageKeys: string[]): string[] {
   switch (role) {
     case 'admin': return [...allPageKeys];
@@ -43,7 +92,11 @@ function getRoleDefaultPages(role: string, allPageKeys: string[]): string[] {
   }
 }
 
-function computeEffectivePages(role: string, allPageKeys: string[], pagePermissions?: { grant?: string[]; deny?: string[] } | null): Set<string> {
+function computeEffectivePages(
+  role: string,
+  allPageKeys: string[],
+  pagePermissions?: { grant?: string[]; deny?: string[] } | null,
+): Set<string> {
   if (role === 'admin') return new Set(allPageKeys);
   const defaults = new Set(getRoleDefaultPages(role, allPageKeys));
   if (pagePermissions) {
@@ -65,6 +118,25 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'worker', label: '司機/工人' },
 ];
 
+const RELATED_LABELS: Record<string, string> = {
+  work_logs_published: '工作紀錄（發佈人）',
+  payrolls: '糧單操作紀錄',
+  expenses: '報銷操作紀錄',
+  payment_ins: '收款操作紀錄',
+  payment_outs: '付款操作紀錄',
+  daily_reports_created: '工程日報（建立人）',
+  acceptance_reports_created: '工程收貨報告（建立人）',
+  audit_logs: '系統審計日誌',
+  verification_confirmations: '對帳確認紀錄',
+  employee_attendances: '員工考勤（用戶）',
+  employee_attendance_operator: '員工考勤（操作員）',
+  mid_shift_approvals: '中直批核紀錄',
+  employee_leaves_submitted: '請假申請（提交人）',
+  employee_leaves_approved: '請假申請（批核人）',
+  web_push_subscriptions: '推播訂閱',
+  deleted_record_marks: '已刪除記錄的「刪除人」標記',
+};
+
 const emptyForm = {
   username: '',
   password: '',
@@ -81,7 +153,7 @@ const emptyForm = {
 };
 
 function UsersPageContent() {
-  const { user: currentUser , isReadOnly } = useAuth();
+  const { user: currentUser, isReadOnly } = useAuth();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -100,6 +172,22 @@ function UsersPageContent() {
   const [permChecked, setPermChecked] = useState<Set<string>>(new Set());
   const [permSaving, setPermSaving] = useState(false);
 
+  // Employee phone follow-up sync prompt
+  const [phoneSyncPrompt, setPhoneSyncPrompt] = useState<{
+    user: UserItem;
+    pending: EmployeePhonePendingSync;
+  } | null>(null);
+  const [phoneSyncRunning, setPhoneSyncRunning] = useState(false);
+
+  // Delete flow
+  const [deleteCheck, setDeleteCheck] = useState<{
+    user: UserItem;
+    info: DeleteCheckResponse;
+  } | null>(null);
+  const [deleteRunning, setDeleteRunning] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteResult, setDeleteResult] = useState<string | null>(null);
+
   // Load page definitions once
   useEffect(() => {
     authApi.getPageDefinitions().then(res => setPageDefs(res.data)).catch(() => {});
@@ -108,12 +196,12 @@ function UsersPageContent() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const params: any = {};
+      const params: Record<string, string> = {};
       if (search) params.search = search;
       if (filterRole) params.role = filterRole;
       if (filterActive) params.isActive = filterActive;
       const res = await usersApi.list(params);
-      setUsers(res.data);
+      setUsers(res.data as UserItem[]);
     } catch (err) {
       console.error('Failed to load users:', err);
     } finally {
@@ -158,7 +246,24 @@ function UsersPageContent() {
       setError('');
 
       if (editingUser) {
-        const payload: any = {
+        const phoneTrimmed = form.phone.trim();
+        const linkedEmployee = editingUser.employee;
+        const phoneChanged = (editingUser.phone || '') !== phoneTrimmed;
+
+        // ── If phone changed AND user has linked employee, ask first ──
+        let syncEmployeePhone: boolean | undefined;
+        if (phoneChanged && linkedEmployee) {
+          const employeeName = linkedEmployee.name_zh || linkedEmployee.name_en || `員工 #${linkedEmployee.id}`;
+          const empPhoneText = linkedEmployee.phone ? `（目前：${linkedEmployee.phone}）` : '（員工未設定電話）';
+          const confirmMsg =
+            `此用戶關聯了員工 ${employeeName}${empPhoneText}\n\n` +
+            `是否同時將員工的手機號碼更新為「${phoneTrimmed || '（清空）'}」？\n\n` +
+            `「確定」= 同時更新員工手機\n「取消」= 只更新登入號碼`;
+          syncEmployeePhone = window.confirm(confirmMsg);
+        }
+
+        const payload: UpdatePayload = {
+          username: form.username.trim(),
           displayName: form.displayName,
           role: form.role,
           email: form.email || undefined,
@@ -173,7 +278,20 @@ function UsersPageContent() {
         if (form.password) {
           payload.password = form.password;
         }
-        await usersApi.update(editingUser.id, payload);
+        if (syncEmployeePhone !== undefined) {
+          payload.sync_employee_phone = syncEmployeePhone;
+        }
+        const res = await usersApi.update(editingUser.id, payload);
+        const data = res.data as UpdateUserResponse;
+        setShowModal(false);
+        await loadUsers();
+
+        // Optional fallback: if backend still surfaced a pending sync hint
+        // (e.g. user changed phone but skipped the dialog above), show
+        // a non-blocking confirm.
+        if (data.employee_phone_pending_sync) {
+          setPhoneSyncPrompt({ user: data.user, pending: data.employee_phone_pending_sync });
+        }
       } else {
         if (!form.username || !form.password || !form.displayName) {
           setError('請填寫用戶名、密碼和顯示名稱');
@@ -194,14 +312,31 @@ function UsersPageContent() {
           can_daily_report: form.can_daily_report,
           can_acceptance_report: form.can_acceptance_report,
         });
+        setShowModal(false);
+        await loadUsers();
       }
-
-      setShowModal(false);
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || '操作失敗');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setError(e.response?.data?.message || '操作失敗');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmPhoneSync = async () => {
+    if (!phoneSyncPrompt) return;
+    try {
+      setPhoneSyncRunning(true);
+      await usersApi.update(phoneSyncPrompt.user.id, {
+        phone: phoneSyncPrompt.pending.new_phone ?? '',
+        sync_employee_phone: true,
+      });
+      setPhoneSyncPrompt(null);
+      await loadUsers();
+    } catch (err) {
+      console.error('Failed to sync employee phone:', err);
+    } finally {
+      setPhoneSyncRunning(false);
     }
   };
 
@@ -215,6 +350,58 @@ function UsersPageContent() {
       loadUsers();
     } catch (err) {
       console.error('Failed to toggle user:', err);
+    }
+  };
+
+  // ── Delete flow ───────────────────────────────────────────
+  const openDelete = async (u: UserItem) => {
+    if (u.id === currentUser?.id) {
+      alert('不能刪除自己的帳號');
+      return;
+    }
+    setDeleteError('');
+    setDeleteResult(null);
+    try {
+      const res = await usersApi.checkDelete(u.id);
+      const info = res.data as DeleteCheckResponse;
+      if (info.can_hard_delete) {
+        // No related history — allow direct delete with simple confirm
+        if (!window.confirm(`確定要刪除用戶「${u.displayName}（${u.username}）」嗎？\n\n此用戶沒有任何關聯記錄，可直接硬刪除。`)) {
+          return;
+        }
+        setDeleteRunning(true);
+        await usersApi.delete(u.id, false);
+        setDeleteRunning(false);
+        await loadUsers();
+        return;
+      }
+      // Has related history — open detailed dialog
+      setDeleteCheck({ user: u, info });
+    } catch (err) {
+      console.error('Failed to check delete:', err);
+      alert('檢查關聯記錄失敗');
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteCheck) return;
+    setDeleteRunning(true);
+    setDeleteError('');
+    try {
+      const res = await usersApi.delete(deleteCheck.user.id, true);
+      const data = res.data as { detached: number };
+      setDeleteResult(`已刪除用戶並處理 ${data.detached} 筆關聯記錄`);
+      await loadUsers();
+      // Auto-close after a short pause so the admin sees the success state
+      setTimeout(() => {
+        setDeleteCheck(null);
+        setDeleteResult(null);
+      }, 1500);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setDeleteError(e.response?.data?.message || '刪除失敗');
+    } finally {
+      setDeleteRunning(false);
     }
   };
 
@@ -299,12 +486,14 @@ function UsersPageContent() {
           <h1 className="text-2xl font-bold text-gray-900">用戶管理</h1>
           <p className="text-sm text-gray-500 mt-1">管理系統用戶帳號和權限</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-        >
-          + 新增用戶
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={openCreate}
+            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+          >
+            + 新增用戶
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -415,13 +604,15 @@ function UsersPageContent() {
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(u.lastLoginAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEdit(u)}
-                          className="text-primary-600 hover:text-primary-800 text-xs font-medium"
-                        >
-                          編輯
-                        </button>
-                        {u.role !== 'admin' && (
+                        {!isReadOnly && (
+                          <button
+                            onClick={() => openEdit(u)}
+                            className="text-primary-600 hover:text-primary-800 text-xs font-medium"
+                          >
+                            編輯
+                          </button>
+                        )}
+                        {!isReadOnly && u.role !== 'admin' && (
                           <button
                             onClick={() => openPermissions(u)}
                             className="text-amber-600 hover:text-amber-800 text-xs font-medium"
@@ -429,7 +620,7 @@ function UsersPageContent() {
                             權限
                           </button>
                         )}
-                        {u.id !== currentUser?.id && (
+                        {!isReadOnly && u.id !== currentUser?.id && (
                           <button
                             onClick={() => handleToggleActive(u)}
                             className={`text-xs font-medium ${
@@ -437,6 +628,14 @@ function UsersPageContent() {
                             }`}
                           >
                             {u.isActive ? '停用' : '啟用'}
+                          </button>
+                        )}
+                        {!isReadOnly && u.id !== currentUser?.id && (
+                          <button
+                            onClick={() => openDelete(u)}
+                            className="text-red-600 hover:text-red-800 text-xs font-medium"
+                          >
+                            刪除
                           </button>
                         )}
                       </div>
@@ -458,18 +657,16 @@ function UsersPageContent() {
               </div>
             )}
 
-            {!editingUser && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">用戶名 *</label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="登入用的帳號名稱"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">用戶名 *</label>
+              <input
+                type="text"
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="登入用的帳號名稱"
+              />
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -542,6 +739,16 @@ function UsersPageContent() {
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
+                {editingUser?.employee && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    已關聯員工：<span className="font-medium">{editingUser.employee.name_zh || editingUser.employee.name_en}</span>
+                    {editingUser.employee.phone && (
+                      <>（員工電話：{editingUser.employee.phone}）</>
+                    )}
+                    <br />
+                    <span className="text-amber-600">改動電話時系統會詢問是否同步更新員工資料。</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -735,12 +942,121 @@ function UsersPageContent() {
           </div>
         </div>
       </Modal>
+
+      {/* Employee Phone Sync Prompt (shown if backend reports a pending sync) */}
+      <Modal
+        isOpen={!!phoneSyncPrompt}
+        onClose={() => setPhoneSyncPrompt(null)}
+        title="是否同步更新員工手機號碼？"
+      >
+        {phoneSyncPrompt && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+              此用戶關聯了員工 <strong>{phoneSyncPrompt.pending.employee_name}</strong>。
+              <br />
+              <span className="text-gray-700">
+                員工目前電話：{phoneSyncPrompt.pending.old_phone || '（未設定）'}
+                <br />
+                新登入電話：{phoneSyncPrompt.pending.new_phone || '（已清空）'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              是否同時將員工資料中的手機號碼也更新為新登入電話？
+              如選「只更新登入號碼」，員工資料中的手機號碼將維持不變。
+            </p>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button
+                onClick={() => setPhoneSyncPrompt(null)}
+                disabled={phoneSyncRunning}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+              >
+                只更新登入號碼
+              </button>
+              <button
+                onClick={confirmPhoneSync}
+                disabled={phoneSyncRunning}
+                className="px-4 py-2 text-sm text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                {phoneSyncRunning ? '同步中...' : '同時更新員工手機'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!deleteCheck}
+        onClose={() => { if (!deleteRunning) { setDeleteCheck(null); setDeleteError(''); setDeleteResult(null); } }}
+        title={`刪除用戶 - ${deleteCheck?.user.displayName || ''}`}
+      >
+        {deleteCheck && (
+          <div className="space-y-4">
+            {deleteResult ? (
+              <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm">
+                {deleteResult}
+              </div>
+            ) : (
+              <>
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                  <p className="font-semibold">⚠️ 此用戶有以下關聯記錄（共 {deleteCheck.info.total} 筆）：</p>
+                </div>
+                <div className="border rounded-lg divide-y max-h-[40vh] overflow-y-auto">
+                  {Object.entries(deleteCheck.info.related)
+                    .filter(([, count]) => count > 0)
+                    .map(([key, count]) => (
+                      <div key={key} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <span className="text-gray-700">{RELATED_LABELS[key] || key}</span>
+                        <span className="font-mono font-semibold text-red-600">{count} 筆</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm space-y-2">
+                  <p className="font-semibold">確認刪除後將執行以下動作：</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>所有關聯記錄中的 user_id / created_by 等欄位將被設為 <code>NULL</code></li>
+                    <li>歷史記錄會保留發佈人/操作人「<strong>{deleteCheck.user.displayName}</strong>」的名字快照，不再可點擊跳轉</li>
+                    <li>用戶帳號將被<strong>硬刪除</strong>，無法復原</li>
+                    <li>系統審計日誌（audit_logs）和推播訂閱會一併移除</li>
+                  </ul>
+                </div>
+                {deleteCheck.info.linked_employee && (
+                  <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-lg text-sm">
+                    此用戶關聯了員工「<strong>{deleteCheck.info.linked_employee.name_zh || deleteCheck.info.linked_employee.name_en}</strong>」，
+                    員工資料不會被刪除，僅會解除帳號關聯。
+                  </div>
+                )}
+                {deleteError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {deleteError}
+                  </div>
+                )}
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => { setDeleteCheck(null); setDeleteError(''); }}
+                    disabled={deleteRunning}
+                    className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={deleteRunning}
+                    className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deleteRunning ? '刪除中...' : '確認刪除'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
 
 export default function UsersPage() {
-  const { isReadOnly } = useAuth();
   return (
     <RoleGuard pageKey="settings-users">
       <UsersPageContent />

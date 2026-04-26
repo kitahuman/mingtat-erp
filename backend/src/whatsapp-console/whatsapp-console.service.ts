@@ -226,7 +226,7 @@ export class WhatsappConsoleService implements OnModuleInit, OnModuleDestroy {
     );
     return {
       buffer: Buffer.from(res.data),
-      contentType: res.headers['content-type'] || 'application/octet-stream',
+      contentType: String(res.headers['content-type'] ?? 'application/octet-stream'),
     };
   }
 }

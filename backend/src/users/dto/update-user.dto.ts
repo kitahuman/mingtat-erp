@@ -9,6 +9,10 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
+  username?: string;
+
+  @IsOptional()
+  @IsString()
   displayName?: string;
 
   @IsOptional()
@@ -52,5 +56,21 @@ export class UpdateUserDto {
   can_acceptance_report?: boolean;
 
   @IsOptional()
-  page_permissions?: any;
+  page_permissions?: PagePermissions | null;
+
+  /**
+   * When updating `phone`, controls whether the linked Employee's phone
+   * should be updated together. Used by the user-management UI.
+   *  - true  : also update employee.phone to the new value
+   *  - false : leave employee.phone untouched (only update user login phone)
+   *  - undefined : behave like the legacy update (no employee sync)
+   */
+  @IsOptional()
+  @IsBoolean()
+  sync_employee_phone?: boolean;
+}
+
+export interface PagePermissions {
+  grant?: string[];
+  deny?: string[];
 }

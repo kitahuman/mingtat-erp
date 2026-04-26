@@ -50,6 +50,9 @@ export const usersApi = {
   create: (data: any) => api.post('/users', data),
   update: (id: number, data: any) => api.put(`/users/${id}`, data),
   toggleActive: (id: number) => api.patch(`/users/${id}/toggle-active`),
+  checkDelete: (id: number) => api.get(`/users/${id}/check-delete`),
+  delete: (id: number, confirm: boolean) =>
+    api.delete(`/users/${id}`, { params: { confirm: confirm ? 'true' : 'false' } }),
 };
 
 // Profile (current user)

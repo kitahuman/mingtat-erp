@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -18,6 +19,18 @@ import { UserRole } from '../auth/user-role.enum';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { DeleteUserDto } from './dto/delete-user.dto';
+
+interface AuthenticatedRequest {
+  user: { sub: number; username: string; role: string };
+}
+
+interface UsersListQuery {
+  role?: string;
+  department?: string;
+  isActive?: string;
+  search?: string;
+}
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -32,9 +45,7 @@ export class UsersController {
    */
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  findAll(
-    @Query() query: { role?: string; department?: string; isActive?: string; search?: string },
-  ) {
+  findAll(@Query() query: UsersListQuery) {
     return this.usersService.findAll(query);
   }
 
@@ -49,20 +60,38 @@ export class UsersController {
   }
 
   /**
+   * GET /api/users/:id/check-delete
+   * Inspect how many historical records reference this user before
+   * the admin confirms the delete. Returns row counts grouped by source.
+   */
+  @Get(':id/check-delete')
+  checkDelete(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.checkDelete(id);
+  }
+
+  /**
    * POST /api/users
    * Create a new user (Admin only)
    */
   @Post()
-  create(@Body() dto: CreateUserDto, @Request() req: any) {
+  create(
+    @Body() dto: CreateUserDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.usersService.create(dto, req.user.sub);
   }
 
   /**
    * PUT /api/users/:id
-   * Update a user (Admin only)
+   * Update a user (Admin only). When `phone` changes the response payload
+   * may include `employee_phone_pending_sync` to inform the UI that a
+   * linked employee phone could optionally be synced.
    */
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+  ) {
     return this.usersService.update(id, dto);
   }
 
@@ -73,5 +102,20 @@ export class UsersController {
   @Patch(':id/toggle-active')
   toggleActive(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.toggleActive(id);
+  }
+
+  /**
+   * DELETE /api/users/:id
+   * Hard-delete a user. If the user has any historical references the
+   * caller MUST set `confirm=true` (query string) — otherwise the API
+   * responds 409 Conflict so the UI can render the warning dialog.
+   */
+  @Delete(':id')
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: DeleteUserDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.usersService.remove(id, req.user.sub, query.confirm === true);
   }
 }

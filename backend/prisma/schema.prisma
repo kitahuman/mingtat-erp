@@ -1120,7 +1120,8 @@ model WorkLog {
   work_log_machinery_id    Int?
   work_log_vehicle_id      Int?
 
-  publisher                  User?                      @relation(fields: [publisher_id], references: [id])
+  publisher                  User?                      @relation(fields: [publisher_id], references: [id], onDelete: SetNull)
+  publisher_name             String?                    @db.VarChar(200)
   company_profile            CompanyProfile?            @relation(fields: [company_profile_id], references: [id])
   company                    Company?                   @relation(fields: [company_id], references: [id])
   client                     Partner?                   @relation(fields: [client_id], references: [id])
@@ -2342,7 +2343,8 @@ model DailyReport {
   daily_report_shift_type         String    @db.VarChar(20)
   daily_report_work_summary       String    @db.Text
   daily_report_memo               String?   @db.Text
-  daily_report_created_by         Int
+  daily_report_created_by         Int?
+  daily_report_created_by_name    String?   @db.VarChar(200)
   daily_report_status             String    @default("draft") @db.VarChar(20)
   daily_report_submitted_at       DateTime?
   daily_report_created_at         DateTime  @default(now())
@@ -2361,7 +2363,7 @@ model DailyReport {
 
   project     Project?                @relation(fields: [daily_report_project_id], references: [id])
   client      Partner?                @relation("daily_report_client", fields: [daily_report_client_id], references: [id])
-  creator     User                    @relation("daily_report_creator", fields: [daily_report_created_by], references: [id])
+  creator     User?                   @relation("daily_report_creator", fields: [daily_report_created_by], references: [id], onDelete: SetNull)
   quotation   Quotation?              @relation("daily_report_quotation", fields: [daily_report_quotation_id], references: [id])
   items       DailyReportItem[]
   attachments DailyReportAttachment[]
@@ -2430,7 +2432,8 @@ model AcceptanceReport {
   acceptance_report_client_signature        String?   @db.Text
   acceptance_report_mingtat_signature       String?   @db.Text
   acceptance_report_supplementary_notes     String?   @db.Text
-  acceptance_report_created_by              Int
+  acceptance_report_created_by              Int?
+  acceptance_report_created_by_name         String?   @db.VarChar(200)
   acceptance_report_status                  String    @default("draft") @db.VarChar(20)
   acceptance_report_submitted_at            DateTime?
   acceptance_report_created_at              DateTime  @default(now())
@@ -2439,7 +2442,7 @@ model AcceptanceReport {
   client           Partner?                     @relation("acceptance_report_client", fields: [acceptance_report_client_id], references: [id])
   project          Project?                     @relation(fields: [acceptance_report_project_id], references: [id])
   inspector        Employee?                    @relation("acceptance_report_inspector", fields: [acceptance_report_mingtat_inspector_id], references: [id])
-  creator          User                         @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id])
+  creator          User?                        @relation("acceptance_report_creator", fields: [acceptance_report_created_by], references: [id], onDelete: SetNull)
   attachments      AcceptanceReportAttachment[]
   acceptance_items AcceptanceReportItem[]
 
@@ -2519,11 +2522,12 @@ model VerificationConfirmation {
   matched_record_id   Int?
   matched_record_type String?  @db.VarChar(50)
   notes               String?  @db.Text
-  confirmed_by        Int
+  confirmed_by        Int?
+  confirmed_by_name   String?  @db.VarChar(200)
   confirmed_at        DateTime @default(now())
   updated_at          DateTime @default(now()) @updatedAt
 
-  user    User    @relation(fields: [confirmed_by], references: [id])
+  user    User?   @relation(fields: [confirmed_by], references: [id], onDelete: SetNull)
   workLog WorkLog @relation(fields: [work_log_id], references: [id])
 
   @@unique([work_log_id, source_code])
