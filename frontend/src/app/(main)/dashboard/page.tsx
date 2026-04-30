@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { dashboardApi, employeesApi } from '@/lib/api';
+import { dashboardApi, employeesApi, issueReportsApi } from '@/lib/api';
 import Link from 'next/link';
 
 // ══════════════════════════════════════════════════════════════
@@ -321,6 +321,9 @@ function WorkStatusTab({ data }: { data: any }) {
         )}
       </div>
 
+      {/* 問題回報 */}
+      <IssueReportsSection />
+
       {/* WhatsApp Bot 狀態 + 最近入職員工 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* WhatsApp Bot 狀態 */}
@@ -396,6 +399,127 @@ function WorkStatusTab({ data }: { data: any }) {
 // ══════════════════════════════════════════════════════════════
 // Tab 2: 警告及提醒
 // ══════════════════════════════════════════════════════════════
+
+function IssueReportsSection() {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  const load = async () => {
+    try {
+      const res = await issueReportsApi.list(20);
+      setReports(res.data || []);
+    } catch {
+      setReports([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 20000); // refresh every 20s to catch AI analysis results
+    return () => clearInterval(t);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="card">
+        <h2 className="text-lg font-bold text-gray-900 mb-2">🐞 問題回報</h2>
+        <p className="text-sm text-gray-400">載入中...</p>
+      </div>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <div className="card">
+        <h2 className="text-lg font-bold text-gray-900 mb-2">🐞 問題回報</h2>
+        <p className="text-sm text-gray-400">目前沒有問題回報。如遇到系統問題，請點左側選單底部的「🐞 問題回報」按鈕。</p>
+      </div>
+    );
+  }
+
+  const statusLabel = (s: string) => ({
+    open: { label: '待處理', cls: 'bg-yellow-100 text-yellow-800' },
+    acknowledged: { label: '已確認', cls: 'bg-blue-100 text-blue-800' },
+    resolved: { label: '已解決', cls: 'bg-green-100 text-green-800' },
+  } as any)[s] || { label: s, cls: 'bg-gray-100 text-gray-700' };
+
+  const aiStatusLabel = (s: string) => ({
+    pending: { label: '待分析', cls: 'bg-gray-100 text-gray-700' },
+    analyzing: { label: 'AI 分析中', cls: 'bg-blue-100 text-blue-800' },
+    completed: { label: 'AI 已分析', cls: 'bg-green-100 text-green-800' },
+    failed: { label: 'AI 分析失敗', cls: 'bg-red-100 text-red-800' },
+  } as any)[s] || { label: s, cls: 'bg-gray-100 text-gray-700' };
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-900">🐞 問題回報</h2>
+        <span className="text-xs text-gray-400">共 {reports.length} 筆（每 20 秒自動更新）</span>
+      </div>
+      <div className="space-y-3">
+        {reports.map((r: any) => {
+          const st = statusLabel(r.issue_report_status);
+          const aist = aiStatusLabel(r.issue_report_ai_status);
+          const isExp = expanded[r.id];
+          return (
+            <div key={r.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-xs text-gray-500">#{r.id}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${st.cls}`}>{st.label}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${aist.cls}`}>{aist.label}</span>
+                    <span className="text-xs text-gray-500">{r.issue_report_reporter_name || '—'}</span>
+                    <span className="text-xs text-gray-400">{formatDate(r.issue_report_created_at)} {new Date(r.issue_report_created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{r.issue_report_description}</p>
+                  {r.issue_report_url && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">📍 {r.issue_report_url}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setExpanded({ ...expanded, [r.id]: !isExp })}
+                  className="text-xs text-primary-600 hover:underline whitespace-nowrap"
+                >
+                  {isExp ? '收合' : '詳情'}
+                </button>
+              </div>
+              {isExp && (
+                <div className="mt-3 pt-3 border-t space-y-3">
+                  {r.issue_report_ai_analysis ? (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-700 mb-1">🤖 AI 分析</div>
+                      <pre className="text-xs bg-blue-50 border border-blue-200 rounded p-3 whitespace-pre-wrap break-words font-sans text-gray-800">{r.issue_report_ai_analysis}</pre>
+                    </div>
+                  ) : r.issue_report_ai_status === 'failed' ? (
+                    <div className="text-xs text-red-600">AI 分析失敗：{r.issue_report_ai_error || '未知原因'}</div>
+                  ) : (
+                    <div className="text-xs text-gray-500">AI 分析進行中，請稍候...</div>
+                  )}
+                  {Array.isArray(r.issue_report_frontend_errors) && r.issue_report_frontend_errors.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-gray-600 hover:text-gray-900">前端錯誤記錄（{r.issue_report_frontend_errors.length} 筆）</summary>
+                      <pre className="mt-1 bg-gray-50 border rounded p-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(r.issue_report_frontend_errors, null, 2)}</pre>
+                    </details>
+                  )}
+                  {Array.isArray(r.issue_report_backend_errors) && r.issue_report_backend_errors.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-gray-600 hover:text-gray-900">後端錯誤記錄（{r.issue_report_backend_errors.length} 筆）</summary>
+                      <pre className="mt-1 bg-gray-50 border rounded p-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(r.issue_report_backend_errors, null, 2)}</pre>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function AlertsTab({ data, onMpfApplied }: { data: any; onMpfApplied: (id: number) => void }) {
   const expiryAlerts = data?.expiry_alerts || {};

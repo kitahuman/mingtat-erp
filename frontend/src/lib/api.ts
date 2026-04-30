@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { recordError } from './errorCollector';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -20,6 +21,30 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
+    // Record failed API requests (except 401 to keep auth flow silent)
+    try {
+      const status = error.response?.status;
+      if (status && status !== 401) {
+        const cfg = error.config || {};
+        let body: any = undefined;
+        try {
+          body = typeof cfg.data === 'string' ? JSON.parse(cfg.data) : cfg.data;
+          if (body && typeof body === 'object' && 'password' in body) body = { ...body, password: '***' };
+        } catch { body = cfg.data; }
+        const respData = error.response?.data;
+        let respBrief: any = respData;
+        if (typeof respData === 'string' && respData.length > 500) respBrief = respData.slice(0, 500) + '...';
+        recordError({
+          type: 'api_error',
+          message: error.response?.data?.message || error.message || 'API error',
+          url: cfg.url,
+          method: (cfg.method || 'GET').toUpperCase(),
+          status,
+          response: respBrief,
+          request_body: body,
+        });
+      }
+    } catch { /* noop */ }
     if (error.response?.status === 401) {
       Cookies.remove('token');
       Cookies.remove('user');
@@ -1123,4 +1148,14 @@ export const whatsappConsoleApi = {
     api.post('/whatsapp-console/push/subscribe', { subscription }),
   unsubscribePush: (endpoint: string) =>
     api.delete('/whatsapp-console/push/subscribe', { data: { endpoint } }),
+};
+
+// Issue Reports (問題回報)
+export const issueReportsApi = {
+  list: (limit?: number) => api.get('/issue-reports', { params: limit ? { limit } : undefined }),
+  get: (id: number) => api.get(`/issue-reports/${id}`),
+  create: (data: { description: string; url?: string; user_agent?: string; frontend_errors?: any[] }) =>
+    api.post('/issue-reports', data),
+  updateStatus: (id: number, status: 'open' | 'acknowledged' | 'resolved') =>
+    api.patch(`/issue-reports/${id}/status`, { status }),
 };

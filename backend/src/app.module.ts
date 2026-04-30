@@ -65,6 +65,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { EquipmentProfitModule } from './equipment-profit/equipment-profit.module';
 import { WhatsappConsoleModule } from './whatsapp-console/whatsapp-console.module';
 import { ErrorLogsModule } from './error-logs/error-logs.module';
+import { IssueReportsModule } from './issue-reports/issue-reports.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
 @Module({
@@ -156,6 +157,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     EquipmentProfitModule,
     WhatsappConsoleModule,
     ErrorLogsModule,
+    IssueReportsModule,
   ],
   providers: [
     {

@@ -2687,3 +2687,26 @@ model ErrorLog {
   @@index([error_log_path])
   @@map("error_logs")
 }
+
+model IssueReport {
+  id                            Int      @id @default(autoincrement())
+  issue_report_reporter_id      Int?
+  issue_report_reporter_name    String?  @db.VarChar(100)
+  issue_report_reporter_role    String?  @db.VarChar(20)
+  issue_report_description      String   @db.Text
+  issue_report_url              String?  @db.VarChar(500)
+  issue_report_user_agent       String?  @db.VarChar(500)
+  issue_report_frontend_errors  Json?    @db.JsonB
+  issue_report_backend_errors   Json?    @db.JsonB
+  issue_report_ai_analysis      String?  @db.Text
+  issue_report_ai_status        String   @default("pending") @db.VarChar(20)
+  issue_report_ai_error         String?  @db.Text
+  issue_report_status           String   @default("open") @db.VarChar(20)
+  issue_report_created_at       DateTime @default(now()) @db.Timestamptz
+  issue_report_updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  @@index([issue_report_reporter_id])
+  @@index([issue_report_created_at])
+  @@index([issue_report_status])
+  @@map("issue_reports")
+}

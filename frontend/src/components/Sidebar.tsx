@@ -5,6 +5,8 @@ import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
 import { useState, useRef, useEffect } from 'react';
 import WhatsAppBotStatus from './WhatsAppBotStatus';
 import VersionBadge from './VersionBadge';
+import IssueReportModal from './IssueReportModal';
+import { installGlobalErrorHandlers } from '@/lib/errorCollector';
 
 interface NavItem {
   href: string;
@@ -223,6 +225,8 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const { user, logout, hasRole, hasMinRole, canAccessPage, isReadOnly } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
+  useEffect(() => { installGlobalErrorHandlers(); }, []);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     '工作紀錄核對': false,
     '公司內部資料': false,
@@ -474,6 +478,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
             </div>
           )}
           <button
+            onClick={() => setIssueModalOpen(true)}
+            className={`text-gray-400 hover:text-yellow-400 transition-colors text-sm ${collapsed ? '' : 'w-full text-left'}`}
+            title={collapsed ? '問題回報' : undefined}
+          >
+            {collapsed ? '🐞' : '🐞 問題回報'}
+          </button>
+          <button
             onClick={logout}
             className={`text-gray-400 hover:text-red-400 transition-colors text-sm ${collapsed ? '' : 'w-full text-left'}`}
             title={collapsed ? '登出系統' : undefined}
@@ -482,6 +493,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
           </button>
         </div>
       </aside>
+      <IssueReportModal open={issueModalOpen} onClose={() => setIssueModalOpen(false)} />
     </>
   );
 }
