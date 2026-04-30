@@ -34,6 +34,8 @@ export default function PaymentOutPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('DESC');
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -56,7 +58,7 @@ export default function PaymentOutPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page, limit: 50 };
+      const params: any = { page, limit: 50, sortBy, sortOrder };
       if (companyFilter) params.company_id = companyFilter;
       if (statusFilter) params.payment_out_status = statusFilter;
       if (dateFrom) params.date_from = dateFrom;
@@ -69,7 +71,7 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, companyFilter, statusFilter, dateFrom, dateTo]);
+  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchData();
@@ -325,6 +327,9 @@ export default function PaymentOutPage() {
         searchPlaceholder="搜尋付款記錄..."
         filters={filters}
         loading={loading}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={(f, o) => { setSortBy(f); setSortOrder(o); setPage(1); }}
         onSave={handleSave}
         onDelete={handleDelete}
         exportFilename="付款記錄"

@@ -17,20 +17,23 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState('ASC');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', name_en: '', company_type: 'internal', internal_prefix: '', contact_person: '', phone: '', address: '', description: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await companiesApi.list({ page, limit: 20, search, company_type: typeFilter || undefined });
+      const res = await companiesApi.list({ page, limit: 20, search, company_type: typeFilter || undefined, sortBy, sortOrder });
       setData(res.data.data);
       setTotal(res.data.total);
     } catch {}
     setLoading(false);
-  }, [page, search, typeFilter]);
+  }, [page, search, typeFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [sortBy, sortOrder]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,20 +48,20 @@ export default function CompaniesPage() {
   };
 
   const columns = [
-    { key: 'internal_prefix', label: '代號', className: 'w-20 font-mono font-bold', render: (v: string) => v || '-' },
-    { key: 'name', label: '公司名稱', render: (_: any, row: any) => (
+    { key: 'internal_prefix', label: '代號', className: 'w-20 font-mono font-bold', render: (v: string) => v || '-', sortable: true },
+    { key: 'name', label: '公司名稱', sortable: true, render: (_: any, row: any) => (
       <div>
         <div className="font-medium text-gray-900">{row.name}</div>
         {row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}
       </div>
     )},
-    { key: 'company_type', label: '類型', render: (v: string) => (
+    { key: 'company_type', label: '類型', sortable: true, render: (v: string) => (
       <span className={v === 'internal' ? 'badge-blue' : v === 'client' ? 'badge-green' : 'badge-yellow'}>
         {typeLabels[v] || v}
       </span>
     ), filterRender: (v: string) => typeLabels[v] || v },
     { key: 'description', label: '說明', className: 'hidden md:table-cell' },
-    { key: 'status', label: '狀態', render: (v: string) => (
+    { key: 'status', label: '狀態', sortable: true, render: (v: string) => (
       <span className={v === 'active' ? 'badge-green' : 'badge-red'}>{v === 'active' ? '啟用' : '停用'}</span>
     ), filterRender: (v: string) => v === 'active' ? '啟用' : '停用' },
   ];
@@ -88,6 +91,9 @@ export default function CompaniesPage() {
           searchPlaceholder="搜尋公司名稱或代號..."
           onRowClick={(row) => router.push(`/companies/${row.id}`)}
           loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={(f, o) => { setSortBy(f); setSortOrder(o); setPage(1); }}
           filters={
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
               <option value="">全部類型</option>

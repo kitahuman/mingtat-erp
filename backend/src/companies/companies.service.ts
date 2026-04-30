@@ -6,10 +6,15 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CompaniesService {
   constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
-  async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string; exclude_external?: string }) {
+  async findAll(query: { page?: number; limit?: number; search?: string; company_type?: string; status?: string; exclude_external?: string; sortBy?: string; sortOrder?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where: any = { deleted_at: null };
+
+    const allowedSortFields = ['id', 'name', 'name_en', 'internal_prefix', 'company_type', 'status', 'created_at'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
+    const orderBy: any = { [sortBy]: sortOrder };
 
     if (query.company_type) where.company_type = query.company_type;
     if (query.status) where.status = query.status;
@@ -27,7 +32,7 @@ export class CompaniesService {
     const [data, total] = await Promise.all([
       this.prisma.company.findMany({
         where,
-        orderBy: { id: 'asc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),

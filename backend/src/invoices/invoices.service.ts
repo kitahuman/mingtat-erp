@@ -132,10 +132,20 @@ export class InvoicesService {
     date_from?: string;
     date_to?: string;
     search?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
     const skip = (page - 1) * limit;
+
+    const allowedSortFields = ['id', 'invoice_no', 'date', 'due_date', 'total_amount', 'paid_amount', 'status', 'created_at'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const relationSortMap: Record<string, any> = {
+      client: { client: { name: sortOrder } },
+    };
+    const orderBy = relationSortMap[sortBy] || { [sortBy]: sortOrder };
 
     const where: WhereClause = { deleted_at: null };
     if (query.status) where.status = query.status;
@@ -160,7 +170,7 @@ export class InvoicesService {
       this.prisma.invoice.findMany({
         where,
         include: this.includeRelations,
-        orderBy: { created_at: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

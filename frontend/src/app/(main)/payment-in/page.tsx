@@ -57,8 +57,9 @@ export default function PaymentInPage() {
   const [contractFilter, setContractFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-
-  // Reference data
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('DESC');
+  // Reference dataa
   const [projects, setProjects] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
@@ -81,7 +82,7 @@ export default function PaymentInPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page, limit: 50 };
+      const params: any = { page, limit: 50, sortBy, sortOrder };
       if (statusFilter) params.payment_in_status = statusFilter;
       if (sourceFilter) params.source_type = sourceFilter;
       if (projectFilter) params.project_id = projectFilter;
@@ -96,7 +97,7 @@ export default function PaymentInPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, sourceFilter, projectFilter, contractFilter, dateFrom, dateTo]);
+  }, [page, sourceFilter, projectFilter, contractFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchData();
@@ -342,6 +343,9 @@ export default function PaymentInPage() {
         searchPlaceholder="搜尋收款記錄..."
         filters={filters}
         loading={loading}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={(f, o) => { setSortBy(f); setSortOrder(o); setPage(1); }}
         onSave={handleSave}
         onDelete={handleDelete}
         onRowClick={(row: any) => router.push(`/payment-in/${row.id}`)}

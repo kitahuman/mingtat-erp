@@ -67,6 +67,8 @@ export default function InvoicesPage() {
   const [clientFilter, setClientFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('DESC');
 
   // Reference data
   const [partners, setPartners] = useState<any[]>([]);
@@ -79,10 +81,23 @@ export default function InvoicesPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<any>({ ...defaultForm });
 
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+    } else {
+      setSortBy(field);
+      setSortOrder('DESC');
+    }
+    setPage(1);
+  };
+  const SortIcon = ({ field }: { field: string }) => (
+    <span className="ml-1 text-gray-400">{sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}</span>
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page, limit: 50 };
+      const params: any = { page, limit: 50, sortBy, sortOrder };
       if (statusFilter) params.status = statusFilter;
       if (clientFilter) params.client_id = clientFilter;
       if (dateFrom) params.date_from = dateFrom;
@@ -96,7 +111,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, clientFilter, dateFrom, dateTo, search]);
+  }, [page, statusFilter, clientFilter, dateFrom, dateTo, search, sortBy, sortOrder]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -223,17 +238,17 @@ export default function InvoicesPage() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">發票編號</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('invoice_no')}>發票編號<SortIcon field="invoice_no" /></th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">發票名稱</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">到期日</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('date')}>日期<SortIcon field="date" /></th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('due_date')}>到期日<SortIcon field="due_date" /></th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶合約</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">關聯報價單</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">總額</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">已收</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('total_amount')}>總額<SortIcon field="total_amount" /></th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('paid_amount')}>已收<SortIcon field="paid_amount" /></th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">未收</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('status')}>狀態<SortIcon field="status" /></th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">

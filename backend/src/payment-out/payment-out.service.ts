@@ -18,6 +18,8 @@ interface FindAllQuery {
   payment_out_status?: string;
   date_from?: string;
   date_to?: string;
+  sortBy?: string;
+  sortOrder?: string;
 }
 
 interface CreatePaymentOutInput {
@@ -104,6 +106,11 @@ export class PaymentOutService {
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
 
+    const allowedSortFields = ['id', 'date', 'amount', 'payment_out_status', 'reference_no', 'created_at'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const orderBy: any = { [sortBy]: sortOrder };
+
     const where: Prisma.PaymentOutWhereInput = {};
     if (query.expense_id) where.expense_id = query.expense_id;
     if (query.subcon_payroll_id) where.subcon_payroll_id = query.subcon_payroll_id;
@@ -120,7 +127,7 @@ export class PaymentOutService {
       this.prisma.paymentOut.findMany({
         where,
         include: this.listInclude,
-        orderBy: { date: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

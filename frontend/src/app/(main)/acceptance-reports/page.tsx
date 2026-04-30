@@ -26,12 +26,27 @@ export default function AcceptanceReportsAdminPage() {
   const [filterDateTo, setFilterDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState('acceptance_report_date');
+  const [sortOrder, setSortOrder] = useState('DESC');
   const limit = 20;
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+    } else {
+      setSortBy(field);
+      setSortOrder('DESC');
+    }
+    setPage(1);
+  };
+  const SortIcon = ({ field }: { field: string }) => (
+    <span className="ml-1 text-gray-400">{sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}</span>
+  );
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const params: any = { page, limit };
+      const params: any = { page, limit, sortBy, sortOrder };
       if (filterProjectId) params.project_id = filterProjectId;
       if (filterClientId) params.client_id = filterClientId;
       if (filterClientName) params.client_name = filterClientName;
@@ -60,7 +75,7 @@ export default function AcceptanceReportsAdminPage() {
 
   useEffect(() => {
     loadData();
-  }, [page, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search]);
+  }, [page, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -174,15 +189,15 @@ export default function AcceptanceReportsAdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">報告日期</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_date')}>報告日期<SortIcon field="acceptance_report_date" /></th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">驗收日期</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">工程</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">客戶</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">客戶合約</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_project_name')}>工程<SortIcon field="acceptance_report_project_name" /></th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_client_name')}>客戶<SortIcon field="acceptance_report_client_name" /></th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_client_contract_no')}>客戶合約<SortIcon field="acceptance_report_client_contract_no" /></th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">收貨項目</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">驗收人</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">建立人</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">狀態</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_status')}>狀態<SortIcon field="acceptance_report_status" /></th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">操作</th>
                 </tr>
               </thead>

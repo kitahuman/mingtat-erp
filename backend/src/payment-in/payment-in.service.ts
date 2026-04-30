@@ -23,6 +23,8 @@ interface FindAllQuery {
   contract_id?: number;
   date_from?: string;
   date_to?: string;
+  sortBy?: string;
+  sortOrder?: string;
 }
 
 @Injectable()
@@ -72,6 +74,11 @@ export class PaymentInService {
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
 
+    const allowedSortFields = ['id', 'date', 'amount', 'source_type', 'payment_in_status', 'reference_no', 'created_at'];
+    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const orderBy: any = { [sortBy]: sortOrder };
+
     const where: Prisma.PaymentInWhereInput = {};
     if (query.source_type) where.source_type = query.source_type;
     if (query.source_ref_id) where.source_ref_id = query.source_ref_id;
@@ -88,7 +95,7 @@ export class PaymentInService {
       this.prisma.paymentIn.findMany({
         where,
         include: this.listInclude,
-        orderBy: { date: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

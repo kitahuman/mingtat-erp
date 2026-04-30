@@ -14,10 +14,25 @@ export class DailyReportsService {
     attachments: { orderBy: { daily_report_attachment_sort_order: 'asc' as const } },
   };
 
+  private readonly allowedSortFields = [
+    'id', 'daily_report_date', 'daily_report_status', 'daily_report_shift_type',
+    'daily_report_project_name', 'daily_report_client_name', 'daily_report_client_contract_no',
+    'daily_report_project_location', 'created_at',
+  ];
+
   async findAll(query: any) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where: any = { daily_report_deleted_at: null };
+
+    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy : 'daily_report_date';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const relationSortMap: Record<string, any> = {
+      project: { project: { project_name: sortOrder } },
+      client: { client: { name: sortOrder } },
+      creator: { creator: { displayName: sortOrder } },
+    };
+    const orderBy = relationSortMap[sortBy] || { [sortBy]: sortOrder };
 
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.project_name) where.daily_report_project_name = { contains: query.project_name, mode: 'insensitive' };
@@ -46,7 +61,7 @@ export class DailyReportsService {
       this.prisma.dailyReport.findMany({
         where,
         include: this.includeAll,
-        orderBy: { daily_report_date: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),

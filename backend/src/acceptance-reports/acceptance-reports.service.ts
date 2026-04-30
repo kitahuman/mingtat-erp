@@ -14,10 +14,25 @@ export class AcceptanceReportsService {
     acceptance_items: { orderBy: { acceptance_report_item_sort_order: 'asc' as const } },
   };
 
+  private readonly allowedSortFields = [
+    'id', 'acceptance_report_date', 'acceptance_report_status',
+    'acceptance_report_project_name', 'acceptance_report_client_name',
+    'acceptance_report_client_contract_no', 'created_at',
+  ];
+
   async findAll(query: any) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where: any = {};
+
+    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy : 'acceptance_report_date';
+    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const relationSortMap: Record<string, any> = {
+      project: { project: { project_name: sortOrder } },
+      client: { client: { name: sortOrder } },
+      creator: { creator: { displayName: sortOrder } },
+    };
+    const orderBy = relationSortMap[sortBy] || { [sortBy]: sortOrder };
 
     if (query.project_id) where.acceptance_report_project_id = Number(query.project_id);
     if (query.client_id) where.acceptance_report_client_id = Number(query.client_id);
@@ -42,7 +57,7 @@ export class AcceptanceReportsService {
       this.prisma.acceptanceReport.findMany({
         where,
         include: this.includeAll,
-        orderBy: { acceptance_report_date: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
