@@ -47,6 +47,8 @@ export interface ProjectGroup {
   project_id: number | null;
   project_no: string;
   project_name: string;
+  project_location: string;
+  client_id: number | null;
   client_name: string;
   client_contract_no: string;
   report_count: number;
@@ -101,6 +103,7 @@ export class DailyReportStatsService {
             id: true,
             project_no: true,
             project_name: true,
+            address: true,
             client: { select: { id: true, name: true } },
             contract: { select: { id: true, contract_no: true } },
           },
@@ -143,6 +146,13 @@ export class DailyReportStatsService {
         || firstReport.project?.project_name
         || '未指定工程';
       const projectNo = firstReport.project?.project_no || '-';
+      const projectLocation = firstReport.daily_report_project_location
+        || firstReport.project?.address
+        || '';
+      const clientId = firstReport.daily_report_client_id
+        || firstReport.client?.id
+        || firstReport.project?.client?.id
+        || null;
       const clientName = firstReport.daily_report_client_name
         || firstReport.client?.name
         || firstReport.project?.client?.name
@@ -228,6 +238,8 @@ export class DailyReportStatsService {
         project_id: firstReport.daily_report_project_id,
         project_no: projectNo,
         project_name: projectName,
+        project_location: projectLocation,
+        client_id: clientId,
         client_name: clientName,
         client_contract_no: clientContractNo,
         report_count: groupReports.length,

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { dailyReportStatsApi, dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import ExportButton from '@/components/ExportButton';
 import SearchableSelect from '@/components/SearchableSelect';
+import ConfirmProjectModal from '@/components/ConfirmProjectModal';
 
 const categoryLabels: Record<string, string> = {
   worker: '工人',
@@ -41,6 +42,11 @@ export default function DailyReportStatsPage() {
   const [loading, setLoading] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [confirmProjectTarget, setConfirmProjectTarget] = useState<{
+    project_name: string;
+    project_location?: string | null;
+    client_id?: number | string | null;
+  } | null>(null);
 
   // Reference data
   const [projectNameOptions, setProjectNameOptions] = useState<{ value: string; label: string }[]>([]);
@@ -268,6 +274,7 @@ export default function DailyReportStatsPage() {
                   <th className="px-4 py-3 text-center font-medium text-gray-600">日報數</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">日期範圍</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">資源項目數</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -284,6 +291,11 @@ export default function DailyReportStatsPage() {
                       expandedDays={expandedDays}
                       onToggleProject={() => toggleProject(projectKey)}
                       onToggleDay={toggleDay}
+                      onConfirmProject={() => setConfirmProjectTarget({
+                        project_name: group.project_name,
+                        project_location: group.project_location,
+                        client_id: group.client_id,
+                      })}
                     />
                   );
                 })}
@@ -292,6 +304,17 @@ export default function DailyReportStatsPage() {
           </div>
         )}
       </div>
+
+      {confirmProjectTarget && (
+        <ConfirmProjectModal
+          target={confirmProjectTarget}
+          onClose={() => setConfirmProjectTarget(null)}
+          onSuccess={() => {
+            setConfirmProjectTarget(null);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -314,6 +337,7 @@ function ProjectRow({
   expandedDays,
   onToggleProject,
   onToggleDay,
+  onConfirmProject,
 }: {
   group: any;
   projectKey: string;
@@ -321,6 +345,7 @@ function ProjectRow({
   expandedDays: Set<string>;
   onToggleProject: () => void;
   onToggleDay: (key: string) => void;
+  onConfirmProject: () => void;
 }) {
   // Categorize summary items
   const workers = group.summary.filter((s: any) => s.category === 'worker');
@@ -353,12 +378,25 @@ function ProjectRow({
           {fmtDate(group.date_range?.from)} ~ {fmtDate(group.date_range?.to)}
         </td>
         <td className="px-4 py-3 text-center text-sm">{group.summary.length}</td>
+        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+          {group.project_id ? (
+            <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">✓ 已確認</span>
+          ) : (
+            <button
+              onClick={onConfirmProject}
+              className="inline-flex items-center gap-1 text-xs text-white bg-primary-600 hover:bg-primary-700 px-2.5 py-1 rounded-md font-medium"
+              title="將此未確認工程轉為正式工程項目"
+            >
+              轉為正式工程
+            </button>
+          )}
+        </td>
       </tr>
 
       {/* Expanded: Summary + Daily Details */}
       {isExpanded && (
         <tr>
-          <td colSpan={8} className="px-0 py-0">
+              <td colSpan={9} className="px-0 py-0">
             <div className="bg-blue-50/40 border-t border-b border-blue-100">
               {/* Resource Summary */}
               <div className="px-6 py-4">
