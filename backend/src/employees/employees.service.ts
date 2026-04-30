@@ -17,6 +17,59 @@ export class EmployeesService {
   ) {}
 
   /**
+   * Generate the next available emp_code in format E001, E002, ...
+   * Scans all existing emp_codes (including revoked ones) to find the max number.
+   */
+  private async getNextEmpCode(): Promise<string> {
+    const existing = await this.prisma.employee.findMany({
+      where: { emp_code: { not: null } },
+      select: { emp_code: true },
+    });
+    let maxNum = 0;
+    for (const emp of existing) {
+      if (!emp.emp_code) continue;
+      const match = emp.emp_code.match(/^E(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return 'E' + String(maxNum + 1).padStart(3, '0');
+  }
+
+  /**
+   * Public endpoint: returns the next available emp_code (for frontend preview).
+   */
+  async getNextEmpCodePublic(): Promise<{ next_emp_code: string }> {
+    const code = await this.getNextEmpCode();
+    return { next_emp_code: code };
+  }
+
+  /**
+   * Backfill emp_code for regular (non-temporary) employees that are missing one.
+   * Assigns codes in order of employee id (oldest first).
+   */
+  async backfillMissingEmpCodes(): Promise<{ updated: number; codes: string[] }> {
+    const missing = await this.prisma.employee.findMany({
+      where: {
+        employee_is_temporary: false,
+        emp_code: null,
+        deleted_at: null,
+      },
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    if (missing.length === 0) return { updated: 0, codes: [] };
+    const codes: string[] = [];
+    for (const emp of missing) {
+      const code = await this.getNextEmpCode();
+      await this.prisma.employee.update({ where: { id: emp.id }, data: { emp_code: code } });
+      codes.push(code);
+    }
+    return { updated: missing.length, codes };
+  }
+
+  /**
    * Parse column filter parameters from query.
    * Supports: filter_<field>=value1,value2
    * For relation fields like company, maps to company_id via lookup.
@@ -736,13 +789,15 @@ export class EmployeesService {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
     if (!emp.employee_is_temporary) throw new Error('此員工已是正式員工');
+    // Auto-assign emp_code if not already set
+    const empCode = emp.emp_code || (dto.emp_code ? dto.emp_code : await this.getNextEmpCode());
     const updateData: Record<string, unknown> = {
       employee_is_temporary: false,
       role: dto.role,
       company_id: dto.company_id,
       status: 'active',
+      emp_code: empCode,
     };
-    if (dto.emp_code) updateData.emp_code = dto.emp_code;
     if (dto.join_date) updateData.join_date = new Date(dto.join_date);
     if (dto.phone) updateData.phone = dto.phone;
     if (dto.name_en) updateData.name_en = dto.name_en;
@@ -929,6 +984,139 @@ export class EmployeesService {
     return this.prisma.employeeNickname.delete({
       where: { id: nicknameId },
     });
+  }
+
+  /**
+   * Check merge preview: returns count of all records that will be transferred
+   * from source (temporary) employee to target (regular) employee.
+   */
+  async checkMerge(sourceId: number, targetId: number) {
+    const source = await this.prisma.employee.findUnique({
+      where: { id: sourceId },
+      select: { id: true, name_zh: true, name_en: true, phone: true, created_at: true, employee_is_temporary: true },
+    });
+    if (!source) throw new NotFoundException('來源員工不存在');
+    if (!source.employee_is_temporary) throw new BadRequestException('來源員工不是臨時員工');
+
+    const target = await this.prisma.employee.findUnique({
+      where: { id: targetId },
+      include: { company: { select: { name: true, internal_prefix: true } } },
+    });
+    if (!target) throw new NotFoundException('目標員工不存在');
+    if (target.employee_is_temporary) throw new BadRequestException('目標員工也是臨時員工，請選擇正式員工');
+    if (target.deleted_at) throw new BadRequestException('目標員工已被刪除');
+
+    const [workLogs, payrolls, attendances, leaves, expenses, anomalies, verificationRecords, verificationMappings] =
+      await Promise.all([
+        this.prisma.workLog.count({ where: { employee_id: sourceId } }),
+        this.prisma.payroll.count({ where: { employee_id: sourceId } }),
+        this.prisma.employeeAttendance.count({ where: { employee_id: sourceId } }),
+        this.prisma.employeeLeave.count({ where: { employee_id: sourceId } }),
+        this.prisma.expense.count({ where: { employee_id: sourceId } }),
+        this.prisma.attendanceAnomaly.count({ where: { anomaly_employee_id: sourceId } }),
+        this.prisma.verificationRecord.count({ where: { record_employee_id: sourceId } }),
+        this.prisma.verificationNicknameMapping.count({ where: { nickname_employee_id: sourceId } }),
+      ]);
+
+    const records = { work_logs: workLogs, payrolls, attendances, leaves, expenses, attendance_anomalies: anomalies, verification_records: verificationRecords, verification_nickname_mappings: verificationMappings };
+    const total_records = Object.values(records).reduce((a, b) => a + b, 0);
+
+    return {
+      source_employee: {
+        id: source.id,
+        name_zh: source.name_zh,
+        name_en: source.name_en,
+        phone: source.phone,
+        created_at: source.created_at,
+      },
+      target_employee: {
+        id: target.id,
+        name_zh: target.name_zh,
+        name_en: target.name_en,
+        emp_code: target.emp_code,
+        role: target.role,
+        company_name: target.company ? (target.company.internal_prefix || target.company.name) : null,
+      },
+      records,
+      total_records,
+    };
+  }
+
+  /**
+   * Execute merge: transfer all records from source (temporary) to target (regular) employee,
+   * then hard-delete the source employee and its salary/transfer/nickname data.
+   */
+  async mergeEmployee(sourceId: number, targetId: number, userId?: number, ipAddress?: string) {
+    const source = await this.prisma.employee.findUnique({ where: { id: sourceId } });
+    if (!source) throw new NotFoundException('來源員工不存在');
+    if (!source.employee_is_temporary) throw new BadRequestException('來源員工不是臨時員工');
+
+    const target = await this.prisma.employee.findUnique({ where: { id: targetId } });
+    if (!target) throw new NotFoundException('目標員工不存在');
+    if (target.employee_is_temporary) throw new BadRequestException('目標員工也是臨時員工，請選擇正式員工');
+    if (target.deleted_at) throw new BadRequestException('目標員工已被刪除');
+
+    // Count records before merge for response
+    const [workLogs, payrolls, attendances, leaves, expenses, anomalies, verificationRecords, verificationMappings] =
+      await Promise.all([
+        this.prisma.workLog.count({ where: { employee_id: sourceId } }),
+        this.prisma.payroll.count({ where: { employee_id: sourceId } }),
+        this.prisma.employeeAttendance.count({ where: { employee_id: sourceId } }),
+        this.prisma.employeeLeave.count({ where: { employee_id: sourceId } }),
+        this.prisma.expense.count({ where: { employee_id: sourceId } }),
+        this.prisma.attendanceAnomaly.count({ where: { anomaly_employee_id: sourceId } }),
+        this.prisma.verificationRecord.count({ where: { record_employee_id: sourceId } }),
+        this.prisma.verificationNicknameMapping.count({ where: { nickname_employee_id: sourceId } }),
+      ]);
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Transfer work_logs
+      await tx.workLog.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      // 2. Transfer payrolls
+      await tx.payroll.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      // 3. Transfer employee_attendances
+      await tx.employeeAttendance.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      // 4. Transfer employee_leaves
+      await tx.employeeLeave.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      // 5. Transfer expenses
+      await tx.expense.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      // 6. Transfer attendance_anomalies
+      await tx.attendanceAnomaly.updateMany({ where: { anomaly_employee_id: sourceId }, data: { anomaly_employee_id: targetId } });
+      // 7. Transfer verification_records
+      await tx.verificationRecord.updateMany({ where: { record_employee_id: sourceId }, data: { record_employee_id: targetId } });
+      // 8. Transfer verification_nickname_mappings
+      await tx.verificationNicknameMapping.updateMany({ where: { nickname_employee_id: sourceId }, data: { nickname_employee_id: targetId } });
+      // 9. Delete salary settings, transfers, nicknames of source (no longer needed)
+      await tx.employeeSalarySetting.deleteMany({ where: { employee_id: sourceId } });
+      await tx.employeeTransfer.deleteMany({ where: { employee_id: sourceId } });
+      await tx.employeeNickname.deleteMany({ where: { emp_nickname_employee_id: sourceId } });
+      // 10. Hard-delete the source employee
+      await tx.employee.delete({ where: { id: sourceId } });
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'employees',
+          targetId: targetId,
+          changesBefore: { source_employee_id: sourceId, source_name: source.name_zh },
+          changesAfter: { merged_into: targetId, target_name: target.name_zh },
+          ipAddress,
+        });
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
+    }
+
+    const transferred = { work_logs: workLogs, payrolls, attendances, leaves, expenses, attendance_anomalies: anomalies, verification_records: verificationRecords, verification_nickname_mappings: verificationMappings };
+    return {
+      success: true,
+      transferred,
+      total_transferred: Object.values(transferred).reduce((a, b) => a + b, 0),
+      deleted_source_id: sourceId,
+    };
   }
 
   async searchByNickname(q: string) {

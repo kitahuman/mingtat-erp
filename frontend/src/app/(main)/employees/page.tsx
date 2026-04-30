@@ -75,6 +75,17 @@ export default function EmployeesPage() {
   const [accountResult, setAccountResult] = useState<any>(null);
   const [accountFilter, setAccountFilter] = useState<'all' | 'without' | 'with'>('without');
 
+  // Merge modal state
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSource, setMergeSource] = useState<any>(null);
+  const [mergeSearchQuery, setMergeSearchQuery] = useState('');
+  const [mergeSearchResults, setMergeSearchResults] = useState<any[]>([]);
+  const [mergeSearchLoading, setMergeSearchLoading] = useState(false);
+  const [mergePreview, setMergePreview] = useState<any>(null);
+  const [mergePreviewLoading, setMergePreviewLoading] = useState(false);
+  const [mergeConfirming, setMergeConfirming] = useState(false);
+  const [mergeStep, setMergeStep] = useState<'search' | 'preview'>('search');
+
   // Ref to store roleLabels for use in callbacks without stale closures
   const roleLabelsRef = useRef(roleLabels);
   useEffect(() => { roleLabelsRef.current = roleLabels; }, [roleLabels]);
@@ -280,14 +291,77 @@ export default function EmployeesPage() {
     load();
   };
 
-  const handleOpenConvert = (emp: any) => {
+  const handleOpenMerge = (emp: any) => {
+    setMergeSource(emp);
+    setMergeSearchQuery('');
+    setMergeSearchResults([]);
+    setMergePreview(null);
+    setMergeStep('search');
+    setShowMergeModal(true);
+  };
+
+  const handleMergeSearch = async (q: string) => {
+    setMergeSearchQuery(q);
+    if (!q.trim()) { setMergeSearchResults([]); return; }
+    setMergeSearchLoading(true);
+    try {
+      const res = await employeesApi.list({ search: q, is_temporary: 'false', status: 'active', limit: 10, page: 1 });
+      setMergeSearchResults(res.data.data || []);
+    } catch {
+      setMergeSearchResults([]);
+    } finally {
+      setMergeSearchLoading(false);
+    }
+  };
+
+  const handleSelectMergeTarget = async (target: any) => {
+    if (!mergeSource) return;
+    setMergePreviewLoading(true);
+    setMergeStep('preview');
+    try {
+      const res = await employeesApi.checkMerge(mergeSource.id, target.id);
+      setMergePreview(res.data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '無法載入預覽');
+      setMergeStep('search');
+    } finally {
+      setMergePreviewLoading(false);
+    }
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!mergePreview || !mergeSource) return;
+    setMergeConfirming(true);
+    try {
+      await employeesApi.merge(mergeSource.id, mergePreview.target_employee.id);
+      setShowMergeModal(false);
+      setMergeSource(null);
+      setMergePreview(null);
+      load();
+      alert(`合併成功！已將 ${mergePreview.source_employee.name_zh} 的 ${mergePreview.total_records} 筆記錄轉移至 ${mergePreview.target_employee.name_zh}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '合併失敗');
+    } finally {
+      setMergeConfirming(false);
+    }
+  };
+
+  const handleOpenConvert = async (emp: any) => {
     setConvertTarget(emp);
     setConvertForm({
       ...EMPTY_CONVERT_FORM,
       phone: emp.phone || '',
       name_en: emp.name_en || '',
+      emp_code: '',
     });
     setShowConvertModal(true);
+    // Fetch next emp_code for preview
+    try {
+      const res = await employeesApi.nextEmpCode();
+      setConvertForm((prev: any) => ({ ...prev, emp_code: res.data.next_emp_code || '' }));
+    } catch {
+      // silently ignore; backend will auto-assign
+    }
   };
 
   const handleConvert = async (e: React.FormEvent) => {
@@ -564,9 +638,12 @@ export default function EmployeesPage() {
                     {emp.phone && <div className="flex justify-between"><span className="text-gray-500">電話</span><span className="text-gray-700">{emp.phone}</span></div>}
                     {emp.company && <div className="flex justify-between"><span className="text-gray-500">公司</span><span className="text-gray-700">{emp.company.internal_prefix || emp.company.name}</span></div>}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button onClick={() => router.push(`/employees/${emp.id}`)} className="flex-1 btn-secondary text-xs py-1.5">查看資料</button>
                     <button onClick={() => handleOpenConvert(emp)} className="flex-1 bg-orange-500 text-white text-xs py-1.5 px-3 rounded-lg font-medium hover:bg-orange-600 transition-colors">轉為正式</button>
+                    {hasMinRole('clerk') && (
+                      <button onClick={() => handleOpenMerge(emp)} className="flex-1 bg-blue-500 text-white text-xs py-1.5 px-3 rounded-lg font-medium hover:bg-blue-600 transition-colors">合併</button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -949,6 +1026,155 @@ export default function EmployeesPage() {
         </form>
       </Modal>
 
+      {/* Merge Temporary Employee Modal */}
+      <Modal
+        isOpen={showMergeModal}
+        onClose={() => { setShowMergeModal(false); setMergeSource(null); setMergePreview(null); setMergeStep('search'); }}
+        title="合併臨時員工到正式員工"
+        size="lg"
+      >
+        {mergeSource && (
+          <div className="space-y-4">
+            {/* Source employee info */}
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-shrink-0 border-2 border-blue-300">
+                {mergeSource.employee_photo_base64 ? (
+                  <img src={`data:image/jpeg;base64,${mergeSource.employee_photo_base64}`} alt={mergeSource.name_zh} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-lg text-gray-400">👤</div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-blue-600 font-medium">臨時員工（將被删除）</p>
+                <p className="font-semibold text-gray-900">{mergeSource.name_zh}</p>
+                <p className="text-xs text-gray-500">建立於 {fmtDate(mergeSource.created_at)}{mergeSource.attendance_count != null && ` · 已打卡 ${mergeSource.attendance_count} 次`}</p>
+              </div>
+            </div>
+
+            {mergeStep === 'search' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">搜尋要合併入的正式員工</label>
+                  <input
+                    type="text"
+                    value={mergeSearchQuery}
+                    onChange={e => handleMergeSearch(e.target.value)}
+                    placeholder="輸入姓名搜尋..."
+                    className="input-field"
+                    autoFocus
+                  />
+                </div>
+                {mergeSearchLoading && (
+                  <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>
+                )}
+                {!mergeSearchLoading && mergeSearchQuery && mergeSearchResults.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">找不到符合條件的正式員工</p>
+                )}
+                {mergeSearchResults.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                    {mergeSearchResults.map((emp: any) => (
+                      <button
+                        key={emp.id}
+                        onClick={() => handleSelectMergeTarget(emp)}
+                        className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">{emp.name_zh}{emp.name_en && <span className="text-gray-400 text-xs ml-2">{emp.name_en}</span>}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {emp.role && <span className="mr-2">{emp.role}</span>}
+                            {emp.company?.internal_prefix || emp.company?.name || ''}
+                            {emp.emp_code && <span className="ml-2 font-mono text-gray-400">{emp.emp_code}</span>}
+                          </p>
+                        </div>
+                        <span className="text-blue-500 text-sm">選擇 →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!mergeSearchQuery && (
+                  <p className="text-sm text-gray-400 text-center py-2">請輸入姓名搜尋正式員工</p>
+                )}
+              </>
+            )}
+
+            {mergeStep === 'preview' && (
+              <>
+                {mergePreviewLoading ? (
+                  <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+                ) : mergePreview && (
+                  <>
+                    {/* Target employee info */}
+                    <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex-shrink-0 border-2 border-green-300 flex items-center justify-center text-lg text-gray-400">👤</div>
+                      <div>
+                        <p className="text-xs text-green-600 font-medium">目標正式員工（記錄將合併入此）</p>
+                        <p className="font-semibold text-gray-900">{mergePreview.target_employee.name_zh}{mergePreview.target_employee.name_en && <span className="text-gray-400 text-sm ml-2">{mergePreview.target_employee.name_en}</span>}</p>
+                        <p className="text-xs text-gray-500">
+                          {mergePreview.target_employee.role}
+                          {mergePreview.target_employee.company_name && ` · ${mergePreview.target_employee.company_name}`}
+                          {mergePreview.target_employee.emp_code && ` · ${mergePreview.target_employee.emp_code}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Records preview */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <p className="text-sm font-semibold text-gray-700 mb-3">將被轉移的歷史記錄</p>
+                      {mergePreview.total_records === 0 ? (
+                        <p className="text-sm text-gray-500">此臨時員工沒有任何關聯記錄</p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {mergePreview.records.work_logs > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">工作記錄</span><span className="font-semibold text-gray-800">{mergePreview.records.work_logs} 筆</span></div>}
+                          {mergePreview.records.payrolls > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">薪單</span><span className="font-semibold text-gray-800">{mergePreview.records.payrolls} 筆</span></div>}
+                          {mergePreview.records.attendances > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">打卡記錄</span><span className="font-semibold text-gray-800">{mergePreview.records.attendances} 筆</span></div>}
+                          {mergePreview.records.leaves > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">請假記錄</span><span className="font-semibold text-gray-800">{mergePreview.records.leaves} 筆</span></div>}
+                          {mergePreview.records.expenses > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">支出記錄</span><span className="font-semibold text-gray-800">{mergePreview.records.expenses} 筆</span></div>}
+                          {mergePreview.records.attendance_anomalies > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">考勤異常</span><span className="font-semibold text-gray-800">{mergePreview.records.attendance_anomalies} 筆</span></div>}
+                          {mergePreview.records.verification_records > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">核實記錄</span><span className="font-semibold text-gray-800">{mergePreview.records.verification_records} 筆</span></div>}
+                          {mergePreview.records.verification_nickname_mappings > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">小名對映</span><span className="font-semibold text-gray-800">{mergePreview.records.verification_nickname_mappings} 筆</span></div>}
+                        </div>
+                      )}
+                      <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-semibold">
+                        <span>共計</span>
+                        <span className="text-blue-600">{mergePreview.total_records} 筆記錄</span>
+                      </div>
+                    </div>
+
+                    {/* Warning */}
+                    <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <span className="text-red-500 text-lg mt-0.5">⚠️</span>
+                      <div className="text-sm">
+                        <p className="font-semibold text-red-800">此操作不可撤銷</p>
+                        <p className="text-red-700 mt-1">合併後，臨時員工 <strong>{mergePreview.source_employee.name_zh}</strong> 的帳號將被永久删除，所有歷史記錄將改為歸屬 <strong>{mergePreview.target_employee.name_zh}</strong>。基本資料以正式員工為準，不會被覆蓋。</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between gap-3 pt-2 border-t">
+                      <button
+                        type="button"
+                        onClick={() => { setMergeStep('search'); setMergePreview(null); }}
+                        className="btn-secondary"
+                        disabled={mergeConfirming}
+                      >
+                        返回搜尋
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmMerge}
+                        disabled={mergeConfirming}
+                        className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                      >
+                        {mergeConfirming ? '合併中...' : `確認合併（删除臨時員工）`}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Convert to Regular Modal */}
       <Modal isOpen={showConvertModal} onClose={() => { setShowConvertModal(false); setConvertTarget(null); }} title="轉為正式員工" size="lg">
         {convertTarget && (
@@ -985,8 +1211,14 @@ export default function EmployeesPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">員工編號</label>
-                <input value={convertForm.emp_code} onChange={e => setConvertForm({...convertForm, emp_code: e.target.value})} className="input-field" placeholder="如 E001" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">員工編號（自動分配）</label>
+                <div className="input-field bg-gray-50 text-gray-600 cursor-not-allowed flex items-center gap-2">
+                  {convertForm.emp_code ? (
+                    <><span className="font-mono font-semibold text-gray-800">{convertForm.emp_code}</span><span className="text-xs text-gray-400">（系統自動分配）</span></>
+                  ) : (
+                    <span className="text-xs text-gray-400">載入中...</span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label>

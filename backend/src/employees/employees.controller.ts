@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Req
 import { AuthGuard } from '@nestjs/passport';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto, UpdateEmployeeDto, TransferEmployeeDto, ConvertToRegularDto, AddSalarySettingDto } from './dto/create-employee.dto';
+import { MergeEmployeeDto } from './dto/merge-employee.dto';
 
 @Controller('employees')
 @UseGuards(AuthGuard('jwt'))
@@ -129,4 +130,56 @@ export class EmployeesController {
     return this.service.searchByNickname(q);
   }
 
+  // ── Emp Code Utilities ──
+
+  /**
+   * GET /employees/next-emp-code
+   * Returns the next available emp_code for preview in the convert-to-regular form.
+   */
+  @Get('next-emp-code')
+  getNextEmpCode() {
+    return this.service.getNextEmpCodePublic();
+  }
+
+  /**
+   * POST /employees/backfill-emp-codes
+   * Backfill emp_code for regular employees that are missing one.
+   */
+  @Post('backfill-emp-codes')
+  backfillMissingEmpCodes() {
+    return this.service.backfillMissingEmpCodes();
+  }
+
+  // ── Temporary Employee Merge ──
+
+  /**
+   * GET /employees/:id/check-merge?target_employee_id=xxx
+   * Returns a preview of records that will be transferred from source (temporary) to target (regular).
+   */
+  @Get(':id/check-merge')
+  checkMerge(
+    @Param('id') id: string,
+    @Query('target_employee_id') targetId: string,
+  ) {
+    return this.service.checkMerge(Number(id), Number(targetId));
+  }
+
+  /**
+   * POST /employees/:id/merge
+   * Execute the merge: transfer all records from source (temporary) to target (regular), then delete source.
+   * Body: { target_employee_id: number }
+   */
+  @Post(':id/merge')
+  mergeEmployee(
+    @Param('id') id: string,
+    @Body() dto: MergeEmployeeDto,
+    @Request() req: any,
+  ) {
+    return this.service.mergeEmployee(
+      Number(id),
+      dto.target_employee_id,
+      req.user?.id || req.user?.userId || 0,
+      req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined,
+    );
+  }
 }
