@@ -513,6 +513,7 @@ export class PayrollService {
         salary_type: 'daily',
         base_rate: 0,
         work_days: 0,
+        work_nights: 0,
         base_amount: 0,
         allowance_total: 0,
         ot_total: 0,
@@ -716,6 +717,7 @@ export class PayrollService {
         salary_type: calc.salary_type,
         base_rate: calc.base_rate,
         work_days: calc.work_days,
+        work_nights: calc.work_nights || 0,
         base_amount: calc.base_amount,
         allowance_total: calc.allowance_total,
         ot_total: calc.ot_total,
@@ -893,6 +895,7 @@ export class PayrollService {
         salary_type: calc.salary_type,
         base_rate: calc.base_rate,
         work_days: calc.work_days,
+        work_nights: calc.work_nights || 0,
         base_amount: calc.base_amount,
         allowance_total: calc.allowance_total,
         ot_total: calc.ot_total,
@@ -1399,6 +1402,7 @@ export class PayrollService {
           salary_type: calc.salary_type,
           base_rate: calc.base_rate,
           work_days: calc.work_days,
+          work_nights: calc.work_nights || 0,
           base_amount: calc.base_amount,
           allowance_total: calc.allowance_total,
           ot_total: calc.ot_total,
@@ -1630,6 +1634,7 @@ export class PayrollService {
         salary_type: calc.salary_type,
         base_rate: calc.base_rate,
         work_days: calc.work_days,
+        work_nights: calc.work_nights || 0,
         base_amount: calc.base_amount,
         allowance_total: calc.allowance_total,
         ot_total: calc.ot_total,
@@ -1967,6 +1972,16 @@ export class PayrollService {
       },
     });
     if (existing) {
+      if (body.allowance_key === 'base_top_up_override') {
+        return this.prisma.payrollDailyAllowance.update({
+          where: { id: existing.id },
+          data: {
+            allowance_name: body.allowance_name,
+            amount: body.amount,
+            remarks: body.remarks || undefined,
+          },
+        });
+      }
       throw new BadRequestException(`此日期已有「${body.allowance_name}」津貼`);
     }
 
@@ -2025,9 +2040,13 @@ export class PayrollService {
       throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
-    // Delete existing allowances for this date
+    // Delete existing display allowances for this date, but preserve manual base top-up override records
     await this.prisma.payrollDailyAllowance.deleteMany({
-      where: { payroll_id: payrollId, date: new Date(body.date) },
+      where: {
+        payroll_id: payrollId,
+        date: new Date(body.date),
+        allowance_key: { not: 'base_top_up_override' },
+      },
     });
 
     // Create new ones

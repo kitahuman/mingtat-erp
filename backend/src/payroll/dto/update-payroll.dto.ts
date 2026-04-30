@@ -12,6 +12,7 @@ export class UpdatePayrollDto {
   @IsOptional() @Type(() => Number) @IsNumber() mpf_relevant_income?: number;
   @IsOptional() @Type(() => Number) @IsNumber() base_rate?: number;
   @IsOptional() @Type(() => Number) @IsNumber() work_days?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() work_nights?: number;
   @IsOptional() @Type(() => Number) @IsNumber() base_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() allowance_total?: number;
   @IsOptional() @Type(() => Number) @IsNumber() ot_total?: number;

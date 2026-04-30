@@ -284,6 +284,7 @@ model EmployeeSalarySetting {
   employee_id            Int
   effective_date         DateTime @db.Date
   base_salary            Decimal  @default(0) @db.Decimal(10, 2)
+  base_salary_night      Decimal  @default(0) @db.Decimal(10, 2)
   salary_type            String   @default("daily")
   allowance_night        Decimal  @default(0) @db.Decimal(10, 2)
   allowance_rent         Decimal  @default(0) @db.Decimal(10, 2)
@@ -1187,6 +1188,7 @@ model Payroll {
   salary_type         String    @default("daily")
   base_rate           Decimal   @default(0) @db.Decimal(12, 2)
   work_days           Decimal   @default(0) @db.Decimal(10, 2)
+  work_nights         Decimal   @default(0) @db.Decimal(10, 2)
   base_amount         Decimal   @default(0) @db.Decimal(12, 2)
   allowance_total     Decimal   @default(0) @db.Decimal(12, 2)
   ot_total            Decimal   @default(0) @db.Decimal(12, 2)

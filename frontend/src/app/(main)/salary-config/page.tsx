@@ -54,7 +54,7 @@ export default function SalaryConfigPage() {
 
   const defaultForm = {
     employee_id: '', effective_date: new Date().toISOString().slice(0, 10),
-    salary_type: 'daily', base_salary: 0,
+    salary_type: 'daily', base_salary: 0, base_salary_night: 0,
     allowance_night: 0, allowance_3runway: 0, allowance_rent: 0,
     allowance_well: 0, allowance_machine: 0, allowance_roller: 0,
     allowance_crane: 0, allowance_move_machine: 0, allowance_kwh_night: 0,
@@ -110,6 +110,7 @@ export default function SalaryConfigPage() {
         ...form,
         employee_id: Number(form.employee_id),
         base_salary: Number(form.base_salary) || 0,
+        base_salary_night: Number(form.base_salary_night) || 0,
       });
       setShowModal(false);
       setForm({ ...defaultForm });
@@ -119,7 +120,7 @@ export default function SalaryConfigPage() {
 
   const handleInlineSave = async (id: number, formData: any) => {
     const payload: any = {};
-    const numFields = ['base_salary', 'allowance_night', 'ot_rate_standard', 'ot_mid_shift'];
+    const numFields = ['base_salary', 'base_salary_night', 'allowance_night', 'ot_rate_standard', 'ot_mid_shift'];
     const dateFields = ['effective_date'];
     if (formData.salary_type !== undefined) payload.salary_type = formData.salary_type;
     numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
@@ -151,7 +152,8 @@ export default function SalaryConfigPage() {
     { key: 'role', label: '職位', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.role || '-', filterRender: (_: any, row: any) => row.employee?.role || '-' },
     { key: 'effective_date', label: '生效日期', sortable: true, editable: true, editType: 'date' as const, render: (v: any) => fmtDate(v) },
     { key: 'salary_type', label: '薪酬類型', sortable: true, editable: true, editType: 'select' as const, editOptions: salaryTypeOptions, render: (v: any) => SALARY_TYPE_LABELS[v] || v, filterRender: (v: any) => SALARY_TYPE_LABELS[v] || v },
-    { key: 'base_salary', label: '底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
+    { key: 'base_salary', label: '日更底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => <span className="font-mono">${Number(v).toLocaleString()}</span> },
+    { key: 'base_salary_night', label: '夜更底薪', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => Number(v) > 0 ? <span className="font-mono text-indigo-700">${Number(v).toLocaleString()}</span> : <span className="text-gray-400 text-xs">跟日更</span> },
     { key: 'allowance_night', label: '晚間津貼', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'ot_rate_standard', label: '標準OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
     { key: 'ot_mid_shift', label: '中直OT', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => v > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
@@ -254,8 +256,12 @@ export default function SalaryConfigPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">底薪金額</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">底薪金額（日更）</label>
               <input type="number" value={form.base_salary} onChange={e => setForm({...form, base_salary: e.target.value})} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">夜更底薪</label>
+              <input type="number" value={form.base_salary_night} onChange={e => setForm({...form, base_salary_night: e.target.value})} className="input-field" placeholder="0 = 跟日更底薪" />
             </div>
           </div>
 

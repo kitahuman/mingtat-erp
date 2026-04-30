@@ -51,34 +51,59 @@ export class PayrollCalculationService {
   ) {
     const salaryType = salarySetting.salary_type || 'daily';
     const baseSalary = Number(salarySetting.base_salary) || 0;
+    const configuredBaseSalaryNight = Number(salarySetting.base_salary_night) || 0;
+    const baseSalaryNight = configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
     const items: any[] = [];
     let sortOrder = 1;
 
     // ── (1) 底薪計算 ──
     let baseAmount = 0;
     let workDays = 0;
-    // 實際工作日期（底薪只算實際上班天數）
+    let workNights = 0;
+    // 實際工作日期（底薪只算實際上班天數）；同一天日更和夜更可同時各算一次
     const workDateSet = new Set(
       workLogs.map((wl) => toDateStr(wl.scheduled_date)),
     );
-    // 法定假日：假日没上班才算（假日有上班則已包含在 workDateSet 中）
+    const dayWorkDateSet = new Set(
+      workLogs
+        .filter((wl) => wl.day_night !== '夜')
+        .map((wl) => toDateStr(wl.scheduled_date)),
+    );
+    const nightWorkDateSet = new Set(
+      workLogs
+        .filter((wl) => wl.day_night === '夜')
+        .map((wl) => toDateStr(wl.scheduled_date)),
+    );
+    // 法定假日：假日没上班才算（假日有上班則已包含在 workDateSet 中），並固定用日更底薪計算
     const validHolidays = (holidayDates || []).filter(
       (h) => !workDateSet.has(toDateStr(h.date)),
     );
     const holidayCount = validHolidays.length;
     if (salaryType === 'daily') {
-      // 底薪只算實際工作天數（不含假日）
-      workDays = workDateSet.size;
-      baseAmount = baseSalary * workDays;
+      workDays = dayWorkDateSet.size;
+      workNights = nightWorkDateSet.size;
+      const dayBaseAmount = baseSalary * workDays;
+      const nightBaseAmount = baseSalaryNight * workNights;
+      baseAmount = dayBaseAmount + nightBaseAmount;
       items.push({
         item_type: 'base_salary',
-        item_name: '底薪（日薪制）',
+        item_name: '底薪-日更',
         unit_price: baseSalary,
         quantity: workDays,
-        amount: baseAmount,
+        amount: dayBaseAmount,
         sort_order: sortOrder++,
       });
-      // 法定假日津貼：假日沒上班，給一天日薪作為津貼（独立一行）
+      if (workNights > 0) {
+        items.push({
+          item_type: 'base_salary',
+          item_name: '底薪-夜更',
+          unit_price: baseSalaryNight,
+          quantity: workNights,
+          amount: nightBaseAmount,
+          sort_order: sortOrder++,
+        });
+      }
+      // 法定假日津貼：假日沒上班，給一天日薪作為津貼（獨立一行）
       if (holidayCount > 0 && baseSalary > 0) {
         const holidayAllowance = baseSalary * holidayCount;
         items.push({
@@ -92,8 +117,8 @@ export class PayrollCalculationService {
         });
       }
     } else {
-      workDays = new Set(workLogs.map((wl) => toDateStr(wl.scheduled_date)))
-        .size;
+      workDays = workDateSet.size;
+      workNights = nightWorkDateSet.size;
       baseAmount = baseSalary;
       items.push({
         item_type: 'base_salary',
@@ -117,7 +142,11 @@ export class PayrollCalculationService {
         label: '夜班津貼',
         condition: (wl) => wl.day_night === '夜',
       },
-      { field: 'allowance_rent', label: '租車津貼' },
+      {
+        field: 'allowance_rent',
+        label: '租車津貼',
+        condition: (wl) => wl.unit === '天',
+      },
       { field: 'allowance_3runway', label: '三跑津貼' },
       { field: 'allowance_well', label: '落井津貼' },
       { field: 'allowance_machine', label: '揸機津貼' },
@@ -294,23 +323,45 @@ export class PayrollCalculationService {
     ];
 
     if (mpfPlan === 'industry') {
-      const dayIncomeMap = new Map<string, number>();
+      const dayIncomeMap = new Map<
+        string,
+        { dayIncome: number; nightIncome: number; hasDay: boolean; hasNight: boolean }
+      >();
       for (const wl of workLogs) {
         const date = toDateStr(wl.scheduled_date);
+        const current = dayIncomeMap.get(date) || {
+          dayIncome: 0,
+          nightIncome: 0,
+          hasDay: false,
+          hasNight: false,
+        };
         const lineAmt =
           Number(wl.line_amount ?? wl._line_amount ?? 0) +
           Number(wl.ot_line_amount ?? wl._ot_line_amount ?? 0) +
           Number(wl.mid_shift_line_amount ?? wl._mid_shift_line_amount ?? 0);
-        dayIncomeMap.set(date, (dayIncomeMap.get(date) || 0) + lineAmt);
+        if (wl.day_night === '夜') {
+          current.nightIncome += lineAmt;
+          current.hasNight = true;
+        } else {
+          current.dayIncome += lineAmt;
+          current.hasDay = true;
+        }
+        dayIncomeMap.set(date, current);
       }
       let totalEmployeeContrib = 0;
       let totalEmployerContrib = 0;
-      for (const [, workIncome] of dayIncomeMap) {
-        // Only apply daily base guarantee for daily salary; monthly salary has no per-day minimum
-        const effectiveIncome =
-          salaryType === 'daily' && baseSalary > 0
-            ? Math.max(workIncome, baseSalary)
-            : workIncome;
+      for (const [, income] of dayIncomeMap) {
+        // 同一天的日更與夜更合併成一個強積金計算日；日/夜只用於套用各自底薪下限。
+        let effectiveIncome = income.dayIncome + income.nightIncome;
+        if (salaryType === 'daily') {
+          const effectiveDayIncome = income.hasDay
+            ? Math.max(income.dayIncome, baseSalary)
+            : 0;
+          const effectiveNightIncome = income.hasNight
+            ? Math.max(income.nightIncome, baseSalaryNight)
+            : 0;
+          effectiveIncome = effectiveDayIncome + effectiveNightIncome;
+        }
         const tier =
           MPF_INDUSTRY_TIERS.find(
             (t) => effectiveIncome > t.min && effectiveIncome <= t.max,
@@ -365,6 +416,7 @@ export class PayrollCalculationService {
       salary_type: salaryType,
       base_rate: baseSalary,
       work_days: workDays,
+      work_nights: workNights,
       base_amount: baseAmount,
       allowance_total: allowanceTotal,
       ot_total: otTotal,
@@ -520,6 +572,11 @@ export class PayrollCalculationService {
     ];
 
     return displayAllowances
+      .filter((item) =>
+        item.key === 'allowance_rent'
+          ? dayWorkLogs.some((wl) => wl.unit === '天')
+          : true,
+      )
       .map((item) => ({
         ...item,
         amount: Number((salarySetting as any)[item.key]) || 0,
@@ -538,6 +595,12 @@ export class PayrollCalculationService {
       salaryType === 'daily'
         ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
         : 0;
+    const configuredBaseSalaryNight =
+      salaryType === 'daily' && salarySetting
+        ? Number((salarySetting as any).base_salary_night) || 0
+        : 0;
+    const baseSalaryNight =
+      configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
     const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
       const date = toDateStr(pwl.scheduled_date);
@@ -561,20 +624,47 @@ export class PayrollCalculationService {
         dayAllowances.some(
           (da: any) => da.allowance_key === 'statutory_holiday',
         );
+      const dayShiftPwls = dayPwls.filter((pwl: any) => pwl.day_night !== '夜');
+      const nightShiftPwls = dayPwls.filter((pwl: any) => pwl.day_night === '夜');
       const workIncome = dayPwls.reduce(
         (sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0),
         0,
       );
-      // 假日天不補底薪（effectiveIncome=0），只顯示假日津貼
-      const needsTopUp =
-        !isHolidayDay && baseSalary > 0 && workIncome < baseSalary;
-      const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-      const effectiveIncome = isHolidayDay
-        ? 0
-        : baseSalary > 0
-          ? Math.max(workIncome, baseSalary)
-          : workIncome;
-      const dailyAllowanceTotal = dayAllowances.reduce(
+      const dayWorkIncome = dayShiftPwls.reduce(
+        (sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0),
+        0,
+      );
+      const nightWorkIncome = nightShiftPwls.reduce(
+        (sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0),
+        0,
+      );
+      const autoDayTopUpAmount =
+        !isHolidayDay && dayShiftPwls.length > 0 && baseSalary > 0
+          ? Math.max(baseSalary - dayWorkIncome, 0)
+          : 0;
+      const autoNightTopUpAmount =
+        !isHolidayDay && nightShiftPwls.length > 0 && baseSalaryNight > 0
+          ? Math.max(baseSalaryNight - nightWorkIncome, 0)
+          : 0;
+      const autoTopUpAmount = autoDayTopUpAmount + autoNightTopUpAmount;
+      const override = dayAllowances.find(
+        (da: any) => da.allowance_key === 'base_top_up_override',
+      );
+      const isTopUpOverridden = !!override;
+      // 假日天不補底薪（effectiveIncome=0），只顯示假日津貼；手動覆蓋只替代補底薪差額本身
+      const topUpAmount = isTopUpOverridden
+        ? Number(override.amount) || 0
+        : autoTopUpAmount;
+      const dayTopUpAmount = isTopUpOverridden
+        ? topUpAmount
+        : autoDayTopUpAmount;
+      const nightTopUpAmount = isTopUpOverridden ? 0 : autoNightTopUpAmount;
+      const needsTopUp = !isHolidayDay && topUpAmount > 0;
+      const effectiveIncome = isHolidayDay ? 0 : workIncome + topUpAmount;
+      const displayDayAllowances = dayAllowances.filter(
+        (da: any) => da.allowance_key !== 'base_top_up_override',
+      );
+      const dailyAllowanceTotal = displayDayAllowances.reduce(
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
       );
@@ -618,11 +708,19 @@ export class PayrollCalculationService {
           price_match_status: pwl.price_match_status,
         })),
         work_income: workIncome,
+        day_work_income: dayWorkIncome,
+        night_work_income: nightWorkIncome,
         base_salary: baseSalary,
+        base_salary_night: baseSalaryNight,
         needs_top_up: needsTopUp,
         top_up_amount: topUpAmount,
+        auto_top_up_amount: autoTopUpAmount,
+        day_top_up_amount: dayTopUpAmount,
+        night_top_up_amount: nightTopUpAmount,
+        is_top_up_overridden: isTopUpOverridden,
+        top_up_override_id: override?.id ?? null,
         effective_income: effectiveIncome,
-        daily_allowances: dayAllowances.map((da: any) => ({
+        daily_allowances: displayDayAllowances.map((da: any) => ({
           id: da.id,
           allowance_key: da.allowance_key,
           allowance_name: da.allowance_name,
@@ -647,6 +745,12 @@ export class PayrollCalculationService {
       salaryType === 'daily'
         ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
         : 0;
+    const configuredBaseSalaryNight =
+      salaryType === 'daily' && salarySetting
+        ? Number((salarySetting as any).base_salary_night) || 0
+        : 0;
+    const baseSalaryNight =
+      configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
     const dateMap = new Map<string, any[]>();
     for (const wl of workLogs) {
       const date = toDateStr(wl.scheduled_date);
@@ -676,22 +780,45 @@ export class PayrollCalculationService {
       const dayWls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
       const isHolidayDay = holidayDatesSet.has(date);
-      const workIncome = dayWls.reduce((sum: number, wl: any) => {
-        const base = Number(wl._line_amount) || 0;
-        const ot = Number(wl._ot_line_amount) || 0;
-        const mid = Number(wl._mid_shift_line_amount) || 0;
-        return sum + base + ot + mid;
-      }, 0);
-      // 假日天不補底薪
-      const needsTopUp =
-        !isHolidayDay && baseSalary > 0 && workIncome < baseSalary;
-      const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-      const effectiveIncome = isHolidayDay
-        ? 0
-        : baseSalary > 0
-          ? Math.max(workIncome, baseSalary)
-          : workIncome;
-      const dailyAllowanceTotal = dayAllowances.reduce(
+      const dayShiftWls = dayWls.filter((wl: any) => wl.day_night !== '夜');
+      const nightShiftWls = dayWls.filter((wl: any) => wl.day_night === '夜');
+      const sumWorkLogIncome = (logs: any[]) =>
+        logs.reduce((sum: number, wl: any) => {
+          const base = Number(wl._line_amount) || 0;
+          const ot = Number(wl._ot_line_amount) || 0;
+          const mid = Number(wl._mid_shift_line_amount) || 0;
+          return sum + base + ot + mid;
+        }, 0);
+      const workIncome = sumWorkLogIncome(dayWls);
+      const dayWorkIncome = sumWorkLogIncome(dayShiftWls);
+      const nightWorkIncome = sumWorkLogIncome(nightShiftWls);
+      const autoDayTopUpAmount =
+        !isHolidayDay && dayShiftWls.length > 0 && baseSalary > 0
+          ? Math.max(baseSalary - dayWorkIncome, 0)
+          : 0;
+      const autoNightTopUpAmount =
+        !isHolidayDay && nightShiftWls.length > 0 && baseSalaryNight > 0
+          ? Math.max(baseSalaryNight - nightWorkIncome, 0)
+          : 0;
+      const autoTopUpAmount = autoDayTopUpAmount + autoNightTopUpAmount;
+      const override = dayAllowances.find(
+        (da: any) => da.allowance_key === 'base_top_up_override',
+      );
+      const isTopUpOverridden = !!override;
+      // 假日天不補底薪；手動覆蓋只替代補底薪差額本身
+      const topUpAmount = isTopUpOverridden
+        ? Number(override.amount) || 0
+        : autoTopUpAmount;
+      const dayTopUpAmount = isTopUpOverridden
+        ? topUpAmount
+        : autoDayTopUpAmount;
+      const nightTopUpAmount = isTopUpOverridden ? 0 : autoNightTopUpAmount;
+      const needsTopUp = !isHolidayDay && topUpAmount > 0;
+      const effectiveIncome = isHolidayDay ? 0 : workIncome + topUpAmount;
+      const displayDayAllowances = dayAllowances.filter(
+        (da: any) => da.allowance_key !== 'base_top_up_override',
+      );
+      const dailyAllowanceTotal = displayDayAllowances.reduce(
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
       );
@@ -736,11 +863,19 @@ export class PayrollCalculationService {
           price_match_status: wl._price_match_status || 'unmatched',
         })),
         work_income: workIncome,
+        day_work_income: dayWorkIncome,
+        night_work_income: nightWorkIncome,
         base_salary: baseSalary,
+        base_salary_night: baseSalaryNight,
         needs_top_up: needsTopUp,
         top_up_amount: topUpAmount,
+        auto_top_up_amount: autoTopUpAmount,
+        day_top_up_amount: dayTopUpAmount,
+        night_top_up_amount: nightTopUpAmount,
+        is_top_up_overridden: isTopUpOverridden,
+        top_up_override_id: override?.id ?? null,
         effective_income: effectiveIncome,
-        daily_allowances: dayAllowances.map((da: any) => ({
+        daily_allowances: displayDayAllowances.map((da: any) => ({
           id: da.id,
           allowance_key: da.allowance_key,
           allowance_name: da.allowance_name,

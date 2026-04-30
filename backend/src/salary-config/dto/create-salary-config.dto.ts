@@ -5,6 +5,7 @@ export class CreateSalaryConfigDto {
   @IsOptional() @Type(() => Number) @IsNumber() employee_id?: number;
   @IsOptional() @IsString() effective_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() base_salary?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() base_salary_night?: number;
   @IsOptional() @IsString() salary_type?: string;
   @IsOptional() @Type(() => Number) @IsNumber() allowance_night?: number;
   @IsOptional() @Type(() => Number) @IsNumber() allowance_rent?: number;

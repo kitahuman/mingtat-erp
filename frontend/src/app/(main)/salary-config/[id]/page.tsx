@@ -112,7 +112,8 @@ export default function SalaryConfigDetailPage() {
                 <option value="daily">日薪制</option><option value="monthly">月薪制</option>
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-500 mb-1">底薪金額</label><input type="number" value={form.base_salary} onChange={e => setForm({...form, base_salary: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">底薪金額（日更）</label><input type="number" value={form.base_salary} onChange={e => setForm({...form, base_salary: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-500 mb-1">夜更底薪</label><input type="number" value={form.base_salary_night ?? 0} onChange={e => setForm({...form, base_salary_night: e.target.value})} className="input-field" placeholder="0 = 跟日更底薪" /></div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.is_piece_rate} onChange={e => setForm({...form, is_piece_rate: e.target.checked})} className="rounded border-gray-300" />
@@ -123,9 +124,14 @@ export default function SalaryConfigDetailPage() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-primary-50 rounded-lg p-4">
-              <p className="text-xs text-primary-600 mb-1">底薪</p>
+              <p className="text-xs text-primary-600 mb-1">底薪（日更）</p>
               <p className="text-2xl font-bold font-mono">${Number(record?.base_salary).toLocaleString()}</p>
               <p className="text-xs text-gray-500 mt-1">{SALARY_TYPE_LABELS[record?.salary_type]}</p>
+            </div>
+            <div className="bg-indigo-50 rounded-lg p-4">
+              <p className="text-xs text-indigo-600 mb-1">夜更底薪</p>
+              <p className="text-2xl font-bold font-mono text-indigo-700">${Number(record?.base_salary_night || record?.base_salary || 0).toLocaleString()}</p>
+              <p className="text-xs text-gray-500 mt-1">{Number(record?.base_salary_night || 0) > 0 ? '獨立夜更底薪' : '跟日更底薪'}</p>
             </div>
             <div><p className="text-sm text-gray-500">生效日期</p><p className="font-medium">{fmtDate(record?.effective_date)}</p></div>
             <div><p className="text-sm text-gray-500">按件計酬</p><p>{record?.is_piece_rate ? <span className="badge-blue">是</span> : '否'}</p></div>
@@ -233,7 +239,8 @@ export default function SalaryConfigDetailPage() {
                   <div className="flex flex-wrap items-center gap-3 mb-2">
                     <span className="font-medium text-gray-900">{fmtDate(h.effective_date)}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{SALARY_TYPE_LABELS[h.salary_type] || h.salary_type}</span>
-                    <span className="font-mono font-semibold text-gray-800">底薪 ${Number(h.base_salary).toLocaleString()}</span>
+                    <span className="font-mono font-semibold text-gray-800">日更底薪 ${Number(h.base_salary).toLocaleString()}</span>
+                    <span className="font-mono font-semibold text-indigo-700">夜更底薪 ${Number(h.base_salary_night || h.base_salary || 0).toLocaleString()}</span>
                     {h.change_type && (
                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                         h.change_type === '加薪' ? 'bg-green-100 text-green-700' :

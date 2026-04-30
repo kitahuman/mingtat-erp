@@ -769,6 +769,7 @@ function DailyCalculationView({
   salarySetting,
   onAddAllowance,
   onRemoveAllowance,
+  onSaveTopUpOverride,
 }: {
   dailyCalc: any[];
   allowanceOptions: any[];
@@ -778,11 +779,15 @@ function DailyCalculationView({
   salarySetting?: any;
   onAddAllowance: (date: string, key: string, name: string, amount: number) => Promise<void>;
   onRemoveAllowance: (daId: number) => Promise<void>;
+  onSaveTopUpOverride: (date: string, amount: number) => Promise<void>;
 }) {
   const isDaily = salaryType === 'daily' || !salaryType;
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState('');
+  const [editingTopUpDate, setEditingTopUpDate] = useState<string | null>(null);
+  const [topUpDraft, setTopUpDraft] = useState('');
+  const [topUpSaving, setTopUpSaving] = useState(false);
 
   if (!dailyCalc || dailyCalc.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
@@ -790,12 +795,27 @@ function DailyCalculationView({
 
   const getTopUpAmount = (day: any) => {
     if (!isDaily) return 0;
-    const workIncome = Number(day.work_income) || 0;
-    const baseSalary = Number(day.base_salary) || 0;
-    const isStatutoryHolidayNoAttendance = (day.work_logs || []).length === 0 &&
-      (day.daily_allowances || []).some((a: any) => a.allowance_key === 'statutory_holiday');
-    if (isStatutoryHolidayNoAttendance || baseSalary <= 0 || workIncome >= baseSalary) return 0;
-    return Math.max(0, Number(day.top_up_amount) || (baseSalary - workIncome));
+    return Math.max(0, Number(day.top_up_amount) || 0);
+  };
+
+  const getDayTopUpAmount = (day: any) => Math.max(0, Number(day.day_top_up_amount) || 0);
+  const getNightTopUpAmount = (day: any) => Math.max(0, Number(day.night_top_up_amount) || 0);
+
+  const startEditTopUp = (day: any) => {
+    if (!isDraft || !isDaily) return;
+    setEditingTopUpDate(day.date);
+    setTopUpDraft(String(getTopUpAmount(day)));
+  };
+
+  const saveTopUpOverride = async (date: string) => {
+    const amount = Math.max(0, Number(topUpDraft) || 0);
+    setTopUpSaving(true);
+    try {
+      await onSaveTopUpOverride(date, amount);
+      setEditingTopUpDate(null);
+    } finally {
+      setTopUpSaving(false);
+    }
   };
 
   const buildAllowanceBadges = (day: any): AllowanceBadge[] => {
@@ -942,10 +962,45 @@ function DailyCalculationView({
                       ${Number(day.work_income).toLocaleString()}
                     </td>
                     {isDaily && <td className="px-3 py-2 text-right font-mono">
-                      {topUpAmount > 0 ? (
-                        <span className="text-orange-600 font-bold">+${topUpAmount.toLocaleString()}</span>
+                      {editingTopUpDate === day.date ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={topUpDraft}
+                          autoFocus
+                          disabled={topUpSaving}
+                          onChange={e => setTopUpDraft(e.target.value)}
+                          onBlur={() => saveTopUpOverride(day.date)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') saveTopUpOverride(day.date);
+                            if (e.key === 'Escape') setEditingTopUpDate(null);
+                          }}
+                          className="input-field text-xs text-right w-24 font-mono"
+                        />
+                      ) : (topUpAmount > 0 || day.is_top_up_overridden) ? (
+                        <button
+                          type="button"
+                          onClick={() => startEditTopUp(day)}
+                          className={`text-right ${isDraft ? 'cursor-pointer hover:underline' : 'cursor-default'} ${day.is_top_up_overridden ? 'text-blue-600' : 'text-orange-600'} font-bold`}
+                          title={isDraft ? '點擊編輯補底薪差額' : undefined}
+                        >
+                          <span>{day.is_top_up_overridden ? '手動 ' : ''}+${topUpAmount.toLocaleString()}</span>
+                          {day.is_top_up_overridden && <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1 rounded">覆蓋</span>}
+                          {!day.is_top_up_overridden && (getDayTopUpAmount(day) > 0 || getNightTopUpAmount(day) > 0) && (
+                            <span className="block text-[10px] font-normal text-gray-500">
+                              {getDayTopUpAmount(day) > 0 && `日 +$${getDayTopUpAmount(day).toLocaleString()}`}
+                              {getDayTopUpAmount(day) > 0 && getNightTopUpAmount(day) > 0 ? ' / ' : ''}
+                              {getNightTopUpAmount(day) > 0 && `夜 +$${getNightTopUpAmount(day).toLocaleString()}`}
+                            </span>
+                          )}
+                        </button>
                       ) : (
-                        <span className="text-gray-300">-</span>
+                        <button
+                          type="button"
+                          onClick={() => startEditTopUp(day)}
+                          className={`text-gray-300 ${isDraft ? 'cursor-pointer hover:text-blue-500' : 'cursor-default'}`}
+                          title={isDraft ? '點擊設定手動補底薪差額' : undefined}
+                        >-</button>
                       )}
                     </td>}
                     <td className="px-3 py-2 text-center">
@@ -1425,6 +1480,22 @@ export default function PayrollDetailPage() {
     }
   };
 
+  const handleSaveTopUpOverride = async (date: string, amount: number) => {
+    try {
+      await payrollApi.addDailyAllowance(payroll.id, {
+        date,
+        allowance_key: 'base_top_up_override',
+        allowance_name: '補底薪手動覆蓋',
+        amount,
+        remarks: '手動覆蓋補底薪差額',
+      });
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '儲存補底薪失敗');
+      throw err;
+    }
+  };
+
   // ── 員工報銷 handlers ──
   const handleOpenReimbursement = async () => {
     setReimbursementLoading(true);
@@ -1733,6 +1804,7 @@ export default function PayrollDetailPage() {
             salarySetting={payroll.salary_setting}
             onAddAllowance={handleAddDailyAllowance}
             onRemoveAllowance={handleRemoveDailyAllowance}
+            onSaveTopUpOverride={handleSaveTopUpOverride}
           />
         )}
 

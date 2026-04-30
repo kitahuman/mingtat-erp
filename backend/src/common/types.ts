@@ -96,9 +96,17 @@ export interface DailyCalculation {
   date: string;
   work_logs: DailyWorkLogEntry[];
   work_income: number;
+  day_work_income?: number;
+  night_work_income?: number;
   base_salary: number;
+  base_salary_night?: number;
   needs_top_up: boolean;
   top_up_amount: number;
+  auto_top_up_amount?: number;
+  day_top_up_amount?: number;
+  night_top_up_amount?: number;
+  is_top_up_overridden?: boolean;
+  top_up_override_id?: number | null;
   effective_income: number;
   daily_allowances: DailyAllowanceEntry[];
   daily_allowance_total: number;
