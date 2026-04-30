@@ -106,7 +106,7 @@ export const employeesApi = {
   searchByNickname: (q: string) => api.get('/employees/search/by-nickname', { params: { q } }),
   // Merge (temporary -> regular)
   checkMerge: (sourceId: number, targetId: number) => api.get(`/employees/${sourceId}/check-merge`, { params: { target_employee_id: targetId } }),
-  merge: (sourceId: number, targetEmployeeId: number) => api.post(`/employees/${sourceId}/merge`, { target_employee_id: targetEmployeeId }),
+  merge: (sourceId: number, targetEmployeeId: number, forceOverwriteSalary?: boolean) => api.post(`/employees/${sourceId}/merge`, { target_employee_id: targetEmployeeId, force_overwrite_salary: forceOverwriteSalary }),
   // Emp code utilities
   nextEmpCode: () => api.get('/employees/next-emp-code'),
   backfillEmpCodes: () => api.post('/employees/backfill-emp-codes'),

@@ -134,10 +134,18 @@ export default function SalaryConfigPage() {
   ];
 
   const columns = [
-    { key: 'emp_code', label: '編號', sortable: true, editable: false, className: 'w-20 font-mono', render: (_: any, row: any) => row.employee?.emp_code || '-', filterRender: (_: any, row: any) => row.employee?.emp_code || '-' },
+    { key: 'emp_code', label: '編號', sortable: true, editable: false, className: 'w-20 font-mono', render: (_: any, row: any) => row.employee?.employee_is_temporary ? <span className="text-gray-400 text-xs">臨時</span> : (row.employee?.emp_code || '-'), filterRender: (_: any, row: any) => row.employee?.emp_code || '-' },
     { key: 'employee', label: '姓名', sortable: true, editable: false, render: (_: any, row: any) => {
       const emp = row.employee;
-      return emp ? <span>{emp.name_zh || emp.name_en}</span> : '-';
+      if (!emp) return <span>-</span>;
+      return (
+        <span className="flex items-center gap-1">
+          {emp.name_zh || emp.name_en}
+          {emp.employee_is_temporary && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">臨時</span>
+          )}
+        </span>
+      );
     }, filterRender: (_: any, row: any) => row.employee?.name_zh || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
     { key: 'role', label: '職位', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.role || '-', filterRender: (_: any, row: any) => row.employee?.role || '-' },

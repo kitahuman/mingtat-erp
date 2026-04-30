@@ -86,6 +86,7 @@ export default function EmployeesPage() {
   const [mergePreviewLoading, setMergePreviewLoading] = useState(false);
   const [mergeConfirming, setMergeConfirming] = useState(false);
   const [mergeStep, setMergeStep] = useState<'search' | 'preview'>('search');
+  const [mergeSalaryChoice, setMergeSalaryChoice] = useState<'keep_target' | 'use_source' | null>(null);
 
   // Ref to store roleLabels for use in callbacks without stale closures
   const roleLabelsRef = useRef(roleLabels);
@@ -298,6 +299,7 @@ export default function EmployeesPage() {
     setMergeSearchResults([]);
     setMergePreview(null);
     setMergeStep('search');
+    setMergeSalaryChoice(null);
     setShowMergeModal(true);
   };
 
@@ -330,14 +332,20 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleConfirmMerge = async () => {
+  const handleConfirmMerge = async (forceOverwriteSalary?: boolean) => {
     if (!mergePreview || !mergeSource) return;
+    // If there's a salary conflict and user hasn't chosen, require a choice
+    if (mergePreview.salary_conflict?.has_conflict && forceOverwriteSalary === undefined && mergeSalaryChoice === null) {
+      return;
+    }
+    const useOverwrite = forceOverwriteSalary !== undefined ? forceOverwriteSalary : mergeSalaryChoice === 'use_source';
     setMergeConfirming(true);
     try {
-      await employeesApi.merge(mergeSource.id, mergePreview.target_employee.id);
+      await employeesApi.merge(mergeSource.id, mergePreview.target_employee.id, mergePreview.salary_conflict?.has_conflict ? useOverwrite : undefined);
       setShowMergeModal(false);
       setMergeSource(null);
       setMergePreview(null);
+      setMergeSalaryChoice(null);
       load();
       alert(`合併成功！已將 ${mergePreview.source_employee.name_zh} 的 ${mergePreview.total_records} 筆記錄轉移至 ${mergePreview.target_employee.name_zh}`);
     } catch (err: any) {
@@ -1152,6 +1160,52 @@ export default function EmployeesPage() {
                       </div>
                     </div>
 
+                    {/* Salary Conflict Resolution */}
+                    {mergePreview.salary_conflict?.has_conflict && (
+                      <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+                        <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ 薪酬配置衝突 — 請選擇如何處理</p>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div className="bg-white border border-yellow-200 rounded p-2 text-xs">
+                            <p className="font-semibold text-gray-700 mb-1">臨時員工（{mergePreview.source_employee.name_zh}）</p>
+                            <p className="text-gray-600">底薪：<span className="font-mono font-semibold">${Number(mergePreview.salary_conflict.source_salary?.base_salary || 0).toLocaleString()}</span></p>
+                            <p className="text-gray-500">{mergePreview.salary_conflict.source_salary?.salary_type === 'daily' ? '日薪制' : '月薪制'}</p>
+                          </div>
+                          <div className="bg-white border border-yellow-200 rounded p-2 text-xs">
+                            <p className="font-semibold text-gray-700 mb-1">正式員工（{mergePreview.target_employee.name_zh}）</p>
+                            <p className="text-gray-600">底薪：<span className="font-mono font-semibold">${Number(mergePreview.salary_conflict.target_salary?.base_salary || 0).toLocaleString()}</span></p>
+                            <p className="text-gray-500">{mergePreview.salary_conflict.target_salary?.salary_type === 'daily' ? '日薪制' : '月薪制'}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMergeSalaryChoice('keep_target')}
+                            className={`flex-1 py-2 px-3 rounded text-xs font-medium border transition-colors ${
+                              mergeSalaryChoice === 'keep_target'
+                                ? 'bg-green-600 text-white border-green-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            保留正式員工配置
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMergeSalaryChoice('use_source')}
+                            className={`flex-1 py-2 px-3 rounded text-xs font-medium border transition-colors ${
+                              mergeSalaryChoice === 'use_source'
+                                ? 'bg-orange-600 text-white border-orange-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            用臨時員工配置覆蓋
+                          </button>
+                        </div>
+                        {mergeSalaryChoice === null && (
+                          <p className="text-xs text-yellow-700 mt-2">請先選擇薪酬配置處理方式才能合併</p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Warning */}
                     <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <span className="text-red-500 text-lg mt-0.5">⚠️</span>
@@ -1164,7 +1218,7 @@ export default function EmployeesPage() {
                     <div className="flex justify-between gap-3 pt-2 border-t">
                       <button
                         type="button"
-                        onClick={() => { setMergeStep('search'); setMergePreview(null); }}
+                        onClick={() => { setMergeStep('search'); setMergePreview(null); setMergeSalaryChoice(null); }}
                         className="btn-secondary"
                         disabled={mergeConfirming}
                       >
@@ -1172,8 +1226,8 @@ export default function EmployeesPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleConfirmMerge}
-                        disabled={mergeConfirming}
+                        onClick={() => handleConfirmMerge()}
+                        disabled={mergeConfirming || (mergePreview.salary_conflict?.has_conflict && mergeSalaryChoice === null)}
                         className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
                       >
                         {mergeConfirming ? '合併中...' : `確認合併（删除臨時員工）`}

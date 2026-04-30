@@ -405,6 +405,19 @@ export class CompanyClockService {
       },
     });
 
+    // 自動建立空白薪酬配置
+    try {
+      await this.prisma.employeeSalarySetting.create({
+        data: {
+          employee_id: employee.id,
+          effective_date: new Date(),
+          salary_type: 'daily',
+        },
+      });
+    } catch (e) {
+      console.error('Auto salary setting creation error for temporary employee:', e);
+    }
+
     return {
       success: true,
       employee: {

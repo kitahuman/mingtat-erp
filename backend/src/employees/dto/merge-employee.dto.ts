@@ -1,10 +1,14 @@
-import { IsNumber } from 'class-validator';
+import { IsNumber, IsBoolean, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class MergeEmployeeDto {
   @Type(() => Number)
   @IsNumber()
   target_employee_id: number;
+
+  @IsOptional()
+  @IsBoolean()
+  force_overwrite_salary?: boolean;
 }
 
 export interface MergeCheckRecord {
@@ -16,6 +20,22 @@ export interface MergeCheckRecord {
   attendance_anomalies: number;
   verification_records: number;
   verification_nickname_mappings: number;
+}
+
+export interface SalaryConflictInfo {
+  has_conflict: boolean;
+  source_salary: {
+    id: number;
+    base_salary: number;
+    salary_type: string;
+    effective_date: Date;
+  } | null;
+  target_salary: {
+    id: number;
+    base_salary: number;
+    salary_type: string;
+    effective_date: Date;
+  } | null;
 }
 
 export interface MergeCheckResponse {
@@ -36,6 +56,7 @@ export interface MergeCheckResponse {
   };
   records: MergeCheckRecord;
   total_records: number;
+  salary_conflict: SalaryConflictInfo;
 }
 
 export interface MergeExecuteResponse {

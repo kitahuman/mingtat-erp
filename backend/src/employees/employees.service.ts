@@ -539,22 +539,20 @@ export class EmployeesService {
 
     const saved = await this.prisma.employee.create({ data });
 
-    // 自動建立空白薪酬配置（正式員工才建立）
-    if (!data.employee_is_temporary) {
-      try {
-        const effectiveDate = data.join_date
-          ? new Date(data.join_date)
-          : new Date();
-        await this.prisma.employeeSalarySetting.create({
-          data: {
-            employee_id: saved.id,
-            effective_date: effectiveDate,
-            salary_type: 'daily',
-          },
-        });
-      } catch (e) {
-        console.error('Auto salary setting creation error:', e);
-      }
+    // 自動建立空白薪酬配置（正式員工和臨時員工都建立）
+    try {
+      const effectiveDate = data.join_date
+        ? new Date(data.join_date as string)
+        : new Date();
+      await this.prisma.employeeSalarySetting.create({
+        data: {
+          employee_id: saved.id,
+          effective_date: effectiveDate,
+          salary_type: 'daily',
+        },
+      });
+    } catch (e) {
+      console.error('Auto salary setting creation error:', e);
     }
 
     if (userId) {
@@ -822,20 +820,35 @@ export class EmployeesService {
     if (dto.phone) updateData.phone = dto.phone;
     if (dto.name_en) updateData.name_en = dto.name_en;
     await this.prisma.employee.update({ where: { id }, data: updateData });
-    // If salary provided, create a salary setting
+    // If salary provided, update the existing latest salary setting (if any), otherwise create a new one
     if (dto.base_salary && dto.base_salary > 0) {
-      await this.prisma.employeeSalarySetting.create({
-        data: {
-          employee_id: id,
-          effective_date: dto.join_date ? new Date(dto.join_date) : new Date(),
-          base_salary: dto.base_salary,
-          salary_type: dto.salary_type || 'monthly',
-          allowance_night: 0,
-          allowance_rent: 0,
-          allowance_3runway: 0,
-          ot_rate_standard: 0,
-        },
+      const existingSalary = await this.prisma.employeeSalarySetting.findFirst({
+        where: { employee_id: id },
+        orderBy: { created_at: 'desc' },
       });
+      if (existingSalary) {
+        await this.prisma.employeeSalarySetting.update({
+          where: { id: existingSalary.id },
+          data: {
+            effective_date: dto.join_date ? new Date(dto.join_date) : existingSalary.effective_date,
+            base_salary: dto.base_salary,
+            salary_type: dto.salary_type || 'monthly',
+          },
+        });
+      } else {
+        await this.prisma.employeeSalarySetting.create({
+          data: {
+            employee_id: id,
+            effective_date: dto.join_date ? new Date(dto.join_date) : new Date(),
+            base_salary: dto.base_salary,
+            salary_type: dto.salary_type || 'monthly',
+            allowance_night: 0,
+            allowance_rent: 0,
+            allowance_3runway: 0,
+            ot_rate_standard: 0,
+          },
+        });
+      }
     }
     return this.findOne(id);
   }
@@ -1041,6 +1054,37 @@ export class EmployeesService {
     const records = { work_logs: workLogs, payrolls, attendances, leaves, expenses, attendance_anomalies: anomalies, verification_records: verificationRecords, verification_nickname_mappings: verificationMappings };
     const total_records = Object.values(records).reduce((a, b) => a + b, 0);
 
+    // Check salary conflict: both source and target have salary settings with non-zero base_salary
+    const [sourceSalary, targetSalary] = await Promise.all([
+      this.prisma.employeeSalarySetting.findFirst({
+        where: { employee_id: sourceId },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, base_salary: true, salary_type: true, effective_date: true },
+      }),
+      this.prisma.employeeSalarySetting.findFirst({
+        where: { employee_id: targetId },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, base_salary: true, salary_type: true, effective_date: true },
+      }),
+    ]);
+    const sourceHasSalary = sourceSalary && Number(sourceSalary.base_salary) > 0;
+    const targetHasSalary = targetSalary && Number(targetSalary.base_salary) > 0;
+    const salary_conflict = {
+      has_conflict: !!(sourceHasSalary && targetHasSalary),
+      source_salary: sourceSalary ? {
+        id: sourceSalary.id,
+        base_salary: Number(sourceSalary.base_salary),
+        salary_type: sourceSalary.salary_type,
+        effective_date: sourceSalary.effective_date,
+      } : null,
+      target_salary: targetSalary ? {
+        id: targetSalary.id,
+        base_salary: Number(targetSalary.base_salary),
+        salary_type: targetSalary.salary_type,
+        effective_date: targetSalary.effective_date,
+      } : null,
+    };
+
     return {
       source_employee: {
         id: source.id,
@@ -1059,6 +1103,7 @@ export class EmployeesService {
       },
       records,
       total_records,
+      salary_conflict,
     };
   }
 
@@ -1066,7 +1111,7 @@ export class EmployeesService {
    * Execute merge: transfer all records from source (temporary) to target (regular) employee,
    * then hard-delete the source employee and its salary/transfer/nickname data.
    */
-  async mergeEmployee(sourceId: number, targetId: number, userId?: number, ipAddress?: string) {
+  async mergeEmployee(sourceId: number, targetId: number, forceOverwriteSalary?: boolean, userId?: number, ipAddress?: string) {
     const source = await this.prisma.employee.findUnique({ where: { id: sourceId } });
     if (!source) throw new NotFoundException('來源員工不存在');
     if (!source.employee_is_temporary) throw new BadRequestException('來源員工不是臨時員工');
@@ -1106,10 +1151,14 @@ export class EmployeesService {
       await tx.verificationRecord.updateMany({ where: { record_employee_id: sourceId }, data: { record_employee_id: targetId } });
       // 8. Transfer verification_nickname_mappings
       await tx.verificationNicknameMapping.updateMany({ where: { nickname_employee_id: sourceId }, data: { nickname_employee_id: targetId } });
-      // 9. Handle salary settings: transfer if target has none, otherwise delete source's
+      // 9. Handle salary settings
       const targetSalaryCount = await tx.employeeSalarySetting.count({ where: { employee_id: targetId } });
       if (targetSalaryCount === 0) {
         // Target has no salary settings - transfer source's settings to target
+        await tx.employeeSalarySetting.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      } else if (forceOverwriteSalary) {
+        // User chose to overwrite target's salary with source's: delete target's, transfer source's
+        await tx.employeeSalarySetting.deleteMany({ where: { employee_id: targetId } });
         await tx.employeeSalarySetting.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
       } else {
         // Target already has salary settings - discard source's (target takes priority)

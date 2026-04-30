@@ -178,6 +178,7 @@ export class EmployeesController {
     return this.service.mergeEmployee(
       Number(id),
       dto.target_employee_id,
+      dto.force_overwrite_salary,
       req.user?.id || req.user?.userId || 0,
       req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined,
     );
