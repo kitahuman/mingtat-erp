@@ -132,6 +132,16 @@ export class PayrollCalculationService {
 
     // ── (2) 津貼計算 ──
     let allowanceTotal = 0;
+
+    // Phase 2: 連結優先規則 - 如果某個 allowance_key 在 PayrollDailyAllowance 中已有自動記錄，則跳過固定津貼計算
+    // 注意：workLogs 這裡如果包含了 _linked_allowance_keys 標記，我們可以用它來跳過
+    const linkedAllowanceKeys = new Set<string>();
+    workLogs.forEach(wl => {
+      if (wl._linked_allowance_keys && Array.isArray(wl._linked_allowance_keys)) {
+        wl._linked_allowance_keys.forEach((k: string) => linkedAllowanceKeys.add(k));
+      }
+    });
+
     const allowanceFields: {
       field: string;
       label: string;
@@ -165,6 +175,9 @@ export class PayrollCalculationService {
       },
     ];
     for (const af of allowanceFields) {
+      // 連結優先規則：如果該津貼已由價目表自動產生，則跳過固定津貼
+      if (linkedAllowanceKeys.has(af.field)) continue;
+
       const rate = Number((salarySetting as any)[af.field]) || 0;
       if (rate === 0) continue;
       let days = 0;

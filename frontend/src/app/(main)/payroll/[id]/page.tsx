@@ -836,14 +836,22 @@ function DailyCalculationView({
     (day.daily_allowances || []).forEach((item: any) => {
       const amount = Number(item.amount) || 0;
       if (amount > 0) {
+        const isAuto = item.is_auto;
         badges.push({
           key: `daily-${item.id || item.allowance_key}`,
           id: item.id,
-          label: item.allowance_name || item.allowance_key || '每日津貼',
+          label: (
+            <span className="inline-flex items-center gap-1">
+              {item.allowance_name || item.allowance_key || '每日津貼'}
+              {isAuto && <span className="text-[10px] bg-blue-500 text-white px-1 rounded-sm scale-90 origin-left" title="自動連結">A</span>}
+            </span>
+          ) as any,
           amount,
           className: item.allowance_key === 'statutory_holiday'
             ? 'bg-amber-100 text-amber-700 border-amber-200'
-            : 'bg-blue-100 text-blue-700 border-blue-200',
+            : isAuto 
+              ? 'bg-blue-50 text-blue-700 border-blue-300 border-dashed'
+              : 'bg-blue-100 text-blue-700 border-blue-200',
           removable: isDraft,
         });
       }

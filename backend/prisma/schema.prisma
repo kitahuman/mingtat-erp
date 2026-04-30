@@ -884,6 +884,7 @@ model FleetRateCard {
   remarks             String?   @db.Text
   source_quotation_id Int?
   status              String    @default("active")
+  linked_allowances   Json?     @db.JsonB
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
 
@@ -1319,6 +1320,7 @@ model PayrollDailyAllowance {
   allowance_key  String
   allowance_name String
   amount         Decimal  @default(0) @db.Decimal(12, 2)
+  is_auto        Boolean  @default(false)
   remarks        String?  @db.Text
   created_at     DateTime @default(now())
   updated_at     DateTime @default(now()) @updatedAt

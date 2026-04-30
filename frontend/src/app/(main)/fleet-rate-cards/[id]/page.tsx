@@ -16,6 +16,20 @@ const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','�
 const OT_TIME_SLOTS = ['1800-1900', '1900-2000', '0600-0700', '0700-0800'];
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'day_night', 'location'];
 
+const ALLOWANCE_OPTIONS = [
+  { key: 'allowance_rent', name: '租車津貼' },
+  { key: 'allowance_3runway', name: '三跑津貼' },
+  { key: 'allowance_well', name: '落井津貼' },
+  { key: 'allowance_machine', name: '揸機津貼' },
+  { key: 'allowance_roller', name: '火轆津貼' },
+  { key: 'allowance_crane', name: '吊/挾車津貼' },
+  { key: 'allowance_move_machine', name: '搬機津貼' },
+  { key: 'allowance_night', name: '夜班津貼' },
+  { key: 'allowance_kwh_night', name: '嘉華夜間津貼' },
+  { key: 'allowance_mid_shift', name: '中直津貼' },
+  { key: 'custom', name: '自定義' },
+];
+
 export default function FleetRateCardDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -35,7 +49,11 @@ export default function FleetRateCardDetailPage() {
   const loadData = () => {
     fleetRateCardsApi.get(Number(params.id)).then(res => {
       setRecord(res.data);
-      setForm({ ...res.data, ot_rates: res.data.ot_rates || [] });
+      setForm({ 
+        ...res.data, 
+        ot_rates: res.data.ot_rates || [],
+        linked_allowances: res.data.linked_allowances || []
+      });
       setLoading(false);
     }).catch(() => router.push('/fleet-rate-cards'));
   };
@@ -64,9 +82,21 @@ export default function FleetRateCardDetailPage() {
           time_slot: ot.time_slot, rate: Number(ot.rate) || 0, unit: ot.unit || '小時',
         }));
       }
+      if (updateData.linked_allowances) {
+        updateData.linked_allowances = updateData.linked_allowances.map((la: any) => ({
+          allowance_key: la.allowance_key,
+          allowance_name: la.allowance_name,
+          mode: la.mode || 'per_day',
+          amount: Number(la.amount) || 0,
+        }));
+      }
       const res = await fleetRateCardsApi.update(record.id, updateData);
       setRecord(res.data);
-      setForm({ ...res.data, ot_rates: res.data.ot_rates || [] });
+      setForm({ 
+        ...res.data, 
+        ot_rates: res.data.ot_rates || [],
+        linked_allowances: res.data.linked_allowances || []
+      });
       setEditing(false);
     } catch (err: any) { alert(err.response?.data?.message || '更新失敗'); }
   };
@@ -76,6 +106,20 @@ export default function FleetRateCardDetailPage() {
   };
   const removeOtRate = (idx: number) => {
     setForm({ ...form, ot_rates: form.ot_rates.filter((_: any, i: number) => i !== idx) });
+  };
+
+  const addLinkedAllowance = () => {
+    setForm({ 
+      ...form, 
+      linked_allowances: [
+        ...(form.linked_allowances || []), 
+        { allowance_key: 'allowance_3runway', allowance_name: '三跑津貼', mode: 'per_day', amount: 0 }
+      ] 
+    });
+  };
+
+  const removeLinkedAllowance = (idx: number) => {
+    setForm({ ...form, linked_allowances: form.linked_allowances.filter((_: any, i: number) => i !== idx) });
   };
 
   const clientOptions = partners
@@ -317,6 +361,100 @@ export default function FleetRateCardDetailPage() {
           </table>
         ) : (
           <p className="text-gray-400 text-sm">暫無 OT 時段費率</p>
+        )}
+      </div>
+
+      {/* 連結津貼 */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">連結津貼</h2>
+          {editing && <button type="button" onClick={addLinkedAllowance} className="text-sm text-primary-600 hover:underline">+ 新增連結津貼</button>}
+        </div>
+        {(editing ? form.linked_allowances : record?.linked_allowances || []).length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-3 py-2 text-left">津貼名稱</th>
+                <th className="px-3 py-2 text-right">金額</th>
+                <th className="px-3 py-2 text-center">可多次</th>
+                {editing && <th className="px-3 py-2 w-10"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {(editing ? form.linked_allowances : record?.linked_allowances || []).map((la: any, idx: number) => (
+                <tr key={idx} className="border-b">
+                  {editing ? (
+                    <>
+                      <td className="px-3 py-1">
+                        <select 
+                          value={la.allowance_key} 
+                          onChange={e => { 
+                            const las = [...form.linked_allowances]; 
+                            const opt = ALLOWANCE_OPTIONS.find(o => o.key === e.target.value);
+                            las[idx] = {
+                              ...las[idx], 
+                              allowance_key: e.target.value, 
+                              allowance_name: opt?.name || e.target.value
+                            }; 
+                            setForm({...form, linked_allowances: las}); 
+                          }} 
+                          className="input-field text-sm"
+                        >
+                          {ALLOWANCE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.name}</option>)}
+                        </select>
+                        {la.allowance_key === 'custom' && (
+                          <input 
+                            value={la.allowance_name} 
+                            onChange={e => {
+                              const las = [...form.linked_allowances];
+                              las[idx] = { ...las[idx], allowance_name: e.target.value };
+                              setForm({...form, linked_allowances: las});
+                            }}
+                            className="input-field text-sm mt-1"
+                            placeholder="自定義名稱"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-1">
+                        <input 
+                          type="number" 
+                          value={la.amount} 
+                          onChange={e => { 
+                            const las = [...form.linked_allowances]; 
+                            las[idx] = {...las[idx], amount: e.target.value}; 
+                            setForm({...form, linked_allowances: las}); 
+                          }} 
+                          className="input-field text-sm text-right" 
+                        />
+                      </td>
+                      <td className="px-3 py-1 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={la.mode === 'per_trip'} 
+                          onChange={e => { 
+                            const las = [...form.linked_allowances]; 
+                            las[idx] = {...las[idx], mode: e.target.checked ? 'per_trip' : 'per_day'}; 
+                            setForm({...form, linked_allowances: las}); 
+                          }} 
+                        />
+                      </td>
+                      <td className="px-3 py-1">
+                        <button type="button" onClick={() => removeLinkedAllowance(idx)} className="text-red-500">&times;</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2 font-medium">{la.allowance_name}</td>
+                      <td className="px-3 py-2 text-right font-mono">${Number(la.amount).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-center">{la.mode === 'per_trip' ? '✅' : '-'}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-gray-400 text-sm">暫無連結津貼</p>
         )}
       </div>
 

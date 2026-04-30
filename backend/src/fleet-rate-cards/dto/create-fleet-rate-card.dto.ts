@@ -25,6 +25,7 @@ export class CreateFleetRateCardDto {
   @IsOptional() @IsString() effective_to?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() ot_rates?: any;
+  @IsOptional() linked_allowances?: any;
 }
 
 export class UpdateFleetRateCardDto extends CreateFleetRateCardDto {}

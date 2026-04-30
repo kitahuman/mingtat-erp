@@ -748,12 +748,15 @@ export class PayrollService {
               allowance_key: 'statutory_holiday',
               allowance_name: `法定假期 - ${holiday.name}`,
               amount: baseSalaryForHoliday,
-              remarks: '自動生成',
+              is_auto: true,
             },
           });
         }
       }
     }
+
+    // Auto-generate linked allowances from rate cards
+    await this.generateLinkedAllowances(id, pwls as any);
 
     if (userId) {
       try {
@@ -1303,6 +1306,13 @@ export class PayrollService {
       };
     });
 
+    // Phase 2: Collect linked allowance keys for this payroll to support priority rules
+    const autoAllowances = await this.prisma.payrollDailyAllowance.findMany({
+      where: { payroll_id: id, is_auto: true },
+      select: { allowance_key: true },
+    });
+    const linkedAllowanceKeys = [...new Set(autoAllowances.map(a => a.allowance_key))];
+
     const workLogLike = payrollWorkLogData.map((pwl: any) => ({
       id: pwl.work_log_id,
       scheduled_date: pwl.scheduled_date,
@@ -1333,6 +1343,7 @@ export class PayrollService {
       line_amount: pwl.line_amount,
       ot_line_amount: pwl.ot_line_amount,
       mid_shift_line_amount: pwl.mid_shift_line_amount,
+      _linked_allowance_keys: linkedAllowanceKeys,
     }));
 
     let holidayDatesForCalc: { date: Date; name: string }[] = [];
@@ -1416,7 +1427,36 @@ export class PayrollService {
           status: 'preparing',
         },
       });
+
+      // Reset auto daily allowances
+      await tx.payrollDailyAllowance.deleteMany({
+        where: { payroll_id: id, is_auto: true },
+      });
     });
+
+    // Re-generate auto daily allowances
+    if ((salarySetting.salary_type || 'daily') === 'daily') {
+      const holidays = await this.statutoryHolidaysService.findByDateRange(
+        dateFrom,
+        dateTo,
+      );
+      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
+      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
+        for (const holiday of holidays) {
+          await this.prisma.payrollDailyAllowance.create({
+            data: {
+              payroll_id: id,
+              date: holiday.date,
+              allowance_key: 'statutory_holiday',
+              allowance_name: `法定假期 - ${holiday.name}`,
+              amount: baseSalaryForHoliday,
+              is_auto: true,
+            },
+          });
+        }
+      }
+    }
+    await this.generateLinkedAllowances(id, payrollWorkLogData);
 
     if (userId) {
       try {
@@ -1993,6 +2033,7 @@ export class PayrollService {
         allowance_name: body.allowance_name,
         amount: body.amount,
         remarks: body.remarks || undefined,
+        is_auto: false, // Manually added
       },
     });
 
@@ -2060,6 +2101,7 @@ export class PayrollService {
           allowance_name: a.allowance_name,
           amount: a.amount,
           remarks: a.remarks || undefined,
+          is_auto: false, // Batch set is manual
         },
       });
       saved.push(da);
@@ -2673,4 +2715,74 @@ export class PayrollService {
 
     return { success: true };
   }
+
+  /**
+   * 根據工作記錄匹配到的價目表，自動生成連結津貼
+   */
+  private async generateLinkedAllowances(payrollId: number, enrichedWorkLogs: any[]) {
+    // 1. 找出所有匹配到價目表的工作記錄
+    const matchedLogs = enrichedWorkLogs.filter(wl => wl.matched_rate_card_id);
+    if (matchedLogs.length === 0) return;
+
+    // 2. 獲取所有相關的 FleetRateCard 資料
+    const cardIds = [...new Set(matchedLogs.map(wl => wl.matched_rate_card_id as number))];
+    const cards = await this.prisma.fleetRateCard.findMany({
+      where: { id: { in: cardIds } },
+    });
+
+    const cardMap = new Map(cards.map(c => [c.id, c]));
+
+    // 3. 按日期和津貼 key 進行分組計算
+    // date -> allowance_key -> { name, amount, count, mode }
+    const dailyMap = new Map<string, Map<string, { name: string; amount: number; count: number; mode: string }>>();
+
+    for (const wl of matchedLogs) {
+      const card = cardMap.get(wl.matched_rate_card_id);
+      if (!card || !card.linked_allowances) continue;
+
+      const linked = card.linked_allowances as any[];
+      if (!Array.isArray(linked)) continue;
+
+      const dateStr = toDateStr(wl.scheduled_date);
+      if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, new Map());
+      const allowanceMap = dailyMap.get(dateStr)!;
+
+      for (const item of linked) {
+        if (!item.allowance_key) continue;
+        
+        if (!allowanceMap.has(item.allowance_key)) {
+          allowanceMap.set(item.allowance_key, {
+            name: item.allowance_name || item.allowance_key,
+            amount: Number(item.amount) || 0,
+            count: 1,
+            mode: item.mode || 'per_day',
+          });
+        } else {
+          const existing = allowanceMap.get(item.allowance_key)!;
+          existing.count += 1;
+        }
+      }
+    }
+
+    // 4. 寫入資料庫
+    for (const [date, allowanceMap] of dailyMap.entries()) {
+      for (const [key, data] of allowanceMap.entries()) {
+        const finalAmount = data.mode === 'per_trip' ? data.amount * data.count : data.amount;
+        if (finalAmount === 0) continue;
+
+        await this.prisma.payrollDailyAllowance.create({
+          data: {
+            payroll_id: payrollId,
+            date: new Date(date),
+            allowance_key: key,
+            allowance_name: data.name,
+            amount: finalAmount,
+            is_auto: true,
+            remarks: data.mode === 'per_trip' ? `自動生成 (可多次: ${data.count}次)` : '自動生成 (每日一次)',
+          },
+        });
+      }
+    }
+  }
+
 }
