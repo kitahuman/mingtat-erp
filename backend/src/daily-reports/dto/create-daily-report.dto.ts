@@ -37,3 +37,13 @@ export class CreateDailyReportDto {
 }
 
 export class UpdateDailyReportDto extends CreateDailyReportDto {}
+
+export class BatchUpdateDailyReportDto {
+  @IsArray() ids!: number[];
+  @IsOptional() project_id?: any;
+  @IsOptional() @IsString() project_name?: string;
+  @IsOptional() @IsString() project_location?: string;
+  @IsOptional() client_id?: any;
+  @IsOptional() @IsString() client_name?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
+}

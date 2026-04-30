@@ -193,6 +193,50 @@ export class DailyReportsService {
     return report;
   }
 
+  // ── Batch update selected fields for multiple reports ──────────
+  async batchUpdate(dto: any) {
+    const ids: number[] = Array.isArray(dto?.ids) ? dto.ids.map((n: any) => Number(n)).filter((n: number) => Number.isFinite(n)) : [];
+    if (ids.length === 0) throw new BadRequestException('未選擇任何日報');
+
+    const data: any = {};
+    // Only touch fields explicitly provided (non-undefined)
+    if (dto.project_id !== undefined) {
+      data.daily_report_project_id = dto.project_id === null || dto.project_id === '' ? null : Number(dto.project_id);
+    }
+    if (dto.project_name !== undefined) {
+      data.daily_report_project_name = dto.project_name || null;
+    }
+    if (dto.project_location !== undefined) {
+      data.daily_report_project_location = dto.project_location || null;
+    }
+    if (dto.client_id !== undefined) {
+      data.daily_report_client_id = dto.client_id === null || dto.client_id === '' ? null : Number(dto.client_id);
+    }
+    if (dto.client_name !== undefined) {
+      data.daily_report_client_name = dto.client_name || null;
+    }
+    if (dto.client_contract_no !== undefined) {
+      data.daily_report_client_contract_no = dto.client_contract_no || null;
+    }
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('未提供任何需修改的欄位');
+    }
+
+    // Block updating already-submitted reports (match single-update behaviour)
+    const submitted = await this.prisma.dailyReport.count({
+      where: { id: { in: ids }, daily_report_status: 'submitted' },
+    });
+    if (submitted > 0) {
+      throw new BadRequestException(`選中的日報中有 ${submitted} 筆已提交，不可修改。請先取消提交或取消勾選。`);
+    }
+
+    const result = await this.prisma.dailyReport.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+    return { updated: result.count, ids };
+  }
+
   // ── Add attachments (works even after submission) ───────────────
   async addAttachments(id: number, userId: number, attachments: { file_name: string; file_url: string; file_type: string }[]) {
     const existing = await this.prisma.dailyReport.findUnique({
