@@ -222,14 +222,6 @@ export class DailyReportsService {
       throw new BadRequestException('未提供任何需修改的欄位');
     }
 
-    // Block updating already-submitted reports (match single-update behaviour)
-    const submitted = await this.prisma.dailyReport.count({
-      where: { id: { in: ids }, daily_report_status: 'submitted' },
-    });
-    if (submitted > 0) {
-      throw new BadRequestException(`選中的日報中有 ${submitted} 筆已提交，不可修改。請先取消提交或取消勾選。`);
-    }
-
     const result = await this.prisma.dailyReport.updateMany({
       where: { id: { in: ids } },
       data,

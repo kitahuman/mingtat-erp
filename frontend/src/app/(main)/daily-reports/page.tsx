@@ -220,7 +220,7 @@ export default function DailyReportsAdminPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">工程日報管理</h1>
         <div className="flex items-center gap-3">
-          {!isReadOnly && selectedIds.size > 0 && (
+          {!isReadOnly() && selectedIds.size > 0 && (
             <button
               onClick={openBatchModal}
               className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
@@ -300,7 +300,7 @@ export default function DailyReportsAdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {!isReadOnly && (
+                  {!isReadOnly() && (
                     <th className="px-3 py-3 w-10">
                       <input
                         type="checkbox"
@@ -330,7 +330,7 @@ export default function DailyReportsAdminPage() {
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}
                     >
-                      {!isReadOnly && (
+                      {!isReadOnly() && (
                         <td className="px-3 py-3 w-10" onClick={e => e.stopPropagation()}>
                           <input
                             type="checkbox"
@@ -381,7 +381,7 @@ export default function DailyReportsAdminPage() {
                     </tr>
                     {expandedId === report.id && (
                       <tr key={`${report.id}-detail`}>
-                        <td colSpan={isReadOnly ? 10 : 11} className="px-4 py-4 bg-blue-50/50">
+                        <td colSpan={isReadOnly() ? 10 : 11} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-4">
                               {report.daily_report_client_contract_no && (
