@@ -1334,7 +1334,8 @@ export default function PayrollDetailPage() {
 
         {/* Tab Content */}
         {activeTab === 'detail' && (
-          <div className="overflow-x-auto border rounded-lg">
+          <div>
+            <div className="overflow-x-auto border rounded-lg">
             {pwls.length > 0 ? (
               <table className="min-w-full divide-y divide-gray-200 text-xs">
                 <thead className="bg-gray-50">
@@ -1430,10 +1431,84 @@ export default function PayrollDetailPage() {
                 </tbody>
               </table>
             ) : (
-              <p className="text-sm text-gray-400 text-center py-8">此糧單暫無工作記錄</p>
+              <p className="text-sm text-gray-400 text-center py-8">此粮單暫無工作記錄</p>
             )}
+            </div>
+          {/* ── 薪酸項目（payroll_items）小節 ── */}
+          {!isPreparing && items.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-sm font-bold text-gray-700 mb-2">薪酸項目明細（底薪 / 津貼 / OT / 強積金）</h3>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">項目</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">單價</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">天數/數量</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item: any, idx: number) => {
+                      const isDeduction = Number(item.amount) < 0;
+                      const typeLabel: Record<string, string> = {
+                        base_salary: '底薪',
+                        allowance: '津貼',
+                        ot: 'OT',
+                        commission: '分傈',
+                        mpf_deduction: '強積金扣款',
+                        mpf_employer: '強積金（雇主）',
+                      };
+                      return (
+                        <tr key={item.id || idx} className={`border-b ${
+                          item.item_type === 'base_salary' ? 'bg-blue-50' :
+                          item.item_type === 'mpf_deduction' ? 'bg-red-50' :
+                          item.item_type === 'allowance' && item.item_name === '法定假日津貼' ? 'bg-amber-50' :
+                          idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}>
+                          <td className="px-4 py-2 font-medium">
+                            <span className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs ${
+                              item.item_type === 'base_salary' ? 'bg-blue-100 text-blue-700' :
+                              item.item_type === 'mpf_deduction' ? 'bg-red-100 text-red-700' :
+                              item.item_type === 'allowance' ? 'bg-green-100 text-green-700' :
+                              item.item_type === 'ot' ? 'bg-purple-100 text-purple-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>{typeLabel[item.item_type] || item.item_type}</span>
+                            {item.item_name}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono">
+                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
+                              ? `${(Number(item.quantity) * 100).toFixed(0)}%`
+                              : `$${Number(item.unit_price).toLocaleString()}`}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono">
+                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
+                          </td>
+                          <td className={`px-4 py-2 text-right font-mono font-bold ${isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
+                            {isDeduction ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-gray-500">{item.remarks || ''}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-900">
+                    <tr className="bg-gray-50">
+                      <td colSpan={3} className="px-4 py-2 font-bold text-right">應收總額</td>
+                      <td className="px-4 py-2 text-right font-mono font-bold text-primary-600">
+                        ${Number(payroll.gross_amount || payroll.net_amount).toLocaleString()}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
           </div>
         )}
+        {/* end detail tab */}
 
         {activeTab === 'grouped' && (
           <GroupedSettlementView groups={grouped} payrollId={payroll.id} isDraft={isDraft} onRateSaved={loadData} />

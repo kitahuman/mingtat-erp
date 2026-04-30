@@ -493,6 +493,24 @@ export default function PayrollPage() {
         {previewError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{previewError}</div>}
       </div>
 
+      {/* ── Action Buttons (top) ── */}
+      {preview && !generated && (
+        <div className="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
+          <button onClick={handlePrepare} disabled={generating} className="btn-primary">
+            {generating ? '準備中...' : '準備粮單（編輯工作記錄後再計算）'}
+          </button>
+          {preview.salary_setting && (
+            <button onClick={handleGenerate} disabled={generating} className="btn-secondary">
+              {generating ? '生成中...' : '直接生成粮單（跳過編輯）'}
+            </button>
+          )}
+          <button onClick={handlePreview} disabled={loading} className="btn-secondary">
+            {loading ? '重新計算中...' : '重新計算'}
+          </button>
+          {generateError && <span className="text-sm text-red-600">{generateError}</span>}
+        </div>
+      )}
+
       {/* ── Summary Cards ── */}
       {preview && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

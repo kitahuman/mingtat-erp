@@ -158,6 +158,28 @@ export class PayrollService {
       dailyAllowances,
     );
 
+    // ── 將 payroll_items 中的固定津貼平均分攤到每日 ──
+    // 目的：讓逐日合計 = 應收總額（固定津貼按工作天平均顯示）
+    const fixedAllowanceItems = (payroll.items || []).filter(
+      (item: any) => item.item_type === 'allowance' && Number(item.amount) > 0,
+    );
+    if (fixedAllowanceItems.length > 0 && dailyCalc.length > 0) {
+      const workDays = dailyCalc.length;
+      for (const day of dailyCalc) {
+        const fixedPerDay: { key: string; name: string; amount: number }[] = [];
+        let fixedTotal = 0;
+        for (const item of fixedAllowanceItems) {
+          const perDay = Math.round((Number(item.amount) / workDays) * 100) / 100;
+          fixedPerDay.push({ key: item.item_type, name: item.item_name, amount: perDay });
+          fixedTotal += perDay;
+        }
+        day.fixed_allowances_per_day = fixedPerDay;
+        day.fixed_allowance_total = fixedTotal;
+        day.daily_allowance_total = (day.daily_allowance_total || 0) + fixedTotal;
+        day.day_total = (day.day_total || 0) + fixedTotal;
+      }
+    }
+
     // Build available allowance options from salary setting
     const allowanceOptions =
       this.calcService.buildAllowanceOptions(salarySetting);
@@ -373,6 +395,20 @@ export class PayrollService {
     const allowanceOptions =
       this.calcService.buildAllowanceOptions(salarySetting);
 
+    // 查出法定假日，傳給 calculatePayroll
+    let previewHolidayDates: { date: Date; name: string }[] = [];
+    if (salarySetting && (salarySetting.salary_type || 'daily') === 'daily') {
+      const previewHolidays =
+        await this.statutoryHolidaysService.findByDateRange(
+          date_from,
+          date_to,
+        );
+      previewHolidayDates = previewHolidays.map((h: any) => ({
+        date: h.date,
+        name: h.name,
+      }));
+    }
+
     // Calculate preview
     const calculation = salarySetting
       ? await this.calcService.calculatePayroll(
@@ -382,6 +418,8 @@ export class PayrollService {
           date_from,
           date_to,
           company_id ?? company_profile_id ?? null,
+          undefined,
+          previewHolidayDates,
         )
       : null;
 
@@ -648,6 +686,19 @@ export class PayrollService {
       mid_shift_line_amount: pwl.mid_shift_line_amount,
     }));
 
+    // 查出法定假日，傳給 calculatePayroll 以生成假日津貼 item
+    let holidayDatesForCalc: { date: Date; name: string }[] = [];
+    if ((salarySetting.salary_type || 'daily') === 'daily') {
+      const holidays = await this.statutoryHolidaysService.findByDateRange(
+        dateFrom,
+        dateTo,
+      );
+      holidayDatesForCalc = holidays.map((h: any) => ({
+        date: h.date,
+        name: h.name,
+      }));
+    }
+
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -655,6 +706,8 @@ export class PayrollService {
       dateFrom,
       dateTo,
       payroll.company_id ?? payroll.company_profile_id ?? null,
+      undefined,
+      holidayDatesForCalc,
     );
 
     // Update payroll items
@@ -807,6 +860,19 @@ export class PayrollService {
       orderBy: { scheduled_date: 'asc' },
     });
 
+    // 查出法定假日，傳給 calculatePayroll 以生成假日津貼 item
+    let holidayDatesForGenerate: { date: Date; name: string }[] = [];
+    if ((salarySetting.salary_type || 'daily') === 'daily') {
+      const genHolidays = await this.statutoryHolidaysService.findByDateRange(
+        date_from,
+        date_to,
+      );
+      holidayDatesForGenerate = genHolidays.map((h: any) => ({
+        date: h.date,
+        name: h.name,
+      }));
+    }
+
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -814,6 +880,8 @@ export class PayrollService {
       date_from,
       date_to,
       company_id ?? company_profile_id ?? null,
+      undefined,
+      holidayDatesForGenerate,
     );
 
     let actualCpId = company_profile_id ?? null;
@@ -1281,6 +1349,17 @@ export class PayrollService {
         ? Number(payroll.mpf_relevant_income)
         : null;
 
+    // 查出法定假日，傳給 calculatePayroll
+    let recalcHolidayDates: { date: Date; name: string }[] = [];
+    if ((salarySetting.salary_type || 'daily') === 'daily') {
+      const recalcHolidays =
+        await this.statutoryHolidaysService.findByDateRange(dateFrom, dateTo);
+      recalcHolidayDates = recalcHolidays.map((h: any) => ({
+        date: h.date,
+        name: h.name,
+      }));
+    }
+
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1289,6 +1368,7 @@ export class PayrollService {
       dateTo,
       companyId ?? cpId,
       existingMpfRelevantIncome,
+      recalcHolidayDates,
     );
 
     // Calculate adjustment total

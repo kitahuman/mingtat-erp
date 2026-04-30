@@ -47,6 +47,7 @@ export class PayrollCalculationService {
     dateTo: string,
     companyOrCpId?: number | null,
     mpfRelevantIncome?: number | null,
+    holidayDates?: { date: Date; name: string }[],
   ) {
     const salaryType = salarySetting.salary_type || 'daily';
     const baseSalary = Number(salarySetting.base_salary) || 0;
@@ -56,11 +57,18 @@ export class PayrollCalculationService {
     // ── (1) 底薪計算 ──
     let baseAmount = 0;
     let workDays = 0;
+    // 實際工作日期（底薪只算實際上班天數）
+    const workDateSet = new Set(
+      workLogs.map((wl) => toDateStr(wl.scheduled_date)),
+    );
+    // 法定假日：假日没上班才算（假日有上班則已包含在 workDateSet 中）
+    const validHolidays = (holidayDates || []).filter(
+      (h) => !workDateSet.has(toDateStr(h.date)),
+    );
+    const holidayCount = validHolidays.length;
     if (salaryType === 'daily') {
-      const uniqueDates = new Set(
-        workLogs.map((wl) => toDateStr(wl.scheduled_date)),
-      );
-      workDays = uniqueDates.size;
+      // 底薪只算實際工作天數（不含假日）
+      workDays = workDateSet.size;
       baseAmount = baseSalary * workDays;
       items.push({
         item_type: 'base_salary',
@@ -70,6 +78,19 @@ export class PayrollCalculationService {
         amount: baseAmount,
         sort_order: sortOrder++,
       });
+      // 法定假日津貼：假日沒上班，給一天日薪作為津貼（独立一行）
+      if (holidayCount > 0 && baseSalary > 0) {
+        const holidayAllowance = baseSalary * holidayCount;
+        items.push({
+          item_type: 'allowance',
+          item_name: '法定假日津貼',
+          unit_price: baseSalary,
+          quantity: holidayCount,
+          amount: holidayAllowance,
+          remarks: validHolidays.map((h) => h.name).join('、'),
+          sort_order: sortOrder++,
+        });
+      }
     } else {
       workDays = new Set(workLogs.map((wl) => toDateStr(wl.scheduled_date)))
         .size;
@@ -508,14 +529,25 @@ export class PayrollCalculationService {
     return sortedDates.map((date) => {
       const dayPwls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
+      // 判斷是否為法定假日：該天有 statutory_holiday 津貼且沒有工作記錄
+      const isHolidayDay =
+        dayPwls.length === 0 &&
+        dayAllowances.some(
+          (da: any) => da.allowance_key === 'statutory_holiday',
+        );
       const workIncome = dayPwls.reduce(
         (sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0),
         0,
       );
-      const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
+      // 假日天不補底薪（effectiveIncome=0），只顯示假日津貼
+      const needsTopUp =
+        !isHolidayDay && baseSalary > 0 && workIncome < baseSalary;
       const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-      const effectiveIncome =
-        baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+      const effectiveIncome = isHolidayDay
+        ? 0
+        : baseSalary > 0
+          ? Math.max(workIncome, baseSalary)
+          : workIncome;
       const dailyAllowanceTotal = dayAllowances.reduce(
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
@@ -523,6 +555,7 @@ export class PayrollCalculationService {
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
         date,
+        is_holiday: isHolidayDay,
         work_logs: dayPwls.map((pwl: any) => ({
           id: pwl.id,
           service_type: pwl.service_type,
@@ -595,20 +628,38 @@ export class PayrollCalculationService {
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
-    const sortedDates = Array.from(dateMap.keys()).sort();
+    // 假日日期：daMap 中有 statutory_holiday 且 dateMap 中沒有工作記錄
+    const holidayDatesSet = new Set(
+      Array.from(daMap.entries())
+        .filter(
+          ([, das]) =>
+            das.some((da: any) => da.allowance_key === 'statutory_holiday'),
+        )
+        .filter(([date]) => !dateMap.has(date))
+        .map(([date]) => date),
+    );
+    // 合並工作日期和假日日期
+    const allDatesSet = new Set([...dateMap.keys(), ...holidayDatesSet]);
+    const sortedDates = Array.from(allDatesSet).sort();
     return sortedDates.map((date) => {
       const dayWls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
+      const isHolidayDay = holidayDatesSet.has(date);
       const workIncome = dayWls.reduce((sum: number, wl: any) => {
         const base = Number(wl._line_amount) || 0;
         const ot = Number(wl._ot_line_amount) || 0;
         const mid = Number(wl._mid_shift_line_amount) || 0;
         return sum + base + ot + mid;
       }, 0);
-      const needsTopUp = baseSalary > 0 && workIncome < baseSalary;
+      // 假日天不補底薪
+      const needsTopUp =
+        !isHolidayDay && baseSalary > 0 && workIncome < baseSalary;
       const topUpAmount = needsTopUp ? baseSalary - workIncome : 0;
-      const effectiveIncome =
-        baseSalary > 0 ? Math.max(workIncome, baseSalary) : workIncome;
+      const effectiveIncome = isHolidayDay
+        ? 0
+        : baseSalary > 0
+          ? Math.max(workIncome, baseSalary)
+          : workIncome;
       const dailyAllowanceTotal = dayAllowances.reduce(
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
@@ -616,6 +667,7 @@ export class PayrollCalculationService {
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
         date,
+        is_holiday: isHolidayDay,
         work_logs: dayWls.map((wl: any) => ({
           id: wl.id,
           service_type: wl.service_type,
