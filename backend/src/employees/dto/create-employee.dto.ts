@@ -28,7 +28,9 @@ export class CreateEmployeeDto {
   @IsOptional() @IsString() driving_license_no?: string;
   @IsOptional() @IsString() driving_license_expiry?: string;
   @IsOptional() @IsString() driving_license_class?: string;
+  @IsOptional() @IsString() role?: string;
   @IsOptional() @IsString() role_title?: string;
+  @IsOptional() @IsString() join_date?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsBoolean() employee_is_temporary?: boolean;
