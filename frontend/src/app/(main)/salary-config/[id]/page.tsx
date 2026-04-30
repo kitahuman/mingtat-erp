@@ -222,30 +222,63 @@ export default function SalaryConfigDetailPage() {
       <div className="card">
         <h2 className="text-lg font-bold text-gray-900 mb-4">薪酬變更歷史</h2>
         {history.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b">
-                <th className="px-3 py-2 text-left">生效日期</th>
-                <th className="px-3 py-2 text-left">薪酬類型</th>
-                <th className="px-3 py-2 text-right">底薪</th>
-                <th className="px-3 py-2 text-left">變更類型</th>
-                <th className="px-3 py-2 text-right">變更金額</th>
-                <th className="px-3 py-2 text-left">備註</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h: any) => (
-                <tr key={h.id} className={`border-b ${h.id === record?.id ? 'bg-primary-50' : ''}`}>
-                  <td className="px-3 py-2">{fmtDate(h.effective_date)}</td>
-                  <td className="px-3 py-2">{SALARY_TYPE_LABELS[h.salary_type] || h.salary_type}</td>
-                  <td className="px-3 py-2 text-right font-mono">${Number(h.base_salary).toLocaleString()}</td>
-                  <td className="px-3 py-2">{h.change_type || '初始設定'}</td>
-                  <td className="px-3 py-2 text-right font-mono">{h.change_amount > 0 ? `+$${Number(h.change_amount).toLocaleString()}` : '-'}</td>
-                  <td className="px-3 py-2 text-gray-500">{h.notes || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="space-y-3">
+            {history.map((h: any) => {
+              const changedFields: Record<string, { label: string; before: any; after: any }> = h.changed_fields || {};
+              const changedKeys = Object.keys(changedFields);
+              const isCurrent = h.id === record?.id;
+              return (
+                <div key={h.id} className={`border rounded-lg p-4 ${isCurrent ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-white'}`}>
+                  {/* Header row */}
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <span className="font-medium text-gray-900">{fmtDate(h.effective_date)}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">{SALARY_TYPE_LABELS[h.salary_type] || h.salary_type}</span>
+                    <span className="font-mono font-semibold text-gray-800">底薪 ${Number(h.base_salary).toLocaleString()}</span>
+                    {h.change_type && (
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                        h.change_type === '加薪' ? 'bg-green-100 text-green-700' :
+                        h.change_type === '減薪' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>{h.change_type}{h.change_amount > 0 ? ` +$${Number(h.change_amount).toLocaleString()}` : ''}</span>
+                    )}
+                    {isCurrent && <span className="text-xs px-2 py-0.5 rounded bg-primary-100 text-primary-700 font-medium">目前生效</span>}
+                    {h.notes && <span className="text-xs text-gray-500">備註：{h.notes}</span>}
+                  </div>
+                  {/* Changed fields detail */}
+                  {changedKeys.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <p className="text-xs text-gray-500 mb-1.5">本次變更項目：</p>
+                      <div className="flex flex-wrap gap-2">
+                        {changedKeys.map(key => {
+                          const cf = changedFields[key];
+                          const isNumeric = typeof cf.before === 'number' || typeof cf.after === 'number';
+                          const formatVal = (v: any) => {
+                            if (v === null || v === undefined) return '-';
+                            if (typeof v === 'boolean') return v ? '是' : '否';
+                            if (isNumeric) return `$${Number(v).toLocaleString()}`;
+                            if (key === 'salary_type') return SALARY_TYPE_LABELS[v] || v;
+                            if (Array.isArray(v)) return `${v.length}項`;
+                            return String(v);
+                          };
+                          return (
+                            <div key={key} className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs">
+                              <span className="font-medium text-gray-700">{cf.label}</span>
+                              <span className="text-gray-400">{formatVal(cf.before)}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="font-semibold text-blue-700">{formatVal(cf.after)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {changedKeys.length === 0 && !h.change_type && (
+                    <p className="text-xs text-gray-400">初始設定</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <p className="text-gray-400 text-sm">暫無歷史記錄</p>
         )}

@@ -303,6 +303,7 @@ model EmployeeSalarySetting {
   ot_mid_shift           Decimal  @default(0) @db.Decimal(10, 2)
   mid_shift_ot_allowance Decimal  @default(0) @db.Decimal(10, 2)
   custom_allowances      Json?    @db.JsonB
+  changed_fields         Json?    @db.JsonB
   is_piece_rate          Boolean  @default(false)
   fleet_rate_card_id     Int?
   change_type            String?

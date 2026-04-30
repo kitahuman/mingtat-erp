@@ -113,6 +113,33 @@ export class SalaryConfigService {
     return this.findOne(saved.id);
   }
 
+  // Field labels for changed_fields display
+  private readonly salaryFieldLabels: Record<string, string> = {
+    effective_date: '生效日期',
+    salary_type: '薪酬類型',
+    base_salary: '底薪',
+    allowance_night: '晚間津貼',
+    allowance_3runway: '3跑津貼',
+    allowance_rent: '租車津貼',
+    allowance_well: '落井津貼',
+    allowance_machine: '揸機津貼',
+    allowance_roller: '火輆津貼',
+    allowance_crane: '吊/夾車津貼',
+    allowance_move_machine: '搬機津貼',
+    allowance_kwh_night: '嘉華-夜間津貼',
+    allowance_mid_shift: '中直津貼',
+    ot_1800_1900: 'OT 1800-1900',
+    ot_1900_2000: 'OT 1900-2000',
+    ot_0600_0700: 'OT 0600-0700',
+    ot_0700_0800: 'OT 0700-0800',
+    ot_rate_standard: '標準OT時薪',
+    ot_mid_shift: '中直OT津貼',
+    mid_shift_ot_allowance: '中直OT津貼(額外)',
+    is_piece_rate: '按件計酬',
+    fleet_rate_card_id: '車隊費率卡',
+    custom_allowances: '自定義津貼',
+  };
+
   async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.employeeSalarySetting.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('薪酬設定不存在');
@@ -133,12 +160,60 @@ export class SalaryConfigService {
       'ot_rate_standard', 'allowance_well', 'allowance_machine', 'allowance_roller',
       'allowance_crane', 'allowance_move_machine', 'allowance_kwh_night',
       'allowance_mid_shift', 'ot_1800_1900', 'ot_1900_2000', 'ot_0600_0700',
-      'ot_0700_0800', 'ot_mid_shift', 'change_amount',
+      'ot_0700_0800', 'ot_mid_shift', 'change_amount', 'mid_shift_ot_allowance',
     ];
     for (const field of numericFields) {
       if (updateData[field] !== undefined) {
         updateData[field] = Number(updateData[field]) || 0;
       }
+    }
+
+    // Compute changed_fields: compare existing vs incoming for tracked fields
+    const trackedFields = [
+      'effective_date', 'salary_type', 'base_salary',
+      'allowance_night', 'allowance_3runway', 'allowance_rent', 'allowance_well',
+      'allowance_machine', 'allowance_roller', 'allowance_crane', 'allowance_move_machine',
+      'allowance_kwh_night', 'allowance_mid_shift',
+      'ot_1800_1900', 'ot_1900_2000', 'ot_0600_0700', 'ot_0700_0800',
+      'ot_rate_standard', 'ot_mid_shift', 'mid_shift_ot_allowance',
+      'is_piece_rate', 'fleet_rate_card_id',
+    ];
+    const changedFields: Record<string, { before: any; after: any; label: string }> = {};
+    for (const field of trackedFields) {
+      if (updateData[field] === undefined) continue;
+      const before = (existing as any)[field];
+      const after = updateData[field];
+      // Normalize for comparison: Decimal -> number, Date -> date string
+      const normBefore = before instanceof Date
+        ? before.toISOString().slice(0, 10)
+        : (before !== null && before !== undefined ? Number(before) : before);
+      const normAfter = after instanceof Date
+        ? after.toISOString().slice(0, 10)
+        : (typeof after === 'string' && field === 'effective_date'
+          ? new Date(after).toISOString().slice(0, 10)
+          : (after !== null && after !== undefined ? (typeof after === 'boolean' ? after : Number(after)) : after));
+      if (String(normBefore) !== String(normAfter)) {
+        changedFields[field] = {
+          label: this.salaryFieldLabels[field] || field,
+          before: normBefore,
+          after: normAfter,
+        };
+      }
+    }
+    // Also track custom_allowances changes
+    if (updateData.custom_allowances !== undefined) {
+      const beforeJson = JSON.stringify(existing.custom_allowances || []);
+      const afterJson = JSON.stringify(updateData.custom_allowances || []);
+      if (beforeJson !== afterJson) {
+        changedFields['custom_allowances'] = {
+          label: '自定義津貼',
+          before: existing.custom_allowances,
+          after: updateData.custom_allowances,
+        };
+      }
+    }
+    if (Object.keys(changedFields).length > 0) {
+      updateData.changed_fields = changedFields;
     }
 
     const updated = await this.prisma.employeeSalarySetting.update({ where: { id }, data: updateData });
