@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -113,6 +113,15 @@ export class SalaryConfigService {
     if (!existing) throw new NotFoundException('薪酬設定不存在');
 
     const { employee, created_at, id: _id, ...updateData } = dto;
+
+    // Convert effective_date string to Date object for Prisma
+    if (updateData.effective_date !== undefined && updateData.effective_date !== null) {
+      const parsed = new Date(updateData.effective_date);
+      if (isNaN(parsed.getTime())) {
+        throw new BadRequestException('effective_date 格式無效，請使用 YYYY-MM-DD 格式');
+      }
+      updateData.effective_date = parsed;
+    }
 
     const numericFields = [
       'base_salary', 'allowance_night', 'allowance_rent', 'allowance_3runway',

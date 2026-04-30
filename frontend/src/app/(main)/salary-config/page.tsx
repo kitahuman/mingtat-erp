@@ -6,7 +6,7 @@ import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
-import { fmtDate } from '@/lib/dateUtils';
+import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
@@ -123,7 +123,7 @@ export default function SalaryConfigPage() {
     const dateFields = ['effective_date'];
     if (formData.salary_type !== undefined) payload.salary_type = formData.salary_type;
     numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
-    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f] || undefined; });
+    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = toInputDate(formData[f]) || undefined; });
     await salaryConfigApi.update(id, payload);
     load();
   };
