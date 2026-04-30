@@ -500,29 +500,9 @@ export class EmployeesService {
       }
     }
 
-    // 自動分配正式員工編號（臨時員工不分配）
+    // 自動分配正式員工編號（臨時員工不分配），使用 gap-filling 邏輯找最小可用號
     if (!data.employee_is_temporary && !data.emp_code) {
-      // 查詢現有最大的 emp_code（格式 E001, E002...），排除已診銷的
-      const existing = await this.prisma.employee.findMany({
-        where: {
-          emp_code: {
-            not: null,
-          },
-        },
-        select: { emp_code: true },
-      });
-      let maxNum = 0;
-      for (const emp of existing) {
-        if (!emp.emp_code) continue;
-        // 只處理標準格式 E001, E002... （包含已診銷的 E001 [revoked]）
-        const match = emp.emp_code.match(/^E(\d+)/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum) maxNum = num;
-        }
-      }
-      const nextNum = maxNum + 1;
-      data.emp_code = 'E' + String(nextNum).padStart(3, '0');
+      data.emp_code = await this.getNextEmpCode();
     }
 
     // Convert date string fields to Date objects for Prisma DateTime columns
@@ -558,6 +538,25 @@ export class EmployeesService {
     }
 
     const saved = await this.prisma.employee.create({ data });
+
+    // 自動建立空白薪酬配置（正式員工才建立）
+    if (!data.employee_is_temporary) {
+      try {
+        const effectiveDate = data.join_date
+          ? new Date(data.join_date)
+          : new Date();
+        await this.prisma.employeeSalarySetting.create({
+          data: {
+            employee_id: saved.id,
+            effective_date: effectiveDate,
+            salary_type: 'daily',
+          },
+        });
+      } catch (e) {
+        console.error('Auto salary setting creation error:', e);
+      }
+    }
+
     if (userId) {
       try {
         await this.auditLogsService.log({
