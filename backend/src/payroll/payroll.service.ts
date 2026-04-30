@@ -158,27 +158,9 @@ export class PayrollService {
       dailyAllowances,
     );
 
-    // ── 將 payroll_items 中的固定津貼平均分攤到每日 ──
-    // 目的：讓逐日合計 = 應收總額（固定津貼按工作天平均顯示）
-    const fixedAllowanceItems = (payroll.items || []).filter(
-      (item: any) => item.item_type === 'allowance' && Number(item.amount) > 0,
-    );
-    if (fixedAllowanceItems.length > 0 && dailyCalc.length > 0) {
-      const workDays = dailyCalc.length;
-      for (const day of dailyCalc) {
-        const fixedPerDay: { key: string; name: string; amount: number }[] = [];
-        let fixedTotal = 0;
-        for (const item of fixedAllowanceItems) {
-          const perDay = Math.round((Number(item.amount) / workDays) * 100) / 100;
-          fixedPerDay.push({ key: item.item_type, name: item.item_name, amount: perDay });
-          fixedTotal += perDay;
-        }
-        day.fixed_allowances_per_day = fixedPerDay;
-        day.fixed_allowance_total = fixedTotal;
-        day.daily_allowance_total = (day.daily_allowance_total || 0) + fixedTotal;
-        day.day_total = (day.day_total || 0) + fixedTotal;
-      }
-    }
+    const workDayCount = dailyCalc.filter(
+      (day: any) => (day.work_logs || []).length > 0,
+    ).length;
 
     // Build available allowance options from salary setting
     const allowanceOptions =
@@ -210,6 +192,7 @@ export class PayrollService {
       payroll_work_logs: pwls,
       grouped_settlement: grouped,
       daily_calculation: dailyCalc,
+      work_day_count: workDayCount,
       allowance_options: allowanceOptions,
       salary_setting: salarySetting,
       paid_amount: paidAmount,
@@ -391,6 +374,10 @@ export class PayrollService {
       [],
     );
 
+    const workDayCount = dailyCalc.filter(
+      (day: any) => (day.work_logs || []).length > 0,
+    ).length;
+
     // Build available allowance options
     const allowanceOptions =
       this.calcService.buildAllowanceOptions(salarySetting);
@@ -429,6 +416,7 @@ export class PayrollService {
       work_logs: enrichedWorkLogs,
       grouped_settlement: grouped,
       daily_calculation: dailyCalc,
+      work_day_count: workDayCount,
       allowance_options: allowanceOptions,
       calculation,
       date_from,

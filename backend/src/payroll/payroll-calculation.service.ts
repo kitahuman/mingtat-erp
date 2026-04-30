@@ -501,6 +501,32 @@ export class PayrollCalculationService {
   // ── 逐日計算邏輯 ──────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════
 
+  /**
+   * 建立逐日顯示用固定津貼。
+   *
+   * 注意：此資料只供前端逐日 badge 顯示，不參與 payroll_items、
+   * daily_allowance_total 或 day_total 的金額計算，避免把已計入糧單
+   * item 的固定津貼再反向分攤或重複加總。
+   */
+  private buildDailyFixedAllowanceDisplay(
+    dayWorkLogs: any[],
+    salarySetting: any | null,
+  ): { key: string; name: string; amount: number }[] {
+    if (!salarySetting || dayWorkLogs.length === 0) return [];
+
+    const displayAllowances = [
+      { key: 'allowance_rent', name: '租車津貼' },
+      { key: 'allowance_3runway', name: '三跑津貼' },
+    ];
+
+    return displayAllowances
+      .map((item) => ({
+        ...item,
+        amount: Number((salarySetting as any)[item.key]) || 0,
+      }))
+      .filter((item) => item.amount > 0);
+  }
+
   buildDailyCalculation(
     pwls: any[],
     salarySetting: any | null,
@@ -552,6 +578,10 @@ export class PayrollCalculationService {
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
       );
+      const fixedAllowancesPerDay = this.buildDailyFixedAllowanceDisplay(
+        dayPwls,
+        salarySetting,
+      );
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
         date,
@@ -599,6 +629,7 @@ export class PayrollCalculationService {
           amount: Number(da.amount),
           remarks: da.remarks,
         })),
+        fixed_allowances_per_day: fixedAllowancesPerDay,
         daily_allowance_total: dailyAllowanceTotal,
         day_total: dayTotal,
       };
@@ -664,6 +695,10 @@ export class PayrollCalculationService {
         (sum: number, da: any) => sum + (Number(da.amount) || 0),
         0,
       );
+      const fixedAllowancesPerDay = this.buildDailyFixedAllowanceDisplay(
+        dayWls,
+        salarySetting,
+      );
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
         date,
@@ -712,6 +747,7 @@ export class PayrollCalculationService {
           amount: Number(da.amount),
           remarks: da.remarks,
         })),
+        fixed_allowances_per_day: fixedAllowancesPerDay,
         daily_allowance_total: dailyAllowanceTotal,
         day_total: dayTotal,
       };

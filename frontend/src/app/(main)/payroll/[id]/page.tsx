@@ -879,6 +879,7 @@ function DailyCalculationView({
   };
 
   const dailyTableColumnCount = 5 + (isDaily ? 1 : 0) + (isDraft ? 1 : 0);
+  const workDayCount = dailyCalc.filter((d: any) => (d.work_logs || []).length > 0).length;
   const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
   const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + getTopUpAmount(d), 0);
   const totalAllowances = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.daily_allowance_total) || 0), 0);
@@ -896,7 +897,7 @@ function DailyCalculationView({
     <div className="space-y-1">
       {/* Summary bar */}
       <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
+        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{workDayCount}天</span></div>
         {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => getTopUpAmount(d) > 0).length}天</span></div>}
         {isDaily && <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>}
         <div><span className="text-gray-500">每日津貼合計：</span><span className="font-bold text-blue-600">${totalAllowances.toLocaleString()}</span></div>

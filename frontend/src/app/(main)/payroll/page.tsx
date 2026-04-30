@@ -83,13 +83,26 @@ function DailyCalculationPreview({ dailyCalc, salaryType }: { dailyCalc: any[]; 
   if (!dailyCalc || dailyCalc.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
   }
+  const isStatutoryHolidayNoAttendance = (day: any) =>
+    (day.work_logs || []).length === 0 &&
+    (day.daily_allowances || []).some((a: any) => a.allowance_key === 'statutory_holiday');
+
+  const getTopUpAmount = (day: any) => {
+    if (!isDaily || isStatutoryHolidayNoAttendance(day)) return 0;
+    const workIncome = Number(day.work_income) || 0;
+    const baseSalary = Number(day.base_salary) || 0;
+    if (baseSalary <= 0 || workIncome >= baseSalary) return 0;
+    return Math.max(0, Number(day.top_up_amount) || (baseSalary - workIncome));
+  };
+
+  const workDayCount = dailyCalc.filter((d: any) => (d.work_logs || []).length > 0).length;
   const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
-  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.top_up_amount) || 0), 0);
+  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + getTopUpAmount(d), 0);
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
-        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter((d: any) => d.needs_top_up).length}天</span></div>}
+        <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{workDayCount}天</span></div>
+        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter((d: any) => getTopUpAmount(d) > 0).length}天</span></div>}
         {isDaily && <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>}
         <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
       </div>
@@ -109,9 +122,10 @@ function DailyCalculationPreview({ dailyCalc, salaryType }: { dailyCalc: any[]; 
             {dailyCalc.map((day: any, idx: number) => {
               const isExpanded = expandedDate === day.date;
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
+              const topUpAmount = getTopUpAmount(day);
               return (
                 <>
-                  <tr key={day.date} className={`border-b ${day.needs_top_up && isDaily ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <tr key={day.date} className={`border-b ${topUpAmount > 0 ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
                         {isExpanded ? '▼' : '▶'}
@@ -124,8 +138,8 @@ function DailyCalculationPreview({ dailyCalc, salaryType }: { dailyCalc: any[]; 
                     <td className="px-3 py-2 text-right font-mono">${Number(day.work_income).toLocaleString()}</td>
                     {isDaily && <td className="px-3 py-2 text-right font-mono text-gray-500">${Number(day.base_salary).toLocaleString()}</td>}
                     {isDaily && <td className="px-3 py-2 text-right font-mono">
-                      {day.needs_top_up
-                        ? <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
+                      {topUpAmount > 0
+                        ? <span className="text-orange-600 font-bold">+${topUpAmount.toLocaleString()}</span>
                         : <span className="text-green-600">-</span>}
                     </td>}
                     <td className="px-3 py-2 text-right font-mono font-bold">${Number(day.day_total).toLocaleString()}</td>
