@@ -40,6 +40,7 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [createNextEmpCode, setCreateNextEmpCode] = useState<string>('');
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({ name_zh: '', name_en: '', role: '雜工', phone: '', company_id: '', emp_code: '', join_date: '', id_number: '', employee_is_temporary: false });
@@ -518,7 +519,7 @@ export default function EmployeesPage() {
             >
               📱 員工帳號管理
             </button>
-            <button onClick={() => setShowModal(true)} className="btn-primary">新增員工</button>
+            <button onClick={async () => { setShowModal(true); try { const r = await employeesApi.nextEmpCode(); setCreateNextEmpCode(r.data.next_emp_code || ''); } catch { setCreateNextEmpCode(''); } }} className="btn-primary">新增員工</button>
           </div>
         )}
       </div>
@@ -972,7 +973,18 @@ export default function EmployeesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-gray-700 mb-1">中文姓名 *</label><input value={form.name_zh} onChange={e => setForm({...form, name_zh: e.target.value})} className="input-field" required /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">英文姓名</label><input value={form.name_en} onChange={e => setForm({...form, name_en: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">員工編號</label><input value={form.emp_code} onChange={e => setForm({...form, emp_code: e.target.value})} className="input-field" placeholder="如 E001" /></div>
+            {!form.employee_is_temporary && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">員工編號（自動分配）</label>
+                <div className="input-field bg-gray-50 text-gray-600 cursor-not-allowed flex items-center gap-2">
+                  {createNextEmpCode ? (
+                    <><span className="font-mono font-semibold text-gray-800">{createNextEmpCode}</span><span className="text-xs text-gray-400">（系統自動分配）</span></>
+                  ) : (
+                    <span className="text-xs text-gray-400">載入中...</span>
+                  )}
+                </div>
+              </div>
+            )}
             <div><label className="block text-sm font-medium text-gray-700 mb-1">職位 *</label>
               <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="input-field">
                 {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}

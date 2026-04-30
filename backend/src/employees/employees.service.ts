@@ -612,6 +612,21 @@ export class EmployeesService {
           : null;
       }
     }
+    // Validate emp_code uniqueness (excluding self)
+    if (updateData.emp_code !== undefined && updateData.emp_code !== null && updateData.emp_code !== '') {
+      const conflict = await this.prisma.employee.findFirst({
+        where: {
+          emp_code: updateData.emp_code as string,
+          id: { not: id },
+        },
+        select: { id: true, name_zh: true, emp_code: true },
+      });
+      if (conflict) {
+        throw new BadRequestException(
+          `員工編號 ${updateData.emp_code} 已被員工「${conflict.name_zh}」使用，請選擇其他編號。`,
+        );
+      }
+    }
     const updated = await this.prisma.employee.update({
       where: { id },
       data: updateData,
