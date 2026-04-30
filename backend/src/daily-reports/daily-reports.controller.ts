@@ -66,6 +66,13 @@ export class DailyReportsController {
     return this.service.batchUpdate(dto);
   }
 
+  /** Confirm an unconfirmed project (from daily report stats) by creating a real Project */
+  @Post('confirm-project')
+  confirmProject(@Request() req: any, @Body() dto: any) {
+    const ip = req.ip || req.headers?.['x-forwarded-for'] || undefined;
+    return this.service.confirmProject(req.user.sub, dto, ip);
+  }
+
   /** Admin-only: force update even submitted reports */
   @Put(':id/admin-update')
   adminUpdate(

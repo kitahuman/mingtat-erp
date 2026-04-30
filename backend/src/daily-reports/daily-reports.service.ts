@@ -1,9 +1,101 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProjectsService } from '../projects/projects.service';
 
 @Injectable()
 export class DailyReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly projectsService: ProjectsService,
+  ) {}
+
+  /**
+   * Confirm an unconfirmed project: create a real Project record from a daily-report
+   * project_name that has no project_id yet, and back-fill daily_report_project_id
+   * on all matching daily reports.
+   */
+  async confirmProject(userId: number, dto: {
+    project_name: string;
+    company_id: number;
+    client_id?: number;
+    contract_id?: number;
+    address?: string;
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+    status?: string;
+  }, ipAddress?: string) {
+    if (!dto.project_name || !dto.project_name.trim()) {
+      throw new BadRequestException('工程名稱不可為空');
+    }
+    if (!dto.company_id) {
+      throw new BadRequestException('請選擇內部公司');
+    }
+    const trimmedName = dto.project_name.trim();
+
+    // 1. Confirm that at least one daily report uses this name with NULL project_id
+    const unconfirmedCount = await this.prisma.dailyReport.count({
+      where: {
+        daily_report_project_name: trimmedName,
+        daily_report_project_id: null,
+        daily_report_deleted_at: null,
+      },
+    });
+    if (unconfirmedCount === 0) {
+      throw new NotFoundException('找不到未確認的工程日報記錄');
+    }
+
+    // 2. Use existing ProjectsService.create (handles project_no generation, client/contract resolution, audit log)
+    const created = await this.projectsService.create(
+      {
+        project_name: trimmedName,
+        company_id: Number(dto.company_id),
+        client_id: dto.client_id ? Number(dto.client_id) : undefined,
+        contract_id: dto.contract_id ? Number(dto.contract_id) : undefined,
+        address: dto.address || undefined,
+        start_date: dto.start_date || undefined,
+        end_date: dto.end_date || undefined,
+        description: dto.description || undefined,
+        status: dto.status || 'active',
+      },
+      userId,
+      ipAddress,
+    );
+
+    // 3. Back-fill daily_report_project_id on matching reports (and sync client/contract if daily report has NULL)
+    const contract = created.contract_id
+      ? await this.prisma.contract.findUnique({
+          where: { id: created.contract_id },
+          select: { contract_no: true },
+        })
+      : null;
+    const clientRecord = created.client_id
+      ? await this.prisma.partner.findUnique({
+          where: { id: created.client_id },
+          select: { name: true },
+        })
+      : null;
+
+    const updateResult = await this.prisma.dailyReport.updateMany({
+      where: {
+        daily_report_project_name: trimmedName,
+        daily_report_project_id: null,
+        daily_report_deleted_at: null,
+      },
+      data: {
+        daily_report_project_id: created.id,
+        daily_report_project_location: created.address ?? undefined,
+        daily_report_client_id: created.client_id ?? undefined,
+        daily_report_client_name: clientRecord?.name ?? undefined,
+        daily_report_client_contract_no: contract?.contract_no ?? undefined,
+      },
+    });
+
+    return {
+      project: created,
+      updated_reports: updateResult.count,
+    };
+  }
 
   private readonly includeAll = {
     project: { select: { id: true, project_no: true, project_name: true, address: true, client: { select: { id: true, name: true } }, contract: { select: { id: true, contract_no: true } } } },
