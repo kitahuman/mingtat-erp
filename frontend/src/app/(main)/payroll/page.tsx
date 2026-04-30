@@ -519,7 +519,7 @@ export default function PayrollPage() {
             </button>
           )}
           <button onClick={handlePreview} disabled={loading} className="btn-secondary">
-            {loading ? '重新計算中...' : '重新計算'}
+            {loading ? '重新抓取資料中...' : '重新抓取資料'}
           </button>
           {generateError && <span className="text-sm text-red-600">{generateError}</span>}
         </div>
@@ -776,7 +776,7 @@ export default function PayrollPage() {
                 </button>
               )}
               <button onClick={handlePreview} disabled={loading} className="btn-secondary">
-                {loading ? '重新計算中...' : '重新計算'}
+                {loading ? '重新抓取資料中...' : '重新抓取資料'}
               </button>
             </div>
           )}

@@ -171,7 +171,7 @@ function UnmatchedSummaryView({ groups }: { groups: UnmatchedGroup[] }) {
   return (
     <div>
       <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-        以下工作記錄未能自動匹配價目。請先補充價目或在「歸組統計」中設定單價，再按「重新抓取資料」更新糧單。
+        以下工作記錄未能自動匹配價目。請先補充價目或在「歸組統計」中設定單價，再按「重新計算」更新糧單。
       </div>
       <div className="overflow-x-auto border rounded-lg">
         <table className="w-full text-sm">
@@ -1509,7 +1509,7 @@ export default function PayrollDetailPage() {
           )}
           {payroll.status === 'draft' && (
             <>
-              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新抓取資料</button>
+              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
               <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
               <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
