@@ -130,6 +130,9 @@ function WorkStatusTab({ data }: { data: any }) {
   const recentEmployees = data?.recent_employees || [];
   const dailyVehicleTrend = data?.daily_vehicle_trend || [];
   const maxTrendCount = Math.max(...dailyVehicleTrend.map((d: any) => d.count), 1);
+  const activeProjectsList: any[] = data?.active_projects || [];
+  const activeByReports = data?.active_projects_count_by_reports ?? activeProjectsList.length;
+  const projectCountByStatus = data?.active_projects_count ?? 0;
 
   const getBotStatusConfig = () => {
     if (!botStatus) return { color: 'bg-yellow-400', label: '狀態未知', textColor: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' };
@@ -156,11 +159,12 @@ function WorkStatusTab({ data }: { data: any }) {
             </div>
           </div>
         </div>
-        <Link href="/projects" className="card hover:shadow-md transition-shadow">
+        <Link href="/daily-reports" className="card hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">進行中工程</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">{data?.active_projects_count ?? 0}</p>
+              <p className="text-sm text-gray-500">活躍工程（近 30 天有日報）</p>
+              <p className="text-2xl font-bold text-purple-600 mt-1">{activeByReports}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">系統共 {projectCountByStatus} 個進行中工程</p>
             </div>
             <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center text-white">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
@@ -261,6 +265,60 @@ function WorkStatusTab({ data }: { data: any }) {
             <p className="text-center py-8 text-gray-400">暫無數據</p>
           )}
         </div>
+      </div>
+
+      {/* 工程統計（活躍工程）*/}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">🏗️ 工程統計（最近 30 天）</h2>
+          <Link href="/daily-reports" className="text-sm text-primary-600 hover:underline">查看全部日報 →</Link>
+        </div>
+        {activeProjectsList.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr className="text-left text-gray-600">
+                  <th className="px-3 py-2 font-medium">工程名稱</th>
+                  <th className="px-3 py-2 font-medium">客戶</th>
+                  <th className="px-3 py-2 font-medium">客戶合約</th>
+                  <th className="px-3 py-2 font-medium">工程地點</th>
+                  <th className="px-3 py-2 font-medium whitespace-nowrap">最近日報</th>
+                  <th className="px-3 py-2 font-medium text-right">日報數</th>
+                  <th className="px-3 py-2 font-medium text-right">出勤人次</th>
+                  <th className="px-3 py-2 font-medium text-right">人數</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {activeProjectsList.slice(0, 15).map((p: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">
+                      {p.project_id ? (
+                        <Link href={`/projects/${p.project_id}`} className="text-primary-600 hover:underline">{p.project_name}</Link>
+                      ) : (
+                        <span className="text-gray-700">{p.project_name}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">{p.client_name || '-'}</td>
+                    <td className="px-3 py-2 text-gray-700">{p.client_contract_no || '-'}</td>
+                    <td className="px-3 py-2 text-gray-700">{p.project_location || '-'}</td>
+                    <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{p.latest_report_date ? formatDate(p.latest_report_date) : '-'}</td>
+                    <td className="px-3 py-2 text-right font-medium text-gray-900">{p.report_count}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{p.manpower_entries}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{p.unique_employees}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {activeProjectsList.length > 15 && (
+              <p className="text-xs text-gray-400 mt-2">只顯示最近 15 個活躍工程，共 {activeProjectsList.length} 個。</p>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-4xl mb-2">📋</p>
+            <p>最近 30 天尚無工程日報記錄</p>
+          </div>
+        )}
       </div>
 
       {/* WhatsApp Bot 狀態 + 最近入職員工 */}

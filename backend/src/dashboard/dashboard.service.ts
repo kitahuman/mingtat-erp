@@ -70,12 +70,105 @@ export class DashboardService {
     }
     const dailyVehicleCount = uniqueVehicles.size;
 
-    // ── 進行中工程數量 ────────────────────────────────────────
+       // ── 進行中工程數量（projects.status='active'）───────────────
     const activeProjectsCount = await this.prisma.project.count({
       where: { status: 'active' },
     });
 
-    // ── 最近入職員工（最近 30 天）────────────────────────────
+    // ── 最近 30 天有日報活動的工程（日報統計）────────────
+    const reportWindowStart = new Date();
+    reportWindowStart.setDate(reportWindowStart.getDate() - 30);
+    const recentReports = await this.prisma.dailyReport.findMany({
+      where: {
+        daily_report_date: { gte: reportWindowStart },
+        daily_report_deleted_at: null,
+      },
+      select: {
+        id: true,
+        daily_report_project_id: true,
+        daily_report_project_name: true,
+        daily_report_project_location: true,
+        daily_report_client_id: true,
+        daily_report_client_name: true,
+        daily_report_client_contract_no: true,
+        daily_report_date: true,
+        items: { select: { daily_report_item_category: true, daily_report_item_employee_ids: true } },
+      },
+      orderBy: { daily_report_date: 'desc' },
+    });
+    // Aggregate by project key (prefer project_id; fall back to project_name)
+    type ProjectAgg = {
+      project_id: number | null;
+      project_name: string;
+      project_location: string | null;
+      client_id: number | null;
+      client_name: string | null;
+      client_contract_no: string | null;
+      latest_report_date: Date | null;
+      report_count: number;
+      employee_ids: Set<string>;
+      manpower_entries: number;
+    };
+    const projectAggMap = new Map<string, ProjectAgg>();
+    for (const rpt of recentReports) {
+      const key = rpt.daily_report_project_id != null
+        ? `id:${rpt.daily_report_project_id}`
+        : `name:${(rpt.daily_report_project_name || '').trim()}`;
+      if (key === 'name:') continue; // skip empty-project reports
+      let agg = projectAggMap.get(key);
+      if (!agg) {
+        agg = {
+          project_id: rpt.daily_report_project_id,
+          project_name: rpt.daily_report_project_name || '(未指定工程)',
+          project_location: rpt.daily_report_project_location,
+          client_id: rpt.daily_report_client_id,
+          client_name: rpt.daily_report_client_name,
+          client_contract_no: rpt.daily_report_client_contract_no,
+          latest_report_date: rpt.daily_report_date,
+          report_count: 0,
+          employee_ids: new Set<string>(),
+          manpower_entries: 0,
+        };
+        projectAggMap.set(key, agg);
+      } else {
+        // keep most recent client/contract/location (reports already sorted desc)
+        if (rpt.daily_report_date && (!agg.latest_report_date || rpt.daily_report_date > agg.latest_report_date)) {
+          agg.latest_report_date = rpt.daily_report_date;
+          if (rpt.daily_report_client_name) agg.client_name = rpt.daily_report_client_name;
+          if (rpt.daily_report_client_id != null) agg.client_id = rpt.daily_report_client_id;
+          if (rpt.daily_report_client_contract_no) agg.client_contract_no = rpt.daily_report_client_contract_no;
+          if (rpt.daily_report_project_location) agg.project_location = rpt.daily_report_project_location;
+        }
+      }
+      agg.report_count += 1;
+      // Collect employee ids from manpower items
+      for (const item of rpt.items || []) {
+        if (item.daily_report_item_category === 'manpower') {
+          agg.manpower_entries += 1;
+          const raw = item.daily_report_item_employee_ids || '';
+          if (raw) {
+            raw.split(/[,;\s]+/).filter(Boolean).forEach((id) => agg!.employee_ids.add(id));
+          }
+        }
+      }
+    }
+    const activeProjectsList = Array.from(projectAggMap.values())
+      .map((a) => ({
+        project_id: a.project_id,
+        project_name: a.project_name,
+        project_location: a.project_location,
+        client_id: a.client_id,
+        client_name: a.client_name,
+        client_contract_no: a.client_contract_no,
+        latest_report_date: a.latest_report_date ? a.latest_report_date.toISOString().split('T')[0] : null,
+        report_count: a.report_count,
+        manpower_entries: a.manpower_entries,
+        unique_employees: a.employee_ids.size,
+      }))
+      .sort((a, b) => (b.latest_report_date || '').localeCompare(a.latest_report_date || ''));
+    const activeProjectsByReports = activeProjectsList.length;
+
+    // ── 最近入職員工（最近 30 天）─────────────────────────────
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentEmployees = await this.prisma.employee.findMany({
@@ -118,6 +211,8 @@ export class DashboardService {
     return {
       daily_vehicle_count: dailyVehicleCount,
       active_projects_count: activeProjectsCount,
+      active_projects_count_by_reports: activeProjectsByReports,
+      active_projects: activeProjectsList,
       daily_order_summary: {
         date: todayStr,
         total: totalOrderItems,
