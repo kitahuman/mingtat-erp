@@ -44,8 +44,8 @@ export default function SalaryConfigPage() {
   const [search, setSearch] = useState('');
   const [salaryTypeFilter, setSalaryTypeFilter] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('active');
-  const [sortBy, setSortBy] = useState('effective_date');
-  const [sortOrder, setSortOrder] = useState('DESC');
+  const [sortBy, setSortBy] = useState('emp_code');
+  const [sortOrder, setSortOrder] = useState('ASC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);

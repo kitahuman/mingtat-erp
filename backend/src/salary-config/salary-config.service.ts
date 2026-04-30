@@ -7,7 +7,7 @@ export class SalaryConfigService {
   constructor(private readonly prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
   private readonly allowedSortFields = [
-    'id', 'employee_id', 'effective_date', 'base_salary', 'salary_type', 'created_at',
+    'id', 'employee_id', 'effective_date', 'base_salary', 'salary_type', 'created_at', 'emp_code',
   ];
 
   async findAll(query: {
@@ -44,14 +44,19 @@ export class SalaryConfigService {
       };
     }
 
-    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'effective_date';
+    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'emp_code';
     const sortOrder = (query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc') as 'asc' | 'desc';
+
+    // emp_code is on the related employee table, requires nested orderBy
+    const orderBy: any = sortBy === 'emp_code'
+      ? { employee: { emp_code: sortOrder } }
+      : { [sortBy]: sortOrder };
 
     const [data, total] = await Promise.all([
       this.prisma.employeeSalarySetting.findMany({
         where,
         include: { employee: { include: { company: true } } },
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
         skip,
         take: limit,
       }),
