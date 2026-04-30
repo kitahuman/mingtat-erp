@@ -99,6 +99,12 @@ export class PayrollController {
     return this.payrollService.cancelPayment(+id);
   }
 
+
+  @Post(':id/reset-refetch')
+  resetAndRefetch(@Param('id') id: string, @Request() req: any) {
+    return this.payrollService.resetAndRefetch(+id, req.user?.id || req.user?.userId || 0);
+  }
+
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string, @Body() body?: { override_manual_rates?: boolean }) {
     return this.payrollService.recalculate(+id, body?.override_manual_rates);

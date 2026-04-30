@@ -1189,6 +1189,252 @@ export class PayrollService {
     return { deleted: true };
   }
 
+
+  // ── 返回上一步：重新抓取原始工作記錄並重建糧單工作記錄快照 ─────
+  async resetAndRefetch(id: number, userId?: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id },
+      include: {
+        employee: { include: { company: true } },
+        adjustments: true,
+      },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (!['draft', 'preparing'].includes(payroll.status)) {
+      throw new BadRequestException('只能對草稿或準備中的糧單重新抓取資料');
+    }
+
+    const emp = payroll.employee;
+    const dateFrom = toDateStr(payroll.date_from) || `${payroll.period}-01`;
+    const dateTo =
+      toDateStr(payroll.date_to) ||
+      (() => {
+        const [y, m] = payroll.period.split('-');
+        const lastDay = new Date(Number(y), Number(m), 0).getDate();
+        return `${payroll.period}-${String(lastDay).padStart(2, '0')}`;
+      })();
+
+    const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+      where: {
+        employee_id: emp.id,
+        effective_date: { lte: new Date(dateTo) },
+      },
+      orderBy: { effective_date: 'desc' },
+    });
+
+    if (!salarySetting) {
+      throw new BadRequestException('此員工沒有薪酬配置，無法重新計算糧單');
+    }
+
+    const wlWhere: any = {
+      employee_id: emp.id,
+      scheduled_date: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+      service_type: { not: '請假/休息' },
+    };
+
+    const workLogs = await this.prisma.workLog.findMany({
+      where: wlWhere,
+      include: {
+        company_profile: true,
+        company: true,
+        client: true,
+        quotation: true,
+      },
+      orderBy: { scheduled_date: 'asc' },
+    });
+
+    const enrichedWorkLogs =
+      await this.calcService.enrichWorkLogsWithPrice(workLogs);
+
+    const payrollWorkLogData = enrichedWorkLogs.map((wl: any) => {
+      const baseAmt = wl._line_amount ?? 0;
+      const otAmt = wl._ot_line_amount ?? 0;
+      const midShiftAmt = wl._mid_shift_line_amount ?? 0;
+      const totalLineAmount = baseAmt + otAmt + midShiftAmt;
+
+      return {
+        payroll_id: id,
+        work_log_id: wl.id,
+        service_type: wl.service_type,
+        scheduled_date: wl.scheduled_date,
+        day_night: wl.day_night,
+        start_location: wl.start_location,
+        end_location: wl.end_location,
+        machine_type: wl.machine_type,
+        tonnage: wl.tonnage,
+        equipment_number: wl.equipment_number,
+        quantity: wl.quantity,
+        unit: wl.unit,
+        ot_quantity: wl.ot_quantity,
+        ot_unit: wl.ot_unit,
+        is_mid_shift: wl.is_mid_shift ?? false,
+        remarks: wl.remarks,
+        matched_rate_card_id:
+          wl._matched_rate_card_id ?? wl.matched_rate_card_id ?? null,
+        matched_rate: wl._matched_rate ?? wl.matched_rate ?? null,
+        matched_unit: wl._matched_unit ?? wl.matched_unit ?? null,
+        matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate ?? null,
+        matched_mid_shift_rate:
+          wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate ?? null,
+        price_match_status:
+          wl._price_match_status ?? wl.price_match_status ?? null,
+        price_match_note: wl._price_match_note ?? wl.price_match_note ?? null,
+        line_amount: totalLineAmount,
+        ot_line_amount: otAmt,
+        mid_shift_line_amount: midShiftAmt,
+        group_key: wl._group_key ?? '',
+        client_id: wl.client_id ?? null,
+        client_name: wl.client?.name ?? wl.client_name ?? null,
+        company_profile_id: wl.company_profile_id ?? null,
+        company_profile_name:
+          wl.company_profile?.chinese_name ?? wl.company_profile_name ?? null,
+        company_id: wl.company_id ?? null,
+        company_name: wl.company?.name ?? null,
+        quotation_id: wl.quotation_id ?? null,
+        client_contract_no:
+          wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
+        payroll_work_log_product_name: wl.work_log_product_name ?? null,
+        payroll_work_log_product_unit: wl.work_log_product_unit ?? null,
+        is_modified: false,
+        is_excluded: false,
+      };
+    });
+
+    const workLogLike = payrollWorkLogData.map((pwl: any) => ({
+      id: pwl.work_log_id,
+      scheduled_date: pwl.scheduled_date,
+      service_type: pwl.service_type,
+      day_night: pwl.day_night,
+      start_location: pwl.start_location,
+      end_location: pwl.end_location,
+      machine_type: pwl.machine_type,
+      tonnage: pwl.tonnage,
+      equipment_number: pwl.equipment_number,
+      quantity: pwl.quantity,
+      unit: pwl.unit,
+      ot_quantity: pwl.ot_quantity,
+      ot_unit: pwl.ot_unit,
+      remarks: pwl.remarks,
+      company_profile_id: pwl.company_profile_id,
+      company_id: pwl.company_id,
+      client_id: pwl.client_id,
+      quotation_id: pwl.quotation_id,
+      matched_rate_card_id: pwl.matched_rate_card_id,
+      matched_rate: pwl.matched_rate,
+      matched_unit: pwl.matched_unit,
+      matched_ot_rate: pwl.matched_ot_rate,
+      matched_mid_shift_rate: pwl.matched_mid_shift_rate,
+      price_match_status: pwl.price_match_status,
+      price_match_note: pwl.price_match_note,
+      is_mid_shift: pwl.is_mid_shift,
+      line_amount: pwl.line_amount,
+      ot_line_amount: pwl.ot_line_amount,
+      mid_shift_line_amount: pwl.mid_shift_line_amount,
+    }));
+
+    let holidayDatesForCalc: { date: Date; name: string }[] = [];
+    if ((salarySetting.salary_type || 'daily') === 'daily') {
+      const holidays = await this.statutoryHolidaysService.findByDateRange(
+        dateFrom,
+        dateTo,
+      );
+      holidayDatesForCalc = holidays.map((h: any) => ({
+        date: h.date,
+        name: h.name,
+      }));
+    }
+
+    const existingMpfRelevantIncome =
+      payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
+        ? Number(payroll.mpf_relevant_income)
+        : undefined;
+
+    const calc = await this.calcService.calculatePayroll(
+      emp,
+      salarySetting,
+      workLogLike,
+      dateFrom,
+      dateTo,
+      payroll.company_id ?? payroll.company_profile_id ?? null,
+      existingMpfRelevantIncome,
+      holidayDatesForCalc,
+    );
+
+    const adjustmentTotal = (payroll.adjustments || []).reduce(
+      (sum: number, adj: any) => sum + (Number(adj.amount) || 0),
+      0,
+    );
+
+    const actualCompanyId =
+      payroll.company_id ??
+      (payrollWorkLogData.length > 0 ? payrollWorkLogData[0].company_id : null);
+    const actualCpId =
+      payroll.company_profile_id ??
+      (payrollWorkLogData.length > 0
+        ? payrollWorkLogData[0].company_profile_id
+        : null);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payrollWorkLog.deleteMany({ where: { payroll_id: id } });
+      await tx.payrollItem.deleteMany({ where: { payroll_id: id } });
+
+      if (payrollWorkLogData.length > 0) {
+        await tx.payrollWorkLog.createMany({ data: payrollWorkLogData });
+      }
+
+      if (calc.items.length > 0) {
+        await tx.payrollItem.createMany({
+          data: calc.items.map((item: any) => ({
+            ...item,
+            payroll_id: id,
+          })),
+        });
+      }
+
+      await tx.payroll.update({
+        where: { id },
+        data: {
+          company_profile_id: actualCpId ?? undefined,
+          company_id: actualCompanyId ?? undefined,
+          salary_type: calc.salary_type,
+          base_rate: calc.base_rate,
+          work_days: calc.work_days,
+          base_amount: calc.base_amount,
+          allowance_total: calc.allowance_total,
+          ot_total: calc.ot_total,
+          commission_total: calc.commission_total,
+          mpf_deduction: calc.mpf_deduction,
+          mpf_plan: calc.mpf_plan,
+          mpf_employer: calc.mpf_employer,
+          mpf_relevant_income: calc.mpf_relevant_income,
+          adjustment_total: adjustmentTotal,
+          net_amount: calc.net_amount + adjustmentTotal,
+          status: 'preparing',
+        },
+      });
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'payrolls',
+          targetId: id,
+          changesAfter: {
+            status: 'preparing',
+            work_log_count: payrollWorkLogData.length,
+            net_amount: calc.net_amount + adjustmentTotal,
+          },
+        });
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
+    }
+
+    return this.findOne(id);
+  }
+
   // ── 重新計算糧單 ──────────────────────────────────────────────
   async recalculate(id: number, overrideManualRates?: boolean) {
     const payroll = await this.prisma.payroll.findUnique({

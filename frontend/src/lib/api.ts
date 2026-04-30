@@ -311,6 +311,7 @@ export const payrollApi = {
   bulkMarkPaid: (ids: number[], paymentDate?: string, chequeNumber?: string) =>
     api.post('/payroll/bulk/mark-paid', { ids, payment_date: paymentDate, cheque_number: chequeNumber }),
   recalculate: (id: number, body?: { override_manual_rates?: boolean }) => api.post(`/payroll/${id}/recalculate`, body || {}),
+  resetRefetch: (id: number) => api.post(`/payroll/${id}/reset-refetch`),
   setGroupRate: (id: number, groupKey: string, rate: number) =>
     api.post(`/payroll/${id}/set-group-rate`, { group_key: groupKey, rate }),
   addToRateCard: (id: number, formData: {

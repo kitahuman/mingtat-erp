@@ -1237,6 +1237,17 @@ export default function PayrollDetailPage() {
     }
   };
 
+  const handleResetRefetch = async () => {
+    if (!confirm('確定要重新抓取資料嗎？這會覆蓋現有的工作記錄快照，需要重新計算。')) return;
+    try {
+      const res = await payrollApi.resetRefetch(payroll.id);
+      setPayroll(res.data);
+      alert('已重新抓取工作記錄，請檢查資料後重新計算。');
+    } catch (err: any) {
+      alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
   const handleFinalizePreparation = async () => {
     if (!confirm('確定工作記錄已編輯完成？系統將根據糧單工作記錄計算糧單。')) return;
     try {
@@ -1504,12 +1515,14 @@ export default function PayrollDetailPage() {
           {isPreparing && (
             <>
               <button onClick={handleFinalizePreparation} className="btn-primary text-sm">確定並計算糧單</button>
+              <button onClick={handleResetRefetch} className="btn-secondary text-sm border-orange-300 text-orange-700 hover:bg-orange-50">返回上一步</button>
               <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
           )}
           {payroll.status === 'draft' && (
             <>
               <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
+              <button onClick={handleResetRefetch} className="btn-secondary text-sm border-orange-300 text-orange-700 hover:bg-orange-50">返回上一步</button>
               <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
               <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
