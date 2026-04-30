@@ -25,6 +25,8 @@ export class SalaryConfigService {
     if (query.salary_type) where.salary_type = query.salary_type;
     if (query.is_piece_rate === 'true') where.is_piece_rate = true;
     if (query.is_piece_rate === 'false') where.is_piece_rate = false;
+    // Always filter out soft-deleted employees
+    where.employee = { ...where.employee, deleted_at: null };
     if (query.employee_status) {
       where.employee = { ...where.employee, status: query.employee_status };
     }

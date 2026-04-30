@@ -18,23 +18,29 @@ export class EmployeesService {
 
   /**
    * Generate the next available emp_code in format E001, E002, ...
-   * Scans all existing emp_codes (including revoked ones) to find the max number.
+   * Uses gap-filling strategy: finds the smallest positive integer N
+   * such that E{N} is not currently assigned to any employee.
+   * This ensures no gaps are left when employees are deleted.
    */
   private async getNextEmpCode(): Promise<string> {
     const existing = await this.prisma.employee.findMany({
       where: { emp_code: { not: null } },
       select: { emp_code: true },
     });
-    let maxNum = 0;
+    const usedNums = new Set<number>();
     for (const emp of existing) {
       if (!emp.emp_code) continue;
-      const match = emp.emp_code.match(/^E(\d+)/);
+      const match = emp.emp_code.match(/^E(\d+)$/);
       if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
+        usedNums.add(parseInt(match[1], 10));
       }
     }
-    return 'E' + String(maxNum + 1).padStart(3, '0');
+    // Find the smallest positive integer not in usedNums
+    let nextNum = 1;
+    while (usedNums.has(nextNum)) {
+      nextNum++;
+    }
+    return 'E' + String(nextNum).padStart(3, '0');
   }
 
   /**
@@ -1101,8 +1107,15 @@ export class EmployeesService {
       await tx.verificationRecord.updateMany({ where: { record_employee_id: sourceId }, data: { record_employee_id: targetId } });
       // 8. Transfer verification_nickname_mappings
       await tx.verificationNicknameMapping.updateMany({ where: { nickname_employee_id: sourceId }, data: { nickname_employee_id: targetId } });
-      // 9. Delete salary settings, transfers, nicknames of source (no longer needed)
-      await tx.employeeSalarySetting.deleteMany({ where: { employee_id: sourceId } });
+      // 9. Handle salary settings: transfer if target has none, otherwise delete source's
+      const targetSalaryCount = await tx.employeeSalarySetting.count({ where: { employee_id: targetId } });
+      if (targetSalaryCount === 0) {
+        // Target has no salary settings - transfer source's settings to target
+        await tx.employeeSalarySetting.updateMany({ where: { employee_id: sourceId }, data: { employee_id: targetId } });
+      } else {
+        // Target already has salary settings - discard source's (target takes priority)
+        await tx.employeeSalarySetting.deleteMany({ where: { employee_id: sourceId } });
+      }
       await tx.employeeTransfer.deleteMany({ where: { employee_id: sourceId } });
       await tx.employeeNickname.deleteMany({ where: { emp_nickname_employee_id: sourceId } });
       // 10. Hard-delete the source employee

@@ -134,9 +134,10 @@ export default function SalaryConfigPage() {
   ];
 
   const columns = [
-    { key: 'employee', label: '員工', sortable: true, editable: false, render: (_: any, row: any) => {
+    { key: 'emp_code', label: '編號', sortable: true, editable: false, className: 'w-20 font-mono', render: (_: any, row: any) => row.employee?.emp_code || '-', filterRender: (_: any, row: any) => row.employee?.emp_code || '-' },
+    { key: 'employee', label: '姓名', sortable: true, editable: false, render: (_: any, row: any) => {
       const emp = row.employee;
-      return emp ? <span>{emp.emp_code} - {emp.name_zh || emp.name_en}</span> : '-';
+      return emp ? <span>{emp.name_zh || emp.name_en}</span> : '-';
     }, filterRender: (_: any, row: any) => row.employee?.name_zh || '-' },
     { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.employee?.company?.internal_prefix || '-' },
     { key: 'role', label: '職位', sortable: true, editable: false, render: (_: any, row: any) => row.employee?.role || '-', filterRender: (_: any, row: any) => row.employee?.role || '-' },
