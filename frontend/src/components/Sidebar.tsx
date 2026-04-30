@@ -444,6 +444,22 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
           </div>
         )}
 
+        {/* Issue Report Button */}
+        <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
+          <button
+            onClick={() => setIssueModalOpen(true)}
+            title={collapsed ? '問題回報' : undefined}
+            className={`
+              flex items-center gap-2.5 px-4 py-2.5 rounded-lg transition-colors w-full
+              text-gray-400 hover:bg-gray-800 hover:text-yellow-400 text-sm
+              ${collapsed ? 'justify-center px-0' : ''}
+            `}
+          >
+            <span className="text-lg">🐞</span>
+            {!collapsed && <span>問題回報</span>}
+          </button>
+        </div>
+
         {/* Employee Portal Quick Link */}
         <div className={`px-2 pb-2 ${collapsed ? 'text-center' : ''}`}>
           <a
@@ -477,13 +493,6 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
               </Link>
             </div>
           )}
-          <button
-            onClick={() => setIssueModalOpen(true)}
-            className={`text-gray-400 hover:text-yellow-400 transition-colors text-sm ${collapsed ? '' : 'w-full text-left'}`}
-            title={collapsed ? '問題回報' : undefined}
-          >
-            {collapsed ? '🐞' : '🐞 問題回報'}
-          </button>
           <button
             onClick={logout}
             className={`text-gray-400 hover:text-red-400 transition-colors text-sm ${collapsed ? '' : 'w-full text-left'}`}
