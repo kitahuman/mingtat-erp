@@ -24,14 +24,186 @@ const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
 };
 
-const TAB_KEYS = ['detail', 'grouped', 'daily', 'print'] as const;
+const TAB_KEYS = ['detail', 'daily', 'grouped', 'print', 'unmatched'] as const;
 type TabKey = typeof TAB_KEYS[number];
 const TAB_LABELS: Record<TabKey, string> = {
   detail: '逐筆明細',
-  grouped: '歸組結算',
   daily: '逐日計算',
-  print: '列印預覽',
+  grouped: '歸組統計',
+  print: '明細',
+  unmatched: '未匹配',
 };
+
+type AllowanceBadge = {
+  key: string;
+  label: string;
+  amount: number;
+  className: string;
+  removable?: boolean;
+  id?: number;
+};
+
+type UnmatchedGroup = {
+  key: string;
+  clientName: string;
+  contractNo: string;
+  dayNight: string;
+  route: string;
+  unit: string;
+  quantity: number;
+  count: number;
+  reason: string;
+};
+
+function buildUnmatchedGroups(pwls: any[]): UnmatchedGroup[] {
+  const groups = new Map<string, UnmatchedGroup>();
+  (pwls || [])
+    .filter((p: any) => !p.is_excluded && p.price_match_status !== 'matched')
+    .forEach((p: any) => {
+      const route = [p.start_location, p.end_location].filter(Boolean).join(' → ') || '-';
+      const key = [
+        p.client_name || p.company_name || '-',
+        p.client_contract_no || p.contract_no || '-',
+        p.day_night || '日',
+        route,
+        p.unit || p.matched_unit || '車',
+      ].join('|');
+      const existing = groups.get(key);
+      if (existing) {
+        existing.quantity += Number(p.quantity) || 1;
+        existing.count += 1;
+        if (!existing.reason && p.price_match_note) existing.reason = p.price_match_note;
+      } else {
+        groups.set(key, {
+          key,
+          clientName: p.client_name || p.company_name || '-',
+          contractNo: p.client_contract_no || p.contract_no || '-',
+          dayNight: p.day_night || '日',
+          route,
+          unit: p.unit || p.matched_unit || '車',
+          quantity: Number(p.quantity) || 1,
+          count: 1,
+          reason: p.price_match_note || '未匹配價目',
+        });
+      }
+    });
+  return Array.from(groups.values());
+}
+
+function PayrollItemsSummary({
+  items,
+  payroll,
+  className = 'mt-6',
+}: {
+  items: any[];
+  payroll: any;
+  className?: string;
+}) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className={className}>
+      <h3 className="font-bold text-gray-900 mb-2">薪酬項目明細（底薪 / 津貼 / OT / 強積金）</h3>
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium text-gray-600">項目</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-600">單價</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-600">天數/數量</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: any) => {
+              const isDeduction = Number(item.amount) < 0;
+              const typeLabel = item.item_type === 'base_salary' ? '底薪' :
+                item.item_type === 'allowance' ? '津貼' :
+                item.item_type === 'ot' ? 'OT' :
+                item.item_type === 'mpf_deduction' ? '強積金扣款' : item.item_type;
+              const badgeColor = item.item_type === 'base_salary' ? 'bg-blue-100 text-blue-700' :
+                item.item_type === 'allowance' ? 'bg-green-100 text-green-700' :
+                item.item_type === 'ot' ? 'bg-purple-100 text-purple-700' :
+                item.item_type === 'mpf_deduction' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
+              return (
+                <tr key={item.id} className={`border-b ${item.item_type === 'base_salary' ? 'bg-blue-50' : item.item_type === 'allowance' && item.item_name?.includes('法定') ? 'bg-yellow-50' : item.item_type === 'mpf_deduction' ? 'bg-red-50' : ''}`}>
+                  <td className="px-4 py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs mr-2 ${badgeColor}`}>{typeLabel}</span>
+                    <span className="font-medium">{item.item_name}</span>
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono">
+                    {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
+                      ? `${(Number(item.quantity) * 100).toFixed(0)}%`
+                      : `$${Number(item.unit_price).toLocaleString()}`}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono">{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}</td>
+                  <td className={`px-4 py-2 text-right font-mono font-bold ${isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
+                    {isDeduction ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2 text-gray-500 text-xs">{item.remarks || '-'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="border-t-2 border-gray-900">
+            <tr className="bg-gray-50">
+              <td colSpan={3} className="px-4 py-2 text-right font-bold">應收總額</td>
+              <td className="px-4 py-2 text-right font-mono font-bold text-primary-600">${Number(payroll.gross_amount).toLocaleString()}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function UnmatchedSummaryView({ groups }: { groups: UnmatchedGroup[] }) {
+  if (groups.length === 0) {
+    return (
+      <div className="text-center py-10 text-green-600 bg-green-50 border border-green-100 rounded-lg">
+        所有工作記錄已成功匹配價目。
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+        以下工作記錄未能自動匹配價目。請先補充價目或在「歸組統計」中設定單價，再按「重新抓取資料」更新糧單。
+      </div>
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">客戶</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">合約</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">日/夜</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">數量</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">筆數</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.key} className="border-b hover:bg-amber-50/50">
+                <td className="px-3 py-2 font-medium">{g.clientName}</td>
+                <td className="px-3 py-2 text-gray-600">{g.contractNo}</td>
+                <td className="px-3 py-2 text-center">{g.dayNight}</td>
+                <td className="px-3 py-2 text-gray-600">{g.route}</td>
+                <td className="px-3 py-2 text-right font-mono">{g.quantity.toLocaleString()} {g.unit}</td>
+                <td className="px-3 py-2 text-right font-mono">{g.count}</td>
+                <td className="px-3 py-2 text-xs text-amber-700">{g.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // ─── Inline Edit Cell Component ────────────────────────────────────────────
 function InlineEditCell({
@@ -594,6 +766,7 @@ function DailyCalculationView({
   payrollId,
   isDraft,
   salaryType,
+  salarySetting,
   onAddAllowance,
   onRemoveAllowance,
 }: {
@@ -602,6 +775,7 @@ function DailyCalculationView({
   payrollId: number;
   isDraft: boolean;
   salaryType?: string;
+  salarySetting?: any;
   onAddAllowance: (date: string, key: string, name: string, amount: number) => Promise<void>;
   onRemoveAllowance: (daId: number) => Promise<void>;
 }) {
@@ -614,8 +788,99 @@ function DailyCalculationView({
     return <p className="text-sm text-gray-400 text-center py-4">沒有逐日計算數據</p>;
   }
 
+  const getTopUpAmount = (day: any) => {
+    if (!isDaily) return 0;
+    const workIncome = Number(day.work_income) || 0;
+    const baseSalary = Number(day.base_salary) || 0;
+    const isStatutoryHolidayNoAttendance = (day.work_logs || []).length === 0 &&
+      (day.daily_allowances || []).some((a: any) => a.allowance_key === 'statutory_holiday');
+    if (isStatutoryHolidayNoAttendance || baseSalary <= 0 || workIncome >= baseSalary) return 0;
+    return Math.max(0, Number(day.top_up_amount) || (baseSalary - workIncome));
+  };
+
+  const buildAllowanceBadges = (day: any): AllowanceBadge[] => {
+    const badges: AllowanceBadge[] = [];
+
+    (day.fixed_allowances_per_day || []).forEach((item: any, idx: number) => {
+      const amount = Number(item.amount) || 0;
+      if (amount > 0) {
+        badges.push({
+          key: `fixed-${item.key || item.name || idx}`,
+          label: item.name || item.item_name || item.key || '固定津貼',
+          amount,
+          className: 'bg-green-100 text-green-700 border-green-200',
+        });
+      }
+    });
+
+    (day.daily_allowances || []).forEach((item: any) => {
+      const amount = Number(item.amount) || 0;
+      if (amount > 0) {
+        badges.push({
+          key: `daily-${item.id || item.allowance_key}`,
+          id: item.id,
+          label: item.allowance_name || item.allowance_key || '每日津貼',
+          amount,
+          className: item.allowance_key === 'statutory_holiday'
+            ? 'bg-amber-100 text-amber-700 border-amber-200'
+            : 'bg-blue-100 text-blue-700 border-blue-200',
+          removable: isDraft,
+        });
+      }
+    });
+
+    const workLogs = day.work_logs || [];
+    const otSlots = [
+      { field: 'ot_1800_1900', label: 'OT 18:00-19:00' },
+      { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
+      { field: 'ot_0600_0700', label: 'OT 06:00-07:00' },
+      { field: 'ot_0700_0800', label: 'OT 07:00-08:00' },
+      { field: 'ot_mid_shift', label: '中直OT津貼', condition: (wl: any) => wl.is_mid_shift === true },
+    ];
+    let salaryOtBadgeCount = 0;
+    otSlots.forEach((slot) => {
+      const rate = Number(salarySetting?.[slot.field]) || 0;
+      if (rate <= 0) return;
+      const hasEligibleOt = workLogs.some((wl: any) => (Number(wl.ot_quantity) || 0) > 0 && (!slot.condition || slot.condition(wl)));
+      if (!hasEligibleOt) return;
+      salaryOtBadgeCount += 1;
+      badges.push({
+        key: `salary-ot-${slot.field}`,
+        label: slot.label,
+        amount: rate,
+        className: 'bg-purple-100 text-purple-700 border-purple-200',
+      });
+    });
+
+    if (salaryOtBadgeCount === 0) {
+      const otAmount = workLogs.reduce((sum: number, wl: any) => sum + (Number(wl.ot_line_amount) || 0), 0);
+      if (otAmount > 0) {
+        badges.push({
+          key: 'matched-ot',
+          label: 'OT',
+          amount: otAmount,
+          className: 'bg-purple-100 text-purple-700 border-purple-200',
+        });
+      }
+    }
+
+    const midShiftAmount = workLogs.reduce((sum: number, wl: any) => sum + (Number(wl.mid_shift_line_amount) || 0), 0);
+    const hasSalaryMidShiftBadge = badges.some((b) => b.key === 'salary-ot-ot_mid_shift');
+    if (midShiftAmount > 0 && !hasSalaryMidShiftBadge) {
+      badges.push({
+        key: 'matched-mid-shift',
+        label: '中直OT津貼',
+        amount: midShiftAmount,
+        className: 'bg-purple-100 text-purple-700 border-purple-200',
+      });
+    }
+
+    return badges;
+  };
+
+  const dailyTableColumnCount = 5 + (isDaily ? 1 : 0) + (isDraft ? 1 : 0);
   const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
-  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.top_up_amount) || 0), 0);
+  const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + getTopUpAmount(d), 0);
   const totalAllowances = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.daily_allowance_total) || 0), 0);
 
   const handleAddAllowance = async (date: string) => {
@@ -632,7 +897,7 @@ function DailyCalculationView({
       {/* Summary bar */}
       <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm">
         <div><span className="text-gray-500">工作天數：</span><span className="font-bold">{dailyCalc.length}天</span></div>
-        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => d.needs_top_up).length}天</span></div>}
+        {isDaily && <div><span className="text-gray-500">需補底薪天數：</span><span className="font-bold text-orange-600">{dailyCalc.filter(d => getTopUpAmount(d) > 0).length}天</span></div>}
         {isDaily && <div><span className="text-gray-500">補底薪合計：</span><span className="font-bold text-orange-600">${totalTopUp.toLocaleString()}</span></div>}
         <div><span className="text-gray-500">每日津貼合計：</span><span className="font-bold text-blue-600">${totalAllowances.toLocaleString()}</span></div>
         <div><span className="text-gray-500">逐日合計：</span><span className="font-bold text-primary-600">${grandTotal.toLocaleString()}</span></div>
@@ -646,8 +911,7 @@ function DailyCalculationView({
               <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
-              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">日薪底薪</th>}
-              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪</th>}
+              {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪差額</th>}
               <th className="px-3 py-2 text-center font-medium text-gray-600">每日津貼</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
               {isDraft && <th className="px-3 py-2 text-center font-medium text-gray-600 w-20">操作</th>}
@@ -659,9 +923,11 @@ function DailyCalculationView({
               const isAdding = addingDate === day.date;
               const displayDate = formatDateDisplay(day.date);
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
+              const topUpAmount = getTopUpAmount(day);
+              const allowanceBadges = buildAllowanceBadges(day);
               return (
                 <>
-                  <tr key={day.date} className={`border-b ${day.needs_top_up ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <tr key={day.date} className={`border-b ${topUpAmount > 0 ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
                         {isExpanded ? '▼' : '▶'}
@@ -669,29 +935,26 @@ function DailyCalculationView({
                     </td>
                     <td className="px-3 py-2 font-medium">
                       {displayDate} <span className="text-xs text-gray-400">({weekday})</span>
-                      {day.work_logs.length > 1 && <span className="text-xs text-gray-400 ml-1">({day.work_logs.length}筆)</span>}
+                      {(day.work_logs || []).length > 1 && <span className="text-xs text-gray-400 ml-1">({(day.work_logs || []).length}筆)</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
                       ${Number(day.work_income).toLocaleString()}
                     </td>
-                    {isDaily && <td className="px-3 py-2 text-right font-mono text-gray-500">
-                      ${Number(day.base_salary).toLocaleString()}
-                    </td>}
                     {isDaily && <td className="px-3 py-2 text-right font-mono">
-                      {day.needs_top_up ? (
-                        <span className="text-orange-600 font-bold">+${Number(day.top_up_amount).toLocaleString()}</span>
+                      {topUpAmount > 0 ? (
+                        <span className="text-orange-600 font-bold">+${topUpAmount.toLocaleString()}</span>
                       ) : (
-                        <span className="text-green-600">-</span>
+                        <span className="text-gray-300">-</span>
                       )}
                     </td>}
                     <td className="px-3 py-2 text-center">
-                      {day.daily_allowances && day.daily_allowances.length > 0 ? (
+                      {allowanceBadges.length > 0 ? (
                         <div className="flex flex-wrap gap-1 justify-center">
-                          {day.daily_allowances.map((da: any) => (
-                            <span key={da.id} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs ${da.allowance_key === 'statutory_holiday' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {da.allowance_key === 'statutory_holiday' && '🏷️ '}{da.allowance_name} ${Number(da.amount).toLocaleString()}
-                              {isDraft && (
-                                <button onClick={() => onRemoveAllowance(da.id)} className="ml-0.5 text-blue-400 hover:text-red-500">&times;</button>
+                          {allowanceBadges.map((badge) => (
+                            <span key={badge.key} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-xs ${badge.className}`}>
+                              {badge.label} ${badge.amount.toLocaleString()}
+                              {badge.removable && badge.id && (
+                                <button onClick={() => onRemoveAllowance(badge.id!)} className="ml-0.5 text-blue-400 hover:text-red-500">&times;</button>
                               )}
                             </span>
                           ))}
@@ -716,7 +979,7 @@ function DailyCalculationView({
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-50">
-                      <td colSpan={isDraft ? 8 : 7} className="px-6 py-2">
+                      <td colSpan={dailyTableColumnCount} className="px-6 py-2">
                         <div className="text-xs space-y-2">
                           {day.work_logs.map((wl: any, wIdx: number) => {
                             const wlRoute = [wl.start_location, wl.end_location].filter(Boolean).join(' → ');
@@ -757,7 +1020,7 @@ function DailyCalculationView({
                   )}
                   {isAdding && (
                     <tr className="bg-blue-50">
-                      <td colSpan={isDraft ? 8 : 7} className="px-6 py-3">
+                      <td colSpan={dailyTableColumnCount} className="px-6 py-3">
                         <div className="flex items-center gap-2">
                           <select
                             value={selectedAllowance}
@@ -786,8 +1049,8 @@ function DailyCalculationView({
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={isDraft ? 6 : 5} className="px-3 py-2 font-bold text-right">逐日合計</td>
-              <td className="px-3 py-2 text-right font-mono font-bold text-primary-600" colSpan={isDraft ? 2 : 2}>
+              <td colSpan={dailyTableColumnCount - (isDraft ? 2 : 1)} className="px-3 py-2 font-bold text-right">逐日合計</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-primary-600" colSpan={isDraft ? 2 : 1}>
                 ${grandTotal.toLocaleString()}
               </td>
             </tr>
@@ -1216,6 +1479,7 @@ export default function PayrollDetailPage() {
   const grouped = payroll.grouped_settlement || [];
   const dailyCalc = payroll.daily_calculation || [];
   const allowanceOptions = payroll.allowance_options || [];
+  const unmatchedGroups = buildUnmatchedGroups(pwls);
   const isPreparing = payroll.status === 'preparing';
   const isDraft = payroll.status === 'draft' || isPreparing;
 
@@ -1244,7 +1508,7 @@ export default function PayrollDetailPage() {
           )}
           {payroll.status === 'draft' && (
             <>
-              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
+              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新抓取資料</button>
               <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
               <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
@@ -1327,6 +1591,9 @@ export default function PayrollDetailPage() {
               )}
               {tab === 'grouped' && grouped.length > 0 && (
                 <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{grouped.length}組</span>
+              )}
+              {tab === 'unmatched' && unmatchedGroups.length > 0 && (
+                <span className="ml-1 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{unmatchedGroups.length}組</span>
               )}
             </button>
           ))}
@@ -1434,78 +1701,6 @@ export default function PayrollDetailPage() {
               <p className="text-sm text-gray-400 text-center py-8">此粮單暫無工作記錄</p>
             )}
             </div>
-          {/* ── 薪酸項目（payroll_items）小節 ── */}
-          {!isPreparing && items.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-2">薪酸項目明細（底薪 / 津貼 / OT / 強積金）</h3>
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">項目</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">單價</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">天數/數量</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item: any, idx: number) => {
-                      const isDeduction = Number(item.amount) < 0;
-                      const typeLabel: Record<string, string> = {
-                        base_salary: '底薪',
-                        allowance: '津貼',
-                        ot: 'OT',
-                        commission: '分傈',
-                        mpf_deduction: '強積金扣款',
-                        mpf_employer: '強積金（雇主）',
-                      };
-                      return (
-                        <tr key={item.id || idx} className={`border-b ${
-                          item.item_type === 'base_salary' ? 'bg-blue-50' :
-                          item.item_type === 'mpf_deduction' ? 'bg-red-50' :
-                          item.item_type === 'allowance' && item.item_name === '法定假日津貼' ? 'bg-amber-50' :
-                          idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        }`}>
-                          <td className="px-4 py-2 font-medium">
-                            <span className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs ${
-                              item.item_type === 'base_salary' ? 'bg-blue-100 text-blue-700' :
-                              item.item_type === 'mpf_deduction' ? 'bg-red-100 text-red-700' :
-                              item.item_type === 'allowance' ? 'bg-green-100 text-green-700' :
-                              item.item_type === 'ot' ? 'bg-purple-100 text-purple-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>{typeLabel[item.item_type] || item.item_type}</span>
-                            {item.item_name}
-                          </td>
-                          <td className="px-4 py-2 text-right font-mono">
-                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
-                              ? `${(Number(item.quantity) * 100).toFixed(0)}%`
-                              : `$${Number(item.unit_price).toLocaleString()}`}
-                          </td>
-                          <td className="px-4 py-2 text-right font-mono">
-                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
-                          </td>
-                          <td className={`px-4 py-2 text-right font-mono font-bold ${isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
-                            {isDeduction ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-2 text-xs text-gray-500">{item.remarks || ''}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="border-t-2 border-gray-900">
-                    <tr className="bg-gray-50">
-                      <td colSpan={3} className="px-4 py-2 font-bold text-right">應收總額</td>
-                      <td className="px-4 py-2 text-right font-mono font-bold text-primary-600">
-                        ${Number(payroll.gross_amount || payroll.net_amount).toLocaleString()}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
           </div>
         )}
         {/* end detail tab */}
@@ -1521,9 +1716,14 @@ export default function PayrollDetailPage() {
             payrollId={payroll.id}
             isDraft={isDraft}
             salaryType={payroll.salary_type}
+            salarySetting={payroll.salary_setting}
             onAddAllowance={handleAddDailyAllowance}
             onRemoveAllowance={handleRemoveDailyAllowance}
           />
+        )}
+
+        {activeTab === 'unmatched' && (
+          <UnmatchedSummaryView groups={unmatchedGroups} />
         )}
 
         {activeTab === 'print' && (
@@ -1676,6 +1876,10 @@ export default function PayrollDetailPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {!isPreparing && items.length > 0 && (
+          <PayrollItemsSummary items={items} payroll={payroll} />
         )}
       </div>
 
