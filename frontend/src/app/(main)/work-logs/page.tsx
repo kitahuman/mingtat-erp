@@ -397,7 +397,12 @@ export default function WorkLogsPage() {
       subconFleetDriversApi.simple().catch(() => ({ data: [] })),
       subconFleetDriversApi.simpleDrivers().catch(() => ({ data: [] })),
     ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet, fleetDrivers]) => {
-      setCompanies((cp.data || []).map((c: any) => ({ value: c.id, label: c.internal_prefix ? c.internal_prefix + ' ' + c.name : c.name })));
+      setCompanies((cp.data || []).map((c: any) => ({
+        value: c.id,
+        label: c.internal_prefix ? `${c.internal_prefix} ${c.name}` : c.name,
+        _raw: c,
+        shortLabel: c.internal_prefix || c.name,
+      })));
       setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.code || p.name })));
       setContracts((qt.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
       const qoData = qo.data?.data || qo.data || [];
@@ -816,6 +821,30 @@ export default function WorkLogsPage() {
     filterQuotation.length || filterContract.length || filterEmployee.length || filterEquipment || filterDateFrom || filterDateTo ||
     Object.keys(columnFilters).length > 0);
 
+  const findOptionByValue = (options: Option[], value: string | number | null | undefined): Option | undefined => {
+    if (value === null || value === undefined || value === '') return undefined;
+    return options.find(o => String(o.value) === String(value));
+  };
+
+  const getShortOptionLabel = (options: Option[], value: string | number | null | undefined): string | undefined => {
+    const option = findOptionByValue(options, value);
+    return option?.shortLabel || option?.label;
+  };
+
+  const getCompanyDisplayName = (row: any, value: string | number | null | undefined): string => {
+    if (row.company && typeof row.company === 'object' && String(row.company.id) === String(value)) {
+      return row.company.internal_prefix || row.company.name || row.company.name_en || '—';
+    }
+    return getShortOptionLabel(companies, value) || row.company_profile?.chinese_name || row.company_profile?.name || '—';
+  };
+
+  const getClientDisplayName = (row: any, value: string | number | null | undefined): string => {
+    if (row.client && typeof row.client === 'object' && String(row.client.id) === String(value)) {
+      return row.client.code || row.client.name || row.client.name_en || '—';
+    }
+    return getShortOptionLabel(clients, value) || row.unverified_client_name || '—';
+  };
+
   // ── Helper: get display value for relation fields ───────────
   const getDisplayValue = (row: any, field: string): string => {
     const dirty = dirtyRows.get(row.id);
@@ -823,11 +852,8 @@ export default function WorkLogsPage() {
     if (dirty && field in dirty) {
       const val = dirty[field];
       if (field === 'status') return getStatusLabel(val) || val || '—';
-      if (field === 'company_id') return companies.find(o => o.value === val)?.label || '—';
-      if (field === 'client_id') {
-        const found = clients.find(o => o.value === val) as any;
-        return found ? (found.shortLabel || found.label) : '—';
-      }
+      if (field === 'company_id') return getCompanyDisplayName(row, val);
+      if (field === 'client_id') return getClientDisplayName(row, val);
       if (field === 'quotation_id') return quotations.find(o => o.value === val)?.label || '—';
       if (field === 'contract_id') return contracts.find(o => o.value === val)?.label || '—';
       if (field === 'employee_id') return employees.find(o => String(o.value) === String(val))?.label || '—';
@@ -837,8 +863,8 @@ export default function WorkLogsPage() {
     }
     // Original value display
     if (field === 'status') return getStatusLabel(row.status) || '—';
-    if (field === 'company_id') return row.company?.internal_prefix || row.company?.name || row.company_profile?.chinese_name || companies.find(o => o.value === row.company_id)?.label || '—';
-    if (field === 'client_id') return (row.client_id ? (row.client?.code || row.client?.name) : null) || row.unverified_client_name || clients.find(o => o.value === row.client_id)?.label || '—';
+    if (field === 'company_id') return getCompanyDisplayName(row, row.company_id);
+    if (field === 'client_id') return getClientDisplayName(row, row.client_id);
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
     if (field === 'employee_id') {
@@ -1146,8 +1172,8 @@ export default function WorkLogsPage() {
           <ExportButton
             columns={COLUMNS.map(col => ({ key: col.key, label: col.label, exportRender: (val: any, row: any) => {
               if (col.key === 'publisher') return row.publisher?.displayName || row.publisher?.username || '';
-              if (col.key === 'company') return row.company?.internal_prefix || row.company?.name || row.company_profile?.chinese_name || '';
-              if (col.key === 'client') return row.client?.code || row.client?.name || '';
+              if (col.key === 'company') return getCompanyDisplayName(row, row.company_id).replace('—', '');
+              if (col.key === 'client') return getClientDisplayName(row, row.client_id).replace('—', '');
               if (col.key === 'quotation') return row.quotation?.quotation_no || '';
               if (col.key === 'contract') return row.contract?.contract_no || '';
               if (col.key === 'employee') {
