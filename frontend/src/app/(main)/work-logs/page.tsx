@@ -23,6 +23,26 @@ import { fmtDate } from '@/lib/dateUtils';
 interface Option { value: string | number; label: string; _raw?: any; shortLabel?: string; }
 
 const LIMIT_OPTIONS = [25, 50, 100];
+
+const SOURCE_LABELS: Record<string, { text: string; cls: string }> = {
+  attendance: { text: '打卡', cls: 'bg-amber-100 text-amber-700' },
+  manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
+  whatsapp_clockin: { text: 'WhatsApp 報工', cls: 'bg-green-100 text-green-700' },
+  whatsapp: { text: 'WhatsApp', cls: 'bg-green-100 text-green-700' },
+  report: { text: '報表', cls: 'bg-blue-100 text-blue-700' },
+  employee_portal: { text: '員工平台', cls: 'bg-purple-100 text-purple-700' },
+};
+
+const getSourceDisplay = (value: any) => {
+  if (value == null || value === '') return '(空白)';
+  const key = String(value);
+  return SOURCE_LABELS[key]?.text || key;
+};
+
+const getSourceClassName = (value: any) => {
+  const key = value == null ? '' : String(value);
+  return SOURCE_LABELS[key]?.cls || 'bg-gray-100 text-gray-600';
+};
 const formatHongKongDateTime = (value: any) => {
   if (!value) return '';
   const d = new Date(value);
@@ -1073,16 +1093,9 @@ export default function WorkLogsPage() {
         );
       }
       case 'source': {
-        const sourceLabels: Record<string, { text: string; cls: string }> = {
-          whatsapp: { text: 'WA', cls: 'bg-green-100 text-green-700' },
-          whatsapp_clockin: { text: 'WA', cls: 'bg-green-100 text-green-700' },
-          report: { text: '報表', cls: 'bg-blue-100 text-blue-700' },
-          manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
-        };
-        const src = sourceLabels[val] || sourceLabels['manual'];
         return (
-          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${src.cls}`}>
-            {src.text}
+          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${getSourceClassName(val)}`}>
+            {getSourceDisplay(val)}
           </span>
         );
       }
@@ -1236,6 +1249,7 @@ export default function WorkLogsPage() {
               if (col.key === 'wl_whatsapp_reported_at') return formatHongKongDateTime(val);
               if (col.key === 'is_confirmed') return val ? '是' : '否';
               if (col.key === 'is_paid') return val ? '是' : '否';
+              if (col.key === 'source') return getSourceDisplay(val).replace('(空白)', '');
               return val != null ? String(val) : '';
             }}))}
             data={rows}
@@ -1490,6 +1504,7 @@ export default function WorkLogsPage() {
                             setPage(1);
                           }}
                           serverSide={true}
+                          optionRender={col.key === 'source' ? (value) => getSourceDisplay(value) : undefined}
                           onFetchOptions={async (key) => {
                             const res = await workLogsApi.filterOptions(key, buildListParams());
                             return res.data as string[];

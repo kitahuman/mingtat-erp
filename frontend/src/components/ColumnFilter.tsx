@@ -10,13 +10,15 @@ interface ColumnFilterProps {
   // Server-side filter support
   serverSide?: boolean;
   onFetchOptions?: (columnKey: string) => Promise<string[]>;
+  /** Optional renderer for server-side option labels while preserving raw filter values */
+  optionRender?: (value: string) => string;
   /** Optional map to convert display labels to raw values for server-side filtering */
   displayToRawMap?: Record<string, string>;
 }
 
 export default function ColumnFilter({
   columnKey, data, activeFilters, onFilterChange, renderValue,
-  serverSide, onFetchOptions, displayToRawMap,
+  serverSide, onFetchOptions, optionRender, displayToRawMap,
 }: ColumnFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,12 +63,17 @@ export default function ColumnFilter({
     }
   }, [isOpen, serverSide, fetchOptions]);
 
-  // Filter values by search term
+  const getDisplayValue = useCallback((value: string) => {
+    return serverSide && optionRender ? optionRender(value) : value;
+  }, [serverSide, optionRender]);
+
+  // Filter values by search term. Search against the displayed label so server-side
+  // raw values can still be shown with user-friendly labels.
   const filteredValues = useMemo(() => {
     if (!searchTerm) return allUniqueValues;
     const lower = searchTerm.toLowerCase();
-    return allUniqueValues.filter(v => v.toLowerCase().includes(lower));
-  }, [allUniqueValues, searchTerm]);
+    return allUniqueValues.filter(v => getDisplayValue(v).toLowerCase().includes(lower));
+  }, [allUniqueValues, searchTerm, getDisplayValue]);
 
   // Current selected values for this column
   const selectedValues = activeFilters[columnKey];
@@ -185,7 +192,7 @@ export default function ColumnFilter({
                     onChange={() => handleToggleValue(value)}
                     className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
-                  <span className="text-xs text-gray-600 truncate">{value || '(空白)'}</span>
+                  <span className="text-xs text-gray-600 truncate">{getDisplayValue(value) || '(空白)'}</span>
                 </label>
               ))
             )}
