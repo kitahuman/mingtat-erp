@@ -18,7 +18,11 @@ interface ConversionResult {
   totalCandidates: number;
   results: Array<{
     employee_id: number;
+    employee_name?: string;
     scheduled_date: string;
+    start_time?: string | null;
+    end_time?: string | null;
+    gps_location?: string | null;
     status: 'created' | 'skipped' | 'preview';
     reason?: string;
   }>;
@@ -100,8 +104,10 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
     onClose();
   };
 
+  const previewItems = result?.results.filter((item) => item.status === 'preview') ?? [];
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="從打卡紀錄匯入工作日誌" size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} title="從打卡紀錄匯入工作日誌" size="xl">
       <div className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded">
@@ -159,7 +165,7 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">將建立：</span>
-                  <span className="font-bold text-green-600 ml-1">{result.results.filter(r => r.status === 'preview').length} 筆</span>
+                  <span className="font-bold text-green-600 ml-1">{result.created} 筆</span>
                 </div>
                 <div>
                   <span className="text-gray-600">將跳過：</span>
@@ -169,6 +175,43 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
               <p className="text-xs text-blue-600 mt-3 italic">
                 * 系統已排除該日期已有工作日誌的員工紀錄。
               </p>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-gray-800">即將匯入的打卡紀錄</h4>
+                <span className="text-xs text-gray-500">共 {previewItems.length} 筆</span>
+              </div>
+              {previewItems.length > 0 ? (
+                <div className="max-h-80 overflow-y-auto overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">員工姓名</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">日期</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">上班時間</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">下班時間</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[220px]">GPS 地點</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {previewItems.map((item) => (
+                        <tr key={`${item.employee_id}-${item.scheduled_date}`} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{item.employee_name || `員工 #${item.employee_id}`}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.scheduled_date}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.start_time || '—'}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.end_time || '—'}</td>
+                          <td className="px-3 py-2 text-gray-700">{item.gps_location || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="px-4 py-6 text-sm text-gray-500 text-center bg-white">
+                  沒有可匯入的打卡紀錄。
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -181,7 +224,7 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
               </button>
               <button
                 onClick={handleImport}
-                disabled={loading || result.results.filter(r => r.status === 'preview').length === 0}
+                disabled={loading || result.created === 0}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
               >
                 {loading ? '匯入中...' : '確認匯入'}

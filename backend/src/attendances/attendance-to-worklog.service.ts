@@ -13,7 +13,11 @@ interface AttendanceGroup {
 
 export interface ConversionItemResult {
   employee_id: number;
+  employee_name?: string;
   scheduled_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  gps_location?: string | null;
   status: 'created' | 'skipped' | 'preview';
   reason?: string;
   work_log_id?: number;
@@ -47,6 +51,7 @@ export class AttendanceToWorkLogService {
     const { dateFrom, dateTo } = this.normalizeRequiredDateRange(dto.date_from, dto.date_to);
     const groups = await this.getAttendanceGroups(dateFrom, dateTo, dto.employee_id);
     const dryRun = dto.dryRun === true;
+    const employeeNames = await this.getEmployeeNameMap(groups.map((group) => group.employeeId));
 
     let created = 0;
     let skipped = 0;
@@ -57,8 +62,7 @@ export class AttendanceToWorkLogService {
         if (!group.clockIn) {
           skipped += 1;
           results.push({
-            employee_id: group.employeeId,
-            scheduled_date: group.businessDate,
+            ...this.buildConversionItemDetails(group, employeeNames),
             status: 'skipped',
             reason: '沒有上班打卡',
           });
@@ -77,8 +81,7 @@ export class AttendanceToWorkLogService {
         if (existing) {
           skipped += 1;
           results.push({
-            employee_id: group.employeeId,
-            scheduled_date: group.businessDate,
+            ...this.buildConversionItemDetails(group, employeeNames),
             status: 'skipped',
             reason: '同一員工同一日期已有未刪除工作日誌',
             work_log_id: existing.id,
@@ -87,9 +90,9 @@ export class AttendanceToWorkLogService {
         }
 
         if (dryRun) {
+          created += 1;
           results.push({
-            employee_id: group.employeeId,
-            scheduled_date: group.businessDate,
+            ...this.buildConversionItemDetails(group, employeeNames),
             status: 'preview',
           });
           continue;
@@ -101,8 +104,7 @@ export class AttendanceToWorkLogService {
         });
         created += 1;
         results.push({
-          employee_id: group.employeeId,
-          scheduled_date: group.businessDate,
+          ...this.buildConversionItemDetails(group, employeeNames),
           status: 'created',
           work_log_id: createdWorkLog.id,
         });
@@ -150,6 +152,23 @@ export class AttendanceToWorkLogService {
     const parsed = new Date(`${normalized}T00:00:00.000Z`);
     if (Number.isNaN(parsed.getTime())) return null;
     return normalized;
+  }
+
+  private async getEmployeeNameMap(employeeIds: number[]): Promise<Map<number, string>> {
+    const uniqueEmployeeIds = Array.from(new Set(employeeIds));
+    if (uniqueEmployeeIds.length === 0) return new Map<number, string>();
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: uniqueEmployeeIds } },
+      select: { id: true, name_zh: true, name_en: true, emp_code: true },
+    });
+
+    return new Map(
+      employees.map((employee) => [
+        employee.id,
+        employee.name_zh || employee.name_en || employee.emp_code || `員工 #${employee.id}`,
+      ]),
+    );
   }
 
   private async getAttendanceGroups(dateFrom?: string, dateTo?: string, employeeId?: number): Promise<AttendanceGroup[]> {
@@ -208,6 +227,17 @@ export class AttendanceToWorkLogService {
         .filter((workLog) => workLog.employee_id !== null && workLog.scheduled_date !== null)
         .map((workLog) => this.groupKey(workLog.employee_id as number, this.dbDateToBusinessDate(workLog.scheduled_date as Date))),
     );
+  }
+
+  private buildConversionItemDetails(group: AttendanceGroup, employeeNames: Map<number, string>): Omit<ConversionItemResult, 'status' | 'reason' | 'work_log_id'> {
+    return {
+      employee_id: group.employeeId,
+      employee_name: employeeNames.get(group.employeeId) ?? `員工 #${group.employeeId}`,
+      scheduled_date: group.businessDate,
+      start_time: group.clockIn ? this.formatHongKongTime(group.clockIn.timestamp) : null,
+      end_time: group.clockOut ? this.formatHongKongTime(group.clockOut.timestamp) : null,
+      gps_location: group.clockIn?.address ?? null,
+    };
   }
 
   private buildWorkLogCreateInput(group: AttendanceGroup): Prisma.WorkLogUncheckedCreateInput {
