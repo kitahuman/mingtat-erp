@@ -30,14 +30,14 @@ function formatTime(timestamp: number): string {
   const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
-    return date.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return date.toLocaleTimeString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour: '2-digit', minute: '2-digit', hour12: false });
   } else if (diffDays === 1) {
     return '昨天';
   } else if (diffDays < 7) {
     const days = ['日', '一', '二', '三', '四', '五', '六'];
     return `星期${days[date.getDay()]}`;
   } else {
-    return date.toLocaleDateString('zh-HK', { month: 'numeric', day: 'numeric' });
+    return date.toLocaleDateString('zh-HK', { timeZone: 'Asia/Hong_Kong', month: 'numeric', day: 'numeric' });
   }
 }
 

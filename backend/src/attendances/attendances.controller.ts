@@ -18,8 +18,16 @@ export class AttendancesController {
   ) {}
 
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: Record<string, string | number | undefined>) {
     return this.service.findAll(query);
+  }
+
+  @Get('filter-options/:column')
+  getFilterOptions(
+    @Param('column') column: string,
+    @Query() query: Record<string, string | number | undefined>,
+  ) {
+    return this.service.getFilterOptions(column, query);
   }
 
   @Get('match-detail/:workLogId')

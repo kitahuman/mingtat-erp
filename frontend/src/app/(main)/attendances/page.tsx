@@ -66,6 +66,7 @@ export default function AttendancesPage() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('timestamp');
   const [sortOrder, setSortOrder] = useState('DESC');
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   // Filters
   const [employeeFilter, setEmployeeFilter] = useState('');
@@ -105,20 +106,31 @@ export default function AttendancesPage() {
     }).catch(() => {});
   }, []);
 
+  const buildColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, values]) => {
+      params[`filter_${key}`] = values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
+    });
+    return params;
+  }, []);
+
+  const buildListParams = useCallback((overrides?: { page?: number; limit?: number }) => ({
+    page: overrides?.page ?? page,
+    limit: overrides?.limit ?? 20,
+    search: search || undefined,
+    employee_id: employeeFilter || undefined,
+    type: typeFilter || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    sortBy,
+    sortOrder,
+    ...buildColumnFilterParams(columnFilters),
+  }), [page, search, employeeFilter, typeFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters, buildColumnFilterParams]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await attendancesApi.list({
-        page,
-        limit: 20,
-        search: search || undefined,
-        employee_id: employeeFilter || undefined,
-        type: typeFilter || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        sortBy,
-        sortOrder,
-      });
+      const res = await attendancesApi.list(buildListParams());
       setData(res.data.data || []);
       setTotal(res.data.total || 0);
     } catch {
@@ -126,7 +138,7 @@ export default function AttendancesPage() {
       setTotal(0);
     }
     setLoading(false);
-  }, [page, search, employeeFilter, typeFilter, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [buildListParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -135,6 +147,22 @@ export default function AttendancesPage() {
     setSortOrder(order);
     setPage(1);
   };
+
+  const handleColumnFilterChange = (filters: Record<string, Set<string>>) => {
+    setColumnFilters(filters);
+    setPage(1);
+  };
+
+  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
+    const res = await attendancesApi.filterOptions(columnKey, buildListParams({ page: 1, limit: 20 }));
+    return Array.isArray(res.data) ? res.data : [];
+  }, [buildListParams]);
+
+  const handleExportFetchAll = useCallback(async () => {
+    if (total === 0) return [];
+    const res = await attendancesApi.list(buildListParams({ page: 1, limit: total }));
+    return res.data.data || [];
+  }, [buildListParams, total]);
 
   const openMapModal = (row: any) => {
     const employeeName = row.employee?.name_zh || row.employee?.name_en || '';
@@ -244,6 +272,7 @@ export default function AttendancesPage() {
     {
       key: 'mid_shift_status',
       label: '中直批核狀態',
+      filterable: false,
       render: (_: any, row: any) => {
         if (!row.is_mid_shift) return <span className="text-gray-300 text-xs">未申請</span>;
         if (row.mid_shift_approved) {
@@ -266,6 +295,7 @@ export default function AttendancesPage() {
       key: 'time',
       label: '時間',
       sortable: true,
+      filterable: false,
       render: (_: any, row: any) => {
         if (!row.timestamp) return '-';
         const d = new Date(row.timestamp);
@@ -280,6 +310,7 @@ export default function AttendancesPage() {
     {
       key: 'gps',
       label: 'GPS 位置',
+      filterable: false,
       render: (_: any, row: any) => {
         if (row.latitude && row.longitude) {
           return (
@@ -315,6 +346,7 @@ export default function AttendancesPage() {
     {
       key: 'photo',
       label: '相片',
+      filterable: false,
       render: (_: any, row: any) => {
         const photoSrc = getPhotoSrc(row);
         if (!photoSrc) return <span className="text-gray-400 text-xs">-</span>;
@@ -332,6 +364,7 @@ export default function AttendancesPage() {
     {
       key: 'work_notes',
       label: '工作備註',
+      filterable: false,
       render: (_: any, row: any) => (
         <span className="text-sm text-blue-700 font-medium">{row.work_notes || '-'}</span>
       ),
@@ -340,6 +373,7 @@ export default function AttendancesPage() {
     {
       key: 'remarks',
       label: '備註',
+      filterable: false,
       render: (_: any, row: any) => (
         <span className="text-sm text-gray-600">{row.remarks || '-'}</span>
       ),
@@ -348,6 +382,7 @@ export default function AttendancesPage() {
     {
       key: '_actions',
       label: '操作',
+      filterable: false,
       render: (_: any, row: any) => (
         <div className="flex items-center gap-1">
           <button
@@ -561,6 +596,11 @@ export default function AttendancesPage() {
             onColumnConfigReset={handleReset}
             columnWidths={columnWidths}
             onColumnResize={handleColumnResize}
+            serverSideFilter={true}
+            columnFilters={columnFilters}
+            onColumnFilterChange={handleColumnFilterChange}
+            onFetchFilterOptions={handleFetchFilterOptions}
+            onExportFetchAll={handleExportFetchAll}
             exportFilename={`attendances_${new Date().toISOString().split('T')[0]}`}
           />
 

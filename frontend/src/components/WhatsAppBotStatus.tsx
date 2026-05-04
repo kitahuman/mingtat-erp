@@ -56,7 +56,13 @@ function formatUptime(seconds: number): string {
 function formatTime(dateStr: string | null): string {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('zh-HK', {
+    timeZone: 'Asia/Hong_Kong',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
 }
 
 // ══════════════════════════════════════════════════════════════

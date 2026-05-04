@@ -132,7 +132,15 @@ function formatDate(dateStr: string) {
 function formatDateTime(dateStr: string | null) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('zh-HK', {
+    timeZone: 'Asia/Hong_Kong',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
 }
 
 function extractStaffList(remarks: string | null): { staffList: string[]; teamLeader: string | null; cleanRemarks: string | null } {

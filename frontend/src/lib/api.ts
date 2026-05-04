@@ -519,6 +519,8 @@ export const expenseCategoriesApi = {
 // Attendances (打卡紀錄) - Admin view
 export const attendancesApi = {
   list: (params?: any) => api.get('/attendances', { params }),
+  filterOptions: (column: string, params?: Record<string, string | number | undefined>) =>
+    api.get(`/attendances/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/attendances/${id}`),
   update: (id: number, data: any) => api.put(`/attendances/${id}`, data),
   delete: (id: number) => api.delete(`/attendances/${id}`),

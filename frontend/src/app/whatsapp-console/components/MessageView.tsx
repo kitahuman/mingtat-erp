@@ -21,7 +21,7 @@ function formatMessageTime(timestamp: number): string {
   if (!timestamp) return '';
   // Bot 已將時間戳轉為毫秒，直接使用
   const date = new Date(timestamp);
-  return date.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return date.toLocaleTimeString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function MessageBubble({ msg }: { msg: WaMessage }) {
@@ -108,7 +108,7 @@ function DateDivider({ timestamp }: { timestamp: number }) {
   let label: string;
   if (diffDays === 0) label = '今天';
   else if (diffDays === 1) label = '昨天';
-  else label = date.toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric' });
+  else label = date.toLocaleDateString('zh-HK', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div className="flex items-center justify-center my-3 px-4">
