@@ -1,10 +1,197 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+interface MachineryListQuery {
+  page?: number | string;
+  limit?: number | string;
+  search?: string;
+  machine_type?: string;
+  owner_company_id?: number | string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  [key: string]: string | number | undefined;
+}
+
+type ColumnFilters = Record<string, string[]>;
+
+const STATUS_LABEL_TO_VALUE: Record<string, string> = {
+  使用中: 'active',
+  維修中: 'maintenance',
+  停用: 'inactive',
+  active: 'active',
+  maintenance: 'maintenance',
+  inactive: 'inactive',
+};
+
+const STATUS_VALUE_TO_LABEL: Record<string, string> = {
+  active: '使用中',
+  maintenance: '維修中',
+  inactive: '停用',
+};
 
 @Injectable()
 export class MachineryService {
   constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
+
+  private parseColumnFilters(query: MachineryListQuery): ColumnFilters {
+    const filters: ColumnFilters = {};
+    for (const key of Object.keys(query)) {
+      if (!key.startsWith('filter_') || !query[key]) continue;
+      const field = key.replace('filter_', '');
+      const values = String(query[key])
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (values.length > 0) filters[field] = values;
+    }
+    return filters;
+  }
+
+  private parseDisplayDate(dateStr: string): { start: Date; end: Date } | null {
+    const displayMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (displayMatch) {
+      const day = Number(displayMatch[1]);
+      const month = Number(displayMatch[2]);
+      const year = Number(displayMatch[3]);
+      if (!day || !month || !year) return null;
+      return {
+        start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)),
+        end: new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0)),
+      };
+    }
+
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]);
+      const day = Number(isoMatch[3]);
+      return {
+        start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)),
+        end: new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0)),
+      };
+    }
+
+    return null;
+  }
+
+  private formatDisplayDate(date: Date | null): string {
+    if (!date) return '-';
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private formatTonnage(value: any): string {
+    if (value == null || value === '') return '-';
+    return `${Number(value)}T`;
+  }
+
+  private parseTonnage(value: string): number | null {
+    if (value === '-') return null;
+    const normalized = value.replace(/T$/i, '').trim();
+    const numberValue = Number(normalized);
+    return Number.isFinite(numberValue) ? numberValue : null;
+  }
+
+  private buildColumnFilterWhere(filters: ColumnFilters): Prisma.MachineryWhereInput {
+    const conditions: Prisma.MachineryWhereInput[] = [];
+    const nullableStringFields = ['brand', 'model', 'serial_number'] as const;
+    const directStringFields = ['machine_code', 'machine_type'] as const;
+
+    for (const [field, values] of Object.entries(filters)) {
+      if (values.includes('__NO_MATCH__')) {
+        conditions.push({ id: -1 });
+        continue;
+      }
+
+      const hasBlank = values.includes('-');
+      const nonBlankValues = values.filter((value) => value !== '-');
+
+      if ((directStringFields as readonly string[]).includes(field)) {
+        if (nonBlankValues.length > 0) conditions.push({ [field]: { in: nonBlankValues } } as Prisma.MachineryWhereInput);
+      } else if ((nullableStringFields as readonly string[]).includes(field)) {
+        const fieldConditions: Prisma.MachineryWhereInput[] = [];
+        if (nonBlankValues.length > 0) fieldConditions.push({ [field]: { in: nonBlankValues } } as Prisma.MachineryWhereInput);
+        if (hasBlank) fieldConditions.push({ OR: [{ [field]: null }, { [field]: '' }] } as Prisma.MachineryWhereInput);
+        if (fieldConditions.length === 1) conditions.push(fieldConditions[0]);
+        if (fieldConditions.length > 1) conditions.push({ OR: fieldConditions });
+      } else if (field === 'tonnage') {
+        const tonnageValues = nonBlankValues
+          .map((value) => this.parseTonnage(value))
+          .filter((value): value is number => value !== null);
+        const tonnageConditions: Prisma.MachineryWhereInput[] = [];
+        if (tonnageValues.length > 0) tonnageConditions.push({ tonnage: { in: tonnageValues } });
+        if (hasBlank) tonnageConditions.push({ tonnage: null });
+        if (tonnageConditions.length === 1) conditions.push(tonnageConditions[0]);
+        if (tonnageConditions.length > 1) conditions.push({ OR: tonnageConditions });
+      } else if (field === 'owner_company') {
+        const companyConditions: Prisma.MachineryWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          companyConditions.push({ owner_company: { internal_prefix: { in: nonBlankValues } } });
+        }
+        if (hasBlank) {
+          companyConditions.push({ owner_company: { OR: [{ internal_prefix: null }, { internal_prefix: '' }] } });
+        }
+        if (companyConditions.length === 1) conditions.push(companyConditions[0]);
+        if (companyConditions.length > 1) conditions.push({ OR: companyConditions });
+      } else if (field === 'inspection_cert_expiry' || field === 'insurance_expiry') {
+        const dateRanges = nonBlankValues
+          .map((value) => this.parseDisplayDate(value))
+          .filter((range): range is { start: Date; end: Date } => range !== null);
+        const dateConditions: Prisma.MachineryWhereInput[] = [];
+        if (dateRanges.length > 0) {
+          dateConditions.push({
+            OR: dateRanges.map((range) => ({ [field]: { gte: range.start, lt: range.end } }) as Prisma.MachineryWhereInput),
+          });
+        }
+        if (hasBlank) dateConditions.push({ [field]: null } as Prisma.MachineryWhereInput);
+        if (dateConditions.length === 1) conditions.push(dateConditions[0]);
+        if (dateConditions.length > 1) conditions.push({ OR: dateConditions });
+      } else if (field === 'status') {
+        const rawValues = nonBlankValues.map((value) => STATUS_LABEL_TO_VALUE[value] || value);
+        if (rawValues.length > 0) conditions.push({ status: { in: rawValues } });
+      }
+    }
+
+    return conditions.length > 0 ? { AND: conditions } : {};
+  }
+
+  private buildBaseWhere(query: MachineryListQuery, excludeFilterColumn?: string): Prisma.MachineryWhereInput {
+    const where: Prisma.MachineryWhereInput = { deleted_at: null };
+
+    if (query.machine_type) where.machine_type = query.machine_type;
+    if (query.owner_company_id) where.owner_company_id = Number(query.owner_company_id);
+    if (query.status) where.status = query.status;
+    if (query.search) {
+      where.OR = [
+        { machine_code: { contains: query.search, mode: 'insensitive' } },
+        { brand: { contains: query.search, mode: 'insensitive' } },
+        { model: { contains: query.search, mode: 'insensitive' } },
+        { serial_number: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const columnFilters = this.parseColumnFilters(query);
+    if (excludeFilterColumn) delete columnFilters[excludeFilterColumn];
+    const columnFilterWhere = this.buildColumnFilterWhere(columnFilters);
+    if (columnFilterWhere.AND) where.AND = columnFilterWhere.AND;
+
+    return where;
+  }
+
+  private buildOrderBy(sortBy: string | undefined, sortOrder: Prisma.SortOrder): Prisma.MachineryOrderByWithRelationInput {
+    const directSortFields = [
+      'machine_code', 'machine_type', 'brand', 'model', 'tonnage', 'serial_number',
+      'inspection_cert_expiry', 'insurance_expiry', 'status', 'id', 'created_at',
+    ];
+    if (sortBy === 'owner_company') return { owner_company: { internal_prefix: sortOrder } };
+    if (directSortFields.includes(sortBy || '')) return { [sortBy!]: sortOrder } as Prisma.MachineryOrderByWithRelationInput;
+    return { machine_code: 'asc' };
+  }
 
   async simple() {
     const machines = await this.prisma.machinery.findMany({
@@ -21,36 +208,18 @@ export class MachineryService {
     }));
   }
 
-  async findAll(query: {
-    page?: number; limit?: number; search?: string;
-    machine_type?: string; owner_company_id?: number; status?: string;
-    sortBy?: string; sortOrder?: string;
-  }) {
+  async findAll(query: MachineryListQuery) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = { deleted_at: null };
-
-    if (query.machine_type) where.machine_type = query.machine_type;
-    if (query.owner_company_id) where.owner_company_id = Number(query.owner_company_id);
-    if (query.status) where.status = query.status;
-    if (query.search) {
-      where.OR = [
-        { machine_code: { contains: query.search, mode: 'insensitive' } },
-        { brand: { contains: query.search, mode: 'insensitive' } },
-        { model: { contains: query.search, mode: 'insensitive' } },
-        { serial_number: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
-
-    const allowedSortFields = ['machine_code', 'machine_type', 'brand', 'model', 'tonnage', 'inspection_cert_expiry', 'insurance_expiry', 'status', 'id', 'created_at', 'plate_number'];
-    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'machine_code';
-    const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
+    const where = this.buildBaseWhere(query);
+    const sortOrder: Prisma.SortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
+    const orderBy = this.buildOrderBy(query.sortBy, sortOrder);
 
     const [data, total] = await Promise.all([
       this.prisma.machinery.findMany({
         where,
         include: { owner_company: true },
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -58,6 +227,59 @@ export class MachineryService {
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getFilterOptions(column: string, query: MachineryListQuery): Promise<string[]> {
+    const where = this.buildBaseWhere(query, column);
+    const stringColumns = ['machine_code', 'machine_type', 'brand', 'model', 'serial_number', 'status'] as const;
+    const dateColumns = ['inspection_cert_expiry', 'insurance_expiry'] as const;
+
+    if ((stringColumns as readonly string[]).includes(column)) {
+      const records = await this.prisma.machinery.findMany({
+        where,
+        select: { [column]: true } as any,
+        distinct: [column as any],
+        orderBy: { [column]: 'asc' } as any,
+      });
+      const values = records.map((record: any) => {
+        const value = record[column];
+        if (column === 'status') return STATUS_VALUE_TO_LABEL[value] || value || '-';
+        return value || '-';
+      });
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'tonnage') {
+      const records = await this.prisma.machinery.findMany({
+        where,
+        select: { tonnage: true },
+        distinct: ['tonnage'],
+        orderBy: { tonnage: 'asc' },
+      });
+      return records.map((record) => this.formatTonnage(record.tonnage));
+    }
+
+    if (column === 'owner_company') {
+      const records = await this.prisma.machinery.findMany({
+        where,
+        include: { owner_company: { select: { internal_prefix: true } } },
+        distinct: ['owner_company_id'],
+      });
+      const values = records.map((record) => record.owner_company?.internal_prefix || '-');
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if ((dateColumns as readonly string[]).includes(column)) {
+      const records = await this.prisma.machinery.findMany({
+        where,
+        select: { [column]: true } as any,
+        orderBy: { [column]: 'desc' } as any,
+      });
+      const values = records.map((record: any) => this.formatDisplayDate(record[column]));
+      return [...new Set(values)];
+    }
+
+    return [];
   }
 
   async findOne(id: number) {

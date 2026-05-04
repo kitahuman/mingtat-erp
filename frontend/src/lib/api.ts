@@ -153,6 +153,7 @@ export const vehiclesApi = {
 export const machineryApi = {
   simple: () => api.get('/machinery/simple'),
   list: (params?: any) => api.get('/machinery', { params }),
+  filterOptions: (column: string, params?: any) => api.get(`/machinery/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/machinery/${id}`),
   create: (data: any) => api.post('/machinery', data),
   update: (id: number, data: any) => api.put(`/machinery/${id}`, data),

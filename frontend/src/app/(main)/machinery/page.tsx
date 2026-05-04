@@ -16,17 +16,23 @@ const statusOptions = [
   { value: 'maintenance', label: '維修中' },
   { value: 'inactive', label: '停用' },
 ];
+const statusLabels: Record<string, string> = {
+  active: '使用中',
+  maintenance: '維修中',
+  inactive: '停用',
+};
 
 export default function MachineryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasMinRole , isReadOnly } = useAuth();
+  const { hasMinRole } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState(searchParams.get('owner_company_id') || '');
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -39,20 +45,37 @@ export default function MachineryPage() {
 
   useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
 
+  const buildColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, values]) => {
+      params[`filter_${key}`] = values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
+    });
+    return params;
+  }, []);
+
+  const buildListParams = useCallback((overrides?: { page?: number; limit?: number }) => ({
+    page: overrides?.page ?? page,
+    limit: overrides?.limit ?? 20,
+    search: search || undefined,
+    machine_type: typeFilter || undefined,
+    owner_company_id: companyFilter || undefined,
+    sortBy,
+    sortOrder,
+    ...buildColumnFilterParams(columnFilters),
+  }), [page, search, typeFilter, companyFilter, sortBy, sortOrder, columnFilters, buildColumnFilterParams]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await machineryApi.list({
-        page, limit: 20, search,
-        machine_type: typeFilter || undefined,
-        owner_company_id: companyFilter || undefined,
-        sortBy, sortOrder
-      });
-      setData(res.data.data);
-      setTotal(res.data.total);
-    } catch {}
+      const res = await machineryApi.list(buildListParams());
+      setData(res.data.data || []);
+      setTotal(res.data.total || 0);
+    } catch {
+      setData([]);
+      setTotal(0);
+    }
     setLoading(false);
-  }, [page, search, typeFilter, companyFilter, sortBy, sortOrder]);
+  }, [buildListParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -68,6 +91,22 @@ export default function MachineryPage() {
 
   const handleSort = (field: string, order: string) => { setSortBy(field); setSortOrder(order); setPage(1); };
 
+  const handleColumnFilterChange = (filters: Record<string, Set<string>>) => {
+    setColumnFilters(filters);
+    setPage(1);
+  };
+
+  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
+    const res = await machineryApi.filterOptions(columnKey, buildListParams({ page: 1, limit: 20 }));
+    return Array.isArray(res.data) ? res.data : [];
+  }, [buildListParams]);
+
+  const handleExportFetchAll = useCallback(async () => {
+    if (total === 0) return [];
+    const res = await machineryApi.list(buildListParams({ page: 1, limit: total }));
+    return res.data.data || [];
+  }, [buildListParams, total]);
+
   const handleInlineSave = async (id: number, formData: any) => {
     await machineryApi.update(id, {
       machine_code: formData.machine_code,
@@ -75,6 +114,7 @@ export default function MachineryPage() {
       brand: formData.brand,
       model: formData.model,
       tonnage: formData.tonnage ? Number(formData.tonnage) : null,
+      serial_number: formData.serial_number || null,
       status: formData.status,
       inspection_cert_expiry: formData.inspection_cert_expiry || null,
       insurance_expiry: formData.insurance_expiry || null,
@@ -84,21 +124,24 @@ export default function MachineryPage() {
 
   const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
   const filterExpiry = (v: string) => fmtDate(v);
+  const renderStatus = (v: string) => (
+    <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
+      {statusLabels[v] || '停用'}
+    </span>
+  );
+  const filterStatus = (v: string) => statusLabels[v] || '停用';
 
   const columns = [
     { key: 'machine_code', label: '編號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
     { key: 'machine_type', label: '類型', sortable: true, editable: true, editType: 'select' as const, editOptions: machineTypes.map(t => ({ value: t, label: t })) },
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'model', label: '型號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
+    { key: 'serial_number', label: '序號', sortable: true, filterable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
     { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
     { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: (v: string) => (
-      <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
-        {v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用'}
-      </span>
-    ), filterRender: (v: string) => v === '使用中' ? '使用中' : v === 'maintenance' ? '維修中' : '停用' },
+    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: renderStatus, filterRender: filterStatus },
   ];
 
   const {
@@ -142,14 +185,19 @@ export default function MachineryPage() {
           limit={20}
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
-          searchPlaceholder="搜尋編號、品牌或型號..."
+          searchPlaceholder="搜尋編號、品牌、型號或序號..."
           onRowClick={(row) => router.push(`/machinery/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={handleSort}
           onSave={handleInlineSave}
-        onDelete={handleInlineDelete}
+          onDelete={handleInlineDelete}
+          serverSideFilter={true}
+          columnFilters={columnFilters}
+          onColumnFilterChange={handleColumnFilterChange}
+          onFetchFilterOptions={handleFetchFilterOptions}
+          onExportFetchAll={handleExportFetchAll}
           filters={
             <div className="flex gap-2">
               <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
