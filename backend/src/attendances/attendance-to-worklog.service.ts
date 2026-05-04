@@ -75,7 +75,7 @@ export class AttendanceToWorkLogService {
             scheduled_date: this.businessDateToDbDate(group.businessDate),
             deleted_at: null,
           },
-          select: { id: true },
+          select: { id: true, source: true },
         });
 
         if (existing) {
@@ -83,7 +83,7 @@ export class AttendanceToWorkLogService {
           results.push({
             ...this.buildConversionItemDetails(group, employeeNames),
             status: 'skipped',
-            reason: '同一員工同一日期已有未刪除工作日誌',
+            reason: this.buildSkipReason(existing.source),
             work_log_id: existing.id,
           });
           continue;
@@ -227,6 +227,24 @@ export class AttendanceToWorkLogService {
         .filter((workLog) => workLog.employee_id !== null && workLog.scheduled_date !== null)
         .map((workLog) => this.groupKey(workLog.employee_id as number, this.dbDateToBusinessDate(workLog.scheduled_date as Date))),
     );
+  }
+
+  private buildSkipReason(source: string | null): string {
+    switch (source) {
+      case 'whatsapp_clockin':
+      case 'whatsapp':
+        return '已有 WhatsApp 報工';
+      case 'manual':
+        return '已有手動紀錄';
+      case 'employee_portal':
+        return '已有員工入口紀錄';
+      case 'attendance':
+        return '已有打卡轉入紀錄';
+      case 'report':
+        return '已有報工紀錄';
+      default:
+        return '已有工作日誌';
+    }
   }
 
   private buildConversionItemDetails(group: AttendanceGroup, employeeNames: Map<number, string>): Omit<ConversionItemResult, 'status' | 'reason' | 'work_log_id'> {

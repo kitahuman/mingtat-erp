@@ -1103,7 +1103,7 @@ model WorkLog {
   is_confirmed           Boolean   @default(false)
   is_paid                Boolean   @default(false)
   unverified_client_name String? // 員工自行輸入的未確認客戶名
-  source                 String    @default("manual") // manual | whatsapp_clockin | employee_portal | attendance | report
+  source                 String    @default("manual") // allowed: manual | whatsapp_clockin | employee_portal | attendance | report
   is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
   ai_parsed_data         Json? // AI 原始解析結果（WhatsApp 打卡）
   wl_whatsapp_reported_at DateTime? // WhatsApp 訊息實際報工時間（UTC 儲存）

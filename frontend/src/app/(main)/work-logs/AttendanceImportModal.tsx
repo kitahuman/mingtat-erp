@@ -105,6 +105,7 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
   };
 
   const previewItems = result?.results.filter((item) => item.status === 'preview') ?? [];
+  const skippedItems = result?.results.filter((item) => item.status === 'skipped') ?? [];
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="從打卡紀錄匯入工作日誌" size="xl">
@@ -177,26 +178,26 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
               </p>
             </div>
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-gray-800">即將匯入的打卡紀錄</h4>
-                <span className="text-xs text-gray-500">共 {previewItems.length} 筆</span>
+            <div className="border border-green-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-green-50 border-b border-green-200 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-green-800">即將匯入的打卡紀錄</h4>
+                <span className="text-xs text-green-700">共 {previewItems.length} 筆</span>
               </div>
               {previewItems.length > 0 ? (
                 <div className="max-h-80 overflow-y-auto overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
+                  <table className="min-w-full divide-y divide-green-100 text-sm">
+                    <thead className="bg-green-50 sticky top-0 z-10">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">員工姓名</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">日期</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">上班時間</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">下班時間</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[220px]">GPS 地點</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase tracking-wider whitespace-nowrap">員工姓名</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase tracking-wider whitespace-nowrap">日期</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase tracking-wider whitespace-nowrap">上班時間</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase tracking-wider whitespace-nowrap">下班時間</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase tracking-wider min-w-[220px]">GPS 地點</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
+                    <tbody className="bg-white divide-y divide-green-50">
                       {previewItems.map((item) => (
-                        <tr key={`${item.employee_id}-${item.scheduled_date}`} className="hover:bg-gray-50">
+                        <tr key={`${item.employee_id}-${item.scheduled_date}`} className="hover:bg-green-50">
                           <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{item.employee_name || `員工 #${item.employee_id}`}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.scheduled_date}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.start_time || '—'}</td>
@@ -210,6 +211,39 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
               ) : (
                 <div className="px-4 py-6 text-sm text-gray-500 text-center bg-white">
                   沒有可匯入的打卡紀錄。
+                </div>
+              )}
+            </div>
+
+            <div className="border border-amber-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-amber-800">將跳過的打卡紀錄</h4>
+                <span className="text-xs text-amber-700">共 {skippedItems.length} 筆</span>
+              </div>
+              {skippedItems.length > 0 ? (
+                <div className="max-h-64 overflow-y-auto overflow-x-auto">
+                  <table className="min-w-full divide-y divide-amber-100 text-sm">
+                    <thead className="bg-amber-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-amber-700 uppercase tracking-wider whitespace-nowrap">員工姓名</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-amber-700 uppercase tracking-wider whitespace-nowrap">日期</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-amber-700 uppercase tracking-wider min-w-[220px]">跳過原因</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-amber-50">
+                      {skippedItems.map((item) => (
+                        <tr key={`skipped-${item.employee_id}-${item.scheduled_date}-${item.reason || ''}`} className="hover:bg-amber-50">
+                          <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{item.employee_name || `員工 #${item.employee_id}`}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{item.scheduled_date}</td>
+                          <td className="px-3 py-2 text-amber-800">{item.reason || '已被系統跳過'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="px-4 py-6 text-sm text-gray-500 text-center bg-white">
+                  沒有將跳過的打卡紀錄。
                 </div>
               )}
             </div>
