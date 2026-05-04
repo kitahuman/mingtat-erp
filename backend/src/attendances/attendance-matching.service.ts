@@ -26,7 +26,7 @@ export class AttendanceMatchingService {
     });
     if (!wl) throw new NotFoundException(`工作紀錄 ${workLogId} 不存在`);
 
-    const date = wl.scheduled_date?.toISOString().slice(0, 10);
+    const date = this.formatDateInHongKong(wl.scheduled_date);
     if (!date) {
       return {
         work_log_id: workLogId,
@@ -37,8 +37,7 @@ export class AttendanceMatchingService {
       };
     }
 
-    const dateObj = new Date(date);
-    const nextDay = new Date(dateObj.getTime() + 86400000);
+    const { start, end } = this.getHongKongDayBounds(date);
     const employeeId = wl.employee_id;
 
     if (!employeeId) {
@@ -55,7 +54,7 @@ export class AttendanceMatchingService {
     const attendances = await this.prisma.employeeAttendance.findMany({
       where: {
         employee_id: employeeId,
-        timestamp: { gte: dateObj, lt: nextDay },
+        timestamp: { gte: start, lt: end },
       },
       include: {
         employee: { select: { id: true, name_zh: true, nickname: true, emp_code: true } },
@@ -125,13 +124,12 @@ export class AttendanceMatchingService {
    * 搜尋員工當天所有打卡記錄（手動配對用）
    */
   async searchEmployeeAttendances(employeeId: number, date: string) {
-    const dateObj = new Date(date);
-    const nextDay = new Date(dateObj.getTime() + 86400000);
+    const { start, end } = this.getHongKongDayBounds(date);
 
     return this.prisma.employeeAttendance.findMany({
       where: {
         employee_id: employeeId,
-        timestamp: { gte: dateObj, lt: nextDay },
+        timestamp: { gte: start, lt: end },
       },
       include: {
         employee: { select: { id: true, name_zh: true, nickname: true, emp_code: true } },
@@ -218,6 +216,39 @@ export class AttendanceMatchingService {
   }
 
   /**
+   * 將 Date 以 Asia/Hong_Kong 時區格式化為 YYYY-MM-DD，避免 toISOString() 使用 UTC 導致日期偏移。
+   */
+  private formatDateInHongKong(value: Date | string | null | undefined): string | null {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Hong_Kong',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(date)
+      .reduce<Record<string, string>>((acc, part) => {
+        if (part.type !== 'literal') acc[part.type] = part.value;
+        return acc;
+      }, {});
+
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+
+  /**
+   * 回傳香港本地日期的 UTC 查詢邊界：[當日 00:00 HKT, 次日 00:00 HKT)。
+   */
+  private getHongKongDayBounds(date: string): { start: Date; end: Date } {
+    const [year, month, day] = date.split('-').map(Number);
+    const start = new Date(Date.UTC(year, month - 1, day) - 8 * 60 * 60 * 1000);
+    const end = new Date(Date.UTC(year, month - 1, day + 1) - 8 * 60 * 60 * 1000);
+    return { start, end };
+  }
+
+  /**
    * 建立逐項核對結果
    */
   private buildChecks(
@@ -237,10 +268,8 @@ export class AttendanceMatchingService {
     }> = [];
 
     // 1. 日期核對
-    const wlDate = workLog.scheduled_date?.toISOString().slice(0, 10) || '—';
-    const attDate = clockIn?.timestamp
-      ? new Date(clockIn.timestamp).toISOString().slice(0, 10)
-      : '—';
+    const wlDate = this.formatDateInHongKong(workLog.scheduled_date) || '—';
+    const attDate = this.formatDateInHongKong(clockIn?.timestamp) || '—';
     checks.push({
       item: '日期',
       work_log_value: wlDate,

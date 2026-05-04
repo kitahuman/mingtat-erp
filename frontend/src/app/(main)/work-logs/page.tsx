@@ -27,7 +27,7 @@ const LIMIT_OPTIONS = [25, 50, 100];
 const SOURCE_LABELS: Record<string, { text: string; cls: string }> = {
   attendance: { text: '打卡', cls: 'bg-amber-100 text-amber-700' },
   manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
-  whatsapp_clockin: { text: 'WhatsApp 報工', cls: 'bg-green-100 text-green-700' },
+  whatsapp_clockin: { text: 'WA', cls: 'bg-green-100 text-green-700' },
   whatsapp: { text: 'WhatsApp', cls: 'bg-green-100 text-green-700' },
   report: { text: '報表', cls: 'bg-blue-100 text-blue-700' },
   employee_portal: { text: '員工平台', cls: 'bg-purple-100 text-purple-700' },
@@ -628,7 +628,7 @@ export default function WorkLogsPage() {
       if (field === 'scheduled_date' && originalValue) {
         originalValue = typeof originalValue === 'string' ? originalValue.split('T')[0] : originalValue;
       }
-      if (field === 'employee_id') {
+      if (field === 'employee') {
         if (originalRow?.work_log_fleet_driver_id) {
           originalValue = `fleet_${originalRow.work_log_fleet_driver_id}`;
         } else if (originalValue) {
@@ -656,7 +656,7 @@ export default function WorkLogsPage() {
   const getCellValue = (row: any, field: string): any => {
     const dirty = dirtyRows.get(row.id);
     if (dirty && field in dirty) return dirty[field];
-    if (field === 'employee_id') {
+    if (field === 'employee') {
       if (row.work_log_fleet_driver_id) return `fleet_${row.work_log_fleet_driver_id}`;
       if (row.employee_id) return `emp_${row.employee_id}`;
     }
@@ -933,7 +933,7 @@ export default function WorkLogsPage() {
     if (field === 'client_id') return getClientDisplayName(row, row.client_id);
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
-    if (field === 'employee_id') {
+    if (field === 'employee') {
       if (row.work_log_fleet_driver_id) {
         const fd = row.fleet_driver;
         if (fd) {
