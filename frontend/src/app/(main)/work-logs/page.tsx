@@ -628,7 +628,7 @@ export default function WorkLogsPage() {
       if (field === 'scheduled_date' && originalValue) {
         originalValue = typeof originalValue === 'string' ? originalValue.split('T')[0] : originalValue;
       }
-      if (field === 'employee') {
+      if (field === 'employee_id') {
         if (originalRow?.work_log_fleet_driver_id) {
           originalValue = `fleet_${originalRow.work_log_fleet_driver_id}`;
         } else if (originalValue) {
@@ -656,7 +656,7 @@ export default function WorkLogsPage() {
   const getCellValue = (row: any, field: string): any => {
     const dirty = dirtyRows.get(row.id);
     if (dirty && field in dirty) return dirty[field];
-    if (field === 'employee') {
+    if (field === 'employee_id') {
       if (row.work_log_fleet_driver_id) return `fleet_${row.work_log_fleet_driver_id}`;
       if (row.employee_id) return `emp_${row.employee_id}`;
     }
@@ -933,7 +933,7 @@ export default function WorkLogsPage() {
     if (field === 'client_id') return getClientDisplayName(row, row.client_id);
     if (field === 'quotation_id') return row.quotation?.quotation_no || quotations.find(o => o.value === row.quotation_id)?.label || '—';
     if (field === 'contract_id') return row.contract?.contract_no || contracts.find(o => o.value === row.contract_id)?.label || '—';
-    if (field === 'employee') {
+    if (field === 'employee_id') {
       if (row.work_log_fleet_driver_id) {
         const fd = row.fleet_driver;
         if (fd) {
