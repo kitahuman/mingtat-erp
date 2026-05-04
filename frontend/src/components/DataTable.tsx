@@ -327,7 +327,7 @@ export default function DataTable({
       )}
 
       {/* Table - always scrollable horizontally */}
-      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+      <div className={`overflow-x-auto border border-gray-200 rounded-lg ${filteredData.length === 0 ? 'min-h-[360px]' : ''}`}>
         <table
           className="w-full text-sm"
           style={{
