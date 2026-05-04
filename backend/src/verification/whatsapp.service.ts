@@ -212,7 +212,7 @@ export class WhatsappService {
 
     return {
       received: true,
-      server_time: new Date().toISOString(),
+      server_time: new Date().toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
     };
   }
 
@@ -228,7 +228,7 @@ export class WhatsappService {
 
     return {
       saved: true,
-      saved_at: this.latestQrCodeAt.toISOString(),
+      saved_at: this.latestQrCodeAt.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
     };
   }
 
@@ -264,12 +264,12 @@ export class WhatsappService {
     return {
       status: effectiveStatus,
       reported_status: this.botStatus,
-      last_heartbeat_at: this.lastHeartbeatAt?.toISOString() || null,
-      last_message_at: this.lastMessageAt?.toISOString() || null,
+      last_heartbeat_at: this.lastHeartbeatAt?.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T') || null,
+      last_message_at: this.lastMessageAt?.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T') || null,
       uptime: this.botUptime,
       offline_duration_ms: offlineDurationMs,
       has_qr_code: hasQrCode,
-      server_time: now.toISOString(),
+      server_time: now.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
     };
   }
 
@@ -295,7 +295,7 @@ export class WhatsappService {
     return {
       available: !expired,
       qr_code: expired ? null : this.latestQrCode,
-      generated_at: this.latestQrCodeAt.toISOString(),
+      generated_at: this.latestQrCodeAt.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
       expired,
       age_ms: qrAge,
     };
@@ -440,13 +440,13 @@ export class WhatsappService {
     const syncDateStart = classification.order_date_start
       || classification.order_date
       || (classification.modifications?.[0]?.target_date)
-      || new Date().toISOString().slice(0, 10);
+      || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
     const syncDateEnd = classification.order_date_end || syncDateStart;
     const syncStart = new Date(syncDateStart);
     const syncEnd = new Date(syncDateEnd);
     const syncCurrent = new Date(syncStart);
     while (syncCurrent <= syncEnd) {
-      await this.syncDailySummaryToVerificationRecords(syncCurrent.toISOString().slice(0, 10), targetShift);
+      await this.syncDailySummaryToVerificationRecords(syncCurrent.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }), targetShift);
       syncCurrent.setDate(syncCurrent.getDate() + 1);
     }
 
@@ -499,7 +499,7 @@ export class WhatsappService {
     const shift = classification.shift || 'day';
 
     // 日期範圍處理：如果有 order_date_start 和 order_date_end，遍歷日期範圍為每一天各建一筆 order
-    const dateStartStr = classification.order_date_start || classification.order_date || new Date().toISOString().slice(0, 10);
+    const dateStartStr = classification.order_date_start || classification.order_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
     const dateEndStr = classification.order_date_end || dateStartStr;
 
     const datesToCreate: Date[] = [];
@@ -611,7 +611,7 @@ export class WhatsappService {
 
       createdOrders.push({
         orderId: waOrder.id,
-        orderDate: orderDate.toISOString().slice(0, 10),
+        orderDate: orderDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }),
         version,
       });
     }
@@ -998,7 +998,7 @@ export class WhatsappService {
     // 2. 修復 DC 編號中的空格：「D C 14」→「DC14」、「D C13」→「DC13」
     text = text.replace(/D\s+C\s*(\d+)/gi, 'DC$1');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
     const systemPrompt = `你是一個專門分析香港建築運輸公司 WhatsApp 群組訊息的 AI 助手。
 你的任務是：
 1. 判斷訊息屬於哪種類型：order（完整工作分配）、modification（修改指令）、chat（一般對話）
@@ -1553,12 +1553,12 @@ DC19喺水澗石倉
             mod_prev_value: log.mod_prev_value,
             mod_new_value: log.mod_new_value,
             mod_ai_confidence: log.mod_ai_confidence ? Number(log.mod_ai_confidence) : null,
-            mod_created_at: log.mod_created_at.toISOString(),
+            mod_created_at: log.mod_created_at.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
             message: log.message
               ? {
                   wa_msg_body: log.message.wa_msg_body,
                   wa_msg_sender_name: log.message.wa_msg_sender_name,
-                  wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
+                  wa_msg_timestamp: log.message.wa_msg_timestamp?.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T') || null,
                 }
               : null,
           })),
@@ -1598,12 +1598,12 @@ DC19喺水澗石倉
         id: log.id,
         mod_type: log.mod_type,
         mod_description: log.mod_description,
-        mod_created_at: log.mod_created_at.toISOString(),
+        mod_created_at: log.mod_created_at.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
         message: log.message
           ? {
               wa_msg_body: log.message.wa_msg_body,
               wa_msg_sender_name: log.message.wa_msg_sender_name,
-              wa_msg_timestamp: log.message.wa_msg_timestamp?.toISOString() || null,
+              wa_msg_timestamp: log.message.wa_msg_timestamp?.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T') || null,
             }
           : null,
       })),
@@ -1625,7 +1625,7 @@ DC19喺水澗石倉
         sender: o.wa_order_sender_name,
         item_count: o.wa_order_item_count,
         ai_confidence: o.wa_order_ai_confidence ? Number(o.wa_order_ai_confidence) : null,
-        created_at: o.wa_order_created_at.toISOString(),
+        created_at: o.wa_order_created_at.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T'),
       })),
       items: summaryItems,
       messages: messages.map((m) => ({
@@ -1634,7 +1634,7 @@ DC19喺水澗石倉
         body: m.wa_msg_body,
         classification: m.wa_msg_ai_classified,
         confidence: m.wa_msg_ai_confidence ? Number(m.wa_msg_ai_confidence) : null,
-        timestamp: m.wa_msg_timestamp?.toISOString() || null,
+        timestamp: m.wa_msg_timestamp?.toLocaleString('sv', { timeZone: 'Asia/Hong_Kong' }).replace(' ', 'T') || null,
       })),
       order_mod_logs: orderModLogs,
     };
@@ -1668,7 +1668,7 @@ DC19喺水澗石倉
 
     // 取得不重複的日期+班次組合
     const uniqueDateShifts = [...new Set(
-      allOrders.map((o) => `${o.wa_order_date.toISOString().slice(0, 10)}|${o.wa_order_shift}`),
+      allOrders.map((o) => `${o.wa_order_date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })}|${o.wa_order_shift}`),
     )].sort((a, b) => b.localeCompare(a)); // 最新日期在前
 
     // 產生每天每班次的總結
@@ -1830,7 +1830,7 @@ DC19喺水澗石倉
     // key: "YYYY-MM-DD|shift|order_type"
     const ordersByDateType = new Map<string, (typeof orders[0])[]>();
     for (const order of orders) {
-      const dateKey = order.wa_order_date.toISOString().slice(0, 10);
+      const dateKey = order.wa_order_date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
       const primaryType = getOrderPrimaryType(order);
       const groupKey = `${dateKey}|${order.wa_order_shift}|${primaryType}`;
       if (!ordersByDateType.has(groupKey)) {
@@ -1875,7 +1875,7 @@ DC19喺水澗石倉
         if (item.wa_item_mod_status === 'cancelled') continue;
         allItems.push({
           ...item,
-          order_date: order.wa_order_date.toISOString().slice(0, 10),
+          order_date: order.wa_order_date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }),
           order_status: order.wa_order_status,
           order_version: order.wa_order_version,
         });

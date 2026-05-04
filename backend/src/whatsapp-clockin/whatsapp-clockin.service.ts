@@ -153,18 +153,18 @@ export class WhatsappClockinService {
     let msgTimeStr = '';
     if (timestamp) {
       const d = new Date(timestamp);
-      msgTimeStr = d.toISOString().replace('T', ' ').split('.')[0];
+      msgTimeStr = d.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
     } else if (waMessageId) {
       const msg = await this.prisma.verificationWaMessage.findUnique({
         where: { id: waMessageId },
         select: { wa_msg_timestamp: true },
       });
       if (msg?.wa_msg_timestamp) {
-        msgTimeStr = msg.wa_msg_timestamp.toISOString().replace('T', ' ').split('.')[0];
+        msgTimeStr = msg.wa_msg_timestamp.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
       }
     }
     if (!msgTimeStr) {
-      msgTimeStr = new Date().toISOString().replace('T', ' ').split('.')[0];
+      msgTimeStr = new Date().toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
     }
 
     try {
