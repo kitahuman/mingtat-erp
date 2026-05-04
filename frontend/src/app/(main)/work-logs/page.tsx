@@ -13,6 +13,7 @@ import ColumnFilter from '@/components/ColumnFilter';
 import { STATUS_OPTIONS, STATUS_COLORS, getStatusLabel, getEquipmentSource } from './constants';
 import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
+import AttendanceImportModal from './AttendanceImportModal';
 import MissingPriceTab from './MissingPriceTab';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
@@ -385,6 +386,20 @@ export default function WorkLogsPage() {
     }
   };
 
+  // ── Attendance Import ──────────────────────────────────────────
+  const [attendanceImportOpen, setAttendanceImportOpen] = useState(false);
+  const [pendingAttendanceCount, setPendingAttendanceCount] = useState<number | null>(null);
+
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const { attendancesApi: attApi } = await import('@/lib/api');
+      const res = await attApi.getPendingConversionCount();
+      setPendingAttendanceCount(res.data.pending);
+    } catch (e) {
+      console.error('Failed to fetch pending attendance count', e);
+    }
+  }, []);
+
   // ── Edit lock ───────────────────────────────────────────────
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; lockedBy?: string; isMe?: boolean } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -450,8 +465,9 @@ export default function WorkLogsPage() {
         ...(subconFleet.data || []),
       ];
       setAllEquipment(equipList);
+      fetchPendingCount();
     }).catch(console.error);
-  }, []);
+  }, [fetchPendingCount]);
 
   const buildListParams = useCallback((overrides: Record<string, any> = {}) => {
     const params: any = {
@@ -802,6 +818,11 @@ export default function WorkLogsPage() {
   const handleBulkUpdateSuccess = async () => {
     setSelected(new Set());
     await fetchLogs();
+  };
+
+  const handleAttendanceImportSuccess = async () => {
+    await fetchLogs();
+    fetchPendingCount();
   };
 
   const handleBulkConfirm = async () => {
@@ -1225,13 +1246,27 @@ export default function WorkLogsPage() {
             }}
           />
           <button
+            onClick={() => setAttendanceImportOpen(true)}
+            className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 font-medium whitespace-nowrap flex items-center gap-1"
+          >
+            📥 從打卡匯入
+            {pendingAttendanceCount !== null && pendingAttendanceCount > 0 && (
+              <span className="bg-amber-200 px-1.5 rounded-full text-[10px]">{pendingAttendanceCount}</span>
+            )}
+          </button>
+          <button
             onClick={handleAddNew}
             disabled={!!newRow}
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
+            className="px-3 py-1.5 text-sm bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50 font-medium whitespace-nowrap"
           >
             ＋ 新增記錄
           </button>
           <CsvImportModal module="work-logs" onImportComplete={fetchLogs} />
+          <AttendanceImportModal
+            isOpen={attendanceImportOpen}
+            onClose={() => setAttendanceImportOpen(false)}
+            onSuccess={handleAttendanceImportSuccess}
+          />
         </div>
       </div>
 

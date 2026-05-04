@@ -538,6 +538,10 @@ export const attendancesApi = {
     api.post(`/attendances/anomalies/${id}/resolve`, data || {}),
   unresolveAnomaly: (id: number) =>
     api.post(`/attendances/anomalies/${id}/unresolve`),
+  getPendingConversionCount: (params?: { date_from?: string; date_to?: string; employee_id?: number }) =>
+    api.get('/attendances/pending-conversion-count', { params }),
+  convertToWorkLog: (data: { date_from: string; date_to: string; employee_id?: number; dryRun?: boolean }) =>
+    api.post('/attendances/convert-to-worklog', data),
 };
 
 // Leaves (請假紀錄) - Admin view

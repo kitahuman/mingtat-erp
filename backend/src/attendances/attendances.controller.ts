@@ -3,6 +3,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { AttendancesService } from './attendances.service';
 import { AttendanceMatchingService } from './attendance-matching.service';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
+import { AttendanceToWorkLogService } from './attendance-to-worklog.service';
+import { ConvertToWorkLogDto, PendingConversionCountQueryDto } from './dto/convert-to-worklog.dto';
 import {
   AnomalyQueryDto,
   ResolveAnomalyDto,
@@ -15,11 +17,22 @@ export class AttendancesController {
   constructor(
     private readonly service: AttendancesService,
     private readonly matchingService: AttendanceMatchingService,
+    private readonly attendanceToWorkLogService: AttendanceToWorkLogService,
   ) {}
 
   @Get()
   findAll(@Query() query: Record<string, string | number | undefined>) {
     return this.service.findAll(query);
+  }
+
+  @Get('pending-conversion-count')
+  getPendingConversionCount(@Query() query: PendingConversionCountQueryDto) {
+    return this.attendanceToWorkLogService.getPendingConversionCount(query);
+  }
+
+  @Post('convert-to-worklog')
+  convertToWorkLog(@Body() dto: ConvertToWorkLogDto) {
+    return this.attendanceToWorkLogService.convertToWorkLog(dto);
   }
 
   @Get('filter-options/:column')
