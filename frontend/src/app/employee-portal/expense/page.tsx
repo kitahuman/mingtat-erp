@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
+
+
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
 interface LineItem {
@@ -40,7 +42,9 @@ const defaultForm: ExpenseForm = {
 };
 
 export default function ExpensePage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+
+
   const [form, setForm] = useState<ExpenseForm>({ ...defaultForm });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -122,8 +126,8 @@ export default function ExpensePage() {
     try {
       const total = itemsTotal > 0 ? itemsTotal : parseFloat(form.total_amount) || 0;
       const remarkParts = [
-        form.remarks,
-        form.receipt_url ? `單據：${form.receipt_url}` : '',
+        form.remarks,        form.receipt_url ? `${t('expenseReceipt')}: ${form.receipt_url}` : 
+'',
       ].filter(Boolean);
 
       const payload: any = {
@@ -177,13 +181,13 @@ export default function ExpensePage() {
   const activePaymentMethods = paymentMethods.filter((m: any) => m.is_active !== false);
 
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString('zh-HK'); } catch { return d; }
+    try { return new Date(d).toLocaleDateString(lang === 'zh' ? 'zh-HK' : 'en-US'); } catch { return d; }
   };
   const formatAmount = (n: any) =>
-    `HK$ ${Number(n).toLocaleString('zh-HK', { minimumFractionDigits: 2 })}`;
+    `HK$ ${Number(n).toLocaleString(lang === 'zh' ? 'zh-HK' : 'en-US', { minimumFractionDigits: 2 })}`;
 
   const paymentMethodLabel = (method: 'SELF_PAID' | 'COMPANY_PAID') =>
-    method === 'SELF_PAID' ? '本人代付' : '公司付款';
+    method === 'SELF_PAID' ? t('selfPaid') : t('companyPaid');
 
   return (
     <div className="p-4 pb-6">
@@ -255,7 +259,7 @@ export default function ExpensePage() {
                   value={form.item}
                   onChange={(e) => set('item', e.target.value)}
                   className={inputClass}
-                  placeholder="報銷項目描述"
+                  placeholder={t("expenseItemDesc")}
                   required
                 />
               </div>
@@ -274,11 +278,11 @@ export default function ExpensePage() {
 
             {/* Payment Info */}
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
-              <h3 className="font-semibold text-gray-800 text-sm">付款資料</h3>
+              <h3 className="font-semibold text-gray-800 text-sm">{t("paymentInfo")}</h3>
 
               {/* Expense Payment Method (SELF_PAID / COMPANY_PAID) */}
               <div>
-                <label className={labelClass}>付款類型 *</label>
+                <label className={labelClass}>{t("paymentType")} *</label>
                 <div className="flex gap-3">
                   <label
                     className={`flex-1 flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
@@ -296,8 +300,8 @@ export default function ExpensePage() {
                       className="accent-blue-600"
                     />
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">本人代付</p>
-                      <p className="text-xs text-gray-500">由本人先墊付，公司報銷</p>
+                      <p className="text-sm font-semibold text-gray-800">{t("selfPaid")}</p>
+                      <p className="text-xs text-gray-500">{t("selfPaidDesc")}</p>
                     </div>
                   </label>
                   <label
@@ -316,8 +320,8 @@ export default function ExpensePage() {
                       className="accent-green-600"
                     />
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">公司付款</p>
-                      <p className="text-xs text-gray-500">由公司直接支付</p>
+                      <p className="text-sm font-semibold text-gray-800">{t("companyPaid")}</p>
+                      <p className="text-xs text-gray-500">{t("companyPaidDesc")}</p>
                     </div>
                   </label>
                 </div>
@@ -343,7 +347,7 @@ export default function ExpensePage() {
                     value={form.payment_method}
                     onChange={(e) => set('payment_method', e.target.value)}
                     className={inputClass}
-                    placeholder="支票 / 現金 / 銀行轉帳..."
+                    placeholder={t("chequeCashBankTransfer")}
                   />
                 )}
               </div>
@@ -355,7 +359,7 @@ export default function ExpensePage() {
                   value={form.payment_ref}
                   onChange={(e) => set('payment_ref', e.target.value)}
                   className={inputClass}
-                  placeholder="收據號碼 / 支票號碼..."
+                  placeholder={t("receiptChequeNo")}
                 />
               </div>
             </div>
@@ -378,7 +382,7 @@ export default function ExpensePage() {
                   {form.items.map((item, idx) => (
                     <div key={idx} className="border border-gray-200 rounded-xl p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-500">明細 {idx + 1}</span>
+                        <span className="text-xs font-medium text-gray-500">{t("itemNo").replace('{idx}', String(idx + 1))}</span>
                         <button
                           type="button"
                           onClick={() => removeItemRow(idx)}
@@ -392,11 +396,11 @@ export default function ExpensePage() {
                         value={item.description}
                         onChange={(e) => updateItemRow(idx, 'description', e.target.value)}
                         className={inputClass}
-                        placeholder="描述"
+                        placeholder={t("itemDesc")}
                       />
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">數量</label>
+                          <label className="block text-xs text-gray-500 mb-1">{t("quantity")}</label>
                           <input
                             type="number"
                             step="0.001"
@@ -406,7 +410,7 @@ export default function ExpensePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">單價</label>
+                          <label className="block text-xs text-gray-500 mb-1">{t("unitPrice")}</label>
                           <input
                             type="number"
                             step="0.01"
@@ -417,14 +421,14 @@ export default function ExpensePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">金額</label>
+                          <label className="block text-xs text-gray-500 mb-1">{t("amount")}</label>
                           <input
                             type="number"
                             step="0.01"
                             value={item.amount}
                             onChange={(e) => updateItemRow(idx, 'amount', e.target.value)}
                             className={inputClass}
-                            placeholder="自動"
+                            placeholder={t("auto")}
                           />
                         </div>
                       </div>
@@ -432,7 +436,7 @@ export default function ExpensePage() {
                   ))}
                   {/* Items total */}
                   <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                    <span className="text-sm font-semibold text-gray-700">明細合計</span>
+                    <span className="text-sm font-semibold text-gray-700">{t("itemsTotal")}</span>
                     <span className="text-sm font-bold text-gray-900">{formatAmount(itemsTotal)}</span>
                   </div>
                 </div>
@@ -533,7 +537,7 @@ export default function ExpensePage() {
                     )}
                     {exp.payment_method && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        付款：{exp.payment_method}
+                        {t("payment")}{exp.payment_method}
                         {exp.payment_ref ? ` (${exp.payment_ref})` : ''}
                       </p>
                     )}
@@ -549,7 +553,7 @@ export default function ExpensePage() {
                       </span>
                     )}
                     {exp.items && exp.items.length > 0 && (
-                      <p className="text-xs text-blue-500 mt-0.5">{exp.items.length} 項明細</p>
+                      <p className="text-xs text-blue-500 mt-0.5">{exp.items.length} {t("lineItems")}</p>
                     )}
                   </div>
                   <div className="text-right ml-3 shrink-0">

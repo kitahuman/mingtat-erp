@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 import Combobox from '@/components/Combobox';
 import MultiSelectPopup from '@/components/MultiSelectPopup';
@@ -114,25 +115,25 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
     // Field options
     portalSharedApi.getFieldOptions('worker_type').then(r => {
       const data = r.data || [];
-      setWorkerTypeOptions(data.filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+      setWorkerTypeOptions(data.filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {
       // Seed default worker types if empty
       setWorkerTypeOptions([
         '什工', '叻架', '中工石矢工', '中工燒焊工', '中工木工', '中工泥水匠',
         '搬車司機', '吊車司機', '吊車機手', '大貨車司機', '機手',
-      ].map(v => ({ value: v, label: v })));
+      ].map(v => ({ value: v, label: t(v as TranslationKey) })));
     });
     portalSharedApi.getFieldOptions('tonnage').then(r => {
-      setTonnageOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+      setTonnageOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {});
     portalSharedApi.getFieldOptions('machine_type').then(r => {
-      setMachineTypeOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+      setMachineTypeOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {});
     portalSharedApi.getFieldOptions('client_contract_no').then(r => {
-      setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+      setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {});
     portalSharedApi.getFieldOptions('project_location').then(r => {
-      setProjectLocationOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+      setProjectLocationOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {});
 
     // Load recent project names from cookies
@@ -141,7 +142,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
       if (saved) {
         const list = JSON.parse(saved);
         if (Array.isArray(list)) {
-          setRecentProjectNames(list.map(v => ({ value: v, label: v })));
+          setRecentProjectNames(list.map(v => ({ value: v, label: t(v as TranslationKey) })));
         }
       }
     } catch {}
@@ -245,7 +246,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
   const handleCreateContract = async (val: string) => {
     setContractOptions(prev => {
       if (prev.find(o => o.label === val)) return prev;
-      return [...prev, { value: val, label: val }];
+      return [...prev, { value: val, label: t(val as TranslationKey) }];
     });
     try {
       await portalSharedApi.createFieldOption({ category: 'client_contract_no', label: val });
@@ -255,7 +256,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
   const handleCreateWorkerType = async (val: string) => {
     setWorkerTypeOptions(prev => {
       if (prev.find(o => o.label === val)) return prev;
-      return [...prev, { value: val, label: val }];
+      return [...prev, { value: val, label: t(val as TranslationKey) }];
     });
     try {
       await portalSharedApi.createFieldOption({ category: 'worker_type', label: val });
@@ -265,7 +266,7 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
   const handleCreateProjectLocation = async (val: string) => {
     setProjectLocationOptions(prev => {
       if (prev.find(o => o.label === val)) return prev;
-      return [...prev, { value: val, label: val }];
+      return [...prev, { value: val, label: t(val as TranslationKey) }];
     });
     try {
       await portalSharedApi.createFieldOption({ category: 'project_location', label: val });

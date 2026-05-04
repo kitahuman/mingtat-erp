@@ -1,12 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Language, translations, TranslationKey } from './translations';
+import { Language, translations } from './translations';
 
 interface I18nContextType {
   lang: Language;
   setLang: (lang: Language) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: keyof typeof translations.zh, params?: Record<string, any>) => string;
   toggleLang: () => void;
 }
 
@@ -29,8 +29,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: TranslationKey): string => {
-      return (translations[lang] as Record<string, string>)[key] ?? key;
+    (key: keyof typeof translations.zh, params?: Record<string, string | number>) => {
+      let translation: string = translations[lang][key] || key;
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          translation = translation.replace(`{${k}}`, String(v));
+        }
+      }
+      return translation;
     },
     [lang],
   );

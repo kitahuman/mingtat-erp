@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useI18n } from '@/lib/i18n/i18n-context';
 
 interface Option {
   value: string | number;
@@ -26,9 +27,11 @@ interface Props {
  * - If onCreateOption is provided, it is called when a new value (not in options) is confirmed
  */
 export default function Combobox({
-  value, onChange, options, placeholder = '請選擇或輸入', disabled = false, clearable = true, className = '',
+  value, onChange, options, placeholder, disabled = false, clearable = true, className = '',
   onCreateOption,
 }: Props) {
+  const { t } = useI18n();
+  const displayPlaceholder = placeholder || t('selectOrCreate');
   const [open, setOpen] = useState(false);
   const [inputVal, setInputVal] = useState('');
   const [focused, setFocused] = useState(false);
@@ -120,7 +123,7 @@ export default function Combobox({
           onFocus={() => { setFocused(true); setOpen(true); }}
           onKeyDown={handleInputKeyDown}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={displayPlaceholder}
           className="flex-1 px-2 py-1 text-xs bg-transparent outline-none min-w-0"
         />
         <div className="flex items-center shrink-0 pr-1 gap-0.5">
@@ -142,7 +145,7 @@ export default function Combobox({
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-400">
-                {inputVal ? `按 Enter 新增「${inputVal}」` : '無選項'}
+                {inputVal ? t('pressEnterToAdd', { inputVal }) : t('noOptions')}
               </div>
             ) : (
               filtered.map(o => (
@@ -162,7 +165,7 @@ export default function Combobox({
                 className="w-full text-left px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 border-t border-gray-100"
                 onMouseDown={() => commitValue(inputVal)}
               >
-                + 使用「{inputVal}」{onCreateOption ? '（自動儲存為選項）' : ''}
+                {t('useInputVal', { inputVal, autoSave: onCreateOption ? t('autoSaveOption') : '' })}
               </button>
             )}
           </div>

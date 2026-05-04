@@ -22,30 +22,31 @@ function getDaysLeft(expiryDate: string | null): number | null {
 }
 
 function ExpiryBadge({ expiryDate }: { expiryDate: string | null }) {
+  const { t, lang } = useI18n();
   if (!expiryDate) return null;
   const days = getDaysLeft(expiryDate);
   if (days === null) return null;
 
-  const dateStr = new Date(expiryDate).toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const dateStr = new Date(expiryDate).toLocaleDateString(lang === 'zh' ? 'zh-HK' : 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
   if (days < 0) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-        ⚠️ 已過期 {dateStr}
+        ⚠️ {t("certExpiredLabel")} {dateStr}
       </span>
     );
   }
   if (days <= 30) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-        🔴 {days} 天後到期 ({dateStr})
+        🔴 {days} {t("daysLeftLabel")} ({dateStr})
       </span>
     );
   }
   if (days <= 90) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
-        🟡 {days} 天後到期 ({dateStr})
+        🟡 {days} {t("daysLeftLabel")} ({dateStr})
       </span>
     );
   }
@@ -219,7 +220,7 @@ export default function CertificatesPage() {
                         onClick={() => startEdit(cert)}
                         className="shrink-0 px-2.5 py-1 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                       >
-                        ✏️ 編輯
+                        ✏️ {t("edit")}
                       </button>
                     )}
                   </div>
@@ -235,12 +236,12 @@ export default function CertificatesPage() {
                           type="text"
                           value={editCertNo}
                           onChange={(e) => setEditCertNo(e.target.value)}
-                          placeholder="輸入證件號碼"
+                          placeholder={t("enterCertNo")}
                           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">到期日</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t("expiryDate")}</label>
                         <input
                           type="date"
                           value={editExpiry}
@@ -254,14 +255,14 @@ export default function CertificatesPage() {
                           disabled={savingKey === cert.key}
                           className="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl active:scale-95 disabled:opacity-50"
                         >
-                          {savingKey === cert.key ? '儲存中...' : '儲存'}
+                          {savingKey === cert.key ? t("saving") : t("save")}
                         </button>
                         <button
                           onClick={cancelEdit}
                           disabled={savingKey === cert.key}
                           className="flex-1 py-2 bg-gray-100 text-gray-600 text-sm font-semibold rounded-xl active:scale-95 disabled:opacity-50"
                         >
-                          取消
+                          {t("cancel")}
                         </button>
                       </div>
                     </div>

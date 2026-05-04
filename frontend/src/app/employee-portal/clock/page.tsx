@@ -182,7 +182,7 @@ export default function ClockPage() {
 
     // Validation: mid-shift is not allowed when clocking IN
     if (type === 'clock_in' && isMidShift) {
-      setError('上班打卡不可選擇中直，請取消勾選「中直」後再提交');
+      setError(t("midShiftClockInError"));
       return;
     }
 
@@ -305,7 +305,7 @@ export default function ClockPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      正在查詢地址...
+                      {t("searchingAddress")}
                     </p>
                   ) : location.address ? (
                     <p className="text-xs mt-1 text-green-800 font-medium">
@@ -322,7 +322,7 @@ export default function ClockPage() {
                   <Suspense
                     fallback={
                       <div className="flex items-center justify-center bg-gray-100 rounded-xl" style={{ height: '150px' }}>
-                        <div className="text-gray-400 text-xs">載入地圖中...</div>
+                        <div className="text-gray-400 text-xs">{t("loadingMap")}</div>
                       </div>
                     }
                   >
@@ -368,12 +368,12 @@ export default function ClockPage() {
               }}
               className="w-5 h-5 rounded accent-blue-600"
             />
-            <span className="text-sm font-semibold text-gray-800">中直</span>
-            <span className="text-xs text-gray-400">（僅適用於下班打卡）</span>
+            <span className="text-sm font-semibold text-gray-800">{t("midShift")}</span>
+            <span className="text-xs text-gray-400">{t("midShiftClockOutOnly")}</span>
           </label>
           {isMidShift && (
             <p className="mt-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-              ⚠️ 上班打卡時不可勾選「中直」，請在下班打卡時才勾選。
+              ⚠️ {t("midShiftClockInWarning")}
             </p>
           )}
         </div>

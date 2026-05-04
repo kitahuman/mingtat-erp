@@ -122,7 +122,7 @@ function PortalInner({ children }: { children: React.ReactNode }) {
             onClick={toggleLang}
             className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-600 hover:bg-blue-500 border border-blue-400 transition-colors"
           >
-            {lang === 'zh' ? 'EN' : '中文'}
+            {lang === 'zh' ? t('englishShort') : t('chineseShort')}
           </button>
           {/* User info + logout */}
           <div className="flex items-center gap-1">

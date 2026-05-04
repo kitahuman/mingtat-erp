@@ -4,12 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
-
-const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
-const statusColors: Record<string, string> = { draft: 'bg-yellow-100 text-yellow-700', submitted: 'bg-green-100 text-green-700' };
-
 export default function AcceptanceReportListPage() {
   const { t } = useI18n();
+  const statusLabels: Record<string, string> = { draft: t('draft'), submitted: t('submitted') };
+  const statusColors: Record<string, string> = { draft: 'bg-yellow-100 text-yellow-700', submitted: 'bg-green-100 text-green-700' };
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<any[]>([]);
@@ -77,13 +75,13 @@ export default function AcceptanceReportListPage() {
           <Link href="/employee-portal/supervisor" className="text-blue-600 flex items-center gap-1">
             <span>‹</span> {t('back')}
           </Link>
-          <h1 className="text-xl font-bold text-gray-800 ml-2">工程收貨報告</h1>
+          <h1 className="text-xl font-bold text-gray-800 ml-2">{t('acceptanceReportTitle')}</h1>
         </div>
         <Link
           href="/employee-portal/supervisor/acceptance-report/new"
           className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
         >
-          + 新增
+          + {t('add')}
         </Link>
       </div>
 
@@ -95,7 +93,7 @@ export default function AcceptanceReportListPage() {
           onChange={e => setFilterProjectId(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部工程</option>
+          <option value="">{t('allProjects')}</option>
           {projects.map((p: any) => (
             <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
           ))}
@@ -107,7 +105,7 @@ export default function AcceptanceReportListPage() {
           onChange={e => handleClientChange(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部客戶（選擇）</option>
+          <option value="">{t('allClients')}</option>
           {partners.map((p: any) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -118,7 +116,7 @@ export default function AcceptanceReportListPage() {
           type="text"
           value={filterClientName}
           onChange={e => handleClientNameChange(e.target.value)}
-          placeholder="客戶名稱搜尋（手動輸入）"
+          placeholder={t('clientNameSearch')}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         />
 
@@ -128,7 +126,7 @@ export default function AcceptanceReportListPage() {
           onChange={e => setFilterContractNo(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部客戶合約</option>
+          <option value="">{t('allClientContracts')}</option>
           {contractOptions.map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
@@ -163,7 +161,7 @@ export default function AcceptanceReportListPage() {
             }}
             className="w-full py-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
           >
-            清除所有篩選
+            {t('clearAllFilters')}
           </button>
         )}
       </div>
@@ -173,7 +171,7 @@ export default function AcceptanceReportListPage() {
         <div className="text-center py-10 text-gray-400">{t('loading')}</div>
       ) : reports.length === 0 ? (
         <div className="bg-gray-50 rounded-2xl p-10 text-center border border-dashed border-gray-300">
-          <p className="text-gray-500">暫無收貨報告記錄</p>
+          <p className="text-gray-500">{t('noAcceptanceRecords')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -200,12 +198,11 @@ export default function AcceptanceReportListPage() {
                 </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-gray-500">
-                <span>報告: {fmtDate(report.acceptance_report_date)}</span>
-                <span>驗收: {fmtDate(report.acceptance_report_acceptance_date)}</span>
+                <span>{t('report')}: {fmtDate(report.acceptance_report_date)}</span>
+                <span>{t('acceptance')}: {fmtDate(report.acceptance_report_acceptance_date)}</span>
               </div>
               {report.acceptance_items?.length > 0 && (
-                <p className="text-sm text-gray-600 mt-2">{report.acceptance_items.length} 個收貨項目</p>
-              )}
+                <p className="text-sm text-gray-600 mt-2">{report.acceptance_items?.length} {t('acceptanceItems')}</p>              )}
             </Link>
           ))}
         </div>

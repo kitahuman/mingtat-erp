@@ -4,15 +4,16 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 
-const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
-const statusColors: Record<string, string> = { draft: 'bg-yellow-100 text-yellow-700', submitted: 'bg-green-100 text-green-700' };
-const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
+const statusColors: Record<string, string> = { draft: "bg-yellow-100 text-yellow-700", submitted: "bg-green-100 text-green-700" };
 
 export default function DailyReportListPage() {
   const router = useRouter();
   const { t } = useI18n();
+  const statusLabels: Record<string, string> = { draft: t("draft"), submitted: t("submitted") };
+  const shiftLabels: Record<string, string> = { day: t("dayShift"), night: t("nightShift") };
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<any[]>([]);
@@ -48,7 +49,7 @@ export default function DailyReportListPage() {
     portalSharedApi.getProjectsSimple().then(res => setProjects(res.data || [])).catch(() => {});
     portalSharedApi.getPartnersSimple().then(res => setPartners(res.data || [])).catch(() => {});
     portalSharedApi.getFieldOptions('client_contract_no').then(res => {
-      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
+      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => t(o.label as TranslationKey)));
     }).catch(() => {});
     loadReports();
   }, []);
@@ -77,7 +78,7 @@ export default function DailyReportListPage() {
   const handleCopy = (e: React.MouseEvent, reportId: number) => {
     e.preventDefault();
     e.stopPropagation();
-    if (confirm('確定要複製這份日報作為模板嗎？')) {
+    if (confirm(t('confirmCopyDailyReport'))) {
       router.push(`/employee-portal/supervisor/daily-report/new?copy_from=${reportId}`);
     }
   };
@@ -90,13 +91,13 @@ export default function DailyReportListPage() {
           <Link href="/employee-portal/supervisor" className="text-blue-600 flex items-center gap-1">
             <span>‹</span> {t('back')}
           </Link>
-          <h1 className="text-xl font-bold text-gray-800 ml-2">工程日報</h1>
+          <h1 className="text-xl font-bold text-gray-800 ml-2">{t('dailyReportTitle')}</h1>
         </div>
         <Link
           href="/employee-portal/supervisor/daily-report/new"
           className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
         >
-          + 新增
+          + {t('add')}
         </Link>
       </div>
 
@@ -108,7 +109,7 @@ export default function DailyReportListPage() {
           onChange={e => setFilterProjectId(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部工程</option>
+          <option value="">{t('allProjects')}</option>
           {projects.map((p: any) => (
             <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
           ))}
@@ -120,7 +121,7 @@ export default function DailyReportListPage() {
           onChange={e => handleClientChange(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部客戶（選擇）</option>
+          <option value="">{t('allClients')}</option>
           {partners.map((p: any) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -131,7 +132,7 @@ export default function DailyReportListPage() {
           type="text"
           value={filterClientName}
           onChange={e => handleClientNameChange(e.target.value)}
-          placeholder="客戶名稱搜尋（手動輸入）"
+          placeholder={t('clientNameSearch')}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         />
 
@@ -141,9 +142,9 @@ export default function DailyReportListPage() {
           onChange={e => setFilterContractNo(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
         >
-          <option value="">全部客戶合約</option>
+          <option value="">{t('allClientContracts')}</option>
           {contractOptions.map(c => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c} value={c}>{t(c as TranslationKey)}</option>
           ))}
         </select>
 
@@ -154,14 +155,14 @@ export default function DailyReportListPage() {
             value={filterDateFrom}
             onChange={e => setFilterDateFrom(e.target.value)}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
-            placeholder="開始日期"
+            placeholder={t('startDate')}
           />
           <input
             type="date"
             value={filterDateTo}
             onChange={e => setFilterDateTo(e.target.value)}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
-            placeholder="結束日期"
+            placeholder={t('endDate')}
           />
         </div>
 
@@ -178,7 +179,7 @@ export default function DailyReportListPage() {
             }}
             className="w-full py-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
           >
-            清除所有篩選
+            {t('clearAllFilters')}
           </button>
         )}
       </div>
@@ -188,7 +189,7 @@ export default function DailyReportListPage() {
         <div className="text-center py-10 text-gray-400">{t('loading')}</div>
       ) : reports.length === 0 ? (
         <div className="bg-gray-50 rounded-2xl p-10 text-center border border-dashed border-gray-300">
-          <p className="text-gray-500">暫無日報記錄</p>
+          <p className="text-gray-500">{t('noDailyRecords')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -217,7 +218,7 @@ export default function DailyReportListPage() {
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>{fmtDate(report.daily_report_date)}</span>
                 <span className="bg-gray-100 px-2 py-0.5 rounded-full">{shiftLabels[report.daily_report_shift_type] || report.daily_report_shift_type}</span>
-                <span>{report.items?.length || 0} 項</span>
+                <span>{report.items?.length || 0} {t('items')}</span>
               </div>
               <p className="text-sm text-gray-600 mt-2 line-clamp-2">{report.daily_report_work_summary}</p>
               
@@ -226,7 +227,7 @@ export default function DailyReportListPage() {
                   onClick={(e) => handleCopy(e, report.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100 active:scale-95 transition-all"
                 >
-                  <span>📋</span> 複製
+                  <span>📋</span> {t('copy')}
                 </button>
               </div>
             </Link>

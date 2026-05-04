@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useI18n } from '@/lib/i18n/i18n-context';
 import { createPortal } from 'react-dom';
 
 interface Option {
@@ -20,6 +21,7 @@ interface Props {
 export default function SearchableSelect({
   value, onChange, options, placeholder = '請選擇', disabled = false, clearable = true, className = '',
 }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   // Position of the dropdown (calculated from trigger button)
@@ -94,13 +96,13 @@ export default function SearchableSelect({
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="搜尋..."
+          placeholder={t('search')}
           className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400"
         />
       </div>
       <div className="max-h-48 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-gray-400">無結果</div>
+          <div className="px-3 py-2 text-xs text-gray-400">{t('noResults')}</div>
         ) : (
           filtered.map(o => (
             <button

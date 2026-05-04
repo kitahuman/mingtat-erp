@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
 import { employeePortalApi, portalSharedApi, WorkLogHistoryItem } from '@/lib/employee-portal-api';
 import { VEHICLE_MACHINE_TYPES, MACHINERY_MACHINE_TYPES } from '@/app/(main)/work-logs/constants';
 
@@ -93,6 +94,7 @@ function Combobox({
   placeholder?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -150,7 +152,7 @@ function Combobox({
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                 onMouseDown={() => handleSelect(o)}
               >
-                {o.label}
+                {t(o.label as TranslationKey)}
               </button>
             ))
           )}
@@ -176,6 +178,7 @@ function ContractCombobox({
   placeholder?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -251,7 +254,7 @@ function ContractCombobox({
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                 onMouseDown={() => handleSelect(o)}
               >
-                {o.label}
+                {t(o.label as TranslationKey)}
               </button>
             ))
           )}
@@ -749,7 +752,7 @@ export default function WorkReportPage() {
       results.forEach(r => {
         newMap[r.cat] = (r.data as { id: number; label: string; sort_order: number; is_active?: boolean }[])
           .filter((o) => o.is_active !== false)
-          .map((o) => ({ value: o.label, label: o.label }));
+          .map((o) => ({ value: o.label, label: t(o.label as TranslationKey) }));
       });
       setOptionsMap(newMap);
     }).catch(() => {});
@@ -982,7 +985,7 @@ export default function WorkReportPage() {
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition-colors"
           >
-            📋 從歷史複製
+            📋 {t("copyFromHistory")}
           </button>
         )}
       </div>
@@ -990,7 +993,7 @@ export default function WorkReportPage() {
       {/* 草稿恢復提示 */}
       {draftRestored && (
         <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-medium flex items-center justify-between">
-          <span>📝 已恢復上次未提交的草稿</span>
+          <span>📝 {t("restoreDraft")}</span>
           <button
             type="button"
             onClick={() => {
@@ -1000,7 +1003,7 @@ export default function WorkReportPage() {
             }}
             className="ml-2 text-amber-500 hover:text-amber-700 underline"
           >
-            清除
+            {t("clear")}
           </button>
         </div>
       )}
@@ -1082,7 +1085,7 @@ export default function WorkReportPage() {
           </div>
 
           <div>
-            <label className={labelClass}>客戶合約</label>
+            <label className={labelClass}>{t("clientContract")}</label>
             <ContractCombobox
               value={form.client_contract_no}
               onChange={(val) => set('client_contract_no', val)}
@@ -1429,7 +1432,7 @@ export default function WorkReportPage() {
           disabled={loading}
           className="w-full py-4 bg-blue-700 text-white font-bold rounded-2xl text-base hover:bg-blue-800 active:bg-blue-900 transition-colors disabled:opacity-50 shadow-md"
         >
-          {loading ? t('loading') : (isEditMode ? '更新紀錄' : t('submitWorkReport'))}
+          {loading ? t('loading') : (isEditMode ? t('updateRecord') : t('submitWorkReport'))}
         </button>
       </form>
 

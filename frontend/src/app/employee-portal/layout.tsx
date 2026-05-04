@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import EmployeePortalClientLayout from './client-layout';
 
 export const metadata: Metadata = {
-  title: '明達建築 員工入口',
-  description: '明達建築有限公司員工入口',
+  title: 'Ming Tat Construction Employee Portal',
+  description: 'Ming Tat Construction Employee Portal',
   manifest: '/employee-portal/manifest.json',
   themeColor: '#2a4db7',
   icons: {

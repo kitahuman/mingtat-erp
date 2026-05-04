@@ -42,13 +42,12 @@ function formatAmount(n: any): string {
 }
 
 // 工作紀錄卡片
-function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () => void }) {
+function WorkLogCard({ log, onClick, t }: { log: WorkLogHistoryItem; onClick: () => void; t: Function }) {
   const clientName = log.client?.name ?? log.unverified_client_name ?? null;
-  const isTransport = log.service_type === '運輸';
+  const isTransport = log.service_type === t('transport');
 
   // 1車/1天 顯示
-  const quantityLabel = log.quantity != null
-    ? `${log.quantity}${log.unit ? ` ${log.unit}` : ''}`
+  const quantityLabel = log.quantity != null    ? `${log.quantity}${log.unit ? ` ${log.unit}` : t('otHour')}`
     : null;
 
   // OT 時數
@@ -57,14 +56,14 @@ function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () =>
     : null;
 
   // 中直
-  const midShiftLabel = log.is_mid_shift ? '中直' : null;
+  const midShiftLabel = log.is_mid_shift ? t('midShift') : null;
 
   // 更次
-  const shiftLabel = log.day_night === 'D' ? '日更' : log.day_night === 'N' ? '夜更' : log.day_night ?? null;
+  const shiftLabel = log.day_night === 'D' ? t('dayShift') : log.day_night === 'N' ? t('nightShift') : log.day_night ?? null;
 
   // 地點
   const locationParts = [log.start_location, log.end_location].filter(Boolean);
-  const locationLabel = locationParts.length > 0 ? locationParts.join(' → ') : null;
+  const locationLabel = locationParts.length > 0 ? locationParts.join(t('locationConnector')) : null;
 
   return (
     <button
@@ -76,7 +75,7 @@ function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () =>
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
-            {log.service_type ?? '工程'}
+            {log.service_type === t('transport') ? t('transport') : t('engineering')}
           </span>
           {shiftLabel && (
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{shiftLabel}</span>
@@ -118,7 +117,7 @@ function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () =>
       {/* Machine type & equipment */}
       {(log.machine_type || log.equipment_number) && (
         <p className="text-xs text-gray-600 mb-1">
-          🔧 {[log.machine_type, log.equipment_number, log.tonnage ? `${log.tonnage}噸` : null].filter(Boolean).join(' · ')}
+          🔧 {[log.machine_type, log.equipment_number, log.tonnage ? `${log.tonnage}${t('ton')}` : null].filter(Boolean).join(' · ')}
         </p>
       )}
 
@@ -132,7 +131,7 @@ function WorkLogCard({ log, onClick }: { log: WorkLogHistoryItem; onClick: () =>
       {/* Quantity */}
       {quantityLabel && (
         <p className="text-xs text-gray-500">
-          數量：{quantityLabel}
+          {t('quantityLabel')}{quantityLabel}
         </p>
       )}
     </button>
@@ -239,11 +238,12 @@ export default function RecordsPage() {
               <EmptyState icon="📋" label={t('noData')} />
             ) : (
               workLogs.map((log) => (
-                <WorkLogCard
-                  key={log.id}
-                  log={log}
-                  onClick={() => router.push(`/employee-portal/work-report?edit=${log.id}`)}
-                />
+                  <WorkLogCard
+                    key={log.id}
+                    log={log}
+                    onClick={() => router.push(`/employee-portal/work-report?edit=${log.id}`)}
+                    t={t}
+                  />
               ))
             )
           )}

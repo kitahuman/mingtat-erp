@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
+
+
 import { employeePortalApi } from '@/lib/employee-portal-api';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -51,14 +54,14 @@ export default function MidShiftApprovalHistoryPage() {
         <Link href="/employee-portal/supervisor/mid-shift-approval" className="text-blue-600">
           <span>‹</span> {t('back')}
         </Link>
-        <h1 className="text-xl font-bold text-gray-800 ml-2">批核歷史紀錄</h1>
+        <h1 className="text-xl font-bold text-gray-800 ml-2">{t("midShiftHistoryTitle")}</h1>
       </div>
 
       {loading && page === 1 ? (
         <div className="text-center py-10 text-gray-400">{t('loading')}</div>
       ) : history.length === 0 ? (
         <div className="bg-gray-50 rounded-2xl p-10 text-center border border-dashed border-gray-300">
-          <p className="text-gray-500">暫無批核歷史紀錄</p>
+          <p className="text-gray-500">{t("noMidShiftHistory")}</p>
         </div>
       ) : (
         <>
@@ -76,7 +79,7 @@ export default function MidShiftApprovalHistoryPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-[10px] font-bold border border-green-100">已批核</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-[10px] font-bold border border-green-100">{t("approved")}</span>
                     <p className="text-[10px] text-gray-400 mt-1">
                       {new Date(record.mid_shift_approved_at).toLocaleDateString('zh-HK')}
                     </p>
@@ -93,17 +96,17 @@ export default function MidShiftApprovalHistoryPage() {
                 onClick={() => setPage(p => p - 1)}
                 className="px-4 py-2 bg-gray-100 rounded-lg text-sm font-medium disabled:opacity-50"
               >
-                上一頁
+                {t("previousPage")}
               </button>
               <span className="text-sm text-gray-500 flex items-center">
-                第 {page} / {totalPages} 頁
+                {t("pageOfTotal", { page, totalPages })}
               </span>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(p => p + 1)}
                 className="px-4 py-2 bg-gray-100 rounded-lg text-sm font-medium disabled:opacity-50"
               >
-                下一頁
+                {t("nextPage")}
               </button>
             </div>
           )}

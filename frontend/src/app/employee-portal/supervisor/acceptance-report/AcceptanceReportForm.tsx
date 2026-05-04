@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 import Combobox from '@/components/Combobox';
 import SignaturePad from '@/components/SignatureCanvas';
@@ -75,9 +76,7 @@ export default function AcceptanceReportForm({ reportId }: Props) {
   // ── Load reference data ──────────────────────────────────────────
   useEffect(() => {
     portalSharedApi.getProjectsSimple().then(r => setProjects(r.data || [])).catch(() => {});
-    portalSharedApi.getPartnersSimple().then(r => setPartners(r.data || [])).catch(() => {});
-    portalSharedApi.getFieldOptions('client_contract_no').then(r => {
-      setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: o.label })));
+    portalSharedApi.getPartnersSimple().then(r => setPartners(r.data || [])).catch(() => {});   portalSharedApi.getFieldOptions('client_contract_no').then(r => {  setContractOptions((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => ({ value: o.label, label: t(o.label as TranslationKey) })));
     }).catch(() => {});
   }, []);
 
@@ -154,7 +153,7 @@ export default function AcceptanceReportForm({ reportId }: Props) {
   const handleCreateContract = async (val: string) => {
     setContractOptions(prev => {
       if (prev.find(o => o.label === val)) return prev;
-      return [...prev, { value: val, label: val }];
+      return [...prev, { value: val, label: t(val as TranslationKey) }];
     });
     try {
       await portalSharedApi.createFieldOption({ category: 'client_contract_no', label: val });

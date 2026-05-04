@@ -116,9 +116,9 @@ export default function EmployeePortalHome() {
       {/* Welcome */}
       <div className="bg-gradient-to-r from-blue-700 to-blue-600 rounded-2xl p-5 text-white shadow-md">
         <p className="text-blue-200 text-sm mb-1">
-          {t('today')} · {new Date().toLocaleDateString('zh-HK', { month: 'long', day: 'numeric', weekday: 'short' })}
+          {t("today")} · {new Date().toLocaleDateString(lang === 'zh' ? 'zh-HK' : 'en-US', { month: 'long', day: 'numeric', weekday: 'short' })}
         </p>
-        <h2 className="text-xl font-bold">{t('appSubtitle')} 👋</h2>
+        <h2 className="text-xl font-bold">{t("welcome")} {displayName} 👋</h2>
         <p className="text-blue-100 text-sm mt-1">{displayName}</p>
       </div>
 

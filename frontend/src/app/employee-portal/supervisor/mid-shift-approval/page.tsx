@@ -65,7 +65,7 @@ export default function MidShiftApprovalPage() {
 
   const handleApprove = () => {
     if (selectedIds.length === 0) {
-      alert('請先選擇要批核的記錄');
+      alert(t('selectRecordsToApprove'));
       return;
     }
     setShowSignature(true);
@@ -77,7 +77,7 @@ export default function MidShiftApprovalPage() {
 
   const submitApproval = async () => {
     if (sigPad.current?.isEmpty()) {
-      alert('請先簽名');
+      alert(t('pleaseSign'));
       return;
     }
 
@@ -90,12 +90,12 @@ export default function MidShiftApprovalPage() {
         attendance_ids: selectedIds,
         signature_base64: signatureBase64,
       });
-      alert('批核成功');
+      alert(t('approveSuccess'));
       setSelectedIds([]);
       setShowSignature(false);
       loadPending();
     } catch (err) {
-      alert('批核失敗');
+      alert(t('approveFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -111,7 +111,7 @@ export default function MidShiftApprovalPage() {
 
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-  const typeLabel = (type: string) => type === 'clock_in' ? '上班' : '下班';
+  const typeLabel = (type: string) => type === 'clock_in' ? t('clockIn') : t('clockOut');
 
   return (
     <div className="p-4 space-y-4 pb-40">
@@ -123,7 +123,7 @@ export default function MidShiftApprovalPage() {
           <h1 className="text-xl font-bold text-gray-800 ml-2">{t('midShiftApproval')}</h1>
         </div>
         <Link href="/employee-portal/supervisor/mid-shift-approval/history" className="text-sm text-gray-500 underline">
-          歷史紀錄
+          {t('midShiftHistory')}
         </Link>
       </div>
 
@@ -131,14 +131,14 @@ export default function MidShiftApprovalPage() {
         <div className="text-center py-10 text-gray-400">{t('loading')}</div>
       ) : pending.length === 0 ? (
         <div className="bg-gray-50 rounded-2xl p-10 text-center border border-dashed border-gray-300">
-          <p className="text-gray-500">暫無待批核中直記錄</p>
+          <p className="text-gray-500">{t('noPendingMidShift')}</p>
         </div>
       ) : (
         <>
           <div className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-            <span className="text-sm font-medium text-gray-600">已選擇 {selectedIds.length} 條</span>
+            <span className="text-sm font-medium text-gray-600">{t('selectedRecords', { count: selectedIds.length })}</span>
             <button onClick={toggleSelectAll} className="text-sm text-blue-600 font-medium">
-              {selectedIds.length === pending.length ? '取消全選' : '全選'}
+              {selectedIds.length === pending.length ? t('cancelSelectAll') : t('selectAll')}
             </button>
           </div>
 
@@ -167,7 +167,7 @@ export default function MidShiftApprovalPage() {
                         {/* Name + type badge */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-gray-800">{record.employee.name_zh}</p>
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">中直</span>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">{t('midShift')}</span>
                           <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                             record.type === 'clock_in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                           }`}>{typeLabel(record.type)}</span>
@@ -175,7 +175,7 @@ export default function MidShiftApprovalPage() {
 
                         {/* Emp code + time */}
                         <p className="text-xs text-gray-500">
-                          {record.employee.emp_code} · {new Date(record.timestamp).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}
+                          {record.employee.emp_code} · {new Date(record.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                         </p>
 
                         {/* Location */}
@@ -217,7 +217,7 @@ export default function MidShiftApprovalPage() {
                 selectedIds.length > 0 ? 'bg-blue-600' : 'bg-gray-300 cursor-not-allowed'
               }`}
             >
-              批核已選記錄 ({selectedIds.length})
+              {t('approveSelected', { count: selectedIds.length })}
             </button>
           </div>
         </>
@@ -228,20 +228,20 @@ export default function MidShiftApprovalPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold text-gray-800">批核確認</h2>
+              <h2 className="text-lg font-bold text-gray-800">{t('approvalConfirmation')}</h2>
               <button onClick={() => setShowSignature(false)} className="text-gray-400 text-2xl">×</button>
             </div>
 
             <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
               <p className="text-blue-800 text-sm font-medium leading-relaxed">
-                本人確認以上 {selectedIds.length} 條中直記錄屬實，並以此簽署作為正式批核記錄。
+                {t('confirmMidShiftApproval', { count: selectedIds.length })}
               </p>
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-500">請在下方簽名</span>
-                <button onClick={clearSignature} className="text-xs text-blue-600 font-medium">清除簽名</button>
+                <span className="text-sm font-medium text-gray-500">{t('pleaseSignBelow')}</span>
+                <button onClick={clearSignature} className="text-xs text-blue-600 font-medium">{t('clearSignature')}</button>
               </div>
               <div className="border-2 border-gray-100 rounded-2xl bg-gray-50 overflow-hidden">
                 <SignaturePad
@@ -258,7 +258,7 @@ export default function MidShiftApprovalPage() {
               disabled={submitting}
               className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 disabled:bg-gray-400"
             >
-              {submitting ? '提交中...' : '確認並提交批核'}
+              {submitting ? t('submitting') : t('confirmAndSubmitApproval')}
             </button>
           </div>
         </div>
