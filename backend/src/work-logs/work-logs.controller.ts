@@ -36,8 +36,8 @@ export class WorkLogsController {
   }
 
   @Get('filter-options/:column')
-  getFilterOptions(@Param('column') column: string) {
-    return this.service.getFilterOptions(column);
+  getFilterOptions(@Param('column') column: string, @Query() query: any) {
+    return this.service.getFilterOptions(column, query);
   }
 
   // ── 缺單價組合 ─────────────────────────────────────────────

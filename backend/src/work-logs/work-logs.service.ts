@@ -119,31 +119,12 @@ export class WorkLogsService {
     if (work_log_product_name) {
       where.work_log_product_name = { contains: String(work_log_product_name), mode: 'insensitive' };
     }
-
-    // 欄標題漏斗圖標篩選器：filter_<field>=val1,val2 → Prisma IN 模式
-    const columnFilterFields = [
-      'start_location',
-      'end_location',
-      'work_order_no',
-      'receipt_no',
-      'work_log_product_name',
-      'work_content',
-    ];
-    for (const field of columnFilterFields) {
-      const raw = (query as any)[`filter_${field}`];
-      if (raw) {
-        const vals = String(raw).split(',').map((v) => v.trim()).filter(Boolean);
-        if (vals.length === 1) {
-          where[field] = vals[0];
-        } else if (vals.length > 1) {
-          where[field] = { in: vals };
-        }
-      }
-    }
+    this.applyColumnFilters(where, query);
 
     const allowedSort = [
       'id',
       'scheduled_date',
+      'wl_whatsapp_reported_at',
       'status',
       'service_type',
       'machine_type',
@@ -235,32 +216,195 @@ export class WorkLogsService {
     };
   }
 
+  private readonly columnFilterFields = [
+    'publisher',
+    'status',
+    'scheduled_date',
+    'wl_whatsapp_reported_at',
+    'service_type',
+    'work_content',
+    'company',
+    'client',
+    'quotation',
+    'client_contract_no',
+    'contract',
+    'employee',
+    'tonnage',
+    'machine_type',
+    'equipment_number',
+    'day_night',
+    'start_location',
+    'start_time',
+    'end_location',
+    'end_time',
+    'work_order_no',
+    'receipt_no',
+    'quantity',
+    'unit',
+    'ot_quantity',
+    'ot_unit',
+    'is_mid_shift',
+    'goods_quantity',
+    'work_log_product_name',
+    'work_log_product_unit',
+    'is_confirmed',
+    'is_paid',
+    'source',
+    'remarks',
+  ];
+
+  private readonly relationFilterConfig: Record<string, { relation: string; field: string; foreignKey: string }> = {
+    publisher: { relation: 'publisher', field: 'displayName', foreignKey: 'publisher_id' },
+    company: { relation: 'company', field: 'name', foreignKey: 'company_id' },
+    client: { relation: 'client', field: 'name', foreignKey: 'client_id' },
+    quotation: { relation: 'quotation', field: 'quotation_no', foreignKey: 'quotation_id' },
+    contract: { relation: 'contract', field: 'contract_no', foreignKey: 'contract_id' },
+    employee: { relation: 'employee', field: 'name_zh', foreignKey: 'employee_id' },
+  };
+
+  private readonly dateFilterFields = ['scheduled_date', 'wl_whatsapp_reported_at'];
+  private readonly booleanFilterFields = ['is_mid_shift', 'is_confirmed', 'is_paid'];
+  private readonly numericFilterFields = ['quantity', 'ot_quantity', 'goods_quantity'];
+
+  private splitFilterValues(raw: unknown): string[] {
+    if (!raw) return [];
+    return String(raw).split(',').map((v) => v.trim()).filter(Boolean);
+  }
+
+  private parseHongKongDateTime(value: string): Date | null {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (!match) return null;
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
+    const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute), Number(second));
+    return new Date(utcMs);
+  }
+
+  private formatHongKongDate(value: Date | null | undefined, includeTime = false): string {
+    if (!value) return '';
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Hong_Kong',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...(includeTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
+    });
+    return formatter.format(value).replace(', ', ' ');
+  }
+
+  private makeDateRange(value: string) {
+    const start = this.parseHongKongDateTime(value);
+    if (!start) return undefined;
+    const end = new Date(start);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      end.setUTCDate(end.getUTCDate() + 1);
+    } else {
+      end.setUTCMinutes(end.getUTCMinutes() + 1);
+    }
+    return { gte: start, lt: end };
+  }
+
+  private applyColumnFilters(where: WhereClause, query: WorkLogQuery, excludeColumn?: string) {
+    for (const field of this.columnFilterFields) {
+      if (field === excludeColumn) continue;
+      const vals = this.splitFilterValues((query as any)[`filter_${field}`]);
+      if (vals.length === 0) continue;
+
+      const relation = this.relationFilterConfig[field];
+      if (relation) {
+        const nonBlank = vals.filter((v) => v !== '(空白)');
+        const conditions: any[] = [];
+        if (nonBlank.length > 0) {
+          conditions.push({ [relation.relation]: { [relation.field]: { in: nonBlank } } });
+        }
+        if (vals.includes('(空白)')) conditions.push({ [relation.foreignKey]: null });
+        if (conditions.length === 1) Object.assign(where, conditions[0]);
+        else if (conditions.length > 1) where.AND = [...((where.AND as any[]) || []), { OR: conditions }];
+        continue;
+      }
+
+      if (this.dateFilterFields.includes(field)) {
+        const ranges = vals.map((v) => this.makeDateRange(v)).filter(Boolean) as Array<{ gte: Date; lt: Date }>;
+        if (ranges.length === 1) where[field] = ranges[0];
+        else if (ranges.length > 1) where.AND = [...((where.AND as any[]) || []), { OR: ranges.map((range) => ({ [field]: range })) }];
+        continue;
+      }
+
+      if (this.booleanFilterFields.includes(field)) {
+        const bools = vals
+          .map((v) => (v === '是' || v === 'true' ? true : v === '否' || v === 'false' ? false : null))
+          .filter((v) => v !== null) as boolean[];
+        if (bools.length === 1) where[field] = bools[0];
+        else if (bools.length > 1) where[field] = { in: bools };
+        continue;
+      }
+
+      if (this.numericFilterFields.includes(field)) {
+        const nums = vals.map(Number).filter((num) => !Number.isNaN(num));
+        if (nums.length === 1) where[field] = nums[0];
+        else if (nums.length > 1) where[field] = { in: nums };
+        continue;
+      }
+
+      const nonBlank = vals.filter((v) => v !== '(空白)');
+      const blankSelected = vals.includes('(空白)');
+      if (blankSelected && nonBlank.length > 0) {
+        where.AND = [...((where.AND as any[]) || []), { OR: [{ [field]: { in: nonBlank } }, { [field]: null }, { [field]: '' }] }];
+      } else if (blankSelected) {
+        where.AND = [...((where.AND as any[]) || []), { OR: [{ [field]: null }, { [field]: '' }] }];
+      } else if (nonBlank.length === 1) {
+        where[field] = nonBlank[0];
+      } else if (nonBlank.length > 1) {
+        where[field] = { in: nonBlank };
+      }
+    }
+  }
+
   /**
    * 取得指定欄位的不重複值清單，供前端欄標題篩選器使用。
-   * 支援欄位：start_location, end_location, work_order_no, receipt_no, work_log_product_name
+   * 會套用其他篩選條件，但排除目標欄位自身篩選。
    */
-  async getFilterOptions(column: string): Promise<string[]> {
-    const allowedColumns = [
-      'start_location',
-      'end_location',
-      'work_order_no',
-      'receipt_no',
-      'work_log_product_name',
-      'work_content',
-    ];
-    if (!allowedColumns.includes(column)) return [];
+  async getFilterOptions(column: string, query: WorkLogQuery = {}): Promise<string[]> {
+    if (!this.columnFilterFields.includes(column)) return [];
 
-    const results = await this.prisma.workLog.findMany({
-      where: { deleted_at: null, [column]: { not: null } },
-      select: { [column]: true },
+    const where: WhereClause = { deleted_at: null };
+    this.applyColumnFilters(where, query, column);
+
+    const relation = this.relationFilterConfig[column];
+    if (relation) {
+      const rows = await this.prisma.workLog.findMany({
+        where,
+        select: { [relation.relation]: { select: { [relation.field]: true } } } as any,
+        take: 2000,
+      });
+      return Array.from(new Set(rows.map((row: any) => row[relation.relation]?.[relation.field] || '(空白)')))
+        .sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+        .slice(0, 500);
+    }
+
+    if (this.dateFilterFields.includes(column)) {
+      const rows = await this.prisma.workLog.findMany({
+        where: { ...where, [column]: { not: null } },
+        select: { [column]: true } as any,
+        orderBy: { [column]: 'desc' } as any,
+        take: 2000,
+      });
+      return Array.from(new Set(rows.map((row: any) => this.formatHongKongDate(row[column], column === 'wl_whatsapp_reported_at')).filter(Boolean))).slice(0, 500);
+    }
+
+    if (this.booleanFilterFields.includes(column)) {
+      const rows = await this.prisma.workLog.findMany({ where, select: { [column]: true } as any, distinct: [column as any], take: 500 });
+      return rows.map((row: any) => (row[column] ? '是' : '否'));
+    }
+
+    const rows = await this.prisma.workLog.findMany({
+      where,
+      select: { [column]: true } as any,
       distinct: [column as any],
-      orderBy: { [column]: 'asc' },
+      orderBy: { [column]: 'asc' } as any,
       take: 500,
     });
-
-    return results
-      .map((r: any) => r[column])
-      .filter((v: any) => v != null && v !== '')
+    return rows
+      .map((row: any) => (row[column] == null || row[column] === '' ? '(空白)' : String(row[column])))
       .sort((a: string, b: string) => a.localeCompare(b, 'zh-Hant'));
   }
 

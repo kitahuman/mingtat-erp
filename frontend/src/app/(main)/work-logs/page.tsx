@@ -22,12 +22,31 @@ import { fmtDate } from '@/lib/dateUtils';
 interface Option { value: string | number; label: string; _raw?: any; shortLabel?: string; }
 
 const LIMIT_OPTIONS = [25, 50, 100];
+const formatHongKongDateTime = (value: any) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d).reduce<Record<string, string>>((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+};
 
 // Map column key → backend sortBy field (undefined = not sortable)
 const COLUMN_SORT_FIELD: Record<string, string> = {
   publisher:              'publisher',
   status:                 'status',
   scheduled_date:         'scheduled_date',
+  wl_whatsapp_reported_at: 'wl_whatsapp_reported_at',
   service_type:           'service_type',
   company:                'company',
   client:                 'client',
@@ -64,6 +83,7 @@ const COLUMNS = [
   { key: 'publisher',        label: '發佈人',    width: 'w-24' },
   { key: 'status',           label: '狀態',      width: 'w-20' },
   { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },
+  { key: 'wl_whatsapp_reported_at', label: '報工時間', width: 'w-32' },
   { key: 'service_type',     label: '服務類型',  width: 'w-28' },
   { key: 'work_content',     label: '工作內容',  width: 'w-40' },
   { key: 'company',          label: '公司',      width: 'w-24' },
@@ -433,40 +453,47 @@ export default function WorkLogsPage() {
     }).catch(console.error);
   }, []);
 
+  const buildListParams = useCallback((overrides: Record<string, any> = {}) => {
+    const params: any = {
+      sortBy,
+      sortOrder,
+      ...overrides,
+    };
+    if (filterPublisher.length)  params.publisher_id  = filterPublisher.join(',');
+    if (filterStatus.length)     params.status        = filterStatus.join(',');
+    if (filterCompany.length)    params.company_id    = filterCompany.join(',');
+    if (filterClient.length)     params.client_id     = filterClient.join(',');
+    if (filterQuotation.length)  params.quotation_id  = filterQuotation.join(',');
+    if (filterContract.length)   params.contract_id   = filterContract.join(',');
+    if (filterEmployee.length) {
+      const empIds: number[] = [];
+      const fleetIds: number[] = [];
+      for (const v of filterEmployee) {
+        const s = String(v);
+        if (s.startsWith('emp_'))   empIds.push(Number(s.replace('emp_', '')));
+        else if (s.startsWith('fleet_')) fleetIds.push(Number(s.replace('fleet_', '')));
+      }
+      if (empIds.length)   params.employee_id   = empIds.join(',');
+      if (fleetIds.length) params.fleet_driver_id = fleetIds.join(',');
+    }
+    if (filterEquipment) params.equipment_number = filterEquipment;
+    if (filterDateFrom)  params.date_from        = filterDateFrom;
+    if (filterDateTo)    params.date_to          = filterDateTo;
+    for (const [col, vals] of Object.entries(columnFilters)) {
+      if (vals && vals.size > 0) {
+        params[`filter_${col}`] = Array.from(vals).join(',');
+      }
+    }
+    return params;
+  }, [sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient,
+      filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo,
+      columnFilters]);
+
   // ── Load work logs ──────────────────────────────────────────
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = {
-        page, limit,
-        sortBy, sortOrder,
-      };
-      if (filterPublisher.length)  params.publisher_id  = filterPublisher.join(',');
-      if (filterStatus.length)     params.status        = filterStatus.join(',');
-      if (filterCompany.length)    params.company_id    = filterCompany.join(',');
-      if (filterClient.length)     params.client_id     = filterClient.join(',');
-      if (filterQuotation.length)  params.quotation_id  = filterQuotation.join(',');
-      if (filterContract.length)   params.contract_id   = filterContract.join(',');
-      if (filterEmployee.length) {
-        const empIds: number[] = [];
-        const fleetIds: number[] = [];
-        for (const v of filterEmployee) {
-          const s = String(v);
-          if (s.startsWith('emp_'))   empIds.push(Number(s.replace('emp_', '')));
-          else if (s.startsWith('fleet_')) fleetIds.push(Number(s.replace('fleet_', '')));
-        }
-        if (empIds.length)   params.employee_id   = empIds.join(',');
-        if (fleetIds.length) params.fleet_driver_id = fleetIds.join(',');
-      }
-      if (filterEquipment) params.equipment_number = filterEquipment;
-      if (filterDateFrom)  params.date_from        = filterDateFrom;
-      if (filterDateTo)    params.date_to          = filterDateTo;
-      // Column header filters → backend filter_* params
-      for (const [col, vals] of Object.entries(columnFilters)) {
-        if (vals && vals.size > 0) {
-          params[`filter_${col}`] = Array.from(vals).join(',');
-        }
-      }
+      const params = buildListParams({ page, limit });
 
       const res = await workLogsApi.list(params);
       setRows(res.data?.data || []);
@@ -477,9 +504,7 @@ export default function WorkLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, showToast,
-      filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo,
-      columnFilters]);
+  }, [page, limit, buildListParams, showToast]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -924,6 +949,10 @@ export default function WorkLogsPage() {
     };
 
     switch (field) {
+      case 'wl_whatsapp_reported_at': {
+        const formatted = formatHongKongDateTime(val);
+        return <span className="inline-block px-1 py-0.5 text-xs text-gray-700 whitespace-nowrap">{formatted || '—'}</span>;
+      }
       case 'status':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={STATUS_OPTIONS} isDirty={dirty} disabled={!!isLocked} />;
       case 'scheduled_date':
@@ -1183,12 +1212,17 @@ export default function WorkLogsPage() {
                 }
                 return row.employee?.name_zh || '';
               }
+              if (col.key === 'wl_whatsapp_reported_at') return formatHongKongDateTime(val);
               if (col.key === 'is_confirmed') return val ? '是' : '否';
               if (col.key === 'is_paid') return val ? '是' : '否';
               return val != null ? String(val) : '';
             }}))}
             data={rows}
             filename="工作記錄"
+            onFetchAll={async () => {
+              const res = await workLogsApi.list(buildListParams({ page: 1, limit: Math.max(total, 100000) }));
+              return res.data?.data || [];
+            }}
           />
           <button
             onClick={handleAddNew}
@@ -1393,7 +1427,7 @@ export default function WorkLogsPage() {
               {(visibleColumns as any[]).map((col: any) => {
                 const sortField = COLUMN_SORT_FIELD[col.key];
                 const isActive = sortField && sortBy === sortField;
-                const isFilterable = ['start_location', 'end_location', 'work_order_no', 'receipt_no', 'work_log_product_name', 'work_content'].includes(col.key);
+                const isFilterable = col.key !== 'attachments';
                 return (
                   <th key={col.key}
                     onClick={sortField ? () => handleSort(sortField) : undefined}
@@ -1422,7 +1456,7 @@ export default function WorkLogsPage() {
                           }}
                           serverSide={true}
                           onFetchOptions={async (key) => {
-                            const res = await workLogsApi.filterOptions(key);
+                            const res = await workLogsApi.filterOptions(key, buildListParams());
                             return res.data as string[];
                           }}
                         />

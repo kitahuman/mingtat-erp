@@ -1106,6 +1106,7 @@ model WorkLog {
   source                 String    @default("manual") // manual | whatsapp | report
   is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
   ai_parsed_data         Json? // AI 原始解析結果（WhatsApp 打卡）
+  wl_whatsapp_reported_at DateTime? // WhatsApp 訊息實際報工時間（UTC 儲存）
   work_content           String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
   work_log_product_name  String?   @db.Text // 商品名稱
   work_log_product_unit  String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
@@ -1154,6 +1155,7 @@ model WorkLog {
   @@index([deleted_at])
   @@index([company_profile_id])
   @@index([equipment_number])
+  @@index([wl_whatsapp_reported_at])
   @@index([scheduled_date, employee_id])
   @@index([scheduled_date, company_id])
   @@index([work_log_machinery_id])

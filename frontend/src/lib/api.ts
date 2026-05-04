@@ -418,8 +418,8 @@ export const workLogsApi = {
     api.get('/work-logs/edit-lock/status', { params: { lockKey } }),
   confirmLocation: (id: number) =>
     api.post(`/work-logs/${id}/confirm-location`),
-  filterOptions: (column: string) =>
-    api.get(`/work-logs/filter-options/${column}`),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/work-logs/filter-options/${column}`, { params }),
   unmatchedCombinations: (params?: Record<string, string | number | undefined>) =>
     api.get('/work-logs/unmatched-combinations', { params }),
   unmatchedFilterOptions: (column: string) =>

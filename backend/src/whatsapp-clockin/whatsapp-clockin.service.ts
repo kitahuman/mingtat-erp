@@ -149,23 +149,22 @@ export class WhatsappClockinService {
       return { success: false, error: 'Non-text message, skipped' };
     }
 
-    // 3.5 獲取訊息時間戳 (用於 remarks)
+    // 3.5 獲取訊息時間戳：資料庫欄位存 UTC DateTime，remarks 顯示香港時間
+    let whatsappReportedAt: Date | null = null;
     let msgTimeStr = '';
     if (timestamp) {
-      const d = new Date(timestamp);
-      msgTimeStr = d.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
+      whatsappReportedAt = new Date(timestamp);
     } else if (waMessageId) {
       const msg = await this.prisma.verificationWaMessage.findUnique({
         where: { id: waMessageId },
         select: { wa_msg_timestamp: true },
       });
-      if (msg?.wa_msg_timestamp) {
-        msgTimeStr = msg.wa_msg_timestamp.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
-      }
+      if (msg?.wa_msg_timestamp) whatsappReportedAt = msg.wa_msg_timestamp;
     }
-    if (!msgTimeStr) {
-      msgTimeStr = new Date().toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
+    if (!whatsappReportedAt || Number.isNaN(whatsappReportedAt.getTime())) {
+      whatsappReportedAt = new Date();
     }
+    msgTimeStr = whatsappReportedAt.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', hour12: false }).replace(/\//g, '-');
 
     try {
       // 4. 載入 ERP 參考資料
@@ -252,6 +251,7 @@ export class WhatsappClockinService {
               source: 'whatsapp_clockin',
               service_type: groupInfo.service_type,
               scheduled_date: scheduledDate,
+              wl_whatsapp_reported_at: whatsappReportedAt,
               employee_id: matchedEmployee?.id || null,
               equipment_number: entry.equipment_no || null,
               machine_type: equipmentMatch?.type || null,
