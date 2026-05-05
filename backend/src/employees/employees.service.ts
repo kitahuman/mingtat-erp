@@ -505,6 +505,19 @@ export class EmployeesService {
       data.emp_code = await this.getNextEmpCode();
     }
 
+    // Validate emp_code uniqueness on create
+    if (data.emp_code) {
+      const conflict = await this.prisma.employee.findFirst({
+        where: { emp_code: data.emp_code, deleted_at: null },
+        select: { id: true, name_zh: true, emp_code: true },
+      });
+      if (conflict) {
+        throw new BadRequestException(
+          `員工編號 ${data.emp_code} 已被員工「${conflict.name_zh}」使用，請選擇其他編號。`,
+        );
+      }
+    }
+
     // Convert date string fields to Date objects for Prisma DateTime columns
     const dateFields = [
       'join_date',
@@ -809,6 +822,17 @@ export class EmployeesService {
     if (!emp.employee_is_temporary) throw new Error('此員工已是正式員工');
     // Auto-assign emp_code if not already set
     const empCode = emp.emp_code || (dto.emp_code ? dto.emp_code : await this.getNextEmpCode());
+
+    // Validate emp_code uniqueness
+    const codeConflict = await this.prisma.employee.findFirst({
+      where: { emp_code: empCode, id: { not: id }, deleted_at: null },
+      select: { id: true, name_zh: true },
+    });
+    if (codeConflict) {
+      throw new BadRequestException(
+        `員工編號 ${empCode} 已被員工「${codeConflict.name_zh}」使用，無法轉正。`,
+      );
+    }
     const updateData: Record<string, unknown> = {
       employee_is_temporary: false,
       role: dto.role,
@@ -921,10 +945,10 @@ export class EmployeesService {
       this.prisma.employeeTransfer.deleteMany({
         where: { employee_id: { in: eligibleIds } },
       }),
-      this.prisma.employee.updateMany({
-        where: { id: { in: eligibleIds } },
-        data: { deleted_at: new Date() },
-      }),
+this.prisma.employee.updateMany({
+          where: { id: { in: eligibleIds } },
+          data: { deleted_at: new Date(), status: 'inactive' },
+        }),
     ]);
 
     return {
