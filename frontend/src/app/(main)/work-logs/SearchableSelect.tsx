@@ -1,6 +1,8 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import { TranslationKey } from '@/lib/i18n/translations';
+import { getDynamicTranslation } from '@/lib/i18n/dynamic-translations';;
 import { createPortal } from 'react-dom';
 
 interface Option {
@@ -19,9 +21,9 @@ interface Props {
 }
 
 export default function SearchableSelect({
-  value, onChange, options, placeholder = '請選擇', disabled = false, clearable = true, className = '',
+  value, onChange, options, placeholder = 'select', disabled = false, clearable = true, className = '',
 }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   // Position of the dropdown (calculated from trigger button)
@@ -111,7 +113,7 @@ export default function SearchableSelect({
               className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${String(o.value) === String(value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
               onMouseDown={() => { onChange(o.value); setOpen(false); setSearch(''); }}
             >
-              {o.label}
+              {getDynamicTranslation(o.label, lang)}
             </button>
           ))
         )}
@@ -132,7 +134,7 @@ export default function SearchableSelect({
         `}
       >
         <span className={`truncate ${!selected ? 'text-gray-400' : ''}`}>
-          {selected ? selected.label : placeholder}
+          {selected ? getDynamicTranslation(selected.label, lang) : t(placeholder as TranslationKey)}
         </span>
         <span className="flex items-center gap-0.5 ml-1 shrink-0">
           {clearable && selected && !disabled && (

@@ -41,9 +41,10 @@ export default function Combobox({
   // Sync input display with value
   useEffect(() => {
     if (!focused) {
-      setInputVal(value ?? '');
+      const match = options.find(o => String(o.value) === value);
+      setInputVal(match ? match.label : (value ?? ''));
     }
-  }, [value, focused]);
+  }, [value, focused, options]);
 
   const filtered = options.filter(o =>
     !inputVal || o.label.toLowerCase().includes(inputVal.toLowerCase())
@@ -96,7 +97,8 @@ export default function Combobox({
   const handleSelect = (optValue: string | number) => {
     const strVal = String(optValue);
     onChange(strVal);
-    setInputVal(strVal);
+    const match = options.find(o => String(o.value) === strVal);
+    setInputVal(match ? match.label : strVal);
     setOpen(false);
     setFocused(false);
   };

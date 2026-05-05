@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { TranslationKey } from '@/lib/i18n/translations';
+import { getDynamicTranslation } from '@/lib/i18n/dynamic-translations';
 import { employeePortalApi, portalSharedApi, WorkLogHistoryItem } from '@/lib/employee-portal-api';
 import { VEHICLE_MACHINE_TYPES, MACHINERY_MACHINE_TYPES } from '@/app/(main)/work-logs/constants';
 
@@ -94,7 +95,7 @@ function Combobox({
   placeholder?: string;
   className?: string;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,13 +138,13 @@ function Combobox({
         onChange={handleInput}
         onFocus={() => setOpen(true)}
         className={className}
-        placeholder={placeholder}
+        placeholder={t(placeholder as TranslationKey)}
         autoComplete="off"
       />
       {open && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-400">無結果</div>
+            <div className="px-3 py-2 text-sm text-gray-400">{t('noResults')}</div>
           ) : (
             filtered.map((o, i) => (
               <button
@@ -152,7 +153,7 @@ function Combobox({
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                 onMouseDown={() => handleSelect(o)}
               >
-                {t(o.label as TranslationKey)}
+                {getDynamicTranslation(o.label, lang)}
               </button>
             ))
           )}
@@ -178,7 +179,7 @@ function ContractCombobox({
   placeholder?: string;
   className?: string;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -230,7 +231,7 @@ function ContractCombobox({
         onChange={handleInput}
         onFocus={() => setOpen(true)}
         className={className}
-        placeholder={placeholder}
+        placeholder={t(placeholder as TranslationKey)}
         autoComplete="off"
       />
       {open && (
@@ -241,11 +242,11 @@ function ContractCombobox({
               className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors font-medium border-b border-gray-100"
               onMouseDown={handleCreate}
             >
-              + 新增「{trimmed}」到選項
+              {t('useInputVal', { inputVal: trimmed, autoSave: onAddOption ? t('autoSaveOption') : '' })}
             </button>
           )}
           {filtered.length === 0 && !showCreate ? (
-            <div className="px-3 py-2 text-sm text-gray-400">無結果</div>
+            <div className="px-3 py-2 text-sm text-gray-400">{t('noResults')}</div>
           ) : (
             filtered.map((o, i) => (
               <button
@@ -254,7 +255,7 @@ function ContractCombobox({
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                 onMouseDown={() => handleSelect(o)}
               >
-                {t(o.label as TranslationKey)}
+                {getDynamicTranslation(o.label, lang)}
               </button>
             ))
           )}
@@ -284,7 +285,7 @@ function ClientCombobox({
   isNew: boolean;
   onChange: (clientId: string, inputVal: string, isNew: boolean) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(inputValue ?? '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -320,9 +321,9 @@ function ClientCombobox({
   };
 
   const handleSelect = (client: ClientItem) => {
-    setQuery(client.name);
+    setQuery(lang === 'en' && client.name_en ? client.name_en : client.name);
     setOpen(false);
-    onChange(String(client.id), client.name, false);
+    onChange(String(client.id), lang === 'en' && client.name_en ? client.name_en : client.name, false);
   };
 
   const inputClass = 'w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white';
@@ -1067,7 +1068,7 @@ export default function WorkReportPage() {
               value={form.service_type}
               onChange={(val) => set('service_type', val)}
               options={serviceTypeOptions}
-              placeholder="選擇或輸入服務類型"
+              placeholder={t('selectOrEnterServiceType')}
               className={inputClass}
             />
           </div>
@@ -1098,8 +1099,7 @@ export default function WorkReportPage() {
                     client_contract_no: [...(prev['client_contract_no'] || []), { value: val, label: val }],
                   }));
                 } catch {}
-              }}
-              placeholder="合約號碼"
+              }}              placeholder={t('clientContract')}
               className={inputClass}
             />
           </div>
@@ -1143,7 +1143,7 @@ export default function WorkReportPage() {
                   if (src === 'machinery') return allEquipment.filter(e => e.category === 'machinery');
                   return allEquipment;
                 })()}
-                placeholder="選擇或輸入機號"
+                placeholder={t('machineNo')}
                 className={inputClass}
               />
             </div>
@@ -1154,7 +1154,7 @@ export default function WorkReportPage() {
                 value={form.start_location}
                 onChange={(val) => set('start_location', val)}
                 options={locationOptions}
-                placeholder="工作地點"
+                placeholder={t('location')}
                 className={inputClass}
               />
             </div>
@@ -1166,7 +1166,7 @@ export default function WorkReportPage() {
                 onChange={(e) => set('work_content', e.target.value)}
                 className={inputClass + ' resize-none'}
                 rows={3}
-                placeholder="工作內容描述"
+                placeholder={t('workContent')}
               />
             </div>
 
@@ -1211,7 +1211,7 @@ export default function WorkReportPage() {
                 value={form.plate_no}
                 onChange={(val) => set('plate_no', val)}
                 options={allEquipment.filter(e => e.category === 'vehicle' || e.category === 'subcon_fleet')}
-                placeholder="選擇或輸入車牌"
+              placeholder={t('plateNo')}
                 className={inputClass}
               />
             </div>
@@ -1223,7 +1223,7 @@ export default function WorkReportPage() {
                 value={form.goods}
                 onChange={(e) => set('goods', e.target.value)}
                 className={inputClass}
-                placeholder="貨物名稱"
+                placeholder={t('goods')}
               />
             </div>
 
@@ -1243,7 +1243,7 @@ export default function WorkReportPage() {
               <div>
                 <label className={labelClass}>{t('unit')}</label>
                 <select value={form.unit} onChange={(e) => set('unit', e.target.value)} className={selectClass}>
-                  <option value="">單位</option>
+                  <option value="">{t('unit')}</option>
                   {unitOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
@@ -1256,7 +1256,7 @@ export default function WorkReportPage() {
                   value={form.origin}
                   onChange={(val) => set('origin', val)}
                   options={locationOptions}
-                  placeholder="起點地址"
+                  placeholder={t('origin')}
                   className={inputClass}
                 />
               </div>
@@ -1266,7 +1266,7 @@ export default function WorkReportPage() {
                   value={form.destination}
                   onChange={(val) => set('destination', val)}
                   options={locationOptions}
-                  placeholder="終點地址"
+                  placeholder={t('destination')}
                   className={inputClass}
                 />
               </div>
