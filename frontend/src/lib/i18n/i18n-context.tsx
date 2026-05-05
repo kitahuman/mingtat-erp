@@ -18,14 +18,29 @@ const I18nContext = createContext<I18nContextType>({
 });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Language>('zh');
+  const [lang, setLangState] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('portal-lang');
+      if (saved === 'en' || saved === 'zh') return saved;
+    }
+    return 'zh';
+  });
 
   const setLang = useCallback((newLang: Language) => {
     setLangState(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('portal-lang', newLang);
+    }
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLangState((prev) => (prev === 'zh' ? 'en' : 'zh'));
+    setLangState((prev) => {
+      const next = prev === 'zh' ? 'en' : 'zh';
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('portal-lang', next);
+      }
+      return next;
+    });
   }, []);
 
   const t = useCallback(

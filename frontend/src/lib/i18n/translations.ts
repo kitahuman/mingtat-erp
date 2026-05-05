@@ -384,6 +384,31 @@ export const translations = {
     '次': '次',
     '轉': '轉',
     '晚': '晚',
+
+    // Payment Method
+    '支票': '支票',
+    '現金': '現金',
+    '銀行轉帳': '銀行轉帳',
+    'EPS': 'EPS',
+    'FPS 轉數快': 'FPS 轉數快',
+    '信用卡': '信用卡',
+    '網上銀行': '網上銀行',
+    '其他': '其他',
+
+    // Expense Category
+    '工程費用': '工程費用',
+    '材料費用': '材料費用',
+    '施工周邊費用': '施工周邊費用',
+    '工程雜費': '工程雜費',
+    '工程外判費用': '工程外判費用',
+    '工程行政費用': '工程行政費用',
+    '機械費用': '機械費用',
+    '驗機費用': '驗機費用',
+    '維修費': '維修費',
+    '零件費': '零件費',
+    '購置機械': '購置機械',
+    '添置配件': '添置配件',
+    '車輛費用': '車輛費用',
   },
 
   en: {
@@ -766,6 +791,31 @@ export const translations = {
     '次': 'Time',
     '轉': 'Round',
     '晚': 'Night',
+
+    // Payment Method
+    '支票': 'Cheque',
+    '現金': 'Cash',
+    '銀行轉帳': 'Bank Transfer',
+    'EPS': 'EPS',
+    'FPS 轉數快': 'FPS',
+    '信用卡': 'Credit Card',
+    '網上銀行': 'Online Banking',
+    '其他': 'Other',
+
+    // Expense Category
+    '工程費用': 'Construction Cost',
+    '材料費用': 'Material Cost',
+    '施工周邊費用': 'Site Peripheral Cost',
+    '工程雜費': 'Miscellaneous Construction Cost',
+    '工程外判費用': 'Subcontracting Cost',
+    '工程行政費用': 'Construction Admin Cost',
+    '機械費用': 'Machinery Cost',
+    '驗機費用': 'Inspection Cost',
+    '維修費': 'Repair Cost',
+    '零件費': 'Parts Cost',
+    '購置機械': 'Machinery Purchase',
+    '添置配件': 'Accessories Purchase',
+    '車輛費用': 'Vehicle Cost',
   },
 } as const;
 

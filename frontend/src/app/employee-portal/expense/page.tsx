@@ -246,7 +246,7 @@ export default function ExpensePage() {
                   <option value="">{t('selectCategory')}</option>
                   {flatCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat._indent ? `　${cat.name}` : cat.name}
+                      {cat._indent ? `　${t(cat.name as any) || cat.name}` : (t(cat.name as any) || cat.name)}
                     </option>
                   ))}
                 </select>
@@ -338,7 +338,7 @@ export default function ExpensePage() {
                   >
                     <option value="">{t('optional')}</option>
                     {activePaymentMethods.map((m: any) => (
-                      <option key={m.id} value={m.label}>{m.label}</option>
+                      <option key={m.id} value={m.label}>{t(m.label as any) || m.label}</option>
                     ))}
                   </select>
                 ) : (

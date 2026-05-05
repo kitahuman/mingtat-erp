@@ -356,8 +356,17 @@ function ClientCombobox({
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                 onMouseDown={() => handleSelect(c)}
               >
-                {c.name}
-                {c.name_en && <span className="text-gray-400 ml-1 text-xs">({c.name_en})</span>}
+                {lang === 'en' ? (
+                  <>
+                    {c.name_en || c.name}
+                    {c.name_en && <span className="text-gray-400 ml-1 text-xs">({c.name})</span>}
+                  </>
+                ) : (
+                  <>
+                    {c.name}
+                    {c.name_en && <span className="text-gray-400 ml-1 text-xs">({c.name_en})</span>}
+                  </>
+                )}
               </button>
             ))
           )}
