@@ -140,8 +140,8 @@ export default function MachineryPage() {
     { key: 'serial_number', label: '序號', sortable: true, filterable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
     { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry },
+    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: renderStatus, filterRender: filterStatus },
   ];
 
