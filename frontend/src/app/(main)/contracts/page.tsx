@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
+import Combobox from '@/components/Combobox';
 import { useRouter } from 'next/navigation';
 import { contractsApi, partnersApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
@@ -23,7 +24,6 @@ const statusColors: Record<string, string> = {
 };
 
 const emptyForm = {
-  contract_no: '',
   contract_name: '',
   client_id: '',
   description: '',
@@ -292,15 +292,18 @@ export default function ContractsPage() {
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">基本資料</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號 *</label>
-              <input value={form.contract_no} onChange={e => setForm({...form, contract_no: e.target.value})} className="input-field" required placeholder="例如 CT-2026-001" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
+              <div className="input-field bg-gray-50 text-gray-500 cursor-not-allowed">系統自動生成</div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶 *</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field" required>
-                <option value="">請選擇客戶</option>
-                {clients.map((c: any) => <option key={c.id} value={c.id}>{c.code ? `${c.code} - ${c.name}` : c.name}</option>)}
-              </select>
+              <Combobox
+                value={form.client_id || null}
+                onChange={(val) => setForm({...form, client_id: val ?? ''})}
+                options={clients.map((c: any) => ({ value: String(c.id), label: c.code ? `${c.code} - ${c.name}` : c.name }))}
+                placeholder="搜尋客戶..."
+                clearable={true}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">合約名稱 *</label>

@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, contractsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
+import SearchableSelect from '@/components/SearchableSelect';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -191,17 +192,13 @@ export default function ProjectsPage() {
                   tabIndex={-1}
                 />
               ) : (
-                <select
-                  value={form.client_id}
-                  onChange={e => setForm({...form, client_id: e.target.value})}
-                  className="input-field"
-                  required
-                >
-                  <option value="">請選擇客戶</option>
-                  {partners.filter((p: any) => p.partner_type === 'client').map((p: any) => (
-                    <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  value={form.client_id || null}
+                  onChange={(val) => setForm({...form, client_id: val ? String(val) : ''})}
+                  options={partners.filter((p: any) => p.partner_type === 'client').map((p: any) => ({ value: String(p.id), label: p.code ? `${p.code} - ${p.name}` : p.name }))}
+                  placeholder="搜尋客戶..."
+                  clearable={true}
+                />
               )}
             </div>
             <div>
