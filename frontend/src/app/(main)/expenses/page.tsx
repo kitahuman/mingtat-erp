@@ -254,7 +254,7 @@ export default function ExpensesPage() {
       label: '日期',
       sortable: true,
       editable: true,
-      inputComponent: DateInput,
+      editType: 'date',
       render: (v: any) => fmtDate(v),
     },
     {
@@ -379,7 +379,7 @@ export default function ExpensesPage() {
       label: '付款日期',
       sortable: true,
       editable: true,
-      inputComponent: DateInput,
+      editType: 'date',
       render: (v: any) => fmtDate(v),
     },
     {
