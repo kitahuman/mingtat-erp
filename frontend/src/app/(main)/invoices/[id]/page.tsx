@@ -655,7 +655,7 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">收款日期 <span className="text-red-500">*</span></label>
-              <input type="date" value={paymentForm.date} onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })} className="input-field" />
+              <DateInput value={paymentForm.date} onChange={value => setPaymentForm({ ...paymentForm, date: value })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">收款金額 <span className="text-red-500">*</span></label>

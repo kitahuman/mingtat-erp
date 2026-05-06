@@ -998,7 +998,7 @@ export default function WorkLogsPage() {
       case 'status':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={STATUS_OPTIONS} isDirty={dirty} disabled={!!isLocked} />;
       case 'scheduled_date':
-        return <EditableCell value={val} displayValue={display} onChange={onChange} type="date" isDirty={dirty} disabled={!!isLocked} />;
+        return <EditableCell value={val} displayValue={display} onChange={(val) => onChange(val)} type="date" isDirty={dirty} disabled={!!isLocked} />;
       case 'service_type':
         return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['service_type'] || []} isDirty={dirty} disabled={!!isLocked} />;
       case 'company_id':
@@ -1115,7 +1115,7 @@ export default function WorkLogsPage() {
       case 'status':
         return <EditableCell value={val} onChange={onChange} type="select" options={STATUS_OPTIONS} />;
       case 'scheduled_date':
-        return <EditableCell value={val} onChange={onChange} type="date" />;
+        return <EditableCell value={val} onChange={(val) => onChange(val)} type="date" />;
       case 'service_type':
         return <EditableCell value={val} onChange={onChange} type="combobox" options={fieldOptions['service_type'] || []} />;
       case 'company_id':
