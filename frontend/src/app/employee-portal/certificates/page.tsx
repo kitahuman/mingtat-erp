@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { employeePortalApi } from '@/lib/employee-portal-api';
 import { useI18n } from '@/lib/i18n/i18n-context';
+import DateInput from '@/components/DateInput';
 
 interface Certificate {
   key: string;
@@ -242,10 +243,8 @@ export default function CertificatesPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">{t("expiryDate")}</label>
-                        <input
-                          type="date"
-                          value={editExpiry}
-                          onChange={(e) => setEditExpiry(e.target.value)}
+                        <DateInput value={editExpiry}
+                          onChange={val => setEditExpiry(val || '')}
                           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
                         />
                       </div>

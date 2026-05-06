@@ -7,6 +7,7 @@ import ProjectCostAnalysis from '@/components/ProjectCostAnalysis';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -195,8 +196,8 @@ export default function ProjectDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label><ClientContractCombobox value={form.client_contract_no || ''} onChange={(val) => setForm({...form, client_contract_no: val || ''})} /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">工程名稱</label><input value={form.project_name || ''} onChange={e => setForm({...form, project_name: e.target.value})} className="input-field" /></div>
               <div className="lg:col-span-2"><label className="block text-sm font-medium text-gray-500 mb-1">工程地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><input type="date" value={toInputDate(form.start_date)} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">預計結束日期</label><input type="date" value={toInputDate(form.end_date)} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-500 mb-1">預計開始日期</label><DateInput value={toInputDate(form.start_date)} onChange={val => setForm({ ...form, start_date: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-500 mb-1">預計結束日期</label><DateInput value={toInputDate(form.end_date)} onChange={val => setForm({ ...form, end_date: val || '' })} className="input-field" /></div>
               <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">說明</label><textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} className="input-field" rows={2} /></div>
               <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">備註</label><textarea value={form.remarks || ''} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={2} /></div>
             </>

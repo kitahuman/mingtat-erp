@@ -5,6 +5,7 @@ import { salaryConfigApi, employeesApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -106,7 +107,7 @@ export default function SalaryConfigDetailPage() {
         <h2 className="text-lg font-bold text-gray-900 mb-4">基本薪酬</h2>
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div><label className="block text-sm font-medium text-gray-500 mb-1">生效日期</label><input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-500 mb-1">生效日期</label><DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">薪酬類型</label>
               <select value={form.salary_type} onChange={e => setForm({...form, salary_type: e.target.value})} className="input-field">
                 <option value="daily">日薪制</option><option value="monthly">月薪制</option>

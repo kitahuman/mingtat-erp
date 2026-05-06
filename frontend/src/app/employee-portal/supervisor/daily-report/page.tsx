@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { TranslationKey } from '@/lib/i18n/translations';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+import DateInput from '@/components/DateInput';
 
 const statusColors: Record<string, string> = { draft: "bg-yellow-100 text-yellow-700", submitted: "bg-green-100 text-green-700" };
 
@@ -150,17 +151,13 @@ export default function DailyReportListPage() {
 
         {/* Date range */}
         <div className="flex gap-2">
-          <input
-            type="date"
-            value={filterDateFrom}
-            onChange={e => setFilterDateFrom(e.target.value)}
+          <DateInput value={filterDateFrom}
+            onChange={val => setFilterDateFrom(val || '')}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
             placeholder={t('startDate')}
           />
-          <input
-            type="date"
-            value={filterDateTo}
-            onChange={e => setFilterDateTo(e.target.value)}
+          <DateInput value={filterDateTo}
+            onChange={val => setFilterDateTo(val || '')}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
             placeholder={t('endDate')}
           />

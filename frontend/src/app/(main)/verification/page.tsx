@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 // ── 狀態圖標 ──────────────────────────────────────────────
 const STATUS_ICON: Record<string, string> = {
@@ -377,19 +378,15 @@ export default function VerificationWorkbenchPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">日期從</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+            <DateInput value={dateFrom}
+              onChange={val => { setDateFrom(val || ''); setPage(1); }}
               className="border rounded-lg px-3 py-2 text-sm"
             />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">日期到</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => { setDateTo(e.target.value); setPage(1); }}
+            <DateInput value={dateTo}
+              onChange={val => { setDateTo(val || ''); setPage(1); }}
               className="border rounded-lg px-3 py-2 text-sm"
             />
           </div>

@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import AttendanceEditModal from './AttendanceEditModal';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 // Lazy load MiniMap to avoid SSR issues
 const MiniMap = lazy(() => import('@/components/MiniMap'));
@@ -431,17 +432,13 @@ export default function AttendancesPage() {
       </select>
 
       {/* Date from */}
-      <input
-        type="date"
-        value={dateFrom}
-        onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+      <DateInput value={dateFrom}
+        onChange={val => { setDateFrom(val || ''); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
       <span className="text-gray-400">至</span>
-      <input
-        type="date"
-        value={dateTo}
-        onChange={e => { setDateTo(e.target.value); setPage(1); }}
+      <DateInput value={dateTo}
+        onChange={val => { setDateTo(val || ''); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
 
@@ -680,19 +677,15 @@ export default function AttendancesPage() {
             <div className="flex flex-wrap gap-3 items-end">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">開始日期</label>
-                <input
-                  type="date"
-                  value={anomalyDateFrom}
-                  onChange={e => { setAnomalyDateFrom(e.target.value); setAnomalyPage(1); }}
+                <DateInput value={anomalyDateFrom}
+                  onChange={val => { setAnomalyDateFrom(val || ''); setAnomalyPage(1); }}
                   className="input-field text-sm py-1.5"
                 />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">結束日期</label>
-                <input
-                  type="date"
-                  value={anomalyDateTo}
-                  onChange={e => { setAnomalyDateTo(e.target.value); setAnomalyPage(1); }}
+                <DateInput value={anomalyDateTo}
+                  onChange={val => { setAnomalyDateTo(val || ''); setAnomalyPage(1); }}
                   className="input-field text-sm py-1.5"
                 />
               </div>

@@ -10,6 +10,7 @@ import {
 import { workLogsApi, fieldOptionsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate as globalFmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 // Format date as DD/MM/YYYY
 const fmtDate = (d: any) => {
@@ -304,7 +305,7 @@ export default function WorkLogRow({
       </td>
       {/* 約定日期 */}
       <td className={`${cellCls} w-28`}>
-        <input type="date" value={form.scheduled_date || ''} onChange={e => set('scheduled_date', e.target.value)} className={inputCls} />
+ <DateInput value={form.scheduled_date || ''} onChange={val => set('scheduled_date', val || '')} className={inputCls} />
       </td>
       {/* 服務類型 */}
       <td className={`${cellCls} w-28`}>

@@ -7,6 +7,7 @@ import DocumentUpload from '@/components/DocumentUpload';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -382,7 +383,7 @@ export default function SubconFleetDriverDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">出生日期</label>
-                  <input type="date" value={form.date_of_birth} onChange={e => setForm({...form, date_of_birth: e.target.value})} className="input-field" />
+ <DateInput value={form.date_of_birth} onChange={val => setForm({ ...form, date_of_birth: val || '' })} className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">黃證no</label>

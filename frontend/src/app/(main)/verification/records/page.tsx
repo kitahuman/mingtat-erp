@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { verificationApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 // ══════════════════════════════════════════════════════════════
 // 來源類型 Tab 定義
@@ -262,19 +263,15 @@ export default function VerificationRecordsPage() {
           {/* 日期範圍 */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">開始日期</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+            <DateInput value={dateFrom}
+              onChange={val => setDateFrom(val || '')}
               className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">結束日期</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+            <DateInput value={dateTo}
+              onChange={val => setDateTo(val || '')}
               className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>

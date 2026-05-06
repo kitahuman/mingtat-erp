@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { customFieldsApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
+import DateInput from '@/components/DateInput';
 
 interface CustomFieldsBlockProps {
   module: string;
@@ -69,7 +70,7 @@ export default function CustomFieldsBlock({ module, entityId }: CustomFieldsBloc
       case 'number':
         return <input type="number" value={val} onChange={e => onChange(e.target.value)} className="input-field" />;
       case 'date':
-        return <input type="date" value={val} onChange={e => onChange(e.target.value)} className="input-field" />;
+ return <DateInput value={val} onChange={val => onChange(val || '')} className="input-field" />;
       case 'boolean':
         return (
           <label className="flex items-center gap-2 cursor-pointer mt-2">

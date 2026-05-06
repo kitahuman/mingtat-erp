@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -279,17 +280,13 @@ export default function PaymentOutPage() {
         <option value="cancelled">取消</option>
       </select>
       <div className="flex items-center gap-1 text-sm">
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+        <DateInput value={dateFrom}
+          onChange={val => { setDateFrom(val || ''); setPage(1); }}
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
         <span className="text-gray-400">~</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={e => { setDateTo(e.target.value); setPage(1); }}
+        <DateInput value={dateTo}
+          onChange={val => { setDateTo(val || ''); setPage(1); }}
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
@@ -347,10 +344,8 @@ export default function PaymentOutPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={e => setForm({ ...form, date: e.target.value })}
+              <DateInput value={form.date}
+                onChange={val => setForm({ ...form, date: val || '' })}
                 className="input-field"
               />
             </div>

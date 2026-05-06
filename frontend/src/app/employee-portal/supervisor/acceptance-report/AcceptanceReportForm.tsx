@@ -9,6 +9,7 @@ import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
 import Combobox from '@/components/Combobox';
 import SignaturePad from '@/components/SignatureCanvas';
 import type { SignatureCanvasRef } from '@/components/SignatureCanvas';
+import DateInput from '@/components/DateInput';
 
 interface AcceptanceItem {
   description: string;
@@ -331,11 +332,11 @@ export default function AcceptanceReportForm({ reportId }: Props) {
         <div className="flex gap-2">
           <div className="flex-1">
             <label className="text-xs font-medium text-gray-500 mb-1 block">報告日期 *</label>
-            <input type="date" value={form.report_date} onChange={e => setForm(f => ({ ...f, report_date: e.target.value }))} disabled={isSubmitted} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60" />
+ <DateInput value={form.report_date} onChange={val => setForm(f => ({...f, report_date: val || ''}))} disabled={isSubmitted} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60" />
           </div>
           <div className="flex-1">
             <label className="text-xs font-medium text-gray-500 mb-1 block">驗收日期 *</label>
-            <input type="date" value={form.acceptance_date} onChange={e => setForm(f => ({ ...f, acceptance_date: e.target.value }))} disabled={isSubmitted} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60" />
+ <DateInput value={form.acceptance_date} onChange={val => setForm(f => ({...f, acceptance_date: val || ''}))} disabled={isSubmitted} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60" />
           </div>
         </div>
 

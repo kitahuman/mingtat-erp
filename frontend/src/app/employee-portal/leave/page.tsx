@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi } from '@/lib/employee-portal-api';
+import DateInput from '@/components/DateInput';
 
 interface LeaveForm {
   leave_type: 'sick' | 'annual';
@@ -171,10 +172,8 @@ export default function LeavePage() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
               <div>
                 <label className={labelClass}>{t('leaveDateFrom')}</label>
-                <input
-                  type="date"
-                  value={form.date_from}
-                  onChange={(e) => handleDateChange('date_from', e.target.value)}
+                <DateInput value={form.date_from}
+                  onChange={val => handleDateChange('date_from', val)}
                   className={inputClass}
                   required
                 />
@@ -182,11 +181,9 @@ export default function LeavePage() {
 
               <div>
                 <label className={labelClass}>{t('leaveDateTo')}</label>
-                <input
-                  type="date"
-                  value={form.date_to}
+                <DateInput value={form.date_to}
                   min={form.date_from}
-                  onChange={(e) => handleDateChange('date_to', e.target.value)}
+                  onChange={val => handleDateChange('date_to', val)}
                   className={inputClass}
                   required
                 />

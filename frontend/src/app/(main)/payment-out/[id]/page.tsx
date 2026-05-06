@@ -7,6 +7,7 @@ import AllocationsCard from './AllocationsCard';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -218,10 +219,8 @@ export default function PaymentOutDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                <DateInput value={form.date}
+                  onChange={val => setForm({ ...form, date: val || '' })}
                   className="input-field"
                 />
               </div>

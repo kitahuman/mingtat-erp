@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Modal from '@/components/Modal';
 import { attendancesApi } from '@/lib/api';
+import DateInput from '@/components/DateInput';
 
 interface AttendanceImportModalProps {
   isOpen: boolean;
@@ -124,19 +125,15 @@ export default function AttendanceImportModal({ isOpen, onClose, onSuccess }: At
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">開始日期</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                <DateInput value={dateFrom}
+                  onChange={val => setDateFrom(val || '')}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">結束日期</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                <DateInput value={dateTo}
+                  onChange={val => setDateTo(val || '')}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                 />
               </div>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 function formatDateDisplay(dateStr: string): string {
   return fmtDate(dateStr);
@@ -719,10 +720,8 @@ function GroupedSettlementView({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">生效日期</label>
-                  <input
-                    type="date"
-                    value={modalForm.effective_date || ''}
-                    onChange={(e) => setModalForm({ ...modalForm, effective_date: e.target.value })}
+                  <DateInput value={modalForm.effective_date || ''}
+                    onChange={val => setModalForm({ ...modalForm, effective_date: val || '' })}
                     className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -2247,7 +2246,7 @@ export default function PayrollDetailPage() {
           <p className="text-sm text-gray-600">確認將此糧單標記為「已付款」？標記後糧單將被鎖定，不可再編輯。</p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
-            <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="input-field" />
+ <DateInput value={paymentDate} onChange={val => setPaymentDate(val || '')} className="input-field" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">支票號碼（可選）</label>
@@ -2266,7 +2265,7 @@ export default function PayrollDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款日期 *</label>
-              <input type="date" value={newPaymentDate} onChange={e => setNewPaymentDate(e.target.value)} className="input-field" />
+ <DateInput value={newPaymentDate} onChange={val => setNewPaymentDate(val || '')} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款金額 *</label>
@@ -2343,10 +2342,8 @@ export default function PayrollDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期</label>
-              <input
-                type="date"
-                value={editForm.scheduled_date}
-                onChange={e => setEditForm({ ...editForm, scheduled_date: e.target.value })}
+              <DateInput value={editForm.scheduled_date}
+                onChange={val => setEditForm({ ...editForm, scheduled_date: val || '' })}
                 className="input-field"
               />
             </div>

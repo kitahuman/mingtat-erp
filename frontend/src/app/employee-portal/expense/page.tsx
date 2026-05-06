@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n/i18n-context';
 
 
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+import DateInput from '@/components/DateInput';
 
 interface LineItem {
   description: string;
@@ -227,10 +228,8 @@ export default function ExpensePage() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
               <div>
                 <label className={labelClass}>{t('expenseDate')}</label>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => set('date', e.target.value)}
+                <DateInput value={form.date}
+                  onChange={val => set('date', val)}
                   className={inputClass}
                   required
                 />

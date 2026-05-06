@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
@@ -360,7 +361,7 @@ export default function QuotationDetailPage() {
                 <ClientSearchSelect value={form.client_id} onChange={v => setForm({...form, client_id: v})} partners={partners} />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">日期</label>
-                <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" />
+ <DateInput value={form.quotation_date} onChange={val => setForm({ ...form, quotation_date: val || '' })} className="input-field" />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶合約</label>
                 <ClientContractCombobox
@@ -530,11 +531,11 @@ export default function QuotationDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label>
-              <input type="date" value={acceptForm.effective_date} onChange={e => setAcceptForm({...acceptForm, effective_date: e.target.value})} className="input-field" required />
+ <DateInput value={acceptForm.effective_date} onChange={val => setAcceptForm({ ...acceptForm, effective_date: val || '' })} className="input-field" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
-              <input type="date" value={acceptForm.expiry_date} onChange={e => setAcceptForm({...acceptForm, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={acceptForm.expiry_date} onChange={val => setAcceptForm({ ...acceptForm, expiry_date: val || '' })} className="input-field" />
               <p className="text-xs text-gray-400 mt-1">可選，如有合約期限</p>
             </div>
           </div>
@@ -558,11 +559,11 @@ export default function QuotationDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label>
-                  <input type="date" value={syncForm.effective_date} onChange={e => setSyncForm({...syncForm, effective_date: e.target.value})} className="input-field" required />
+ <DateInput value={syncForm.effective_date} onChange={val => setSyncForm({ ...syncForm, effective_date: val || '' })} className="input-field" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
-                  <input type="date" value={syncForm.expiry_date} onChange={e => setSyncForm({...syncForm, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={syncForm.expiry_date} onChange={val => setSyncForm({ ...syncForm, expiry_date: val || '' })} className="input-field" />
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -623,11 +624,11 @@ export default function QuotationDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">發票日期</label>
-                <input type="date" value={invoiceForm.date} onChange={e => setInvoiceForm({...invoiceForm, date: e.target.value})} className="input-field" />
+ <DateInput value={invoiceForm.date} onChange={val => setInvoiceForm({ ...invoiceForm, date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
-                <input type="date" value={invoiceForm.due_date} onChange={e => setInvoiceForm({...invoiceForm, due_date: e.target.value})} className="input-field" />
+ <DateInput value={invoiceForm.due_date} onChange={val => setInvoiceForm({ ...invoiceForm, due_date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">稅率 (%)</label>

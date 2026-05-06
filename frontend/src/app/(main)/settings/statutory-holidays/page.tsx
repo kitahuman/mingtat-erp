@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { statutoryHolidaysApi } from '@/lib/api';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const HK_STATUTORY_HOLIDAYS = [
   { name: '元旦', month: 1, day: 1 },
@@ -129,10 +130,8 @@ export default function StatutoryHolidaysPage() {
                   {editingId === h.id ? (
                     <>
                       <td className="py-2 pr-2">
-                        <input
-                          type="date"
-                          value={editForm.date}
-                          onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                        <DateInput value={editForm.date}
+                          onChange={val => setEditForm({ ...editForm, date: val || '' })}
                           className="input-field text-sm"
                         />
                       </td>
@@ -184,10 +183,8 @@ export default function StatutoryHolidaysPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={e => setForm({ ...form, date: e.target.value })}
+            <DateInput value={form.date}
+              onChange={val => setForm({ ...form, date: val || '' })}
               className="input-field"
               required
             />

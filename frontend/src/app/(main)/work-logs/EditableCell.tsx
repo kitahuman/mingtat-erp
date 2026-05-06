@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import SearchableSelect from './SearchableSelect';
 import Combobox from './Combobox';
 import { fieldOptionsApi } from '@/lib/api';
+import DateInput from '@/components/DateInput';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -131,11 +132,9 @@ export default function EditableCell({
     case 'date':
       return (
         <div ref={cellRef} className={`${dirtyBorder}`}>
-          <input
-            ref={inputRef}
-            type="date"
-            value={value || ''}
-            onChange={e => { onChange(e.target.value || null); }}
+          <DateInput
+            ref={inputRef} value={value || ''}
+            onChange={val => { onChange(val || null); }}
             onBlur={() => setEditing(false)}
             className={inputCls}
           />
@@ -149,7 +148,7 @@ export default function EditableCell({
             ref={inputRef}
             type="time"
             value={value || ''}
-            onChange={e => { onChange(e.target.value || null); }}
+            onChange={val => { onChange(val || null); }}
             onBlur={() => setEditing(false)}
             className={inputCls}
           />

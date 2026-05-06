@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { paymentApplicationsApi, contractsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -259,19 +260,15 @@ export default function IpaTabContent({ contractId }: Props) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">計糧期間（起）</label>
-            <input
-              type="date"
-              value={periodFrom}
-              onChange={(e) => setPeriodFrom(e.target.value)}
+            <DateInput value={periodFrom}
+              onChange={val => setPeriodFrom(val || '')}
               className="input-field"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">計糧截止日期 <span className="text-red-500">*</span></label>
-            <input
-              type="date"
-              value={periodTo}
-              onChange={(e) => setPeriodTo(e.target.value)}
+            <DateInput value={periodTo}
+              onChange={val => setPeriodTo(val || '')}
               className="input-field"
             />
           </div>
