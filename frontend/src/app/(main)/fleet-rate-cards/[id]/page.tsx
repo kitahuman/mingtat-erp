@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import { fleetRateCardsApi, companiesApi, partnersApi, vehiclesApi, machineryApi } from '@/lib/api';
 import AuditHistory from '@/components/AuditHistory';
@@ -273,11 +274,11 @@ export default function FleetRateCardDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">生效日期</label>
-              <input type="date" value={form.effective_date ? String(form.effective_date).substring(0, 10) : ''} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+              <DateInput value={form.effective_date ? String(form.effective_date).substring(0, 10) : ''} onChange={value => setForm({...form, effective_date: value})} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">到期日期</label>
-              <input type="date" value={form.expiry_date ? String(form.expiry_date).substring(0, 10) : ''} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+              <DateInput value={form.expiry_date ? String(form.expiry_date).substring(0, 10) : ''} onChange={value => setForm({...form, expiry_date: value})} className="input-field" />
             </div>
           </div>
         ) : (

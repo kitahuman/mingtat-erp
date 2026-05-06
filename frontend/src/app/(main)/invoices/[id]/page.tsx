@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi, paymentInApi, bankAccountsApi } from '@/lib/api';
@@ -377,11 +378,11 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">發票日期</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" />
+              <DateInput value={form.date} onChange={value => setForm({ ...form, date: value })} className="input-field" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">到期日</label>
-              <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="input-field" />
+              <DateInput value={form.due_date} onChange={value => setForm({ ...form, due_date: value })} className="input-field" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">開立公司</label>

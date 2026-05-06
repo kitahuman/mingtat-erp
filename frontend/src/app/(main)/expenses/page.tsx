@@ -254,7 +254,14 @@ export default function ExpensesPage() {
       label: '日期',
       sortable: true,
       editable: true,
-      inputComponent: DateInput,
+      editType: 'date',
+      editRender: (value, onChange) => (
+        <DateInput
+          value={value}
+          onChange={onChange}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
       render: (v: any) => fmtDate(v),
     },
     {
@@ -379,7 +386,14 @@ export default function ExpensesPage() {
       label: '付款日期',
       sortable: true,
       editable: true,
-      inputComponent: DateInput,
+      editType: 'date',
+      editRender: (value, onChange) => (
+        <DateInput
+          value={value}
+          onChange={onChange}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
       render: (v: any) => fmtDate(v),
     },
     {
@@ -608,7 +622,7 @@ export default function ExpensesPage() {
             {/* Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <DateInput value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" required />
+              <DateInput value={form.date} onChange={value => setForm({ ...form, date: value })} className="input-field" required />
             </div>
             {/* Company */}
             <div>
@@ -711,7 +725,7 @@ export default function ExpensesPage() {
             {/* Payment Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
-              <DateInput value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field" />
+              <DateInput value={form.payment_date} onChange={value => setForm({ ...form, payment_date: value })} className="input-field" />
             </div>
             {/* Payment Ref */}
             <div>

@@ -217,7 +217,7 @@ export default function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
             <DateInput
               value={filterDateFrom}
-              onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
+              onChange={v => { setFilterDateFrom(v); setPage(1); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -226,7 +226,7 @@ export default function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
             <DateInput
               value={filterDateTo}
-              onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
+              onChange={v => { setFilterDateTo(v); setPage(1); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>

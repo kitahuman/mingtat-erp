@@ -769,7 +769,7 @@ export default function IpaDetailPage() {
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">付款到期日</label>
-            <DateInput value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field" />
+            <DateInput value={dueDate} onChange={v => setDueDate(v)} className="input-field" />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => setShowCertifyModal(false)} className="btn-secondary">取消</button>
@@ -790,7 +790,7 @@ export default function IpaDetailPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">收款日期 <span className="text-red-500">*</span></label>
-            <DateInput value={paidDate} onChange={e => setPaidDate(e.target.value)} className="input-field" />
+            <DateInput value={paidDate} onChange={v => setPaidDate(v)} className="input-field" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">收款金額 <span className="text-red-500">*</span></label>

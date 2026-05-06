@@ -374,10 +374,9 @@ export default function EditDailyReportPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">日期 <span className="text-red-500">*</span></label>
-            <input
-              as={DateInput} type="text"
+            <DateInput
               value={reportDate}
-              onChange={e => setReportDate(e.target.value)}
+              onChange={setReportDate}
               className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

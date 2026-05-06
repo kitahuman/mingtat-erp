@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { leavesApi, employeesApi } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
@@ -300,17 +301,15 @@ export default function LeavesPage() {
       </select>
 
       {/* Date range */}
-      <input
-        type="date"
+      <DateInput
         value={dateFrom}
-        onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+        onChange={value => { setDateFrom(value); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
       <span className="text-gray-400 text-sm">至</span>
-      <input
-        type="date"
+      <DateInput
         value={dateTo}
-        onChange={e => { setDateTo(e.target.value); setPage(1); }}
+        onChange={value => { setDateTo(value); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
 

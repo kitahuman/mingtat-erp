@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { machineryApi, companiesApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -122,7 +123,7 @@ export default function MachineryPage() {
     load();
   };
 
-  const renderExpiry = (v: string) => <ExpiryBadge date={v} showLabel={false} />;
+  const renderExpiry = (v: string) => v ? <ExpiryBadge date={v} showLabel={false} /> : '-';
   const filterExpiry = (v: string) => fmtDate(v);
   const renderStatus = (v: string) => (
     <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
@@ -139,8 +140,8 @@ export default function MachineryPage() {
     { key: 'serial_number', label: '序號', sortable: true, filterable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
     { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry },
+    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry },
     { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: renderStatus, filterRender: filterStatus },
   ];
 
@@ -232,8 +233,8 @@ export default function MachineryPage() {
                 {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗機紙到期日</label><input type="date" value={form.inspection_cert_expiry} onChange={e => setForm({...form, inspection_cert_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗機紙到期日</label><DateInput value={form.inspection_cert_expiry} onChange={value => setForm({...form, inspection_cert_expiry: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

@@ -403,11 +403,11 @@ export default function ContractDetailPage() {
                       <option value="active">進行中</option><option value="completed">已完成</option><option value="cancelled">已取消</option>
                     </select></div>
                   <div><label className="block text-sm font-medium text-gray-500 mb-1">簽約日期</label>
-                    <DateInput value={toInputDate(form.sign_date)} onChange={e => setForm({...form, sign_date: e.target.value})} className="input-field" /></div>
+                    <DateInput value={toInputDate(form.sign_date)} onChange={v => setForm({...form, sign_date: v})} className="input-field" /></div>
                   <div><label className="block text-sm font-medium text-gray-500 mb-1">開始日期</label>
-                    <DateInput value={toInputDate(form.start_date)} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" /></div>
+                    <DateInput value={toInputDate(form.start_date)} onChange={v => setForm({...form, start_date: v})} className="input-field" /></div>
                   <div><label className="block text-sm font-medium text-gray-500 mb-1">結束日期</label>
-                    <DateInput value={toInputDate(form.end_date)} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" /></div>
+                    <DateInput value={toInputDate(form.end_date)} onChange={v => setForm({...form, end_date: v})} className="input-field" /></div>
                   <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">說明</label>
                     <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} className="input-field" rows={3} /></div>
                 </>
@@ -710,18 +710,18 @@ export default function ContractDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">提交日期</label>
-              <DateInput value={toInputDate(voForm.submitted_date)} onChange={e => setVoForm({ ...voForm, submitted_date: e.target.value })} className="input-field" disabled={!!voDetail && !voEditing} />
+              <DateInput value={toInputDate(voForm.submitted_date)} onChange={v => setVoForm({...voForm, submitted_date: v})} className="input-field" disabled={!!voDetail && !voEditing} />
             </div>
             {voForm.status === 'approved' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">批准金額</label>
-                <input type="number" step="0.01" value={voForm.approved_amount ?? ''} onChange={e => setVoForm({ ...voForm, approved_amount: e.target.value })} className="input-field" disabled={!voEditing} />
+                <input type="number" step="0.01" value={voForm.approved_amount ?? ''} onChange={v => setVoForm({...voForm, submitted_date: v})} className="input-field" disabled={!voEditing} />
               </div>
             )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
-            <input value={voForm.remarks || ''} onChange={e => setVoForm({ ...voForm, remarks: e.target.value })} className="input-field" disabled={!!voDetail && !voEditing} />
+            <input value={voForm.remarks || ''} onChange={e => setVoForm({...voForm, remarks: e.target.value})} className="input-field" disabled={!!voDetail && !voEditing} />
           </div>
 
           {/* VO Items */}

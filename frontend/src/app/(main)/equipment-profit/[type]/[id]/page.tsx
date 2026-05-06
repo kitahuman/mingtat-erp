@@ -162,7 +162,7 @@ export default function EquipmentProfitDetailPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
             <DateInput
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(v) => setDateFrom(v)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
@@ -170,7 +170,7 @@ export default function EquipmentProfitDetailPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
             <DateInput
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(v) => setDateTo(v)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>

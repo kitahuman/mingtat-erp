@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -122,7 +123,7 @@ export default function VehicleDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">品牌</label><input value={form.brand || ''} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">使用中</option><option value="maintenance">維修中</option><option value="inactive">停用</option></select></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">首次登記日期</label><input type="date" value={form.vehicle_first_reg_date?.slice(0, 10) || ''} onChange={e => setForm({...form, vehicle_first_reg_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">首次登記日期</label><DateInput value={form.vehicle_first_reg_date?.slice(0, 10) || ''} onChange={value => setForm({...form, vehicle_first_reg_date: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">底盤號碼</label><input value={form.vehicle_chassis_no || ''} onChange={e => setForm({...form, vehicle_chassis_no: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">原身車牌</label><input value={form.vehicle_original_plate || ''} onChange={e => setForm({...form, vehicle_original_plate: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">車主名稱</label><input value={form.vehicle_owner_name || ''} onChange={e => setForm({...form, vehicle_owner_name: e.target.value})} className="input-field" /></div>
@@ -133,11 +134,11 @@ export default function VehicleDetailPage() {
                   <option value="false">無</option>
                 </select>
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">牌費到期日</label><input type="date" value={form.permit_fee_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, permit_fee_expiry: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">驗車到期日</label><input type="date" value={form.inspection_date?.slice(0, 10) || ''} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">行車證到期日</label><input type="date" value={form.license_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">泥尾到期日</label><input type="date" value={form.vehicle_mud_tail_expiry?.slice(0, 10) || ''} onChange={e => setForm({...form, vehicle_mud_tail_expiry: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><DateInput value={form.insurance_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">牌費到期日</label><DateInput value={form.permit_fee_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, permit_fee_expiry: value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">驗車到期日</label><DateInput value={form.inspection_date?.slice(0, 10) || ''} onChange={value => setForm({...form, inspection_date: value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">行車證到期日</label><DateInput value={form.license_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, license_expiry: value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">泥尾到期日</label><DateInput value={form.vehicle_mud_tail_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, vehicle_mud_tail_expiry: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">電子通訊</label><input value={form.vehicle_electronic_comm || ''} onChange={e => setForm({...form, vehicle_electronic_comm: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">易通行</label><input value={form.vehicle_autotoll || ''} onChange={e => setForm({...form, vehicle_autotoll: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">易通行已取</label><input value={form.vehicle_autotoll_collected || ''} onChange={e => setForm({...form, vehicle_autotoll_collected: e.target.value})} className="input-field" /></div>
@@ -273,7 +274,7 @@ export default function VehicleDetailPage() {
         <form onSubmit={handleChangePlate} className="space-y-4">
           <div><label className="block text-sm font-medium text-gray-700 mb-1">目前車牌</label><input value={vehicle?.plate_number} className="input-field bg-gray-50 font-mono" disabled /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">新車牌 *</label><input value={plateForm.new_plate} onChange={e => setPlateForm({...plateForm, new_plate: e.target.value})} className="input-field" required /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">變更日期 *</label><input type="date" value={plateForm.change_date} onChange={e => setPlateForm({...plateForm, change_date: e.target.value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">變更日期 *</label><DateInput value={plateForm.change_date} onChange={value => setPlateForm({...plateForm, change_date: value})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={plateForm.notes} onChange={e => setPlateForm({...plateForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowPlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認更換</button></div>
         </form>
@@ -289,7 +290,7 @@ export default function VehicleDetailPage() {
               {companies.filter(c => c.id !== vehicle?.owner_company_id).map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
             </select>
           </div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">過戶日期 *</label><input type="date" value={transferForm.transfer_date} onChange={e => setTransferForm({...transferForm, transfer_date: e.target.value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">過戶日期 *</label><DateInput value={transferForm.transfer_date} onChange={value => setTransferForm({...transferForm, transfer_date: value})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={transferForm.notes} onChange={e => setTransferForm({...transferForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowTransferModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認過戶</button></div>
         </form>

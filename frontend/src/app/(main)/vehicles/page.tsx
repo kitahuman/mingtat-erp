@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -104,14 +105,14 @@ export default function VehiclesPage() {
     { key: 'owner_company', label: '車主', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '-', exportRender: (_: any, row: any) => row.owner_company?.internal_prefix || row.owner_company?.name || '' },
     { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-', exportRender: (v: number) => v ? `${v}` : '' },
     { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const },
-    { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? fmtDate(v) : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
+    { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
     { key: 'vehicle_chassis_no', label: '底盤號碼', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-xs">{v}</span> : '-' },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
+    { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'vehicle_inspection_notes', label: '驗車備註', sortable: false, editable: false, render: (v: string) => v ? <span className="text-sm text-gray-700 whitespace-pre-wrap">{v}</span> : '-', filterRender: (v: string) => v || '-', exportRender: (v: string) => v || '' },
-    { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'vehicle_mud_tail_expiry', label: '泥尾到期', sortable: true, editable: true, editType: 'date' as const, render: renderExpiry, filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry, exportRender: (v: string) => v || '' },
+    { key: 'vehicle_mud_tail_expiry', label: '泥尾到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => v ? new Date(v).toLocaleDateString('en-GB') : '-', filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'vehicle_insurance_agent', label: '保險代理', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'vehicle_insurance_company', label: '保險公司', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
     { key: 'vehicle_has_gps', label: 'GPS', sortable: false, editable: false, render: (v: boolean | null) => v === true ? '有' : v === false ? '無' : '-' },
@@ -206,10 +207,10 @@ export default function VehiclesPage() {
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">品牌</label><input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">型號</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><input type="date" value={form.permit_fee_expiry} onChange={e => setForm({...form, permit_fee_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><input type="date" value={form.inspection_date} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><input type="date" value={form.license_expiry} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><DateInput value={form.permit_fee_expiry} onChange={value => setForm({...form, permit_fee_expiry: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><DateInput value={form.inspection_date} onChange={value => setForm({...form, inspection_date: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><DateInput value={form.road_license_expiry} onChange={value => setForm({...form, road_license_expiry: value})} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

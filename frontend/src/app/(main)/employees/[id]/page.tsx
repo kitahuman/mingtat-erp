@@ -293,12 +293,12 @@ export default function EmployeeDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">職位</label><select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="input-field">{roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">在職</option><option value="inactive">離職</option></select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">身份證號碼</label><input value={form.id_number || ''} onChange={e => setForm({...form, id_number: e.target.value})} className="input-field" placeholder="例：R838479(6)" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">出生日期</label><DateInput value={toInputDate(form.date_of_birth)} onChange={e => setForm({...form, date_of_birth: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">出生日期</label><DateInput value={toInputDate(form.date_of_birth)} onChange={v => setForm({...form, date_of_birth: v})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">性別</label><select value={form.gender || ''} onChange={e => setForm({...form, gender: e.target.value})} className="input-field">{genderOptions.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">電話</label><input value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">緊急聯絡人</label><input value={form.emergency_contact || ''} onChange={e => setForm({...form, emergency_contact: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">入職日期</label><DateInput value={toInputDate(form.join_date)} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">離職日期</label><DateInput value={toInputDate(form.termination_date)} onChange={e => setForm({...form, termination_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">入職日期</label><DateInput value={toInputDate(form.join_date)} onChange={v => setForm({...form, join_date: v})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">離職日期</label><DateInput value={toInputDate(form.termination_date)} onChange={v => setForm({...form, termination_date: v})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">離職原因</label><input value={form.termination_reason || ''} onChange={e => setForm({...form, termination_reason: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">常用車牌</label><input value={form.frequent_vehicle || ''} onChange={e => setForm({...form, frequent_vehicle: e.target.value})} className="input-field" /></div>
               <div className="md:col-span-2 lg:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">地址</label><input value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} className="input-field" /></div>
@@ -376,8 +376,8 @@ export default function EmployeeDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">銀行戶口號碼</label><input value={form.bank_account || ''} onChange={e => setForm({...form, bank_account: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">強積金計劃</label><select value={form.mpf_plan || ''} onChange={e => setForm({...form, mpf_plan: e.target.value})} className="input-field">{mpfOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">強積金戶口號碼</label><input value={form.mpf_account_number || ''} onChange={e => setForm({...form, mpf_account_number: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">受僱日期(MPF)</label><DateInput value={toInputDate(form.mpf_employment_date)} onChange={e => setForm({...form, mpf_employment_date: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">舊受僱日期</label><DateInput value={toInputDate(form.mpf_old_employment_date)} onChange={e => setForm({...form, mpf_old_employment_date: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">受僱日期(MPF)</label><DateInput value={toInputDate(form.mpf_employment_date)} onChange={v => setForm({...form, mpf_employment_date: v})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">舊受僱日期</label><DateInput value={toInputDate(form.mpf_old_employment_date)} onChange={v => setForm({...form, mpf_old_employment_date: v})} className="input-field" /></div>
             </>
           ) : (
             <>
@@ -421,7 +421,7 @@ export default function EmployeeDetailPage() {
                 <p className="text-sm font-medium text-gray-700 mb-2">{cert.label}</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div><label className="block text-xs text-gray-500 mb-1">號碼</label><input value={form[cert.noKey] || ''} onChange={e => setForm({...form, [cert.noKey]: e.target.value})} className="input-field" /></div>
-                  <div><label className="block text-xs font-medium text-gray-500 mb-1">到期日</label><DateInput value={toInputDate(form[cert.expiryKey])} onChange={e => setForm({...form, [cert.expiryKey]: e.target.value})} className="input-field" /></div>
+                  <div><label className="block text-xs font-medium text-gray-500 mb-1">到期日</label><DateInput value={toInputDate(form[cert.expiryKey])} onChange={v => setForm({...form, [cert.expiryKey]: v})} className="input-field" /></div>
                   {cert.extraKey && <div><label className="block text-xs text-gray-500 mb-1">{cert.extraLabel}</label><input value={form[cert.extraKey] || ''} onChange={e => setForm({...form, [cert.extraKey]: e.target.value})} className="input-field" /></div>}
                 </div>
               </div>
@@ -444,10 +444,9 @@ export default function EmployeeDetailPage() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">到期日</label>
-                        <input
-                          as={DateInput} type="text"
+                        <DateInput
                           value={otherCerts[ct.label]?.expiry_date || ''}
-                          onChange={e => setOtherCerts(prev => ({ ...prev, [ct.label]: { ...prev[ct.label], expiry_date: e.target.value, cert_no: prev[ct.label]?.cert_no || '' } }))}
+                          onChange={v => setOtherCerts(prev => ({ ...prev, [ct.label]: { ...prev[ct.label], expiry_date: v, cert_no: prev[ct.label]?.cert_no || '' } }))}
                           className="input-field"
                         />
                       </div>
@@ -596,7 +595,7 @@ export default function EmployeeDetailPage() {
       <Modal isOpen={showSalaryModal} onClose={() => setShowSalaryModal(false)} title="新增薪資設定" size="lg">
         <form onSubmit={handleAddSalary} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label><DateInput value={salaryForm.effective_date} onChange={e => setSalaryForm({...salaryForm, effective_date: e.target.value})} className="input-field" required /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label><DateInput value={salaryForm.effective_date} onChange={v => setSalaryForm({...salaryForm, effective_date: v})} className="input-field" required /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">薪資類型</label><select value={salaryForm.salary_type} onChange={e => setSalaryForm({...salaryForm, salary_type: e.target.value})} className="input-field"><option value="monthly">月薪</option><option value="daily">日薪</option></select></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">底薪</label><input type="number" value={salaryForm.base_salary} onChange={e => setSalaryForm({...salaryForm, base_salary: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">夜班津貼</label><input type="number" value={salaryForm.allowance_night} onChange={e => setSalaryForm({...salaryForm, allowance_night: e.target.value})} className="input-field" /></div>
@@ -619,7 +618,7 @@ export default function EmployeeDetailPage() {
               {companies.filter(c => c.id !== emp?.company_id).map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
             </select>
           </div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">調動日期 *</label><DateInput value={transferForm.transfer_date} onChange={e => setTransferForm({...transferForm, transfer_date: e.target.value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">調動日期 *</label><DateInput value={transferForm.transfer_date} onChange={v => setTransferForm({...transferForm, transfer_date: v})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={transferForm.notes} onChange={e => setTransferForm({...transferForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowTransferModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認調動</button></div>
         </form>
@@ -631,7 +630,7 @@ export default function EmployeeDetailPage() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
             確定要將 <strong>{emp?.name_zh}</strong> 設為離職嗎？離職後員工將移至「已離職」分頁。
           </div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">離職日期 *</label><DateInput value={terminateForm.termination_date} onChange={e => setTerminateForm({...terminateForm, termination_date: e.target.value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">離職日期 *</label><DateInput value={terminateForm.termination_date} onChange={v => setTerminateForm({...terminateForm, termination_date: v})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">離職原因</label><textarea value={terminateForm.termination_reason} onChange={e => setTerminateForm({...terminateForm, termination_reason: e.target.value})} className="input-field" rows={3} placeholder="請輸入離職原因（選填）" /></div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowTerminateModal(false)} className="btn-secondary">取消</button>
