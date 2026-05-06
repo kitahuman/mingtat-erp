@@ -7,6 +7,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
+import Combobox from '@/components/Combobox';
 import { fmtDate } from '@/lib/dateUtils';
 
 const statusOptions = [
@@ -22,8 +23,30 @@ const statusColors: Record<string, string> = {
   active: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
 };
 
-const emptyForm = {
-  contract_no: '',
+interface ClientOption {
+  value: string | number;
+  label: string;
+}
+
+interface Client {
+  id: number;
+  code?: string | null;
+  name: string;
+  partner_type?: string | null;
+}
+
+interface ContractForm {
+  contract_name: string;
+  client_id: string;
+  description: string;
+  sign_date: string;
+  start_date: string;
+  end_date: string;
+  original_amount: string;
+  status: string;
+}
+
+const emptyForm: ContractForm = {
   contract_name: '',
   client_id: '',
   description: '',
@@ -45,10 +68,10 @@ export default function ContractsPage() {
   const [clientFilter, setClientFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState<any>({ ...emptyForm });
+  const [form, setForm] = useState<ContractForm>({ ...emptyForm });
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('DESC');
-  const [clients, setClients] = useState<any[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
 
   // Merge state
   const [mergeMode, setMergeMode] = useState(false);
@@ -59,7 +82,7 @@ export default function ContractsPage() {
 
   useEffect(() => {
     partnersApi.simple().then(res => {
-      const clientPartners = (res.data || []).filter((p: any) => p.partner_type === 'client');
+      const clientPartners = (res.data || []).filter((p: Client) => p.partner_type === 'client');
       setClients(clientPartners);
     });
   }, []);
@@ -87,8 +110,23 @@ export default function ContractsPage() {
     setPage(1);
   };
 
+  const clientOptions: ClientOption[] = clients.map(client => ({
+    value: client.id,
+    label: client.code ? `${client.code} - ${client.name}` : client.name,
+  }));
+
+  const handleClientChange = (value: string | null) => {
+    if (value === null || clientOptions.some(option => String(option.value) === value)) {
+      setForm(prev => ({ ...prev, client_id: value ?? '' }));
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.client_id) {
+      alert('請選擇客戶');
+      return;
+    }
     try {
       await contractsApi.create({
         ...form,
@@ -292,15 +330,21 @@ export default function ContractsPage() {
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">基本資料</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號 *</label>
-              <input value={form.contract_no} onChange={e => setForm({...form, contract_no: e.target.value})} className="input-field" required placeholder="例如 CT-2026-001" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">合約編號</label>
+              <div className="input-field bg-gray-50 text-gray-500 flex items-center min-h-[38px]">
+                系統自動生成（例如 CT-2026-001）
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶 *</label>
-              <select value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input-field" required>
-                <option value="">請選擇客戶</option>
-                {clients.map((c: any) => <option key={c.id} value={c.id}>{c.code ? `${c.code} - ${c.name}` : c.name}</option>)}
-              </select>
+              <Combobox
+                value={form.client_id || null}
+                onChange={handleClientChange}
+                options={clientOptions}
+                placeholder="搜尋客戶..."
+                clearable
+                className="w-full"
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">合約名稱 *</label>

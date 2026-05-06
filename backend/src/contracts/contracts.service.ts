@@ -1,6 +1,18 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateContractDto, UpdateContractDto } from './dto/create-contract.dto';
+
+interface FindContractsQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  clientId?: number;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}
 
 @Injectable()
 export class ContractsService {
@@ -11,14 +23,10 @@ export class ContractsService {
     'sign_date', 'start_date', 'end_date', 'status', 'created_at',
   ];
 
-  async findAll(query: {
-    page?: number; limit?: number; search?: string;
-    clientId?: number; status?: string;
-    sortBy?: string; sortOrder?: string;
-  }) {
+  async findAll(query: FindContractsQuery) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = { deleted_at: null };
+    const where: Prisma.ContractWhereInput = { deleted_at: null };
 
     if (query.clientId) where.client_id = Number(query.clientId);
     if (query.status) where.status = query.status;
@@ -76,17 +84,52 @@ export class ContractsService {
     });
   }
 
-  async create(dto: any, userId?: number, ipAddress?: string) {
-    // Check unique contract_no
-    if (dto.contract_no) {
-      const existing = await this.prisma.contract.findUnique({
-        where: { contract_no: dto.contract_no },
-      });
-      if (existing) {
-        throw new BadRequestException('此合約編號已存在');
-      }
+  private async generateContractNo(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `CT-${year}-`;
+    const contracts = await this.prisma.contract.findMany({
+      where: { contract_no: { startsWith: prefix } },
+      select: { contract_no: true },
+    });
+
+    const maxSerial = contracts.reduce((max, contract) => {
+      const match = contract.contract_no.match(/^CT-\d{4}-(\d{3,})$/);
+      if (!match) return max;
+      const serial = Number(match[1]);
+      return Number.isFinite(serial) && serial > max ? serial : max;
+    }, 0);
+
+    return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
+  }
+
+  private async ensureContractNoUnique(contractNo: string, excludeId?: number): Promise<void> {
+    const duplicate = await this.prisma.contract.findFirst({
+      where: {
+        contract_no: contractNo,
+        ...(excludeId !== undefined ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException(`合約編號「${contractNo}」已被其他合約使用`);
+    }
+  }
+
+  private handleUniqueConstraintError(error: unknown): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta.target.includes('contract_no')
+    ) {
+      throw new ConflictException('合約編號已被其他合約使用，請重新提交');
     }
 
+    throw error;
+  }
+
+  async create(dto: CreateContractDto, userId?: number, ipAddress?: string) {
     // Validate client exists and is a client-type partner
     if (dto.client_id) {
       const partner = await this.prisma.partner.findUnique({
@@ -95,16 +138,31 @@ export class ContractsService {
       if (!partner) throw new BadRequestException('客戶不存在');
     }
 
-     const { client, _count, ...data } = dto;
-    // Normalize dates: convert empty strings to null, valid strings to Date
-    data.sign_date = data.sign_date ? new Date(data.sign_date) : null;
-    data.start_date = data.start_date ? new Date(data.start_date) : null;
-    data.end_date = data.end_date ? new Date(data.end_date) : null;
-    if (data.original_amount !== undefined) data.original_amount = Number(data.original_amount);
-    if (data.client_id) data.client_id = Number(data.client_id);
-    // Remove empty string fields that would fail type validation
-    if (data.description === '') data.description = null;
-    const saved = await this.prisma.contract.create({ data });
+    const { client_id, contract_name, description, sign_date, start_date, end_date, original_amount, status, retention_rate, retention_cap_rate } = dto;
+    const contractNo = await this.generateContractNo();
+    await this.ensureContractNoUnique(contractNo);
+
+    const data: Prisma.ContractUncheckedCreateInput = {
+      contract_no: contractNo,
+      client_id: Number(client_id),
+      contract_name: contract_name ?? '',
+      description: description === '' ? null : description,
+      sign_date: sign_date ? new Date(sign_date) : null,
+      start_date: start_date ? new Date(start_date) : null,
+      end_date: end_date ? new Date(end_date) : null,
+      original_amount: original_amount !== undefined ? Number(original_amount) : undefined,
+      status: status ?? 'active',
+      retention_rate: retention_rate !== undefined ? Number(retention_rate) : undefined,
+      retention_cap_rate: retention_cap_rate !== undefined ? Number(retention_cap_rate) : undefined,
+    };
+
+    let saved: Awaited<ReturnType<typeof this.prisma.contract.create>>;
+    try {
+      saved = await this.prisma.contract.create({ data });
+    } catch (error) {
+      this.handleUniqueConstraintError(error);
+    }
+
     if (userId) {
       try {
         await this.auditLogsService.log({
@@ -120,31 +178,37 @@ export class ContractsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
+  async update(id: number, dto: UpdateContractDto, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.contract.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('合約不存在');
 
     // Check unique contract_no if changed
     if (dto.contract_no && dto.contract_no !== existing.contract_no) {
-      const dup = await this.prisma.contract.findUnique({
-        where: { contract_no: dto.contract_no },
-      });
-      if (dup) throw new BadRequestException('此合約編號已存在');
+      await this.ensureContractNoUnique(dto.contract_no, id);
     }
 
-    const { client, _count, created_at, updated_at, id: _id, ...updateData } = dto;
+    const { client_id, contract_no, contract_name, description, sign_date, start_date, end_date, original_amount, status, retention_rate, retention_cap_rate } = dto;
+    const updateData: Prisma.ContractUncheckedUpdateInput = {};
 
-    // Normalize dates
-    if (updateData.sign_date) updateData.sign_date = new Date(updateData.sign_date);
-    else if (updateData.sign_date === '') updateData.sign_date = null;
-    if (updateData.start_date) updateData.start_date = new Date(updateData.start_date);
-    else if (updateData.start_date === '') updateData.start_date = null;
-    if (updateData.end_date) updateData.end_date = new Date(updateData.end_date);
-    else if (updateData.end_date === '') updateData.end_date = null;
-    if (updateData.original_amount !== undefined) updateData.original_amount = Number(updateData.original_amount);
-    if (updateData.client_id) updateData.client_id = Number(updateData.client_id);
+    if (contract_no !== undefined) updateData.contract_no = contract_no;
+    if (client_id !== undefined) updateData.client_id = Number(client_id);
+    if (contract_name !== undefined) updateData.contract_name = contract_name;
+    if (description !== undefined) updateData.description = description === '' ? null : description;
+    if (sign_date !== undefined) updateData.sign_date = sign_date ? new Date(sign_date) : null;
+    if (start_date !== undefined) updateData.start_date = start_date ? new Date(start_date) : null;
+    if (end_date !== undefined) updateData.end_date = end_date ? new Date(end_date) : null;
+    if (original_amount !== undefined) updateData.original_amount = Number(original_amount);
+    if (status !== undefined) updateData.status = status;
+    if (retention_rate !== undefined) updateData.retention_rate = Number(retention_rate);
+    if (retention_cap_rate !== undefined) updateData.retention_cap_rate = Number(retention_cap_rate);
 
-    const updated = await this.prisma.contract.update({ where: { id }, data: updateData });
+    let updated: Awaited<ReturnType<typeof this.prisma.contract.update>>;
+    try {
+      updated = await this.prisma.contract.update({ where: { id }, data: updateData });
+    } catch (error) {
+      this.handleUniqueConstraintError(error);
+    }
+
     if (userId) {
       try {
         await this.auditLogsService.log({
