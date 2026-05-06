@@ -173,7 +173,7 @@ export default function LeavePage() {
               <div>
                 <label className={labelClass}>{t('leaveDateFrom')}</label>
                 <DateInput value={form.date_from}
-                  onChange={(e) => handleDateChange('date_from', e.target.value)}
+                  onChange={val => handleDateChange('date_from', val)}
                   className={inputClass}
                   required
                 />
@@ -183,7 +183,7 @@ export default function LeavePage() {
                 <label className={labelClass}>{t('leaveDateTo')}</label>
                 <DateInput value={form.date_to}
                   min={form.date_from}
-                  onChange={(e) => handleDateChange('date_to', e.target.value)}
+                  onChange={val => handleDateChange('date_to', val)}
                   className={inputClass}
                   required
                 />

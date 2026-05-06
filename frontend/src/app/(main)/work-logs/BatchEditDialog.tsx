@@ -153,7 +153,7 @@ export default function BatchEditDialog({
       case 'date':
         return (
           <DateInput value={fieldValue || ''}
-            onChange={e => setFieldValue(e.target.value || null)}
+            onChange={val => setFieldValue(val || null)}
             className={`w-full ${inputCls}`}
           />
         );
@@ -162,7 +162,7 @@ export default function BatchEditDialog({
           <input
             type="time"
             value={fieldValue || ''}
-            onChange={e => setFieldValue(e.target.value || null)}
+            onChange={val => setFieldValue(val || null)}
             className={`w-full ${inputCls}`}
           />
         );
@@ -182,7 +182,7 @@ export default function BatchEditDialog({
           <input
             type="text"
             value={fieldValue || ''}
-            onChange={e => setFieldValue(e.target.value || null)}
+            onChange={val => setFieldValue(val || null)}
             placeholder={`輸入${fieldDef.label}`}
             className={`w-full ${inputCls}`}
           />

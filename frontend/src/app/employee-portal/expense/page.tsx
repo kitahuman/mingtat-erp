@@ -229,7 +229,7 @@ export default function ExpensePage() {
               <div>
                 <label className={labelClass}>{t('expenseDate')}</label>
                 <DateInput value={form.date}
-                  onChange={(e) => set('date', e.target.value)}
+                  onChange={val => set('date', val)}
                   className={inputClass}
                   required
                 />
