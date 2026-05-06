@@ -54,7 +54,7 @@ export default function AcceptanceReportListPage() {
 
   const fmtDate = (d: string) => {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString('zh-HK');
+    return new Date(d).toLocaleDateString('en-GB');
   };
 
   const handleClientChange = (val: string) => {

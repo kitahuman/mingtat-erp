@@ -27,7 +27,7 @@ function ExpiryBadge({ expiryDate }: { expiryDate: string | null }) {
   const days = getDaysLeft(expiryDate);
   if (days === null) return null;
 
-  const dateStr = new Date(expiryDate).toLocaleDateString(lang === 'zh' ? 'zh-HK' : 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const dateStr = new Date(expiryDate).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
   if (days < 0) {
     return (

@@ -533,7 +533,7 @@ export default function CompanyClockPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">
-                          {new Date(r.timestamp).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' })}{' '}
+                          {new Date(r.timestamp).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' })}{' '}
                           {formatTime(r.timestamp)}
                         </span>
                       </div>

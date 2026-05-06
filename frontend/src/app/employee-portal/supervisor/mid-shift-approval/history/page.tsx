@@ -81,7 +81,7 @@ export default function MidShiftApprovalHistoryPage() {
                   <div className="text-right">
                     <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded text-[10px] font-bold border border-green-100">{t("approved")}</span>
                     <p className="text-[10px] text-gray-400 mt-1">
-                      {new Date(record.mid_shift_approved_at).toLocaleDateString('zh-HK')}
+                      {new Date(record.mid_shift_approved_at).toLocaleDateString('en-GB')}
                     </p>
                   </div>
                 </div>

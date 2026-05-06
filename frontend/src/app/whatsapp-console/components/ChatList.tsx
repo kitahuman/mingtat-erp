@@ -37,7 +37,7 @@ function formatTime(timestamp: number): string {
     const days = ['日', '一', '二', '三', '四', '五', '六'];
     return `星期${days[date.getDay()]}`;
   } else {
-    return date.toLocaleDateString('zh-HK', { timeZone: 'Asia/Hong_Kong', month: 'numeric', day: 'numeric' });
+    return date.toLocaleDateString('en-GB', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' });
   }
 }
 

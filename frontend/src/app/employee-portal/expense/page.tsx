@@ -181,7 +181,7 @@ export default function ExpensePage() {
   const activePaymentMethods = paymentMethods.filter((m: any) => m.is_active !== false);
 
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString(lang === 'zh' ? 'zh-HK' : 'en-US'); } catch { return d; }
+    try { return new Date(d).toLocaleDateString('en-GB'); } catch { return d; }
   };
   const formatAmount = (n: any) =>
     `HK$ ${Number(n).toLocaleString(lang === 'zh' ? 'zh-HK' : 'en-US', { minimumFractionDigits: 2 })}`;

@@ -144,7 +144,7 @@ export class DailyReportsController {
     const report = await this.service.findOne(id);
     const categoryLabels: Record<string, string> = { worker: '工人', vehicle: '車輛/機械', machinery: '車輛/機械', tool: '工具' };
     const shiftLabels: Record<string, string> = { day: '日更', night: '夜更' };
-    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('zh-HK') : '-';
+    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-GB') : '-';
 
     const projectName = report.daily_report_project_name || report.project?.project_name || '-';
     const projectLocation = report.daily_report_project_location || '-';

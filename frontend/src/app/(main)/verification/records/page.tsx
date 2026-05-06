@@ -74,7 +74,7 @@ interface Pagination {
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleDateString('zh-HK', {
+    return new Date(dateStr).toLocaleDateString('en-GB', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

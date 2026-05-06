@@ -520,7 +520,7 @@ function HistoryCopyModal({
 
   const formatDateFull = (d: string | null) => {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric' });
+    return new Date(d).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
   };
 
   const getClientName = (log: WorkLogHistoryItem) =>

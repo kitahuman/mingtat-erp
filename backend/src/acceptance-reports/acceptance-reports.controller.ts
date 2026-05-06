@@ -94,7 +94,7 @@ export class AcceptanceReportsController {
     @Res() res: Response,
   ) {
     const report = await this.service.findOne(id);
-    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('zh-HK') : '-';
+    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-GB') : '-';
 
     const projectName = report.acceptance_report_project_name || report.project?.project_name || '-';
     const clientName = report.acceptance_report_client_name || (report as any).client?.name || '-';

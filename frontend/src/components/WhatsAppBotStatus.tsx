@@ -57,7 +57,7 @@ function formatTime(dateStr: string | null): string {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('zh-HK', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Hong_Kong',
     hour: '2-digit',
     minute: '2-digit',

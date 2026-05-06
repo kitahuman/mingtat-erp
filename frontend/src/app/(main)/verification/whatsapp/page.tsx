@@ -133,7 +133,7 @@ function formatDateTime(dateStr: string | null) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('zh-HK', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Hong_Kong',
     month: 'numeric',
     day: 'numeric',

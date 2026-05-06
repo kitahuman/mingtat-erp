@@ -275,7 +275,7 @@ export default function CompanyProfitLossPage() {
         <span className="font-medium">報表期間：</span>{getPeriodDisplayText()}
         {data?.period?.date_from && data?.period?.date_to && (
           <span className="ml-2 text-indigo-600">
-            （{new Date(data.period.date_from).toLocaleDateString('zh-HK')} 至 {new Date(data.period.date_to).toLocaleDateString('zh-HK')}）
+            （{new Date(data.period.date_from).toLocaleDateString('en-GB')} 至 {new Date(data.period.date_to).toLocaleDateString('en-GB')}）
           </span>
         )}
       </div>

@@ -26,7 +26,7 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
 function formatDateFull(d: string | null): string {
   if (!d) return '-';
   const date = new Date(d);
-  return date.toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 // 格式化日期時間，加上年份

@@ -108,7 +108,7 @@ function DateDivider({ timestamp }: { timestamp: number }) {
   let label: string;
   if (diffDays === 0) label = '今天';
   else if (diffDays === 1) label = '昨天';
-  else label = date.toLocaleDateString('zh-HK', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: 'long', day: 'numeric' });
+  else label = date.toLocaleDateString('en-GB', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' });
 
   return (
     <div className="flex items-center justify-center my-3 px-4">
