@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter } from 'next/navigation';
 import {
   expensesApi,
@@ -253,7 +254,7 @@ export default function ExpensesPage() {
       label: '日期',
       sortable: true,
       editable: true,
-      editType: 'date',
+      inputComponent: DateInput,
       render: (v: any) => fmtDate(v),
     },
     {
@@ -378,7 +379,7 @@ export default function ExpensesPage() {
       label: '付款日期',
       sortable: true,
       editable: true,
-      editType: 'date',
+      inputComponent: DateInput,
       render: (v: any) => fmtDate(v),
     },
     {
@@ -607,7 +608,7 @@ export default function ExpensesPage() {
             {/* Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" required />
+              <DateInput value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" required />
             </div>
             {/* Company */}
             <div>
@@ -710,7 +711,7 @@ export default function ExpensesPage() {
             {/* Payment Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
-              <input type="date" value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field" />
+              <DateInput value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field" />
             </div>
             {/* Payment Ref */}
             <div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { dailyReportStatsApi, dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import ExportButton from '@/components/ExportButton';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -178,7 +179,7 @@ export default function DailyReportStatsPage() {
           <div>
             <label className="block text-xs text-gray-500 mb-1">開始日期</label>
             <input
-              type="date"
+              as={DateInput} type="text"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -187,7 +188,7 @@ export default function DailyReportStatsPage() {
           <div>
             <label className="block text-xs text-gray-500 mb-1">結束日期</label>
             <input
-              type="date"
+              as={DateInput} type="text"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import Cookies from 'js-cookie';
 import { useAuth } from '@/lib/auth';
 
@@ -214,8 +215,7 @@ export default function AuditLogsPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
-            <input
-              type="date"
+            <DateInput
               value={filterDateFrom}
               onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -224,8 +224,7 @@ export default function AuditLogsPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
-            <input
-              type="date"
+            <DateInput
               value={filterDateTo}
               onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"

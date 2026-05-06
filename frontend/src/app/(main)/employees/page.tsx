@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
@@ -1007,7 +1008,7 @@ export default function EmployeesPage() {
               </div>
             )}
             <div><label className="block text-sm font-medium text-gray-700 mb-1">電話</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label><input type="date" value={form.join_date} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
+             <div><label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label><DateInput value={form.join_date} onChange={e => setForm({...form, join_date: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">身份證號碼</label><input value={form.id_number} onChange={e => setForm({...form, id_number: e.target.value, ...(createError ? { _clearError: true } : {})})} onInput={() => setCreateError('')} className="input-field" placeholder="例：R838479(6)" /></div>
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -1288,7 +1289,7 @@ export default function EmployeesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">入職日期</label>
-                <input type="date" value={convertForm.join_date} onChange={e => setConvertForm({...convertForm, join_date: e.target.value})} className="input-field" />
+                 <DateInput value={convertForm.join_date} onChange={e => setConvertForm({...convertForm, join_date: e.target.value})} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">電話</label>

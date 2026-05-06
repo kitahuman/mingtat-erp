@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import {
   expensesApi,
@@ -293,7 +294,7 @@ export default function ExpenseDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">日期 *</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field text-sm" />
+              <DateInput value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">公司</label>
@@ -325,8 +326,8 @@ export default function ExpenseDetailPage() {
               <SearchableSelect value={form.employee_id || null} onChange={v => setForm({ ...form, employee_id: v })} options={employeeOptions} placeholder="搜尋員工..." />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">項目</label>
-              <input type="text" value={form.item} onChange={e => setForm({ ...form, item: e.target.value })} className="input-field text-sm" />
+              <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
+              <DateInput value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">總金額</label>

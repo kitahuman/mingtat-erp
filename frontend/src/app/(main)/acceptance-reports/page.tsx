@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { acceptanceReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 import { useAuth } from '@/lib/auth';
 
 const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
@@ -123,14 +124,12 @@ export default function AcceptanceReportsAdminPage() {
             <option value="draft">草稿</option>
             <option value="submitted">已提交</option>
           </select>
-          <input
-            type="date"
+          <DateInput
             value={filterDateFrom}
             onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
-          <input
-            type="date"
+          <DateInput
             value={filterDateTo}
             onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"

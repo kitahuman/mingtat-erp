@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter, useParams } from 'next/navigation';
 import { dailyReportsApi, quotationsApi, partnersApi, fieldOptionsApi, projectsApi } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -374,7 +375,7 @@ export default function EditDailyReportPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">日期 <span className="text-red-500">*</span></label>
             <input
-              type="date"
+              as={DateInput} type="text"
               value={reportDate}
               onChange={e => setReportDate(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

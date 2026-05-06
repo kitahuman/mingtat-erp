@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import DateInput from '@/components/DateInput';
 import { companiesApi, bankAccountsApi, bankReconciliationApi } from '@/lib/api';
 import { format } from 'date-fns';
 import ImportModal from './ImportModal';
@@ -437,7 +438,7 @@ export default function BankReconciliationPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期（從）</label>
             <input
-              type="date"
+              as={DateInput} type="text"
               className="w-full border rounded-lg px-3 py-2 text-sm"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -448,7 +449,7 @@ export default function BankReconciliationPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期（至）</label>
             <input
-              type="date"
+              as={DateInput} type="text"
               className="w-full border rounded-lg px-3 py-2 text-sm"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
@@ -780,7 +781,7 @@ export default function BankReconciliationPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期</label>
-            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} />
+            <DateInput value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">描述</label>
@@ -817,7 +818,7 @@ export default function BankReconciliationPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期 *</label>
-            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={addForm.date} onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))} />
+            <DateInput value={addForm.date} onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">描述 *</label>

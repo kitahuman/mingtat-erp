@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import DateInput from '@/components/DateInput';
 import { useRouter } from 'next/navigation';
 import { dailyReportsApi, partnersApi, fieldOptionsApi, projectsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
@@ -251,13 +252,13 @@ export default function DailyReportsAdminPage() {
             className="text-sm"
           />
           <input
-            type="date"
+            as={DateInput} type="text"
             value={filterDateFrom}
             onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <input
-            type="date"
+            as={DateInput} type="text"
             value={filterDateTo}
             onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"
