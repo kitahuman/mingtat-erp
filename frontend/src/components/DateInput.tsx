@@ -1,13 +1,16 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
-import { fmtDate, toInputDate } from '../lib/dateUtils';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, ChangeEvent } from 'react';
+import { fmtDate } from '../lib/dateUtils';
 
 interface DateInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> {
   value?: string | null;
   onChange?: (value: string | null) => void;
 }
 
-const DateInput: React.FC<DateInputProps> = ({ value, onChange, ...props }) => {
+const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ value, onChange, ...props }, ref) => {
   const [displayValue, setDisplayValue] = useState<string>(fmtDate(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
   useEffect(() => {
     setDisplayValue(fmtDate(value));
@@ -21,11 +24,9 @@ const DateInput: React.FC<DateInputProps> = ({ value, onChange, ...props }) => {
     const parts = inputValue.split('/');
     if (parts.length === 3) {
       const [day, month, year] = parts;
-      // Basic validation for numbers and length
       if (day.length === 2 && month.length === 2 && year.length === 4 &&
           !isNaN(Number(day)) && !isNaN(Number(month)) && !isNaN(Number(year))) {
         const formattedValue = `${year}-${month}-${day}`;
-        // Check if it's a valid date
         const date = new Date(formattedValue);
         if (!isNaN(date.getTime())) {
           onChange?.(formattedValue);
@@ -33,22 +34,19 @@ const DateInput: React.FC<DateInputProps> = ({ value, onChange, ...props }) => {
         }
       }
     }
-    // If input is empty, clear the value
     if (inputValue === '') {
       onChange?.(null);
       return;
     }
-    // If input is not a valid dd/MM/yyyy or empty, don't update the parent state yet
-    // The parent will update displayValue via useEffect if its value changes
   };
 
   const handleBlur = () => {
-    // When blurring, re-format the display value to ensure consistency
     setDisplayValue(fmtDate(value));
   };
 
   return (
     <input
+      ref={inputRef}
       type="text"
       value={displayValue}
       onChange={handleChange}
@@ -58,6 +56,8 @@ const DateInput: React.FC<DateInputProps> = ({ value, onChange, ...props }) => {
       {...props}
     />
   );
-};
+});
+
+DateInput.displayName = 'DateInput';
 
 export default DateInput;

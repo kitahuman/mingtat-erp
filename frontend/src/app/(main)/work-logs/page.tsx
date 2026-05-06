@@ -19,6 +19,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 interface Option { value: string | number; label: string; _raw?: any; shortLabel?: string; }
 
@@ -1430,14 +1431,14 @@ export default function WorkLogsPage() {
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">日期從</label>
-            <input type="date" value={filterDateFrom}
-              onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
+            <DateInput value={filterDateFrom}
+              onChange={val => { setFilterDateFrom(val || ''); setPage(1); }}
               className="w-32 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">日期至</label>
-            <input type="date" value={filterDateTo}
-              onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
+            <DateInput value={filterDateTo}
+              onChange={val => { setFilterDateTo(val || ''); setPage(1); }}
               className="w-32 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
           </div>
           {hasFilters && (

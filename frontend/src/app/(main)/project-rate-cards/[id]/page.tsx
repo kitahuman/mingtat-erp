@@ -6,6 +6,7 @@ import AuditHistory from '@/components/AuditHistory';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SERVICE_TYPES = ['工程', '人工', '物料', '服務'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -143,8 +144,8 @@ export default function ProjectRateCardDetailPage() {
                 <select value={form.day_unit || 'JOB'} onChange={e => setForm({...form, day_unit: e.target.value})} className="input-field w-20">{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select>
               </div>
             </div>
-            <div><label className="block text-xs text-gray-500 mb-1">生效日期</label><input type="date" value={form.effective_date || ''} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-xs text-gray-500 mb-1">到期日期</label><input type="date" value={form.expiry_date || ''} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-xs text-gray-500 mb-1">生效日期</label><DateInput value={form.effective_date || ''} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" /></div>
+ <div><label className="block text-xs text-gray-500 mb-1">到期日期</label><DateInput value={form.expiry_date || ''} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

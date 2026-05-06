@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/i18n-context';
 import { employeePortalApi, portalSharedApi } from '@/lib/employee-portal-api';
+import DateInput from '@/components/DateInput';
 export default function AcceptanceReportListPage() {
   const { t } = useI18n();
   const statusLabels: Record<string, string> = { draft: t('draft'), submitted: t('submitted') };
@@ -134,16 +135,12 @@ export default function AcceptanceReportListPage() {
 
         {/* Date range */}
         <div className="flex gap-2">
-          <input
-            type="date"
-            value={filterDateFrom}
-            onChange={e => setFilterDateFrom(e.target.value)}
+          <DateInput value={filterDateFrom}
+            onChange={val => setFilterDateFrom(val || '')}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
           />
-          <input
-            type="date"
-            value={filterDateTo}
-            onChange={e => setFilterDateTo(e.target.value)}
+          <DateInput value={filterDateTo}
+            onChange={val => setFilterDateTo(val || '')}
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm bg-gray-50"
           />
         </div>

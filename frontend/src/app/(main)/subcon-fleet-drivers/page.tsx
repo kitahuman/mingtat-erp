@@ -8,6 +8,7 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 export default function SubconFleetDriversPage() {
   const router = useRouter();
@@ -208,7 +209,7 @@ export default function SubconFleetDriversPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">出生日期</label>
-              <input type="date" value={form.date_of_birth} onChange={e => setForm({...form, date_of_birth: e.target.value})} className="input-field" />
+ <DateInput value={form.date_of_birth} onChange={val => setForm({ ...form, date_of_birth: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">黃證no</label>

@@ -178,19 +178,17 @@ export default function DailyReportStatsPage() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">開始日期</label>
-            <input
-              as={DateInput} type="text"
+            <DateInput
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={val => setDateFrom(val || '')}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">結束日期</label>
-            <input
-              as={DateInput} type="text"
+            <DateInput
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={val => setDateTo(val || '')}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             />
           </div>

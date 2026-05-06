@@ -8,6 +8,7 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
@@ -246,7 +247,7 @@ export default function SalaryConfigPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">生效日期 *</label>
-              <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" required />
+ <DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">薪酬類型</label>

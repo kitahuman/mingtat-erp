@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { companiesApi, contractsApi, dailyReportsApi, partnersApi } from '@/lib/api';
+import DateInput from '@/components/DateInput';
 
 interface ConfirmProjectTarget {
   project_name: string;
@@ -141,11 +142,11 @@ export default function ConfirmProjectModal({ target, onClose, onSuccess }: Conf
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
-              <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={startDate} onChange={e => setStartDate(e.target.value)} />
+ <DateInput className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={startDate} onChange={val => setStartDate(val || '')} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
-              <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={endDate} onChange={e => setEndDate(e.target.value)} />
+ <DateInput className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={endDate} onChange={val => setEndDate(val || '')} />
             </div>
           </div>
 

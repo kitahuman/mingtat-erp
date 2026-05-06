@@ -8,6 +8,7 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
 
@@ -100,8 +101,8 @@ export default function MachineryDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage || ''} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">序號</label><input value={form.serial_number || ''} onChange={e => setForm({...form, serial_number: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">驗機紙到期日</label><input type="date" value={form.inspection_cert_expiry || ''} onChange={e => setForm({...form, inspection_cert_expiry: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry || ''} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-500 mb-1">驗機紙到期日</label><DateInput value={form.inspection_cert_expiry || ''} onChange={val => setForm({ ...form, inspection_cert_expiry: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><DateInput value={form.insurance_expiry || ''} onChange={val => setForm({ ...form, insurance_expiry: val || '' })} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">使用中</option><option value="maintenance">維修中</option><option value="inactive">停用</option></select></div>
               <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-500 mb-1">備註</label><textarea value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} className="input-field" rows={2} /></div>
             </>
@@ -169,7 +170,7 @@ export default function MachineryDetailPage() {
               {companies.filter(c => c.id !== machine?.owner_company_id).map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
             </select>
           </div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">過戶日期 *</label><input type="date" value={transferForm.transfer_date} onChange={e => setTransferForm({...transferForm, transfer_date: e.target.value})} className="input-field" required /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">過戶日期 *</label><DateInput value={transferForm.transfer_date} onChange={val => setTransferForm({ ...transferForm, transfer_date: val || '' })} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={transferForm.notes} onChange={e => setTransferForm({...transferForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowTransferModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認過戶</button></div>
         </form>

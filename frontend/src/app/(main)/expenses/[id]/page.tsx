@@ -294,7 +294,7 @@ export default function ExpenseDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">日期 *</label>
-              <DateInput value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field text-sm" />
+              <DateInput value={form.date} onChange={val => setForm({ ...form, date: val || '' })} className="input-field text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">公司</label>
@@ -327,7 +327,7 @@ export default function ExpenseDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
-              <DateInput value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field text-sm" />
+              <DateInput value={form.payment_date} onChange={val => setForm({ ...form, payment_date: val || '' })} className="input-field text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">總金額</label>

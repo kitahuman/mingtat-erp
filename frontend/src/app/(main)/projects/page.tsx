@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -220,11 +221,11 @@ export default function ProjectsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">預計開始日期</label>
-              <input type="date" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" />
+ <DateInput value={form.start_date} onChange={val => setForm({ ...form, start_date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">預計結束日期</label>
-              <input type="date" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" />
+ <DateInput value={form.end_date} onChange={val => setForm({ ...form, end_date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>

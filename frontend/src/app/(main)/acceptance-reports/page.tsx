@@ -126,12 +126,12 @@ export default function AcceptanceReportsAdminPage() {
           </select>
           <DateInput
             value={filterDateFrom}
-            onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
+            onChange={val => { setFilterDateFrom(val || ''); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <DateInput
             value={filterDateTo}
-            onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
+            onChange={val => { setFilterDateTo(val || ''); setPage(1); }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
         </div>

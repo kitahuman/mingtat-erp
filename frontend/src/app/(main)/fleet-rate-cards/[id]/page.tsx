@@ -10,6 +10,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -273,11 +274,11 @@ export default function FleetRateCardDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">生效日期</label>
-              <input type="date" value={form.effective_date ? String(form.effective_date).substring(0, 10) : ''} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+ <DateInput value={form.effective_date ? String(form.effective_date).substring(0, 10) : ''} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">到期日期</label>
-              <input type="date" value={form.expiry_date ? String(form.expiry_date).substring(0, 10) : ''} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={form.expiry_date ? String(form.expiry_date).substring(0, 10) : ''} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" />
             </div>
           </div>
         ) : (

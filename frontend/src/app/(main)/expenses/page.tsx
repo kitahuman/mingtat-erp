@@ -608,7 +608,7 @@ export default function ExpensesPage() {
             {/* Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <DateInput value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" required />
+              <DateInput value={form.date} onChange={val => setForm({ ...form, date: val || '' })} className="input-field" required />
             </div>
             {/* Company */}
             <div>
@@ -711,7 +711,7 @@ export default function ExpensesPage() {
             {/* Payment Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
-              <DateInput value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} className="input-field" />
+              <DateInput value={form.payment_date} onChange={val => setForm({ ...form, payment_date: val || '' })} className="input-field" />
             </div>
             {/* Payment Ref */}
             <div>

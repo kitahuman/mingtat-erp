@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { projectProfitLossApi, projectsApi } from '@/lib/api';
+import DateInput from '@/components/DateInput';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: '待開工',
@@ -131,17 +132,13 @@ export default function ProjectProfitLossPage() {
               </option>
             ))}
           </select>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+          <DateInput value={dateFrom}
+            onChange={val => setDateFrom(val || '')}
             className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             placeholder="開始日期"
           />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+          <DateInput value={dateTo}
+            onChange={val => setDateTo(val || '')}
             className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             placeholder="結束日期"
           />

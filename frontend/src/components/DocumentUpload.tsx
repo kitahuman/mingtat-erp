@@ -4,6 +4,7 @@ import { documentsApi, getExpiryStatus, getExpiryColor } from '@/lib/api';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import Cookies from 'js-cookie';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 interface DocumentUploadProps {
   entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile' | 'subcon-fleet-driver';
@@ -105,7 +106,7 @@ export default function DocumentUpload({ entityType, entityId, docTypes }: Docum
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">到期日（可選）</label>
-              <input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className="input-field" />
+ <DateInput value={expiryDate} onChange={val => setExpiryDate(val || '')} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">選擇文件 *</label>

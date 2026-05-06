@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DataTable from './DataTable';
 import { ColumnConfig } from './ColumnCustomizer';
+import DateInput from '@/components/DateInput';
 
 export interface InlineColumn {
   key: string;
@@ -166,10 +167,8 @@ export default function InlineEditDataTable({
               );
             case 'date':
               return (
-                <input
-                  type="date"
-                  value={toDateInputValue(editForm[col.key])}
-                  onChange={(e) => handleFieldChange(col.key, e.target.value || null)}
+                <DateInput value={toDateInputValue(editForm[col.key])}
+                  onChange={val => handleFieldChange(col.key, val || null)}
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                   onClick={(e) => e.stopPropagation()}
                 />

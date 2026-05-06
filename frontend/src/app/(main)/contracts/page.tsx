@@ -322,15 +322,15 @@ export default function ContractsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">簽約日期</label>
-              <DateInput value={form.sign_date} onChange={e => setForm({...form, sign_date: e.target.value})} className="input-field" />
+              <DateInput value={form.sign_date} onChange={val => setForm({...form, sign_date: val || ''})} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
-              <DateInput value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})} className="input-field" />
+              <DateInput value={form.start_date} onChange={val => setForm({...form, start_date: val || ''})} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
-              <DateInput value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})} className="input-field" />
+              <DateInput value={form.end_date} onChange={val => setForm({...form, end_date: val || ''})} className="input-field" />
             </div>
           </div>
 

@@ -6,6 +6,7 @@ import { STATUS_OPTIONS } from './constants';
 import { workLogsApi, fieldOptionsApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 interface Option { value: string | number; label: string; _raw?: any; }
 
@@ -151,9 +152,7 @@ export default function BatchEditDialog({
         );
       case 'date':
         return (
-          <input
-            type="date"
-            value={fieldValue || ''}
+          <DateInput value={fieldValue || ''}
             onChange={e => setFieldValue(e.target.value || null)}
             className={`w-full ${inputCls}`}
           />

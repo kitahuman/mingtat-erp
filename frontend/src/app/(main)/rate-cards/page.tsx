@@ -12,6 +12,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SERVICE_TYPES = ['運輸', '機械租賃', '人工', '物料', '服務', '工程', '租賃/運輸'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -371,11 +372,11 @@ export default function RateCardsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">生效日期</label>
-                <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+ <DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
-                <input type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={form.expiry_date} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">關聯工程項目</label>
@@ -611,11 +612,11 @@ export default function RateCardsPage() {
                     <div className="border-t pt-3 grid grid-cols-2 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">生效日期</label>
-                        <input type="date" value={card.effective_date ? String(card.effective_date).substring(0, 10) : ''} onChange={e => updateFleetCard(idx, 'effective_date', e.target.value)} className="input-field text-sm" />
+ <DateInput value={card.effective_date ? String(card.effective_date).substring(0, 10) : ''} onChange={val => updateFleetCard(idx, 'effective_date', val || '')} className="input-field text-sm" />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">到期日期</label>
-                        <input type="date" value={card.expiry_date ? String(card.expiry_date).substring(0, 10) : ''} onChange={e => updateFleetCard(idx, 'expiry_date', e.target.value)} className="input-field text-sm" />
+ <DateInput value={card.expiry_date ? String(card.expiry_date).substring(0, 10) : ''} onChange={val => updateFleetCard(idx, 'expiry_date', val || '')} className="input-field text-sm" />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">狀態</label>

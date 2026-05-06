@@ -8,6 +8,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const UNIT_OPTIONS = ['車','噸','天','晚','小時','次'];
 const SERVICE_TYPES = ['運輸', '機械', '勞務', '其他'];
@@ -479,11 +480,11 @@ export default function PayrollPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input-field w-full" />
+ <DateInput value={dateFrom} onChange={val => setDateFrom(val || '')} className="input-field w-full" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input-field w-full" />
+ <DateInput value={dateTo} onChange={val => setDateTo(val || '')} className="input-field w-full" />
           </div>
           <div>
             <button

@@ -5,6 +5,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   sick: '病假',
@@ -300,17 +301,13 @@ export default function LeavesPage() {
       </select>
 
       {/* Date range */}
-      <input
-        type="date"
-        value={dateFrom}
-        onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+      <DateInput value={dateFrom}
+        onChange={val => { setDateFrom(val || ''); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
       <span className="text-gray-400 text-sm">至</span>
-      <input
-        type="date"
-        value={dateTo}
-        onChange={e => { setDateTo(e.target.value); setPage(1); }}
+      <DateInput value={dateTo}
+        onChange={val => { setDateTo(val || ''); setPage(1); }}
         className="input-field text-sm py-1.5"
       />
 

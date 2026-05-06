@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { retentionApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -310,10 +311,8 @@ export default function RetentionTabContent({ contractId }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">釋放日期 *</label>
-              <input
-                type="date"
-                value={releaseForm.release_date}
-                onChange={e => setReleaseForm({ ...releaseForm, release_date: e.target.value })}
+              <DateInput value={releaseForm.release_date}
+                onChange={val => setReleaseForm({ ...releaseForm, release_date: val || '' })}
                 className="input-field"
               />
             </div>

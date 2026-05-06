@@ -9,6 +9,7 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
 
@@ -206,10 +207,10 @@ export default function VehiclesPage() {
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">品牌</label><input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">型號</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><input type="date" value={form.permit_fee_expiry} onChange={e => setForm({...form, permit_fee_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><input type="date" value={form.inspection_date} onChange={e => setForm({...form, inspection_date: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><input type="date" value={form.license_expiry} onChange={e => setForm({...form, license_expiry: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={val => setForm({ ...form, insurance_expiry: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><DateInput value={form.permit_fee_expiry} onChange={val => setForm({ ...form, permit_fee_expiry: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><DateInput value={form.inspection_date} onChange={val => setForm({ ...form, inspection_date: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><DateInput value={form.license_expiry} onChange={val => setForm({ ...form, license_expiry: val || '' })} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

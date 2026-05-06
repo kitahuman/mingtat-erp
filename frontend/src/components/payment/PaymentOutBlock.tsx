@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { paymentOutApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
+import DateInput from '@/components/DateInput';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface PaymentOutBlockProps {
@@ -192,10 +193,8 @@ export default function PaymentOutBlock({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">日期 *</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              <DateInput value={form.date}
+                onChange={val => setForm({ ...form, date: val || '' })}
                 className="input-field text-sm"
               />
             </div>

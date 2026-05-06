@@ -7,6 +7,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -377,11 +378,11 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">發票日期</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" />
+ <DateInput value={form.date} onChange={val => setForm({ ...form, date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">到期日</label>
-              <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="input-field" />
+ <DateInput value={form.due_date} onChange={val => setForm({ ...form, due_date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">開立公司</label>
@@ -654,7 +655,7 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">收款日期 <span className="text-red-500">*</span></label>
-              <input type="date" value={paymentForm.date} onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })} className="input-field" />
+ <DateInput value={paymentForm.date} onChange={val => setPaymentForm({ ...paymentForm, date: val || '' })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">收款金額 <span className="text-red-500">*</span></label>

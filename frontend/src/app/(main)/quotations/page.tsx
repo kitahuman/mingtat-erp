@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕',
@@ -277,7 +278,7 @@ export default function QuotationsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <input type="date" value={form.quotation_date} onChange={e => setForm({...form, quotation_date: e.target.value})} className="input-field" required />
+ <DateInput value={form.quotation_date} onChange={val => setForm({ ...form, quotation_date: val || '' })} className="input-field" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>

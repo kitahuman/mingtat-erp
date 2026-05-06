@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dailyReportStatsApi } from '@/lib/api';
 import ExportButton from '@/components/ExportButton';
+import DateInput from '@/components/DateInput';
 
 const categoryLabels: Record<string, string> = {
   worker: '工人',
@@ -114,19 +115,15 @@ export default function ProjectCostAnalysis({ projectId, projectNo }: ProjectCos
       <div className="flex items-center gap-3 flex-wrap">
         <div>
           <label className="block text-xs text-gray-500 mb-1">開始日期</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
+          <DateInput value={dateFrom}
+            onChange={val => setDateFrom(val || '')}
             className="px-3 py-1.5 border rounded-lg text-sm"
           />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">結束日期</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
+          <DateInput value={dateTo}
+            onChange={val => setDateTo(val || '')}
             className="px-3 py-1.5 border rounded-lg text-sm"
           />
         </div>

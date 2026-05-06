@@ -8,6 +8,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const SERVICE_TYPES = ['工程', '人工', '物料', '服務'];
 const UNIT_OPTIONS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
@@ -220,11 +221,11 @@ export default function ProjectRateCardsPage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">生效日期</label>
-                <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+ <DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">到期日期</label>
-                <input type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={form.expiry_date} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" />
               </div>
             </div>
           </div>

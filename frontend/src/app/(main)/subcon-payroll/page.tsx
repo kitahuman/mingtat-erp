@@ -5,6 +5,7 @@ import { subconPayrollApi, partnersApi, companiesApi, subconRateCardsApi } from 
 import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 type Option = { value: any; label: string };
 type ExtraItem = { name: string; amount: string };
@@ -308,10 +309,10 @@ export default function SubconPayrollPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">日期範圍</label>
             <div className="flex gap-2">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              <DateInput value={dateFrom} onChange={val => setDateFrom(val || '')}
                 className="border rounded px-2 py-1.5 text-sm flex-1" />
               <span className="self-center text-gray-400">至</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              <DateInput value={dateTo} onChange={val => setDateTo(val || '')}
                 className="border rounded px-2 py-1.5 text-sm flex-1" />
             </div>
           </div>

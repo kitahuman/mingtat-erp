@@ -9,6 +9,7 @@ import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
+import DateInput from '@/components/DateInput';
 
 const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
 const statusOptions = [
@@ -232,8 +233,8 @@ export default function MachineryPage() {
                 {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗機紙到期日</label><input type="date" value={form.inspection_cert_expiry} onChange={e => setForm({...form, inspection_cert_expiry: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">驗機紙到期日</label><DateInput value={form.inspection_cert_expiry} onChange={val => setForm({ ...form, inspection_cert_expiry: val || '' })} className="input-field" /></div>
+ <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={val => setForm({ ...form, insurance_expiry: val || '' })} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

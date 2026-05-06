@@ -12,6 +12,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
 
@@ -311,11 +312,11 @@ export default function RentalRateCardsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">生效日期</label>
-                <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" />
+ <DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
-                <input type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
+ <DateInput value={form.expiry_date} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" />
               </div>
             </div>
           </div>

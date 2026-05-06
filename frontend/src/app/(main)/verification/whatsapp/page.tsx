@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { verificationApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -1532,19 +1533,15 @@ export default function WhatsAppDailySummaryPage() {
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">開始日期</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+            <DateInput value={dateFrom}
+              onChange={val => setDateFrom(val || '')}
               className="border rounded px-3 py-1.5 text-sm w-40"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">結束日期</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+            <DateInput value={dateTo}
+              onChange={val => setDateTo(val || '')}
               className="border rounded px-3 py-1.5 text-sm w-40"
             />
           </div>

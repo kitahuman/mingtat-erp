@@ -6,6 +6,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import DateInput from '@/components/DateInput';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -224,11 +225,11 @@ export default function InvoicesPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期（從）</label>
-            <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="input-field" />
+ <DateInput value={dateFrom} onChange={val => { setDateFrom(val || ''); setPage(1); }} className="input-field" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">日期（至）</label>
-            <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="input-field" />
+ <DateInput value={dateTo} onChange={val => { setDateTo(val || ''); setPage(1); }} className="input-field" />
           </div>
         </div>
       </div>
@@ -330,11 +331,11 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">發票日期</label>
-                <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field" />
+ <DateInput value={form.date} onChange={val => setForm({ ...form, date: val || '' })} className="input-field" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
-                <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="input-field" />
+ <DateInput value={form.due_date} onChange={val => setForm({ ...form, due_date: val || '' })} className="input-field" />
               </div>
             </div>
 

@@ -11,6 +11,7 @@ import MultiSelectPopup from '@/components/MultiSelectPopup';
 import type { MultiSelectOption } from '@/components/MultiSelectPopup';
 import SignaturePad from '@/components/SignatureCanvas';
 import type { SignatureCanvasRef } from '@/components/SignatureCanvas';
+import DateInput from '@/components/DateInput';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface DailyReportItem {
@@ -525,10 +526,8 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
         {/* Date */}
         <div>
           <label className="text-xs font-medium text-gray-500 mb-1 block">日期 *</label>
-          <input
-            type="date"
-            value={form.report_date}
-            onChange={e => setForm(f => ({ ...f, report_date: e.target.value }))}
+          <DateInput value={form.report_date}
+            onChange={val => setForm(f => ({...f, report_date: val || ''}))}
             disabled={isSubmitted}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 disabled:opacity-60"
           />
