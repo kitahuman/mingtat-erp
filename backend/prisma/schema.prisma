@@ -2706,6 +2706,7 @@ model IssueReport {
   issue_report_user_agent       String?  @db.VarChar(500)
   issue_report_frontend_errors  Json?    @db.JsonB
   issue_report_backend_errors   Json?    @db.JsonB
+  issue_report_screenshots      Json?    @default("[]") @db.JsonB
   issue_report_ai_analysis      String?  @db.Text
   issue_report_ai_status        String   @default("pending") @db.VarChar(20)
   issue_report_ai_error         String?  @db.Text

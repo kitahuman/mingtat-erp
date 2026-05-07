@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export interface FrontendErrorItem {
   type: 'js_error' | 'api_error' | 'unhandled_rejection';
@@ -30,4 +30,10 @@ export class CreateIssueReportDto {
 
   @IsOptional()
   frontend_errors?: FrontendErrorItem[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @IsString({ each: true })
+  screenshots?: string[];
 }

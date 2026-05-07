@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { existsSync, mkdirSync } from 'fs';
+import { extname, join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateIssueReportDto, FrontendErrorItem } from './issue-reports.dto';
 import { createOpenAIClient } from '../common/openai-client';
@@ -7,7 +10,33 @@ import { createOpenAIClient } from '../common/openai-client';
 export class IssueReportsService {
   private readonly logger = new Logger(IssueReportsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    IssueReportsService.ensureScreenshotUploadDir();
+  }
+
+  static ensureScreenshotUploadDir(): string {
+    const dir = join(process.cwd(), 'uploads', 'issue-reports');
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+
+  static createScreenshotFilename(originalName: string): string {
+    return `${uuidv4()}${extname(originalName).toLowerCase()}`;
+  }
+
+  toScreenshotUploadResponse(file: Express.Multer.File) {
+    const path = `/uploads/issue-reports/${file.filename}`;
+    return {
+      path,
+      file_path: path,
+      filename: file.filename,
+      file_name: file.originalname,
+      file_type: file.mimetype,
+      file_size: file.size,
+    };
+  }
 
   async create(
     dto: CreateIssueReportDto,
@@ -49,6 +78,7 @@ export class IssueReportsService {
         issue_report_user_agent: dto.user_agent || null,
         issue_report_frontend_errors: (dto.frontend_errors as any) || [],
         issue_report_backend_errors: backendErrors as any,
+        issue_report_screenshots: (dto.screenshots as any) || [],
         issue_report_ai_status: 'pending',
       },
     });

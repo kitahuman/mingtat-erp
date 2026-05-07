@@ -1163,8 +1163,10 @@ export const whatsappConsoleApi = {
 export const issueReportsApi = {
   list: (limit?: number) => api.get('/issue-reports', { params: limit ? { limit } : undefined }),
   get: (id: number) => api.get(`/issue-reports/${id}`),
-  create: (data: { description: string; url?: string; user_agent?: string; frontend_errors?: any[] }) =>
+  create: (data: { description: string; url?: string; user_agent?: string; frontend_errors?: any[]; screenshots?: string[] }) =>
     api.post('/issue-reports', data),
+  uploadScreenshot: (formData: FormData) =>
+    api.post('/issue-reports/upload-screenshot', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateStatus: (id: number, status: 'open' | 'acknowledged' | 'resolved') =>
     api.patch(`/issue-reports/${id}/status`, { status }),
 };

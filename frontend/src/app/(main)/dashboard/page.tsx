@@ -432,6 +432,7 @@ function IssueReportsSection() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [previewScreenshot, setPreviewScreenshot] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -492,6 +493,8 @@ function IssueReportsSection() {
           const st = statusLabel(r.issue_report_status);
           const aist = aiStatusLabel(r.issue_report_ai_status);
           const isExp = expanded[r.id];
+          const screenshots = Array.isArray(r.issue_report_screenshots) ? r.issue_report_screenshots : [];
+          const hasScreenshots = screenshots.length > 0;
           return (
             <div key={r.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
               <div className="flex items-start justify-between gap-3">
@@ -500,6 +503,11 @@ function IssueReportsSection() {
                     <span className="text-xs text-gray-500">#{r.id}</span>
                     <span className={`text-xs px-2 py-0.5 rounded ${st.cls}`}>{st.label}</span>
                     <span className={`text-xs px-2 py-0.5 rounded ${aist.cls}`}>{aist.label}</span>
+                    {hasScreenshots && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800" title={`有 ${screenshots.length} 張截圖`}>
+                        <span aria-hidden="true">🖼️</span> {screenshots.length}
+                      </span>
+                    )}
                     <span className="text-xs text-gray-500">{r.issue_report_reporter_name || '—'}</span>
                     <span className="text-xs text-gray-400">{formatDate(r.issue_report_created_at)} {new Date(r.issue_report_created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
@@ -527,6 +535,25 @@ function IssueReportsSection() {
                   ) : (
                     <div className="text-xs text-gray-500">AI 分析進行中，請稍候...</div>
                   )}
+                  {hasScreenshots && (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-700 mb-2">截圖（{screenshots.length} 張）</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {screenshots.map((src: string, index: number) => (
+                          <button
+                            key={`${r.id}-${src}`}
+                            type="button"
+                            onClick={() => setPreviewScreenshot(src)}
+                            className="border rounded-lg overflow-hidden bg-gray-100 hover:ring-2 hover:ring-primary-500 text-left"
+                            title="點擊放大截圖"
+                          >
+                            <img src={src} alt={`問題回報 #${r.id} 截圖 ${index + 1}`} className="w-full h-28 object-cover" />
+                            <div className="px-2 py-1 text-[11px] text-gray-500 truncate">截圖 {index + 1}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {Array.isArray(r.issue_report_frontend_errors) && r.issue_report_frontend_errors.length > 0 && (
                     <details className="text-xs">
                       <summary className="cursor-pointer text-gray-600 hover:text-gray-900">前端錯誤記錄（{r.issue_report_frontend_errors.length} 筆）</summary>
@@ -545,6 +572,23 @@ function IssueReportsSection() {
           );
         })}
       </div>
+      {previewScreenshot && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreviewScreenshot(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewScreenshot(null)}
+              className="absolute -top-10 right-0 text-white text-sm hover:underline"
+            >
+              關閉
+            </button>
+            <img src={previewScreenshot} alt="問題回報截圖放大預覽" className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain bg-white" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
