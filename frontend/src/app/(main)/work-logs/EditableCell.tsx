@@ -146,10 +146,18 @@ export default function EditableCell({
         <div ref={cellRef} className={`${dirtyBorder}`}>
           <input
             ref={inputRef}
-            type="time"
+            type="text"
             value={value || ''}
-            onChange={e => { onChange(e.target.value || null); }}
+            onChange={e => {
+              let v = e.target.value.replace(/[^0-9:]/g, '');
+              // Auto-insert colon after 2 digits
+              if (v.length === 2 && !v.includes(':')) v = v + ':';
+              if (v.length > 5) v = v.slice(0, 5);
+              onChange(v || null);
+            }}
             onBlur={() => setEditing(false)}
+            placeholder="HH:mm"
+            maxLength={5}
             className={inputCls}
           />
         </div>
