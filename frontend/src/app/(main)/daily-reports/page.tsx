@@ -54,6 +54,7 @@ export default function DailyReportsAdminPage() {
   const [batchFieldsEnabled, setBatchFieldsEnabled] = useState<{ project: boolean; location: boolean; client: boolean; contract: boolean }>({ project: false, location: false, client: false, contract: false });
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [projectsList, setProjectsList] = useState<any[]>([]);
+  const [informalProjectNames, setInformalProjectNames] = useState<string[]>([]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -67,6 +68,14 @@ export default function DailyReportsAdminPage() {
   const SortIcon = ({ field }: { field: string }) => (
     <span className="ml-1 text-gray-400">{sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}</span>
   );
+
+  const normalizeProjectNames = (data: any): string[] => {
+    const list = Array.isArray(data) ? data : [];
+    return list
+      .map((item: any) => (typeof item === 'string' ? item : item?.name))
+      .filter((name: any): name is string => typeof name === 'string' && name.trim().length > 0)
+      .map((name: string) => name.trim());
+  };
 
   const loadData = async () => {
     try {
@@ -96,10 +105,19 @@ export default function DailyReportsAdminPage() {
   };
 
   useEffect(() => {
-    // Load project names (distinct from daily_reports + projects table)
-    dailyReportsApi.projectNames().then(res => {
-      const names: string[] = res.data || [];
-      setProjectNameOptions(names.map(n => ({ value: n, label: n })));
+    // Load formal projects and informal project names from daily reports.
+    Promise.all([
+      projectsApi.simple().catch(() => ({ data: [] })),
+      dailyReportsApi.projectNames().catch(() => ({ data: [] })),
+    ]).then(([projectsRes, namesRes]) => {
+      const projects: any[] = projectsRes.data || [];
+      const informalNames = normalizeProjectNames(namesRes.data);
+      const formalNames = projects.map((p: any) => p.project_name).filter(Boolean) as string[];
+      const allNames = Array.from(new Set([...formalNames, ...informalNames])).sort((a, b) => a.localeCompare(b, 'zh-HK'));
+
+      setProjectsList(projects);
+      setInformalProjectNames(informalNames);
+      setProjectNameOptions(allNames.map(n => ({ value: n, label: n })));
     }).catch(() => {});
 
     // Load partners for client filter
@@ -114,8 +132,6 @@ export default function DailyReportsAdminPage() {
       setContractOptions(opts.map((o: any) => ({ value: o.label, label: o.label })));
     }).catch(() => {});
 
-    // Load projects list for batch edit modal
-    projectsApi.simple().then(res => setProjectsList(res.data || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -164,10 +180,14 @@ export default function DailyReportsAdminPage() {
     }
     const payload: any = { ids: Array.from(selectedIds) };
     if (project) {
-      if (batchProjectId) {
-        const p = projectsList.find((x: any) => String(x.id) === String(batchProjectId));
-        payload.project_id = Number(batchProjectId);
+      if (batchProjectId?.startsWith('formal:')) {
+        const projectId = batchProjectId.slice('formal:'.length);
+        const p = projectsList.find((x: any) => String(x.id) === String(projectId));
+        payload.project_id = Number(projectId);
         payload.project_name = p?.project_name || null;
+      } else if (batchProjectId?.startsWith('informal:')) {
+        payload.project_id = null;
+        payload.project_name = batchProjectId.slice('informal:'.length) || null;
       } else {
         payload.project_id = null;
         payload.project_name = null;
@@ -490,7 +510,10 @@ export default function DailyReportsAdminPage() {
                   <SearchableSelect
                     value={batchProjectId}
                     onChange={val => setBatchProjectId(val as string | null)}
-                    options={projectsList.map((p: any) => ({ value: String(p.id), label: `${p.project_no || ''} - ${p.project_name}` }))}
+                    options={[
+                      ...projectsList.map((p: any) => ({ value: `formal:${p.id}`, label: `${p.project_no} - ${p.project_name}` })),
+                      ...informalProjectNames.map((name: string) => ({ value: `informal:${name}`, label: name })),
+                    ]}
                     placeholder="選擇工程（或留空清除）"
                     className="text-sm"
                   />

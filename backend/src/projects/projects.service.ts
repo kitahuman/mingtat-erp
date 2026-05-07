@@ -182,6 +182,20 @@ export class ProjectsService {
         client_contract_no: sanitized.client_contract_no,
       },
     });
+
+    if (saved.project_name) {
+      await this.prisma.dailyReport.updateMany({
+        where: {
+          daily_report_project_name: saved.project_name,
+          daily_report_project_id: null,
+          daily_report_deleted_at: null,
+        },
+        data: {
+          daily_report_project_id: saved.id,
+        },
+      });
+    }
+
     if (userId) {
       try {
         await this.auditLogsService.log({

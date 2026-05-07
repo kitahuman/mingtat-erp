@@ -47,3 +47,7 @@ export class BatchUpdateDailyReportDto {
   @IsOptional() @IsString() client_name?: string;
   @IsOptional() @IsString() client_contract_no?: string;
 }
+
+export class DailyReportProjectNameDto {
+  @IsString() name!: string;
+}

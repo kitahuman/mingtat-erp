@@ -99,6 +99,14 @@ export default function EditDailyReportPage() {
   const [error, setError] = useState('');
   const [originalReport, setOriginalReport] = useState<any>(null);
 
+  const normalizeProjectNames = (data: any): string[] => {
+    const list = Array.isArray(data) ? data : [];
+    return list
+      .map((item: any) => (typeof item === 'string' ? item : item?.name))
+      .filter((name: any): name is string => typeof name === 'string' && name.trim().length > 0)
+      .map((name: string) => name.trim());
+  };
+
   // Load reference data
   useEffect(() => {
     // Load both sources for project name dropdown:
@@ -108,7 +116,7 @@ export default function EditDailyReportPage() {
       dailyReportsApi.projectNames().catch(() => ({ data: [] })),
     ]).then(([projRes, namesRes]) => {
       const projects: any[] = projRes.data || [];
-      const historyNames: string[] = namesRes.data || [];
+      const historyNames = normalizeProjectNames(namesRes.data);
 
       // Build name -> project_id map from projects table
       const nameToId = new Map<string, number>();

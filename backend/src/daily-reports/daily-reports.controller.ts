@@ -11,7 +11,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { DailyReportsService } from './daily-reports.service';
-import { CreateDailyReportDto, UpdateDailyReportDto, BatchUpdateDailyReportDto } from './dto/create-daily-report.dto';
+import { CreateDailyReportDto, UpdateDailyReportDto, BatchUpdateDailyReportDto, DailyReportProjectNameDto } from './dto/create-daily-report.dto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'daily-reports');
 if (!existsSync(UPLOAD_DIR)) {
@@ -29,8 +29,9 @@ export class DailyReportsController {
   }
 
   @Get('project-names')
-  getDistinctProjectNames() {
-    return this.service.getDistinctProjectNames();
+  async getDistinctProjectNames(): Promise<DailyReportProjectNameDto[]> {
+    const names = await this.service.getDistinctProjectNames();
+    return names.map((name) => ({ name }));
   }
 
   @Get('by-project/:projectId')

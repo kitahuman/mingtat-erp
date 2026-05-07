@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
-import { dailyReportStatsApi, dailyReportsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import { dailyReportStatsApi, dailyReportsApi, partnersApi, fieldOptionsApi, projectsApi } from '@/lib/api';
 import ExportButton from '@/components/ExportButton';
 import SearchableSelect from '@/components/SearchableSelect';
 import ConfirmProjectModal from '@/components/ConfirmProjectModal';
@@ -59,10 +59,23 @@ export default function DailyReportStatsPage() {
     { value: '', label: '全部' },
   ];
 
+  const normalizeProjectNames = (data: any): string[] => {
+    const list = Array.isArray(data) ? data : [];
+    return list
+      .map((item: any) => (typeof item === 'string' ? item : item?.name))
+      .filter((name: any): name is string => typeof name === 'string' && name.trim().length > 0)
+      .map((name: string) => name.trim());
+  };
+
   // Load reference data
   useEffect(() => {
-    dailyReportsApi.projectNames().then(res => {
-      const names: string[] = res.data || [];
+    Promise.all([
+      projectsApi.simple().catch(() => ({ data: [] })),
+      dailyReportsApi.projectNames().catch(() => ({ data: [] })),
+    ]).then(([projectsRes, namesRes]) => {
+      const formalNames = (projectsRes.data || []).map((p: any) => p.project_name).filter(Boolean) as string[];
+      const informalNames = normalizeProjectNames(namesRes.data);
+      const names = Array.from(new Set([...formalNames, ...informalNames])).sort((a, b) => a.localeCompare(b, 'zh-HK'));
       setProjectNameOptions(names.map(n => ({ value: n, label: n })));
     }).catch(() => {});
     partnersApi.simple().then(res => {
