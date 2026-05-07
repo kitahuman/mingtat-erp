@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateIssueReportDto, FrontendErrorItem } from './issue-reports.dto';
+import { createOpenAIClient } from '../common/openai-client';
 
 @Injectable()
 export class IssueReportsService {
@@ -114,9 +115,7 @@ export class IssueReportsService {
         return;
       }
 
-      // Lazy import to avoid requiring openai at startup
-      const { default: OpenAI } = await import('openai');
-      const client = new OpenAI();
+      const client = createOpenAIClient();
 
       const systemPrompt = `你是明達 ERP 系統的技術支援助手。請根據用戶的問題描述、前端錯誤記錄和後端錯誤記錄，分析問題可能原因並提供建議。請用繁體中文回覆，輸出格式：
 
