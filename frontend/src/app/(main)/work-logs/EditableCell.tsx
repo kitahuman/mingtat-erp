@@ -148,7 +148,7 @@ export default function EditableCell({
             ref={inputRef}
             type="time"
             value={value || ''}
-            onChange={val => { onChange(val || null); }}
+            onChange={e => { onChange(e.target.value || null); }}
             onBlur={() => setEditing(false)}
             className={inputCls}
           />
