@@ -87,25 +87,25 @@ export class WorkLogsController {
   }
 
   @Post('bulk/update')
-  bulkUpdate(@Body() body: { ids: number[]; field: string; value: any }) {
-    return this.service.bulkUpdate(body.ids, body.field, body.value);
+  bulkUpdate(@Body() body: { ids: number[]; field: string; value: any }, @Request() req: any) {
+    return this.service.bulkUpdate(body.ids, body.field, body.value, req.user?.id || req.user?.userId || 0);
   }
 
   @Post('bulk/confirm')
-  bulkConfirm(@Body('ids') ids: number[]) {
-    return this.service.bulkConfirm(ids);
+  bulkConfirm(@Body('ids') ids: number[], @Request() req: any) {
+    return this.service.bulkConfirm(ids, req.user?.id || req.user?.userId || 0);
   }
 
   @Post('bulk/unconfirm')
-  bulkUnconfirm(@Body('ids') ids: number[]) {
-    return this.service.bulkUnconfirm(ids);
+  bulkUnconfirm(@Body('ids') ids: number[], @Request() req: any) {
+    return this.service.bulkUnconfirm(ids, req.user?.id || req.user?.userId || 0);
   }
 
   // ── 批量儲存 (Airtable 風格) ───────────────────────────────────
 
   @Post('bulk/save')
-  bulkSave(@Body('changes') changes: Array<{ id: number; data: any }>) {
-    return this.service.bulkSave(changes);
+  bulkSave(@Body('changes') changes: Array<{ id: number; data: any }>, @Request() req: any) {
+    return this.service.bulkSave(changes, req.user?.id || req.user?.userId || 0);
   }
 
   // ── 編輯鎖定 ─────────────────────────────────────

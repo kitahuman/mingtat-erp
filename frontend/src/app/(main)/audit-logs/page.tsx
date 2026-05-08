@@ -24,6 +24,14 @@ interface UserOption {
   name: string;
 }
 
+interface UserActivity {
+  user_id: number;
+  user_name: string;
+  today_count: number;
+  week_count: number;
+  last_activity_at: string | null;
+}
+
 const ACTIONS = [
   { value: '', label: '所有操作' },
   { value: 'create', label: '新增' },
@@ -40,7 +48,9 @@ const TABLES = [
   { value: 'partners', label: '合作單位' },
   { value: 'projects', label: '工程項目' },
   { value: 'contracts', label: '合約' },
-  { value: 'work_logs', label: '工作記錄' },
+  { value: 'work_logs', label: '工作紀錄' },
+  { value: 'orders', label: '訂單' },
+  { value: 'order', label: '訂單' },
   { value: 'invoices', label: '發票' },
   { value: 'expenses', label: '費用' },
   { value: 'payrolls', label: '糧單' },
@@ -63,13 +73,85 @@ function getTableLabel(tableName: string): string {
   return TABLE_LABEL_MAP[tableName] || tableName;
 }
 
+function getCountableTableLabel(tableName: string): string {
+  return getTableLabel(tableName).replace(/^工作記錄$/, '工作紀錄');
+}
+
+function getMetadata(log: AuditLog): any {
+  return log.changes_after?.metadata || {};
+}
+
+function getAffectedCount(log: AuditLog): number {
+  const metadata = getMetadata(log);
+  if (typeof metadata.affectedCount === 'number') return metadata.affectedCount;
+  if (Array.isArray(metadata.affectedIds)) return metadata.affectedIds.length;
+  if (Array.isArray(log.changes_after?.workLogIds)) return log.changes_after.workLogIds.length;
+  if (Array.isArray(log.changes_after?.orderIds)) return log.changes_after.orderIds.length;
+  return 1;
+}
+
+function getChangedFieldLabels(log: AuditLog): string[] {
+  const metadata = getMetadata(log);
+  if (Array.isArray(metadata.fields) && metadata.fields.length > 0) return metadata.fields;
+  if (log.changes_after?.changes && typeof log.changes_after.changes === 'object') {
+    return Object.keys(log.changes_after.changes);
+  }
+  if (log.changes_after?.fields && typeof log.changes_after.fields === 'object') {
+    return Object.keys(log.changes_after.fields);
+  }
+  return [];
+}
+
+function getAuditLogDescription(log: AuditLog): string {
+  const metadata = getMetadata(log);
+  const operation = metadata.operation || '';
+  const tableName = metadata.targetTable || log.target_table;
+  const tableLabel = getCountableTableLabel(tableName);
+  const count = getAffectedCount(log);
+  const fields = getChangedFieldLabels(log);
+
+  if (operation === 'bulk_confirm') {
+    return `核對了 ${count} 筆${tableLabel}`;
+  }
+  if (operation === 'bulk_unconfirm') {
+    return `取消核對了 ${count} 筆${tableLabel}`;
+  }
+  if (operation === 'bulk_update') {
+    if (fields.length === 1) {
+      return `批量修改了 ${fields[0]} 欄位（${count} 筆${tableLabel}）`;
+    }
+    return `修改了 ${count} 筆${tableLabel}`;
+  }
+  if (operation === 'bulk_save') {
+    return `修改了 ${count} 筆${tableLabel}`;
+  }
+
+  switch (log.action) {
+    case 'create':
+      return `新增了 1 筆${tableLabel}`;
+    case 'update':
+      if (fields.length === 1) return `修改了 ${fields[0]} 欄位（1 筆${tableLabel}）`;
+      return `修改了 1 筆${tableLabel}`;
+    case 'delete':
+      return `刪除了 1 筆${tableLabel}`;
+    default:
+      return `${log.action} 1 筆${tableLabel}`;
+  }
+}
+
+function formatDateTime(value: string | null): string {
+  return value ? new Date(value).toLocaleString('zh-HK') : '—';
+}
+
 export default function AuditLogsPage() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [userActivity, setUserActivity] = useState<UserActivity[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [loading, setLoading] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   // Filters
   const [filterUserName, setFilterUserName] = useState('');
@@ -129,9 +211,36 @@ export default function AuditLogsPage() {
     }
   }, [page, limit, filterUserName, filterAction, filterTable, filterDateFrom, filterDateTo]);
 
+
+  const fetchUserActivity = useCallback(async () => {
+    setActivityLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterDateFrom) params.append('dateFrom', filterDateFrom);
+      if (filterDateTo) params.append('dateTo', filterDateTo);
+      const token = Cookies.get('token');
+      const res = await fetch(`/api/audit-logs/user-activity?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      setUserActivity(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch user activity:', err);
+      setUserActivity([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [filterDateFrom, filterDateTo]);
+
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  useEffect(() => {
+    fetchUserActivity();
+  }, [fetchUserActivity]);
 
   const handleFilterReset = () => {
     setPage(1);
@@ -242,6 +351,48 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
+
+      {/* User Activity Overview */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">用戶活動總覽</h2>
+            <p className="text-sm text-gray-500 mt-1">按用戶顯示今日、本週及最後活動時間；日期範圍會同步套用於統計。</p>
+          </div>
+          {activityLoading && <span className="text-sm text-gray-500">更新中...</span>}
+        </div>
+        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700">用戶名稱</th>
+                <th className="px-4 py-2 text-right font-semibold text-gray-700">今日操作數</th>
+                <th className="px-4 py-2 text-right font-semibold text-gray-700">本週操作數</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700">最後活動時間</th>
+              </tr>
+            </thead>
+            <tbody>
+              {userActivity.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                    {activityLoading ? '加載中...' : '沒有用戶活動資料'}
+                  </td>
+                </tr>
+              ) : (
+                userActivity.map(activity => (
+                  <tr key={activity.user_id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-900 font-medium">{activity.user_name}</td>
+                    <td className="px-4 py-2 text-right text-gray-800">{activity.today_count}</td>
+                    <td className="px-4 py-2 text-right text-gray-800">{activity.week_count}</td>
+                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatDateTime(activity.last_activity_at)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm">
@@ -250,8 +401,9 @@ export default function AuditLogsPage() {
               <th className="px-6 py-3 text-left font-semibold text-gray-700">時間</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">用戶</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">操作</th>
+              <th className="px-6 py-3 text-left font-semibold text-gray-700">操作描述</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">模組</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700">記錄 ID</th>
+              <th className="px-6 py-3 text-left font-semibold text-gray-700">記錄 / 筆數</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">IP 地址</th>
               <th className="px-6 py-3 text-left font-semibold text-gray-700">詳情</th>
             </tr>
@@ -259,13 +411,13 @@ export default function AuditLogsPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                   加載中...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                   沒有找到操作記錄
                 </td>
               </tr>
@@ -282,8 +434,11 @@ export default function AuditLogsPage() {
                         {getActionLabel(log.action)}
                       </span>
                     </td>
+                    <td className="px-6 py-3 text-gray-800 text-sm font-medium">{getAuditLogDescription(log)}</td>
                     <td className="px-6 py-3 text-gray-700 text-sm">{getTableLabel(log.target_table)}</td>
-                    <td className="px-6 py-3 text-gray-600 font-mono">{log.target_id}</td>
+                    <td className="px-6 py-3 text-gray-600 font-mono">
+                      {getAffectedCount(log) > 1 ? `${getAffectedCount(log)} 筆` : log.target_id}
+                    </td>
                     <td className="px-6 py-3 text-gray-600 text-xs font-mono">{log.ip_address || '—'}</td>
                     <td className="px-6 py-3">
                       <button
@@ -296,7 +451,7 @@ export default function AuditLogsPage() {
                   </tr>
                   {expandedId === log.id && (
                     <tr className="bg-blue-50 border-b border-gray-100">
-                      <td colSpan={7} className="px-6 py-4">
+                      <td colSpan={8} className="px-6 py-4">
                         <div className="space-y-3">
                           {log.changes_before && (
                             <div>

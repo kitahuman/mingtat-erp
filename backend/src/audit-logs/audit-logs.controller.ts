@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuditLogsService } from './audit-logs.service';
 
@@ -30,6 +30,15 @@ export class AuditLogsController {
       dateFrom,
       dateTo,
     });
+  }
+
+
+  @Get('user-activity')
+  async getUserActivity(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.service.getUserActivity({ dateFrom, dateTo });
   }
 
   @Get(':id')

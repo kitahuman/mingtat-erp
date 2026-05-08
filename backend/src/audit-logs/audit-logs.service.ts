@@ -127,6 +127,107 @@ export class AuditLogsService {
     };
   }
 
+  private buildDateRangeWhere(dateFrom?: string, dateTo?: string) {
+    const where: any = {};
+    if (dateFrom || dateTo) {
+      where.audit_timestamp = {};
+      if (dateFrom) {
+        where.audit_timestamp.gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        where.audit_timestamp.lte = endDate;
+      }
+    }
+    return where;
+  }
+
+  private mergeDateRanges(...ranges: any[]) {
+    const timestamps = ranges
+      .map((range) => range?.audit_timestamp)
+      .filter(Boolean);
+    if (timestamps.length === 0) return {};
+
+    const merged: any = {};
+    for (const timestamp of timestamps) {
+      if (timestamp.gte && (!merged.gte || timestamp.gte > merged.gte)) {
+        merged.gte = timestamp.gte;
+      }
+      if (timestamp.lte && (!merged.lte || timestamp.lte < merged.lte)) {
+        merged.lte = timestamp.lte;
+      }
+    }
+
+    return { audit_timestamp: merged };
+  }
+
+  async getUserActivity(query: { dateFrom?: string; dateTo?: string }) {
+    const dateRangeWhere = this.buildDateRangeWhere(query.dateFrom, query.dateTo);
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const weekStart = new Date(now);
+    const day = weekStart.getDay();
+    const diffToMonday = (day + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - diffToMonday);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const users = await this.prisma.user.findMany({
+      select: { id: true, username: true, displayName: true },
+      orderBy: [{ displayName: 'asc' }, { username: 'asc' }],
+    });
+    const userIds = users.map((user) => user.id);
+    if (userIds.length === 0) return [];
+
+    const lastActivityGroups = await this.prisma.auditLog.groupBy({
+      by: ['audit_user_id'],
+      where: { ...dateRangeWhere, audit_user_id: { in: userIds } },
+      _max: { audit_timestamp: true },
+    });
+
+    const todayWhere = this.mergeDateRanges(
+      dateRangeWhere,
+      { audit_timestamp: { gte: todayStart, lte: todayEnd } },
+    );
+    const weekWhere = this.mergeDateRanges(
+      dateRangeWhere,
+      { audit_timestamp: { gte: weekStart } },
+    );
+
+    const todayGroups = await this.prisma.auditLog.groupBy({
+      by: ['audit_user_id'],
+      where: { ...todayWhere, audit_user_id: { in: userIds } },
+      _count: { _all: true },
+    });
+    const weekGroups = await this.prisma.auditLog.groupBy({
+      by: ['audit_user_id'],
+      where: { ...weekWhere, audit_user_id: { in: userIds } },
+      _count: { _all: true },
+    });
+
+    const lastActivityByUserId = new Map(
+      lastActivityGroups.map((group) => [group.audit_user_id, group._max.audit_timestamp]),
+    );
+    const todayCountByUserId = new Map(
+      todayGroups.map((group) => [group.audit_user_id, group._count._all]),
+    );
+    const weekCountByUserId = new Map(
+      weekGroups.map((group) => [group.audit_user_id, group._count._all]),
+    );
+
+    return users.map((user) => ({
+      user_id: user.id,
+      user_name: user.displayName || user.username || `用戶 ${user.id}`,
+      today_count: todayCountByUserId.get(user.id) || 0,
+      week_count: weekCountByUserId.get(user.id) || 0,
+      last_activity_at: lastActivityByUserId.get(user.id) || null,
+    }));
+  }
+
   /**
    * 獲取單筆審計日誌
    */

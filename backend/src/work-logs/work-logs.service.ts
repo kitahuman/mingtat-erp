@@ -568,6 +568,123 @@ export class WorkLogsService {
     return this.findOne(id);
   }
 
+  private getChangedFields(before: any, after: any, fields?: string[]) {
+    const keys = fields && fields.length > 0
+      ? fields
+      : Array.from(new Set([
+          ...Object.keys(before || {}),
+          ...Object.keys(after || {}),
+        ]));
+    const changes: Record<string, { before: any; after: any }> = {};
+
+    for (const key of keys) {
+      const beforeValue = before?.[key] ?? null;
+      const afterValue = after?.[key] ?? null;
+      if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+        changes[key] = { before: beforeValue, after: afterValue };
+      }
+    }
+
+    return changes;
+  }
+
+  private async logBulkWorkLogUpdate(params: {
+    userId?: number;
+    workLogId: number;
+    before: any;
+    after: any;
+    operation: string;
+    affectedIds: number[];
+    fields?: string[];
+  }) {
+    if (!params.userId) return;
+
+    const fieldChanges = this.getChangedFields(
+      params.before,
+      params.after,
+      params.fields,
+    );
+
+    try {
+      await this.auditLogsService.log({
+        userId: params.userId,
+        action: 'update',
+        targetTable: 'work_logs',
+        targetId: params.workLogId,
+        changesBefore: {
+          fields: Object.fromEntries(
+            Object.entries(fieldChanges).map(([field, change]) => [
+              field,
+              (change as { before: any; after: any }).before,
+            ]),
+          ),
+        },
+        changesAfter: {
+          fields: Object.fromEntries(
+            Object.entries(fieldChanges).map(([field, change]) => [
+              field,
+              (change as { before: any; after: any }).after,
+            ]),
+          ),
+          changes: fieldChanges,
+          metadata: {
+            isBulkOperation: true,
+            operation: params.operation,
+            targetTable: 'work_logs',
+            affectedCount: params.affectedIds.length,
+            affectedIds: params.affectedIds,
+            fields: Object.keys(fieldChanges),
+          },
+        },
+      });
+    } catch (e) {
+      console.error('Audit log error:', e);
+    }
+  }
+
+  private async logBulkWorkLogConfirmation(params: {
+    userId?: number;
+    operation: 'bulk_confirm' | 'bulk_unconfirm';
+    affectedIds: number[];
+    beforeLogs: any[];
+    afterLogs: any[];
+  }) {
+    if (!params.userId || params.affectedIds.length === 0) return;
+
+    try {
+      await this.auditLogsService.log({
+        userId: params.userId,
+        action: 'update',
+        targetTable: 'work_logs',
+        targetId: params.affectedIds[0],
+        changesBefore: {
+          workLogIds: params.affectedIds,
+          records: params.beforeLogs.map((log) => ({
+            id: log.id,
+            is_confirmed: log.is_confirmed,
+          })),
+        },
+        changesAfter: {
+          workLogIds: params.affectedIds,
+          records: params.afterLogs.map((log) => ({
+            id: log.id,
+            is_confirmed: log.is_confirmed,
+          })),
+          metadata: {
+            isBulkOperation: true,
+            operation: params.operation,
+            targetTable: 'work_logs',
+            affectedCount: params.affectedIds.length,
+            affectedIds: params.affectedIds,
+            fields: ['is_confirmed'],
+          },
+        },
+      });
+    } catch (e) {
+      console.error('Audit log error:', e);
+    }
+  }
+
   async remove(id: number, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.workLog.findUnique({ where: { id } });
     if (userId && existing) {
@@ -628,7 +745,14 @@ export class WorkLogsService {
     return { success: true, deleted: result.count };
   }
 
-  async bulkUpdate(ids: number[], field: string, value: any) {
+  async bulkUpdate(ids: number[], field: string, value: any, userId?: number) {
+    const safeIds = Array.isArray(ids)
+      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    if (safeIds.length === 0) {
+      return { success: true, updated: 0 };
+    }
+
     // Whitelist of fields that can be batch-updated
     const ALLOWED_FIELDS = [
       'status',
@@ -668,7 +792,6 @@ export class WorkLogsService {
     if (!ALLOWED_FIELDS.includes(field)) {
       throw new Error(`Field "${field}" is not allowed for batch update`);
     }
-
     let processedValue = value;
     // Type coercions
     if (field === 'scheduled_date' && processedValue) {
@@ -699,11 +822,21 @@ export class WorkLogsService {
     if (['is_mid_shift', 'is_confirmed', 'is_paid'].includes(field)) {
       processedValue = Boolean(processedValue);
     }
+
+    const beforeLogs = await this.prisma.workLog.findMany({
+      where: { id: { in: safeIds } },
+      orderBy: { id: 'asc' },
+    });
+    const affectedIds = beforeLogs.map((log) => log.id);
+    const auditFields = field === 'machine_type'
+      ? ['machine_type', 'equipment_source']
+      : [field];
+
     if (field === 'machine_type') {
       // Also update equipment_source
       const equipmentSource = this.resolveEquipmentSource(processedValue);
       await this.prisma.workLog.updateMany({
-        where: { id: { in: ids } },
+        where: { id: { in: affectedIds } },
         data: {
           machine_type: processedValue,
           equipment_source: equipmentSource,
@@ -713,61 +846,129 @@ export class WorkLogsService {
       const priceRelatedFields = ['machine_type'];
       if (priceRelatedFields.includes(field)) {
         const updatedLogs = await this.prisma.workLog.findMany({
-          where: { id: { in: ids } },
+          where: { id: { in: affectedIds } },
           include: { company: true, client: true },
         });
         await Promise.all(
           updatedLogs.map((log) => this.matchAndSavePrice(log)),
         );
       }
-      return { success: true, updated: ids.length };
-    }
-
-    await this.prisma.workLog.updateMany({
-      where: { id: { in: ids } },
-      data: { [field]: processedValue },
-    });
-
-    // Re-match prices if price-related field changed
-    const priceRelatedFields = [
-      'client_id',
-      'company_profile_id',
-      'company_id',
-      'quotation_id',
-      'contract_id',
-      'client_contract_no',
-      'tonnage',
-      'day_night',
-      'start_location',
-      'end_location',
-    ];
-    if (priceRelatedFields.includes(field)) {
-      const updatedLogs = await this.prisma.workLog.findMany({
-        where: { id: { in: ids } },
-        include: { company: true, client: true },
+    } else {
+      await this.prisma.workLog.updateMany({
+        where: { id: { in: affectedIds } },
+        data: { [field]: processedValue },
       });
-      await Promise.all(updatedLogs.map((log) => this.matchAndSavePrice(log)));
+      // Re-match prices if price-related field changed
+      const priceRelatedFields = [
+        'client_id',
+        'company_profile_id',
+        'company_id',
+        'quotation_id',
+        'contract_id',
+        'client_contract_no',
+        'tonnage',
+        'day_night',
+        'start_location',
+        'end_location',
+      ];
+      if (priceRelatedFields.includes(field)) {
+        const updatedLogs = await this.prisma.workLog.findMany({
+          where: { id: { in: affectedIds } },
+          include: { company: true, client: true },
+        });
+        await Promise.all(updatedLogs.map((log) => this.matchAndSavePrice(log)));
+      }
     }
 
-    return { success: true, updated: ids.length };
-  }
+    if (userId && affectedIds.length > 0) {
+      const afterLogs = await this.prisma.workLog.findMany({
+        where: { id: { in: affectedIds } },
+        orderBy: { id: 'asc' },
+      });
+      const afterById = new Map(afterLogs.map((log) => [log.id, log]));
+      await Promise.all(
+        beforeLogs.map((before) => {
+          const after = afterById.get(before.id);
+          if (!after) return Promise.resolve();
+          return this.logBulkWorkLogUpdate({
+            userId,
+            workLogId: before.id,
+            before,
+            after,
+            operation: 'bulk_update',
+            affectedIds,
+            fields: auditFields,
+          });
+        }),
+      );
+    }
 
-  async bulkConfirm(ids: number[]) {
+    return { success: true, updated: affectedIds.length };
+  }
+  async bulkConfirm(ids: number[], userId?: number) {
+    const safeIds = Array.isArray(ids)
+      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    if (safeIds.length === 0) {
+      return { success: true, confirmed: 0 };
+    }
+
+    const beforeLogs = await this.prisma.workLog.findMany({
+      where: { id: { in: safeIds } },
+      orderBy: { id: 'asc' },
+    });
+    const affectedIds = beforeLogs.map((log) => log.id);
     await this.prisma.workLog.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: affectedIds } },
       data: { is_confirmed: true },
     });
-    return { success: true, confirmed: ids.length };
+    if (userId && affectedIds.length > 0) {
+      const afterLogs = await this.prisma.workLog.findMany({
+        where: { id: { in: affectedIds } },
+        orderBy: { id: 'asc' },
+      });
+      await this.logBulkWorkLogConfirmation({
+        userId,
+        operation: 'bulk_confirm',
+        affectedIds,
+        beforeLogs,
+        afterLogs,
+      });
+    }
+    return { success: true, confirmed: affectedIds.length };
   }
+  async bulkUnconfirm(ids: number[], userId?: number) {
+    const safeIds = Array.isArray(ids)
+      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    if (safeIds.length === 0) {
+      return { success: true, unconfirmed: 0 };
+    }
 
-  async bulkUnconfirm(ids: number[]) {
+    const beforeLogs = await this.prisma.workLog.findMany({
+      where: { id: { in: safeIds } },
+      orderBy: { id: 'asc' },
+    });
+    const affectedIds = beforeLogs.map((log) => log.id);
     await this.prisma.workLog.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: affectedIds } },
       data: { is_confirmed: false },
     });
-    return { success: true, unconfirmed: ids.length };
+    if (userId && affectedIds.length > 0) {
+      const afterLogs = await this.prisma.workLog.findMany({
+        where: { id: { in: affectedIds } },
+        orderBy: { id: 'asc' },
+      });
+      await this.logBulkWorkLogConfirmation({
+        userId,
+        operation: 'bulk_unconfirm',
+        affectedIds,
+        beforeLogs,
+        afterLogs,
+      });
+    }
+    return { success: true, unconfirmed: affectedIds.length };
   }
-
   async duplicate(id: number, userId: number) {
     const original = await this.prisma.workLog.findUnique({ where: { id } });
     if (!original) throw new Error('WorkLog not found');
@@ -993,12 +1194,43 @@ export class WorkLogsService {
 
   // ── 批量儲存 (Airtable 風格) ───────────────────────────
 
-  async bulkSave(changes: Array<{ id: number; data: any }>) {
+  async bulkSave(changes: Array<{ id: number; data: any }>, userId?: number) {
+    const safeChanges = Array.isArray(changes) ? changes : [];
+    const affectedIds = safeChanges
+      .map(({ id }) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const beforeLogs = userId
+      ? await this.prisma.workLog.findMany({
+          where: { id: { in: affectedIds } },
+          orderBy: { id: 'asc' },
+        })
+      : [];
+    const beforeById = new Map(beforeLogs.map((log) => [log.id, log]));
     const results: any[] = [];
-    for (const { id, data } of changes) {
+
+    for (const { id, data } of safeChanges) {
       try {
-        const updated = await this.update(id, data);
-        results.push({ id, success: true, data: updated });
+        const numericId = Number(id);
+        const updated = await this.update(numericId, data);
+        results.push({ id: numericId, success: true, data: updated });
+
+        const before = beforeById.get(numericId);
+        if (userId && before) {
+          const after = await this.prisma.workLog.findUnique({
+            where: { id: numericId },
+          });
+          if (after) {
+            await this.logBulkWorkLogUpdate({
+              userId,
+              workLogId: numericId,
+              before,
+              after,
+              operation: 'bulk_save',
+              affectedIds,
+              fields: Object.keys(data || {}),
+            });
+          }
+        }
       } catch (e: any) {
         results.push({ id, success: false, error: e.message });
       }
@@ -1009,7 +1241,6 @@ export class WorkLogsService {
       failed: results.filter((r) => !r.success).length,
     };
   }
-
   // ── 編輯鎖定 (簡易在記憶體實作) ─────────────────────
 
   private static editLocks = new Map<
