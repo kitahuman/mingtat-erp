@@ -9,7 +9,6 @@ export class CreateVehicleDto {
   @IsOptional() @Type(() => Number) @IsNumber() tonnage?: number;
   @IsOptional() @Type(() => Number) @IsNumber() owner_company_id?: number;
   @IsOptional() @IsString() insurance_expiry?: string;
-  @IsOptional() @IsString() permit_fee_expiry?: string;
   @IsOptional() @IsString() inspection_date?: string;
   @IsOptional() @IsString() license_expiry?: string;
   @IsOptional() @IsString() brand?: string;

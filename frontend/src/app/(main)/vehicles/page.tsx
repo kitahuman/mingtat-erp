@@ -31,7 +31,7 @@ export default function VehiclesPage() {
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({
     plate_number: '', machine_type: '', tonnage: '', owner_company_id: '',
-    brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: ''
+    brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: ''
   });
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function VehiclesPage() {
     try {
       await vehiclesApi.create({ ...form, owner_company_id: Number(form.owner_company_id), tonnage: form.tonnage ? Number(form.tonnage) : null });
       setShowModal(false);
-      setForm({ plate_number: '', machine_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', permit_fee_expiry: '', inspection_date: '', license_expiry: '' });
+      setForm({ plate_number: '', machine_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: '' });
       load();
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
   };
@@ -83,7 +83,6 @@ export default function VehiclesPage() {
       model: formData.model,
       status: formData.status,
       insurance_expiry: formData.insurance_expiry || null,
-      permit_fee_expiry: formData.permit_fee_expiry || null,
       inspection_date: formData.inspection_date || null,
       license_expiry: formData.license_expiry || null,
     });
@@ -108,7 +107,6 @@ export default function VehiclesPage() {
     { key: 'vehicle_first_reg_date', label: '首次登記', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
     { key: 'vehicle_chassis_no', label: '底盤號碼', sortable: false, editable: true, editType: 'text' as const, render: (v: string) => v ? <span className="font-mono text-xs">{v}</span> : '-' },
     { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry, exportRender: (v: string) => v || '' },
-    { key: 'permit_fee_expiry', label: '牌費到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: (v: string) => fmtDate(v), exportRender: (v: string) => v || '' },
     { key: 'inspection_date', label: '驗車到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry, exportRender: (v: string) => v || '' },
     { key: 'vehicle_inspection_notes', label: '驗車備註', sortable: false, editable: false, render: (v: string) => v ? <span className="text-sm text-gray-700 whitespace-pre-wrap">{v}</span> : '-', filterRender: (v: string) => v || '-', exportRender: (v: string) => v || '' },
     { key: 'license_expiry', label: '行車證到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry, exportRender: (v: string) => v || '' },
@@ -208,9 +206,8 @@ export default function VehiclesPage() {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">品牌</label><input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">型號</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">牌費到期日</label><DateInput value={form.permit_fee_expiry} onChange={value => setForm({...form, permit_fee_expiry: value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">驗車到期日</label><DateInput value={form.inspection_date} onChange={value => setForm({...form, inspection_date: value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><DateInput value={form.road_license_expiry} onChange={value => setForm({...form, road_license_expiry: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><DateInput value={form.license_expiry} onChange={value => setForm({...form, license_expiry: value})} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
         </form>

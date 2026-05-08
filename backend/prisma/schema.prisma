@@ -344,7 +344,6 @@ model Vehicle {
   tonnage                    Decimal?  @db.Decimal(5, 1)
   owner_company_id           Int
   insurance_expiry           DateTime? @db.Date
-  permit_fee_expiry          DateTime? @db.Date
   inspection_date            DateTime? @db.Date
   license_expiry             DateTime? @db.Date
   brand                      String?

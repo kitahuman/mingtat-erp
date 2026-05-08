@@ -38,7 +38,6 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'brand', label: '品牌', type: 'string' },
     { key: 'model', label: '型號', type: 'string' },
     { key: 'insurance_expiry', label: '保險到期日', type: 'date', description: 'DD/MM/YYYY' },
-    { key: 'permit_fee_expiry', label: '牌費到期日', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'inspection_date', label: '驗車日期', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'license_expiry', label: '行車證到期日', type: 'date', description: 'DD/MM/YYYY' },
     { key: 'notes', label: '備註', type: 'string' },
@@ -436,7 +435,7 @@ export class CsvImportService {
     const { company_name, ...rest } = data;
 
     // Convert dates
-    for (const df of ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry']) {
+    for (const df of ['insurance_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry']) {
       if (rest[df]) rest[df] = new Date(rest[df]);
     }
     // Boolean field

@@ -335,7 +335,6 @@ export class DashboardService {
     for (const v of activeVehicles) {
       const checks = [
         { type: '保險', date: v.insurance_expiry },
-        { type: '牌費', date: v.permit_fee_expiry },
         { type: '驗車', date: v.inspection_date },
         { type: '行車證', date: v.license_expiry },
       ];
@@ -728,7 +727,7 @@ export class DashboardService {
     const activeVehicles = await this.prisma.vehicle.findMany({ where: { status: 'active' }, include: { owner_company: true } });
     for (const v of activeVehicles) {
       const checks = [
-        { type: '保險', date: v.insurance_expiry }, { type: '牌費', date: v.permit_fee_expiry },
+        { type: '保險', date: v.insurance_expiry },
         { type: '驗車', date: v.inspection_date }, { type: '行車證', date: v.license_expiry },
       ];
       for (const c of checks) {

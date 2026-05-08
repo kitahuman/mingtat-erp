@@ -135,7 +135,6 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><DateInput value={form.insurance_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">牌費到期日</label><DateInput value={form.permit_fee_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, permit_fee_expiry: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">驗車到期日</label><DateInput value={form.inspection_date?.slice(0, 10) || ''} onChange={value => setForm({...form, inspection_date: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">行車證到期日</label><DateInput value={form.license_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, license_expiry: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">泥尾到期日</label><DateInput value={form.vehicle_mud_tail_expiry?.slice(0, 10) || ''} onChange={value => setForm({...form, vehicle_mud_tail_expiry: value})} className="input-field" /></div>
@@ -174,7 +173,6 @@ export default function VehicleDetailPage() {
           <h2 className="text-lg font-bold text-gray-900 mb-4">日期追蹤</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><p className="text-sm text-gray-500">保險到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.insurance_expiry)}</p></div>
-            <div><p className="text-sm text-gray-500">牌費到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.permit_fee_expiry)}</p></div>
             <div><p className="text-sm text-gray-500">驗車到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.inspection_date)}</p></div>
             <div><p className="text-sm text-gray-500">行車證到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.license_expiry)}</p></div>
             <div><p className="text-sm text-gray-500">泥尾到期日</p><p className="mt-1">{dateStatusBadge(vehicle?.vehicle_mud_tail_expiry)}</p></div>

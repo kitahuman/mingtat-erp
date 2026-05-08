@@ -41,7 +41,7 @@ export class VehiclesService {
       ];
     }
 
-    const allowedSortFields = ['plate_number', 'machine_type', 'tonnage', 'brand', 'model', 'insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'status', 'id', 'created_at'];
+    const allowedSortFields = ['plate_number', 'machine_type', 'tonnage', 'brand', 'model', 'insurance_expiry', 'inspection_date', 'license_expiry', 'status', 'id', 'created_at'];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
@@ -99,7 +99,7 @@ export class VehiclesService {
     const { plate_history, transfers, owner_company, created_at, updated_at, id: _id, ...updateData } = dto;
 
     // 日期欄位：字串轉 Date，空值轉 null
-    const dateFields = ['insurance_expiry', 'permit_fee_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry'];
+    const dateFields = ['insurance_expiry', 'inspection_date', 'license_expiry', 'vehicle_first_reg_date', 'vehicle_mud_tail_expiry'];
     for (const field of dateFields) {
       if (field in updateData) {
         updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
