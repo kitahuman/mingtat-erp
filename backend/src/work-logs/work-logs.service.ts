@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -33,7 +33,22 @@ export class WorkLogsService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  // ── 工作記錄 CRUD ─────────────────────────────────────────
+  private async assertVehicleIsNotScrappedByWorkLogData(data: any) {
+    const vehicleId = data.work_log_vehicle_id ? Number(data.work_log_vehicle_id) : null;
+    const equipmentNumber = data.equipment_number ? String(data.equipment_number) : null;
+    if (!vehicleId && !equipmentNumber) return;
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: vehicleId
+        ? { id: vehicleId }
+        : { plate_number: equipmentNumber as string },
+      select: { id: true, plate_number: true, status: true },
+    });
+    if (vehicle?.status === 'scrapped') {
+      throw new BadRequestException(`已劏車的車輛${vehicle.plate_number ? `（${vehicle.plate_number}）` : ''}不能新增或更新工作紀錄`);
+    }
+  }
+
+  // ── 工作記錄 CRUD ──────────────────────────────────────────
 
   async findAll(query: WorkLogQuery) {
     const {
@@ -441,6 +456,7 @@ export class WorkLogsService {
       fleet_driver,
       ...data
     } = dto;
+    await this.assertVehicleIsNotScrappedByWorkLogData(data);
     const saved = await this.prisma.workLog.create({
       data: {
         ...data,
@@ -494,6 +510,7 @@ export class WorkLogsService {
     if (rest.machine_type !== undefined) {
       rest.equipment_source = this.resolveEquipmentSource(rest.machine_type);
     }
+    await this.assertVehicleIsNotScrappedByWorkLogData(rest);
     if (rest.scheduled_date)
       rest.scheduled_date = new Date(rest.scheduled_date);
 

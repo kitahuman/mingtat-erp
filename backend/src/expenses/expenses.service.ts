@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -107,13 +107,26 @@ export class ExpensesService {
     return expense;
   }
 
+  private async assertVehicleIsNotScrappedByExpenseData(data: any) {
+    const vehicleId = data.vehicle_id ? Number(data.vehicle_id) : null;
+    const machineCode = data.machine_code ? String(data.machine_code) : null;
+    if (!vehicleId && !machineCode) return;
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: vehicleId ? { id: vehicleId } : { plate_number: machineCode as string },
+      select: { id: true, plate_number: true, status: true },
+    });
+    if (vehicle?.status === 'scrapped') {
+      throw new BadRequestException(`已劏車的車輛${vehicle.plate_number ? `（${vehicle.plate_number}）` : ''}不能新增或更新費用`);
+    }
+  }
+
   private normalizeDto(dto: any) {
     const { company, supplier, category, employee, machinery, client, project, quotation, items, attachments, ...data } = dto;
     if (data.date) data.date = new Date(data.date);
     if (data.payment_date === '') data.payment_date = null;
     else if (data.payment_date) data.payment_date = new Date(data.payment_date);
 
-    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id', 'source_ref_id'];
+    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'vehicle_id', 'client_id', 'project_id', 'quotation_id', 'contract_id', 'source_ref_id'];
     for (const f of numericFields) {
       if (f in data) {
         data[f] = data[f] ? Number(data[f]) : null;
@@ -134,6 +147,7 @@ export class ExpensesService {
 
   async create(dto: any, userId?: number, ipAddress?: string) {
     const data = this.normalizeDto(dto);
+    await this.assertVehicleIsNotScrappedByExpenseData(data);
     // Set default source if not provided
     if (!data.source) data.source = 'MANUAL';
     const saved = await this.prisma.expense.create({ data });
@@ -157,6 +171,7 @@ export class ExpensesService {
     if (!existing) throw new NotFoundException('支出記錄不存在');
     const { id: _id, created_at, updated_at, ...rest } = dto;
     const data = this.normalizeDto(rest);
+    await this.assertVehicleIsNotScrappedByExpenseData(data);
     const updated = await this.prisma.expense.update({ where: { id }, data });
     if (userId) {
       try {
@@ -198,6 +213,7 @@ export class ExpensesService {
     const createdIds: number[] = [];
     for (const dto of expenses) {
       const data = this.normalizeDto(dto);
+      await this.assertVehicleIsNotScrappedByExpenseData(data);
       if (!data.source) data.source = 'MANUAL';
       const saved = await this.prisma.expense.create({ data });
       createdIds.push(saved.id);

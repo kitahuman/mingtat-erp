@@ -5,6 +5,9 @@ export class CreateVehicleDto {
   @IsOptional() @Type(() => Number) @IsNumber() from_company_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() to_company_id?: number;
   @IsOptional() @IsString() plate_number?: string;
+  @IsOptional() @IsString() plate_mode?: 'new' | 'existing';
+  @IsOptional() @Type(() => Number) @IsNumber() existing_plate_id?: number;
+  @IsOptional() @IsString() assigned_date?: string;
   @IsOptional() @IsString() machine_type?: string;
   @IsOptional() @Type(() => Number) @IsNumber() tonnage?: number;
   @IsOptional() @Type(() => Number) @IsNumber() owner_company_id?: number;
@@ -41,5 +44,18 @@ export class TransferVehicleDto {
   @Type(() => Number) @IsNumber() from_company_id: number;
   @Type(() => Number) @IsNumber() to_company_id: number;
   @IsString() transfer_date: string;
+  @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() reason?: string;
+}
+
+export class ScrapVehicleDto {
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class VehicleTransferHistoryDto extends TransferVehicleDto {}
+
+export class VehicleHistoryEventDto {
+  @IsString() event_date: string;
+  @IsString() event_type: string;
+  @IsString() description: string;
 }

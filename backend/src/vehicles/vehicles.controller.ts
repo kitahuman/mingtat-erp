@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { VehiclesService } from './vehicles.service';
-import { CreateVehicleDto, UpdateVehicleDto, ChangePlateDto, TransferVehicleDto } from './dto/create-vehicle.dto';
+import { ChangePlateDto, CreateVehicleDto, ScrapVehicleDto, TransferVehicleDto, UpdateVehicleDto, VehicleHistoryEventDto, VehicleTransferHistoryDto } from './dto/create-vehicle.dto';
 
 @Controller('vehicles')
 @UseGuards(AuthGuard('jwt'))
@@ -41,6 +41,27 @@ export class VehiclesController {
   @Post(':id/transfer')
   transferVehicle(@Param('id') id: number, @Body() dto: TransferVehicleDto, @Request() req: any) {
     return this.service.transferVehicle(+id, dto);
+  }
+
+  @Post(':id/transfer-history')
+  addTransferHistory(@Param('id') id: number, @Body() dto: VehicleTransferHistoryDto) {
+    return this.service.addTransferHistory(+id, dto);
+  }
+
+  @Post(':id/history-events')
+  addHistoryEvent(@Param('id') id: number, @Body() dto: VehicleHistoryEventDto) {
+    return this.service.addHistoryEvent(+id, dto);
+  }
+
+  @Post(':id/scrap')
+  scrap(@Param('id') id: number, @Body() dto: ScrapVehicleDto, @Request() req: any) {
+    void dto;
+    return this.service.scrap(+id, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  }
+
+  @Post(':id/restore')
+  restore(@Param('id') id: number, @Request() req: any) {
+    return this.service.restore(+id, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Delete(':id')

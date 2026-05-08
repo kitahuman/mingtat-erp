@@ -12,6 +12,7 @@ import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
 import { EmployeesModule } from './employees/employees.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { VehiclePlatesModule } from './vehicle-plates/vehicle-plates.module';
 import { MachineryModule } from './machinery/machinery.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -105,6 +106,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     CompaniesModule,
     EmployeesModule,
     VehiclesModule,
+    VehiclePlatesModule,
     MachineryModule,
     DashboardModule,
     DocumentsModule,

@@ -146,7 +146,20 @@ export const vehiclesApi = {
   update: (id: number, data: any) => api.put(`/vehicles/${id}`, data),
   changePlate: (id: number, data: any) => api.post(`/vehicles/${id}/change-plate`, data),
   transfer: (id: number, data: any) => api.post(`/vehicles/${id}/transfer`, data),
+  addTransferHistory: (id: number, data: any) => api.post(`/vehicles/${id}/transfer-history`, data),
+  addHistoryEvent: (id: number, data: any) => api.post(`/vehicles/${id}/history-events`, data),
+  scrap: (id: number, data?: any) => api.post(`/vehicles/${id}/scrap`, data || {}),
+  restore: (id: number) => api.post(`/vehicles/${id}/restore`),
   delete: (id: number) => api.delete(`/vehicles/${id}`),
+};
+
+export const vehiclePlatesApi = {
+  list: (params?: any) => api.get('/vehicle-plates', { params }),
+  get: (id: number) => api.get(`/vehicle-plates/${id}`),
+  assign: (id: number, data: any) => api.post(`/vehicle-plates/${id}/assign`, data),
+  transfer: (id: number, data: any) => api.post(`/vehicle-plates/${id}/transfer`, data),
+  addAssignmentHistory: (id: number, data: any) => api.post(`/vehicle-plates/${id}/history/assignment`, data),
+  addTransferHistory: (id: number, data: any) => api.post(`/vehicle-plates/${id}/history/transfer`, data),
 };
 
 // Machinery

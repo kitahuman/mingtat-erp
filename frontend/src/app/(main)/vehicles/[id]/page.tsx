@@ -35,8 +35,12 @@ export default function VehicleDetailPage() {
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [showPlateModal, setShowPlateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showManualTransferModal, setShowManualTransferModal] = useState(false);
+  const [showHistoryEventModal, setShowHistoryEventModal] = useState(false);
   const [plateForm, setPlateForm] = useState({ new_plate: '', change_date: '', notes: '' });
   const [transferForm, setTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
+  const [manualTransferForm, setManualTransferForm] = useState({ from_company_id: '', to_company_id: '', transfer_date: '', notes: '' });
+  const [historyEventForm, setHistoryEventForm] = useState({ event_date: '', event_type: '', description: '' });
 
   const loadData = () => {
     vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/vehicles'));
@@ -53,7 +57,7 @@ export default function VehicleDetailPage() {
 
   const handleSave = async () => {
     try {
-      const { owner_company, plate_history, transfers, created_at, updated_at, ...updateData } = form;
+      const { owner_company, plate_history, plate_assignments, transfers, history_events, current_plate, created_at, updated_at, ...updateData } = form;
       const res = await vehiclesApi.update(vehicle.id, { ...updateData, tonnage: updateData.tonnage ? Number(updateData.tonnage) : null });
       setVehicle(res.data);
       setEditing(false);
@@ -80,6 +84,54 @@ export default function VehicleDetailPage() {
     } catch (err: any) { alert(err.response?.data?.message || '過戶失敗'); }
   };
 
+  const handleAddTransferHistory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await vehiclesApi.addTransferHistory(vehicle.id, { from_company_id: Number(manualTransferForm.from_company_id), to_company_id: Number(manualTransferForm.to_company_id), transfer_date: manualTransferForm.transfer_date, notes: manualTransferForm.notes });
+      setShowManualTransferModal(false);
+      setManualTransferForm({ from_company_id: '', to_company_id: '', transfer_date: '', notes: '' });
+      loadData();
+    } catch (err: any) { alert(err.response?.data?.message || '新增歷史紀錄失敗'); }
+  };
+
+  const handleAddHistoryEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await vehiclesApi.addHistoryEvent(vehicle.id, historyEventForm);
+      setShowHistoryEventModal(false);
+      setHistoryEventForm({ event_date: '', event_type: '', description: '' });
+      loadData();
+    } catch (err: any) { alert(err.response?.data?.message || '新增自定義歷史失敗'); }
+  };
+
+  const handleScrap = async () => {
+    const plate = vehicle?.current_plate?.plate_number || vehicle?.plate_number;
+    if (!confirm(`確定要將此車輛標記為已劏車？車牌 ${plate || '-'} 將變為閒置狀態。`)) return;
+    try { await vehiclesApi.scrap(vehicle.id); loadData(); } catch (err: any) { alert(err.response?.data?.message || '劏車失敗'); }
+  };
+
+  const handleRestore = async () => {
+    if (!confirm('確定要復原此已劏車車輛？')) return;
+    try { await vehiclesApi.restore(vehicle.id); loadData(); } catch (err: any) { alert(err.response?.data?.message || '復原失敗'); }
+  };
+
+  const timelineEvents = [
+    ...(vehicle?.plate_assignments || []).flatMap((a: any) => {
+      const plate = a.plate?.plate_number || vehicle?.plate_number || '-';
+      const events: any[] = [{ key: `plate-assigned-${a.id}`, date: a.assigned_date, type: '車牌套牌', description: `套用車牌 ${plate}`, notes: a.notes }];
+      if (a.removed_date) events.push({ key: `plate-removed-${a.id}`, date: a.removed_date, type: '車牌拆牌', description: `拆除車牌 ${plate}`, notes: a.notes });
+      return events;
+    }),
+    ...(vehicle?.transfers || []).map((t: any) => ({
+      key: `transfer-${t.id}`,
+      date: t.transfer_date,
+      type: '車輛過戶',
+      description: `${t.from_company?.internal_prefix || t.from_company?.name || '-'} → ${t.to_company?.internal_prefix || t.to_company?.name || '-'}`,
+      notes: t.notes,
+    })),
+    ...(vehicle?.history_events || []).map((e: any) => ({ key: `custom-${e.id}`, date: e.event_date, type: e.event_type, description: e.description, notes: '' })),
+  ].filter((e: any) => e.date).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   const dateStatusBadge = (date: string | null) => {
     if (!date) return <span className="text-gray-400">未設定</span>;
     if (isExpired(date)) return <span className="badge-red">{fmtDate(date)} (已過期)</span>;
@@ -101,12 +153,19 @@ export default function VehicleDetailPage() {
           <p className="text-gray-500">{vehicle?.machine_type} | {vehicle?.owner_company?.internal_prefix || vehicle?.owner_company?.name}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowPlateModal(true)} className="btn-secondary">更換車牌</button>
-          <button onClick={() => setShowTransferModal(true)} className="btn-secondary">過戶</button>
-          {editing ? (
-            <><button onClick={() => { setForm(vehicle); setEditing(false); }} className="btn-secondary">取消</button><button onClick={handleSave} className="btn-primary">儲存</button></>
+          {vehicle?.status === 'scrapped' ? (
+            <button onClick={handleRestore} className="btn-primary">復原</button>
           ) : (
-            <button onClick={() => setEditing(true)} className="btn-primary">編輯</button>
+            <>
+              <button onClick={() => setShowPlateModal(true)} className="btn-secondary">更換車牌</button>
+              <button onClick={() => setShowTransferModal(true)} className="btn-secondary">過戶</button>
+              <button onClick={handleScrap} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">劏車</button>
+              {editing ? (
+                <><button onClick={() => { setForm(vehicle); setEditing(false); }} className="btn-secondary">取消</button><button onClick={handleSave} className="btn-primary">儲存</button></>
+              ) : (
+                <button onClick={() => setEditing(true)} className="btn-primary">編輯</button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -154,7 +213,7 @@ export default function VehicleDetailPage() {
               <div><p className="text-sm text-gray-500">品牌</p><p>{vehicle?.brand || '-'}</p></div>
               <div><p className="text-sm text-gray-500">型號</p><p>{vehicle?.model || '-'}</p></div>
               <div><p className="text-sm text-gray-500">車主</p><p className="font-medium">{vehicle?.owner_company?.internal_prefix ? `${vehicle.owner_company.internal_prefix} - ${vehicle.owner_company.name}` : vehicle?.owner_company?.name || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">狀態</p><p><span className={vehicle?.status === 'active' ? 'badge-green' : vehicle?.status === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{vehicle?.status === 'active' ? '使用中' : vehicle?.status === 'maintenance' ? '維修中' : '停用'}</span></p></div>
+              <div><p className="text-sm text-gray-500">狀態</p><p><span className={vehicle?.status === 'active' ? 'badge-green' : vehicle?.status === 'maintenance' ? 'badge-yellow' : 'badge-red'}>{vehicle?.status === 'active' ? '使用中' : vehicle?.status === 'maintenance' ? '維修中' : vehicle?.status === 'scrapped' ? '已劏車' : '停用'}</span></p></div>
               <div><p className="text-sm text-gray-500">首次登記日期</p><p>{fmtDate(vehicle?.vehicle_first_reg_date) || '-'}</p></div>
               <div><p className="text-sm text-gray-500">底盤號碼</p><p className="font-mono text-sm">{vehicle?.vehicle_chassis_no || '-'}</p></div>
               <div><p className="text-sm text-gray-500">原身車牌</p><p className="font-mono">{vehicle?.vehicle_original_plate || '-'}</p></div>
@@ -206,30 +265,33 @@ export default function VehicleDetailPage() {
         </div>
       )}
 
-      {/* Plate History */}
+      {/* Vehicle Timeline */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">車牌變更紀錄</h2>
-          <button onClick={() => setShowPlateModal(true)} className="text-sm text-primary-600 hover:underline">更換車牌</button>
-        </div>
-        {vehicle?.plate_history?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">舊車牌</th><th className="px-3 py-2 text-center">→</th><th className="px-3 py-2 text-left">新車牌</th><th className="px-3 py-2 text-left">備註</th></tr></thead>
-              <tbody>
-                {vehicle.plate_history.map((h: any) => (
-                  <tr key={h.id} className="border-b">
-                    <td className="px-3 py-2">{fmtDate(h.change_date)}</td>
-                    <td className="px-3 py-2 font-mono">{h.old_plate}</td>
-                    <td className="px-3 py-2 text-center text-gray-400">→</td>
-                    <td className="px-3 py-2 font-mono font-bold">{h.new_plate}</td>
-                    <td className="px-3 py-2 text-gray-500">{h.notes || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h2 className="text-lg font-bold text-gray-900">車輛歷史時間線</h2>
+          <div className="flex gap-3 text-sm flex-wrap justify-end">
+            {vehicle?.status !== 'scrapped' && <button onClick={() => setShowPlateModal(true)} className="text-primary-600 hover:underline">更換車牌</button>}
+            {vehicle?.status !== 'scrapped' && <button onClick={() => setShowTransferModal(true)} className="text-primary-600 hover:underline">過戶</button>}
+            <button onClick={() => setShowManualTransferModal(true)} className="text-primary-600 hover:underline">新增過戶歷史</button>
+            <button onClick={() => setShowHistoryEventModal(true)} className="text-primary-600 hover:underline">新增自定義歷史</button>
           </div>
-        ) : <p className="text-gray-500 text-sm">暫無變更紀錄</p>}
+        </div>
+        {timelineEvents.length > 0 ? (
+          <div className="space-y-3">
+            {timelineEvents.map((event: any) => (
+              <div key={event.key} className="flex gap-4 border-l-2 border-primary-200 pl-4 py-2">
+                <div className="w-28 flex-shrink-0 text-sm font-mono text-gray-600">{fmtDate(event.date)}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 text-xs font-medium">{event.type}</span>
+                    <span className="font-medium text-gray-900">{event.description}</span>
+                  </div>
+                  {event.notes && <p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{event.notes}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-gray-500 text-sm">暫無歷史紀錄</p>}
       </div>
 
       {/* Documents */}
@@ -237,34 +299,8 @@ export default function VehicleDetailPage() {
         <CustomFieldsBlock module="vehicle" entityId={vehicle?.id} />
       </div>
 
-      <div className="card">
+      <div className="card mb-6">
         <DocumentUpload entityType="vehicle" entityId={vehicle?.id} docTypes={['牌簿', '行車證', '保險單', '貸款文件', '買賣合約', '其他']} />
-      </div>
-
-      {/* Transfer History */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">過戶紀錄</h2>
-          <button onClick={() => setShowTransferModal(true)} className="text-sm text-primary-600 hover:underline">過戶</button>
-        </div>
-        {vehicle?.transfers?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">原公司</th><th className="px-3 py-2 text-center">→</th><th className="px-3 py-2 text-left">新公司</th><th className="px-3 py-2 text-left">備註</th></tr></thead>
-              <tbody>
-                {vehicle.transfers.map((t: any) => (
-                  <tr key={t.id} className="border-b">
-                    <td className="px-3 py-2">{fmtDate(t.transfer_date)}</td>
-                    <td className="px-3 py-2">{t.from_company?.internal_prefix || t.from_company?.name}</td>
-                    <td className="px-3 py-2 text-center text-gray-400">→</td>
-                    <td className="px-3 py-2">{t.to_company?.internal_prefix || t.to_company?.name}</td>
-                    <td className="px-3 py-2 text-gray-500">{t.notes || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <p className="text-gray-500 text-sm">暫無過戶紀錄</p>}
       </div>
 
       {/* Change Plate Modal */}
@@ -275,6 +311,37 @@ export default function VehicleDetailPage() {
           <div><label className="block text-sm font-medium text-gray-700 mb-1">變更日期 *</label><DateInput value={plateForm.change_date} onChange={value => setPlateForm({...plateForm, change_date: value})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={plateForm.notes} onChange={e => setPlateForm({...plateForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowPlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認更換</button></div>
+        </form>
+      </Modal>
+
+      {/* Manual Transfer History Modal */}
+      <Modal isOpen={showManualTransferModal} onClose={() => setShowManualTransferModal(false)} title="新增車輛過戶歷史紀錄">
+        <form onSubmit={handleAddTransferHistory} className="space-y-4">
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">原公司 *</label>
+            <select value={manualTransferForm.from_company_id} onChange={e => setManualTransferForm({...manualTransferForm, from_company_id: e.target.value})} className="input-field" required>
+              <option value="">請選擇</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+            </select>
+          </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">新公司 *</label>
+            <select value={manualTransferForm.to_company_id} onChange={e => setManualTransferForm({...manualTransferForm, to_company_id: e.target.value})} className="input-field" required>
+              <option value="">請選擇</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+            </select>
+          </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">過戶日期 *</label><DateInput value={manualTransferForm.transfer_date} onChange={value => setManualTransferForm({...manualTransferForm, transfer_date: value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={manualTransferForm.notes} onChange={e => setManualTransferForm({...manualTransferForm, notes: e.target.value})} className="input-field" rows={2} /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowManualTransferModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">新增歷史紀錄</button></div>
+        </form>
+      </Modal>
+
+      {/* Custom History Event Modal */}
+      <Modal isOpen={showHistoryEventModal} onClose={() => setShowHistoryEventModal(false)} title="新增自定義車輛歷史">
+        <form onSubmit={handleAddHistoryEvent} className="space-y-4">
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label><DateInput value={historyEventForm.event_date} onChange={value => setHistoryEventForm({...historyEventForm, event_date: value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">類型 *</label><input value={historyEventForm.event_type} onChange={e => setHistoryEventForm({...historyEventForm, event_type: e.target.value})} className="input-field" placeholder="例如：大修、意外、驗車、備註" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">描述 *</label><textarea value={historyEventForm.description} onChange={e => setHistoryEventForm({...historyEventForm, description: e.target.value})} className="input-field" rows={3} required /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowHistoryEventModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">新增歷史</button></div>
         </form>
       </Modal>
 

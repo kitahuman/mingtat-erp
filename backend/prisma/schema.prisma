@@ -53,6 +53,7 @@ model User {
   deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
   deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
+  scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
   web_push_subscriptions     WebPushSubscription[]
 
   @@map("users")
@@ -79,27 +80,31 @@ model Company {
   deleted_by      Int?
   deletedBy       User?     @relation("CompanyDeletedBy", fields: [deleted_by], references: [id])
 
-  employees                Employee[]
-  vehicles                 Vehicle[]
-  machinery                Machinery[]
-  employee_transfers_from  EmployeeTransfer[]  @relation("transfer_from_company")
-  employee_transfers_to    EmployeeTransfer[]  @relation("transfer_to_company")
-  vehicle_transfers_from   VehicleTransfer[]   @relation("vehicle_transfer_from")
-  vehicle_transfers_to     VehicleTransfer[]   @relation("vehicle_transfer_to")
-  machinery_transfers_from MachineryTransfer[] @relation("machinery_transfer_from")
-  machinery_transfers_to   MachineryTransfer[] @relation("machinery_transfer_to")
-  projects                 Project[]
-  quotations               Quotation[]
-  rate_cards               RateCard[]
-  expenses                 Expense[]
-  profiles                 CompanyProfile[]
-  invoices                 Invoice[]
-  fleet_rate_cards         FleetRateCard[]
-  subcon_rate_cards        SubconRateCard[]
-  work_logs                WorkLog[]
-  payrolls                 Payroll[]
-  payment_outs             PaymentOut[]
-  bank_accounts            BankAccount[]
+  employees                    Employee[]
+  vehicles                     Vehicle[]
+  machinery                    Machinery[]
+  employee_transfers_from      EmployeeTransfer[]     @relation("transfer_from_company")
+  employee_transfers_to        EmployeeTransfer[]     @relation("transfer_to_company")
+  vehicle_transfers_from       VehicleTransfer[]      @relation("vehicle_transfer_from")
+  vehicle_transfers_to         VehicleTransfer[]      @relation("vehicle_transfer_to")
+  owned_vehicle_plates         VehiclePlate[]         @relation("vehicle_plate_owner")
+  vehicle_plate_transfers_from VehiclePlateTransfer[] @relation("vehicle_plate_transfer_from")
+  vehicle_plate_transfers_to   VehiclePlateTransfer[] @relation("vehicle_plate_transfer_to")
+  machinery_transfers_from     MachineryTransfer[]    @relation("machinery_transfer_from")
+  machinery_transfers_to       MachineryTransfer[]    @relation("machinery_transfer_to")
+  projects                     Project[]
+  quotations                   Quotation[]
+  rate_cards                   RateCard[]
+  expenses                     Expense[]
+  profiles                     CompanyProfile[]
+  invoices                     Invoice[]
+  fleet_rate_cards             FleetRateCard[]
+  subcon_rate_cards            SubconRateCard[]
+  work_logs                    WorkLog[]
+  payrolls                     Payroll[]
+  payment_outs                 PaymentOut[]
+  bank_accounts                BankAccount[]
+
   @@map("companies")
 }
 
@@ -338,43 +343,109 @@ model EmployeeTransfer {
 // ══════════════════════════════════════════════════════════════
 
 model Vehicle {
-  id                         Int       @id @default(autoincrement())
-  plate_number               String
-  machine_type               String?
-  tonnage                    Decimal?  @db.Decimal(5, 1)
-  owner_company_id           Int
-  insurance_expiry           DateTime? @db.Date
-  inspection_date            DateTime? @db.Date
-  license_expiry             DateTime? @db.Date
-  brand                      String?
-  model                      String?
-  status                     String    @default("active")
-  notes                      String?   @db.Text
-  vehicle_first_reg_date     DateTime? @db.Date
-  vehicle_chassis_no         String?
-  vehicle_electronic_comm    String?
-  vehicle_autotoll_collected String?
-  vehicle_autotoll           String?
-  vehicle_inspection_notes   String?   @db.Text
-  vehicle_insurance_agent    String?
-  vehicle_insurance_company  String?
-  vehicle_has_gps            Boolean?
-  vehicle_mud_tail_expiry    DateTime? @db.Date
-  vehicle_original_plate     String?
-  vehicle_owner_name         String?
-  created_at                 DateTime  @default(now())
-  updated_at                 DateTime  @default(now()) @updatedAt
-  deleted_at                 DateTime? // 軯刪除時間時戳
-  deleted_by                 Int?
-  deletedBy                  User?     @relation("VehicleDeletedBy", fields: [deleted_by], references: [id])
-
-  owner_company Company               @relation(fields: [owner_company_id], references: [id])
-  plate_history VehiclePlateHistory[]
-  transfers     VehicleTransfer[]
-  work_logs     WorkLog[]              @relation("work_log_vehicle")
-  expenses      Expense[]              @relation("expense_vehicle")
+  id                             Int                      @id @default(autoincrement())
+  plate_number                   String
+  machine_type                   String?
+  tonnage                        Decimal?                 @db.Decimal(5, 1)
+  owner_company_id               Int
+  insurance_expiry               DateTime?                @db.Date
+  inspection_date                DateTime?                @db.Date
+  license_expiry                 DateTime?                @db.Date
+  brand                          String?
+  model                          String?
+  status                         String                   @default("active")
+  notes                          String?                  @db.Text
+  vehicle_first_reg_date         DateTime?                @db.Date
+  vehicle_chassis_no             String?
+  vehicle_electronic_comm        String?
+  vehicle_autotoll_collected     String?
+  vehicle_autotoll               String?
+  vehicle_inspection_notes       String?                  @db.Text
+  vehicle_insurance_agent        String?
+  vehicle_insurance_company      String?
+  vehicle_has_gps                Boolean?
+  vehicle_mud_tail_expiry        DateTime?                @db.Date
+  vehicle_original_plate         String?
+  vehicle_owner_name             String?
+  scrapped_at                    DateTime?
+  scrapped_by                    Int?
+  current_plate_id               Int?                     @unique
+  created_at                     DateTime                 @default(now())
+  updated_at                     DateTime                 @default(now()) @updatedAt
+  deleted_at                     DateTime? // 軯刪除時間時戳
+  deleted_by                     Int?
+  deletedBy                      User?                    @relation("VehicleDeletedBy", fields: [deleted_by], references: [id])
+  scrappedBy                     User?                    @relation("VehicleScrappedBy", fields: [scrapped_by], references: [id])
+  owner_company                  Company                  @relation(fields: [owner_company_id], references: [id])
+  current_plate                  VehiclePlate?            @relation("VehicleCurrentPlate", fields: [current_plate_id], references: [id])
+  plates_currently_using_vehicle VehiclePlate[]           @relation("VehiclePlateCurrentVehicle")
+  plate_history                  VehiclePlateHistory[]
+  transfers                      VehicleTransfer[]
+  plate_assignments              VehiclePlateAssignment[]
+  history_events                 VehicleHistoryEvent[]
+  work_logs                      WorkLog[]                @relation("work_log_vehicle")
+  expenses                       Expense[]                @relation("expense_vehicle")
 
   @@map("vehicles")
+}
+
+model VehiclePlate {
+  id                 Int      @id @default(autoincrement())
+  plate_number       String   @unique
+  owner_company_id   Int
+  status             String   @default("idle")
+  current_vehicle_id Int?     @unique
+  created_at         DateTime @default(now())
+  updated_at         DateTime @default(now()) @updatedAt
+
+  owner_company             Company                  @relation("vehicle_plate_owner", fields: [owner_company_id], references: [id])
+  current_vehicle           Vehicle?                 @relation("VehiclePlateCurrentVehicle", fields: [current_vehicle_id], references: [id])
+  vehicles_as_current_plate Vehicle[]                @relation("VehicleCurrentPlate")
+  transfers                 VehiclePlateTransfer[]
+  assignments               VehiclePlateAssignment[]
+
+  @@index([owner_company_id])
+  @@index([status])
+  @@map("vehicle_plates")
+}
+
+model VehiclePlateTransfer {
+  id              Int      @id @default(autoincrement())
+  plate_id        Int
+  from_company_id Int
+  to_company_id   Int
+  transfer_date   DateTime @db.Date
+  notes           String?  @db.Text
+  created_at      DateTime @default(now())
+
+  plate        VehiclePlate @relation(fields: [plate_id], references: [id], onDelete: Cascade)
+  from_company Company      @relation("vehicle_plate_transfer_from", fields: [from_company_id], references: [id])
+  to_company   Company      @relation("vehicle_plate_transfer_to", fields: [to_company_id], references: [id])
+
+  @@index([plate_id])
+  @@index([from_company_id])
+  @@index([to_company_id])
+  @@index([transfer_date])
+  @@map("vehicle_plate_transfers")
+}
+
+model VehiclePlateAssignment {
+  id            Int       @id @default(autoincrement())
+  plate_id      Int
+  vehicle_id    Int
+  assigned_date DateTime  @db.Date
+  removed_date  DateTime? @db.Date
+  notes         String?   @db.Text
+  created_at    DateTime  @default(now())
+
+  plate   VehiclePlate @relation(fields: [plate_id], references: [id], onDelete: Cascade)
+  vehicle Vehicle      @relation(fields: [vehicle_id], references: [id])
+
+  @@index([plate_id])
+  @@index([vehicle_id])
+  @@index([assigned_date])
+  @@index([removed_date])
+  @@map("vehicle_plate_assignments")
 }
 
 model VehiclePlateHistory {
@@ -404,7 +475,24 @@ model VehicleTransfer {
   from_company Company @relation("vehicle_transfer_from", fields: [from_company_id], references: [id])
   to_company   Company @relation("vehicle_transfer_to", fields: [to_company_id], references: [id])
 
+  @@index([vehicle_id])
+  @@index([transfer_date])
   @@map("vehicle_transfers")
+}
+
+model VehicleHistoryEvent {
+  id          Int      @id @default(autoincrement())
+  vehicle_id  Int
+  event_date  DateTime @db.Date
+  event_type  String
+  description String   @db.Text
+  created_at  DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  @@index([vehicle_id])
+  @@index([event_date])
+  @@map("vehicle_history_events")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -433,7 +521,7 @@ model Machinery {
   owner_company Company             @relation(fields: [owner_company_id], references: [id])
   transfers     MachineryTransfer[]
   expenses      Expense[]
-  work_logs     WorkLog[]            @relation("work_log_machinery")
+  work_logs     WorkLog[]           @relation("work_log_machinery")
 
   @@map("machinery")
 }
@@ -504,6 +592,7 @@ model Partner {
   acceptance_reports_client AcceptanceReport[]         @relation("acceptance_report_client")
   daily_reports_client      DailyReport[]              @relation("daily_report_client")
   subcon_payrolls           SubconPayroll[]            @relation("subcon_payroll_partner")
+
   @@map("partners")
 }
 
@@ -692,9 +781,9 @@ model Project {
   work_logs            WorkLog[]
   payment_applications PaymentApplication[]
   // Phase 4
-  payment_ins  PaymentIn[]
+  payment_ins          PaymentIn[]
   // Phase 5
-  invoices Invoice[]
+  invoices             Invoice[]
 
   // Supervisor module
   daily_reports      DailyReport[]
@@ -1064,59 +1153,59 @@ model FieldOption {
 // ══════════════════════════════════════════════════════════════
 
 model WorkLog {
-  id                     Int       @id @default(autoincrement())
-  publisher_id           Int?
-  status                 String    @default("editing")
-  service_type           String?
-  scheduled_date         DateTime? @db.Date
-  company_profile_id     Int?
-  company_id             Int?
-  client_id              Int?
-  quotation_id           Int?
-  contract_id            Int?
-  client_contract_no     String?
-  employee_id            Int?
-  machine_type           String?
-  equipment_number       String?
-  equipment_source       String?
-  tonnage                String?
-  day_night              String?
-  start_location         String?   @db.Text
-  start_time             String?
-  end_location           String?   @db.Text
-  end_time               String?
-  quantity               Decimal?  @db.Decimal(10, 2)
-  unit                   String?
-  ot_quantity            Decimal?  @db.Decimal(10, 2)
-  ot_unit                String?
-  is_mid_shift           Boolean   @default(false)
-  goods_quantity         Decimal?  @db.Decimal(10, 2)
-  matched_rate_card_id   Int?
-  matched_rate           Decimal?  @db.Decimal(12, 2)
-  matched_unit           String?
-  matched_ot_rate        Decimal?  @db.Decimal(12, 2)
-  price_match_status     String?
-  price_match_note       String?   @db.Text
-  receipt_no             String?
-  work_order_no          String?
-  is_confirmed           Boolean   @default(false)
-  is_paid                Boolean   @default(false)
-  unverified_client_name String? // 員工自行輸入的未確認客戶名
-  source                 String    @default("manual") // allowed: manual | whatsapp_clockin | employee_portal | attendance | report
-  is_location_new        Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
-  ai_parsed_data         Json? // AI 原始解析結果（WhatsApp 打卡）
+  id                      Int       @id @default(autoincrement())
+  publisher_id            Int?
+  status                  String    @default("editing")
+  service_type            String?
+  scheduled_date          DateTime? @db.Date
+  company_profile_id      Int?
+  company_id              Int?
+  client_id               Int?
+  quotation_id            Int?
+  contract_id             Int?
+  client_contract_no      String?
+  employee_id             Int?
+  machine_type            String?
+  equipment_number        String?
+  equipment_source        String?
+  tonnage                 String?
+  day_night               String?
+  start_location          String?   @db.Text
+  start_time              String?
+  end_location            String?   @db.Text
+  end_time                String?
+  quantity                Decimal?  @db.Decimal(10, 2)
+  unit                    String?
+  ot_quantity             Decimal?  @db.Decimal(10, 2)
+  ot_unit                 String?
+  is_mid_shift            Boolean   @default(false)
+  goods_quantity          Decimal?  @db.Decimal(10, 2)
+  matched_rate_card_id    Int?
+  matched_rate            Decimal?  @db.Decimal(12, 2)
+  matched_unit            String?
+  matched_ot_rate         Decimal?  @db.Decimal(12, 2)
+  price_match_status      String?
+  price_match_note        String?   @db.Text
+  receipt_no              String?
+  work_order_no           String?
+  is_confirmed            Boolean   @default(false)
+  is_paid                 Boolean   @default(false)
+  unverified_client_name  String? // 員工自行輸入的未確認客戶名
+  source                  String    @default("manual") // allowed: manual | whatsapp_clockin | employee_portal | attendance | report
+  is_location_new         Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
+  ai_parsed_data          Json? // AI 原始解析結果（WhatsApp 打卡）
   wl_whatsapp_reported_at DateTime? // WhatsApp 訊息實際報工時間（UTC 儲存）
-  work_content           String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
-  work_log_product_name  String?   @db.Text // 商品名稱
-  work_log_product_unit  String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
-  work_log_photo_urls    Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
-  work_log_signature_url String?   @db.Text // 員工簽名圖片 URL
-  remarks                String?   @db.Text
-  created_at             DateTime  @default(now())
-  updated_at             DateTime  @default(now()) @updatedAt
-  deleted_at             DateTime? // 軯刪除時間時戳
-  deleted_by             Int?
-  deletedBy              User?     @relation("WorkLogDeletedBy", fields: [deleted_by], references: [id])
+  work_content            String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
+  work_log_product_name   String?   @db.Text // 商品名稱
+  work_log_product_unit   String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
+  work_log_photo_urls     Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
+  work_log_signature_url  String?   @db.Text // 員工簽名圖片 URL
+  remarks                 String?   @db.Text
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @default(now()) @updatedAt
+  deleted_at              DateTime? // 軯刪除時間時戳
+  deleted_by              Int?
+  deletedBy               User?     @relation("WorkLogDeletedBy", fields: [deleted_by], references: [id])
 
   project_id               Int?
   work_log_fleet_driver_id Int?
@@ -1140,6 +1229,7 @@ model WorkLog {
   verification_confirmations VerificationConfirmation[]
   attendance_anomalies       AttendanceAnomaly[]
   subcon_payroll_items       SubconPayrollItem[]
+
   // ── Performance indexes ──
   @@index([scheduled_date])
   @@index([employee_id])
@@ -1208,18 +1298,18 @@ model Payroll {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now()) @updatedAt
 
-  employee          Employee                @relation(fields: [employee_id], references: [id])
-  company_profile   CompanyProfile?         @relation(fields: [company_profile_id], references: [id])
-  company           Company?                @relation(fields: [company_id], references: [id])
-  items             PayrollItem[]
-  payroll_work_logs PayrollWorkLog[]
-  adjustments       PayrollAdjustment[]
-  daily_allowances  PayrollDailyAllowance[]
-  payroll_payments  PayrollPayment[]
-  payment_outs      PaymentOut[]
-  payroll_expenses  PayrollExpense[]
-  settled_expenses  Expense[]               @relation("expense_settled_payroll")
-  payment_out_allocations PaymentOutAllocation[] @relation("PayrollPaymentOutAllocations")
+  employee                Employee                @relation(fields: [employee_id], references: [id])
+  company_profile         CompanyProfile?         @relation(fields: [company_profile_id], references: [id])
+  company                 Company?                @relation(fields: [company_id], references: [id])
+  items                   PayrollItem[]
+  payroll_work_logs       PayrollWorkLog[]
+  adjustments             PayrollAdjustment[]
+  daily_allowances        PayrollDailyAllowance[]
+  payroll_payments        PayrollPayment[]
+  payment_outs            PaymentOut[]
+  payroll_expenses        PayrollExpense[]
+  settled_expenses        Expense[]               @relation("expense_settled_payroll")
+  payment_out_allocations PaymentOutAllocation[]  @relation("PayrollPaymentOutAllocations")
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1332,16 +1422,16 @@ model PayrollDailyAllowance {
 }
 
 model PayrollPayment {
-  id                             Int       @id @default(autoincrement())
+  id                             Int      @id @default(autoincrement())
   payroll_payment_payroll_id     Int
-  payroll_payment_date           DateTime  @db.Date
-  payroll_payment_amount         Decimal   @db.Decimal(14, 2)
-  payroll_payment_reference_no   String?   @db.VarChar(100)
-  payroll_payment_bank_account   String?   @db.VarChar(100)
-  payroll_payment_remarks        String?   @db.Text
+  payroll_payment_date           DateTime @db.Date
+  payroll_payment_amount         Decimal  @db.Decimal(14, 2)
+  payroll_payment_reference_no   String?  @db.VarChar(100)
+  payroll_payment_bank_account   String?  @db.VarChar(100)
+  payroll_payment_remarks        String?  @db.Text
   payroll_payment_payment_out_id Int?
-  payroll_payment_created_at     DateTime  @default(now())
-  payroll_payment_updated_at     DateTime  @default(now()) @updatedAt
+  payroll_payment_created_at     DateTime @default(now())
+  payroll_payment_updated_at     DateTime @default(now()) @updatedAt
 
   payroll     Payroll     @relation(fields: [payroll_payment_payroll_id], references: [id], onDelete: Cascade)
   payment_out PaymentOut? @relation(fields: [payroll_payment_payment_out_id], references: [id], onDelete: SetNull)
@@ -1374,9 +1464,10 @@ model SubcontractorFleetDriver {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @default(now()) @updatedAt
 
-  subcontractor Partner   @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
-  work_logs     WorkLog[]
+  subcontractor        Partner             @relation("subcon_fleet_drivers", fields: [subcontractor_id], references: [id])
+  work_logs            WorkLog[]
   subcon_payroll_items SubconPayrollItem[]
+
   @@map("subcontractor_fleet_drivers")
 }
 
@@ -1468,36 +1559,36 @@ model ExpenseCategory {
 // ══════════════════════════════════════════════════════════════
 
 model Expense {
-  id                  Int       @id @default(autoincrement())
-  date                DateTime  @db.Date
-  company_id          Int?
-  supplier_name       String?
-  supplier_partner_id Int?
-  category_id         Int?
-  employee_id         Int?
-  item                String?
-  total_amount        Decimal   @default(0) @db.Decimal(12, 2)
-  is_paid             Boolean   @default(false)
-  payment_status      String    @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
-  payment_method      String?
-  payment_date        DateTime? @db.Date
-  payment_ref         String?
-  remarks             String?   @db.Text
-  source              String?   @default("MANUAL") // MANUAL | PURCHASE | PAYROLL | SUBCON | CONTRA
-  source_ref_id       Int? // 關聯到來源記錄的 ID
-  expense_payment_method String @default("SELF_PAID") @db.VarChar(20) // SELF_PAID | COMPANY_PAID
-  machine_code        String?
-  machinery_id        Int?
-  vehicle_id          Int?
-  client_id           Int?
-  contract_id         Int?
-  project_id          Int?
-  quotation_id        Int?
-  created_at          DateTime  @default(now())
-  updated_at          DateTime  @default(now()) @updatedAt
-  deleted_at          DateTime? // 軯刪除時間時戳
-  deleted_by          Int?
-  deletedBy           User?     @relation("ExpenseDeletedBy", fields: [deleted_by], references: [id])
+  id                     Int       @id @default(autoincrement())
+  date                   DateTime  @db.Date
+  company_id             Int?
+  supplier_name          String?
+  supplier_partner_id    Int?
+  category_id            Int?
+  employee_id            Int?
+  item                   String?
+  total_amount           Decimal   @default(0) @db.Decimal(12, 2)
+  is_paid                Boolean   @default(false)
+  payment_status         String    @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
+  payment_method         String?
+  payment_date           DateTime? @db.Date
+  payment_ref            String?
+  remarks                String?   @db.Text
+  source                 String?   @default("MANUAL") // MANUAL | PURCHASE | PAYROLL | SUBCON | CONTRA
+  source_ref_id          Int? // 關聯到來源記錄的 ID
+  expense_payment_method String    @default("SELF_PAID") @db.VarChar(20) // SELF_PAID | COMPANY_PAID
+  machine_code           String?
+  machinery_id           Int?
+  vehicle_id             Int?
+  client_id              Int?
+  contract_id            Int?
+  project_id             Int?
+  quotation_id           Int?
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @default(now()) @updatedAt
+  deleted_at             DateTime? // 軯刪除時間時戳
+  deleted_by             Int?
+  deletedBy              User?     @relation("ExpenseDeletedBy", fields: [deleted_by], references: [id])
 
   company     Company?            @relation(fields: [company_id], references: [id])
   supplier    Partner?            @relation("expense_supplier", fields: [supplier_partner_id], references: [id])
@@ -1513,7 +1604,7 @@ model Expense {
   attachments ExpenseAttachment[]
 
   // Phase 4
-  payment_outs PaymentOut[]
+  payment_outs            PaymentOut[]
   // Many-to-many payment allocations (new)
   payment_out_allocations PaymentOutAllocation[] @relation("ExpensePaymentOutAllocations")
 
@@ -1530,10 +1621,10 @@ model Expense {
 // ══════════════════════════════════════════════════════════════
 
 model PayrollExpense {
-  id                          Int      @id @default(autoincrement())
-  payroll_expense_payroll_id  Int
-  payroll_expense_expense_id  Int
-  payroll_expense_created_at  DateTime @default(now())
+  id                         Int      @id @default(autoincrement())
+  payroll_expense_payroll_id Int
+  payroll_expense_expense_id Int
+  payroll_expense_created_at DateTime @default(now())
 
   payroll Payroll @relation(fields: [payroll_expense_payroll_id], references: [id], onDelete: Cascade)
   expense Expense @relation(fields: [payroll_expense_expense_id], references: [id], onDelete: Cascade)
@@ -1716,27 +1807,27 @@ model PaymentMaterial {
 // ══════════════════════════════════════════════════════════════
 
 model PaymentIn {
-  id                   Int      @id @default(autoincrement())
-  date                 DateTime @db.Date
-  amount               Decimal  @db.Decimal(14, 2)
+  id                Int      @id @default(autoincrement())
+  date              DateTime @db.Date
+  amount            Decimal  @db.Decimal(14, 2)
   // NOTE: source_type / source_ref_id are deprecated (legacy polymorphic link).
   // For PaymentIn↔Invoice, new code should use the PaymentInAllocation many-to-many
   // table below. source_type='IPA'/'payment_certificate'/'retention_release'/'other'
   // still use the legacy polymorphic mechanism.
-  source_type          String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
-  source_ref_id        Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
-  project_id           Int?
-  contract_id          Int?
-  bank_account_id      Int?     // 關聯銀行帳戶
-  reference_no         String?  @db.VarChar(100) // 支票號碼 / 交易號碼
-  payment_in_status    String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
-  remarks              String?  @db.Text
-  created_at           DateTime @default(now())
-  updated_at           DateTime @default(now()) @updatedAt
+  source_type       String   @db.VarChar(30) // payment_certificate | invoice | retention_release | other
+  source_ref_id     Int? // 關聯 ID（PaymentApplication.id / RetentionRelease.id 等）
+  project_id        Int?
+  contract_id       Int?
+  bank_account_id   Int? // 關聯銀行帳戶
+  reference_no      String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  payment_in_status String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
+  remarks           String?  @db.Text
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now()) @updatedAt
 
-  project      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
-  contract     Contract?    @relation(fields: [contract_id], references: [id], onDelete: SetNull)
-  bank_account BankAccount? @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
+  project      Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  contract     Contract?             @relation(fields: [contract_id], references: [id], onDelete: SetNull)
+  bank_account BankAccount?          @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
   allocations  PaymentInAllocation[]
 
   @@map("payment_ins")
@@ -1774,12 +1865,12 @@ model PaymentOut {
   date                    DateTime @db.Date
   amount                  Decimal  @db.Decimal(14, 2)
   expense_id              Int?
-  payroll_id              Int?     // 關聯糧單（從糧單建立時設定）
-  subcon_payroll_id       Int?     // 關聯判頭糧單
-  company_id              Int?     // 所屬公司（自動從糧單或支出帶入）
+  payroll_id              Int? // 關聯糧單（從糧單建立時設定）
+  subcon_payroll_id       Int? // 關聯判頭糧單
+  company_id              Int? // 所屬公司（自動從糧單或支出帶入）
   payment_out_description String?  @db.VarChar(255) // 付款項目描述，例如「2026年4月 張三的糧單」
   payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
-  bank_account_id         Int?     // 關聯銀行帳戶
+  bank_account_id         Int? // 關聯銀行帳戶
   reference_no            String?  @db.VarChar(100) // 支票號碼 / 交易號碼
   remarks                 String?  @db.Text
   created_at              DateTime @default(now())
@@ -1787,13 +1878,14 @@ model PaymentOut {
 
   // NOTE: expense_id / payroll_id / subcon_payroll_id are deprecated (legacy direct links).
   // New code should use the PaymentOutAllocation many-to-many table below.
-  expense          Expense?          @relation(fields: [expense_id], references: [id], onDelete: SetNull)
-  payroll          Payroll?          @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
-  subcon_payroll   SubconPayroll?    @relation(fields: [subcon_payroll_id], references: [id], onDelete: SetNull)
-  company          Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
-  bank_account     BankAccount?      @relation("PaymentOutBankAccount", fields: [bank_account_id], references: [id], onDelete: SetNull)
+  expense          Expense?               @relation(fields: [expense_id], references: [id], onDelete: SetNull)
+  payroll          Payroll?               @relation(fields: [payroll_id], references: [id], onDelete: SetNull)
+  subcon_payroll   SubconPayroll?         @relation(fields: [subcon_payroll_id], references: [id], onDelete: SetNull)
+  company          Company?               @relation(fields: [company_id], references: [id], onDelete: SetNull)
+  bank_account     BankAccount?           @relation("PaymentOutBankAccount", fields: [bank_account_id], references: [id], onDelete: SetNull)
   payroll_payments PayrollPayment[]
   allocations      PaymentOutAllocation[]
+
   @@map("payment_outs")
 }
 
@@ -1859,11 +1951,11 @@ model Invoice {
   deleted_by         Int?
   deletedBy          User?     @relation("InvoiceDeletedBy", fields: [deleted_by], references: [id])
 
-  client    Partner?      @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
-  project   Project?      @relation(fields: [project_id], references: [id], onDelete: SetNull)
-  quotation Quotation?    @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
-  company   Company       @relation(fields: [company_id], references: [id])
-  items     InvoiceItem[]
+  client                 Partner?              @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
+  project                Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  quotation              Quotation?            @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
+  company                Company               @relation(fields: [company_id], references: [id])
+  items                  InvoiceItem[]
   payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
 
   // ── Performance indexes ──
@@ -1955,7 +2047,7 @@ model BankAccount {
   bank_name    String   @db.VarChar(200) // 銀行名稱
   account_no   String   @db.VarChar(100) // 帳號
   currency     String   @default("HKD") @db.VarChar(10) // 幣種
-  company_id   Int?     // 所屬公司
+  company_id   Int? // 所屬公司
   is_active    Boolean  @default(true)
   remarks      String?  @db.Text
   created_at   DateTime @default(now())
@@ -2211,10 +2303,10 @@ model VerificationWaMessage {
   orders   VerificationWaOrder[]
   mod_logs VerificationWaModLog[]
 
+  @@unique([wa_msg_remote_id])
   @@index([wa_msg_group_id])
   @@index([wa_msg_timestamp])
   @@index([wa_msg_ai_classified])
-  @@unique([wa_msg_remote_id])
   @@map("verification_wa_messages")
 }
 
@@ -2589,23 +2681,22 @@ model SystemSetting {
   @@map("system_settings")
 }
 
-
 // ══════════════════════════════════════════════════════════════
 // Subcon Payroll (判頭糧單)
 // ══════════════════════════════════════════════════════════════
 model SubconPayroll {
-  id                                Int       @id @default(autoincrement()) @map("subcon_payroll_id")
-  subcon_payroll_subcontractor_id   Int
-  subcon_payroll_month              DateTime  @db.Date
-  subcon_payroll_total_amount       Decimal   @default(0) @db.Decimal(14, 2)
-  subcon_payroll_status             String    @default("draft") @db.VarChar(30) // draft | confirmed | paid | partially_paid | cancelled
-  subcon_payroll_confirmed_at       DateTime?
-  subcon_payroll_created_at         DateTime  @default(now())
-  subcon_payroll_updated_at         DateTime  @default(now()) @updatedAt
+  id                              Int       @id @default(autoincrement()) @map("subcon_payroll_id")
+  subcon_payroll_subcontractor_id Int
+  subcon_payroll_month            DateTime  @db.Date
+  subcon_payroll_total_amount     Decimal   @default(0) @db.Decimal(14, 2)
+  subcon_payroll_status           String    @default("draft") @db.VarChar(30) // draft | confirmed | paid | partially_paid | cancelled
+  subcon_payroll_confirmed_at     DateTime?
+  subcon_payroll_created_at       DateTime  @default(now())
+  subcon_payroll_updated_at       DateTime  @default(now()) @updatedAt
 
-  subcontractor Partner            @relation("subcon_payroll_partner", fields: [subcon_payroll_subcontractor_id], references: [id], onDelete: Restrict)
-  items         SubconPayrollItem[]
-  payment_outs  PaymentOut[]
+  subcontractor           Partner                @relation("subcon_payroll_partner", fields: [subcon_payroll_subcontractor_id], references: [id], onDelete: Restrict)
+  items                   SubconPayrollItem[]
+  payment_outs            PaymentOut[]
   payment_out_allocations PaymentOutAllocation[] @relation("SubconPayrollPaymentOutAllocations")
 
   @@index([subcon_payroll_subcontractor_id])
@@ -2616,22 +2707,22 @@ model SubconPayroll {
 }
 
 model SubconPayrollItem {
-  id                                  Int       @id @default(autoincrement()) @map("subcon_payroll_item_id")
-  subcon_payroll_item_payroll_id      Int
-  subcon_payroll_item_driver_id       Int?
-  subcon_payroll_item_driver_name     String    @db.VarChar(100)
-  subcon_payroll_item_work_date       DateTime  @db.Date
-  subcon_payroll_item_work_content    String?   @db.Text
-  subcon_payroll_item_quantity        Decimal   @default(1) @db.Decimal(10, 2)
-  subcon_payroll_item_unit            String    @db.VarChar(20)
-  subcon_payroll_item_unit_price      Decimal   @default(0) @db.Decimal(12, 2)
-  subcon_payroll_item_subtotal        Decimal   @default(0) @db.Decimal(12, 2)
-  subcon_payroll_item_work_log_id     Int?
-  subcon_payroll_item_created_at      DateTime  @default(now())
+  id                               Int      @id @default(autoincrement()) @map("subcon_payroll_item_id")
+  subcon_payroll_item_payroll_id   Int
+  subcon_payroll_item_driver_id    Int?
+  subcon_payroll_item_driver_name  String   @db.VarChar(100)
+  subcon_payroll_item_work_date    DateTime @db.Date
+  subcon_payroll_item_work_content String?  @db.Text
+  subcon_payroll_item_quantity     Decimal  @default(1) @db.Decimal(10, 2)
+  subcon_payroll_item_unit         String   @db.VarChar(20)
+  subcon_payroll_item_unit_price   Decimal  @default(0) @db.Decimal(12, 2)
+  subcon_payroll_item_subtotal     Decimal  @default(0) @db.Decimal(12, 2)
+  subcon_payroll_item_work_log_id  Int?
+  subcon_payroll_item_created_at   DateTime @default(now())
 
-  payroll   SubconPayroll            @relation(fields: [subcon_payroll_item_payroll_id], references: [id], onDelete: Cascade)
-  driver    SubcontractorFleetDriver? @relation(fields: [subcon_payroll_item_driver_id], references: [id], onDelete: SetNull)
-  work_log  WorkLog?                 @relation(fields: [subcon_payroll_item_work_log_id], references: [id], onDelete: SetNull)
+  payroll  SubconPayroll             @relation(fields: [subcon_payroll_item_payroll_id], references: [id], onDelete: Cascade)
+  driver   SubcontractorFleetDriver? @relation(fields: [subcon_payroll_item_driver_id], references: [id], onDelete: SetNull)
+  work_log WorkLog?                  @relation(fields: [subcon_payroll_item_work_log_id], references: [id], onDelete: SetNull)
 
   @@index([subcon_payroll_item_payroll_id])
   @@index([subcon_payroll_item_work_log_id])
@@ -2644,12 +2735,12 @@ model SubconPayrollItem {
 // ══════════════════════════════════════════════════════════════
 
 model EquipmentProfitSetting {
-  id                                    Int      @id @default(autoincrement())
-  equipment_profit_equipment_type       String   @db.VarChar(20) // 'machinery' | 'vehicle'
-  equipment_profit_equipment_id         Int
+  id                                     Int      @id @default(autoincrement())
+  equipment_profit_equipment_type        String   @db.VarChar(20) // 'machinery' | 'vehicle'
+  equipment_profit_equipment_id          Int
   equipment_profit_commission_percentage Decimal  @default(100) @db.Decimal(5, 2)
-  created_at                            DateTime @default(now())
-  updated_at                            DateTime @default(now()) @updatedAt
+  created_at                             DateTime @default(now())
+  updated_at                             DateTime @default(now()) @updatedAt
 
   @@unique([equipment_profit_equipment_type, equipment_profit_equipment_id])
   @@map("equipment_profit_settings")
@@ -2659,15 +2750,16 @@ model EquipmentProfitSetting {
 // Web Push Subscriptions (WhatsApp Console 推送通知訂閱)
 // ══════════════════════════════════════════════════════════════
 model WebPushSubscription {
-  id          Int      @id @default(autoincrement())
-  user_id     Int
-  endpoint    String   @db.Text
-  p256dh      String   @db.Text
-  auth        String   @db.VarChar(255)
-  user_agent  String?  @db.VarChar(500)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @default(now()) @updatedAt
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  endpoint   String   @db.Text
+  p256dh     String   @db.Text
+  auth       String   @db.VarChar(255)
+  user_agent String?  @db.VarChar(500)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
   @@unique([user_id, endpoint])
   @@index([user_id])
   @@map("web_push_subscriptions")
@@ -2677,17 +2769,17 @@ model WebPushSubscription {
 // Error Logs (錯誤日誌)
 // ══════════════════════════════════════════════════════════════
 model ErrorLog {
-  id                       Int      @id @default(autoincrement())
-  error_log_timestamp      DateTime @default(now()) @db.Timestamptz
-  error_log_method         String   @db.VarChar(10)  // GET, POST, PUT, DELETE, PATCH
-  error_log_path           String   @db.VarChar(500) // API 路徑
-  error_log_status_code    Int                        // HTTP status code
-  error_log_message        String   @db.Text          // 錯誤訊息
-  error_log_stack          String?  @db.Text          // Stack trace
-  error_log_user_id        Int?                       // 請求的用戶 ID（如果有登入）
-  error_log_username       String?  @db.VarChar(100)  // 用戶名
-  error_log_request_body   Json?    @db.JsonB         // 請求 body（脫敏後）
-  error_log_notified       Boolean  @default(false)   // 是否已發送 WhatsApp 通知
+  id                     Int      @id @default(autoincrement())
+  error_log_timestamp    DateTime @default(now()) @db.Timestamptz
+  error_log_method       String   @db.VarChar(10) // GET, POST, PUT, DELETE, PATCH
+  error_log_path         String   @db.VarChar(500) // API 路徑
+  error_log_status_code  Int // HTTP status code
+  error_log_message      String   @db.Text // 錯誤訊息
+  error_log_stack        String?  @db.Text // Stack trace
+  error_log_user_id      Int? // 請求的用戶 ID（如果有登入）
+  error_log_username     String?  @db.VarChar(100) // 用戶名
+  error_log_request_body Json?    @db.JsonB // 請求 body（脫敏後）
+  error_log_notified     Boolean  @default(false) // 是否已發送 WhatsApp 通知
 
   @@index([error_log_timestamp])
   @@index([error_log_status_code])
@@ -2696,22 +2788,22 @@ model ErrorLog {
 }
 
 model IssueReport {
-  id                            Int      @id @default(autoincrement())
-  issue_report_reporter_id      Int?
-  issue_report_reporter_name    String?  @db.VarChar(100)
-  issue_report_reporter_role    String?  @db.VarChar(20)
-  issue_report_description      String   @db.Text
-  issue_report_url              String?  @db.VarChar(500)
-  issue_report_user_agent       String?  @db.VarChar(500)
-  issue_report_frontend_errors  Json?    @db.JsonB
-  issue_report_backend_errors   Json?    @db.JsonB
-  issue_report_screenshots      Json?    @default("[]") @db.JsonB
-  issue_report_ai_analysis      String?  @db.Text
-  issue_report_ai_status        String   @default("pending") @db.VarChar(20)
-  issue_report_ai_error         String?  @db.Text
-  issue_report_status           String   @default("open") @db.VarChar(20)
-  issue_report_created_at       DateTime @default(now()) @db.Timestamptz
-  issue_report_updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz
+  id                           Int      @id @default(autoincrement())
+  issue_report_reporter_id     Int?
+  issue_report_reporter_name   String?  @db.VarChar(100)
+  issue_report_reporter_role   String?  @db.VarChar(20)
+  issue_report_description     String   @db.Text
+  issue_report_url             String?  @db.VarChar(500)
+  issue_report_user_agent      String?  @db.VarChar(500)
+  issue_report_frontend_errors Json?    @db.JsonB
+  issue_report_backend_errors  Json?    @db.JsonB
+  issue_report_screenshots     Json?    @default("[]") @db.JsonB
+  issue_report_ai_analysis     String?  @db.Text
+  issue_report_ai_status       String   @default("pending") @db.VarChar(20)
+  issue_report_ai_error        String?  @db.Text
+  issue_report_status          String   @default("open") @db.VarChar(20)
+  issue_report_created_at      DateTime @default(now()) @db.Timestamptz
+  issue_report_updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz
 
   @@index([issue_report_reporter_id])
   @@index([issue_report_created_at])
