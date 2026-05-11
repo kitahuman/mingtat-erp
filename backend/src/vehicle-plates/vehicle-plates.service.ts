@@ -3,34 +3,161 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto } from './dto/vehicle-plate.dto';
 
+interface VehiclePlateListQuery {
+  page?: number | string;
+  limit?: number | string;
+  status?: string;
+  search?: string;
+  owner_company_id?: number | string;
+  sortBy?: string;
+  sortOrder?: string;
+  [key: string]: string | number | undefined;
+}
+
+type ColumnFilters = Record<string, string[]>;
+
 @Injectable()
 export class VehiclePlatesService {
   constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
 
-  async findAll(query: { status?: string; search?: string; owner_company_id?: number }) {
+  private parseColumnFilters(query: VehiclePlateListQuery): ColumnFilters {
+    const filters: ColumnFilters = {};
+    for (const key of Object.keys(query)) {
+      if (!key.startsWith('filter_') || !query[key]) continue;
+      const field = key.replace('filter_', '');
+      const values = String(query[key])
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (values.length > 0) filters[field] = values;
+    }
+    return filters;
+  }
+
+  private formatDisplayDate(date: Date | string | null | undefined): string {
+    if (!date) return '-';
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) return '-';
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private getVehicleLabel(vehicle: any): string {
+    if (!vehicle) return '-';
+    return `${vehicle.plate_number || ''} ${vehicle.brand || ''} ${vehicle.model || ''}`.trim() || '-';
+  }
+
+  private renderCompany(company: any): string {
+    if (!company) return '-';
+    return company.internal_prefix ? `${company.internal_prefix} - ${company.name}` : company.name || '-';
+  }
+
+  private getFilterDisplayValue(row: any, field: string): string {
+    if (field === 'owner_company') return row.owner_company_label || '-';
+    if (field === 'vehicle_label') return row.vehicle_label || '-';
+    if (field === 'owned_date' || field === 'activity_date' || field === 'plate_expiry_date') return this.formatDisplayDate(row[field]);
+    if (field === 'status') return row.status === 'in_use' ? '使用中' : row.status === 'idle' ? '閒置' : row.status || '-';
+    const value = row[field];
+    return value == null || value === '' ? '-' : String(value);
+  }
+
+  private async getPlateRows(query: VehiclePlateListQuery, excludeFilterColumn?: string) {
     const where: any = {};
     if (query.status) where.status = query.status;
     if (query.owner_company_id) where.owner_company_id = Number(query.owner_company_id);
     if (query.search) where.plate_number = { contains: query.search, mode: 'insensitive' };
 
-    const plates = await this.prisma.vehiclePlate.findMany({
+    const records = await this.prisma.vehiclePlate.findMany({
       where,
       include: {
         owner_company: true,
         current_vehicle: { include: { owner_company: true } },
+        transfers: {
+          include: { from_company: true, to_company: true },
+          orderBy: [{ transfer_date: 'desc' }, { created_at: 'desc' }],
+          take: 1,
+        },
         assignments: {
           include: { vehicle: { include: { owner_company: true } } },
-          orderBy: [{ removed_date: 'desc' }, { assigned_date: 'desc' }],
+          orderBy: [{ removed_date: 'desc' }, { assigned_date: 'desc' }, { created_at: 'desc' }],
           take: 1,
         },
       },
-      orderBy: [{ status: 'asc' }, { plate_number: 'asc' }],
+      orderBy: { plate_number: 'asc' },
     });
 
-    return plates.map((plate) => ({
-      ...plate,
-      latest_assignment: plate.assignments?.[0] || null,
+    let rows = records.map((plate) => {
+      const latest_assignment = plate.assignments?.[0] || null;
+      const latest_transfer = plate.transfers?.[0] || null;
+      const vehicle = plate.status === 'in_use' ? plate.current_vehicle : latest_assignment?.vehicle;
+      const owned_date = latest_transfer?.transfer_date || plate.created_at;
+      const activity_date = plate.status === 'in_use' ? latest_assignment?.assigned_date : latest_assignment?.removed_date;
+
+      return {
+        ...plate,
+        latest_assignment,
+        latest_transfer,
+        owned_date,
+        activity_date,
+        owner_company_label: this.renderCompany(plate.owner_company),
+        vehicle_label: this.getVehicleLabel(vehicle),
+      };
+    });
+
+    const columnFilters = this.parseColumnFilters(query);
+    if (excludeFilterColumn) delete columnFilters[excludeFilterColumn];
+
+    rows = rows.filter((row) => Object.entries(columnFilters).every(([field, values]) => {
+      if (values.includes('__NO_MATCH__')) return false;
+      const displayValue = this.getFilterDisplayValue(row, field);
+      return values.includes(displayValue);
     }));
+
+    return rows;
+  }
+
+  private compareRows(a: any, b: any, sortBy: string, direction: number): number {
+    const dateFields = ['owned_date', 'activity_date', 'plate_expiry_date', 'created_at', 'updated_at'];
+    if (dateFields.includes(sortBy)) {
+      const aTime = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
+      const bTime = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+      return (aTime - bTime) * direction;
+    }
+
+    const aValue = this.getFilterDisplayValue(a, sortBy);
+    const bValue = this.getFilterDisplayValue(b, sortBy);
+    return aValue.localeCompare(bValue, 'zh-Hant', { numeric: true }) * direction;
+  }
+
+  async findAll(query: VehiclePlateListQuery) {
+    const hasPagination = query.page !== undefined || query.limit !== undefined;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const sortBy = query.sortBy || 'plate_number';
+    const direction = query.sortOrder?.toUpperCase() === 'DESC' ? -1 : 1;
+
+    const rows = await this.getPlateRows(query);
+    rows.sort((a, b) => this.compareRows(a, b, sortBy, direction));
+
+    if (!hasPagination) return rows;
+
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    return {
+      data: rows.slice(start, start + limit),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getFilterOptions(column: string, query: VehiclePlateListQuery): Promise<string[]> {
+    const rows = await this.getPlateRows(query, column);
+    const values = rows.map((row) => this.getFilterDisplayValue(row, column));
+    return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true }));
   }
 
   async findOne(id: number) {
@@ -50,7 +177,12 @@ export class VehiclePlatesService {
       },
     });
     if (!plate) throw new NotFoundException('車牌不存在');
-    return plate;
+    const latest_transfer = plate.transfers?.[0] || null;
+    return {
+      ...plate,
+      owned_date: latest_transfer?.transfer_date || plate.created_at,
+      owner_company_label: this.renderCompany(plate.owner_company),
+    };
   }
 
   async assign(id: number, dto: AssignVehiclePlateDto, userId?: number, ipAddress?: string) {

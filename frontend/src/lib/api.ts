@@ -155,6 +155,7 @@ export const vehiclesApi = {
 
 export const vehiclePlatesApi = {
   list: (params?: any) => api.get('/vehicle-plates', { params }),
+  filterOptions: (column: string, params?: any) => api.get(`/vehicle-plates/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/vehicle-plates/${id}`),
   assign: (id: number, data: any) => api.post(`/vehicle-plates/${id}/assign`, data),
   transfer: (id: number, data: any) => api.post(`/vehicle-plates/${id}/transfer`, data),

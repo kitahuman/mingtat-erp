@@ -7,6 +7,7 @@ import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
+import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
@@ -43,6 +44,9 @@ export default function VehiclesPage() {
   const [plateTransferForm, setPlateTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
+  const [plateSortBy, setPlateSortBy] = useState('plate_number');
+  const [plateSortOrder, setPlateSortOrder] = useState('ASC');
+  const [plateColumnFilters, setPlateColumnFilters] = useState<Record<string, Set<string>>>({});
   const [form, setForm] = useState<any>({
     plate_mode: 'new', existing_plate_id: '', plate_number: '', machine_type: '', tonnage: '', owner_company_id: '',
     brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: ''
@@ -70,13 +74,54 @@ export default function VehiclesPage() {
     }).catch(() => {});
   }, [loadReferenceData]);
 
+  const buildPlateColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, values]) => {
+      params[`filter_${key}`] = values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
+    });
+    return params;
+  }, []);
+
+  const buildPlateListParams = useCallback((overrides?: { page?: number; limit?: number }) => ({
+    page: overrides?.page ?? page,
+    limit: overrides?.limit ?? 20,
+    status: plateTab,
+    search: search || undefined,
+    owner_company_id: companyFilter || undefined,
+    sortBy: plateSortBy,
+    sortOrder: plateSortOrder,
+    ...buildPlateColumnFilterParams(plateColumnFilters),
+  }), [page, plateTab, search, companyFilter, plateSortBy, plateSortOrder, plateColumnFilters, buildPlateColumnFilterParams]);
+
+  const handlePlateSort = (field: string, order: string) => {
+    setPlateSortBy(field);
+    setPlateSortOrder(order);
+    setPage(1);
+  };
+
+  const handlePlateColumnFilterChange = (filters: Record<string, Set<string>>) => {
+    setPlateColumnFilters(filters);
+    setPage(1);
+  };
+
+  const handleFetchPlateFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
+    const res = await vehiclePlatesApi.filterOptions(columnKey, buildPlateListParams({ page: 1, limit: 20 }));
+    return Array.isArray(res.data) ? res.data : [];
+  }, [buildPlateListParams]);
+
+  const handlePlateExportFetchAll = useCallback(async () => {
+    if (total === 0) return [];
+    const res = await vehiclePlatesApi.list(buildPlateListParams({ page: 1, limit: total }));
+    return res.data.data || [];
+  }, [buildPlateListParams, total]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       if (activeTab === 'plates') {
-        const res = await vehiclePlatesApi.list({ status: plateTab, search: search || undefined, owner_company_id: companyFilter || undefined });
-        setPlates(res.data || []);
-        setTotal((res.data || []).length);
+        const res = await vehiclePlatesApi.list(buildPlateListParams());
+        setPlates(res.data.data || []);
+        setTotal(res.data.total || 0);
       } else if (activeTab === 'scrapped') {
         const res = await vehiclesApi.list({
           page, limit: 20, search,
@@ -100,7 +145,7 @@ export default function VehiclesPage() {
       }
     } catch {}
     setLoading(false);
-  }, [activeTab, plateTab, page, search, typeFilter, companyFilter, sortBy, sortOrder]);
+  }, [activeTab, plateTab, page, search, typeFilter, companyFilter, sortBy, sortOrder, buildPlateListParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -226,6 +271,72 @@ export default function VehiclesPage() {
   const { columnConfigs, columnWidths, visibleColumns, handleColumnConfigChange, handleReset, handleColumnResize } = useColumnConfig('vehicles', columns);
 
   const renderCompany = (company: any) => company?.internal_prefix ? `${company.internal_prefix} - ${company.name}` : company?.name || '-';
+  const renderDate = (value: string) => fmtDate(value);
+
+  const plateColumns = [
+    {
+      key: 'plate_number',
+      label: '車牌號碼',
+      sortable: true,
+      render: (value: string) => <span className="font-mono font-bold text-primary-600">{value}</span>,
+      filterRender: (value: string) => value || '-',
+      exportRender: (value: string) => value || '',
+    },
+    {
+      key: 'owner_company',
+      label: '持有公司',
+      sortable: true,
+      render: (_: any, row: any) => renderCompany(row.owner_company),
+      filterRender: (_: any, row: any) => renderCompany(row.owner_company),
+      exportRender: (_: any, row: any) => renderCompany(row.owner_company),
+    },
+    {
+      key: 'vehicle_label',
+      label: plateTab === 'in_use' ? '目前車輛' : '上一輛車',
+      sortable: true,
+      render: (value: string) => value || '-',
+      filterRender: (value: string) => value || '-',
+      exportRender: (value: string) => value || '',
+    },
+    {
+      key: 'owned_date',
+      label: '擁有日期',
+      sortable: true,
+      render: renderDate,
+      filterRender: renderDate,
+      exportRender: renderDate,
+    },
+    {
+      key: 'activity_date',
+      label: plateTab === 'in_use' ? '套牌日期' : '閒置日期',
+      sortable: true,
+      render: renderDate,
+      filterRender: renderDate,
+      exportRender: renderDate,
+    },
+    ...(plateTab === 'idle' ? [{
+      key: 'plate_expiry_date',
+      label: '車牌到期日',
+      sortable: true,
+      render: renderDate,
+      filterRender: renderDate,
+      exportRender: renderDate,
+    }] : []),
+    {
+      key: 'actions',
+      label: '操作',
+      sortable: false,
+      filterable: false,
+      render: (_: any, row: any) => (
+        <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => openAssignModal(row)} className="text-primary-600 hover:underline">套牌</button>
+          <button onClick={() => openTransferPlateModal(row)} className="text-primary-600 hover:underline">過戶</button>
+        </div>
+      ),
+      className: 'text-right',
+      exportRender: () => '',
+    },
+  ];
 
   return (
     <div>
@@ -290,8 +401,43 @@ export default function VehiclesPage() {
 
       {activeTab === 'plates' && (
         <div className="card">
-          <div className="flex items-center justify-between mb-4"><div className="flex gap-2"><button onClick={() => setPlateTab('in_use')} className={`px-4 py-2 rounded ${plateTab === 'in_use' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}>使用中</button><button onClick={() => setPlateTab('idle')} className={`px-4 py-2 rounded ${plateTab === 'idle' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}>閒置</button></div><div className="flex gap-2"><input className="input-field" placeholder="搜尋車牌..." value={search} onChange={e => setSearch(e.target.value)} /><select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} className="input-field w-auto"><option value="">全部公司</option>{companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix || c.name}</option>)}</select></div></div>
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">車牌號碼</th><th className="px-3 py-2 text-left">持有公司</th><th className="px-3 py-2 text-left">{plateTab === 'in_use' ? '目前車輛' : '上一輛車'}</th><th className="px-3 py-2 text-left">{plateTab === 'in_use' ? '套牌日期' : '閒置日期'}</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{plates.map(p => <tr key={p.id} className="border-b hover:bg-gray-50"><td className="px-3 py-2 font-mono font-bold cursor-pointer text-primary-600" onClick={() => router.push(`/vehicles/plates/${p.id}`)}>{p.plate_number}</td><td className="px-3 py-2">{renderCompany(p.owner_company)}</td><td className="px-3 py-2">{plateTab === 'in_use' ? (p.current_vehicle ? `${p.current_vehicle.plate_number} ${p.current_vehicle.brand || ''} ${p.current_vehicle.model || ''}` : '-') : (p.latest_assignment?.vehicle ? `${p.latest_assignment.vehicle.plate_number} ${p.latest_assignment.vehicle.brand || ''} ${p.latest_assignment.vehicle.model || ''}` : '-')}</td><td className="px-3 py-2">{plateTab === 'in_use' ? fmtDate(p.latest_assignment?.assigned_date) : fmtDate(p.latest_assignment?.removed_date)}</td><td className="px-3 py-2 text-right space-x-3"><button onClick={() => openAssignModal(p)} className="text-primary-600 hover:underline">套牌</button><button onClick={() => openTransferPlateModal(p)} className="text-primary-600 hover:underline">過戶</button></td></tr>)}</tbody></table>{!loading && plates.length === 0 && <p className="text-gray-500 text-sm py-6 text-center">暫無車牌紀錄</p>}</div>
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => { setPlateTab('in_use'); setPlateColumnFilters({}); setPage(1); }}
+              className={`px-4 py-2 rounded ${plateTab === 'in_use' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >使用中</button>
+            <button
+              onClick={() => { setPlateTab('idle'); setPlateColumnFilters({}); setPage(1); }}
+              className={`px-4 py-2 rounded ${plateTab === 'idle' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >閒置</button>
+          </div>
+          <DataTable
+            exportFilename={plateTab === 'in_use' ? '使用中車牌列表' : '閒置車牌列表'}
+            columns={plateColumns as any}
+            data={plates}
+            total={total}
+            page={page}
+            limit={20}
+            onPageChange={setPage}
+            onSearch={(s) => { setSearch(s); setPage(1); }}
+            searchPlaceholder="搜尋車牌..."
+            onRowClick={(row) => router.push(`/vehicles/plates/${row.id}`)}
+            loading={loading}
+            sortBy={plateSortBy}
+            sortOrder={plateSortOrder}
+            onSort={handlePlateSort}
+            serverSideFilter={true}
+            columnFilters={plateColumnFilters}
+            onColumnFilterChange={handlePlateColumnFilterChange}
+            onFetchFilterOptions={handleFetchPlateFilterOptions}
+            onExportFetchAll={handlePlateExportFetchAll}
+            filters={
+              <select value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+                <option value="">全部公司</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix || c.name}</option>)}
+              </select>
+            }
+          />
         </div>
       )}
 
