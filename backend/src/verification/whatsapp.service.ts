@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { Prisma, VerificationWaOrder, VerificationWaOrderItem } from '@prisma/client';
 import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
 import { NicknameMatchService } from './nickname-match.service';
@@ -42,6 +42,10 @@ interface ParsedOrderItem {
   remarks?: string;
 }
 
+type OrderUpdateMode = 'supplement' | 'partial_update' | 'full_replace' | 'new_order' | 'unknown';
+
+type OrderMergeStrategy = 'new_order' | 'merge_add' | 'merge_update' | 'replace_full' | 'new_independent';
+
 interface AiClassification {
   message_type: 'order' | 'modification' | 'chat';
   confidence: number;
@@ -50,6 +54,8 @@ interface AiClassification {
   order_date_end?: string; // YYYY-MM-DD (日期範圍結束，如 14-15/4/2026 → 2026-04-15)
   shift?: 'day' | 'night'; // day (default) or night
   is_update: boolean;
+  update_mode?: OrderUpdateMode;
+  update_reason?: string | null;
   order_status: 'tentative' | 'confirmed';
   items: ParsedOrderItem[];
   leave_list: string[];
@@ -71,6 +77,62 @@ interface AiModification {
   new_items?: ParsedOrderItem[];
   description: string;
   confidence: number;
+}
+
+type WaOrderWithItems = VerificationWaOrder & { items: VerificationWaOrderItem[] };
+
+interface OrderItemSnapshot {
+  source_item_id?: number;
+  seq: number;
+  order_type: string | null;
+  contract_no: string | null;
+  customer: string | null;
+  work_description: string | null;
+  location: string | null;
+  driver_nickname: string | null;
+  vehicle_no: string | null;
+  machine_code: string | null;
+  contact_person: string | null;
+  slip_write_as: string | null;
+  is_suspended: boolean;
+  product_name: string | null;
+  product_unit: string | null;
+  goods_quantity: number | null;
+  remarks: string | null;
+  mod_status: string | null;
+  mod_prev_data?: Prisma.JsonValue;
+}
+
+interface ItemMatchScore {
+  score: number;
+  reasons: string[];
+}
+
+interface ItemMatchResult {
+  new_index: number;
+  old_index: number | null;
+  old_item_id: number | null;
+  score: number;
+  matched: boolean;
+  reasons: string[];
+}
+
+interface OrderMatchStats {
+  old_item_count: number;
+  new_item_count: number;
+  matched_item_count: number;
+  count_ratio: number;
+  overlap_ratio: number;
+  matches: ItemMatchResult[];
+}
+
+interface OrderUpdateDecision {
+  strategy: OrderMergeStrategy;
+  previous_order: WaOrderWithItems | null;
+  primary_type: string | null;
+  reason: string;
+  stats: OrderMatchStats;
+  merged_items: OrderItemSnapshot[];
 }
 
 // ── Daily Summary 介面 ──────────────────────────────────────
@@ -487,6 +549,485 @@ export class WhatsappService {
     });
   }
 
+
+  // ══════════════════════════════════════════════════════════════
+  // WhatsApp Order merge/replace helpers
+  // ══════════════════════════════════════════════════════════════
+  private normalizeUpdateMode(mode?: OrderUpdateMode | string | null): OrderUpdateMode {
+    const allowedModes: OrderUpdateMode[] = ['supplement', 'partial_update', 'full_replace', 'new_order', 'unknown'];
+    return allowedModes.includes(mode as OrderUpdateMode) ? mode as OrderUpdateMode : 'unknown';
+  }
+
+  private getPrimaryTypeFromParsedItems(items: ParsedOrderItem[]): string | null {
+    const typeCounts: Record<string, number> = {};
+    for (const item of items) {
+      const type = item.order_type || 'unknown';
+      if (type === 'leave' || type === 'notice') continue;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    }
+    return this.pickMostCommonType(typeCounts);
+  }
+
+  private getPrimaryTypeFromDbItems(items: VerificationWaOrderItem[]): string | null {
+    const typeCounts: Record<string, number> = {};
+    for (const item of items) {
+      const type = item.wa_item_order_type || 'unknown';
+      if (type === 'leave' || type === 'notice') continue;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    }
+    return this.pickMostCommonType(typeCounts);
+  }
+
+  private pickMostCommonType(typeCounts: Record<string, number>): string | null {
+    let primaryType: string | null = null;
+    let primaryCount = 0;
+    for (const [type, count] of Object.entries(typeCounts)) {
+      if (count > primaryCount) {
+        primaryType = type;
+        primaryCount = count;
+      }
+    }
+    return primaryType;
+  }
+
+  private normalizeComparableText(value: string | null | undefined): string {
+    return (value || '')
+      .toLowerCase()
+      .replace(/[\s　\-_/\\()（）\[\]【】,，.。:：;；~～*＊]/g, '')
+      .trim();
+  }
+
+  private textSimilarityScore(left: string | null | undefined, right: string | null | undefined): number {
+    const normalizedLeft = this.normalizeComparableText(left);
+    const normalizedRight = this.normalizeComparableText(right);
+    if (!normalizedLeft || !normalizedRight) return 0;
+    if (normalizedLeft === normalizedRight) return 1;
+    if (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)) return 0.82;
+
+    const leftChars = new Set(normalizedLeft.split(''));
+    const rightChars = new Set(normalizedRight.split(''));
+    let intersectionCount = 0;
+    for (const char of leftChars) {
+      if (rightChars.has(char)) intersectionCount += 1;
+    }
+    const unionCount = new Set([...leftChars, ...rightChars]).size;
+    return unionCount === 0 ? 0 : intersectionCount / unionCount;
+  }
+
+  private isSameComparableValue(left: string | null | undefined, right: string | null | undefined): boolean {
+    const normalizedLeft = this.normalizeComparableText(left);
+    const normalizedRight = this.normalizeComparableText(right);
+    return normalizedLeft.length > 0 && normalizedLeft === normalizedRight;
+  }
+
+  private calculateItemMatchScore(oldItem: OrderItemSnapshot, newItem: OrderItemSnapshot): ItemMatchScore {
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (oldItem.order_type && newItem.order_type && oldItem.order_type === newItem.order_type) {
+      score += 10;
+      reasons.push('same_order_type');
+    }
+    if (this.isSameComparableValue(oldItem.machine_code, newItem.machine_code)) {
+      score += 65;
+      reasons.push('same_machine_code');
+    }
+    if (this.isSameComparableValue(oldItem.vehicle_no, newItem.vehicle_no)) {
+      score += 65;
+      reasons.push('same_vehicle_no');
+    }
+    if (this.isSameComparableValue(oldItem.contract_no, newItem.contract_no)) {
+      score += 15;
+      reasons.push('same_contract_no');
+    }
+    if (this.isSameComparableValue(oldItem.customer, newItem.customer)) {
+      score += 10;
+      reasons.push('same_customer');
+    }
+    if (this.isSameComparableValue(oldItem.driver_nickname, newItem.driver_nickname)) {
+      score += 10;
+      reasons.push('same_driver_or_leader');
+    }
+    if (this.isSameComparableValue(oldItem.product_name, newItem.product_name)) {
+      score += 15;
+      reasons.push('same_product');
+    }
+    if (oldItem.goods_quantity !== null && newItem.goods_quantity !== null && oldItem.goods_quantity === newItem.goods_quantity) {
+      score += 5;
+      reasons.push('same_goods_quantity');
+    }
+
+    const locationSimilarity = this.textSimilarityScore(oldItem.location, newItem.location);
+    if (locationSimilarity >= 0.7) {
+      score += 10;
+      reasons.push('similar_location');
+    } else if (locationSimilarity >= 0.4) {
+      score += 5;
+      reasons.push('partly_similar_location');
+    }
+
+    const workDescriptionSimilarity = this.textSimilarityScore(oldItem.work_description, newItem.work_description);
+    if (workDescriptionSimilarity >= 0.7) {
+      score += 15;
+      reasons.push('similar_work_description');
+    } else if (workDescriptionSimilarity >= 0.4) {
+      score += 7;
+      reasons.push('partly_similar_work_description');
+    }
+
+    return { score, reasons };
+  }
+
+  private calculateMatchStats(oldItems: OrderItemSnapshot[], newItems: OrderItemSnapshot[]): OrderMatchStats {
+    const usedOldIndexes = new Set<number>();
+    const matches: ItemMatchResult[] = [];
+    const matchThreshold = 60;
+
+    for (let newIndex = 0; newIndex < newItems.length; newIndex += 1) {
+      let bestOldIndex: number | null = null;
+      let bestMatch: ItemMatchScore = { score: 0, reasons: [] };
+
+      for (let oldIndex = 0; oldIndex < oldItems.length; oldIndex += 1) {
+        if (usedOldIndexes.has(oldIndex)) continue;
+        const candidate = this.calculateItemMatchScore(oldItems[oldIndex], newItems[newIndex]);
+        if (candidate.score > bestMatch.score) {
+          bestMatch = candidate;
+          bestOldIndex = oldIndex;
+        }
+      }
+
+      const matched = bestOldIndex !== null && bestMatch.score >= matchThreshold;
+      if (matched && bestOldIndex !== null) usedOldIndexes.add(bestOldIndex);
+
+      matches.push({
+        new_index: newIndex,
+        old_index: matched ? bestOldIndex : null,
+        old_item_id: matched && bestOldIndex !== null ? oldItems[bestOldIndex].source_item_id ?? null : null,
+        score: bestMatch.score,
+        matched,
+        reasons: bestMatch.reasons,
+      });
+    }
+
+    const oldItemCount = oldItems.length;
+    const newItemCount = newItems.length;
+    const matchedItemCount = matches.filter(match => match.matched).length;
+    const countRatio = oldItemCount === 0 ? 1 : Number((newItemCount / oldItemCount).toFixed(4));
+    const overlapRatio = newItemCount === 0 ? 0 : Number((matchedItemCount / newItemCount).toFixed(4));
+
+    return {
+      old_item_count: oldItemCount,
+      new_item_count: newItemCount,
+      matched_item_count: matchedItemCount,
+      count_ratio: countRatio,
+      overlap_ratio: overlapRatio,
+      matches,
+    };
+  }
+
+  private buildCombinedRemarksFromParsedItem(item: ParsedOrderItem): string | null {
+    const remarkParts: string[] = [];
+    if (item.team_leader) remarkParts.push(`[leader]帶隊: ${item.team_leader}`);
+    if (item.staff_list && item.staff_list.length > 0) remarkParts.push(`[staff]員工: ${item.staff_list.join('、')}`);
+    if (item.remarks) remarkParts.push(item.remarks);
+    return remarkParts.length > 0 ? remarkParts.join('\n') : null;
+  }
+
+  private mapParsedItemToSnapshot(item: ParsedOrderItem, index: number): OrderItemSnapshot {
+    return {
+      seq: item.seq || index + 1,
+      order_type: item.order_type || null,
+      contract_no: item.contract_no || null,
+      customer: item.customer || null,
+      work_description: item.work_description || null,
+      location: item.location || null,
+      driver_nickname: item.driver_nickname || item.team_leader || null,
+      vehicle_no: item.vehicle_no || null,
+      machine_code: item.machine_code || null,
+      contact_person: item.contact_person || null,
+      slip_write_as: item.slip_write_as || null,
+      is_suspended: item.is_suspended || false,
+      product_name: item.product_name || null,
+      product_unit: item.product_unit || null,
+      goods_quantity: item.goods_quantity ?? null,
+      remarks: this.buildCombinedRemarksFromParsedItem(item),
+      mod_status: null,
+    };
+  }
+
+  private decimalToNumber(value: Prisma.Decimal | number | string | null): number | null {
+    if (value === null) return null;
+    const numericValue = Number(value.toString());
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  private mapDbItemToSnapshot(item: VerificationWaOrderItem, index: number): OrderItemSnapshot {
+    return {
+      source_item_id: item.id,
+      seq: item.wa_item_seq || index + 1,
+      order_type: item.wa_item_order_type || null,
+      contract_no: item.wa_item_contract_no || null,
+      customer: item.wa_item_customer || null,
+      work_description: item.wa_item_work_desc || null,
+      location: item.wa_item_location || null,
+      driver_nickname: item.wa_item_driver_nickname || null,
+      vehicle_no: item.wa_item_vehicle_no || null,
+      machine_code: item.wa_item_machine_code || null,
+      contact_person: item.wa_item_contact_person || null,
+      slip_write_as: item.wa_item_slip_write_as || null,
+      is_suspended: item.wa_item_is_suspended || false,
+      product_name: item.wa_item_product_name || null,
+      product_unit: item.wa_item_product_unit || null,
+      goods_quantity: this.decimalToNumber(item.wa_item_goods_quantity),
+      remarks: item.wa_item_remarks || null,
+      mod_status: item.wa_item_mod_status || null,
+      mod_prev_data: item.wa_item_mod_prev_data ?? undefined,
+    };
+  }
+
+  private deepCopySnapshot(item: OrderItemSnapshot): OrderItemSnapshot {
+    return {
+      source_item_id: item.source_item_id,
+      seq: item.seq,
+      order_type: item.order_type,
+      contract_no: item.contract_no,
+      customer: item.customer,
+      work_description: item.work_description,
+      location: item.location,
+      driver_nickname: item.driver_nickname,
+      vehicle_no: item.vehicle_no,
+      machine_code: item.machine_code,
+      contact_person: item.contact_person,
+      slip_write_as: item.slip_write_as,
+      is_suspended: item.is_suspended,
+      product_name: item.product_name,
+      product_unit: item.product_unit,
+      goods_quantity: item.goods_quantity,
+      remarks: item.remarks,
+      mod_status: item.mod_status,
+      mod_prev_data: item.mod_prev_data,
+    };
+  }
+
+  private hasTextValue(value: string | null): boolean {
+    return Boolean(value && value.trim().length > 0);
+  }
+
+  private mergeMatchedItem(oldItem: OrderItemSnapshot, newItem: OrderItemSnapshot): OrderItemSnapshot {
+    const merged = this.deepCopySnapshot(oldItem);
+    const textFields: Array<keyof Pick<OrderItemSnapshot,
+      'order_type' | 'contract_no' | 'customer' | 'work_description' | 'location' | 'driver_nickname' |
+      'vehicle_no' | 'machine_code' | 'contact_person' | 'slip_write_as' | 'product_name' | 'product_unit' | 'remarks'
+    >> = [
+      'order_type', 'contract_no', 'customer', 'work_description', 'location', 'driver_nickname',
+      'vehicle_no', 'machine_code', 'contact_person', 'slip_write_as', 'product_name', 'product_unit', 'remarks',
+    ];
+
+    for (const field of textFields) {
+      if (this.hasTextValue(newItem[field])) {
+        merged[field] = newItem[field];
+      }
+    }
+    if (newItem.goods_quantity !== null) merged.goods_quantity = newItem.goods_quantity;
+    if (newItem.is_suspended) merged.is_suspended = true;
+    return merged;
+  }
+
+  private renumberSnapshots(items: OrderItemSnapshot[]): OrderItemSnapshot[] {
+    return items.map((item, index) => ({ ...item, seq: index + 1 }));
+  }
+
+  private mergeSnapshotsByStrategy(
+    strategy: OrderMergeStrategy,
+    oldItems: OrderItemSnapshot[],
+    newItems: OrderItemSnapshot[],
+    stats: OrderMatchStats,
+  ): OrderItemSnapshot[] {
+    if (strategy === 'replace_full' || strategy === 'new_order' || strategy === 'new_independent') {
+      return this.renumberSnapshots(newItems.map(item => this.deepCopySnapshot(item)));
+    }
+
+    const mergedItems = oldItems.map(item => this.deepCopySnapshot(item));
+    for (const match of stats.matches) {
+      const newItem = newItems[match.new_index];
+      if (!newItem) continue;
+      if (strategy === 'merge_update' && match.matched && match.old_index !== null && mergedItems[match.old_index]) {
+        mergedItems[match.old_index] = this.mergeMatchedItem(mergedItems[match.old_index], newItem);
+      } else if (!match.matched) {
+        mergedItems.push(this.deepCopySnapshot(newItem));
+      } else if (strategy === 'merge_add') {
+        mergedItems.push(this.deepCopySnapshot(newItem));
+      }
+    }
+    return this.renumberSnapshots(mergedItems);
+  }
+
+  private async findLatestOrderForMerge(orderDate: Date, shift: string, primaryType: string | null): Promise<WaOrderWithItems | null> {
+    const dayStart = new Date(orderDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(orderDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const orders = await this.prisma.verificationWaOrder.findMany({
+      where: {
+        wa_order_date: { gte: dayStart, lte: dayEnd },
+        wa_order_shift: shift,
+      },
+      include: {
+        items: { orderBy: { wa_item_seq: 'asc' } },
+      },
+      orderBy: [
+        { wa_order_version: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+
+    if (orders.length === 0) return null;
+    if (!primaryType) return null;
+    return orders.find(order => this.getPrimaryTypeFromDbItems(order.items) === primaryType) || null;
+  }
+
+  private async resolveOrderUpdateDecision(
+    orderDate: Date,
+    shift: string,
+    classification: AiClassification,
+  ): Promise<OrderUpdateDecision> {
+    const updateMode = this.normalizeUpdateMode(classification.update_mode);
+    const primaryType = this.getPrimaryTypeFromParsedItems(classification.items);
+    const newItems = classification.items.map((item, index) => this.mapParsedItemToSnapshot(item, index));
+    const previousOrder = await this.findLatestOrderForMerge(orderDate, shift, primaryType);
+
+    if (!previousOrder) {
+      const stats = this.calculateMatchStats([], newItems);
+      return {
+        strategy: 'new_order',
+        previous_order: null,
+        primary_type: primaryType,
+        reason: '沒有找到同日、同班次、同 primaryType 的既有 order，建立全新 snapshot。',
+        stats,
+        merged_items: this.renumberSnapshots(newItems),
+      };
+    }
+
+    const oldItems = previousOrder.items.map((item, index) => this.mapDbItemToSnapshot(item, index));
+    const stats = this.calculateMatchStats(oldItems, newItems);
+    const isSmallUpdate = stats.new_item_count <= Math.max(2, Math.floor(stats.old_item_count * 0.5));
+    const isLargeOrComparable = stats.old_item_count === 0 || stats.new_item_count >= Math.max(1, Math.ceil(stats.old_item_count * 0.6));
+    const hasOverlap = stats.matched_item_count > 0;
+
+    let strategy: OrderMergeStrategy;
+    let reason: string;
+
+    if (updateMode === 'full_replace' && (isLargeOrComparable || hasOverlap)) {
+      strategy = 'replace_full';
+      reason = 'AI 判斷為 full_replace，且新訊息 items 數量接近既有 order 或與舊內容有重覆，因此以新訊息完整替換。';
+    } else if (isLargeOrComparable && hasOverlap) {
+      strategy = 'replace_full';
+      reason = '新訊息 items 數量接近或超過現有 order，且存在舊內容重覆，判定為完整替換。';
+    } else if (hasOverlap) {
+      strategy = 'merge_update';
+      reason = '新訊息 items 較少且可匹配舊內容，判定為局部更新並更新匹配 item 欄位。';
+    } else if (isSmallUpdate || updateMode === 'supplement' || classification.is_update) {
+      strategy = 'merge_add';
+      reason = '新訊息 items 較少且內容全新，判定為補充新增，保留舊 items 並加入新 items。';
+    } else {
+      strategy = 'merge_add';
+      reason = '同日、同班次、同 primaryType 已有 order，但新訊息未與舊內容重覆；為避免覆蓋既有每日摘要，保守判定為補充新增。';
+    }
+
+    return {
+      strategy,
+      previous_order: previousOrder,
+      primary_type: primaryType,
+      reason,
+      stats,
+      merged_items: this.mergeSnapshotsByStrategy(strategy, oldItems, newItems, stats),
+    };
+  }
+
+  private matchStatsToJson(stats: OrderMatchStats): Prisma.InputJsonObject {
+    return {
+      old_item_count: stats.old_item_count,
+      new_item_count: stats.new_item_count,
+      matched_item_count: stats.matched_item_count,
+      count_ratio: stats.count_ratio,
+      overlap_ratio: stats.overlap_ratio,
+      matches: stats.matches.map(match => ({
+        new_index: match.new_index,
+        old_index: match.old_index,
+        old_item_id: match.old_item_id,
+        score: match.score,
+        matched: match.matched,
+        reasons: match.reasons,
+      })),
+    };
+  }
+
+  private buildMergeDecisionPayload(
+    decision: OrderUpdateDecision,
+    classification: AiClassification,
+  ): Prisma.InputJsonObject {
+    return {
+      strategy: decision.strategy,
+      primary_type: decision.primary_type,
+      reason: decision.reason,
+      ai_is_update: classification.is_update,
+      ai_update_mode: this.normalizeUpdateMode(classification.update_mode),
+      ai_update_reason: classification.update_reason ?? null,
+      stats: this.matchStatsToJson(decision.stats),
+    };
+  }
+
+  private async persistOrderSnapshotItems(orderId: number, items: OrderItemSnapshot[]): Promise<void> {
+    if (items.length === 0) return;
+    const data: Prisma.VerificationWaOrderItemCreateManyInput[] = items.map((item, index) => {
+      const row: Prisma.VerificationWaOrderItemCreateManyInput = {
+        wa_item_order_id: orderId,
+        wa_item_seq: item.seq || index + 1,
+        wa_item_order_type: item.order_type,
+        wa_item_contract_no: item.contract_no,
+        wa_item_customer: item.customer,
+        wa_item_work_desc: item.work_description,
+        wa_item_location: item.location,
+        wa_item_driver_nickname: item.driver_nickname,
+        wa_item_driver_id: null,
+        wa_item_vehicle_no: item.vehicle_no,
+        wa_item_machine_code: item.machine_code,
+        wa_item_contact_person: item.contact_person,
+        wa_item_slip_write_as: item.slip_write_as,
+        wa_item_is_suspended: item.is_suspended,
+        wa_item_product_name: item.product_name,
+        wa_item_product_unit: item.product_unit,
+        wa_item_goods_quantity: item.goods_quantity,
+        wa_item_remarks: item.remarks,
+        wa_item_mod_status: item.mod_status,
+      };
+      if (item.mod_prev_data !== undefined && item.mod_prev_data !== null) {
+        row.wa_item_mod_prev_data = item.mod_prev_data as Prisma.InputJsonValue;
+      }
+      return row;
+    });
+
+    await this.prisma.verificationWaOrderItem.createMany({ data });
+    await this.matchCreatedOrderItemsToEmployees(orderId);
+  }
+
+  private async matchCreatedOrderItemsToEmployees(orderId: number): Promise<void> {
+    const createdItems = await this.prisma.verificationWaOrderItem.findMany({
+      where: { wa_item_order_id: orderId },
+    });
+
+    for (const createdItem of createdItems) {
+      if (!createdItem.wa_item_driver_nickname) continue;
+      const empId = await this.nicknameMatchService.matchNickname(createdItem.wa_item_driver_nickname);
+      if (!empId) continue;
+      await this.prisma.verificationWaOrderItem.update({
+        where: { id: createdItem.id },
+        data: { wa_item_driver_id: empId },
+      });
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   // 處理完整 Order
   // ══════════════════════════════════════════════════════════════
@@ -497,6 +1038,7 @@ export class WhatsappService {
     text: string,
   ) {
     const shift = classification.shift || 'day';
+    const updateMode = this.normalizeUpdateMode(classification.update_mode);
 
     // 日期範圍處理：如果有 order_date_start 和 order_date_end，遍歷日期範圍為每一天各建一筆 order
     const dateStartStr = classification.order_date_start || classification.order_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
@@ -505,7 +1047,6 @@ export class WhatsappService {
     const datesToCreate: Date[] = [];
     const startDate = new Date(dateStartStr);
     const endDate = new Date(dateEndStr);
-    // 遍歷日期範圍（含頭尾）
     const currentDate = new Date(startDate);
     while (currentDate <= endDate) {
       datesToCreate.push(new Date(currentDate));
@@ -516,27 +1057,37 @@ export class WhatsappService {
       datesToCreate.push(classification.order_date ? new Date(classification.order_date) : new Date());
     }
 
-    const createdOrders: Array<{ orderId: number; orderDate: string; version: number }> = [];
+    const createdOrders: Array<{
+      orderId: number;
+      orderDate: string;
+      version: number;
+      merge_strategy: OrderMergeStrategy;
+      parent_order_id: number | null;
+      snapshot_item_count: number;
+    }> = [];
 
     for (const orderDate of datesToCreate) {
-      // 版本管理：檢查同一天 + 同一班次是否已有 order
       const dayStart = new Date(orderDate);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(orderDate);
       dayEnd.setHours(23, 59, 59, 999);
 
-      const existingOrders = await this.prisma.verificationWaOrder.findMany({
+      // 版本管理：仍沿用同一天 + 同一班次的遞增版本號，保持 getDailySummary() 既有模型不變
+      const latestOrder = await this.prisma.verificationWaOrder.findFirst({
         where: {
           wa_order_date: { gte: dayStart, lte: dayEnd },
           wa_order_shift: shift,
         },
         orderBy: { wa_order_version: 'desc' },
-        take: 1,
       });
+      const version = latestOrder ? latestOrder.wa_order_version + 1 : 1;
 
-      const version = existingOrders.length > 0
-        ? existingOrders[0].wa_order_version + 1
-        : 1;
+      // Phase 2：AI 解析完成後、建立新版 order 前，先做 deterministic merge/replace 決策
+      const decision = await this.resolveOrderUpdateDecision(orderDate, shift, classification);
+      const isUpdateSnapshot = decision.strategy !== 'new_order';
+      const replacesOrderId = decision.strategy === 'replace_full'
+        ? decision.previous_order?.id ?? null
+        : null;
 
       const waOrder = await this.prisma.verificationWaOrder.create({
         data: {
@@ -548,71 +1099,44 @@ export class WhatsappService {
           wa_order_sender_name: sender,
           wa_order_sender_role: null,
           wa_order_raw_text: text,
-          wa_order_item_count: classification.items.length,
+          wa_order_item_count: decision.merged_items.length,
           wa_order_ai_model: 'gpt-4.1-mini',
           wa_order_ai_confidence: classification.confidence,
+          wa_order_is_update: isUpdateSnapshot,
+          wa_order_update_mode: updateMode,
+          wa_order_merge_strategy: decision.strategy,
+          wa_order_parent_id: decision.previous_order?.id ?? null,
+          wa_order_replaces_order_id: replacesOrderId,
+          wa_order_ai_update_reason: classification.update_reason ?? null,
+          wa_order_merge_reason: decision.reason,
+          wa_order_match_stats: this.matchStatsToJson(decision.stats),
         },
       });
 
-      // 存入 order items
-      if (classification.items.length > 0) {
-        await this.prisma.verificationWaOrderItem.createMany({
-          data: classification.items.map((item, idx) => {
-            // 組合 remarks：staff_list + team_leader + 原始 remarks
-            const remarkParts: string[] = [];
-            if (item.team_leader) remarkParts.push(`[leader]帶隊: ${item.team_leader}`);
-            if (item.staff_list && item.staff_list.length > 0) remarkParts.push(`[staff]員工: ${item.staff_list.join('、')}`);
-            if (item.remarks) remarkParts.push(item.remarks);
-            const combinedRemarks = remarkParts.length > 0 ? remarkParts.join('\n') : null;
+      await this.persistOrderSnapshotItems(waOrder.id, decision.merged_items);
 
-            return {
-              wa_item_order_id: waOrder.id,
-              wa_item_seq: item.seq || idx + 1,
-              wa_item_order_type: item.order_type || null,
-              wa_item_contract_no: item.contract_no || null,
-              wa_item_customer: item.customer || null,
-              wa_item_work_desc: item.work_description || null,
-              wa_item_location: item.location || null,
-              // transport/machinery: 司機/操作員花名; manpower: 帶隊人
-              wa_item_driver_nickname: item.driver_nickname || item.team_leader || null,
-              wa_item_driver_id: null, // We'll update this in the next step
-              wa_item_vehicle_no: item.vehicle_no || null,
-              wa_item_machine_code: item.machine_code || null,
-              wa_item_contact_person: item.contact_person || null,
-              wa_item_slip_write_as: item.slip_write_as || null,
-              wa_item_is_suspended: item.is_suspended || false,
-              wa_item_product_name: item.product_name || null,
-              wa_item_product_unit: item.product_unit || null,
-              wa_item_goods_quantity: item.goods_quantity ?? null,
-              wa_item_remarks: combinedRemarks,
-              wa_item_mod_status: null,
-              wa_item_mod_prev_data: undefined,
-            };
-          }),
-        });
-
-        // Match nicknames to employee IDs
-        const createdItems = await this.prisma.verificationWaOrderItem.findMany({
-          where: { wa_item_order_id: waOrder.id }
-        });
-
-        for (const createdItem of createdItems) {
-          if (createdItem.wa_item_driver_nickname) {
-            const empId = await this.nicknameMatchService.matchNickname(createdItem.wa_item_driver_nickname);
-            if (empId) {
-              await this.prisma.verificationWaOrderItem.update({
-                where: { id: createdItem.id },
-                data: { wa_item_driver_id: empId }
-              });
-            }
-          }
-        }
-      }
+      await this.prisma.verificationWaOrderMergeLog.create({
+        data: {
+          merge_log_new_order_id: waOrder.id,
+          merge_log_base_order_id: decision.previous_order?.id ?? null,
+          merge_log_source_msg_id: messageId,
+          merge_log_decision: decision.strategy,
+          merge_log_ai_update_mode: updateMode,
+          merge_log_old_item_count: decision.stats.old_item_count,
+          merge_log_new_item_count: decision.stats.new_item_count,
+          merge_log_merged_item_count: decision.merged_items.length,
+          merge_log_matched_item_count: decision.stats.matched_item_count,
+          merge_log_decision_payload: this.buildMergeDecisionPayload(decision, classification),
+        },
+      });
 
       createdOrders.push({
         orderId: waOrder.id,
         orderDate: orderDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }),
         version,
+        merge_strategy: decision.strategy,
+        parent_order_id: decision.previous_order?.id ?? null,
+        snapshot_item_count: decision.merged_items.length,
       });
     }
 
@@ -629,8 +1153,10 @@ export class WhatsappService {
       shift,
       version: createdOrders[0].version,
       item_count: classification.items.length,
+      snapshot_item_count: createdOrders[0].snapshot_item_count,
       leave_count: classification.leave_list.length,
       confidence: classification.confidence,
+      update_mode: updateMode,
       orders_created: createdOrders,
     };
   }
@@ -1298,8 +1824,17 @@ DC19喺水澗石倉
 - 如果日期後面沒有「(夜)」「（夜）」「[夜]」，則 shift: "day"（日間班次，預設值）
 - 夜間 order 的內容格式與日間相同，只是日期標記不同
 - 全形數字（４）= 半形數字（4）
-- 「暫定」→ order_status: "tentative"；「更新」→ is_update: true, order_status: "confirmed"
+- 「暫定」→ order_status: "tentative"；「更新」通常 → is_update: true, order_status: "confirmed"，但 is_update 不只限於文字出現「更新」
 - 「明天」「聽日」「今日」等相對日期基於今天 ${today}
+
+## 補充/更新判斷規則
+- is_update=true 表示這條訊息不是全新完整 order，而是對同日、同班次、同 order_type 既有 order 的補充、局部修改或更新；不只限於文字出現「更新」。
+- update_mode="supplement"：新訊息 items 很少，內容像新增一兩項工作，例如「可樂自取 subbase 40 Tons」。這類訊息應加入既有 order，不應取代整份 order。
+- update_mode="partial_update"：新訊息 items 很少，且可對應到舊 item，但司機、車牌、數量、地點、備註等細節不同。
+- update_mode="full_replace"：新訊息 items 數量多，接近或超過既有同日同類型 order，且內容看起來是一份完整清單；或明確寫「更新版」「以下為最新全部 order」「全份重發」等。
+- update_mode="new_order"：訊息明確是另一個日期、班次或主要類型的新完整 order，與既有同日同類型 order 無關。
+- update_mode="unknown"：無法判斷更新意圖。若不確定，短訊息優先選 supplement 或 partial_update，不要選 full_replace。
+- 短訊息即使沒有「更新」字眼，只要像同日同類型 order 的新增工作，也應設 is_update=true 並說明 update_reason。
 
 ## 回覆格式（JSON，不加 markdown 代碼塊）
 
@@ -1312,6 +1847,8 @@ DC19喺水澗石倉
   "order_date_end": "YYYY-MM-DD",  // ⛔ 必填！日期範圍結束日，單一日期時 = order_date
   "shift": "day" 或 "night",  // ⛔ 必填！日期帶(夜)/(夜）/[夜]→ "night"，否則 "day"
   "is_update": true/false,
+  "update_mode": "supplement" 或 "partial_update" 或 "full_replace" 或 "new_order" 或 "unknown",
+  "update_reason": "短文字說明為何判斷為補充/局部修改/完整替換/新 order；不確定時說明不確定原因",
   "order_status": "tentative" 或 "confirmed",
   "items": [
     {
@@ -1362,6 +1899,8 @@ DC19喺水澗石倉
   ],
   "order_date": null,
   "is_update": false,
+  "update_mode": "unknown",
+  "update_reason": null,
   "order_status": "tentative",
   "items": [],
   "leave_list": [],
@@ -1375,6 +1914,8 @@ DC19喺水澗石倉
   "order_date": null,
   "shift": "day",
   "is_update": false,
+  "update_mode": "unknown",
+  "update_reason": null,
   "order_status": "tentative",
   "items": [],
   "leave_list": [],
@@ -1402,6 +1943,12 @@ DC19喺水澗石倉
       if (parsed.is_order !== undefined && !parsed.message_type) {
         parsed.message_type = parsed.is_order ? 'order' : 'chat';
       }
+      if (!parsed.update_mode) {
+        parsed.update_mode = parsed.is_update ? 'unknown' : 'new_order';
+      }
+      if (parsed.update_reason === undefined) {
+        parsed.update_reason = null;
+      }
       return parsed;
     } catch (_parseError) {
       this.logger.warn(`Failed to parse AI response: ${cleaned.substring(0, 200)}`);
@@ -1409,6 +1956,8 @@ DC19喺水澗石倉
         message_type: 'chat' as const,
         confidence: 0,
         is_update: false,
+        update_mode: 'unknown' as const,
+        update_reason: null,
         order_status: 'tentative' as const,
         items: [],
         leave_list: [],

@@ -2301,8 +2301,9 @@ model VerificationWaMessage {
   wa_msg_review_result  String?   @db.VarChar(30) // confirmed_order | confirmed_chat
   wa_msg_created_at     DateTime  @default(now())
 
-  orders   VerificationWaOrder[]
-  mod_logs VerificationWaModLog[]
+  orders     VerificationWaOrder[]
+  mod_logs   VerificationWaModLog[]
+  merge_logs VerificationWaOrderMergeLog[]
 
   @@unique([wa_msg_remote_id])
   @@index([wa_msg_group_id])
@@ -2322,19 +2323,36 @@ model VerificationWaOrder {
   wa_order_sender_name   String?  @db.VarChar(100)
   wa_order_sender_role   String?  @db.VarChar(50)
   wa_order_raw_text      String?  @db.Text
-  wa_order_item_count    Int      @default(0)
-  wa_order_ai_model      String?  @db.VarChar(50)
-  wa_order_ai_confidence Decimal? @db.Decimal(5, 2)
-  wa_order_created_at    DateTime @default(now())
+  wa_order_item_count        Int      @default(0)
+  wa_order_ai_model          String?  @db.VarChar(50)
+  wa_order_ai_confidence     Decimal? @db.Decimal(5, 2)
+  wa_order_is_update         Boolean  @default(false)
+  wa_order_update_mode       String?  @db.VarChar(30)
+  wa_order_merge_strategy    String?  @db.VarChar(30)
+  wa_order_parent_id         Int?
+  wa_order_replaces_order_id Int?
+  wa_order_ai_update_reason  String?  @db.Text
+  wa_order_merge_reason      String?  @db.Text
+  wa_order_match_stats       Json?
+  wa_order_created_at        DateTime @default(now())
 
-  message  VerificationWaMessage?    @relation(fields: [wa_order_msg_id], references: [id])
-  items    VerificationWaOrderItem[]
-  mod_logs VerificationWaModLog[]
+  message             VerificationWaMessage?        @relation(fields: [wa_order_msg_id], references: [id])
+  items               VerificationWaOrderItem[]
+  mod_logs            VerificationWaModLog[]
+  parent_order        VerificationWaOrder?          @relation("WaOrderParent", fields: [wa_order_parent_id], references: [id], onDelete: SetNull)
+  child_orders        VerificationWaOrder[]         @relation("WaOrderParent")
+  replaces_order      VerificationWaOrder?          @relation("WaOrderReplacement", fields: [wa_order_replaces_order_id], references: [id], onDelete: SetNull)
+  replaced_by_orders  VerificationWaOrder[]         @relation("WaOrderReplacement")
+  merge_logs_as_new   VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogNewOrder")
+  merge_logs_as_base  VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogBaseOrder")
 
   @@index([wa_order_date])
   @@index([wa_order_shift])
   @@index([wa_order_status])
   @@index([wa_order_msg_id])
+  @@index([wa_order_parent_id])
+  @@index([wa_order_replaces_order_id])
+  @@index([wa_order_merge_strategy])
   @@map("verification_wa_orders")
 }
 
@@ -2373,7 +2391,33 @@ model VerificationWaOrderItem {
   @@map("verification_wa_order_items")
 }
 
-// 10b. verification_wa_mod_logs — WhatsApp Order 修改歷史
+// 10b. verification_wa_order_merge_logs — WhatsApp Order merge/replace 決策紀錄
+model VerificationWaOrderMergeLog {
+  id                          Int      @id @default(autoincrement())
+  merge_log_new_order_id      Int
+  merge_log_base_order_id     Int?
+  merge_log_source_msg_id     Int
+  merge_log_decision          String   @db.VarChar(30)
+  merge_log_ai_update_mode    String?  @db.VarChar(30)
+  merge_log_old_item_count    Int      @default(0)
+  merge_log_new_item_count    Int      @default(0)
+  merge_log_merged_item_count Int      @default(0)
+  merge_log_matched_item_count Int     @default(0)
+  merge_log_decision_payload  Json?
+  merge_log_created_at        DateTime @default(now())
+
+  new_order VerificationWaOrder   @relation("WaOrderMergeLogNewOrder", fields: [merge_log_new_order_id], references: [id], onDelete: Cascade)
+  base_order VerificationWaOrder? @relation("WaOrderMergeLogBaseOrder", fields: [merge_log_base_order_id], references: [id], onDelete: SetNull)
+  message   VerificationWaMessage @relation(fields: [merge_log_source_msg_id], references: [id], onDelete: Cascade)
+
+  @@index([merge_log_new_order_id])
+  @@index([merge_log_base_order_id])
+  @@index([merge_log_source_msg_id])
+  @@index([merge_log_decision])
+  @@map("verification_wa_order_merge_logs")
+}
+
+// 10c. verification_wa_mod_logs — WhatsApp Order 修改歷史
 model VerificationWaModLog {
   id                Int      @id @default(autoincrement())
   mod_order_id      Int
