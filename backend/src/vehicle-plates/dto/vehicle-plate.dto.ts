@@ -49,3 +49,9 @@ export class ManualPlateAssignmentHistoryDto {
 }
 
 export class ManualPlateTransferHistoryDto extends TransferVehiclePlateDto {}
+  
+export class UpdateVehiclePlateDto {
+  @IsOptional()
+  @IsString()
+  plate_expiry_date?: string | null;
+}

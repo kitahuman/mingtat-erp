@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto } from './dto/vehicle-plate.dto';
+import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
 
 interface VehiclePlateListQuery {
   page?: number | string;
@@ -283,6 +283,24 @@ export class VehiclePlatesService {
         notes: dto.notes,
       },
     });
+    return this.findOne(id);
+  }
+
+  async update(id: number, dto: UpdateVehiclePlateDto, userId?: number, ipAddress?: string) {
+    const before = await this.prisma.vehiclePlate.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('車牌不存在');
+
+    const data: any = {};
+    if (dto.plate_expiry_date !== undefined) {
+      data.plate_expiry_date = dto.plate_expiry_date ? new Date(dto.plate_expiry_date) : null;
+    }
+
+    const result = await this.prisma.vehiclePlate.update({
+      where: { id },
+      data,
+    });
+
+    await this.log(userId, 'update_plate', 'vehicle_plates', id, before, result, ipAddress);
     return this.findOne(id);
   }
 

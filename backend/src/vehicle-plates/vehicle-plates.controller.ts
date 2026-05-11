@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto } from './dto/vehicle-plate.dto';
+import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
 import { VehiclePlatesService } from './vehicle-plates.service';
 
 @Controller('vehicle-plates')
@@ -41,5 +41,10 @@ export class VehiclePlatesController {
   @Post(':id/history/transfer')
   addTransferHistory(@Param('id') id: string, @Body() dto: ManualPlateTransferHistoryDto) {
     return this.service.addTransferHistory(Number(id), dto);
+  }
+
+  @Put(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateVehiclePlateDto, @Request() req: any) {
+    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 }

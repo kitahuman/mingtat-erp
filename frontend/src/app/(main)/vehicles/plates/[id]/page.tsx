@@ -14,6 +14,8 @@ export default function VehiclePlateDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<any>({});
   const [showAssignHistoryModal, setShowAssignHistoryModal] = useState(false);
   const [showTransferHistoryModal, setShowTransferHistoryModal] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState({ vehicle_id: '', assigned_date: '', removed_date: '', notes: '' });
@@ -27,6 +29,7 @@ export default function VehiclePlateDetailPage() {
         vehiclesApi.list({ status: 'not_scrapped', limit: 1000, sortBy: 'plate_number', sortOrder: 'ASC' }),
       ]);
       setPlate(plateRes.data);
+      setForm({ plate_expiry_date: plateRes.data.plate_expiry_date || '' });
       setCompanies(companyRes.data || []);
       setVehicles(vehicleRes.data?.data || []);
       setLoading(false);
@@ -81,6 +84,16 @@ export default function VehiclePlateDetailPage() {
     } catch (err: any) { alert(err.response?.data?.message || '新增過戶歷史失敗'); }
   };
 
+  const handleSave = async () => {
+    try {
+      await vehiclePlatesApi.update(plate.id, { plate_expiry_date: form.plate_expiry_date || null });
+      setEditing(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新車牌資料失敗');
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
   return (
@@ -95,8 +108,18 @@ export default function VehiclePlateDetailPage() {
           <p className="text-gray-500">{renderCompany(plate?.owner_company)} · {plate?.status === 'in_use' ? '使用中' : '閒置'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowAssignHistoryModal(true)} className="btn-secondary">新增套牌/拆牌歷史</button>
-          <button onClick={() => setShowTransferHistoryModal(true)} className="btn-secondary">新增過戶歷史</button>
+          {editing ? (
+            <>
+              <button onClick={() => { setEditing(false); setForm({ plate_expiry_date: plate.plate_expiry_date || '' }); }} className="btn-secondary">取消</button>
+              <button onClick={handleSave} className="btn-primary">儲存變更</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setEditing(true)} className="btn-secondary">編輯資料</button>
+              <button onClick={() => setShowAssignHistoryModal(true)} className="btn-secondary">新增套牌/拆牌歷史</button>
+              <button onClick={() => setShowTransferHistoryModal(true)} className="btn-secondary">新增過戶歷史</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -107,6 +130,18 @@ export default function VehiclePlateDetailPage() {
           <div><p className="text-sm text-gray-500">持有公司</p><p>{renderCompany(plate?.owner_company)}</p></div>
           <div><p className="text-sm text-gray-500">狀態</p><p><span className={plate?.status === 'in_use' ? 'badge-green' : 'badge-yellow'}>{plate?.status === 'in_use' ? '使用中' : '閒置'}</span></p></div>
           <div><p className="text-sm text-gray-500">目前車輛</p><p>{plate?.current_vehicle ? <Link className="text-primary-600 hover:underline" href={`/vehicles/${plate.current_vehicle.id}`}>{plate.current_vehicle.plate_number} {plate.current_vehicle.brand || ''} {plate.current_vehicle.model || ''}</Link> : '-'}</p></div>
+          <div>
+            <p className="text-sm text-gray-500">擁有日期</p>
+            <p>{fmtDate(plate?.owned_date)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">車牌到期日</p>
+            {editing ? (
+              <DateInput value={form.plate_expiry_date} onChange={value => setForm({ ...form, plate_expiry_date: value })} className="input-field mt-1" />
+            ) : (
+              <p>{fmtDate(plate?.plate_expiry_date)}</p>
+            )}
+          </div>
           <div><p className="text-sm text-gray-500">建立時間</p><p>{fmtDate(plate?.created_at)}</p></div>
           <div><p className="text-sm text-gray-500">更新時間</p><p>{fmtDate(plate?.updated_at)}</p></div>
         </div>

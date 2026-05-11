@@ -161,6 +161,7 @@ export const vehiclePlatesApi = {
   transfer: (id: number, data: any) => api.post(`/vehicle-plates/${id}/transfer`, data),
   addAssignmentHistory: (id: number, data: any) => api.post(`/vehicle-plates/${id}/history/assignment`, data),
   addTransferHistory: (id: number, data: any) => api.post(`/vehicle-plates/${id}/history/transfer`, data),
+  update: (id: number, data: any) => api.put(`/vehicle-plates/${id}`, data),
 };
 
 // Machinery
