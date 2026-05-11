@@ -152,6 +152,7 @@ export default function AuditLogsPage() {
   const [limit, setLimit] = useState(25);
   const [loading, setLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'logs' | 'activity'>('logs');
 
   // Filters
   const [filterUserName, setFilterUserName] = useState('');
@@ -225,7 +226,13 @@ export default function AuditLogsPage() {
         },
       });
       const data = await res.json();
-      setUserActivity(Array.isArray(data) ? data : []);
+      const activityData = Array.isArray(data) ? data : [];
+      // Sort by week_count descending, then today_count descending
+      const sortedData = [...activityData].sort((a, b) => {
+        if (b.week_count !== a.week_count) return b.week_count - a.week_count;
+        return b.today_count - a.today_count;
+      });
+      setUserActivity(sortedData);
     } catch (err) {
       console.error('Failed to fetch user activity:', err);
       setUserActivity([]);
@@ -277,6 +284,30 @@ export default function AuditLogsPage() {
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-900">操作歷史</h1>
         <p className="text-sm text-gray-600 mt-1">查看所有用戶的後台操作記錄</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 px-6 flex gap-6">
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`py-4 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'logs'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          操作歷史
+        </button>
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={`py-4 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'activity'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          活動總覽
+        </button>
       </div>
 
       {/* Filters */}
@@ -352,49 +383,51 @@ export default function AuditLogsPage() {
       </div>
 
 
-      {/* User Activity Overview */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">用戶活動總覽</h2>
-            <p className="text-sm text-gray-500 mt-1">按用戶顯示今日、本週及最後活動時間；日期範圍會同步套用於統計。</p>
+      {activeTab === 'activity' ? (
+        /* User Activity Overview */
+        <div className="bg-white px-6 py-4 flex-1 overflow-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">用戶活動總覽</h2>
+              <p className="text-sm text-gray-500 mt-1">按用戶顯示今日、本週及最後活動時間；日期範圍會同步套用於統計。</p>
+            </div>
+            {activityLoading && <span className="text-sm text-gray-500">更新中...</span>}
           </div>
-          {activityLoading && <span className="text-sm text-gray-500">更新中...</span>}
-        </div>
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-2 text-left font-semibold text-gray-700">用戶名稱</th>
-                <th className="px-4 py-2 text-right font-semibold text-gray-700">今日操作數</th>
-                <th className="px-4 py-2 text-right font-semibold text-gray-700">本週操作數</th>
-                <th className="px-4 py-2 text-left font-semibold text-gray-700">最後活動時間</th>
-              </tr>
-            </thead>
-            <tbody>
-              {userActivity.length === 0 ? (
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
-                    {activityLoading ? '加載中...' : '沒有用戶活動資料'}
-                  </td>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">用戶名稱</th>
+                  <th className="px-4 py-2 text-right font-semibold text-gray-700">今日操作數</th>
+                  <th className="px-4 py-2 text-right font-semibold text-gray-700">本週操作數</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">最後活動時間</th>
                 </tr>
-              ) : (
-                userActivity.map(activity => (
-                  <tr key={activity.user_id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
-                    <td className="px-4 py-2 text-gray-900 font-medium">{activity.user_name}</td>
-                    <td className="px-4 py-2 text-right text-gray-800">{activity.today_count}</td>
-                    <td className="px-4 py-2 text-right text-gray-800">{activity.week_count}</td>
-                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatDateTime(activity.last_activity_at)}</td>
+              </thead>
+              <tbody>
+                {userActivity.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-4 text-center text-gray-500">
+                      {activityLoading ? '加載中...' : '沒有用戶活動資料'}
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  userActivity.map(activity => (
+                    <tr key={activity.user_id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-gray-900 font-medium">{activity.user_name}</td>
+                      <td className="px-4 py-2 text-right text-gray-800">{activity.today_count}</td>
+                      <td className="px-4 py-2 text-right text-gray-800">{activity.week_count}</td>
+                      <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatDateTime(activity.last_activity_at)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
+      ) : (
+        <>
+          {/* Table */}
+          <div className="flex-1 overflow-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 border-b border-gray-200 sticky top-0">
             <tr>
@@ -487,76 +520,79 @@ export default function AuditLogsPage() {
       </div>
 
       {/* Pagination */}
-      <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-600">每頁顯示</span>
-          <select
-            value={limit}
-            onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}
-            className="px-2 py-1 text-sm border border-gray-300 rounded"
-          >
-            {[10, 25, 50, 100].map(l => (
-              <option key={l} value={l}>{l} 筆</option>
-            ))}
-          </select>
-          <span className="text-sm text-gray-500">
-            第 {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} 筆，共 {total} 筆
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPage(1)}
-            disabled={page === 1}
-            className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-          >
-            «
-          </button>
-          <button
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page === 1}
-            className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-          >
-            ‹ 上一頁
-          </button>
-
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let p: number;
-            if (totalPages <= 5) p = i + 1;
-            else if (page <= 3) p = i + 1;
-            else if (page >= totalPages - 2) p = totalPages - 4 + i;
-            else p = page - 2 + i;
-            return (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                className={`px-3 py-1 text-sm border rounded ${
-                  p === page
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
+          {/* Pagination */}
+          <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">每頁顯示</span>
+              <select
+                value={limit}
+                onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}
+                className="px-2 py-1 text-sm border border-gray-300 rounded"
               >
-                {p}
-              </button>
-            );
-          })}
+                {[10, 25, 50, 100].map(l => (
+                  <option key={l} value={l}>{l} 筆</option>
+                ))}
+              </select>
+              <span className="text-sm text-gray-500">
+                第 {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} 筆，共 {total} 筆
+              </span>
+            </div>
 
-          <button
-            onClick={() => setPage(Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages}
-            className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-          >
-            下一頁 ›
-          </button>
-          <button
-            onClick={() => setPage(totalPages)}
-            disabled={page >= totalPages}
-            className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-          >
-            »
-          </button>
-        </div>
-      </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                «
+              </button>
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                ‹ 上一頁
+              </button>
+
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let p: number;
+                if (totalPages <= 5) p = i + 1;
+                else if (page <= 3) p = i + 1;
+                else if (page >= totalPages - 2) p = totalPages - 4 + i;
+                else p = page - 2 + i;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`px-3 py-1 text-sm border rounded ${
+                      p === page
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                下一頁 ›
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
