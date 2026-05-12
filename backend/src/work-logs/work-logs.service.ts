@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -9,6 +10,72 @@ import {
   UnmatchedCombinationRow,
   UnmatchedCombinationsResult,
 } from './dto/unmatched-combinations.dto';
+import {
+  PIVOT_DIMENSIONS,
+  PivotAxisItem,
+  PivotDimension,
+  PivotMetric,
+  PivotValueType,
+  WorkLogPivotQueryDto,
+  WorkLogPivotResult,
+  WorkLogPivotSummary,
+} from './dto/work-log-pivot.dto';
+
+
+interface PivotNamedRelation {
+  name?: string | null;
+  name_zh?: string | null;
+  short_name?: string | null;
+  contract_no?: string | null;
+  quotation_no?: string | null;
+  chinese_name?: string | null;
+  english_name?: string | null;
+  code?: string | null;
+}
+
+interface PivotWorkLogRecord {
+  id: number;
+  status: string;
+  scheduled_date: Date | null;
+  client_contract_no: string | null;
+  service_type: string | null;
+  company_id: number | null;
+  client_id: number | null;
+  employee_id: number | null;
+  work_log_fleet_driver_id: number | null;
+  machine_type: string | null;
+  equipment_number: string | null;
+  tonnage: string | null;
+  day_night: string | null;
+  start_location: string | null;
+  end_location: string | null;
+  quantity: unknown;
+  unit: string | null;
+  ot_quantity: unknown;
+  ot_unit: string | null;
+  is_mid_shift: boolean;
+  is_confirmed: boolean;
+  price_match_status: string | null;
+  matched_rate_card_id: number | null;
+  company: PivotNamedRelation | null;
+  company_profile: PivotNamedRelation | null;
+  client: PivotNamedRelation | null;
+  quotation: PivotNamedRelation | null;
+  contract: PivotNamedRelation | null;
+  employee: PivotNamedRelation | null;
+  fleet_driver: PivotNamedRelation | null;
+}
+
+interface PivotAccumulator {
+  value: number;
+  units: Map<string, number>;
+}
+
+interface PivotAxisParts {
+  values: string[];
+  labels: string[];
+  key: string;
+}
 
 // 車輛類機種
 const VEHICLE_TYPES = [
@@ -1555,6 +1622,339 @@ export class WorkLogsService {
     }
 
     return { rateCard: { id: saved.id }, rematchedCount };
+  }
+
+
+  // ── Pivot Table 整理分析 ─────────────────────────────────────
+
+  async getPivot(query: WorkLogPivotQueryDto): Promise<WorkLogPivotResult> {
+    const rowFields = this.parsePivotDimensions(query.row_fields, ['employee']);
+    const colFields = this.parsePivotDimensions(query.col_fields, ['scheduled_date']);
+    const valueType: PivotValueType = query.value_type || 'quantity_sum';
+    const where = this.buildPivotWhere(query);
+
+    const logs = (await this.prisma.workLog.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        scheduled_date: true,
+        client_contract_no: true,
+        service_type: true,
+        company_id: true,
+        client_id: true,
+        employee_id: true,
+        work_log_fleet_driver_id: true,
+        machine_type: true,
+        equipment_number: true,
+        tonnage: true,
+        day_night: true,
+        start_location: true,
+        end_location: true,
+        quantity: true,
+        unit: true,
+        ot_quantity: true,
+        ot_unit: true,
+        is_mid_shift: true,
+        is_confirmed: true,
+        price_match_status: true,
+        matched_rate_card_id: true,
+        company: { select: { name: true } },
+        company_profile: { select: { chinese_name: true, english_name: true, code: true } },
+        client: { select: { name: true } },
+        quotation: { select: { quotation_no: true } },
+        contract: { select: { contract_no: true } },
+        employee: { select: { name_zh: true } },
+        fleet_driver: { select: { name_zh: true, short_name: true } },
+      },
+      orderBy: [{ scheduled_date: 'asc' }, { id: 'asc' }],
+    })) as unknown as PivotWorkLogRecord[];
+
+    const rowMap = new Map<string, PivotAxisItem>();
+    const colMap = new Map<string, PivotAxisItem>();
+    const cellAccumulators = new Map<string, PivotAccumulator>();
+    const rowAccumulators = new Map<string, PivotAccumulator>();
+    const colAccumulators = new Map<string, PivotAccumulator>();
+    const grandAccumulator = this.createPivotAccumulator();
+
+    const allRow = this.makePivotAxisParts([], []);
+    const allCol = this.makePivotAxisParts([], []);
+
+    for (const log of logs) {
+      const rowParts = rowFields.length > 0 ? this.getPivotAxisParts(log, rowFields) : allRow;
+      const colParts = colFields.length > 0 ? this.getPivotAxisParts(log, colFields) : allCol;
+      rowMap.set(rowParts.key, { key: rowParts.key, values: rowParts.values, labels: rowParts.labels });
+      colMap.set(colParts.key, { key: colParts.key, values: colParts.values, labels: colParts.labels });
+
+      const metric = this.getPivotMetricForLog(log, valueType);
+      this.addPivotMetric(cellAccumulators, `${rowParts.key}|${colParts.key}`, metric.value, metric.unit);
+      this.addPivotMetric(rowAccumulators, rowParts.key, metric.value, metric.unit);
+      this.addPivotMetric(colAccumulators, colParts.key, metric.value, metric.unit);
+      this.addToPivotAccumulator(grandAccumulator, metric.value, metric.unit);
+    }
+
+    if (logs.length === 0) {
+      rowMap.set(allRow.key, { key: allRow.key, values: allRow.values, labels: allRow.labels });
+      colMap.set(allCol.key, { key: allCol.key, values: allCol.values, labels: allCol.labels });
+    }
+
+    return {
+      rows: this.sortPivotAxisItems(Array.from(rowMap.values())),
+      cols: this.sortPivotAxisItems(Array.from(colMap.values())),
+      data: this.finalizePivotAccumulatorMap(cellAccumulators),
+      rowTotals: this.finalizePivotAccumulatorMap(rowAccumulators),
+      colTotals: this.finalizePivotAccumulatorMap(colAccumulators),
+      grandTotal: this.finalizePivotAccumulator(grandAccumulator),
+      summary: this.buildPivotSummary(logs),
+    };
+  }
+
+  async getPivotSummary(query: WorkLogPivotQueryDto): Promise<WorkLogPivotSummary> {
+    const result = await this.getPivot(query);
+    return result.summary;
+  }
+
+  private parsePivotDimensions(raw: string | undefined, fallback: PivotDimension[]): PivotDimension[] {
+    const source = raw === undefined || raw.trim() === '' ? fallback.join(',') : raw;
+    const allowed = new Set<string>(PIVOT_DIMENSIONS);
+    const dimensions: PivotDimension[] = [];
+    for (const part of source.split(',')) {
+      const value = part.trim();
+      if (!value || value === 'none') continue;
+      if (allowed.has(value) && !dimensions.includes(value as PivotDimension)) {
+        dimensions.push(value as PivotDimension);
+      }
+    }
+    return dimensions;
+  }
+
+  private buildPivotWhere(query: WorkLogPivotQueryDto): Prisma.WorkLogWhereInput {
+    const where: Prisma.WorkLogWhereInput = { deleted_at: null };
+
+    if (query.date_from || query.date_to) {
+      where.scheduled_date = {};
+      if (query.date_from) where.scheduled_date.gte = new Date(query.date_from);
+      if (query.date_to) where.scheduled_date.lte = new Date(query.date_to);
+    }
+
+    this.applyPivotNumberFilter(where, 'company_id', query.company_id);
+    this.applyPivotNumberFilter(where, 'client_id', query.client_id);
+    this.applyPivotNumberFilter(where, 'employee_id', query.employee_id);
+    this.applyPivotStringFilter(where, 'machine_type', query.machine_type);
+    this.applyPivotStringFilter(where, 'tonnage', query.tonnage);
+    this.applyPivotStringFilter(where, 'day_night', query.day_night);
+    this.applyPivotStringFilter(where, 'service_type', query.service_type);
+
+    const confirmed = this.parsePivotConfirmationFilter(query.status);
+    if (confirmed !== null) where.is_confirmed = confirmed;
+
+    return where;
+  }
+
+  private applyPivotNumberFilter(
+    where: Prisma.WorkLogWhereInput,
+    field: 'company_id' | 'client_id' | 'employee_id',
+    raw: string | undefined,
+  ) {
+    const values = this.splitFilterValues(raw)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+    if (values.length === 1) where[field] = values[0];
+    else if (values.length > 1) where[field] = { in: values };
+  }
+
+  private applyPivotStringFilter(
+    where: Prisma.WorkLogWhereInput,
+    field: 'machine_type' | 'tonnage' | 'day_night' | 'service_type',
+    raw: string | undefined,
+  ) {
+    const values = this.splitFilterValues(raw);
+    if (values.length === 1) where[field] = values[0];
+    else if (values.length > 1) where[field] = { in: values };
+  }
+
+  private parsePivotConfirmationFilter(raw: string | undefined): boolean | null {
+    const values = this.splitFilterValues(raw).map((value) => value.toLowerCase());
+    const confirmedValues = new Set(['confirmed', 'true', '1', '已確認']);
+    const unconfirmedValues = new Set(['unconfirmed', 'false', '0', '未確認']);
+    const hasConfirmed = values.some((value) => confirmedValues.has(value));
+    const hasUnconfirmed = values.some((value) => unconfirmedValues.has(value));
+    if (hasConfirmed && !hasUnconfirmed) return true;
+    if (hasUnconfirmed && !hasConfirmed) return false;
+    return null;
+  }
+
+  private getPivotAxisParts(log: PivotWorkLogRecord, fields: PivotDimension[]): PivotAxisParts {
+    const labels = fields.map((field) => this.getPivotDimensionLabel(log, field));
+    return this.makePivotAxisParts(labels, labels);
+  }
+
+  private makePivotAxisParts(values: string[], labels: string[]): PivotAxisParts {
+    const safeValues = values.length > 0 ? values : ['全部'];
+    const safeLabels = labels.length > 0 ? labels : ['全部'];
+    return {
+      values: safeValues,
+      labels: safeLabels,
+      key: safeValues.map((value) => encodeURIComponent(value)).join('~'),
+    };
+  }
+
+  private getPivotDimensionLabel(log: PivotWorkLogRecord, field: PivotDimension): string {
+    const blank = '(空白)';
+    switch (field) {
+      case 'employee':
+        return log.employee?.name_zh || log.fleet_driver?.name_zh || log.fleet_driver?.short_name || blank;
+      case 'equipment_number':
+        return log.equipment_number || blank;
+      case 'client':
+        return log.client?.name || blank;
+      case 'company':
+        return log.company?.name || log.company_profile?.chinese_name || log.company_profile?.english_name || log.company_profile?.code || blank;
+      case 'machine_type':
+        return log.machine_type || blank;
+      case 'start_location':
+        return log.start_location || blank;
+      case 'end_location':
+        return log.end_location || blank;
+      case 'contract':
+        return log.contract?.contract_no || log.client_contract_no || blank;
+      case 'quotation':
+        return log.quotation?.quotation_no || blank;
+      case 'scheduled_date':
+        return this.formatHongKongDate(log.scheduled_date) || blank;
+      case 'week':
+        return this.formatPivotWeek(log.scheduled_date) || blank;
+      case 'month':
+        return this.formatPivotMonth(log.scheduled_date) || blank;
+      case 'day_night':
+        return log.day_night || blank;
+      case 'service_type':
+        return log.service_type || blank;
+      case 'none':
+        return '全部';
+    }
+  }
+
+  private getPivotMetricForLog(log: PivotWorkLogRecord, valueType: PivotValueType): PivotMetric {
+    switch (valueType) {
+      case 'count':
+        return { value: 1, unit: '筆' };
+      case 'quantity_sum':
+        return { value: this.toPivotNumber(log.quantity), unit: log.unit || '' };
+      case 'ot_sum':
+        return { value: this.toPivotNumber(log.ot_quantity), unit: log.ot_unit || '' };
+      case 'mid_shift_count':
+        return { value: log.is_mid_shift ? 1 : 0, unit: '次' };
+    }
+  }
+
+  private createPivotAccumulator(): PivotAccumulator {
+    return { value: 0, units: new Map<string, number>() };
+  }
+
+  private addPivotMetric(map: Map<string, PivotAccumulator>, key: string, value: number, unit: string) {
+    if (!map.has(key)) map.set(key, this.createPivotAccumulator());
+    const accumulator = map.get(key);
+    if (accumulator) this.addToPivotAccumulator(accumulator, value, unit);
+  }
+
+  private addToPivotAccumulator(accumulator: PivotAccumulator, value: number, unit: string) {
+    accumulator.value += value;
+    const normalizedUnit = unit || '';
+    accumulator.units.set(normalizedUnit, (accumulator.units.get(normalizedUnit) || 0) + 1);
+  }
+
+  private finalizePivotAccumulatorMap(map: Map<string, PivotAccumulator>): Record<string, PivotMetric> {
+    const result: Record<string, PivotMetric> = {};
+    for (const [key, accumulator] of map.entries()) {
+      result[key] = this.finalizePivotAccumulator(accumulator);
+    }
+    return result;
+  }
+
+  private finalizePivotAccumulator(accumulator: PivotAccumulator): PivotMetric {
+    const value = Number(accumulator.value.toFixed(2));
+    return { value, unit: this.getPrimaryPivotUnit(accumulator.units) };
+  }
+
+  private getPrimaryPivotUnit(units: Map<string, number>): string {
+    let selected = '';
+    let selectedCount = -1;
+    for (const [unit, count] of units.entries()) {
+      if (count > selectedCount && unit) {
+        selected = unit;
+        selectedCount = count;
+      }
+    }
+    if (selected) return selected;
+    const first = units.keys().next();
+    return first.done ? '' : first.value;
+  }
+
+  private sortPivotAxisItems(items: PivotAxisItem[]): PivotAxisItem[] {
+    return items.sort((a, b) => a.labels.join('\u0000').localeCompare(b.labels.join('\u0000'), 'zh-Hant'));
+  }
+
+  private buildPivotSummary(logs: PivotWorkLogRecord[]): WorkLogPivotSummary {
+    const employees = new Set<string>();
+    const equipment = new Set<string>();
+    let totalQuantity = 0;
+    let confirmedCount = 0;
+    let matchedCount = 0;
+
+    for (const log of logs) {
+      totalQuantity += this.toPivotNumber(log.quantity);
+      if (log.is_confirmed) confirmedCount += 1;
+      if (log.price_match_status === 'matched' || log.matched_rate_card_id) matchedCount += 1;
+      if (log.employee_id) employees.add(`employee:${log.employee_id}`);
+      if (log.work_log_fleet_driver_id) employees.add(`fleet:${log.work_log_fleet_driver_id}`);
+      if (log.equipment_number) equipment.add(log.equipment_number);
+    }
+
+    return {
+      totalRecords: logs.length,
+      confirmedCount,
+      totalQuantity: Number(totalQuantity.toFixed(2)),
+      priceMatchRate: logs.length > 0 ? Number((matchedCount / logs.length).toFixed(3)) : 0,
+      employeeCount: employees.size,
+      equipmentCount: equipment.size,
+    };
+  }
+
+  private toPivotNumber(value: unknown): number {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    if (typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+      const parsed = value.toNumber();
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    if (typeof value === 'object' && 'toString' in value && typeof value.toString === 'function') {
+      const parsed = Number(value.toString());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }
+
+  private formatPivotMonth(value: Date | null): string {
+    const date = this.formatHongKongDate(value);
+    return date ? date.slice(0, 7) : '';
+  }
+
+  private formatPivotWeek(value: Date | null): string {
+    const dateText = this.formatHongKongDate(value);
+    if (!dateText) return '';
+    const [yearText, monthText, dayText] = dateText.split('-');
+    const date = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
+    const day = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - day);
+    const weekYear = date.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+    const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${weekYear}-W${String(week).padStart(2, '0')}`;
   }
 
   // ── 缺單價組合筛選選項 ─────────────────────────────────────

@@ -6,6 +6,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { WorkLogsService } from './work-logs.service';
 import { CreateWorkLogDto, UpdateWorkLogDto } from './dto/create-work-log.dto';
 import { UnmatchedCombinationsQueryDto, AddRateAndRematchDto } from './dto/unmatched-combinations.dto';
+import { WorkLogPivotQueryDto } from './dto/work-log-pivot.dto';
 
 @Controller('work-logs')
 @UseGuards(AuthGuard('jwt'))
@@ -55,6 +56,18 @@ export class WorkLogsController {
   @Post('add-rate-and-rematch')
   addRateAndRematch(@Body() dto: AddRateAndRematchDto) {
     return this.service.addRateAndRematch(dto);
+  }
+
+  // ── 整理分析 Pivot Table ─────────────────────────────────────
+
+  @Get('pivot')
+  getPivot(@Query() query: WorkLogPivotQueryDto) {
+    return this.service.getPivot(query);
+  }
+
+  @Get('pivot/summary')
+  getPivotSummary(@Query() query: WorkLogPivotQueryDto) {
+    return this.service.getPivotSummary(query);
   }
 
   @Get(':id')

@@ -442,6 +442,10 @@ export const workLogsApi = {
     api.get(`/work-logs/unmatched-combinations/filter-options/${column}`),
   addRateAndRematch: (data: Record<string, unknown>) =>
     api.post('/work-logs/add-rate-and-rematch', data),
+  pivot: (params?: Record<string, string | number | undefined>) =>
+    api.get('/work-logs/pivot', { params }),
+  pivotSummary: (params?: Record<string, string | number | undefined>) =>
+    api.get('/work-logs/pivot/summary', { params }),
 };
 
 // CSV Import (CSV 匯入)

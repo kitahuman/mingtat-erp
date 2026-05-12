@@ -15,6 +15,7 @@ import ExportButton from '@/components/ExportButton';
 import CsvImportModal from '@/components/CsvImportModal';
 import AttendanceImportModal from './AttendanceImportModal';
 import MissingPriceTab from './MissingPriceTab';
+import SummaryTab from './SummaryTab';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
@@ -1251,7 +1252,7 @@ export default function WorkLogsPage() {
     work_content: 'work_content',
   };
 
-  const [activeTab, setActiveTab] = useState<'records' | 'missing-price'>('records');
+  const [activeTab, setActiveTab] = useState<'records' | 'summary' | 'missing-price'>('records');
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50 -m-4 sm:-m-6">
@@ -1370,6 +1371,16 @@ export default function WorkLogsPage() {
             工作記錄
           </button>
           <button
+            onClick={() => setActiveTab('summary')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'summary'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            整理分析
+          </button>
+          <button
             onClick={() => setActiveTab('missing-price')}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'missing-price'
@@ -1381,6 +1392,13 @@ export default function WorkLogsPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Tab Content: Summary Analysis ────────────────────────────── */}
+      {activeTab === 'summary' && (
+        <div className="flex-1 overflow-hidden">
+          <SummaryTab />
+        </div>
+      )}
 
       {/* ── Tab Content: Missing Price ────────────────────────────── */}
       {activeTab === 'missing-price' && (
