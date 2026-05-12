@@ -126,7 +126,12 @@ export class PricingService {
     origin: string | null,
     destination: string | null,
   ): Promise<MatchResult> {
-    const where: any = { status: 'active', client_id: clientId };
+    const where: any = {
+      status: 'active',
+      client_id: clientId,
+      rate_card_type: 'client',
+      deleted_at: null,
+    };
     if (companyId) where.company_id = companyId;
     if (quotationId) where.source_quotation_id = quotationId;
     if (serviceType) where.service_type = serviceType;

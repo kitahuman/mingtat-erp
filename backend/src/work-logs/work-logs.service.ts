@@ -1264,10 +1264,18 @@ export class WorkLogsService {
           matched_rate: null,
           matched_unit: null,
           matched_ot_rate: null,
+          client_price_match_status: 'pending',
+          client_price_match_note: '缺少客戶資訊，無法匹配',
+          matched_client_rate_card_id: null,
+          matched_client_rate: null,
+          matched_client_unit: null,
+          matched_client_ot_rate: null,
         },
       });
       return;
     }
+
+    const updateData: Record<string, unknown> = {};
 
     // 根據業務邏輯：工作記錄配對費率查 FleetRateCard（租賃價目表），用於計算員工薪酬/機械成本
     // RateCard（客戶價目表）用於開發票，SubconRateCard（供應商價目表）用於付款給供應商
@@ -1284,37 +1292,64 @@ export class WorkLogsService {
         workLog.end_location,
       );
 
-    if (!card) {
-      await this.prisma.workLog.update({
-        where: { id: workLog.id },
-        data: {
-          price_match_status: 'unmatched',
-          price_match_note:
-            unmatchedReason || '找不到對應的租賃價目表，請人工處理',
-          matched_rate_card_id: null,
-          matched_rate: null,
-          matched_unit: null,
-          matched_ot_rate: null,
-        },
-      });
-      return;
+    if (card) {
+      const { rate, unit } = this.pricingService.resolveRate(
+        card,
+        workLog.day_night,
+      );
+      updateData.price_match_status = 'matched';
+      updateData.price_match_note = `匹配到：${card.name || card.client_contract_no || `FleetRC#${card.id}`}`;
+      updateData.matched_rate_card_id = card.id;
+      updateData.matched_rate = rate;
+      updateData.matched_unit = unit;
+      updateData.matched_ot_rate = card.ot_rate ?? null;
+    } else {
+      updateData.price_match_status = 'unmatched';
+      updateData.price_match_note =
+        unmatchedReason || '找不到對應的租賃價目表，請人工處理';
+      updateData.matched_rate_card_id = null;
+      updateData.matched_rate = null;
+      updateData.matched_unit = null;
+      updateData.matched_ot_rate = null;
     }
 
-    const { rate, unit } = this.pricingService.resolveRate(
-      card,
-      workLog.day_night,
-    );
+    // 客戶價目配對（用於開發票）
+    const { card: clientCard, unmatchedReason: clientUnmatchedReason } =
+      await this.pricingService.matchRateCardFromDb(
+        workLog.client_id,
+        workLog.company_id || workLog.company_profile_id,
+        workLog.quotation_id || null,
+        workLog.service_type,
+        workLog.machine_type,
+        workLog.tonnage,
+        workLog.start_location,
+        workLog.end_location,
+      );
+
+    if (clientCard) {
+      const { rate, unit } = this.pricingService.resolveRate(
+        clientCard,
+        workLog.day_night,
+      );
+      updateData.client_price_match_status = 'matched';
+      updateData.client_price_match_note = `匹配到：${clientCard.name || clientCard.client_contract_no || `RateCard#${clientCard.id}`}`;
+      updateData.matched_client_rate_card_id = clientCard.id;
+      updateData.matched_client_rate = rate;
+      updateData.matched_client_unit = unit;
+      updateData.matched_client_ot_rate = clientCard.ot_rate ?? null;
+    } else {
+      updateData.client_price_match_status = 'unmatched';
+      updateData.client_price_match_note =
+        clientUnmatchedReason || '找不到對應的客戶價目表，請人工處理';
+      updateData.matched_client_rate_card_id = null;
+      updateData.matched_client_rate = null;
+      updateData.matched_client_unit = null;
+      updateData.matched_client_ot_rate = null;
+    }
 
     await this.prisma.workLog.update({
       where: { id: workLog.id },
-      data: {
-        price_match_status: 'matched',
-        price_match_note: `匹配到：${card.name || card.client_contract_no || `FleetRC#${card.id}`}`,
-        matched_rate_card_id: card.id,
-        matched_rate: rate,
-        matched_unit: unit,
-        matched_ot_rate: card.ot_rate ?? null,
-      },
+      data: updateData as never,
     });
   }
 
@@ -1450,7 +1485,7 @@ export class WorkLogsService {
     // Build WHERE conditions for filtering
     const conditions: string[] = [
       `wl.deleted_at IS NULL`,
-      `wl.price_match_status = 'unmatched'`,
+      `wl.client_price_match_status = 'unmatched'`,
     ];
     const params: (string | number)[] = [];
     let paramIdx = 1;
@@ -1556,7 +1591,7 @@ export class WorkLogsService {
     const total = Number(countResult[0]?.total || 0);
 
     // Count total unmatched work_logs
-    const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND wl.price_match_status = 'unmatched'`;
+    const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND wl.client_price_match_status = 'unmatched'`;
     const unmatchedResult = await this.prisma.$queryRawUnsafe<{ cnt: number }[]>(unmatchedCountSql);
     const totalUnmatched = Number(unmatchedResult[0]?.cnt || 0);
 
@@ -1596,10 +1631,20 @@ export class WorkLogsService {
     rateCard: { id: number };
     rematchedCount: number;
   }> {
-    // 1. Create fleet_rate_card
+    const companyId = Number(dto.company_id);
+    const clientId = Number(dto.client_id);
+
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      throw new BadRequestException('新增客戶價目必須提供有效的公司資訊');
+    }
+    if (!Number.isInteger(clientId) || clientId <= 0) {
+      throw new BadRequestException('新增客戶價目必須提供有效的客戶資訊');
+    }
+
+    // 1. Create rate_card（客戶價目表，用於開發票）
     const rateCardData: Record<string, unknown> = {
-      client_id: dto.client_id || undefined,
-      company_id: dto.company_id || undefined,
+      client_id: clientId,
+      company_id: companyId,
       client_contract_no: dto.client_contract_no || undefined,
       service_type: dto.service_type || undefined,
       source_quotation_id: dto.quotation_id || undefined,
@@ -1613,7 +1658,9 @@ export class WorkLogsService {
       mid_shift_rate: dto.mid_shift_rate ?? 0,
       unit: dto.unit || '日',
       effective_date: dto.effective_date ? new Date(dto.effective_date) : new Date(),
+      rate_card_type: 'client',
       status: 'active',
+      deleted_at: null,
     };
 
     // Remove undefined keys
@@ -1622,20 +1669,18 @@ export class WorkLogsService {
       if (v !== undefined) cleanData[k] = v;
     }
 
-    const saved = await this.prisma.fleetRateCard.create({ data: cleanData as never });
+    const saved = await this.prisma.rateCard.create({ data: cleanData as never });
 
-    // 2. Find affected unmatched work_logs with matching conditions
+    // 2. Find affected client-unmatched work_logs with matching conditions
     const where: Record<string, unknown> = {
       deleted_at: null,
-      price_match_status: 'unmatched',
+      client_price_match_status: 'unmatched',
     };
-    if (dto.client_id) where.client_id = dto.client_id;
-    if (dto.company_id) {
-      where.OR = [
-        { company_id: dto.company_id },
-        { company_profile_id: dto.company_id },
-      ];
-    }
+    where.client_id = clientId;
+    where.OR = [
+      { company_id: companyId },
+      { company_profile_id: companyId },
+    ];
     if (dto.client_contract_no) where.client_contract_no = dto.client_contract_no;
     if (dto.service_type) where.service_type = dto.service_type;
     if (dto.quotation_id) where.quotation_id = dto.quotation_id;
@@ -2017,7 +2062,7 @@ export class WorkLogsService {
       LEFT JOIN companies cp ON cp.id = wl.company_profile_id
       LEFT JOIN partners cl ON cl.id = wl.client_id
       LEFT JOIN quotations q ON q.id = wl.quotation_id
-      WHERE wl.deleted_at IS NULL AND wl.price_match_status = 'unmatched'
+      WHERE wl.deleted_at IS NULL AND wl.client_price_match_status = 'unmatched'
         AND ${expr} IS NOT NULL
       ORDER BY val ASC
       LIMIT 500

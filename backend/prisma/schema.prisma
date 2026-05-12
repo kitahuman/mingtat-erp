@@ -1187,6 +1187,12 @@ model WorkLog {
   matched_ot_rate         Decimal?  @db.Decimal(12, 2)
   price_match_status      String?
   price_match_note        String?   @db.Text
+  matched_client_rate_card_id    Int?
+  matched_client_rate            Decimal?  @db.Decimal(12, 2)
+  matched_client_unit            String?
+  matched_client_ot_rate         Decimal?  @db.Decimal(12, 2)
+  client_price_match_status      String?
+  client_price_match_note        String?   @db.Text
   receipt_no              String?
   work_order_no           String?
   is_confirmed            Boolean   @default(false)
