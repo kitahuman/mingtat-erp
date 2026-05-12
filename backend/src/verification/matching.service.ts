@@ -1292,7 +1292,7 @@ export class MatchingService {
       }],
     };
 
-    // 入帳票
+    // 入帳票（支援多票號配對）
     const matchedReceipts = vehicleNorm
       ? receiptRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
       : [];
@@ -1302,12 +1302,19 @@ export class MatchingService {
         status: 'found',
         details: matchedReceipts.map((r: any) => {
           const raw = r.record_raw_data as any || {};
+          // 支援多票號：拆分逗號分隔的票號
+          const chitNos = r.chits?.map((c: any) => c.chit_no) || [];
+          const allReceiptNos: string[] = [];
+          for (const chitNo of chitNos) {
+            const receiptNos = chitNo.split(',').map((rn: string) => rn.trim()).filter(Boolean);
+            allReceiptNos.push(...receiptNos);
+          }
           return {
             id: r.id,
             facility: raw.facility || '—',
             vehicle: r.record_vehicle_no || '—',
             account_no: raw.account_no || '—',
-            chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
+            chit_nos: allReceiptNos.length > 0 ? allReceiptNos : chitNos,
             weight_net: r.record_weight_net ?? '—',
           };
         }),

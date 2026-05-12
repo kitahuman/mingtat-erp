@@ -905,7 +905,7 @@ function renderSourceDetail(sourceKey: string, detail: any) {
 
     case 'chit':
       return (
-        <div className="space-y-0.5">
+        <div className="space-y-2">
           {detail.vehicle && (
             <div><span className="text-gray-400">車牌:</span> <span className="font-mono">{detail.vehicle}</span></div>
           )}
@@ -921,11 +921,25 @@ function renderSourceDetail(sourceKey: string, detail: any) {
           {detail.contract && detail.contract !== '—' && (
             <div><span className="text-gray-400">合約:</span> <span className="font-mono">{detail.contract}</span></div>
           )}
-          {detail.chit_nos?.length > 0 && (
-            <div><span className="text-gray-400">入帳票號:</span> {detail.chit_nos.join(', ')}</div>
+          {/* 支援多票號：逐筆顯示每個配對的入帳票 */}
+          {detail.chit_nos && detail.chit_nos.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-gray-400">配對入帳票:</div>
+              <div className="space-y-1 pl-4">
+                {detail.chit_nos.map((chitNo: string, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="font-mono">{chitNo}</span>
+                    {detail.account_no && detail.account_no !== '—' && (
+                      <span className="text-gray-500">({detail.account_no})</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-          {detail.weight && (
-            <div><span className="text-gray-400">重量:</span> {detail.weight}</div>
+          {detail.weight_net && (
+            <div><span className="text-gray-400">淨噸數:</span> {detail.weight_net}</div>
           )}
         </div>
       );

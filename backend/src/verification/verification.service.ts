@@ -426,16 +426,21 @@ export class VerificationService {
     const chitNos = (record.chits || []).map((c: any) => c.chit_no);
 
     // ── 策略 A: chit_no 精確匹配（最高優先，信心度 95-100%）──
+    // 支援多票號配對：receipt_no 可能包含逗號分隔的多個票號
     if (chitNos.length > 0) {
       for (const chitNo of chitNos) {
-        const workLogs = await this.prisma.workLog.findMany({
-          where: { receipt_no: chitNo },
-          include: { employee: true },
-        });
-        if (workLogs.length > 0) {
-          for (const wl of workLogs) {
-            const result = await this.createMatchWithComparison(record, wl, sourceId, sourceCode, 'chit_no', 95);
-            return { status: result.status, workLogId: wl.id };
+        // 拆分逗號分隔的票號（支援向後相容：單一票號）
+        const receiptNos = chitNo.split(',').map((r: string) => r.trim()).filter(Boolean);
+        for (const receiptNo of receiptNos) {
+          const workLogs = await this.prisma.workLog.findMany({
+            where: { receipt_no: receiptNo },
+            include: { employee: true },
+          });
+          if (workLogs.length > 0) {
+            for (const wl of workLogs) {
+              const result = await this.createMatchWithComparison(record, wl, sourceId, sourceCode, 'chit_no', 95);
+              return { status: result.status, workLogId: wl.id };
+            }
           }
         }
       }

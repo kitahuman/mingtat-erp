@@ -1822,13 +1822,24 @@ export default function WorkLogsPage() {
                                           </div>
                                         );
                                         if (key === 'chit') return (
-                                          <div className="space-y-0.5 text-gray-600">
+                                          <div className="space-y-1 text-gray-600">
                                             {d.facility && d.facility !== '—' && <div>🏭 設施: {d.facility}</div>}
                                             {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
                                             {d.account_no && d.account_no !== '—' && <div>💳 戶口: {d.account_no}</div>}
-                                            {d.chit_nos?.length > 0 && <div>🧾 入帳票: {d.chit_nos.join(', ')}</div>}
+                                            {/* 支援多票號：逐筆顯示每個配對的入帳票 */}
+                                            {d.chit_nos?.length > 0 && (
+                                              <div className="space-y-0.5 text-[11px]">
+                                                <div className="font-semibold text-gray-700">🧾 配對入帳票:</div>
+                                                {d.chit_nos.map((chitNo: string, idx: number) => (
+                                                  <div key={idx} className="flex items-center gap-1 pl-2">
+                                                    <span className="text-green-600 font-bold">✓</span>
+                                                    <span className="font-mono">{chitNo}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
                                             {d.weight_net != null && d.weight_net !== '—' && <div>⚖️ 凈重: {d.weight_net} T</div>}
-                                            {src.details.length > 1 && <div className="text-gray-400">共 {src.details.length} 筆</div>}
+                                            {src.details.length > 1 && <div className="text-gray-400 text-[10px]">共 {src.details.length} 筆</div>}
                                           </div>
                                         );
                                         if (key === 'delivery_note') return (
