@@ -3,6 +3,7 @@ import {
   Param, Query, Body, UseGuards, Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { WorkLogsService } from './work-logs.service';
 import { CreateWorkLogDto, UpdateWorkLogDto } from './dto/create-work-log.dto';
 import { UnmatchedCombinationsQueryDto, AddRateAndRematchDto } from './dto/unmatched-combinations.dto';
@@ -36,6 +37,7 @@ export class WorkLogsController {
     return this.service.getEquipmentOptions(machineType, tonnage);
   }
 
+  @SkipThrottle()
   @Get('filter-options/:column')
   getFilterOptions(@Param('column') column: string, @Query() query: any) {
     return this.service.getFilterOptions(column, query);

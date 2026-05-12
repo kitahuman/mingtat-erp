@@ -358,8 +358,38 @@ export class WorkLogsService {
   private readonly numericFilterFields = ['quantity', 'ot_quantity', 'goods_quantity'];
 
   private splitFilterValues(raw: unknown): string[] {
-    if (!raw) return [];
-    return String(raw).split(',').map((v) => v.trim()).filter(Boolean);
+    if (raw === null || raw === undefined) return [];
+    if (raw === '') return [''];
+    return String(raw)
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+  }
+
+  private isBlankFilterValue(value: string): boolean {
+    return value === '(空白)' || value === '__BLANK__' || value === '';
+  }
+
+  private getNonBlankFilterValues(values: string[]): string[] {
+    return values.filter((value) => !this.isBlankFilterValue(value));
+  }
+
+  private hasBlankFilterValue(values: string[]): boolean {
+    return values.some((value) => this.isBlankFilterValue(value));
+  }
+
+  private appendAndCondition(where: WhereClause, condition: WhereClause): void {
+    const existingConditions = Array.isArray(where.AND) ? where.AND : [];
+    where.AND = [...existingConditions, condition];
+  }
+
+  private applyOrConditions(where: WhereClause, conditions: WhereClause[]): void {
+    if (conditions.length === 0) return;
+    if (conditions.length === 1) {
+      Object.assign(where, conditions[0]);
+      return;
+    }
+    this.appendAndCondition(where, { OR: conditions });
   }
 
   private parseHongKongDateTime(value: string): Date | null {
@@ -397,56 +427,62 @@ export class WorkLogsService {
   private applyColumnFilters(where: WhereClause, query: WorkLogQuery, excludeColumn?: string) {
     for (const field of this.columnFilterFields) {
       if (field === excludeColumn) continue;
-      const vals = this.splitFilterValues((query as any)[`filter_${field}`]);
+      const vals = this.splitFilterValues(query[`filter_${field}`]);
       if (vals.length === 0) continue;
 
+      const nonBlank = this.getNonBlankFilterValues(vals);
+      const blankSelected = this.hasBlankFilterValue(vals);
       const relation = this.relationFilterConfig[field];
+
       if (relation) {
-        const nonBlank = vals.filter((v) => v !== '(空白)');
-        const conditions: any[] = [];
+        const conditions: WhereClause[] = [];
         if (nonBlank.length > 0) {
           conditions.push({ [relation.relation]: { [relation.field]: { in: nonBlank } } });
         }
-        if (vals.includes('(空白)')) conditions.push({ [relation.foreignKey]: null });
-        if (conditions.length === 1) Object.assign(where, conditions[0]);
-        else if (conditions.length > 1) where.AND = [...((where.AND as any[]) || []), { OR: conditions }];
+        if (blankSelected) {
+          conditions.push(
+            { [relation.foreignKey]: null },
+            { [relation.relation]: { [relation.field]: '' } },
+          );
+        }
+        this.applyOrConditions(where, conditions);
         continue;
       }
 
       if (this.dateFilterFields.includes(field)) {
-        const ranges = vals.map((v) => this.makeDateRange(v)).filter(Boolean) as Array<{ gte: Date; lt: Date }>;
-        if (ranges.length === 1) where[field] = ranges[0];
-        else if (ranges.length > 1) where.AND = [...((where.AND as any[]) || []), { OR: ranges.map((range) => ({ [field]: range })) }];
+        const ranges = nonBlank
+          .map((v) => this.makeDateRange(v))
+          .filter((range): range is { gte: Date; lt: Date } => Boolean(range));
+        const conditions: WhereClause[] = ranges.map((range) => ({ [field]: range }));
+        if (blankSelected) conditions.push({ [field]: null });
+        this.applyOrConditions(where, conditions);
         continue;
       }
 
       if (this.booleanFilterFields.includes(field)) {
-        const bools = vals
+        const bools = nonBlank
           .map((v) => (v === '是' || v === 'true' ? true : v === '否' || v === 'false' ? false : null))
-          .filter((v) => v !== null) as boolean[];
+          .filter((v): v is boolean => v !== null);
         if (bools.length === 1) where[field] = bools[0];
         else if (bools.length > 1) where[field] = { in: bools };
         continue;
       }
 
       if (this.numericFilterFields.includes(field)) {
-        const nums = vals.map(Number).filter((num) => !Number.isNaN(num));
-        if (nums.length === 1) where[field] = nums[0];
-        else if (nums.length > 1) where[field] = { in: nums };
+        const nums = nonBlank.map(Number).filter((num) => !Number.isNaN(num));
+        const conditions: WhereClause[] = [];
+        if (nums.length === 1) conditions.push({ [field]: nums[0] });
+        else if (nums.length > 1) conditions.push({ [field]: { in: nums } });
+        if (blankSelected) conditions.push({ [field]: null });
+        this.applyOrConditions(where, conditions);
         continue;
       }
 
-      const nonBlank = vals.filter((v) => v !== '(空白)');
-      const blankSelected = vals.includes('(空白)');
-      if (blankSelected && nonBlank.length > 0) {
-        where.AND = [...((where.AND as any[]) || []), { OR: [{ [field]: { in: nonBlank } }, { [field]: null }, { [field]: '' }] }];
-      } else if (blankSelected) {
-        where.AND = [...((where.AND as any[]) || []), { OR: [{ [field]: null }, { [field]: '' }] }];
-      } else if (nonBlank.length === 1) {
-        where[field] = nonBlank[0];
-      } else if (nonBlank.length > 1) {
-        where[field] = { in: nonBlank };
-      }
+      const conditions: WhereClause[] = [];
+      if (nonBlank.length === 1) conditions.push({ [field]: nonBlank[0] });
+      else if (nonBlank.length > 1) conditions.push({ [field]: { in: nonBlank } });
+      if (blankSelected) conditions.push({ [field]: null }, { [field]: '' });
+      this.applyOrConditions(where, conditions);
     }
   }
 

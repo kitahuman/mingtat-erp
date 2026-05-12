@@ -1,4 +1,3 @@
-'use client';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
 interface ColumnFilterProps {
@@ -28,6 +27,7 @@ export default function ColumnFilter({
   // Server-side options state
   const [serverOptions, setServerOptions] = useState<string[] | null>(null);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const onFetchOptionsRef = useRef(onFetchOptions);
 
   useEffect(() => {
@@ -52,38 +52,45 @@ export default function ColumnFilter({
   // Keep onFetchOptions in a ref so parent re-renders do not trigger duplicate
   // requests while the dropdown is already open. The cancellation flag prevents
   // stale responses from overwriting newer results.
+  const loadServerOptions = useCallback(async (isCancelled: () => boolean = () => false) => {
+    if (!serverSide) return;
+
+    const fetchOptions = onFetchOptionsRef.current;
+    if (!fetchOptions) return;
+
+    setLoadingOptions(true);
+    setLoadError(false);
+    try {
+      const options = await fetchOptions(columnKey);
+      if (!isCancelled()) {
+        setServerOptions(options);
+      }
+    } catch {
+      if (!isCancelled()) {
+        setServerOptions([]);
+        setLoadError(true);
+      }
+    } finally {
+      if (!isCancelled()) {
+        setLoadingOptions(false);
+      }
+    }
+  }, [serverSide, columnKey]);
+
   useEffect(() => {
     if (!isOpen || !serverSide) return;
 
     let cancelled = false;
-
-    const loadOptions = async () => {
-      const fetchOptions = onFetchOptionsRef.current;
-      if (!fetchOptions) return;
-
-      setLoadingOptions(true);
-      try {
-        const options = await fetchOptions(columnKey);
-        if (!cancelled) {
-          setServerOptions(options);
-        }
-      } catch {
-        if (!cancelled) {
-          setServerOptions([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingOptions(false);
-        }
-      }
-    };
-
-    loadOptions();
+    loadServerOptions(() => cancelled);
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, serverSide, columnKey]);
+  }, [isOpen, serverSide, loadServerOptions]);
+
+  const handleRetryLoad = useCallback(() => {
+    void loadServerOptions();
+  }, [loadServerOptions]);
 
   const getDisplayValue = useCallback((value: string) => {
     return serverSide && optionRender ? optionRender(value) : value;
@@ -203,6 +210,14 @@ export default function ColumnFilter({
                 </div>
                 載入中...
               </div>
+            ) : loadError ? (
+              <button
+                type="button"
+                onClick={handleRetryLoad}
+                className="w-full px-3 py-4 text-xs text-red-500 text-center hover:bg-red-50"
+              >
+                載入失敗，點擊重試
+              </button>
             ) : filteredValues.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-400">無匹配項目</div>
             ) : (
