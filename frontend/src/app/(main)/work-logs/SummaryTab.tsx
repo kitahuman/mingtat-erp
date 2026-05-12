@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { workLogsApi, companiesApi, partnersApi, employeesApi, fieldOptionsApi } from '@/lib/api';
+import { workLogsApi, companiesApi, partnersApi, employeesApi, fieldOptionsApi, vehiclesApi, machineryApi, contractsApi, quotationsApi } from '@/lib/api';
 import DateInput from '@/components/DateInput';
 
 interface Option { value: string; label: string; }
@@ -232,21 +232,24 @@ function buildAxisTree(items: PivotAxisItem[]): AxisNode[] {
   return roots;
 }
 
-function flattenRows(nodes: AxisNode[], collapsed: Set<string>, maxDepth: number): RowEntry[] {
+function flattenRows(nodes: AxisNode[], _collapsed: Set<string>, maxDepth: number): RowEntry[] {
   const rows: RowEntry[] = [];
   const visit = (node: AxisNode) => {
     const hasChildren = node.children.length > 0;
-    const isGroup = hasChildren && node.depth < maxDepth;
-    rows.push({
-      key: node.leafKey || node.key,
-      labels: node.labels,
-      depth: node.depth,
-      label: isGroup ? `${node.label} 小計` : node.label,
-      isGroup,
-      isLeaf: !isGroup,
-      canToggle: isGroup,
-    });
-    if (isGroup && !collapsed.has(node.key)) node.children.forEach(visit);
+    const isLeafRow = !hasChildren || node.depth >= maxDepth;
+    if (isLeafRow) {
+      rows.push({
+        key: node.leafKey || node.key,
+        labels: node.labels,
+        depth: node.depth,
+        label: node.labels.join(' / '),
+        isGroup: false,
+        isLeaf: true,
+        canToggle: false,
+      });
+      return;
+    }
+    node.children.forEach(visit);
   };
   nodes.forEach(visit);
   return rows;
@@ -288,12 +291,25 @@ function aggregateMetric(pivot: WorkLogPivotResult | null, rowLabels: string[], 
   return finalizeMetric(acc);
 }
 
-function makeOptionsFromResponse(response: unknown, labelFields: string[]): Option[] {
+function makeOptionsFromResponse(response: unknown, labelFields: string[], valueFields: string[] = ['id']): Option[] {
   return toDataArray(response).map((item) => {
-    const id = item.id;
-    const label = labelFields.map((field) => item[field]).find((value) => typeof value === 'string' && value.trim()) || id;
-    return { value: String(id || ''), label: String(label || '') };
+    const value = valueFields.map((field) => item[field]).find((fieldValue) => (typeof fieldValue === 'string' && fieldValue.trim()) || typeof fieldValue === 'number');
+    const label = labelFields.map((field) => item[field]).find((fieldValue) => typeof fieldValue === 'string' && fieldValue.trim()) || value;
+    return { value: String(value || ''), label: String(label || '') };
   }).filter((option) => option.value && option.label);
+}
+
+function dedupeOptions(options: Option[]): Option[] {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  });
+}
+
+function combineOptions(...groups: Option[][]): Option[] {
+  return dedupeOptions(groups.flat()).sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
 }
 
 function getFieldOptions(response: unknown, category: string): Option[] {
@@ -380,6 +396,79 @@ function AxisFieldSelector({
   );
 }
 
+function MultiSelectComboBox({
+  label,
+  values,
+  onChange,
+  options,
+  placeholder = '全部',
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  options: Option[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const selectedSet = useMemo(() => new Set(values), [values]);
+  const selectedOptions = useMemo(() => options.filter((option) => selectedSet.has(option.value)), [options, selectedSet]);
+  const filteredOptions = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return options;
+    return options.filter((option) => option.label.toLowerCase().includes(keyword) || option.value.toLowerCase().includes(keyword));
+  }, [options, search]);
+  const summaryText = values.length === 0
+    ? placeholder
+    : `${selectedOptions.slice(0, 2).map((option) => option.label).join('、')}${values.length > 2 ? ` 等 ${values.length} 項` : ''}`;
+
+  const toggleValue = (value: string) => {
+    onChange(selectedSet.has(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  return (
+    <label className="relative block">
+      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+      >
+        <span className={values.length === 0 ? 'truncate text-gray-400' : 'truncate'}>{summaryText}</span>
+        <span className="ml-2 text-xs text-gray-500">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="absolute z-40 mt-1 w-full rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="搜尋..."
+            className="mb-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-500"
+          />
+          <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
+            <span>已選 {values.length} 項</span>
+            {values.length > 0 && <button type="button" onClick={() => onChange([])} className="text-blue-600 hover:text-blue-700">清除</button>}
+          </div>
+          <div className="max-h-56 overflow-auto">
+            {filteredOptions.length === 0 && <div className="px-2 py-3 text-center text-xs text-gray-500">沒有選項</div>}
+            {filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleValue(option.value)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-blue-50"
+              >
+                <input type="checkbox" readOnly checked={selectedSet.has(option.value)} className="h-4 w-4 rounded border-gray-300" />
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </label>
+  );
+}
+
 export default function SummaryTab() {
   const defaults = useMemo(getDefaultDateRange, []);
   const [rowFields, setRowFields] = useState<PivotDimension[]>(['employee']);
@@ -387,14 +476,18 @@ export default function SummaryTab() {
   const [valueType, setValueType] = useState<PivotValueType>('quantity_sum');
   const [dateFrom, setDateFrom] = useState(defaults.from);
   const [dateTo, setDateTo] = useState(defaults.to);
-  const [companyId, setCompanyId] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
-  const [machineType, setMachineType] = useState('');
-  const [tonnage, setTonnage] = useState('');
-  const [dayNight, setDayNight] = useState('');
-  const [serviceType, setServiceType] = useState('');
-  const [status, setStatus] = useState('');
+  const [companyIds, setCompanyIds] = useState<string[]>([]);
+  const [clientIds, setClientIds] = useState<string[]>([]);
+  const [employeeIds, setEmployeeIds] = useState<string[]>([]);
+  const [equipmentNumbers, setEquipmentNumbers] = useState<string[]>([]);
+  const [selectedMachineTypes, setSelectedMachineTypes] = useState<string[]>([]);
+  const [startLocations, setStartLocations] = useState<string[]>([]);
+  const [endLocations, setEndLocations] = useState<string[]>([]);
+  const [selectedContracts, setSelectedContracts] = useState<string[]>([]);
+  const [selectedQuotations, setSelectedQuotations] = useState<string[]>([]);
+  const [selectedDayNights, setSelectedDayNights] = useState<string[]>([]);
+  const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [axisOpen, setAxisOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -404,8 +497,11 @@ export default function SummaryTab() {
   const [companies, setCompanies] = useState<Option[]>([]);
   const [clients, setClients] = useState<Option[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
+  const [equipmentOptions, setEquipmentOptions] = useState<Option[]>([]);
   const [machineTypes, setMachineTypes] = useState<Option[]>([]);
-  const [tonnages, setTonnages] = useState<Option[]>([]);
+  const [locationOptions, setLocationOptions] = useState<Option[]>([]);
+  const [contractOptions, setContractOptions] = useState<Option[]>([]);
+  const [quotationOptions, setQuotationOptions] = useState<Option[]>([]);
   const [dayNights, setDayNights] = useState<Option[]>([]);
   const [serviceTypes, setServiceTypes] = useState<Option[]>([]);
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
@@ -416,13 +512,26 @@ export default function SummaryTab() {
       companiesApi.simple(),
       partnersApi.simple(),
       employeesApi.list({ limit: 500, status: 'active' }),
+      vehiclesApi.simple(),
+      machineryApi.simple(),
+      contractsApi.simple(),
+      quotationsApi.list({ limit: 500 }),
       fieldOptionsApi.getAll(),
-    ]).then(([companyResponse, clientResponse, employeeResponse, fieldOptionResponse]) => {
-      setCompanies(makeOptionsFromResponse(companyResponse, ['internal_prefix', 'name']));
+    ]).then(([companyResponse, clientResponse, employeeResponse, vehicleResponse, machineryResponse, contractResponse, quotationResponse, fieldOptionResponse]) => {
+      setCompanies(makeOptionsFromResponse(companyResponse, ['short_name', 'internal_prefix', 'name']));
       setClients(makeOptionsFromResponse(clientResponse, ['name']));
       setEmployees(makeOptionsFromResponse(employeeResponse, ['name_zh', 'name_en']));
+      setEquipmentOptions(combineOptions(
+        makeOptionsFromResponse(vehicleResponse, ['label', 'plate_number', 'value'], ['value', 'plate_number', 'id']),
+        makeOptionsFromResponse(machineryResponse, ['label', 'machine_code', 'value'], ['value', 'machine_code', 'id']),
+      ));
       setMachineTypes(getFieldOptions(fieldOptionResponse, 'machine_type'));
-      setTonnages(getFieldOptions(fieldOptionResponse, 'tonnage'));
+      setLocationOptions(getFieldOptions(fieldOptionResponse, 'location'));
+      setContractOptions(combineOptions(
+        makeOptionsFromResponse(contractResponse, ['contract_no', 'contract_name'], ['contract_no', 'id']),
+        getFieldOptions(fieldOptionResponse, 'client_contract_no'),
+      ));
+      setQuotationOptions(makeOptionsFromResponse(quotationResponse, ['quotation_no'], ['quotation_no', 'id']));
       setDayNights(getFieldOptions(fieldOptionResponse, 'day_night'));
       setServiceTypes(getFieldOptions(fieldOptionResponse, 'service_type'));
     }).catch(() => undefined);
@@ -435,17 +544,21 @@ export default function SummaryTab() {
       row_fields: rowFields.length ? rowFields.join(',') : 'none',
       col_fields: colFields.length ? colFields.join(',') : 'none',
       value_type: valueType,
-      company_id: companyId || undefined,
-      client_id: clientId || undefined,
-      employee_id: employeeId || undefined,
-      machine_type: machineType || undefined,
-      tonnage: tonnage || undefined,
-      day_night: dayNight || undefined,
-      service_type: serviceType || undefined,
-      status: status || undefined,
+      company_ids: companyIds.length ? companyIds.join(',') : undefined,
+      client_ids: clientIds.length ? clientIds.join(',') : undefined,
+      employee_ids: employeeIds.length ? employeeIds.join(',') : undefined,
+      equipment_numbers: equipmentNumbers.length ? equipmentNumbers.join(',') : undefined,
+      machine_types: selectedMachineTypes.length ? selectedMachineTypes.join(',') : undefined,
+      start_locations: startLocations.length ? startLocations.join(',') : undefined,
+      end_locations: endLocations.length ? endLocations.join(',') : undefined,
+      contracts: selectedContracts.length ? selectedContracts.join(',') : undefined,
+      quotations: selectedQuotations.length ? selectedQuotations.join(',') : undefined,
+      day_nights: selectedDayNights.length ? selectedDayNights.join(',') : undefined,
+      service_types: selectedServiceTypes.length ? selectedServiceTypes.join(',') : undefined,
+      status: selectedStatuses.length ? selectedStatuses.join(',') : undefined,
     };
     return result;
-  }, [dateFrom, dateTo, rowFields, colFields, valueType, companyId, clientId, employeeId, machineType, tonnage, dayNight, serviceType, status]);
+  }, [dateFrom, dateTo, rowFields, colFields, valueType, companyIds, clientIds, employeeIds, equipmentNumbers, selectedMachineTypes, startLocations, endLocations, selectedContracts, selectedQuotations, selectedDayNights, selectedServiceTypes, selectedStatuses]);
 
   const fetchPivot = useCallback(async () => {
     setLoading(true);
@@ -523,16 +636,6 @@ export default function SummaryTab() {
     URL.revokeObjectURL(link.href);
   };
 
-  const renderSelect = (label: string, value: string, onChange: (value: string) => void, options: Option[]) => (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
-        <option value="">全部</option>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </label>
-  );
-
   const summary = pivot?.summary;
 
   return (
@@ -579,14 +682,18 @@ export default function SummaryTab() {
                 <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
                   <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期由</span><DateInput value={dateFrom} onChange={(value) => setDateFrom(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
                   <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期至</span><DateInput value={dateTo} onChange={(value) => setDateTo(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
-                  {renderSelect('公司', companyId, setCompanyId, companies)}
-                  {renderSelect('客戶', clientId, setClientId, clients)}
-                  {renderSelect('員工', employeeId, setEmployeeId, employees)}
-                  {renderSelect('機種', machineType, setMachineType, machineTypes)}
-                  {renderSelect('噸數', tonnage, setTonnage, tonnages)}
-                  {renderSelect('日夜班', dayNight, setDayNight, dayNights)}
-                  {renderSelect('服務類型', serviceType, setServiceType, serviceTypes)}
-                  {renderSelect('狀態', status, setStatus, [{ value: 'confirmed', label: '已確認' }, { value: 'unconfirmed', label: '未確認' }])}
+                  <MultiSelectComboBox label="員工" values={employeeIds} onChange={setEmployeeIds} options={employees} />
+                  <MultiSelectComboBox label="車牌/機號" values={equipmentNumbers} onChange={setEquipmentNumbers} options={equipmentOptions} />
+                  <MultiSelectComboBox label="客戶" values={clientIds} onChange={setClientIds} options={clients} />
+                  <MultiSelectComboBox label="公司" values={companyIds} onChange={setCompanyIds} options={companies} />
+                  <MultiSelectComboBox label="機種" values={selectedMachineTypes} onChange={setSelectedMachineTypes} options={machineTypes} />
+                  <MultiSelectComboBox label="起點" values={startLocations} onChange={setStartLocations} options={locationOptions} />
+                  <MultiSelectComboBox label="終點" values={endLocations} onChange={setEndLocations} options={locationOptions} />
+                  <MultiSelectComboBox label="合約" values={selectedContracts} onChange={setSelectedContracts} options={contractOptions} />
+                  <MultiSelectComboBox label="報價單" values={selectedQuotations} onChange={setSelectedQuotations} options={quotationOptions} />
+                  <MultiSelectComboBox label="日夜班" values={selectedDayNights} onChange={setSelectedDayNights} options={dayNights} />
+                  <MultiSelectComboBox label="服務類型" values={selectedServiceTypes} onChange={setSelectedServiceTypes} options={serviceTypes} />
+                  <MultiSelectComboBox label="確認狀態" values={selectedStatuses} onChange={setSelectedStatuses} options={[{ value: 'confirmed', label: '已確認' }, { value: 'unconfirmed', label: '未確認' }]} />
                 </div>
               </div>
             )}

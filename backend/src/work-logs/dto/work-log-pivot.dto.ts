@@ -37,6 +37,7 @@ export class WorkLogPivotQueryDto {
 
   @IsOptional() @IsIn(PIVOT_VALUE_TYPES) value_type?: PivotValueType;
 
+  // Legacy single-value filters kept for backwards compatibility.
   @IsOptional() @IsString() company_id?: string;
   @IsOptional() @IsString() client_id?: string;
   @IsOptional() @IsString() employee_id?: string;
@@ -44,6 +45,20 @@ export class WorkLogPivotQueryDto {
   @IsOptional() @IsString() tonnage?: string;
   @IsOptional() @IsString() day_night?: string;
   @IsOptional() @IsString() service_type?: string;
+
+  // Multi-select filters sent as comma-separated query strings by the frontend.
+  @IsOptional() @IsString() company_ids?: string;
+  @IsOptional() @IsString() client_ids?: string;
+  @IsOptional() @IsString() employee_ids?: string;
+  @IsOptional() @IsString() equipment_numbers?: string;
+  @IsOptional() @IsString() machine_types?: string;
+  @IsOptional() @IsString() start_locations?: string;
+  @IsOptional() @IsString() end_locations?: string;
+  @IsOptional() @IsString() contracts?: string;
+  @IsOptional() @IsString() quotations?: string;
+  @IsOptional() @IsString() day_nights?: string;
+  @IsOptional() @IsString() service_types?: string;
+
   @IsOptional() @IsString() status?: string;
 }
 

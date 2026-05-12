@@ -26,6 +26,7 @@ interface PivotNamedRelation {
   name?: string | null;
   name_zh?: string | null;
   short_name?: string | null;
+  internal_prefix?: string | null;
   contract_no?: string | null;
   quotation_no?: string | null;
   chinese_name?: string | null;
@@ -1739,7 +1740,7 @@ export class WorkLogsService {
         is_confirmed: true,
         price_match_status: true,
         matched_rate_card_id: true,
-        company: { select: { name: true } },
+        company: { select: { name: true, internal_prefix: true } },
         company_profile: { select: { chinese_name: true, english_name: true, code: true } },
         client: { select: { name: true } },
         quotation: { select: { quotation_no: true } },
@@ -1817,13 +1818,18 @@ export class WorkLogsService {
       if (query.date_to) where.scheduled_date.lte = new Date(query.date_to);
     }
 
-    this.applyPivotNumberFilter(where, 'company_id', query.company_id);
-    this.applyPivotNumberFilter(where, 'client_id', query.client_id);
-    this.applyPivotNumberFilter(where, 'employee_id', query.employee_id);
-    this.applyPivotStringFilter(where, 'machine_type', query.machine_type);
+    this.applyPivotCompanyFilter(where, query.company_ids || query.company_id);
+    this.applyPivotNumberFilter(where, 'client_id', query.client_ids || query.client_id);
+    this.applyPivotNumberFilter(where, 'employee_id', query.employee_ids || query.employee_id);
+    this.applyPivotStringFilter(where, 'equipment_number', query.equipment_numbers);
+    this.applyPivotStringFilter(where, 'machine_type', query.machine_types || query.machine_type);
     this.applyPivotStringFilter(where, 'tonnage', query.tonnage);
-    this.applyPivotStringFilter(where, 'day_night', query.day_night);
-    this.applyPivotStringFilter(where, 'service_type', query.service_type);
+    this.applyPivotStringFilter(where, 'start_location', query.start_locations);
+    this.applyPivotStringFilter(where, 'end_location', query.end_locations);
+    this.applyPivotContractFilter(where, query.contracts);
+    this.applyPivotQuotationFilter(where, query.quotations);
+    this.applyPivotStringFilter(where, 'day_night', query.day_nights || query.day_night);
+    this.applyPivotStringFilter(where, 'service_type', query.service_types || query.service_type);
 
     const confirmed = this.parsePivotConfirmationFilter(query.status);
     if (confirmed !== null) where.is_confirmed = confirmed;
@@ -1831,26 +1837,79 @@ export class WorkLogsService {
     return where;
   }
 
-  private applyPivotNumberFilter(
-    where: Prisma.WorkLogWhereInput,
-    field: 'company_id' | 'client_id' | 'employee_id',
-    raw: string | undefined,
-  ) {
-    const values = this.splitFilterValues(raw)
+  private getPivotNumberValues(raw: string | undefined): number[] {
+    return this.splitFilterValues(raw)
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value));
-    if (values.length === 1) where[field] = values[0];
-    else if (values.length > 1) where[field] = { in: values };
+  }
+
+  private makePivotNumberFilter(values: number[]): number | { in: number[] } | undefined {
+    if (values.length === 0) return undefined;
+    return values.length === 1 ? values[0] : { in: values };
+  }
+
+  private makePivotStringFilter(values: string[]): string | { in: string[] } | undefined {
+    if (values.length === 0) return undefined;
+    return values.length === 1 ? values[0] : { in: values };
+  }
+
+  private addPivotAndCondition(where: Prisma.WorkLogWhereInput, condition: Prisma.WorkLogWhereInput) {
+    const existing = where.AND;
+    where.AND = Array.isArray(existing) ? [...existing, condition] : existing ? [existing, condition] : [condition];
+  }
+
+  private applyPivotCompanyFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+    const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    if (!idFilter) return;
+    this.addPivotAndCondition(where, {
+      OR: [
+        { company_id: idFilter },
+        { company_profile: { is: { company_id: idFilter } } },
+      ],
+    } as Prisma.WorkLogWhereInput);
+  }
+
+  private applyPivotNumberFilter(
+    where: Prisma.WorkLogWhereInput,
+    field: 'client_id' | 'employee_id',
+    raw: string | undefined,
+  ) {
+    const filter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    if (filter !== undefined) where[field] = filter;
   }
 
   private applyPivotStringFilter(
     where: Prisma.WorkLogWhereInput,
-    field: 'machine_type' | 'tonnage' | 'day_night' | 'service_type',
+    field: 'equipment_number' | 'machine_type' | 'tonnage' | 'day_night' | 'service_type' | 'start_location' | 'end_location',
     raw: string | undefined,
   ) {
+    const filter = this.makePivotStringFilter(this.splitFilterValues(raw));
+    if (filter !== undefined) where[field] = filter;
+  }
+
+  private applyPivotContractFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
     const values = this.splitFilterValues(raw);
-    if (values.length === 1) where[field] = values[0];
-    else if (values.length > 1) where[field] = { in: values };
+    if (values.length === 0) return;
+    const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    const textFilter = this.makePivotStringFilter(values);
+    const conditions: Prisma.WorkLogWhereInput[] = [];
+    if (idFilter) conditions.push({ contract_id: idFilter });
+    if (textFilter) {
+      conditions.push({ client_contract_no: textFilter });
+      conditions.push({ contract: { is: { contract_no: textFilter } } } as Prisma.WorkLogWhereInput);
+    }
+    this.addPivotAndCondition(where, { OR: conditions });
+  }
+
+  private applyPivotQuotationFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+    const values = this.splitFilterValues(raw);
+    if (values.length === 0) return;
+    const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    const textFilter = this.makePivotStringFilter(values);
+    const conditions: Prisma.WorkLogWhereInput[] = [];
+    if (idFilter) conditions.push({ quotation_id: idFilter });
+    if (textFilter) conditions.push({ quotation: { is: { quotation_no: textFilter } } } as Prisma.WorkLogWhereInput);
+    this.addPivotAndCondition(where, { OR: conditions });
   }
 
   private parsePivotConfirmationFilter(raw: string | undefined): boolean | null {
@@ -1889,7 +1948,7 @@ export class WorkLogsService {
       case 'client':
         return log.client?.name || blank;
       case 'company':
-        return log.company?.name || log.company_profile?.chinese_name || log.company_profile?.english_name || log.company_profile?.code || blank;
+        return log.company?.internal_prefix || log.company?.name || log.company_profile?.code || log.company_profile?.chinese_name || log.company_profile?.english_name || blank;
       case 'machine_type':
         return log.machine_type || blank;
       case 'start_location':
