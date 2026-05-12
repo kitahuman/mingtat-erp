@@ -360,6 +360,9 @@ export default function VerificationRecordsPage() {
                     離開時間
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                    戶口號碼
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
                     入帳票號
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
@@ -374,7 +377,7 @@ export default function VerificationRecordsPage() {
             <tbody className="bg-white divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={isGpsTab ? 9 : 12} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={isGpsTab ? 9 : 13} className="px-4 py-12 text-center text-gray-400">
                     <div className="flex items-center justify-center gap-2">
                       <svg
                         className="animate-spin h-5 w-5 text-primary-500"
@@ -402,7 +405,7 @@ export default function VerificationRecordsPage() {
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={isGpsTab ? 9 : 12} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={isGpsTab ? 9 : 13} className="px-4 py-12 text-center text-gray-400">
                     沒有符合條件的記錄
                   </td>
                 </tr>
@@ -504,6 +507,9 @@ export default function VerificationRecordsPage() {
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
                       {formatTime(record.record_time_out)}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-700">
+                      {record.record_contract_no || '—'}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-gray-700">
                       {record.chits && record.chits.length > 0

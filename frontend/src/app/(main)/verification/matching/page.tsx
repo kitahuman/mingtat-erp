@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { verificationApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
@@ -61,6 +61,10 @@ interface Pagination {
   total_pages: number;
 }
 
+type SortField = 'date' | 'key' | 'match_count' | 'avg_score';
+type SortDirection = 'asc' | 'desc';
+type SourceStatusFilterValue = 'all' | 'found' | 'missing';
+
 // ══════════════════════════════════════════════════════════════
 // 來源定義
 // ══════════════════════════════════════════════════════════════
@@ -88,6 +92,18 @@ const REVIEW_STATUS_OPTIONS = [
   { value: 'rejected', label: '已拒絕', color: 'bg-red-100 text-red-700 border-red-300' },
   { value: 'manual_match', label: '手動配對', color: 'bg-purple-100 text-purple-700 border-purple-300' },
 ];
+
+const SOURCE_STATUS_OPTIONS: { value: SourceStatusFilterValue; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'found', label: '已配對' },
+  { value: 'missing', label: '未配對' },
+];
+
+const createDefaultSourceStatusFilter = () =>
+  ALL_SOURCE_COLUMNS.reduce<Record<string, SourceStatusFilterValue>>((acc, col) => {
+    acc[col.key] = 'all';
+    return acc;
+  }, {});
 
 const CONFIRM_STATUS_BADGE: Record<string, { label: string; icon: string; color: string }> = {
   confirmed: { label: '已確認', icon: '✅', color: 'text-green-600 bg-green-50 border-green-200' },
@@ -152,6 +168,11 @@ export default function MatchingPage() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [confirmLoading, setConfirmLoading] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sourceStatusFilter, setSourceStatusFilter] = useState<Record<string, SourceStatusFilterValue>>(
+    createDefaultSourceStatusFilter,
+  );
 
   // 顯示來源篩選器：預設全部開啟（work_log 強制開啟）
   const [visibleSources, setVisibleSources] = useState<Set<string>>(
@@ -204,6 +225,34 @@ export default function MatchingPage() {
   };
 
   const handlePageChange = (newPage: number) => fetchData(newPage);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortField(field);
+    setSortDirection('asc');
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return '▲▼';
+    return sortDirection === 'asc' ? '▲' : '▼';
+  };
+
+  const handleSourceStatusFilterChange = (sourceKey: string, value: SourceStatusFilterValue) => {
+    setSourceStatusFilter((prev) => ({ ...prev, [sourceKey]: value }));
+    setExpandedKey(null);
+    setExpandedSource(null);
+  };
+
+  const hasSourceStatusFilter = Object.values(sourceStatusFilter).some((value) => value !== 'all');
+
+  const handleClearSourceStatusFilters = () => {
+    setSourceStatusFilter(createDefaultSourceStatusFilter());
+    setExpandedKey(null);
+    setExpandedSource(null);
+  };
 
   const toggleExpand = (rowKey: string) => {
     if (expandedKey === rowKey) {
@@ -286,8 +335,48 @@ export default function MatchingPage() {
     }
   };
 
+  const displayedData = useMemo(() => {
+    const filteredData = data.filter((row) =>
+      Object.entries(sourceStatusFilter).every(([sourceKey, filterValue]) => {
+        if (filterValue === 'all') return true;
+        return row.sources[sourceKey]?.status === filterValue;
+      }),
+    );
+
+    if (!sortField) return filteredData;
+
+    return [...filteredData].sort((a, b) => {
+      const getValue = (row: MatchingRow) => {
+        switch (sortField) {
+          case 'date':
+            return row.date || '';
+          case 'key':
+            return row.key || '';
+          case 'match_count':
+            return row.match_count ?? 0;
+          case 'avg_score':
+            return row.avg_score ?? 0;
+          default:
+            return '';
+        }
+      };
+
+      const aValue = getValue(a);
+      const bValue = getValue(b);
+      const comparison =
+        typeof aValue === 'number' && typeof bValue === 'number'
+          ? aValue - bValue
+          : String(aValue).localeCompare(String(bValue), 'zh-Hant', {
+            numeric: true,
+            sensitivity: 'base',
+          });
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [data, sourceStatusFilter, sortField, sortDirection]);
+
   // 展開詳情的 colSpan
-  const expandColSpan = 7 + visibleColumns.length + 2;
+  const expandColSpan = 7 + visibleColumns.length + 3;
 
   return (
     <div className="p-4 sm:p-6 max-w-full">
@@ -408,6 +497,37 @@ export default function MatchingPage() {
             </button>
           </div>
         </div>
+
+        {/* 配對狀態篩選 */}
+        <div className="mt-3 pt-3 border-t">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-500 shrink-0">配對狀態篩選:</span>
+            {ALL_SOURCE_COLUMNS.map((col) => (
+              <label key={col.key} className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="whitespace-nowrap">{col.icon} {col.label}</span>
+                <select
+                  value={sourceStatusFilter[col.key] ?? 'all'}
+                  onChange={(e) =>
+                    handleSourceStatusFilterChange(col.key, e.target.value as SourceStatusFilterValue)
+                  }
+                  className="border border-gray-300 rounded px-2 py-1 text-xs text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  {SOURCE_STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {hasSourceStatusFilter && (
+              <button
+                onClick={handleClearSourceStatusFilters}
+                className="text-xs text-gray-400 hover:text-gray-600 underline ml-1"
+              >
+                清除配對狀態篩選
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* 評分說明 */}
@@ -469,10 +589,10 @@ export default function MatchingPage() {
             <p className="text-sm text-gray-400 mt-1">系統正在比對各來源資料，這可能需要數秒鐘</p>
           </div>
         </div>
-      ) : data.length === 0 ? (
+      ) : displayedData.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <div className="text-4xl mb-3">📭</div>
-          <div>所選日期範圍內無工作紀錄</div>
+          <div>{data.length === 0 ? '所選日期範圍內無工作紀錄' : '沒有符合目前篩選條件的記錄'}</div>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
@@ -481,9 +601,25 @@ export default function MatchingPage() {
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 w-8"></th>
-                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">日期</th>
                   <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
-                    {groupBy === 'vehicle' ? '車牌' : '員工'}
+                    <button
+                      type="button"
+                      onClick={() => handleSort('date')}
+                      className="inline-flex items-center gap-1 hover:text-gray-800 transition-colors"
+                    >
+                      日期
+                      <span className="text-[10px] text-gray-400">{getSortIcon('date')}</span>
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('key')}
+                      className="inline-flex items-center gap-1 hover:text-gray-800 transition-colors"
+                    >
+                      {groupBy === 'vehicle' ? '車牌' : '員工'}
+                      <span className="text-[10px] text-gray-400">{getSortIcon('key')}</span>
+                    </button>
                   </th>
                   <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">司機/員工</th>
                   <th className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">客戶</th>
@@ -495,12 +631,31 @@ export default function MatchingPage() {
                       <div className="whitespace-nowrap">{col.label}</div>
                     </th>
                   ))}
-                  <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap">平均分</th>
+                  <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('match_count')}
+                      className="inline-flex items-center justify-center gap-1 w-full hover:text-gray-800 transition-colors"
+                    >
+                      配對數
+                      <span className="text-[10px] text-gray-400">{getSortIcon('match_count')}</span>
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('avg_score')}
+                      className="inline-flex items-center justify-center gap-1 w-full hover:text-gray-800 transition-colors"
+                    >
+                      平均分
+                      <span className="text-[10px] text-gray-400">{getSortIcon('avg_score')}</span>
+                    </button>
+                  </th>
                   <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap">狀態</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.map((row) => {
+                {displayedData.map((row) => {
                   const rowKey = `${row.date}-${row.key}`;
                   const isExpanded = expandedKey === rowKey;
                   const statusCfg = STATUS_CONFIG[row.match_status] || STATUS_CONFIG.missing_source;
@@ -667,6 +822,10 @@ function MatchingTableRow({
             </td>
           );
         })}
+        {/* 配對數 */}
+        <td className="px-2 py-2 text-center text-xs text-gray-700 whitespace-nowrap">
+          {row.match_count}/{row.total_sources}
+        </td>
         {/* 平均分 */}
         <td className="px-2 py-2 text-center">
           {row.avg_score > 0 ? (
