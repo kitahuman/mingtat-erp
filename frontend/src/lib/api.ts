@@ -901,6 +901,49 @@ export const subconPayrollApi = {
 // Verification (工作紀錄核對)
 // ══════════════════════════════════════════════════════════════
 
+export type VerificationRecordSortField =
+  | 'date'
+  | 'vehicle_no'
+  | 'driver_name'
+  | 'contract_no'
+  | 'slip_no'
+  | 'weight';
+
+export type VerificationRecordSortDirection = 'asc' | 'desc';
+
+export type VerificationRecordFilterColumn =
+  | 'source'
+  | 'vehicle_no'
+  | 'driver_name'
+  | 'location_from'
+  | 'location_to'
+  | 'contract_no'
+  | 'match_status';
+
+export interface VerificationRecordFilterOption {
+  value: string;
+  label: string;
+}
+
+export interface VerificationRecordsParams {
+  page?: number;
+  limit?: number;
+  source_type?: string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  sort_field?: VerificationRecordSortField;
+  sort_direction?: VerificationRecordSortDirection;
+  match_status?: 'matched' | 'unmatched';
+  filter_source?: string;
+  filter_vehicle_no?: string;
+  filter_driver_name?: string;
+  filter_location_from?: string;
+  filter_location_to?: string;
+  filter_contract_no?: string;
+  filter_match_status?: string;
+}
+
 export const verificationApi = {
   // 上傳檔案
   upload: (formData: FormData) =>
@@ -955,15 +998,12 @@ export const verificationApi = {
 
 
   // 已匯入資料列表
-  getRecords: (params?: {
-    page?: number;
-    limit?: number;
-    source_type?: string;
-    date_from?: string;
-    date_to?: string;
-    search?: string;
-  }) =>
+  getRecords: (params?: VerificationRecordsParams) =>
     api.get('/verification/records', { params }),
+
+  // 已匯入資料欄位篩選選項
+  getRecordFilterOptions: (column: VerificationRecordFilterColumn, params?: VerificationRecordsParams) =>
+    api.get<{ options: VerificationRecordFilterOption[] }>(`/verification/records/filter-options/${column}`, { params }),
 
   // ── OCR 相關 ──────────────────────────────────────────────
 

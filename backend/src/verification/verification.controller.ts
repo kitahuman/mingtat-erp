@@ -22,6 +22,12 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { VerificationService } from './verification.service';
 import { OcrService } from './ocr.service';
+import { VERIFICATION_RECORD_FILTER_COLUMNS } from './dto/verification-records-query.dto';
+import type {
+  VerificationRecordFilterColumn,
+  VerificationRecordFilterOptionsQueryDto,
+  VerificationRecordsQueryDto,
+} from './dto/verification-records-query.dto';
 import { GpsService } from './gps.service';
 import {
   FileValidationPipe,
@@ -329,22 +335,19 @@ export class VerificationController {
 
   // ── 已匯入資料列表 ────────────────────────────────────────
   @Get('records')
-  async getRecords(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('source_type') sourceType?: string,
-    @Query('date_from') dateFrom?: string,
-    @Query('date_to') dateTo?: string,
-    @Query('search') search?: string,
+  async getRecords(@Query() query: VerificationRecordsQueryDto) {
+    return this.service.getRecords(query);
+  }
+
+  @Get('records/filter-options/:column')
+  async getRecordFilterOptions(
+    @Param('column') column: string,
+    @Query() query: VerificationRecordFilterOptionsQueryDto,
   ) {
-    return this.service.getRecords({
-      page: page ? +page : 1,
-      limit: limit ? +limit : 20,
-      source_type: sourceType,
-      date_from: dateFrom,
-      date_to: dateTo,
-      search,
-    });
+    if (!VERIFICATION_RECORD_FILTER_COLUMNS.includes(column as VerificationRecordFilterColumn)) {
+      return { options: [] };
+    }
+    return this.service.getRecordFilterOptions(column as VerificationRecordFilterColumn, query);
   }
 
   // ── 來源列表 ──────────────────────────────────────────────

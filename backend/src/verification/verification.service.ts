@@ -1,9 +1,17 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from './whatsapp.service';
 import * as ExcelJS from 'exceljs';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import {
+  VERIFICATION_RECORD_FILTER_COLUMNS,
+  VerificationRecordFilterColumn,
+  VerificationRecordFilterOptionDto,
+  VerificationRecordFilterOptionsResponseDto,
+  VerificationRecordsQueryDto,
+} from './dto/verification-records-query.dto';
 
 interface UploadOptions {
   sourceType: string;
@@ -39,6 +47,20 @@ interface SyncClockOptions {
   month: number;
   userId?: number;
 }
+
+
+type VerificationRecordColumnFilters = Partial<Record<VerificationRecordFilterColumn, string[]>>;
+
+type VerificationRecordTextFilterColumn =
+  | 'vehicle_no'
+  | 'driver_name'
+  | 'location_from'
+  | 'location_to'
+  | 'contract_no';
+
+const BLANK_FILTER_VALUE = '-';
+const MATCHED_FILTER_VALUE = 'matched';
+const UNMATCHED_FILTER_VALUE = 'unmatched';
 
 @Injectable()
 export class VerificationService {
@@ -1705,77 +1727,217 @@ export class VerificationService {
   }
 
 
+  private parseRecordColumnFilters(query: VerificationRecordsQueryDto): VerificationRecordColumnFilters {
+    const rawFilters: Record<VerificationRecordFilterColumn, string | undefined> = {
+      source: query.filter_source,
+      vehicle_no: query.filter_vehicle_no,
+      driver_name: query.filter_driver_name,
+      location_from: query.filter_location_from,
+      location_to: query.filter_location_to,
+      contract_no: query.filter_contract_no,
+      match_status: query.filter_match_status,
+    };
+
+    return VERIFICATION_RECORD_FILTER_COLUMNS.reduce<VerificationRecordColumnFilters>((filters, column) => {
+      const rawValue = rawFilters[column];
+      if (!rawValue) return filters;
+      const values = rawValue
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (values.length > 0) filters[column] = values;
+      return filters;
+    }, {});
+  }
+
+  private buildNullableStringColumnWhere(
+    column: VerificationRecordTextFilterColumn,
+    values: string[],
+  ): Prisma.VerificationRecordWhereInput | null {
+    const hasBlank = values.includes(BLANK_FILTER_VALUE);
+    const nonBlankValues = values.filter((value) => value !== BLANK_FILTER_VALUE);
+    const conditions: Prisma.VerificationRecordWhereInput[] = [];
+
+    const textFilter: Prisma.StringNullableFilter<'VerificationRecord'> = {
+      in: nonBlankValues,
+      mode: 'insensitive',
+    };
+
+    if (nonBlankValues.length > 0) {
+      if (column === 'vehicle_no') conditions.push({ record_vehicle_no: textFilter });
+      if (column === 'driver_name') conditions.push({ record_driver_name: textFilter });
+      if (column === 'location_from') conditions.push({ record_location_from: textFilter });
+      if (column === 'location_to') conditions.push({ record_location_to: textFilter });
+      if (column === 'contract_no') conditions.push({ record_contract_no: textFilter });
+    }
+
+    if (hasBlank) {
+      if (column === 'vehicle_no') conditions.push({ OR: [{ record_vehicle_no: null }, { record_vehicle_no: '' }] });
+      if (column === 'driver_name') conditions.push({ OR: [{ record_driver_name: null }, { record_driver_name: '' }] });
+      if (column === 'location_from') conditions.push({ OR: [{ record_location_from: null }, { record_location_from: '' }] });
+      if (column === 'location_to') conditions.push({ OR: [{ record_location_to: null }, { record_location_to: '' }] });
+      if (column === 'contract_no') conditions.push({ OR: [{ record_contract_no: null }, { record_contract_no: '' }] });
+    }
+
+    if (conditions.length === 0) return null;
+    if (conditions.length === 1) return conditions[0];
+    return { OR: conditions };
+  }
+
+  private buildMatchStatusWhere(values: string[]): Prisma.VerificationRecordWhereInput | null {
+    const wantsMatched = values.includes(MATCHED_FILTER_VALUE);
+    const wantsUnmatched = values.includes(UNMATCHED_FILTER_VALUE);
+    if (wantsMatched === wantsUnmatched) return null;
+    return wantsMatched ? { matches: { some: {} } } : { matches: { none: {} } };
+  }
+
+  private buildRecordColumnFilterConditions(
+    filters: VerificationRecordColumnFilters,
+  ): Prisma.VerificationRecordWhereInput[] {
+    const conditions: Prisma.VerificationRecordWhereInput[] = [];
+
+    if (filters.source && filters.source.length > 0) {
+      conditions.push({ source: { source_code: { in: filters.source } } });
+    }
+
+    const textColumns: VerificationRecordTextFilterColumn[] = [
+      'vehicle_no',
+      'driver_name',
+      'location_from',
+      'location_to',
+      'contract_no',
+    ];
+
+    for (const column of textColumns) {
+      const values = filters[column];
+      if (!values || values.length === 0) continue;
+      const condition = this.buildNullableStringColumnWhere(column, values);
+      if (condition) conditions.push(condition);
+    }
+
+    if (filters.match_status && filters.match_status.length > 0) {
+      const condition = this.buildMatchStatusWhere(filters.match_status);
+      if (condition) conditions.push(condition);
+    }
+
+    return conditions;
+  }
+
+  private buildRecordsWhere(
+    query: VerificationRecordsQueryDto,
+    options?: { excludeFilterColumn?: VerificationRecordFilterColumn },
+  ): Prisma.VerificationRecordWhereInput {
+    const conditions: Prisma.VerificationRecordWhereInput[] = [];
+    const { source_type, date_from, date_to, search, match_status } = query;
+
+    if (source_type && source_type !== 'all') {
+      conditions.push({ source: { source_code: source_type } });
+    }
+
+    if (date_from || date_to) {
+      const dateFilter: Prisma.DateTimeNullableFilter<'VerificationRecord'> = {};
+      if (date_from) dateFilter.gte = new Date(date_from);
+      if (date_to) dateFilter.lte = new Date(date_to);
+      conditions.push({ record_work_date: dateFilter });
+    }
+
+    if (search) {
+      conditions.push({
+        OR: [
+          { record_vehicle_no: { contains: search, mode: 'insensitive' } },
+          { record_driver_name: { contains: search, mode: 'insensitive' } },
+          { record_customer: { contains: search, mode: 'insensitive' } },
+          { record_location_from: { contains: search, mode: 'insensitive' } },
+          { record_location_to: { contains: search, mode: 'insensitive' } },
+          { record_slip_no: { contains: search, mode: 'insensitive' } },
+          { record_contract_no: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (match_status) {
+      const condition = this.buildMatchStatusWhere([match_status]);
+      if (condition) conditions.push(condition);
+    }
+
+    const columnFilters = this.parseRecordColumnFilters(query);
+    if (options?.excludeFilterColumn) delete columnFilters[options.excludeFilterColumn];
+    conditions.push(...this.buildRecordColumnFilterConditions(columnFilters));
+
+    return conditions.length > 0 ? { AND: conditions } : {};
+  }
+
+  private buildRecordsOrderBy(
+    sortField: VerificationRecordsQueryDto['sort_field'],
+    sortDirection: VerificationRecordsQueryDto['sort_direction'],
+  ): Prisma.VerificationRecordOrderByWithRelationInput[] {
+    const direction: Prisma.SortOrder = sortDirection === 'asc' ? 'asc' : 'desc';
+    const fallback: Prisma.VerificationRecordOrderByWithRelationInput = { id: direction };
+
+    if (sortField === 'date') return [{ record_work_date: direction }, fallback];
+    if (sortField === 'vehicle_no') return [{ record_vehicle_no: direction }, fallback];
+    if (sortField === 'driver_name') return [{ record_driver_name: direction }, fallback];
+    if (sortField === 'contract_no') return [{ record_contract_no: direction }, fallback];
+    if (sortField === 'slip_no') return [{ record_slip_no: direction }, fallback];
+    if (sortField === 'weight') return [{ record_weight_net: direction }, fallback];
+
+    return [{ record_work_date: 'desc' }, { id: 'desc' }];
+  }
+
+  private mapFilterValue(value: string | null | undefined): VerificationRecordFilterOptionDto {
+    const normalizedValue = value && value.trim() ? value : BLANK_FILTER_VALUE;
+    return { value: normalizedValue, label: normalizedValue };
+  }
+
+  private uniqueSortedOptions(options: VerificationRecordFilterOptionDto[]): VerificationRecordFilterOptionDto[] {
+    const byValue = new Map<string, VerificationRecordFilterOptionDto>();
+    for (const option of options) byValue.set(option.value, option);
+    return [...byValue.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+  }
+
   // ══════════════════════════════════════════════════════════════
   // 已匯入資料列表
   // ══════════════════════════════════════════════════════════════
-  async getRecords(query: {
-    page: number;
-    limit: number;
-    source_type?: string;
-    date_from?: string;
-    date_to?: string;
-    search?: string;
-  }) {
-    const { page, limit, source_type, date_from, date_to, search } = query;
+  async getRecords(query: VerificationRecordsQueryDto) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const where = this.buildRecordsWhere(query);
+    const orderBy = this.buildRecordsOrderBy(query.sort_field, query.sort_direction);
 
-    const where: any = {};
-
-    // 按 source_type 篩選（透過 source 關聯）
-    if (source_type && source_type !== 'all') {
-      where.source = { source_code: source_type };
-    }
-
-    // 按日期範圍篩選
-    if (date_from || date_to) {
-      where.record_work_date = {};
-      if (date_from) where.record_work_date.gte = new Date(date_from);
-      if (date_to) where.record_work_date.lte = new Date(date_to);
-    }
-
-    // 搜尋（車牌、司機名、客戶、地點）
-    if (search) {
-      where.OR = [
-        { record_vehicle_no: { contains: search, mode: 'insensitive' } },
-        { record_driver_name: { contains: search, mode: 'insensitive' } },
-        { record_customer: { contains: search, mode: 'insensitive' } },
-        { record_location_from: { contains: search, mode: 'insensitive' } },
-        { record_location_to: { contains: search, mode: 'insensitive' } },
-        { record_slip_no: { contains: search, mode: 'insensitive' } },
-        { record_contract_no: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    const total = await this.prisma.verificationRecord.count({ where });
-    const records = await this.prisma.verificationRecord.findMany({
-      where,
-      include: {
-        batch: {
-          select: {
-            batch_code: true,
-            batch_period_year: true,
-            batch_period_month: true,
-            batch_upload_time: true,
+    const [total, records] = await Promise.all([
+      this.prisma.verificationRecord.count({ where }),
+      this.prisma.verificationRecord.findMany({
+        where,
+        include: {
+          batch: {
+            select: {
+              batch_code: true,
+              batch_period_year: true,
+              batch_period_month: true,
+              batch_upload_time: true,
+            },
+          },
+          source: {
+            select: {
+              source_code: true,
+              source_name: true,
+              source_type: true,
+            },
+          },
+          chits: {
+            select: { chit_no: true, chit_seq: true },
+            orderBy: { chit_seq: 'asc' },
+          },
+          matches: {
+            select: { id: true },
+            take: 1,
           },
         },
-        source: {
-          select: {
-            source_code: true,
-            source_name: true,
-            source_type: true,
-          },
-        },
-        chits: {
-          select: { chit_no: true, chit_seq: true },
-          orderBy: { chit_seq: 'asc' },
-        },
-      },
-      orderBy: [
-        { record_work_date: 'desc' },
-        { id: 'desc' },
-      ],
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
     return {
       data: records,
@@ -1786,6 +1948,66 @@ export class VerificationService {
         total_pages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async getRecordFilterOptions(
+    column: VerificationRecordFilterColumn,
+    query: VerificationRecordsQueryDto,
+  ): Promise<VerificationRecordFilterOptionsResponseDto> {
+    const where = this.buildRecordsWhere(query, { excludeFilterColumn: column });
+
+    if (column === 'source') {
+      const records = await this.prisma.verificationRecord.findMany({
+        where,
+        select: {
+          record_source_id: true,
+          source: { select: { source_code: true, source_name: true } },
+        },
+        distinct: ['record_source_id'],
+      });
+      return {
+        options: this.uniqueSortedOptions(
+          records.map((record) => ({
+            value: record.source.source_code,
+            label: record.source.source_name || record.source.source_code,
+          })),
+        ),
+      };
+    }
+
+    if (column === 'match_status') {
+      const [matchedCount, unmatchedCount] = await Promise.all([
+        this.prisma.verificationRecord.count({ where: { AND: [where, { matches: { some: {} } }] } }),
+        this.prisma.verificationRecord.count({ where: { AND: [where, { matches: { none: {} } }] } }),
+      ]);
+      const options: VerificationRecordFilterOptionDto[] = [];
+      if (matchedCount > 0) options.push({ value: MATCHED_FILTER_VALUE, label: '已配對' });
+      if (unmatchedCount > 0) options.push({ value: UNMATCHED_FILTER_VALUE, label: '未配對' });
+      return { options };
+    }
+
+    const selectFieldMap: Record<VerificationRecordTextFilterColumn, Prisma.VerificationRecordScalarFieldEnum> = {
+      vehicle_no: 'record_vehicle_no',
+      driver_name: 'record_driver_name',
+      location_from: 'record_location_from',
+      location_to: 'record_location_to',
+      contract_no: 'record_contract_no',
+    };
+    const scalarField = selectFieldMap[column];
+
+    const records = await this.prisma.verificationRecord.findMany({
+      where,
+      select: { [scalarField]: true },
+      distinct: [scalarField],
+      orderBy: { [scalarField]: 'asc' },
+    });
+
+    const options = records.map((record) => {
+      const value = record[scalarField];
+      return this.mapFilterValue(typeof value === 'string' ? value : null);
+    });
+
+    return { options: this.uniqueSortedOptions(options) };
   }
 
   // ══════════════════════════════════════════════════════════════
