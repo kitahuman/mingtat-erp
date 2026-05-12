@@ -1395,7 +1395,7 @@ export default function WorkLogsPage() {
 
       {/* ── Tab Content: Summary Analysis ────────────────────────────── */}
       {activeTab === 'summary' && (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <SummaryTab />
         </div>
       )}

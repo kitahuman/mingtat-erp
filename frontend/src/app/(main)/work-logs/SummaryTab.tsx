@@ -316,10 +316,10 @@ function CsvButton({ onClick }: { onClick: () => void }) {
 
 function SummaryCard({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
       <div className="text-xs font-medium text-gray-500">{title}</div>
-      <div className="mt-2 text-2xl font-bold text-gray-900">{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{subtitle}</div>
+      <div className="mt-1 text-xl font-bold text-gray-900">{value}</div>
+      <div className="mt-0.5 text-xs text-gray-500">{subtitle}</div>
     </div>
   );
 }
@@ -395,9 +395,9 @@ export default function SummaryTab() {
   const [dayNight, setDayNight] = useState('');
   const [serviceType, setServiceType] = useState('');
   const [status, setStatus] = useState('');
-  const [controlsOpen, setControlsOpen] = useState(true);
-  const [axisOpen, setAxisOpen] = useState(true);
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [axisOpen, setAxisOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [pivot, setPivot] = useState<WorkLogPivotResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -536,9 +536,9 @@ export default function SummaryTab() {
   const summary = pivot?.summary;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gray-50">
-      <div className="shrink-0 border-b border-gray-200 bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div className="bg-gray-50">
+      <div className="border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-gray-900">整理分析</h2>
             <p className="text-xs text-gray-500">以 Pivot Table 交叉表整理工作紀錄，可按直軸與橫軸多層分組。</p>
@@ -550,61 +550,10 @@ export default function SummaryTab() {
             </button>
           </div>
         </div>
-
-        {controlsOpen && (
-          <div className="space-y-3">
-            <section className="rounded-xl border border-gray-200 bg-white">
-              <button onClick={() => setAxisOpen((open) => !open)} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                <span>軸設定區</span><span>{axisOpen ? '−' : '+'}</span>
-              </button>
-              {axisOpen && (
-                <div className="grid gap-3 border-t border-gray-100 p-4 lg:grid-cols-3">
-                  <AxisFieldSelector title="直軸" fields={rowFields} onChange={setRowFields} />
-                  <AxisFieldSelector title="橫軸" fields={colFields} onChange={setColFields} />
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <label className="block text-sm font-semibold text-gray-800">值</label>
-                    <select value={valueType} onChange={(event) => setValueType(event.target.value as PivotValueType)} className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
-                      {VALUE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-xl border border-gray-200 bg-white">
-              <button onClick={() => setFiltersOpen((open) => !open)} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                <span>篩選區</span><span>{filtersOpen ? '−' : '+'}</span>
-              </button>
-              {filtersOpen && (
-                <div className="border-t border-gray-100 p-4">
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <button onClick={() => applyQuickRange('week')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本週</button>
-                    <button onClick={() => applyQuickRange('month')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本月</button>
-                    <button onClick={() => applyQuickRange('lastMonth')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">上月</button>
-                    <button onClick={() => applyQuickRange('quarter')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本季</button>
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">自訂日期可直接修改下方日期範圍</span>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期由</span><DateInput value={dateFrom} onChange={(value) => setDateFrom(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期至</span><DateInput value={dateTo} onChange={(value) => setDateTo(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
-                    {renderSelect('公司', companyId, setCompanyId, companies)}
-                    {renderSelect('客戶', clientId, setClientId, clients)}
-                    {renderSelect('員工', employeeId, setEmployeeId, employees)}
-                    {renderSelect('機種', machineType, setMachineType, machineTypes)}
-                    {renderSelect('噸數', tonnage, setTonnage, tonnages)}
-                    {renderSelect('日夜班', dayNight, setDayNight, dayNights)}
-                    {renderSelect('服務類型', serviceType, setServiceType, serviceTypes)}
-                    {renderSelect('狀態', status, setStatus, [{ value: 'confirmed', label: '已確認' }, { value: 'unconfirmed', label: '未確認' }])}
-                  </div>
-                </div>
-              )}
-            </section>
-          </div>
-        )}
       </div>
 
-      <div className="shrink-0 p-4 pb-2">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="p-3 pb-1">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard title="總工作紀錄數" value={String(summary?.totalRecords || 0)} subtitle={`已確認 ${summary?.confirmedCount || 0} / 未確認 ${(summary?.totalRecords || 0) - (summary?.confirmedCount || 0)}`} />
           <SummaryCard title="總工作量" value={metricText({ value: summary?.totalQuantity || 0, unit: '' })} subtitle="依 quantity 欄位合計" />
           <SummaryCard title="價格匹配率" value={`${Math.round((summary?.priceMatchRate || 0) * 1000) / 10}%`} subtitle="已匹配單價的工作紀錄比例" />
@@ -612,14 +561,65 @@ export default function SummaryTab() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 p-4 pt-2">
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
+      {controlsOpen && (
+        <div className="space-y-2 px-3 py-2">
+          <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <button onClick={() => setFiltersOpen((open) => !open)} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800">
+              <span>篩選區</span><span>{filtersOpen ? '−' : '+'}</span>
+            </button>
+            {filtersOpen && (
+              <div className="border-t border-gray-100 p-4">
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <button onClick={() => applyQuickRange('week')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本週</button>
+                  <button onClick={() => applyQuickRange('month')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本月</button>
+                  <button onClick={() => applyQuickRange('lastMonth')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">上月</button>
+                  <button onClick={() => applyQuickRange('quarter')} className="rounded-full border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50">本季</button>
+                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">自訂日期可直接修改下方日期範圍</span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+                  <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期由</span><DateInput value={dateFrom} onChange={(value) => setDateFrom(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
+                  <label className="block"><span className="mb-1 block text-xs font-medium text-gray-600">日期至</span><DateInput value={dateTo} onChange={(value) => setDateTo(value || '')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" /></label>
+                  {renderSelect('公司', companyId, setCompanyId, companies)}
+                  {renderSelect('客戶', clientId, setClientId, clients)}
+                  {renderSelect('員工', employeeId, setEmployeeId, employees)}
+                  {renderSelect('機種', machineType, setMachineType, machineTypes)}
+                  {renderSelect('噸數', tonnage, setTonnage, tonnages)}
+                  {renderSelect('日夜班', dayNight, setDayNight, dayNights)}
+                  {renderSelect('服務類型', serviceType, setServiceType, serviceTypes)}
+                  {renderSelect('狀態', status, setStatus, [{ value: 'confirmed', label: '已確認' }, { value: 'unconfirmed', label: '未確認' }])}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <button onClick={() => setAxisOpen((open) => !open)} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800">
+              <span>軸設定區</span><span>{axisOpen ? '−' : '+'}</span>
+            </button>
+            {axisOpen && (
+              <div className="grid gap-3 border-t border-gray-100 p-4 lg:grid-cols-3">
+                <AxisFieldSelector title="直軸" fields={rowFields} onChange={setRowFields} />
+                <AxisFieldSelector title="橫軸" fields={colFields} onChange={setColFields} />
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <label className="block text-sm font-semibold text-gray-800">值</label>
+                  <select value={valueType} onChange={(event) => setValueType(event.target.value as PivotValueType)} className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                    {VALUE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      <div className="p-3 pt-2">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
             <div className="text-sm font-semibold text-gray-800">Pivot Table 交叉表</div>
             <div className="text-xs text-gray-500">{loading ? '載入中...' : `直軸 ${visibleRows.length} 項，橫軸 ${visibleCols.length} 項`}</div>
           </div>
           {error && <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0 text-sm">
               <thead className="sticky top-0 z-20 bg-gray-100">
                 {Array.from({ length: Math.max(colFields.length, 1) }).map((_, depthIndex) => (
@@ -670,7 +670,7 @@ export default function SummaryTab() {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="sticky bottom-0 z-20 bg-gray-100">
+              <tfoot className="bg-gray-100">
                 <tr>
                   <th className="sticky left-0 z-30 border-t border-r border-gray-300 bg-gray-100 px-3 py-2 text-left font-bold text-gray-900">合計</th>
                   {visibleCols.map((col) => <td key={`total-${col.key}`} className="border-t border-r border-gray-300 px-3 py-2 text-right font-bold tabular-nums text-gray-900">{metricText(aggregateMetric(pivot, [], col.labels))}</td>)}
