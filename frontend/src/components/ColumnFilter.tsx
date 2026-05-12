@@ -28,6 +28,11 @@ export default function ColumnFilter({
   // Server-side options state
   const [serverOptions, setServerOptions] = useState<string[] | null>(null);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const onFetchOptionsRef = useRef(onFetchOptions);
+
+  useEffect(() => {
+    onFetchOptionsRef.current = onFetchOptions;
+  }, [onFetchOptions]);
 
   // Get all unique values for this column from the raw data (client-side mode)
   const clientUniqueValues = useMemo(() => {
@@ -43,25 +48,42 @@ export default function ColumnFilter({
 
   const allUniqueValues = serverSide && serverOptions ? serverOptions : clientUniqueValues;
 
-  // Fetch server-side options when dropdown opens
-  const fetchOptions = useCallback(async () => {
-    if (!serverSide || !onFetchOptions) return;
-    setLoadingOptions(true);
-    try {
-      const options = await onFetchOptions(columnKey);
-      setServerOptions(options);
-    } catch {
-      setServerOptions([]);
-    }
-    setLoadingOptions(false);
-  }, [serverSide, onFetchOptions, columnKey]);
-
-  // Fetch options when dropdown opens in server-side mode
+  // Fetch options when dropdown opens in server-side mode.
+  // Keep onFetchOptions in a ref so parent re-renders do not trigger duplicate
+  // requests while the dropdown is already open. The cancellation flag prevents
+  // stale responses from overwriting newer results.
   useEffect(() => {
-    if (isOpen && serverSide) {
-      fetchOptions();
-    }
-  }, [isOpen, serverSide, fetchOptions]);
+    if (!isOpen || !serverSide) return;
+
+    let cancelled = false;
+
+    const loadOptions = async () => {
+      const fetchOptions = onFetchOptionsRef.current;
+      if (!fetchOptions) return;
+
+      setLoadingOptions(true);
+      try {
+        const options = await fetchOptions(columnKey);
+        if (!cancelled) {
+          setServerOptions(options);
+        }
+      } catch {
+        if (!cancelled) {
+          setServerOptions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingOptions(false);
+        }
+      }
+    };
+
+    loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, serverSide, columnKey]);
 
   const getDisplayValue = useCallback((value: string) => {
     return serverSide && optionRender ? optionRender(value) : value;
