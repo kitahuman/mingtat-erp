@@ -1485,7 +1485,7 @@ export class WorkLogsService {
     // Build WHERE conditions for filtering
     const conditions: string[] = [
       `wl.deleted_at IS NULL`,
-      `wl.client_price_match_status = 'unmatched'`,
+      `(wl.client_price_match_status = 'unmatched' OR wl.client_price_match_status IS NULL)`,
     ];
     const params: (string | number)[] = [];
     let paramIdx = 1;
@@ -1591,7 +1591,7 @@ export class WorkLogsService {
     const total = Number(countResult[0]?.total || 0);
 
     // Count total unmatched work_logs
-    const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND wl.client_price_match_status = 'unmatched'`;
+    const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND (wl.client_price_match_status = 'unmatched' OR wl.client_price_match_status IS NULL)`;
     const unmatchedResult = await this.prisma.$queryRawUnsafe<{ cnt: number }[]>(unmatchedCountSql);
     const totalUnmatched = Number(unmatchedResult[0]?.cnt || 0);
 
@@ -1674,13 +1674,12 @@ export class WorkLogsService {
     // 2. Find affected client-unmatched work_logs with matching conditions
     const where: Record<string, unknown> = {
       deleted_at: null,
-      client_price_match_status: 'unmatched',
+      AND: [
+        { OR: [{ client_price_match_status: 'unmatched' }, { client_price_match_status: null }] },
+        { OR: [{ company_id: companyId }, { company_profile_id: companyId }] },
+      ],
+      client_id: clientId,
     };
-    where.client_id = clientId;
-    where.OR = [
-      { company_id: companyId },
-      { company_profile_id: companyId },
-    ];
     if (dto.client_contract_no) where.client_contract_no = dto.client_contract_no;
     if (dto.service_type) where.service_type = dto.service_type;
     if (dto.quotation_id) where.quotation_id = dto.quotation_id;
@@ -2062,7 +2061,7 @@ export class WorkLogsService {
       LEFT JOIN companies cp ON cp.id = wl.company_profile_id
       LEFT JOIN partners cl ON cl.id = wl.client_id
       LEFT JOIN quotations q ON q.id = wl.quotation_id
-      WHERE wl.deleted_at IS NULL AND wl.client_price_match_status = 'unmatched'
+      WHERE wl.deleted_at IS NULL AND (wl.client_price_match_status = 'unmatched' OR wl.client_price_match_status IS NULL)
         AND ${expr} IS NOT NULL
       ORDER BY val ASC
       LIMIT 500
