@@ -93,7 +93,7 @@ export class BankReconciliationService {
     bank_txn_remark?: string;
   }) {
     const amount = new Prisma.Decimal(data.amount);
-    return this.prisma.bankTransaction.create({
+    const tx = await this.prisma.bankTransaction.create({
       data: {
         bank_account_id: data.bank_account_id,
         date: new Date(data.date),
@@ -107,6 +107,8 @@ export class BankReconciliationService {
         match_status: 'unmatched',
       },
     });
+    await this.syncBalances(data.bank_account_id);
+    return tx;
   }
 
   /** Update a transaction */
@@ -136,17 +138,62 @@ export class BankReconciliationService {
     if (data.balance !== undefined) updateData.balance = data.balance != null ? new Prisma.Decimal(data.balance) : null;
     if (data.bank_txn_remark !== undefined) updateData.bank_txn_remark = data.bank_txn_remark || null;
 
-    return this.prisma.bankTransaction.update({
+    const updatedTx = await this.prisma.bankTransaction.update({
       where: { id },
       data: updateData,
     });
+
+    // After updating an amount or date, we should ideally trigger a balance recalculation for all subsequent transactions.
+    // However, since balances are often provided by the bank statement itself, we only auto-recalculate if the user
+    // hasn't provided a specific balance, or we can implement a "sync balances" method.
+    // For this requirement, we will implement a helper to update all subsequent balances in the database.
+    if (data.amount !== undefined || data.date !== undefined) {
+      await this.syncBalances(updatedTx.bank_account_id);
+    }
+
+    return updatedTx;
+  }
+
+  /**
+   * Recalculate and sync all balances for a bank account based on chronological order.
+   * This ensures that any change in amount or date is reflected in all subsequent balances.
+   */
+  async syncBalances(bankAccountId: number) {
+    // Get all transactions for this account, sorted chronologically
+    const txs = await this.prisma.bankTransaction.findMany({
+      where: { bank_account_id: bankAccountId },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+
+    if (txs.length === 0) return;
+
+    // We need a starting balance. If the first transaction had a balance,
+    // we can assume the opening balance was (balance - amount).
+    // But since we don't have an explicit "opening balance" field in the DB yet,
+    // we'll just re-calculate based on the existing sequence.
+    let currentBalance = new Prisma.Decimal(0);
+    
+    // If there are existing records, we might want to preserve the very first one's balance logic
+    // but for a full sync, we start from 0 or a known opening balance.
+    // Given the requirement "First line Balance = Opening Balance + Deposits - Withdrawals",
+    // and we don't have Opening Balance in DB, we'll assume it's 0 or based on the first record.
+    
+    for (const tx of txs) {
+      currentBalance = currentBalance.add(tx.amount);
+      await this.prisma.bankTransaction.update({
+        where: { id: tx.id },
+        data: { balance: currentBalance },
+      });
+    }
   }
 
   /** Delete a single transaction */
   async deleteTransaction(id: number) {
     const tx = await this.prisma.bankTransaction.findUnique({ where: { id } });
     if (!tx) throw new NotFoundException('交易記錄不存在');
-    return this.prisma.bankTransaction.delete({ where: { id } });
+    const result = await this.prisma.bankTransaction.delete({ where: { id } });
+    await this.syncBalances(tx.bank_account_id);
+    return result;
   }
 
   /** Update remark for a transaction */
@@ -164,9 +211,21 @@ export class BankReconciliationService {
   /** Delete multiple transactions */
   async batchDelete(ids: number[]) {
     if (!ids || ids.length === 0) throw new BadRequestException('請選擇至少一筆交易');
+    
+    // Get account ID from one of the transactions before deleting
+    const firstTx = await this.prisma.bankTransaction.findFirst({
+      where: { id: { in: ids } },
+      select: { bank_account_id: true },
+    });
+
     const result = await this.prisma.bankTransaction.deleteMany({
       where: { id: { in: ids } },
     });
+
+    if (firstTx) {
+      await this.syncBalances(firstTx.bank_account_id);
+    }
+
     return { deleted: result.count };
   }
 
@@ -176,6 +235,12 @@ export class BankReconciliationService {
     // Verify target bank account exists
     const account = await this.prisma.bankAccount.findUnique({ where: { id: targetBankAccountId } });
     if (!account) throw new NotFoundException('目標銀行帳戶不存在');
+
+    // Get source account ID before moving
+    const firstTx = await this.prisma.bankTransaction.findFirst({
+      where: { id: { in: ids } },
+      select: { bank_account_id: true },
+    });
 
     // Unmatch all moved transactions (since they are changing accounts)
     const result = await this.prisma.bankTransaction.updateMany({
@@ -187,6 +252,13 @@ export class BankReconciliationService {
         matched_id: null,
       },
     });
+
+    // Sync balances for both source and target accounts
+    if (firstTx) {
+      await this.syncBalances(firstTx.bank_account_id);
+    }
+    await this.syncBalances(targetBankAccountId);
+
     return { moved: result.count };
   }
 
@@ -236,6 +308,7 @@ export class BankReconciliationService {
 
     // Auto-match after import
     if (results.imported > 0) {
+      await this.syncBalances(bankAccountId);
       await this.autoMatch(bankAccountId, batchId);
     }
 

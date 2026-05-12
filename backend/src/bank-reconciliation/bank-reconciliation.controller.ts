@@ -211,4 +211,9 @@ export class BankReconciliationController {
   exclude(@Param('txId') txId: string, @Body('remarks') remarks?: string) {
     return this.service.exclude(+txId, remarks);
   }
+  
+  @Post('sync-balances/:bankAccountId')
+  syncBalances(@Param('bankAccountId') bankAccountId: string) {
+    return this.service.syncBalances(+bankAccountId);
+  }
 }

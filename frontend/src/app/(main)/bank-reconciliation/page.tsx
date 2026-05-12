@@ -22,10 +22,12 @@ export default function BankReconciliationPage() {
 
   // ── Data state ──
   const [summary, setSummary] = useState<any>(null);
+  const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [openingBalance, setOpeningBalance] = useState<number>(0);
   const limit = 50;
 
   // ── Modal state ──
@@ -123,7 +125,8 @@ export default function BankReconciliationPage() {
         bankReconciliationApi.findTransactions(txParams),
         bankReconciliationApi.getSummary(selectedAccountId, Object.keys(summaryParams).length > 0 ? summaryParams : undefined),
       ]);
-      setTransactions(txRes.data.items);
+      const items = txRes.data.items;
+      setRawTransactions(items);
       setTotal(txRes.data.total);
       setSummary(summaryRes.data);
     } catch (err) {
@@ -294,6 +297,41 @@ export default function BankReconciliationPage() {
     }
   };
 
+  // ── Balance Recalculation ──
+  const recalculateBalances = useCallback((txs: any[], startBalance: number) => {
+    // We need to calculate chronologically: from oldest to newest.
+    // The current transactions are sorted by date desc, id desc.
+    const sorted = [...txs].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateA !== dateB) return dateA - dateB;
+      return a.id - b.id;
+    });
+
+    let currentBalance = startBalance;
+    const idToBalance: Record<number, number> = {};
+
+    sorted.forEach(tx => {
+      currentBalance += Number(tx.amount);
+      idToBalance[tx.id] = currentBalance;
+    });
+
+    return txs.map(tx => ({
+      ...tx,
+      balance: idToBalance[tx.id]
+    }));
+  }, []);
+
+  // Update transactions when openingBalance or raw transactions change
+  useEffect(() => {
+    if (rawTransactions.length > 0) {
+      const updated = recalculateBalances(rawTransactions, openingBalance);
+      setTransactions(updated);
+    } else {
+      setTransactions([]);
+    }
+  }, [openingBalance, rawTransactions, recalculateBalances]);
+
   // ── Helpers ──
   const fmtMoney = (val: any) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -305,46 +343,45 @@ export default function BankReconciliationPage() {
     }
   };
 
-  const getMatchedInfo = (tx: any) => {
-    if (tx.match_status !== 'matched' || !tx.matched_record) {
-      return { category: '', name: '', link: '' };
-    }
-    const rec = tx.matched_record;
-    if (tx.matched_type === 'payment_out') {
-      const category = rec.expense?.category?.name || '付款';
-      const name = rec.expense?.supplier_name || rec.expense?.item || rec.description || '—';
-      const link = `/payment-out/${rec.id}`;
-      return { category, name, link };
-    } else {
-      const category = '收款';
-      const name = rec.project?.project_name || rec.description || '—';
-      const link = `/payment-in`;
-      return { category, name, link };
-    }
-  };
-
   const getSourceBadge = (source: string) => {
     switch (source) {
-      case 'manual': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800">手動</span>;
-      case 'pdf': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800">PDF</span>;
-      case 'csv': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800">CSV</span>;
-      default: return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">{source}</span>;
+      case 'pdf': return <span className="px-1 text-[9px] bg-red-100 text-red-700 rounded uppercase font-bold">PDF</span>;
+      case 'manual': return <span className="px-1 text-[9px] bg-amber-100 text-amber-700 rounded uppercase font-bold">MAN</span>;
+      default: return <span className="px-1 text-[9px] bg-blue-100 text-blue-700 rounded uppercase font-bold">CSV</span>;
     }
   };
 
-  const selectedAccount = accounts.find((a: any) => a.id === selectedAccountId);
+  const getMatchedInfo = (tx: any) => {
+    if (tx.match_status !== 'matched' || !tx.matched_record) return { category: '', name: '', link: '' };
+    const r = tx.matched_record;
+    if (tx.matched_type === 'payment_in') {
+      return {
+        category: '收款',
+        name: r.project?.project_name || r.description || '未命名項目',
+        link: `/payment-in/${r.id}`,
+      };
+    } else {
+      return {
+        category: '支出',
+        name: r.expense?.item || r.description || '未命名支出',
+        link: `/payment-out/${r.id}`,
+      };
+    }
+  };
 
   return (
-    <div className="p-6 space-y-5">
-      {/* ═══ Header ═══ */}
-      <div className="flex justify-between items-start">
-        <h1 className="text-2xl font-bold">銀行對帳</h1>
-        <div className="flex gap-2">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+      {/* ── Header ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">銀行月結單核對</h1>
+          <p className="text-sm text-gray-500">核對銀行流水與系統財務記錄</p>
+        </div>
+        <div className="flex items-center gap-2">
           {selectionMode ? (
             <>
-              <span className="text-sm text-gray-500 self-center">已選 {selectedIds.size} 筆</span>
               <button
-                onClick={() => { if (selectedIds.size > 0) setBatchDeleteConfirm(true); }}
+                onClick={() => setBatchDeleteConfirm(true)}
                 disabled={selectedIds.size === 0}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
@@ -425,7 +462,11 @@ export default function BankReconciliationPage() {
             <select
               className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
               value={selectedAccountId || ''}
-              onChange={(e) => { setSelectedAccountId(Number(e.target.value)); setPage(1); }}
+              onChange={(e) => {
+                setSelectedAccountId(Number(e.target.value));
+                setPage(1);
+                setOpeningBalance(0); // Reset opening balance when switching accounts
+              }}
             >
               {filteredAccounts.length === 0 && <option value="">— 無帳戶 —</option>}
               {filteredAccounts.map((a: any) => (
@@ -473,7 +514,7 @@ export default function BankReconciliationPage() {
 
       {/* ═══ Summary Cards ═══ */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div className="bg-white p-3 rounded-xl border shadow-sm">
             <div className="text-xs text-gray-500">總交易</div>
             <div className="text-xl font-bold">{summary.total_count}</div>
@@ -497,6 +538,16 @@ export default function BankReconciliationPage() {
           <div className="bg-white p-3 rounded-xl border shadow-sm">
             <div className="text-xs text-gray-500">總提取</div>
             <div className="text-lg font-bold text-red-600">${fmtMoney(summary.total_withdrawals)}</div>
+          </div>
+          <div className="bg-white p-3 rounded-xl border shadow-sm border-l-4 border-l-blue-400">
+            <div className="text-xs text-gray-500 font-medium">期初餘額 (Opening)</div>
+            <input
+              type="number"
+              step="0.01"
+              className="w-full mt-1 text-lg font-bold border-none p-0 focus:ring-0"
+              value={openingBalance}
+              onChange={(e) => setOpeningBalance(Number(e.target.value))}
+            />
           </div>
         </div>
       )}
@@ -689,7 +740,7 @@ export default function BankReconciliationPage() {
                           className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50"
                           title="刪除"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6" /></svg>
                         </button>
                       </div>
                     )}
@@ -699,34 +750,30 @@ export default function BankReconciliationPage() {
             })
           )}
         </div>
-
-        {/* Pagination */}
-        {total > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50 text-sm">
-            <span className="text-gray-500">
-              顯示 {(page - 1) * limit + 1}-{Math.min(page * limit, total)} 筆，共 {total} 筆
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 border rounded text-xs hover:bg-white disabled:opacity-50 transition-colors"
-              >
-                上一頁
-              </button>
-              <button
-                onClick={() => setPage(p => p + 1)}
-                disabled={page * limit >= total}
-                className="px-3 py-1 border rounded text-xs hover:bg-white disabled:opacity-50 transition-colors"
-              >
-                下一頁
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ═══ Modals ═══ */}
+      {/* ── Pagination ── */}
+      {total > limit && (
+        <div className="flex justify-center gap-2 py-4">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            上一頁
+          </button>
+          <span className="px-4 py-2 text-sm text-gray-500">第 {page} 頁 / 共 {Math.ceil(total / limit)} 頁</span>
+          <button
+            onClick={() => setPage(p => Math.min(Math.ceil(total / limit), p + 1))}
+            disabled={page >= Math.ceil(total / limit)}
+            className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            下一頁
+          </button>
+        </div>
+      )}
+
+      {/* ── Modals ── */}
       <ImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
@@ -735,19 +782,22 @@ export default function BankReconciliationPage() {
         companies={companies}
         bankAccounts={accounts}
       />
-      <MatchModal
-        isOpen={isMatchModalOpen}
-        onClose={() => { setIsMatchModalOpen(false); setSelectedTx(null); }}
-        tx={selectedTx}
-        onSuccess={loadData}
-      />
+
+      {isMatchModalOpen && selectedTx && (
+        <MatchModal
+          isOpen={isMatchModalOpen}
+          onClose={() => { setIsMatchModalOpen(false); setSelectedTx(null); }}
+          tx={selectedTx}
+          onSuccess={loadData}
+        />
+      )}
 
       {/* ── Delete Confirm Dialog ── */}
       {deleteConfirmId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setDeleteConfirmId(null)} />
           <div className="relative bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-bold mb-2">確認刪除</h3>
+            <h3 className="text-lg font-bold mb-2 text-red-600">確認刪除</h3>
             <p className="text-sm text-gray-600 mb-4">確定要刪除這筆交易記錄嗎？此操作無法復原。</p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">取消</button>
@@ -853,7 +903,7 @@ export default function BankReconciliationPage() {
       {remarkTxId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setRemarkTxId(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
+          <div className="relative bg-white rounded-xl shadow-xl p-6 max-md w-full">
             <h3 className="text-lg font-bold mb-3">編輯備註</h3>
             <textarea
               className="w-full border rounded-lg px-3 py-2 text-sm"

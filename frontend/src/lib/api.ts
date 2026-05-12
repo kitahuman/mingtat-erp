@@ -845,6 +845,7 @@ export const bankReconciliationApi = {
   match: (txId: number, type: 'payment_in' | 'payment_out', matchedId: number) => api.post(`/bank-reconciliation/match/${txId}`, { type, matchedId }),
   unmatch: (txId: number) => api.post(`/bank-reconciliation/unmatch/${txId}`),
   exclude: (txId: number, remarks?: string) => api.post(`/bank-reconciliation/exclude/${txId}`, { remarks }),
+  syncBalances: (bankAccountId: number) => api.post(`/bank-reconciliation/sync-balances/${bankAccountId}`),
 };
 
 // Project Profit & Loss (工程損益表)
