@@ -151,6 +151,7 @@ export default function WorkLogsPage() {
   const [users, setUsers]                     = useState<Option[]>([]);
   const [fieldOptions, setFieldOptions]       = useState<Record<string, Option[]>>({});
   const [allEquipment, setAllEquipment]       = useState<Option[]>([]);
+  const [dynamicTopFilterOptions, setDynamicTopFilterOptions] = useState<Record<string, string[]>>({});
 
   // ── List state ──────────────────────────────────────────────
   const [rows, setRows]   = useState<any[]>([]);
@@ -490,8 +491,8 @@ export default function WorkLogsPage() {
     }).catch(console.error);
   }, [fetchPendingCount]);
 
-  const buildListParams = useCallback((overrides: Record<string, any> = {}) => {
-    const params: any = {
+  const buildListParams = useCallback((overrides: Record<string, unknown> = {}) => {
+    const params: Record<string, unknown> = {
       sortBy,
       sortOrder,
       ...overrides,
@@ -525,6 +526,76 @@ export default function WorkLogsPage() {
   }, [sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient,
       filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo,
       columnFilters]);
+
+  const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  );
+
+  const optionCandidates = (option: Option, rawKeys: string[] = []): string[] => {
+    const candidates = [String(option.value), option.label, option.shortLabel].filter((value): value is string => Boolean(value));
+    const raw = option._raw;
+    if (isPlainRecord(raw)) {
+      for (const key of rawKeys) {
+        const value = raw[key];
+        if (value !== undefined && value !== null && value !== '') candidates.push(String(value));
+      }
+    }
+    return candidates;
+  };
+
+  const contextualOptions = (
+    options: Option[],
+    columnKey: string,
+    selectedValues: (string | number)[],
+    rawKeys: string[] = [],
+  ) => {
+    const availableValues = dynamicTopFilterOptions[columnKey];
+    if (!availableValues) return options;
+
+    const selected = new Set(selectedValues.map(String));
+    const available = new Set(availableValues.map(String));
+    return options.filter(option => {
+      if (selected.has(String(option.value))) return true;
+      return optionCandidates(option, rawKeys).some(candidate => available.has(candidate));
+    });
+  };
+
+  // ── Dynamic top-filter options: use the same server-side filter-option endpoint
+  // so option lists are recalculated from the complete filtered dataset, not only
+  // from rows on the current page.
+  useEffect(() => {
+    let cancelled = false;
+    const loadDynamicTopFilterOptions = async () => {
+      try {
+        const params = buildListParams({ page: 1, limit: Math.max(total, 100000) });
+        const [publisher, status, company, client, quotation, contract] = await Promise.all([
+          workLogsApi.filterOptions('publisher', params),
+          workLogsApi.filterOptions('status', params),
+          workLogsApi.filterOptions('company', params),
+          workLogsApi.filterOptions('client', params),
+          workLogsApi.filterOptions('quotation', params),
+          workLogsApi.filterOptions('contract', params),
+        ]);
+        if (cancelled) return;
+        setDynamicTopFilterOptions({
+          publisher: (publisher.data || []).map(String),
+          status: (status.data || []).map(String),
+          company: (company.data || []).map(String),
+          client: (client.data || []).map(String),
+          quotation: (quotation.data || []).map(String),
+          contract: (contract.data || []).map(String),
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to fetch contextual work-log filter options', error);
+          setDynamicTopFilterOptions({});
+        }
+      }
+    };
+
+    loadDynamicTopFilterOptions();
+    return () => { cancelled = true; };
+  }, [buildListParams, total]);
 
   // ── Load work logs ──────────────────────────────────────────
   const fetchLogs = useCallback(async () => {
@@ -1381,37 +1452,37 @@ export default function WorkLogsPage() {
             <label className="text-xs text-gray-500">發佈人</label>
             <MultiSearchableSelect value={filterPublisher}
               onChange={v => { setFilterPublisher(v); setPage(1); }}
-              options={users} placeholder="全部" className="w-32" />
+              options={contextualOptions(users, 'publisher', filterPublisher)} placeholder="全部" className="w-32" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">狀態</label>
             <MultiSearchableSelect value={filterStatus}
               onChange={v => { setFilterStatus(v); setPage(1); }}
-              options={STATUS_OPTIONS} placeholder="全部" className="w-28" />
+              options={contextualOptions(STATUS_OPTIONS, 'status', filterStatus)} placeholder="全部" className="w-28" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">公司</label>
             <MultiSearchableSelect value={filterCompany}
               onChange={v => { setFilterCompany(v); setPage(1); }}
-              options={companies} placeholder="全部" className="w-32" />
+              options={contextualOptions(companies, 'company', filterCompany, ['name', 'internal_prefix'])} placeholder="全部" className="w-32" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">客戶公司</label>
             <MultiSearchableSelect value={filterClient}
               onChange={v => { setFilterClient(v); setPage(1); }}
-              options={clients} placeholder="全部" className="w-40" />
+              options={contextualOptions(clients, 'client', filterClient, ['name', 'code', 'english_code'])} placeholder="全部" className="w-40" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">報價單</label>
             <MultiSearchableSelect value={filterQuotation}
               onChange={v => { setFilterQuotation(v); setPage(1); }}
-              options={quotations} placeholder="全部" className="w-36" />
+              options={contextualOptions(quotations, 'quotation', filterQuotation, ['quotation_no', 'contract_name'])} placeholder="全部" className="w-36" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">合約</label>
             <MultiSearchableSelect value={filterContract}
               onChange={v => { setFilterContract(v); setPage(1); }}
-              options={contracts} placeholder="全部" className="w-36" />
+              options={contextualOptions(contracts, 'contract', filterContract, ['contract_no', 'contract_name'])} placeholder="全部" className="w-36" />
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">員工</label>

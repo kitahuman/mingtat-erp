@@ -50,10 +50,8 @@ export class WorkLogsService {
 
   // ── 工作記錄 CRUD ──────────────────────────────────────────
 
-  async findAll(query: WorkLogQuery) {
+  private buildWorkLogWhere(query: WorkLogQuery, excludeColumnFilter?: string): WhereClause {
     const {
-      page = 1,
-      limit = 25,
       publisher_id,
       status,
       company_profile_id,
@@ -70,8 +68,6 @@ export class WorkLogsService {
       work_order_no,
       receipt_no,
       work_log_product_name,
-      sortBy = 'created_at',
-      sortOrder = 'DESC',
     } = query;
 
     // Helper: parse comma-separated string or single value into Prisma filter
@@ -134,7 +130,20 @@ export class WorkLogsService {
     if (work_log_product_name) {
       where.work_log_product_name = { contains: String(work_log_product_name), mode: 'insensitive' };
     }
-    this.applyColumnFilters(where, query);
+    this.applyColumnFilters(where, query, excludeColumnFilter);
+
+    return where;
+  }
+
+  async findAll(query: WorkLogQuery) {
+    const {
+      page = 1,
+      limit = 25,
+      sortBy = 'created_at',
+      sortOrder = 'DESC',
+    } = query;
+
+    const where = this.buildWorkLogWhere(query);
 
     const allowedSort = [
       'id',
@@ -381,8 +390,7 @@ export class WorkLogsService {
   async getFilterOptions(column: string, query: WorkLogQuery = {}): Promise<string[]> {
     if (!this.columnFilterFields.includes(column)) return [];
 
-    const where: WhereClause = { deleted_at: null };
-    this.applyColumnFilters(where, query, column);
+    const where = this.buildWorkLogWhere(query, column);
 
     const relation = this.relationFilterConfig[column];
     if (relation) {
