@@ -1254,7 +1254,7 @@ export default function WorkLogsPage() {
   const [activeTab, setActiveTab] = useState<'records' | 'missing-price'>('records');
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 -m-4 sm:-m-6">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50 -m-4 sm:-m-6">
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 gap-2">
         <div className="shrink-0">
@@ -1390,7 +1390,8 @@ export default function WorkLogsPage() {
       )}
 
       {/* ── Tab Content: Work Records (existing content) ────────── */}
-      {activeTab === 'records' && (<>
+      {activeTab === 'records' && (
+        <div className="flex min-h-0 flex-1 flex-col">
 
       {/* ── Batch Edit Dialog ────────────────────────────────────── */}     <BatchEditDialog
         open={batchEditOpen}
@@ -1522,8 +1523,8 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Table ────────────────────────────────────────────────── */}
-      {/* overflow-auto + max-height 讓水平滾動條固定在視窗內，不需要全域修改 */}
-      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      {/* flex-1 + min-h-0 讓表格高度由可用視窗空間決定；資料少時保留空白，資料多時只在此區域內滾動。 */}
+      <div className="min-h-0 flex-1 overflow-auto bg-white">
         <table className="border-collapse text-xs" style={{ minWidth: '2800px' }}>
           <thead className="sticky top-0 z-20 bg-gray-100 border-b-2 border-gray-300">
             <tr>
@@ -2348,7 +2349,8 @@ export default function WorkLogsPage() {
       )}
 
       {/* End of records tab */}
-      </>)}
+      </div>
+      )}
     </div>
   );
 }
