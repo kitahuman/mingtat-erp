@@ -31,7 +31,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   detail: '逐筆明細',
   daily: '逐日計算',
   grouped: '歸組統計',
-  print: '明細',
+  print: '列印',
   unmatched: '未匹配',
 };
 
@@ -69,7 +69,7 @@ function buildUnmatchedGroups(pwls: any[]): UnmatchedGroup[] {
         p.client_contract_no || p.contract_no || '-',
         p.day_night || '日',
         route,
-        p.unit || p.matched_unit || '車',
+        p.unit || p.matched_unit || '天',
       ].join('|');
       const existing = groups.get(key);
       if (existing) {
@@ -83,7 +83,7 @@ function buildUnmatchedGroups(pwls: any[]): UnmatchedGroup[] {
           contractNo: p.client_contract_no || p.contract_no || '-',
           dayNight: p.day_night || '日',
           route,
-          unit: p.unit || p.matched_unit || '車',
+          unit: p.unit || p.matched_unit || '天',
           quantity: Number(p.quantity) || 1,
           count: 1,
           reason: p.price_match_note || '未匹配價目',
@@ -531,7 +531,7 @@ function GroupedSettlementView({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}車</td>
+                  <td className="px-3 py-2 text-right font-mono">{Number(g.total_quantity)}{g.unit || g.matched_unit || '天'}</td>
                   <td className="px-3 py-2 text-right font-mono font-bold">
                     {hasPrice ? `$${subtotal.toLocaleString()}` : <span className="text-orange-500">未設定</span>}
                   </td>
@@ -1178,13 +1178,13 @@ function PrintGroupedSettlement({ groups }: { groups: any[] }) {
             return (
               <tr key={idx}>
                 <td style={cellStyle}>{g.client_name || '-'}</td>
-                <td style={cellStyle}>{g.contract_no || '-'}</td>
+                <td style={cellStyle}>{g.client_contract_no || g.contract_no || '-'}</td>
                 <td style={{ ...cellStyle, textAlign: 'center' }}>{g.day_night || '日'}</td>
                 <td style={cellStyle}>{route || '-'}</td>
                 <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>
                   {hasPrice ? `$${Number(g.matched_rate).toLocaleString()}` : '未設定'}
                 </td>
-                <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>{Number(g.total_quantity)}車</td>
+                <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace' }}>{Number(g.total_quantity)}{g.unit || g.matched_unit || '天'}</td>
                 <td style={{ ...cellStyle, textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
                   {hasPrice ? `$${Number(g.total_amount).toLocaleString()}` : '未設定'}
                 </td>
@@ -1250,6 +1250,13 @@ export default function PayrollDetailPage() {
       router.push('/payroll');
     }
     setLoading(false);
+  };
+
+  const recalculateAndLoad = async () => {
+    try {
+      await payrollApi.recalculate(payroll.id);
+    } catch { /* ignore recalculate errors */ }
+    await loadData();
   };
 
   const loadFieldOptions = async () => {
@@ -1362,6 +1369,7 @@ export default function PayrollDetailPage() {
     if (!confirm('確定要從糧單移除此工作記錄？')) return;
     try {
       await payrollApi.excludeWorkLog(payroll.id, pwlId);
+      await payrollApi.recalculate(payroll.id);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -1371,6 +1379,7 @@ export default function PayrollDetailPage() {
   const handleRestoreWorkLog = async (pwlId: number) => {
     try {
       await payrollApi.restoreWorkLog(payroll.id, pwlId);
+      await payrollApi.recalculate(payroll.id);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -1416,6 +1425,7 @@ export default function PayrollDetailPage() {
   };
 
   // ── Payroll Payment actions ──
+  const [showGroupedInPrint, setShowGroupedInPrint] = useState(true);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [newPaymentDate, setNewPaymentDate] = useState('');
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
@@ -1498,6 +1508,7 @@ export default function PayrollDetailPage() {
         allowance_name: name,
         amount,
       });
+      await payrollApi.recalculate(payroll.id);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -1534,6 +1545,7 @@ export default function PayrollDetailPage() {
         amount,
         remarks: '手動覆蓋補底薪差額',
       });
+      await payrollApi.recalculate(payroll.id);
       await loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '儲存補底薪失敗');
@@ -1774,25 +1786,25 @@ export default function PayrollDetailPage() {
                     return (
                       <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'hover:bg-gray-50'}`}>
                         <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
-                        <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} display={fmtDate(pwl.scheduled_date)} />
-                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['service_type'] || []} onSaved={loadData} />
+                        <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} display={fmtDate(pwl.scheduled_date)} />
+                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['service_type'] || []} onSaved={recalculateAndLoad} />
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.company_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap truncate max-w-[120px]" title={pwl.client_name}>{pwl.client_name || '—'}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap">{pwl.quotation_no || '—'}</td>
-                        <InlineEditCell value={pwl.client_contract_no} field="client_contract_no" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['tonnage'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['machine_type'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.equipment_number} field="equipment_number" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['day_night'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.quantity} field="quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
-                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.ot_quantity} field="ot_quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={loadData} />
-                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={loadData} />
-                        <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={loadData} />
-                        <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={loadData} />
-                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['product_unit'] || []} onSaved={loadData} />
+                        <InlineEditCell value={pwl.client_contract_no} field="client_contract_no" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['tonnage'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['machine_type'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.equipment_number} field="equipment_number" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['day_night'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.quantity} field="quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.ot_quantity} field="ot_quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
+                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['product_unit'] || []} onSaved={recalculateAndLoad} />
                         <InlineEditCell
                           value={pwl.matched_rate}
                           field="matched_rate"
@@ -1801,7 +1813,7 @@ export default function PayrollDetailPage() {
                           editable={canEdit}
                           type="number"
                           align="right"
-                          onSaved={loadData}
+                          onSaved={recalculateAndLoad}
                           display={hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : undefined}
                         />
                         <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono font-bold text-primary-600">
@@ -1836,7 +1848,7 @@ export default function PayrollDetailPage() {
         {/* end detail tab */}
 
         {activeTab === 'grouped' && (
-          <GroupedSettlementView groups={grouped} payrollId={payroll.id} isDraft={isDraft} onRateSaved={loadData} />
+          <GroupedSettlementView groups={grouped} payrollId={payroll.id} isDraft={isDraft} onRateSaved={recalculateAndLoad} />
         )}
 
         {activeTab === 'daily' && (
@@ -1860,7 +1872,16 @@ export default function PayrollDetailPage() {
 
         {activeTab === 'print' && (
           <div>
-            <div className="flex justify-end mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showGroupedInPrint}
+                  onChange={(e) => setShowGroupedInPrint(e.target.checked)}
+                  className="rounded"
+                />
+                顯示歸組結算明細
+              </label>
               <button onClick={handlePrint} className="btn-primary text-sm">列印糧單</button>
             </div>
             <div ref={printRef} className="border rounded-lg p-6 bg-white">
@@ -1905,7 +1926,7 @@ export default function PayrollDetailPage() {
                 </div>
 
                 {/* Grouped Settlement in print */}
-                <PrintGroupedSettlement groups={grouped} />
+                {showGroupedInPrint && <PrintGroupedSettlement groups={grouped} />}
 
                 {/* Calculation Table */}
                 <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>

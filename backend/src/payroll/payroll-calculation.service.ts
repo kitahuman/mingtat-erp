@@ -956,6 +956,7 @@ export class PayrollCalculationService {
           tonnage: pwl.tonnage || '',
           matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
           matched_unit: pwl.matched_unit || null,
+          unit: pwl.unit || pwl.matched_unit || '天',
           total_quantity: Number(pwl.quantity) || 1,
           total_amount: Number(pwl.line_amount) || 0,
           count: 1,
