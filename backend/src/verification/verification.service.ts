@@ -711,6 +711,7 @@ export class VerificationService {
           fleet_driver: { select: { name_zh: true } },
           client: { select: { name: true } },
           start_location: true,
+          end_location: true,
         },
       });
       if (!wl) return;
@@ -721,6 +722,7 @@ export class VerificationService {
       if (driverName) updateData.record_driver_name = driverName;
       if (wl.client?.name) updateData.record_customer = wl.client.name;
       if ((wl as any).start_location) updateData.record_location_from = (wl as any).start_location;
+      if ((wl as any).end_location) updateData.record_location_to = (wl as any).end_location;
 
       if (Object.keys(updateData).length > 0) {
         await this.prisma.verificationRecord.update({
@@ -1994,7 +1996,7 @@ export class VerificationService {
         r.matches?.length > 0 &&
         r.matches[0]?.match_status !== 'missing' &&
         r.matches[0]?.match_work_record_id > 0 &&
-        (!r.record_driver_name || !r.record_customer || !r.record_location_from),
+        (!r.record_driver_name || !r.record_customer || !r.record_location_from || !r.record_location_to),
     );
     if (recordsToBackfill.length > 0) {
       // Fire-and-forget backfill (non-blocking)
@@ -2386,6 +2388,7 @@ export class VerificationService {
             fleet_driver: { select: { name_zh: true } },
             client: { select: { name: true } },
             start_location: true,
+            end_location: true,
           },
         });
         if (!wl) continue;
@@ -2400,6 +2403,9 @@ export class VerificationService {
         }
         if (!record.record_location_from && (wl as any).start_location) {
           updateData.record_location_from = (wl as any).start_location;
+        }
+        if (!record.record_location_to && (wl as any).end_location) {
+          updateData.record_location_to = (wl as any).end_location;
         }
 
         if (Object.keys(updateData).length > 0) {
