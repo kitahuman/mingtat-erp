@@ -10,10 +10,13 @@ export class UnmatchedCombinationsQueryDto {
 
   // 篩選欄位
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
+  @IsOptional() @IsString() company_name?: string;
   @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsOptional() @IsString() client_name?: string;
   @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() service_type?: string;
   @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
+  @IsOptional() @IsString() quotation_no?: string;
   @IsOptional() @IsString() day_night?: string;
   @IsOptional() @IsString() tonnage?: string;
   @IsOptional() @IsString() machine_type?: string;

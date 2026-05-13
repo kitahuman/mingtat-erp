@@ -416,14 +416,19 @@ export class WorkLogsService {
   }
 
   private makeDateRange(value: string) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      // DATE type: no timezone conversion needed.
+      const start = new Date(`${value}T00:00:00.000Z`);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 1);
+      return { gte: start, lt: end };
+    }
+
+    // TIMESTAMP type: keep Hong Kong timezone conversion.
     const start = this.parseHongKongDateTime(value);
     if (!start) return undefined;
     const end = new Date(start);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      end.setUTCDate(end.getUTCDate() + 1);
-    } else {
-      end.setUTCMinutes(end.getUTCMinutes() + 1);
-    }
+    end.setUTCMinutes(end.getUTCMinutes() + 1);
     return { gte: start, lt: end };
   }
 
@@ -517,7 +522,15 @@ export class WorkLogsService {
         orderBy: { [column]: 'desc' } as any,
         take: 2000,
       });
-      return Array.from(new Set(rows.map((row: any) => this.formatHongKongDate(row[column], column === 'wl_whatsapp_reported_at')).filter(Boolean))).slice(0, 500);
+      return Array.from(new Set(rows.map((row: any) => {
+        const val = row[column];
+        if (!val) return '';
+        // For DATE type fields, use UTC date string directly (no timezone conversion).
+        if (column === 'scheduled_date') {
+          return val instanceof Date ? val.toISOString().split('T')[0] : String(val).split('T')[0];
+        }
+        return this.formatHongKongDate(val, column === 'wl_whatsapp_reported_at');
+      }).filter(Boolean))).slice(0, 500);
     }
 
     if (this.booleanFilterFields.includes(column)) {
@@ -1493,46 +1506,58 @@ export class WorkLogsService {
     const params: (string | number)[] = [];
     let paramIdx = 1;
 
+    const addTextFilter = (raw: string | undefined, sqlExpr: string) => {
+      const values = this.splitFilterValues(raw);
+      if (values.length === 0) return;
+
+      const nonBlank = this.getNonBlankFilterValues(values);
+      const blankSelected = this.hasBlankFilterValue(values);
+      const textConditions: string[] = [];
+
+      if (nonBlank.length === 1) {
+        textConditions.push(`${sqlExpr} = $${paramIdx++}`);
+        params.push(nonBlank[0]);
+      } else if (nonBlank.length > 1) {
+        const placeholders = nonBlank.map((value) => {
+          params.push(value);
+          return `$${paramIdx++}`;
+        });
+        textConditions.push(`${sqlExpr} IN (${placeholders.join(', ')})`);
+      }
+
+      if (blankSelected) {
+        textConditions.push(`(${sqlExpr} IS NULL OR ${sqlExpr} = '')`);
+      }
+
+      if (textConditions.length === 1) {
+        conditions.push(textConditions[0]);
+      } else if (textConditions.length > 1) {
+        conditions.push(`(${textConditions.join(' OR ')})`);
+      }
+    };
+
     if (query.company_id) {
       conditions.push(`COALESCE(wl.company_id, wl.company_profile_id) = $${paramIdx++}`);
       params.push(Number(query.company_id));
     }
+    addTextFilter(query.company_name, 'COALESCE(co.name, cp.name)');
     if (query.client_id) {
       conditions.push(`wl.client_id = $${paramIdx++}`);
       params.push(Number(query.client_id));
     }
-    if (query.client_contract_no) {
-      conditions.push(`wl.client_contract_no = $${paramIdx++}`);
-      params.push(query.client_contract_no);
-    }
-    if (query.service_type) {
-      conditions.push(`wl.service_type = $${paramIdx++}`);
-      params.push(query.service_type);
-    }
+    addTextFilter(query.client_name, 'cl.name');
+    addTextFilter(query.client_contract_no, 'wl.client_contract_no');
+    addTextFilter(query.service_type, 'wl.service_type');
     if (query.quotation_id) {
       conditions.push(`wl.quotation_id = $${paramIdx++}`);
       params.push(Number(query.quotation_id));
     }
-    if (query.day_night) {
-      conditions.push(`wl.day_night = $${paramIdx++}`);
-      params.push(query.day_night);
-    }
-    if (query.tonnage) {
-      conditions.push(`wl.tonnage = $${paramIdx++}`);
-      params.push(query.tonnage);
-    }
-    if (query.machine_type) {
-      conditions.push(`wl.machine_type = $${paramIdx++}`);
-      params.push(query.machine_type);
-    }
-    if (query.start_location) {
-      conditions.push(`wl.start_location = $${paramIdx++}`);
-      params.push(query.start_location);
-    }
-    if (query.end_location) {
-      conditions.push(`wl.end_location = $${paramIdx++}`);
-      params.push(query.end_location);
-    }
+    addTextFilter(query.quotation_no, 'q.quotation_no');
+    addTextFilter(query.day_night, 'wl.day_night');
+    addTextFilter(query.tonnage, 'wl.tonnage');
+    addTextFilter(query.machine_type, 'wl.machine_type');
+    addTextFilter(query.start_location, 'wl.start_location');
+    addTextFilter(query.end_location, 'wl.end_location');
 
     const whereClause = conditions.join(' AND ');
 
@@ -2166,7 +2191,10 @@ export class WorkLogsService {
       case 'quotation':
         return log.quotation?.quotation_no || blank;
       case 'scheduled_date':
-        return this.formatHongKongDate(log.scheduled_date) || blank;
+        if (log.scheduled_date instanceof Date) {
+          return log.scheduled_date.toISOString().split('T')[0];
+        }
+        return log.scheduled_date ? String(log.scheduled_date).split('T')[0] : blank;
       case 'week':
         return this.formatPivotWeek(log.scheduled_date) || blank;
       case 'month':
