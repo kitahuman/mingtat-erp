@@ -25,6 +25,7 @@ import { VerificationService } from './verification.service';
 import { OcrService } from './ocr.service';
 import {
   VERIFICATION_RECORD_FILTER_COLUMNS,
+  VerificationRecordBatchDeleteDto,
   VerificationRecordFilterOptionsQueryDto,
   VerificationRecordsQueryDto,
 } from './dto/verification-records-query.dto';
@@ -339,6 +340,25 @@ export class VerificationController {
   @Get('records')
   async getRecords(@Query() query: VerificationRecordsQueryDto) {
     return this.service.getRecords(query);
+  }
+
+
+  @SkipThrottle()
+  @Delete('records/batch')
+  async deleteRecordsBatch(@Body() body: VerificationRecordBatchDeleteDto) {
+    return this.service.deleteRecordsBatch(body.ids);
+  }
+
+  @SkipThrottle()
+  @Delete('records/:id/match')
+  async cancelRecordMatch(@Param('id') id: string) {
+    return this.service.cancelRecordMatch(+id);
+  }
+
+  @SkipThrottle()
+  @Post('records/:id/rematch')
+  async rematchRecord(@Param('id') id: string) {
+    return this.service.rematchRecord(+id);
   }
 
   @SkipThrottle()

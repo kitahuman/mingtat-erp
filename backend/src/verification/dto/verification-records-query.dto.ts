@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ArrayNotEmpty, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export const VERIFICATION_RECORD_SORT_FIELDS = [
   'date',
@@ -118,6 +118,16 @@ export class VerificationRecordsQueryDto {
 }
 
 export class VerificationRecordFilterOptionsQueryDto extends VerificationRecordsQueryDto {}
+
+export class VerificationRecordBatchDeleteDto {
+  @ApiPropertyOptional({ description: '要刪除的已匯入資料 ID 陣列', type: [Number] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  ids: number[];
+}
 
 export interface VerificationRecordFilterOptionDto {
   value: string;

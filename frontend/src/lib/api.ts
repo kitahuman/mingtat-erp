@@ -1011,6 +1011,18 @@ export const verificationApi = {
   getRecords: (params?: VerificationRecordsParams) =>
     api.get('/verification/records', { params }),
 
+  // 取消單筆已匯入資料配對
+  cancelRecordMatch: (recordId: number) =>
+    api.delete(`/verification/records/${recordId}/match`),
+
+  // 重新配對單筆已匯入資料
+  rematchRecord: (recordId: number) =>
+    api.post(`/verification/records/${recordId}/rematch`),
+
+  // 批量刪除已匯入資料
+  deleteRecordsBatch: (ids: number[]) =>
+    api.delete('/verification/records/batch', { data: { ids } }),
+
   // 已匯入資料欄位篩選選項
   getRecordFilterOptions: (column: VerificationRecordFilterColumn, params?: VerificationRecordsParams) =>
     api.get<{ options: VerificationRecordFilterOption[] }>(`/verification/records/filter-options/${column}`, { params }),

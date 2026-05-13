@@ -1822,7 +1822,9 @@ export class VerificationService {
     const wantsMatched = values.includes(MATCHED_FILTER_VALUE);
     const wantsUnmatched = values.includes(UNMATCHED_FILTER_VALUE);
     if (wantsMatched === wantsUnmatched) return null;
-    return wantsMatched ? { matches: { some: {} } } : { matches: { none: {} } };
+    return wantsMatched
+      ? { matches: { some: { match_status: { not: 'missing' } } } }
+      : { matches: { none: { match_status: { not: 'missing' } } } };
   }
 
   private buildRecordColumnFilterConditions(
@@ -1971,8 +1973,7 @@ export class VerificationService {
             orderBy: { chit_seq: 'asc' },
           },
           matches: {
-            select: { id: true },
-            take: 1,
+            select: { id: true, match_status: true },
           },
         },
         orderBy,
@@ -1989,6 +1990,144 @@ export class VerificationService {
         total,
         total_pages: Math.ceil(total / limit),
       },
+    };
+  }
+
+
+  async cancelRecordMatch(recordId: number) {
+    if (!Number.isInteger(recordId) || recordId <= 0) {
+      throw new BadRequestException('記錄 ID 不正確');
+    }
+
+    const record = await this.prisma.verificationRecord.findUnique({
+      where: { id: recordId },
+      select: { id: true },
+    });
+    if (!record) {
+      throw new NotFoundException('找不到已匯入資料記錄');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const deletedMatches = await tx.verificationMatch.deleteMany({
+        where: { match_record_id: recordId },
+      });
+
+      await tx.verificationRecord.update({
+        where: { id: recordId },
+        data: {
+          record_driver_name: null,
+          record_customer: null,
+        },
+      });
+
+      return deletedMatches;
+    });
+
+    return {
+      success: true,
+      record_id: recordId,
+      deleted_match_count: result.count,
+    };
+  }
+
+  async rematchRecord(recordId: number) {
+    if (!Number.isInteger(recordId) || recordId <= 0) {
+      throw new BadRequestException('記錄 ID 不正確');
+    }
+
+    const existingRecord = await this.prisma.verificationRecord.findUnique({
+      where: { id: recordId },
+      select: { id: true },
+    });
+    if (!existingRecord) {
+      throw new NotFoundException('找不到已匯入資料記錄');
+    }
+
+    await this.cancelRecordMatch(recordId);
+
+    const record = await this.prisma.verificationRecord.findUnique({
+      where: { id: recordId },
+      include: { chits: true, source: true },
+    });
+    if (!record) {
+      throw new NotFoundException('找不到已匯入資料記錄');
+    }
+
+    const matchResult = await this.matchRecordToWorkLog(
+      record,
+      record.record_source_id,
+      record.source.source_code,
+    );
+
+    if (matchResult) {
+      return {
+        success: true,
+        record_id: recordId,
+        matched: true,
+        match_status: matchResult.status,
+        work_log_id: matchResult.workLogId,
+      };
+    }
+
+    await this.prisma.verificationMatch.create({
+      data: {
+        match_work_record_id: 0,
+        match_source_id: record.record_source_id,
+        match_record_id: record.id,
+        match_status: 'missing',
+        match_confidence: 0,
+        match_method: 'none',
+        match_diff_fields: { reason: '來源有記錄但系統找不到對應的工作紀錄' },
+        match_diff_count: 0,
+      },
+    });
+
+    return {
+      success: true,
+      record_id: recordId,
+      matched: false,
+      match_status: 'missing',
+      work_log_id: null,
+    };
+  }
+
+  async deleteRecordsBatch(recordIds: number[]) {
+    const ids = [...new Set((recordIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+    if (ids.length === 0) {
+      throw new BadRequestException('請提供要刪除的記錄 ID');
+    }
+
+    const existingRecords = await this.prisma.verificationRecord.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    const existingIds = existingRecords.map((record) => record.id);
+    if (existingIds.length === 0) {
+      throw new NotFoundException('找不到可刪除的已匯入資料記錄');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const deletedMatches = await tx.verificationMatch.deleteMany({
+        where: { match_record_id: { in: existingIds } },
+      });
+
+      await tx.verificationRecordChit.deleteMany({
+        where: { chit_record_id: { in: existingIds } },
+      });
+
+      const deletedRecords = await tx.verificationRecord.deleteMany({
+        where: { id: { in: existingIds } },
+      });
+
+      return { deletedMatches, deletedRecords };
+    });
+
+    return {
+      success: true,
+      requested_count: ids.length,
+      deleted_count: result.deletedRecords.count,
+      deleted_match_count: result.deletedMatches.count,
+      missing_ids: ids.filter((id) => !existingIds.includes(id)),
     };
   }
 
@@ -2019,8 +2158,12 @@ export class VerificationService {
 
     if (column === 'match_status') {
       const [matchedCount, unmatchedCount] = await Promise.all([
-        this.prisma.verificationRecord.count({ where: { AND: [where, { matches: { some: {} } }] } }),
-        this.prisma.verificationRecord.count({ where: { AND: [where, { matches: { none: {} } }] } }),
+        this.prisma.verificationRecord.count({
+          where: { AND: [where, { matches: { some: { match_status: { not: 'missing' } } } }] },
+        }),
+        this.prisma.verificationRecord.count({
+          where: { AND: [where, { matches: { none: { match_status: { not: 'missing' } } } }] },
+        }),
       ]);
       const options: VerificationRecordFilterOptionDto[] = [];
       if (matchedCount > 0) options.push({ value: MATCHED_FILTER_VALUE, label: '已配對' });

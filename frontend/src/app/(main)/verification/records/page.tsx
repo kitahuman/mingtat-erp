@@ -84,6 +84,7 @@ interface ChitItem {
 
 interface MatchItem {
   id: number;
+  match_status: string | null;
 }
 
 interface BatchInfo {
@@ -257,7 +258,7 @@ function parseStoredColumnConfig(raw: string | null, keys: readonly ColumnKey[])
 }
 
 function isMatchStatus(record: RecordItem): boolean {
-  return Boolean(record.matches && record.matches.length > 0);
+  return Boolean(record.matches?.some((match) => match.match_status !== 'missing'));
 }
 
 function MatchStatusBadge({ matched }: { matched: boolean }) {
@@ -288,6 +289,9 @@ export default function VerificationRecordsPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
 
   // 篩選條件
   const [search, setSearch] = useState('');
@@ -340,6 +344,244 @@ export default function VerificationRecordsPage() {
   const activeColumnConfig = isGpsTab ? gpsColumnConfig : normalColumnConfig;
   const setActiveColumnConfig = isGpsTab ? setGpsColumnConfig : setNormalColumnConfig;
 
+
+  const buildParams = useCallback(
+    (page = 1): VerificationRecordsParams => {
+      const params: VerificationRecordsParams = { page, limit: 20 };
+      if (activeTab !== 'all') params.source_type = activeTab;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (search) params.search = search;
+      if (sortField) {
+        params.sort_field = sortField;
+        params.sort_direction = sortDirection;
+      }
+
+      if (columnFilters.source?.length) params.filter_source = columnFilters.source.join(',');
+      if (columnFilters.vehicle_no?.length) params.filter_vehicle_no = columnFilters.vehicle_no.join(',');
+      if (columnFilters.driver_name?.length) params.filter_driver_name = columnFilters.driver_name.join(',');
+      if (columnFilters.location_from?.length) params.filter_location_from = columnFilters.location_from.join(',');
+      if (columnFilters.location_to?.length) params.filter_location_to = columnFilters.location_to.join(',');
+      if (columnFilters.contract_no?.length) params.filter_contract_no = columnFilters.contract_no.join(',');
+      if (columnFilters.match_status?.length) params.filter_match_status = columnFilters.match_status.join(',');
+
+      return params;
+    },
+    [activeTab, columnFilters, dateFrom, dateTo, search, sortDirection, sortField],
+  );
+
+  const fetchRecords = useCallback(
+    async (page = 1) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await verificationApi.getRecords(buildParams(page));
+        setRecords(res.data.data || []);
+        setSelectedIds(new Set());
+        setPagination(res.data.pagination || { page: 1, limit: 20, total: 0, total_pages: 0 });
+      } catch (err: unknown) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [buildParams],
+  );
+
+  const fetchFilterOptions = useCallback(async () => {
+    const params = buildParams(1);
+    try {
+      const results: [VerificationRecordFilterColumn, VerificationRecordFilterOption[]][] = [];
+      for (const column of FILTER_COLUMNS) {
+        const response = await verificationApi.getRecordFilterOptions(column, params);
+        results.push([column, response.data.options || []]);
+      }
+      setFilterOptions((prev) => ({ ...prev, ...Object.fromEntries(results) }));
+    } catch {
+      // 篩選選項載入失敗不阻塞主要列表顯示。
+    }
+  }, [buildParams]);
+
+  const refreshCurrentPage = useCallback(async () => {
+    await fetchRecords(pagination.page);
+    await fetchFilterOptions();
+  }, [fetchFilterOptions, fetchRecords, pagination.page]);
+
+  const handleCancelMatch = useCallback(
+    async (recordId: number) => {
+      if (typeof window !== 'undefined' && !window.confirm('確定要取消這筆記錄的配對嗎？系統會刪除配對記錄，並清空司機及客戶資料。')) return;
+      setActionLoadingId(recordId);
+      try {
+        await verificationApi.cancelRecordMatch(recordId);
+        await refreshCurrentPage();
+      } catch (err: unknown) {
+        alert(getErrorMessage(err) || '取消配對失敗');
+      } finally {
+        setActionLoadingId(null);
+      }
+    },
+    [refreshCurrentPage],
+  );
+
+  const handleRematch = useCallback(
+    async (recordId: number) => {
+      if (typeof window !== 'undefined' && !window.confirm('確定要重新配對這筆記錄嗎？系統會先取消現有配對，再重新執行自動配對。')) return;
+      setActionLoadingId(recordId);
+      try {
+        await verificationApi.rematchRecord(recordId);
+        await refreshCurrentPage();
+      } catch (err: unknown) {
+        alert(getErrorMessage(err) || '重新配對失敗');
+      } finally {
+        setActionLoadingId(null);
+      }
+    },
+    [refreshCurrentPage],
+  );
+
+  const selectedIdList = useMemo(() => Array.from(selectedIds), [selectedIds]);
+  const selectedCount = selectedIdList.length;
+  const visibleRecordIds = useMemo(() => records.map((record) => record.id), [records]);
+  const allVisibleSelected = visibleRecordIds.length > 0 && visibleRecordIds.every((id) => selectedIds.has(id));
+
+  const handleToggleRecordSelection = useCallback((recordId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  }, []);
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const shouldClearVisible = visibleRecordIds.length > 0 && visibleRecordIds.every((id) => next.has(id));
+      if (shouldClearVisible) {
+        visibleRecordIds.forEach((id) => next.delete(id));
+      } else {
+        visibleRecordIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [visibleRecordIds]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedIdList.length === 0) return;
+    if (typeof window !== 'undefined' && !window.confirm(`確定要刪除已選取的 ${selectedIdList.length} 筆已匯入資料嗎？相關配對記錄也會一併刪除。`)) return;
+    setBatchDeleting(true);
+    try {
+      await verificationApi.deleteRecordsBatch(selectedIdList);
+      setSelectedIds(new Set());
+      await refreshCurrentPage();
+    } catch (err: unknown) {
+      alert(getErrorMessage(err) || '刪除選取失敗');
+    } finally {
+      setBatchDeleting(false);
+    }
+  }, [refreshCurrentPage, selectedIdList]);
+
+
+  useEffect(() => {
+    fetchRecords(1);
+  }, [fetchRecords]);
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, [fetchFilterOptions]);
+
+  const handleTabChange = (tabKey: string) => {
+    setActiveTab(tabKey);
+    setColumnFilters({});
+    setOpenFilter(null);
+    setSelectedIds(new Set());
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleSearch = () => {
+    setSearch(searchInput);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setSearchInput('');
+    setDateFrom('');
+    setDateTo('');
+    setColumnFilters({});
+    setOpenFilter(null);
+    setSelectedIds(new Set());
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handlePageChange = (newPage: number) => {
+    fetchRecords(newPage);
+  };
+
+  const handleSort = (field: VerificationRecordSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleToggleFilterValue = (column: VerificationRecordFilterColumn, value: string) => {
+    setColumnFilters((prev) => {
+      const current = prev[column] || [];
+      const nextValues = current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value];
+      const nextFilters: ColumnFilters = { ...prev };
+      if (nextValues.length > 0) nextFilters[column] = nextValues;
+      else delete nextFilters[column];
+      return nextFilters;
+    });
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const clearColumnFilter = (column: VerificationRecordFilterColumn) => {
+    setColumnFilters((prev) => {
+      const nextFilters: ColumnFilters = { ...prev };
+      delete nextFilters[column];
+      return nextFilters;
+    });
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleColumnVisibilityToggle = (key: ColumnKey) => {
+    if (key === 'source') return;
+    setActiveColumnConfig((prev) =>
+      prev.map((config) => (config.key === key ? { ...config, visible: !config.visible } : config)),
+    );
+  };
+
+  const handleColumnDragStart = (key: ColumnKey) => {
+    draggedColumnRef.current = key;
+  };
+
+  const handleColumnDrop = (targetKey: ColumnKey) => {
+    const draggedKey = draggedColumnRef.current;
+    draggedColumnRef.current = null;
+    if (!draggedKey || draggedKey === targetKey) return;
+
+    setActiveColumnConfig((prev) => {
+      const fromIndex = prev.findIndex((config) => config.key === draggedKey);
+      const toIndex = prev.findIndex((config) => config.key === targetKey);
+      if (fromIndex < 0 || toIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const resetColumnConfig = () => {
+    setActiveColumnConfig(createDefaultColumnConfig(isGpsTab ? GPS_COLUMN_KEYS : NORMAL_COLUMN_KEYS));
+  };
+
   const columnDefinitions = useMemo<Record<ColumnKey, ColumnDefinition>>(
     () => ({
       source: {
@@ -359,7 +601,35 @@ export default function VerificationRecordsPage() {
         key: 'match_status',
         label: '配對狀態',
         filterColumn: 'match_status',
-        render: (record) => <MatchStatusBadge matched={isMatchStatus(record)} />,
+        render: (record) => {
+          const matched = isMatchStatus(record);
+          const isActionLoading = actionLoadingId === record.id;
+          return (
+            <div className="flex flex-col gap-1">
+              <MatchStatusBadge matched={matched} />
+              {matched && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleCancelMatch(record.id)}
+                    disabled={isActionLoading || batchDeleting}
+                    className="rounded border border-red-200 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    取消配對
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRematch(record.id)}
+                    disabled={isActionLoading || batchDeleting}
+                    className="rounded border border-primary-200 px-1.5 py-0.5 text-[11px] font-medium text-primary-600 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    重新配對
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        },
       },
       date: {
         key: 'date',
@@ -499,7 +769,7 @@ export default function VerificationRecordsPage() {
         },
       },
     }),
-    [],
+    [actionLoadingId, batchDeleting, handleCancelMatch, handleRematch],
   );
 
   const visibleColumns = useMemo(() => {
@@ -508,160 +778,6 @@ export default function VerificationRecordsPage() {
       .filter((config) => availableKeys.has(config.key) && (config.visible || config.key === 'source'))
       .map((config) => columnDefinitions[config.key]);
   }, [activeColumnConfig, columnDefinitions, isGpsTab]);
-
-  const buildParams = useCallback(
-    (page = 1): VerificationRecordsParams => {
-      const params: VerificationRecordsParams = { page, limit: 20 };
-      if (activeTab !== 'all') params.source_type = activeTab;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      if (search) params.search = search;
-      if (sortField) {
-        params.sort_field = sortField;
-        params.sort_direction = sortDirection;
-      }
-
-      if (columnFilters.source?.length) params.filter_source = columnFilters.source.join(',');
-      if (columnFilters.vehicle_no?.length) params.filter_vehicle_no = columnFilters.vehicle_no.join(',');
-      if (columnFilters.driver_name?.length) params.filter_driver_name = columnFilters.driver_name.join(',');
-      if (columnFilters.location_from?.length) params.filter_location_from = columnFilters.location_from.join(',');
-      if (columnFilters.location_to?.length) params.filter_location_to = columnFilters.location_to.join(',');
-      if (columnFilters.contract_no?.length) params.filter_contract_no = columnFilters.contract_no.join(',');
-      if (columnFilters.match_status?.length) params.filter_match_status = columnFilters.match_status.join(',');
-
-      return params;
-    },
-    [activeTab, columnFilters, dateFrom, dateTo, search, sortDirection, sortField],
-  );
-
-  const fetchRecords = useCallback(
-    async (page = 1) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await verificationApi.getRecords(buildParams(page));
-        setRecords(res.data.data || []);
-        setPagination(res.data.pagination || { page: 1, limit: 20, total: 0, total_pages: 0 });
-      } catch (err: unknown) {
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [buildParams],
-  );
-
-  const fetchFilterOptions = useCallback(async () => {
-    const params = buildParams(1);
-    try {
-      const results: [VerificationRecordFilterColumn, VerificationRecordFilterOption[]][] = [];
-      for (const column of FILTER_COLUMNS) {
-        const response = await verificationApi.getRecordFilterOptions(column, params);
-        results.push([column, response.data.options || []]);
-      }
-      setFilterOptions((prev) => ({ ...prev, ...Object.fromEntries(results) }));
-    } catch {
-      // 篩選選項載入失敗不阻塞主要列表顯示。
-    }
-  }, [buildParams]);
-
-  useEffect(() => {
-    fetchRecords(1);
-  }, [fetchRecords]);
-
-  useEffect(() => {
-    fetchFilterOptions();
-  }, [fetchFilterOptions]);
-
-  const handleTabChange = (tabKey: string) => {
-    setActiveTab(tabKey);
-    setColumnFilters({});
-    setOpenFilter(null);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const handleSearch = () => {
-    setSearch(searchInput);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const handleClearFilters = () => {
-    setSearch('');
-    setSearchInput('');
-    setDateFrom('');
-    setDateTo('');
-    setColumnFilters({});
-    setOpenFilter(null);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const handlePageChange = (newPage: number) => {
-    fetchRecords(newPage);
-  };
-
-  const handleSort = (field: VerificationRecordSortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const handleToggleFilterValue = (column: VerificationRecordFilterColumn, value: string) => {
-    setColumnFilters((prev) => {
-      const current = prev[column] || [];
-      const nextValues = current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value];
-      const nextFilters: ColumnFilters = { ...prev };
-      if (nextValues.length > 0) nextFilters[column] = nextValues;
-      else delete nextFilters[column];
-      return nextFilters;
-    });
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const clearColumnFilter = (column: VerificationRecordFilterColumn) => {
-    setColumnFilters((prev) => {
-      const nextFilters: ColumnFilters = { ...prev };
-      delete nextFilters[column];
-      return nextFilters;
-    });
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  };
-
-  const handleColumnVisibilityToggle = (key: ColumnKey) => {
-    if (key === 'source') return;
-    setActiveColumnConfig((prev) =>
-      prev.map((config) => (config.key === key ? { ...config, visible: !config.visible } : config)),
-    );
-  };
-
-  const handleColumnDragStart = (key: ColumnKey) => {
-    draggedColumnRef.current = key;
-  };
-
-  const handleColumnDrop = (targetKey: ColumnKey) => {
-    const draggedKey = draggedColumnRef.current;
-    draggedColumnRef.current = null;
-    if (!draggedKey || draggedKey === targetKey) return;
-
-    setActiveColumnConfig((prev) => {
-      const fromIndex = prev.findIndex((config) => config.key === draggedKey);
-      const toIndex = prev.findIndex((config) => config.key === targetKey);
-      if (fromIndex < 0 || toIndex < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  };
-
-  const resetColumnConfig = () => {
-    setActiveColumnConfig(createDefaultColumnConfig(isGpsTab ? GPS_COLUMN_KEYS : NORMAL_COLUMN_KEYS));
-  };
 
   const activeFilterCount = Object.values(columnFilters).reduce((count, values) => count + (values?.length || 0), 0);
   const hasFilters = Boolean(search || dateFrom || dateTo || activeFilterCount > 0);
@@ -900,17 +1016,54 @@ export default function VerificationRecordsPage() {
         </div>
       )}
 
+      {/* 批量操作列 */}
+      {selectedCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+          <span className="text-sm font-medium text-primary-800">已選取 {selectedCount} 筆記錄</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={batchDeleting}
+              className="rounded-md border border-primary-200 px-3 py-1.5 text-sm text-primary-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              取消選取
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              disabled={batchDeleting}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {batchDeleting ? '刪除中...' : '刪除選取'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 資料表格 */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
-              <tr>{visibleColumns.map((column) => renderHeaderCell(column))}</tr>
+              <tr>
+                <th className="w-10 px-3 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={handleToggleSelectAll}
+                    disabled={records.length === 0 || loading || batchDeleting}
+                    aria-label="全選此頁記錄"
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </th>
+                {visibleColumns.map((column) => renderHeaderCell(column))}
+              </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={visibleColumns.length + 1} className="px-4 py-12 text-center text-gray-400">
                     <div className="flex items-center justify-center gap-2">
                       <svg
                         className="animate-spin h-5 w-5 text-primary-500"
@@ -938,13 +1091,26 @@ export default function VerificationRecordsPage() {
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={visibleColumns.length + 1} className="px-4 py-12 text-center text-gray-400">
                     沒有符合條件的記錄
                   </td>
                 </tr>
               ) : (
                 records.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={record.id}
+                    className={`${selectedIds.has(record.id) ? 'bg-primary-50' : ''} hover:bg-gray-50 transition-colors`}
+                  >
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(record.id)}
+                        onChange={() => handleToggleRecordSelection(record.id)}
+                        disabled={batchDeleting}
+                        aria-label={`選取記錄 ${record.id}`}
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </td>
                     {visibleColumns.map((column) => (
                       <td
                         key={`${record.id}-${column.key}`}
