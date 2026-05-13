@@ -251,7 +251,7 @@ export default function WorkLogsPage() {
   const [manualMatchSearch, setManualMatchSearch] = useState('');
   const [manualMatchResults, setManualMatchResults] = useState<any[]>([]);
   const [manualMatchLoading, setManualMatchLoading] = useState(false);
-  const [manualMatchSelected, setManualMatchSelected] = useState<any | null>(null);
+  const [manualMatchSelected, setManualMatchSelected] = useState<any[]>([]);
 
   const handleVerify = async (workLogId: number) => {
     if (openVerifyId === workLogId) {
@@ -340,7 +340,7 @@ export default function WorkLogsPage() {
   const openManualMatchPopup = async (workLogId: number, workLogDate: string, sourceCode: string) => {
     setManualMatchPopup({ workLogId, workLogDate, sourceCode });
     setManualMatchSearch('');
-    setManualMatchSelected(null);
+    setManualMatchSelected([]);
     setManualMatchResults([]);
     // 自動載入當天所有 WA items
     setManualMatchLoading(true);
@@ -377,13 +377,39 @@ export default function WorkLogsPage() {
     }
   };
 
+  const isManualMatchMultiSelectSource = (sourceCode: string) => sourceCode === 'chit' || sourceCode === 'delivery_note';
+
+  const getManualMatchItemLabel = (sourceCode: string, item: any) => {
+    if (sourceCode === 'whatsapp_order') {
+      return `${item.wa_item_vehicle_no || item.wa_item_machine_code || `#${item.id}`} ${item.wa_item_driver_nickname || ''}`.trim();
+    }
+    if (sourceCode === 'chit' || sourceCode === 'delivery_note') {
+      return `${item.record_vehicle_no || ''} ${item.record_slip_no ? '#' + item.record_slip_no : `#${item.id}`}`.trim();
+    }
+    if (sourceCode === 'gps') return item.gps_summary_vehicle_no || `#${item.id}`;
+    if (sourceCode === 'attendance') return item.employee?.name_zh || `#${item.id}`;
+    return `#${item.id}`;
+  };
+
+  const getManualMatchNotesPrefix = (sourceCode: string) => {
+    const prefixMap: Record<string, string> = {
+      whatsapp_order: '手動配對',
+      chit: '手動配對入帳票',
+      delivery_note: '手動配對飛仔',
+      gps: '手動配對 GPS',
+      attendance: '手動配對打卡',
+    };
+    return prefixMap[sourceCode] || '手動配對';
+  };
+
   // 確認手動配對
   const handleManualMatchConfirm = async () => {
-    if (!manualMatchPopup || !manualMatchSelected) return;
+    if (!manualMatchPopup || manualMatchSelected.length === 0) return;
     setManualMatchLoading(true);
     try {
       const { verificationApi } = await import('@/lib/api');
       const sc = manualMatchPopup.sourceCode;
+      const primarySelected = manualMatchSelected[0];
       const recordTypeMap: Record<string, string> = {
         whatsapp_order: 'wa_order_item',
         chit: 'verification_record',
@@ -391,20 +417,17 @@ export default function WorkLogsPage() {
         gps: 'gps_summary',
         attendance: 'attendance',
       };
-      const notesMap: Record<string, string> = {
-        whatsapp_order: `手動配對: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || ''} ${manualMatchSelected.wa_item_driver_nickname || ''}`.trim(),
-        chit: `手動配對入帳票: ${manualMatchSelected.record_vehicle_no || ''} ${manualMatchSelected.record_slip_no ? '#' + manualMatchSelected.record_slip_no : ''}`.trim(),
-        delivery_note: `手動配對飛仔: ${manualMatchSelected.record_vehicle_no || ''} ${manualMatchSelected.record_slip_no ? '#' + manualMatchSelected.record_slip_no : ''}`.trim(),
-        gps: `手動配對 GPS: ${manualMatchSelected.gps_summary_vehicle_no || ''}`.trim(),
-        attendance: `手動配對打卡: ${manualMatchSelected.employee?.name_zh || ''}`.trim(),
-      };
+      const selectedLabels = manualMatchSelected.map(item => getManualMatchItemLabel(sc, item)).join(', ');
+      const notes = isManualMatchMultiSelectSource(sc)
+        ? `${getManualMatchNotesPrefix(sc)}: 記錄ID ${manualMatchSelected.map(item => item.id).join(', ')}${selectedLabels ? ` (${selectedLabels})` : ''}`
+        : `${getManualMatchNotesPrefix(sc)}: ${selectedLabels}`.trim();
       await verificationApi.upsertConfirmation({
         work_log_id: manualMatchPopup.workLogId,
         source_code: sc,
         status: 'manual_match',
-        matched_record_id: manualMatchSelected.id,
+        matched_record_id: primarySelected.id,
         matched_record_type: recordTypeMap[sc] || sc,
-        notes: notesMap[sc] || `手動配對: #${manualMatchSelected.id}`,
+        notes: notes || `手動配對: #${primarySelected.id}`,
       });
       // 更新確認狀態
       setConfirmations(prev => {
@@ -2276,12 +2299,19 @@ export default function WorkLogsPage() {
                 <div className="text-center text-gray-400 py-8 text-sm">沒有找到對應的{(() => { const m: Record<string, string> = { whatsapp_order: ' WhatsApp Order', chit: '入帳票記錄', delivery_note: '飛仔記錄', gps: ' GPS 記錄', attendance: '打卡記錄' }; return m[manualMatchPopup.sourceCode] || '記錄'; })()}</div>
               )}
               {!manualMatchLoading && manualMatchResults.map((item: any) => {
-                const isSelected = manualMatchSelected?.id === item.id;
                 const sc = manualMatchPopup.sourceCode;
+                const isMultiSelect = isManualMatchMultiSelectSource(sc);
+                const isSelected = manualMatchSelected.some(selectedItem => selectedItem.id === item.id);
                 return (
                   <div
                     key={item.id}
-                    onClick={() => setManualMatchSelected(isSelected ? null : item)}
+                    onClick={() => setManualMatchSelected(prev => {
+                      const selected = prev.some(selectedItem => selectedItem.id === item.id);
+                      if (isMultiSelect) {
+                        return selected ? prev.filter(selectedItem => selectedItem.id !== item.id) : [...prev, item];
+                      }
+                      return selected ? [] : [item];
+                    })}
                     className={`cursor-pointer rounded-lg border p-3 text-sm transition-colors ${
                       isSelected
                         ? 'border-indigo-500 bg-indigo-50'
@@ -2289,7 +2319,13 @@ export default function WorkLogsPage() {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 space-y-0.5">
+                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                        {isMultiSelect && (
+                          <span className="text-indigo-600 font-semibold text-lg leading-5 mt-0.5 w-5 shrink-0" aria-hidden="true">
+                            {isSelected ? '☑' : '☐'}
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0 space-y-0.5">
                         {sc === 'whatsapp_order' ? (
                           /* ── WhatsApp Order 格式 ── */
                           <>
@@ -2389,8 +2425,9 @@ export default function WorkLogsPage() {
                           /* ── 其他來源 fallback ── */
                           <div className="text-gray-600">#{item.id}</div>
                         )}
+                        </div>
                       </div>
-                      {isSelected && (
+                      {!isMultiSelect && isSelected && (
                         <span className="text-indigo-600 font-bold text-lg">✓</span>
                       )}
                     </div>
@@ -2402,8 +2439,10 @@ export default function WorkLogsPage() {
             {/* Footer */}
             <div className="border-t border-gray-200 px-5 py-3 flex items-center justify-between bg-gray-50 rounded-b-xl">
               <div className="text-xs text-gray-500">
-                {manualMatchSelected
-                  ? `已選擇: ${manualMatchPopup.sourceCode === 'whatsapp_order' ? (manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || `#${manualMatchSelected.id}`) : (manualMatchSelected.record_vehicle_no || manualMatchSelected.gps_summary_vehicle_no || manualMatchSelected.employee?.name_zh || `#${manualMatchSelected.id}`)}`
+                {manualMatchSelected.length > 0
+                  ? isManualMatchMultiSelectSource(manualMatchPopup.sourceCode)
+                    ? `已選擇 ${manualMatchSelected.length} 筆記錄`
+                    : `已選擇: ${getManualMatchItemLabel(manualMatchPopup.sourceCode, manualMatchSelected[0])}`
                   : '請選擇一筆記錄來配對'}
               </div>
               <div className="flex items-center gap-2">
@@ -2413,7 +2452,7 @@ export default function WorkLogsPage() {
                 >取消</button>
                 <button
                   onClick={handleManualMatchConfirm}
-                  disabled={!manualMatchSelected || manualMatchLoading}
+                  disabled={manualMatchSelected.length === 0 || manualMatchLoading}
                   className="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
                 >
                   {manualMatchLoading ? '處理中...' : '確認配對'}
