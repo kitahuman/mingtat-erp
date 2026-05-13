@@ -692,7 +692,41 @@ export class VerificationService {
       },
     });
 
+    // 配對成功後，將工作紀錄的司機/客戶名寫回 verification_records
+    await this.backfillRecordFromWorkLog(record.id, workLog);
+
     return { status: matchStatus };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 配對成功後將司機/客戶名寫回 verification_records
+  // ══════════════════════════════════════════════════════════════
+  private async backfillRecordFromWorkLog(recordId: number, workLog: any): Promise<void> {
+    try {
+      // workLog 可能已經 include employee，但不一定有 client，所以重新查詢確保完整
+      const wl = await this.prisma.workLog.findUnique({
+        where: { id: workLog.id },
+        select: {
+          employee: { select: { name_zh: true } },
+          client: { select: { name: true } },
+        },
+      });
+      if (!wl) return;
+
+      const updateData: Record<string, string> = {};
+      if (wl.employee?.name_zh) updateData.record_driver_name = wl.employee.name_zh;
+      if (wl.client?.name) updateData.record_customer = wl.client.name;
+
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.verificationRecord.update({
+          where: { id: recordId },
+          data: updateData,
+        });
+      }
+    } catch (err) {
+      // 寫回失敗不影響配對結果
+      console.warn(`[backfillRecordFromWorkLog] Failed for record ${recordId}:`, err);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════

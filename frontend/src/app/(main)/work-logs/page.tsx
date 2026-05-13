@@ -383,13 +383,28 @@ export default function WorkLogsPage() {
     setManualMatchLoading(true);
     try {
       const { verificationApi } = await import('@/lib/api');
+      const sc = manualMatchPopup.sourceCode;
+      const recordTypeMap: Record<string, string> = {
+        whatsapp_order: 'wa_order_item',
+        chit: 'verification_record',
+        delivery_note: 'verification_record',
+        gps: 'gps_summary',
+        attendance: 'attendance',
+      };
+      const notesMap: Record<string, string> = {
+        whatsapp_order: `手動配對: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || ''} ${manualMatchSelected.wa_item_driver_nickname || ''}`.trim(),
+        chit: `手動配對入帳票: ${manualMatchSelected.record_vehicle_no || ''} ${manualMatchSelected.record_slip_no ? '#' + manualMatchSelected.record_slip_no : ''}`.trim(),
+        delivery_note: `手動配對飛仔: ${manualMatchSelected.record_vehicle_no || ''} ${manualMatchSelected.record_slip_no ? '#' + manualMatchSelected.record_slip_no : ''}`.trim(),
+        gps: `手動配對 GPS: ${manualMatchSelected.gps_summary_vehicle_no || ''}`.trim(),
+        attendance: `手動配對打卡: ${manualMatchSelected.employee?.name_zh || ''}`.trim(),
+      };
       await verificationApi.upsertConfirmation({
         work_log_id: manualMatchPopup.workLogId,
-        source_code: manualMatchPopup.sourceCode,
+        source_code: sc,
         status: 'manual_match',
         matched_record_id: manualMatchSelected.id,
-        matched_record_type: 'wa_order_item',
-        notes: `手動配對: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || ''} ${manualMatchSelected.wa_item_driver_nickname || ''}`.trim(),
+        matched_record_type: recordTypeMap[sc] || sc,
+        notes: notesMap[sc] || `手動配對: #${manualMatchSelected.id}`,
       });
       // 更新確認狀態
       setConfirmations(prev => {
@@ -2233,7 +2248,7 @@ export default function WorkLogsPage() {
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between rounded-t-xl">
               <div>
-                <h2 className="text-base font-bold text-gray-900">🔗 手動配對 WhatsApp Order</h2>
+                <h2 className="text-base font-bold text-gray-900">🔗 手動配對 {(() => { const m: Record<string, string> = { whatsapp_order: 'WhatsApp Order', chit: '入帳票', delivery_note: '飛仔 OCR', gps: 'GPS 追蹤', attendance: '打卡紀錄' }; return m[manualMatchPopup.sourceCode] || manualMatchPopup.sourceCode; })()}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">日期: {manualMatchPopup.workLogDate}，工作紀錄 #{manualMatchPopup.workLogId}</p>
               </div>
               <button onClick={() => setManualMatchPopup(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
@@ -2257,10 +2272,11 @@ export default function WorkLogsPage() {
                 <div className="text-center text-gray-400 py-8 text-sm">載入中...</div>
               )}
               {!manualMatchLoading && manualMatchResults.length === 0 && (
-                <div className="text-center text-gray-400 py-8 text-sm">沒有找到對應的 WhatsApp Order</div>
+                <div className="text-center text-gray-400 py-8 text-sm">沒有找到對應的{(() => { const m: Record<string, string> = { whatsapp_order: ' WhatsApp Order', chit: '入帳票記錄', delivery_note: '飛仔記錄', gps: ' GPS 記錄', attendance: '打卡記錄' }; return m[manualMatchPopup.sourceCode] || '記錄'; })()}</div>
               )}
               {!manualMatchLoading && manualMatchResults.map((item: any) => {
                 const isSelected = manualMatchSelected?.id === item.id;
+                const sc = manualMatchPopup.sourceCode;
                 return (
                   <div
                     key={item.id}
@@ -2273,45 +2289,104 @@ export default function WorkLogsPage() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 space-y-0.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* 車牌/機械號（transport/machinery）或帶隊人（manpower） */}
-                          {(item.wa_item_vehicle_no || item.wa_item_machine_code) ? (
-                            <span className="font-mono font-semibold text-gray-800">
-                              {item.wa_item_vehicle_no || item.wa_item_machine_code}
-                            </span>
-                          ) : item.wa_item_driver_nickname ? (
-                            <span className="font-semibold text-gray-800">👤 {item.wa_item_driver_nickname}</span>
-                          ) : null}
-                          {item.wa_item_order_type && (
-                            <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
-                              {item.wa_item_order_type}
-                            </span>
-                          )}
-                          {item.order?.wa_order_version && (
-                            <span className="text-xs text-gray-400">v{item.order.wa_order_version}</span>
-                          )}
-                        </div>
-                        {/* transport/machinery 類型：在標題下方顯示司機花名 */}
-                        {(item.wa_item_vehicle_no || item.wa_item_machine_code) && item.wa_item_driver_nickname && (
-                          <div className="text-gray-600">👤 {item.wa_item_driver_nickname}</div>
-                        )}
-                        {/* manpower 類型：從 remarks 解析員工列表 */}
-                        {item.wa_item_order_type === 'manpower' && item.wa_item_remarks && (() => {
-                          const staffMatch = item.wa_item_remarks.match(/\[staff\]員工: (.+)/);
-                          if (!staffMatch) return null;
-                          return <div className="text-gray-600 text-xs">👥 {staffMatch[1]}</div>;
-                        })()}
-                        {item.wa_item_customer && (
-                          <div className="text-gray-600">🏢 {item.wa_item_customer}</div>
-                        )}
-                        {item.wa_item_contract_no && (
-                          <div className="text-gray-500 text-xs">📄 {item.wa_item_contract_no}</div>
-                        )}
-                        {item.wa_item_location && (
-                          <div className="text-gray-500 text-xs">📍 {item.wa_item_location}</div>
-                        )}
-                        {item.wa_item_work_desc && (
-                          <div className="text-gray-500 text-xs">💬 {item.wa_item_work_desc}</div>
+                        {sc === 'whatsapp_order' ? (
+                          /* ── WhatsApp Order 格式 ── */
+                          <>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {(item.wa_item_vehicle_no || item.wa_item_machine_code) ? (
+                                <span className="font-mono font-semibold text-gray-800">
+                                  {item.wa_item_vehicle_no || item.wa_item_machine_code}
+                                </span>
+                              ) : item.wa_item_driver_nickname ? (
+                                <span className="font-semibold text-gray-800">👤 {item.wa_item_driver_nickname}</span>
+                              ) : null}
+                              {item.wa_item_order_type && (
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                  {item.wa_item_order_type}
+                                </span>
+                              )}
+                              {item.order?.wa_order_version && (
+                                <span className="text-xs text-gray-400">v{item.order.wa_order_version}</span>
+                              )}
+                            </div>
+                            {(item.wa_item_vehicle_no || item.wa_item_machine_code) && item.wa_item_driver_nickname && (
+                              <div className="text-gray-600">👤 {item.wa_item_driver_nickname}</div>
+                            )}
+                            {item.wa_item_order_type === 'manpower' && item.wa_item_remarks && (() => {
+                              const staffMatch = item.wa_item_remarks.match(/\[staff\]員工: (.+)/);
+                              if (!staffMatch) return null;
+                              return <div className="text-gray-600 text-xs">👥 {staffMatch[1]}</div>;
+                            })()}
+                            {item.wa_item_customer && (
+                              <div className="text-gray-600">🏢 {item.wa_item_customer}</div>
+                            )}
+                            {item.wa_item_contract_no && (
+                              <div className="text-gray-500 text-xs">📄 {item.wa_item_contract_no}</div>
+                            )}
+                            {item.wa_item_location && (
+                              <div className="text-gray-500 text-xs">📍 {item.wa_item_location}</div>
+                            )}
+                            {item.wa_item_work_desc && (
+                              <div className="text-gray-500 text-xs">💬 {item.wa_item_work_desc}</div>
+                            )}
+                          </>
+                        ) : (sc === 'chit' || sc === 'delivery_note') ? (
+                          /* ── 入帳票 / 飛仔 OCR 格式（verification_records） ── */
+                          <>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.record_vehicle_no && (
+                                <span className="font-mono font-semibold text-gray-800">{item.record_vehicle_no}</span>
+                              )}
+                              {item.record_slip_no && (
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">#{item.record_slip_no}</span>
+                              )}
+                            </div>
+                            {item.record_driver_name && (
+                              <div className="text-gray-600">👤 {item.record_driver_name}</div>
+                            )}
+                            {item.record_customer && (
+                              <div className="text-gray-600">🏢 {item.record_customer}</div>
+                            )}
+                            {(item.record_origin || item.record_destination) && (
+                              <div className="text-gray-500 text-xs">📍 {item.record_origin || ''}{item.record_origin && item.record_destination ? ' → ' : ''}{item.record_destination || ''}</div>
+                            )}
+                            {item.record_time_in && (
+                              <div className="text-gray-500 text-xs">🕐 {item.record_time_in}{item.record_time_out ? ` - ${item.record_time_out}` : ''}</div>
+                            )}
+                            {item.record_weight_net != null && (
+                              <div className="text-gray-500 text-xs">⚖️ {item.record_weight_net}t</div>
+                            )}
+                            {item.chits && item.chits.length > 0 && (
+                              <div className="text-gray-500 text-xs">🧾 {item.chits.map((c: any) => c.chit_no).join(', ')}</div>
+                            )}
+                          </>
+                        ) : sc === 'gps' ? (
+                          /* ── GPS 格式 ── */
+                          <>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.gps_summary_vehicle_no && (
+                                <span className="font-mono font-semibold text-gray-800">{item.gps_summary_vehicle_no}</span>
+                              )}
+                            </div>
+                            {item.gps_summary_first_location && (
+                              <div className="text-gray-500 text-xs">📍 {item.gps_summary_first_location}</div>
+                            )}
+                          </>
+                        ) : sc === 'attendance' ? (
+                          /* ── 打卡紀錄格式 ── */
+                          <>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.employee?.name_zh && (
+                                <span className="font-semibold text-gray-800">👤 {item.employee.name_zh}</span>
+                              )}
+                              {item.employee?.nickname && (
+                                <span className="text-gray-500 text-xs">({item.employee.nickname})</span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          /* ── 其他來源 fallback ── */
+                          <div className="text-gray-600">#{item.id}</div>
                         )}
                       </div>
                       {isSelected && (
@@ -2327,7 +2402,7 @@ export default function WorkLogsPage() {
             <div className="border-t border-gray-200 px-5 py-3 flex items-center justify-between bg-gray-50 rounded-b-xl">
               <div className="text-xs text-gray-500">
                 {manualMatchSelected
-                  ? `已選擇: ${manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || `#${manualMatchSelected.id}`}`
+                  ? `已選擇: ${manualMatchPopup.sourceCode === 'whatsapp_order' ? (manualMatchSelected.wa_item_vehicle_no || manualMatchSelected.wa_item_machine_code || `#${manualMatchSelected.id}`) : (manualMatchSelected.record_vehicle_no || manualMatchSelected.gps_summary_vehicle_no || manualMatchSelected.employee?.name_zh || `#${manualMatchSelected.id}`)}`
                   : '請選擇一筆記錄來配對'}
               </div>
               <div className="flex items-center gap-2">
