@@ -731,7 +731,7 @@ export default function SummaryTab() {
               <thead className="sticky top-0 z-20 bg-gray-100">
                 {Array.from({ length: Math.max(colFields.length, 1) }).map((_, depthIndex) => (
                   <tr key={`head-${depthIndex}`}>
-                    {depthIndex === 0 && <th rowSpan={Math.max(colFields.length, 1)} className="sticky left-0 z-30 min-w-[220px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">直軸</th>}
+                    {depthIndex === 0 && <th rowSpan={Math.max(colFields.length, 1)} className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">直軸</th>}
                     {visibleCols.map((col) => (
                       <th key={`${col.key}-${depthIndex}`} className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700">
                         {depthIndex === col.labels.length - 1 && col.canToggle && (
@@ -752,7 +752,7 @@ export default function SummaryTab() {
                 )}
                 {visibleRows.map((row) => (
                   <tr key={row.key} className={row.isGroup ? 'bg-blue-50 font-semibold' : 'bg-white hover:bg-gray-50'}>
-                    <th className="sticky left-0 z-10 border-b border-r border-gray-200 bg-inherit px-3 py-2 text-left text-gray-800" style={{ paddingLeft: `${12 + (row.depth - 1) * 18}px` }}>
+                    <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-200 bg-inherit px-3 py-2 text-left text-gray-800" style={{ paddingLeft: `${12 + (row.depth - 1) * 18}px` }}>
                       {row.canToggle && (
                         <button onClick={() => toggleRow(row.key)} className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-700">
                           {collapsedRows.has(row.key) ? '+' : '−'}
