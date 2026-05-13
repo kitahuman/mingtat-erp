@@ -551,19 +551,21 @@ export default function VerificationRecordsPage() {
   );
 
   const fetchFilterOptions = useCallback(async () => {
-    const params = buildParams(1);
+    const params: Record<string, string> = { page: '1', limit: '20' };
+    if (activeTab !== 'all') params.source_type = activeTab;
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
     try {
-      const responses = await Promise.all(
-        FILTER_COLUMNS.map(async (column) => {
-          const response = await verificationApi.getRecordFilterOptions(column, params);
-          return [column, response.data.options || []] as const;
-        }),
-      );
-      setFilterOptions((prev) => ({ ...prev, ...Object.fromEntries(responses) }));
+      const results: [string, VerificationRecordFilterOption[]][] = [];
+      for (const column of FILTER_COLUMNS) {
+        const response = await verificationApi.getRecordFilterOptions(column, params);
+        results.push([column, response.data.options || []]);
+      }
+      setFilterOptions((prev) => ({ ...prev, ...Object.fromEntries(results) }));
     } catch {
       // 篩選選項載入失敗不阻塞主要列表顯示。
     }
-  }, [buildParams]);
+  }, [activeTab, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchRecords(1);

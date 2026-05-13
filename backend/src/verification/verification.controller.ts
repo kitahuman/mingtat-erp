@@ -14,6 +14,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
@@ -334,11 +335,13 @@ export class VerificationController {
 
 
   // ── 已匯入資料列表 ────────────────────────────────────────
+  @SkipThrottle()
   @Get('records')
   async getRecords(@Query() query: VerificationRecordsQueryDto) {
     return this.service.getRecords(query);
   }
 
+  @SkipThrottle()
   @Get('records/filter-options/:column')
   async getRecordFilterOptions(
     @Param('column') column: string,
