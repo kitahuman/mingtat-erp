@@ -1734,14 +1734,15 @@ export default function WorkLogsPage() {
               rows.map((row, rowIndex) => {
                 const rowDirty = dirtyRows.has(row.id);
                 const hasUnverifiedClient = !row.client_id && !!row.unverified_client_name;
-                const rowBg = rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'bg-white';
+                const isRowSelected = selected.has(row.id);
+                const rowBg = isRowSelected ? 'bg-blue-50' : rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'bg-white';
                 const rowNum = (page - 1) * limit + rowIndex + 1;
 
                 return (
                   <>
                   <tr key={row.id}
                     className={`border-b border-gray-100 text-xs ${
-                      rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-100'
+                      isRowSelected ? 'bg-blue-50' : rowDirty ? 'bg-amber-50' : hasUnverifiedClient ? 'bg-amber-50' : 'hover:bg-blue-100'
                     }`}
                   >
                     {/* 行數編號 - sticky left */}
