@@ -216,6 +216,7 @@ export class PayrollService {
           lte: new Date(payroll.date_to),
         },
         service_type: { not: '請假/休息' },
+        deleted_at: null,
       };
       if (payroll.company_id) {
         wlWhere.company_id = payroll.company_id;
@@ -346,6 +347,7 @@ export class PayrollService {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
+      deleted_at: null,
     };
 
     const workLogs = await this.prisma.workLog.findMany({
@@ -478,6 +480,7 @@ export class PayrollService {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
+      deleted_at: null,
     };
 
     const workLogs = await this.prisma.workLog.findMany({
@@ -840,6 +843,7 @@ export class PayrollService {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
+      deleted_at: null,
     };
 
     const workLogs = await this.prisma.workLog.findMany({
@@ -1236,6 +1240,7 @@ export class PayrollService {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(dateFrom), lte: new Date(dateTo) },
       service_type: { not: '請假/休息' },
+      deleted_at: null,
     };
 
     const workLogs = await this.prisma.workLog.findMany({
