@@ -825,6 +825,37 @@ export default function VerificationRecordsPage() {
             />
           </div>
 
+          {/* 月份快捷 */}
+          <div className="flex items-end gap-1">
+            {(() => {
+              const shortcuts = [
+                { label: '本月', offset: 0 },
+                { label: '上月', offset: 1 },
+                { label: '上上月', offset: 2 },
+              ];
+              return shortcuts.map((s) => (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    const y = now.getFullYear();
+                    const m = now.getMonth() - s.offset;
+                    const first = new Date(y, m, 1);
+                    const last = new Date(y, m + 1, 0);
+                    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+                    setDateFrom(fmt(first));
+                    setDateTo(fmt(last));
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700 transition-colors"
+                >
+                  {s.label}
+                </button>
+              ));
+            })()}
+          </div>
+
           <button
             onClick={() => setShowColumnSettings(true)}
             className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50 transition-colors"
