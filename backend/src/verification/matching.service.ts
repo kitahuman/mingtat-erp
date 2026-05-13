@@ -471,7 +471,7 @@ export class MatchingService {
           employee: bestReceipt.record_driver_name || '',
           customer: bestReceipt.record_customer || '',
           contract: bestReceipt.record_contract_no || '',
-          location: bestReceipt.record_location_from || '',
+          location: bestReceipt.record_location_to || bestReceipt.record_location_from || '',
         }, locationAliasMap);
         sources['chit'] = {
           source: '入帳票',
@@ -483,7 +483,7 @@ export class MatchingService {
             vehicle: r.record_vehicle_no,
             employee: r.record_driver_name || '—',
             customer: r.record_customer || '—',
-            location: r.record_location_from || '—',
+            location: r.record_location_to || r.record_location_from || '—',
             contract: r.record_contract_no || '—',
             chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
             time_in: r.record_time_in,
@@ -744,7 +744,7 @@ export class MatchingService {
           employee: best.record_driver_name || '',
           customer: best.record_customer || '',
           contract: best.record_contract_no || '',
-          location: best.record_location_from || '',
+          location: best.record_location_to || best.record_location_from || '',
         }, locationAliasMap);
         sources['chit'] = {
           source: '入帳票',
@@ -756,7 +756,7 @@ export class MatchingService {
             vehicle: r.record_vehicle_no,
             employee: r.record_driver_name || '—',
             customer: r.record_customer || '—',
-            location: r.record_location_from || '—',
+            location: r.record_location_to || r.record_location_from || '—',
             contract: r.record_contract_no || '—',
             chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
           })),
