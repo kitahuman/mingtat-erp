@@ -1797,7 +1797,11 @@ export class VerificationService {
     const conditions: Prisma.VerificationRecordWhereInput[] = [];
 
     if (filters.source && filters.source.length > 0) {
-      conditions.push({ source: { is: { source_code: { in: filters.source } } } });
+      conditions.push({
+        source: {
+          source_code: { in: filters.source },
+        },
+      });
     }
 
     const textColumns: VerificationRecordTextFilterColumn[] = [
@@ -1831,7 +1835,11 @@ export class VerificationService {
     const { source_type, date_from, date_to, search, match_status } = query;
 
     if (source_type && source_type !== 'all') {
-      conditions.push({ source: { is: { source_code: source_type } } });
+      conditions.push({
+        source: {
+          source_code: source_type,
+        },
+      });
     }
 
     if (date_from || date_to) {
@@ -1899,9 +1907,11 @@ export class VerificationService {
   // 已匯入資料列表
   // ══════════════════════════════════════════════════════════════
   async getRecords(query: VerificationRecordsQueryDto) {
+    console.log('[getRecords] query.filter_source:', query.filter_source);
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where = this.buildRecordsWhere(query);
+    console.log('[getRecords] where:', JSON.stringify(where, null, 2));
     const orderBy = this.buildRecordsOrderBy(query.sort_field, query.sort_direction);
 
     const [total, records] = await Promise.all([
