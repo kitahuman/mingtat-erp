@@ -71,6 +71,19 @@ export class FleetRateCardsService {
       throw new BadRequestException('生效日期為必填欄位');
     }
 
+    // Convert date strings to full ISO DateTime for Prisma
+    if (data.effective_date && typeof data.effective_date === 'string' && !data.effective_date.includes('T')) {
+      data.effective_date = new Date(data.effective_date + 'T00:00:00.000Z');
+    }
+    if (data.expiry_date && typeof data.expiry_date === 'string' && !data.expiry_date.includes('T')) {
+      data.expiry_date = new Date(data.expiry_date + 'T00:00:00.000Z');
+    }
+    // Remove empty expiry_date
+    if (!data.expiry_date) delete data.expiry_date;
+
+    // Clean up undefined fields that Prisma doesn't accept
+    Object.keys(data).forEach(k => { if (data[k] === undefined) delete data[k]; });
+
     const saved = await this.prisma.fleetRateCard.create({ data });
     // Handle ot_rates if provided
     if (ot_rates && Array.isArray(ot_rates) && ot_rates.length > 0) {

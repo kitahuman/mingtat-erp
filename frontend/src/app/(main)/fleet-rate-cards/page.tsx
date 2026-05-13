@@ -325,23 +325,23 @@ export default function FleetRateCardsPage() {
           {/* 費率 */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-bold text-gray-700 mb-3">費率</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">費率</label>
-                <div className="flex gap-1">
-                  <input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" placeholder="0" />
-                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field">
+                <div className="flex gap-2">
+                  <input type="number" step="0.01" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1 min-w-0" placeholder="0" />
+                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-16 shrink-0">
                     {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                   </select>
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">中直費率</label>
-                <input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" placeholder="0" />
+                <input type="number" step="0.01" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field w-full" placeholder="0" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
-                <input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" placeholder="0" />
+                <input type="number" step="0.01" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field w-full" placeholder="0" />
               </div>
             </div>
           </div>
