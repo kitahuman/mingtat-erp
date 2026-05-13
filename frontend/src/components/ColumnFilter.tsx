@@ -49,9 +49,6 @@ export default function ColumnFilter({
   const allUniqueValues = serverSide && serverOptions ? serverOptions : clientUniqueValues;
 
   // Fetch options when dropdown opens in server-side mode.
-  // Keep onFetchOptions in a ref so parent re-renders do not trigger duplicate
-  // requests while the dropdown is already open. The cancellation flag prevents
-  // stale responses from overwriting newer results.
   const loadServerOptions = useCallback(async (isCancelled: () => boolean = () => false) => {
     if (!serverSide) return;
 
@@ -96,13 +93,15 @@ export default function ColumnFilter({
     return serverSide && optionRender ? optionRender(value) : value;
   }, [serverSide, optionRender]);
 
-  // Filter values by search term. Search against the displayed label so server-side
-  // raw values can still be shown with user-friendly labels.
+  // Filter values by search term.
   const filteredValues = useMemo(() => {
     if (!searchTerm) return allUniqueValues;
     const lower = searchTerm.toLowerCase();
     return allUniqueValues.filter(v => getDisplayValue(v).toLowerCase().includes(lower));
   }, [allUniqueValues, searchTerm, getDisplayValue]);
+
+  // Whether search is actively narrowing the list
+  const isSearchActive = searchTerm !== '' && filteredValues.length < allUniqueValues.length;
 
   // Current selected values for this column
   const selectedValues = activeFilters[columnKey];
@@ -124,26 +123,44 @@ export default function ColumnFilter({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
+  // Determine if a value should show as checked.
+  // When search is active and no filter has been explicitly set (isAllSelected),
+  // show all items as UNCHECKED so the user can pick only the ones they want.
+  const isValueSelected = useCallback((value: string) => {
+    if (isSearchActive && isAllSelected) return false;
+    if (isAllSelected) return true;
+    return selectedValues.has(value);
+  }, [isSearchActive, isAllSelected, selectedValues]);
+
+  // "Select All" checkbox state
+  const isSelectAllChecked = useMemo(() => {
+    if (isSearchActive) {
+      if (isAllSelected) return false; // search active, no filter → show unchecked
+      return filteredValues.length > 0 && filteredValues.every(v => selectedValues.has(v));
+    }
+    return isAllSelected;
+  }, [isSearchActive, filteredValues, allUniqueValues, isAllSelected, selectedValues]);
+
   const handleToggleAll = () => {
-    if (searchTerm && filteredValues.length < allUniqueValues.length) {
-      // When search narrows the list, toggle only the currently visible values.
+    if (isSearchActive) {
       if (isAllSelected) {
-        const newSelected = new Set(allUniqueValues);
-        filteredValues.forEach(v => newSelected.delete(v));
-        onFilterChange(columnKey, newSelected.size === 0 ? new Set() : newSelected);
+        // No filter yet, search active → select only the visible (searched) items
+        onFilterChange(columnKey, new Set(filteredValues));
       } else {
         const allFilteredSelected = filteredValues.every(v => selectedValues.has(v));
         const newSelected = new Set(selectedValues);
         if (allFilteredSelected) {
+          // Uncheck all visible items
           filteredValues.forEach(v => newSelected.delete(v));
         } else {
+          // Check all visible items
           filteredValues.forEach(v => newSelected.add(v));
         }
 
         if (newSelected.size === allUniqueValues.length) {
-          onFilterChange(columnKey, null);
+          onFilterChange(columnKey, null); // all selected → clear filter
         } else if (newSelected.size === 0) {
-          onFilterChange(columnKey, new Set());
+          onFilterChange(columnKey, new Set()); // none selected
         } else {
           onFilterChange(columnKey, newSelected);
         }
@@ -151,24 +168,24 @@ export default function ColumnFilter({
       return;
     }
 
+    // No search active
     if (isAllSelected) {
-      onFilterChange(columnKey, new Set());
+      onFilterChange(columnKey, new Set()); // deselect all
     } else {
-      onFilterChange(columnKey, null);
+      onFilterChange(columnKey, null); // select all (clear filter)
     }
   };
 
-  const isSelectAllChecked = useMemo(() => {
-    if (searchTerm && filteredValues.length < allUniqueValues.length) {
-      if (isAllSelected) return true;
-      return filteredValues.length > 0 && filteredValues.every(v => selectedValues.has(v));
-    }
-    return isAllSelected;
-  }, [searchTerm, filteredValues, allUniqueValues, isAllSelected, selectedValues]);
-
   const handleToggleValue = (value: string) => {
+    if (isSearchActive && isAllSelected) {
+      // No filter yet, search active → clicking a value selects ONLY that value
+      onFilterChange(columnKey, new Set([value]));
+      return;
+    }
+
     let newSelected: Set<string>;
     if (isAllSelected) {
+      // No search, clicking from "all selected" → deselect this one value
       newSelected = new Set(allUniqueValues);
       newSelected.delete(value);
     } else {
@@ -184,11 +201,6 @@ export default function ColumnFilter({
     } else {
       onFilterChange(columnKey, newSelected);
     }
-  };
-
-  const isValueSelected = (value: string) => {
-    if (isAllSelected) return true;
-    return selectedValues.has(value);
   };
 
   return (
@@ -231,7 +243,9 @@ export default function ColumnFilter({
                 onChange={handleToggleAll}
                 className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-xs font-medium text-gray-700">選擇全部</span>
+              <span className="text-xs font-medium text-gray-700">
+                {isSearchActive ? '選擇搜尋結果' : '選擇全部'}
+              </span>
             </label>
           </div>
 
