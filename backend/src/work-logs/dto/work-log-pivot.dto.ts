@@ -62,6 +62,27 @@ export class WorkLogPivotQueryDto {
   @IsOptional() @IsString() status?: string;
 }
 
+
+export interface PivotFilterOption {
+  value: string;
+  label: string;
+}
+
+export interface WorkLogPivotFilterOptions {
+  companies: PivotFilterOption[];
+  clients: PivotFilterOption[];
+  employees: PivotFilterOption[];
+  equipment_numbers: PivotFilterOption[];
+  machine_types: PivotFilterOption[];
+  start_locations: PivotFilterOption[];
+  end_locations: PivotFilterOption[];
+  contracts: PivotFilterOption[];
+  quotations: PivotFilterOption[];
+  day_nights: PivotFilterOption[];
+  service_types: PivotFilterOption[];
+  statuses: PivotFilterOption[];
+}
+
 export interface PivotAxisItem {
   key: string;
   values: string[];

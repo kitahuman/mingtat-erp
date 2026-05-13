@@ -446,6 +446,8 @@ export const workLogsApi = {
     api.post('/work-logs/add-rate-and-rematch', data),
   pivot: (params?: Record<string, string | number | undefined>) =>
     api.get('/work-logs/pivot', { params }),
+  pivotFilterOptions: (params?: Record<string, string | number | undefined>) =>
+    api.get('/work-logs/pivot/filter-options', { params }),
   pivotSummary: (params?: Record<string, string | number | undefined>) =>
     api.get('/work-logs/pivot/summary', { params }),
 };

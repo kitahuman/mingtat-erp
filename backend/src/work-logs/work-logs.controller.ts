@@ -62,6 +62,12 @@ export class WorkLogsController {
 
   // ── 整理分析 Pivot Table ─────────────────────────────────────
 
+
+  @Get('pivot/filter-options')
+  getPivotFilterOptions(@Query() query: WorkLogPivotQueryDto) {
+    return this.service.getPivotFilterOptions(query);
+  }
+
   @Get('pivot')
   getPivot(@Query() query: WorkLogPivotQueryDto) {
     return this.service.getPivot(query);

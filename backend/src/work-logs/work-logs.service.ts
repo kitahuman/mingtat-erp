@@ -14,8 +14,10 @@ import {
   PIVOT_DIMENSIONS,
   PivotAxisItem,
   PivotDimension,
+  PivotFilterOption,
   PivotMetric,
   PivotValueType,
+  WorkLogPivotFilterOptions,
   WorkLogPivotQueryDto,
   WorkLogPivotResult,
   WorkLogPivotSummary,
@@ -1790,9 +1792,175 @@ export class WorkLogsService {
     };
   }
 
+
+  async getPivotFilterOptions(query: WorkLogPivotQueryDto): Promise<WorkLogPivotFilterOptions> {
+    const where = this.buildPivotWhere(query);
+
+    const [
+      companyRows,
+      clientRows,
+      employeeRows,
+      equipmentRows,
+      machineTypeRows,
+      startLocationRows,
+      endLocationRows,
+      contractRows,
+      quotationRows,
+      dayNightRows,
+      serviceTypeRows,
+      statusRows,
+    ] = await Promise.all([
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['company_id', 'company_profile_id'],
+        select: {
+          company_id: true,
+          company_profile_id: true,
+          company: { select: { name: true, internal_prefix: true } },
+          company_profile: {
+            select: {
+              company_id: true,
+              code: true,
+              chinese_name: true,
+              english_name: true,
+              company: { select: { name: true, internal_prefix: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['client_id'],
+        select: { client_id: true, client: { select: { name: true } } },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['employee_id'],
+        select: { employee_id: true, employee: { select: { name_zh: true, name_en: true, emp_code: true } } },
+      }),
+      this.prisma.workLog.findMany({ where, distinct: ['equipment_number'], select: { equipment_number: true } }),
+      this.prisma.workLog.findMany({ where, distinct: ['machine_type'], select: { machine_type: true } }),
+      this.prisma.workLog.findMany({ where, distinct: ['start_location'], select: { start_location: true } }),
+      this.prisma.workLog.findMany({ where, distinct: ['end_location'], select: { end_location: true } }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['contract_id', 'client_contract_no'],
+        select: { contract_id: true, client_contract_no: true, contract: { select: { contract_no: true } } },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['quotation_id'],
+        select: { quotation_id: true, quotation: { select: { quotation_no: true } } },
+      }),
+      this.prisma.workLog.findMany({ where, distinct: ['day_night'], select: { day_night: true } }),
+      this.prisma.workLog.findMany({ where, distinct: ['service_type'], select: { service_type: true } }),
+      this.prisma.workLog.findMany({ where, distinct: ['is_confirmed'], select: { is_confirmed: true } }),
+    ]);
+
+    return {
+      companies: this.buildPivotCompanyFilterOptions(companyRows),
+      clients: this.buildPivotRelationFilterOptions(clientRows, 'client_id', (row) => row.client?.name),
+      employees: this.buildPivotRelationFilterOptions(employeeRows, 'employee_id', (row) => row.employee?.name_zh || row.employee?.name_en || row.employee?.emp_code),
+      equipment_numbers: this.buildPivotStringFilterOptions(equipmentRows, 'equipment_number'),
+      machine_types: this.buildPivotStringFilterOptions(machineTypeRows, 'machine_type'),
+      start_locations: this.buildPivotStringFilterOptions(startLocationRows, 'start_location'),
+      end_locations: this.buildPivotStringFilterOptions(endLocationRows, 'end_location'),
+      contracts: this.buildPivotContractFilterOptions(contractRows),
+      quotations: this.buildPivotQuotationFilterOptions(quotationRows),
+      day_nights: this.buildPivotStringFilterOptions(dayNightRows, 'day_night'),
+      service_types: this.buildPivotStringFilterOptions(serviceTypeRows, 'service_type'),
+      statuses: this.buildPivotStatusFilterOptions(statusRows),
+    };
+  }
+
   async getPivotSummary(query: WorkLogPivotQueryDto): Promise<WorkLogPivotSummary> {
     const result = await this.getPivot(query);
     return result.summary;
+  }
+
+
+  private normalizePivotFilterOptionValue(value: unknown): string {
+    if (value === null || value === undefined) return '(空白)';
+    const normalized = String(value).trim();
+    return normalized || '(空白)';
+  }
+
+  private addPivotFilterOption(options: Map<string, PivotFilterOption>, value: unknown, label?: unknown): void {
+    const optionValue = this.normalizePivotFilterOptionValue(value);
+    const optionLabel = optionValue === '(空白)'
+      ? '(空白)'
+      : this.normalizePivotFilterOptionValue(label ?? value);
+    if (!options.has(optionValue)) {
+      options.set(optionValue, { value: optionValue, label: optionLabel });
+    }
+  }
+
+  private sortPivotFilterOptions(options: Map<string, PivotFilterOption>): PivotFilterOption[] {
+    return Array.from(options.values()).sort((a, b) => {
+      if (a.value === '(空白)') return -1;
+      if (b.value === '(空白)') return 1;
+      return a.label.localeCompare(b.label, 'zh-Hant');
+    });
+  }
+
+  private buildPivotStringFilterOptions<T extends Record<string, unknown>>(rows: T[], field: keyof T): PivotFilterOption[] {
+    const options = new Map<string, PivotFilterOption>();
+    rows.forEach((row) => this.addPivotFilterOption(options, row[field], row[field]));
+    return this.sortPivotFilterOptions(options);
+  }
+
+  private buildPivotRelationFilterOptions<T extends Record<string, unknown>>(
+    rows: T[],
+    valueField: keyof T,
+    getLabel: (row: T) => unknown,
+  ): PivotFilterOption[] {
+    const options = new Map<string, PivotFilterOption>();
+    rows.forEach((row) => this.addPivotFilterOption(options, row[valueField], getLabel(row)));
+    return this.sortPivotFilterOptions(options);
+  }
+
+  private buildPivotCompanyFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+    const options = new Map<string, PivotFilterOption>();
+    rows.forEach((row) => {
+      const profile = row.company_profile;
+      const profileCompany = profile?.company;
+      const value = row.company_id ?? profile?.company_id;
+      const label = row.company?.internal_prefix
+        || row.company?.name
+        || profileCompany?.internal_prefix
+        || profileCompany?.name
+        || profile?.code
+        || profile?.chinese_name
+        || profile?.english_name;
+      this.addPivotFilterOption(options, value, label);
+    });
+    return this.sortPivotFilterOptions(options);
+  }
+
+  private buildPivotContractFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+    const options = new Map<string, PivotFilterOption>();
+    rows.forEach((row) => {
+      const value = row.contract?.contract_no || row.client_contract_no || row.contract_id;
+      this.addPivotFilterOption(options, value, value);
+    });
+    return this.sortPivotFilterOptions(options);
+  }
+
+  private buildPivotQuotationFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+    const options = new Map<string, PivotFilterOption>();
+    rows.forEach((row) => {
+      const value = row.quotation?.quotation_no || row.quotation_id;
+      this.addPivotFilterOption(options, value, value);
+    });
+    return this.sortPivotFilterOptions(options);
+  }
+
+  private buildPivotStatusFilterOptions(rows: Array<{ is_confirmed: boolean }>): PivotFilterOption[] {
+    const values = new Set(rows.map((row) => row.is_confirmed));
+    const options: PivotFilterOption[] = [];
+    if (values.has(true)) options.push({ value: 'confirmed', label: '已確認' });
+    if (values.has(false)) options.push({ value: 'unconfirmed', label: '未確認' });
+    return options;
   }
 
   private parsePivotDimensions(raw: string | undefined, fallback: PivotDimension[]): PivotDimension[] {
