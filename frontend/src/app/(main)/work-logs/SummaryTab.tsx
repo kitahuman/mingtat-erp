@@ -316,10 +316,11 @@ function getFieldOptions(response: unknown, category: string): Option[] {
   const grouped = asRecord(asRecord(response).data);
   const values = grouped[category];
   if (!Array.isArray(values)) return [];
-  return values.map((item) => {
+  const result = values.map((item) => {
     const record = asRecord(item);
     return { value: String(record.label || ''), label: String(record.label || '') };
   }).filter((option) => option.value);
+  return [{ value: '(空白)', label: '(空白)' }, ...result];
 }
 
 function CsvButton({ onClick }: { onClick: () => void }) {
@@ -518,20 +519,21 @@ export default function SummaryTab() {
       quotationsApi.list({ limit: 500 }),
       fieldOptionsApi.getAll(),
     ]).then(([companyResponse, clientResponse, employeeResponse, vehicleResponse, machineryResponse, contractResponse, quotationResponse, fieldOptionResponse]) => {
-      setCompanies(makeOptionsFromResponse(companyResponse, ['short_name', 'internal_prefix', 'name']));
-      setClients(makeOptionsFromResponse(clientResponse, ['name']));
-      setEmployees(makeOptionsFromResponse(employeeResponse, ['name_zh', 'name_en']));
-      setEquipmentOptions(combineOptions(
+      const blankOption: Option = { value: '(空白)', label: '(空白)' };
+      setCompanies([blankOption, ...makeOptionsFromResponse(companyResponse, ['short_name', 'internal_prefix', 'name'])]);
+      setClients([blankOption, ...makeOptionsFromResponse(clientResponse, ['name'])]);
+      setEmployees([blankOption, ...makeOptionsFromResponse(employeeResponse, ['name_zh', 'name_en'])]);
+      setEquipmentOptions([blankOption, ...combineOptions(
         makeOptionsFromResponse(vehicleResponse, ['label', 'plate_number', 'value'], ['value', 'plate_number', 'id']),
         makeOptionsFromResponse(machineryResponse, ['label', 'machine_code', 'value'], ['value', 'machine_code', 'id']),
-      ));
+      )]);
       setMachineTypes(getFieldOptions(fieldOptionResponse, 'machine_type'));
       setLocationOptions(getFieldOptions(fieldOptionResponse, 'location'));
-      setContractOptions(combineOptions(
+      setContractOptions([blankOption, ...combineOptions(
         makeOptionsFromResponse(contractResponse, ['contract_no', 'contract_name'], ['contract_no', 'id']),
         getFieldOptions(fieldOptionResponse, 'client_contract_no'),
-      ));
-      setQuotationOptions(makeOptionsFromResponse(quotationResponse, ['quotation_no'], ['quotation_no', 'id']));
+      )]);
+      setQuotationOptions([blankOption, ...makeOptionsFromResponse(quotationResponse, ['quotation_no'], ['quotation_no', 'id'])]);
       setDayNights(getFieldOptions(fieldOptionResponse, 'day_night'));
       setServiceTypes(getFieldOptions(fieldOptionResponse, 'service_type'));
     }).catch(() => undefined);

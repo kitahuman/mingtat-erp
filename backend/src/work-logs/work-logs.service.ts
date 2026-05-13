@@ -1859,14 +1859,21 @@ export class WorkLogsService {
   }
 
   private applyPivotCompanyFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+    const values = this.splitFilterValues(raw);
+    if (values.length === 0) return;
+    const blankSelected = this.hasBlankFilterValue(values);
     const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
-    if (!idFilter) return;
-    this.addPivotAndCondition(where, {
-      OR: [
-        { company_id: idFilter },
-        { company_profile: { is: { company_id: idFilter } } },
-      ],
-    } as Prisma.WorkLogWhereInput);
+    const conditions: Prisma.WorkLogWhereInput[] = [];
+    if (idFilter) {
+      conditions.push({ company_id: idFilter });
+      conditions.push({ company_profile: { is: { company_id: idFilter } } } as Prisma.WorkLogWhereInput);
+    }
+    if (blankSelected) {
+      conditions.push({ company_id: null, company_profile_id: null });
+    }
+    if (conditions.length > 0) {
+      this.addPivotAndCondition(where, { OR: conditions });
+    }
   }
 
   private applyPivotNumberFilter(
@@ -1874,8 +1881,19 @@ export class WorkLogsService {
     field: 'client_id' | 'employee_id',
     raw: string | undefined,
   ) {
-    const filter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
-    if (filter !== undefined) where[field] = filter;
+    const values = this.splitFilterValues(raw);
+    if (values.length === 0) return;
+    const blankSelected = this.hasBlankFilterValue(values);
+    const numericFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    if (blankSelected && numericFilter) {
+      this.addPivotAndCondition(where, {
+        OR: [{ [field]: numericFilter }, { [field]: null }],
+      });
+    } else if (blankSelected) {
+      where[field] = null;
+    } else if (numericFilter) {
+      where[field] = numericFilter;
+    }
   }
 
   private applyPivotStringFilter(
@@ -1883,8 +1901,28 @@ export class WorkLogsService {
     field: 'equipment_number' | 'machine_type' | 'tonnage' | 'day_night' | 'service_type' | 'start_location' | 'end_location',
     raw: string | undefined,
   ) {
-    const filter = this.makePivotStringFilter(this.splitFilterValues(raw));
-    if (filter !== undefined) where[field] = filter;
+    const values = this.splitFilterValues(raw);
+    if (values.length === 0) return;
+    const nonBlank = this.getNonBlankFilterValues(values);
+    const blankSelected = this.hasBlankFilterValue(values);
+    if (blankSelected && nonBlank.length > 0) {
+      // Include both blank (null/empty) and specific values
+      this.addPivotAndCondition(where, {
+        OR: [
+          { [field]: { in: nonBlank } },
+          { [field]: null },
+          { [field]: '' },
+        ],
+      });
+    } else if (blankSelected) {
+      // Only blank selected
+      this.addPivotAndCondition(where, {
+        OR: [{ [field]: null }, { [field]: '' }],
+      });
+    } else {
+      // Only non-blank values
+      where[field] = nonBlank.length === 1 ? nonBlank[0] : { in: nonBlank };
+    }
   }
 
   private applyPivotContractFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
