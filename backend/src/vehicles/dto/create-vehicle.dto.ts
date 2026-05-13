@@ -40,6 +40,11 @@ export class ChangePlateDto {
   @IsOptional() @IsString() reason?: string;
 }
 
+export class RemovePlateDto {
+  @IsString() remove_date: string;
+  @IsOptional() @IsString() notes?: string;
+}
+
 export class TransferVehicleDto {
   @Type(() => Number) @IsNumber() from_company_id: number;
   @Type(() => Number) @IsNumber() to_company_id: number;

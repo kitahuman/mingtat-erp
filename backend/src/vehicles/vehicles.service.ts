@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RemovePlateDto } from './dto/create-vehicle.dto';
 
 @Injectable()
 export class VehiclesService {
@@ -206,7 +207,49 @@ export class VehiclesService {
         where: { id },
         data: { plate_number: newPlateNumber, current_plate_id: targetPlate.id },
       });
+      await tx.vehicleHistoryEvent.create({
+        data: {
+          vehicle_id: id,
+          event_date: changeDate,
+          event_type: 'plate_changed',
+          description: `車牌從 ${vehicle.plate_number || '(無)'} 更換為 ${newPlateNumber}`,
+        },
+      });
     });
+    return this.findOne(id);
+  }
+
+  async removePlate(id: number, dto: RemovePlateDto) {
+    const removeDate = new Date(dto.remove_date);
+
+    await this.prisma.$transaction(async (tx) => {
+      const vehicle = await tx.vehicle.findUnique({ where: { id }, include: { current_plate: true } });
+      if (!vehicle) throw new NotFoundException('車輛不存在');
+      if (!vehicle.current_plate_id || !vehicle.current_plate) throw new BadRequestException('此車輛目前沒有車牌');
+
+      const plateNumber = vehicle.current_plate.plate_number || vehicle.plate_number;
+      await tx.vehiclePlateAssignment.updateMany({
+        where: { plate_id: vehicle.current_plate_id, vehicle_id: id, removed_date: null },
+        data: { removed_date: removeDate, notes: dto.notes },
+      });
+      await tx.vehiclePlate.update({
+        where: { id: vehicle.current_plate_id },
+        data: { status: 'idle', current_vehicle_id: null },
+      });
+      await tx.vehicle.update({
+        where: { id },
+        data: { plate_number: '', current_plate_id: null },
+      });
+      await tx.vehicleHistoryEvent.create({
+        data: {
+          vehicle_id: id,
+          event_date: removeDate,
+          event_type: 'plate_removed',
+          description: `移除車牌 ${plateNumber}`,
+        },
+      });
+    });
+
     return this.findOne(id);
   }
 

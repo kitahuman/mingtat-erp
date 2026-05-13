@@ -145,6 +145,7 @@ export const vehiclesApi = {
   create: (data: any) => api.post('/vehicles', data),
   update: (id: number, data: any) => api.put(`/vehicles/${id}`, data),
   changePlate: (id: number, data: any) => api.post(`/vehicles/${id}/change-plate`, data),
+  removePlate: (id: number, data: any) => api.post(`/vehicles/${id}/remove-plate`, data),
   transfer: (id: number, data: any) => api.post(`/vehicles/${id}/transfer`, data),
   addTransferHistory: (id: number, data: any) => api.post(`/vehicles/${id}/transfer-history`, data),
   addHistoryEvent: (id: number, data: any) => api.post(`/vehicles/${id}/history-events`, data),
@@ -155,6 +156,7 @@ export const vehiclesApi = {
 
 export const vehiclePlatesApi = {
   list: (params?: any) => api.get('/vehicle-plates', { params }),
+  create: (data: any) => api.post('/vehicle-plates', data),
   filterOptions: (column: string, params?: any) => api.get(`/vehicle-plates/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/vehicle-plates/${id}`),
   assign: (id: number, data: any) => api.post(`/vehicle-plates/${id}/assign`, data),

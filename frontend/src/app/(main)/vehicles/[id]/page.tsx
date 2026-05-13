@@ -34,10 +34,12 @@ export default function VehicleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [showPlateModal, setShowPlateModal] = useState(false);
+  const [showRemovePlateModal, setShowRemovePlateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showManualTransferModal, setShowManualTransferModal] = useState(false);
   const [showHistoryEventModal, setShowHistoryEventModal] = useState(false);
   const [plateForm, setPlateForm] = useState({ new_plate: '', change_date: '', notes: '' });
+  const [removePlateForm, setRemovePlateForm] = useState({ remove_date: '', notes: '' });
   const [transferForm, setTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
   const [manualTransferForm, setManualTransferForm] = useState({ from_company_id: '', to_company_id: '', transfer_date: '', notes: '' });
   const [historyEventForm, setHistoryEventForm] = useState({ event_date: '', event_type: '', description: '' });
@@ -72,6 +74,16 @@ export default function VehicleDetailPage() {
       setPlateForm({ new_plate: '', change_date: '', notes: '' });
       loadData();
     } catch (err: any) { alert(err.response?.data?.message || '更換失敗'); }
+  };
+
+  const handleRemovePlate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await vehiclesApi.removePlate(vehicle.id, removePlateForm);
+      setShowRemovePlateModal(false);
+      setRemovePlateForm({ remove_date: '', notes: '' });
+      loadData();
+    } catch (err: any) { alert(err.response?.data?.message || '移除車牌失敗'); }
   };
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -158,6 +170,7 @@ export default function VehicleDetailPage() {
           ) : (
             <>
               <button onClick={() => setShowPlateModal(true)} className="btn-secondary">更換車牌</button>
+              {(vehicle?.current_plate_id || vehicle?.current_plate || vehicle?.plate_number) && <button onClick={() => setShowRemovePlateModal(true)} className="btn-secondary">移除車牌</button>}
               <button onClick={() => setShowTransferModal(true)} className="btn-secondary">過戶</button>
               <button onClick={handleScrap} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">劏車</button>
               {editing ? (
@@ -271,6 +284,7 @@ export default function VehicleDetailPage() {
           <h2 className="text-lg font-bold text-gray-900">車輛歷史時間線</h2>
           <div className="flex gap-3 text-sm flex-wrap justify-end">
             {vehicle?.status !== 'scrapped' && <button onClick={() => setShowPlateModal(true)} className="text-primary-600 hover:underline">更換車牌</button>}
+            {vehicle?.status !== 'scrapped' && (vehicle?.current_plate_id || vehicle?.current_plate || vehicle?.plate_number) && <button onClick={() => setShowRemovePlateModal(true)} className="text-primary-600 hover:underline">移除車牌</button>}
             {vehicle?.status !== 'scrapped' && <button onClick={() => setShowTransferModal(true)} className="text-primary-600 hover:underline">過戶</button>}
             <button onClick={() => setShowManualTransferModal(true)} className="text-primary-600 hover:underline">新增過戶歷史</button>
             <button onClick={() => setShowHistoryEventModal(true)} className="text-primary-600 hover:underline">新增自定義歷史</button>
@@ -311,6 +325,16 @@ export default function VehicleDetailPage() {
           <div><label className="block text-sm font-medium text-gray-700 mb-1">變更日期 *</label><DateInput value={plateForm.change_date} onChange={value => setPlateForm({...plateForm, change_date: value})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={plateForm.notes} onChange={e => setPlateForm({...plateForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowPlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認更換</button></div>
+        </form>
+      </Modal>
+
+      {/* Remove Plate Modal */}
+      <Modal isOpen={showRemovePlateModal} onClose={() => setShowRemovePlateModal(false)} title="移除車牌">
+        <form onSubmit={handleRemovePlate} className="space-y-4">
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">目前車牌</label><input value={vehicle?.current_plate?.plate_number || vehicle?.plate_number || ''} className="input-field bg-gray-50 font-mono" disabled /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">移除日期 *</label><DateInput value={removePlateForm.remove_date} onChange={value => setRemovePlateForm({...removePlateForm, remove_date: value})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={removePlateForm.notes} onChange={e => setRemovePlateForm({...removePlateForm, notes: e.target.value})} className="input-field" rows={2} /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowRemovePlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">確認移除</button></div>
         </form>
       </Modal>
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { VehiclesService } from './vehicles.service';
-import { ChangePlateDto, CreateVehicleDto, ScrapVehicleDto, TransferVehicleDto, UpdateVehicleDto, VehicleHistoryEventDto, VehicleTransferHistoryDto } from './dto/create-vehicle.dto';
+import { ChangePlateDto, CreateVehicleDto, RemovePlateDto, ScrapVehicleDto, TransferVehicleDto, UpdateVehicleDto, VehicleHistoryEventDto, VehicleTransferHistoryDto } from './dto/create-vehicle.dto';
 
 @Controller('vehicles')
 @UseGuards(AuthGuard('jwt'))
@@ -35,7 +35,14 @@ export class VehiclesController {
 
   @Post(':id/change-plate')
   changePlate(@Param('id') id: number, @Body() dto: ChangePlateDto, @Request() req: any) {
+    void req;
     return this.service.changePlate(+id, dto);
+  }
+
+  @Post(':id/remove-plate')
+  removePlate(@Param('id') id: number, @Body() dto: RemovePlateDto, @Request() req: any) {
+    void req;
+    return this.service.removePlate(+id, dto);
   }
 
   @Post(':id/transfer')

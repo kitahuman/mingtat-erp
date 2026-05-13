@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
+import { AssignVehiclePlateDto, CreateVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
 
 interface VehiclePlateListQuery {
   page?: number | string;
@@ -57,7 +57,7 @@ export class VehiclePlatesService {
   private getFilterDisplayValue(row: any, field: string): string {
     if (field === 'owner_company') return row.owner_company_label || '-';
     if (field === 'vehicle_label') return row.vehicle_label || '-';
-    if (field === 'owned_date' || field === 'activity_date' || field === 'plate_expiry_date') return this.formatDisplayDate(row[field]);
+    if (field === 'owned_date' || field === 'activity_date' || field === 'plate_expiry_date' || field === 'plate_owned_date') return this.formatDisplayDate(row[field]);
     if (field === 'status') return row.status === 'in_use' ? '使用中' : row.status === 'idle' ? '閒置' : row.status || '-';
     const value = row[field];
     return value == null || value === '' ? '-' : String(value);
@@ -119,7 +119,7 @@ export class VehiclePlatesService {
   }
 
   private compareRows(a: any, b: any, sortBy: string, direction: number): number {
-    const dateFields = ['owned_date', 'activity_date', 'plate_expiry_date', 'created_at', 'updated_at'];
+    const dateFields = ['owned_date', 'activity_date', 'plate_expiry_date', 'plate_owned_date', 'created_at', 'updated_at'];
     if (dateFields.includes(sortBy)) {
       const aTime = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
       const bTime = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
@@ -129,6 +129,28 @@ export class VehiclePlatesService {
     const aValue = this.getFilterDisplayValue(a, sortBy);
     const bValue = this.getFilterDisplayValue(b, sortBy);
     return aValue.localeCompare(bValue, 'zh-Hant', { numeric: true }) * direction;
+  }
+
+  async create(dto: CreateVehiclePlateDto, userId?: number, ipAddress?: string) {
+    const plateNumber = dto.plate_number?.trim();
+    if (!plateNumber) throw new BadRequestException('必須輸入車牌號碼');
+
+    const exists = await this.prisma.vehiclePlate.findUnique({ where: { plate_number: plateNumber } });
+    if (exists) throw new BadRequestException('此車牌已存在');
+
+    const result = await this.prisma.vehiclePlate.create({
+      data: {
+        plate_number: plateNumber,
+        owner_company_id: Number(dto.owner_company_id),
+        status: 'idle',
+        plate_owned_date: dto.plate_owned_date ? new Date(dto.plate_owned_date) : null,
+        plate_expiry_date: dto.plate_expiry_date ? new Date(dto.plate_expiry_date) : null,
+        plate_notes: dto.plate_notes?.trim() || null,
+      },
+    });
+
+    await this.log(userId, 'create', 'vehicle_plates', result.id, undefined, result, ipAddress);
+    return this.findOne(result.id);
   }
 
   async findAll(query: VehiclePlateListQuery) {
@@ -293,6 +315,12 @@ export class VehiclePlatesService {
     const data: any = {};
     if (dto.plate_expiry_date !== undefined) {
       data.plate_expiry_date = dto.plate_expiry_date ? new Date(dto.plate_expiry_date) : null;
+    }
+    if (dto.plate_owned_date !== undefined) {
+      data.plate_owned_date = dto.plate_owned_date ? new Date(dto.plate_owned_date) : null;
+    }
+    if (dto.plate_notes !== undefined) {
+      data.plate_notes = dto.plate_notes?.trim() || null;
     }
 
     const result = await this.prisma.vehiclePlate.update({

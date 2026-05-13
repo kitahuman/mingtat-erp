@@ -29,7 +29,11 @@ export default function VehiclePlateDetailPage() {
         vehiclesApi.list({ status: 'not_scrapped', limit: 1000, sortBy: 'plate_number', sortOrder: 'ASC' }),
       ]);
       setPlate(plateRes.data);
-      setForm({ plate_expiry_date: plateRes.data.plate_expiry_date || '' });
+      setForm({
+        plate_expiry_date: plateRes.data.plate_expiry_date || '',
+        plate_owned_date: plateRes.data.plate_owned_date || '',
+        plate_notes: plateRes.data.plate_notes || '',
+      });
       setCompanies(companyRes.data || []);
       setVehicles(vehicleRes.data?.data || []);
       setLoading(false);
@@ -86,7 +90,11 @@ export default function VehiclePlateDetailPage() {
 
   const handleSave = async () => {
     try {
-      await vehiclePlatesApi.update(plate.id, { plate_expiry_date: form.plate_expiry_date || null });
+      await vehiclePlatesApi.update(plate.id, {
+        plate_expiry_date: form.plate_expiry_date || null,
+        plate_owned_date: form.plate_owned_date || null,
+        plate_notes: form.plate_notes || null,
+      });
       setEditing(false);
       loadData();
     } catch (err: any) {
@@ -110,7 +118,7 @@ export default function VehiclePlateDetailPage() {
         <div className="flex gap-2 flex-wrap">
           {editing ? (
             <>
-              <button onClick={() => { setEditing(false); setForm({ plate_expiry_date: plate.plate_expiry_date || '' }); }} className="btn-secondary">取消</button>
+              <button onClick={() => { setEditing(false); setForm({ plate_expiry_date: plate.plate_expiry_date || '', plate_owned_date: plate.plate_owned_date || '', plate_notes: plate.plate_notes || '' }); }} className="btn-secondary">取消</button>
               <button onClick={handleSave} className="btn-primary">儲存變更</button>
             </>
           ) : (
@@ -132,7 +140,11 @@ export default function VehiclePlateDetailPage() {
           <div><p className="text-sm text-gray-500">目前車輛</p><p>{plate?.current_vehicle ? <Link className="text-primary-600 hover:underline" href={`/vehicles/${plate.current_vehicle.id}`}>{plate.current_vehicle.plate_number} {plate.current_vehicle.brand || ''} {plate.current_vehicle.model || ''}</Link> : '-'}</p></div>
           <div>
             <p className="text-sm text-gray-500">擁有日期</p>
-            <p>{fmtDate(plate?.owned_date)}</p>
+            {editing ? (
+              <DateInput value={form.plate_owned_date} onChange={value => setForm({ ...form, plate_owned_date: value })} className="input-field mt-1" />
+            ) : (
+              <p>{fmtDate(plate?.plate_owned_date) || '-'}</p>
+            )}
           </div>
           <div>
             <p className="text-sm text-gray-500">車牌到期日</p>
@@ -144,6 +156,14 @@ export default function VehiclePlateDetailPage() {
           </div>
           <div><p className="text-sm text-gray-500">建立時間</p><p>{fmtDate(plate?.created_at)}</p></div>
           <div><p className="text-sm text-gray-500">更新時間</p><p>{fmtDate(plate?.updated_at)}</p></div>
+          <div className="md:col-span-3">
+            <p className="text-sm text-gray-500">備註</p>
+            {editing ? (
+              <textarea value={form.plate_notes} onChange={e => setForm({ ...form, plate_notes: e.target.value })} className="input-field mt-1" rows={3} />
+            ) : (
+              <p className="whitespace-pre-wrap">{plate?.plate_notes || '-'}</p>
+            )}
+          </div>
         </div>
       </div>
 

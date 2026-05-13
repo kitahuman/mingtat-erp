@@ -38,9 +38,11 @@ export default function VehiclesPage() {
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [showModal, setShowModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showCreatePlateModal, setShowCreatePlateModal] = useState(false);
   const [showTransferPlateModal, setShowTransferPlateModal] = useState(false);
   const [selectedPlate, setSelectedPlate] = useState<any>(null);
   const [assignForm, setAssignForm] = useState({ vehicle_id: '', assigned_date: '', notes: '' });
+  const [createPlateForm, setCreatePlateForm] = useState({ plate_number: '', owner_company_id: '', plate_owned_date: '', plate_expiry_date: '', plate_notes: '' });
   const [plateTransferForm, setPlateTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('ASC');
@@ -150,6 +152,7 @@ export default function VehiclesPage() {
   useEffect(() => { load(); }, [load]);
 
   const resetForm = () => setForm({ plate_mode: 'new', existing_plate_id: '', plate_number: '', machine_type: vehicleTypes[0] || '', tonnage: '', owner_company_id: '', brand: '', model: '', insurance_expiry: '', inspection_date: '', license_expiry: '' });
+  const resetCreatePlateForm = () => setCreatePlateForm({ plate_number: '', owner_company_id: '', plate_owned_date: '', plate_expiry_date: '', plate_notes: '' });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,6 +169,22 @@ export default function VehiclesPage() {
       resetForm();
       await Promise.all([load(), loadReferenceData()]);
     } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
+  };
+
+  const handleCreatePlate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await vehiclePlatesApi.create({
+        plate_number: createPlateForm.plate_number,
+        owner_company_id: Number(createPlateForm.owner_company_id),
+        plate_owned_date: createPlateForm.plate_owned_date || undefined,
+        plate_expiry_date: createPlateForm.plate_expiry_date || undefined,
+        plate_notes: createPlateForm.plate_notes || undefined,
+      });
+      setShowCreatePlateModal(false);
+      resetCreatePlateForm();
+      await Promise.all([load(), loadReferenceData()]);
+    } catch (err: any) { alert(err.response?.data?.message || '新增車牌失敗'); }
   };
 
   const handleSort = (field: string, order: string) => { setSortBy(field); setSortOrder(order); setPage(1); };
@@ -299,7 +318,7 @@ export default function VehiclesPage() {
       exportRender: (value: string) => value || '',
     },
     {
-      key: 'owned_date',
+      key: 'plate_owned_date',
       label: '擁有日期',
       sortable: true,
       render: renderDate,
@@ -350,6 +369,9 @@ export default function VehiclesPage() {
             <CsvImportModal module="vehicles" onImportComplete={load} />
             <button onClick={() => { resetForm(); setShowModal(true); }} className="btn-primary">新增車輛</button>
           </div>
+        )}
+        {hasMinRole('clerk') && activeTab === 'plates' && (
+          <button onClick={() => { resetCreatePlateForm(); setShowCreatePlateModal(true); }} className="btn-primary">新增車牌</button>
         )}
       </div>
 
@@ -456,6 +478,19 @@ export default function VehiclesPage() {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">行車證到期日</label><DateInput value={form.license_expiry} onChange={value => setForm({...form, license_expiry: value})} className="input-field" /></div>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={showCreatePlateModal} onClose={() => setShowCreatePlateModal(false)} title="新增車牌" size="lg">
+        <form onSubmit={handleCreatePlate} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">車牌號碼 *</label><input value={createPlateForm.plate_number} onChange={e => setCreatePlateForm({...createPlateForm, plate_number: e.target.value})} className="input-field font-mono" required /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label><select value={createPlateForm.owner_company_id} onChange={e => setCreatePlateForm({...createPlateForm, owner_company_id: e.target.value})} className="input-field" required><option value="">請選擇</option>{companies.map(c => <option key={c.id} value={c.id}>{renderCompany(c)}</option>)}</select></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">擁有日期</label><DateInput value={createPlateForm.plate_owned_date} onChange={value => setCreatePlateForm({...createPlateForm, plate_owned_date: value})} className="input-field" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">車牌到期日</label><DateInput value={createPlateForm.plate_expiry_date} onChange={value => setCreatePlateForm({...createPlateForm, plate_expiry_date: value})} className="input-field" /></div>
+            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={createPlateForm.plate_notes} onChange={e => setCreatePlateForm({...createPlateForm, plate_notes: e.target.value})} className="input-field" rows={3} /></div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowCreatePlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">新增</button></div>
         </form>
       </Modal>
 

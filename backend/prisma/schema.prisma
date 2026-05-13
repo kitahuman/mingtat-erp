@@ -395,6 +395,8 @@ model VehiclePlate {
   owner_company_id   Int
   status             String    @default("idle")
   plate_expiry_date  DateTime? @db.Date
+  plate_owned_date   DateTime? @db.Date
+  plate_notes        String?   @db.Text
   current_vehicle_id Int?      @unique
   created_at         DateTime @default(now())
   updated_at         DateTime @default(now()) @updatedAt

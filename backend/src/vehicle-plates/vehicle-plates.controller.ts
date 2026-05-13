@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { AssignVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
+import { AssignVehiclePlateDto, CreateVehiclePlateDto, ManualPlateAssignmentHistoryDto, ManualPlateTransferHistoryDto, TransferVehiclePlateDto, UpdateVehiclePlateDto } from './dto/vehicle-plate.dto';
 import { VehiclePlatesService } from './vehicle-plates.service';
 
 @Controller('vehicle-plates')
@@ -11,6 +11,11 @@ export class VehiclePlatesController {
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
+  }
+
+  @Post()
+  create(@Body() dto: CreateVehiclePlateDto, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Get('filter-options/:column')
