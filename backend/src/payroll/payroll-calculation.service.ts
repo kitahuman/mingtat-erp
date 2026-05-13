@@ -48,7 +48,9 @@ export class PayrollCalculationService {
     companyOrCpId?: number | null,
     mpfRelevantIncome?: number | null,
     holidayDates?: { date: Date; name: string }[],
+    excludedBadgeKeys?: Set<string>,
   ) {
+    const excluded = excludedBadgeKeys || new Set<string>();
     const salaryType = salarySetting.salary_type || 'daily';
     const baseSalary = Number(salarySetting.base_salary) || 0;
     const configuredBaseSalaryNight = Number(salarySetting.base_salary_night) || 0;
@@ -121,16 +123,22 @@ export class PayrollCalculationService {
     let allowanceTotal = 0;
 
     // 法定假日津貼：假日沒上班，給一天日薪作為津貼（獨立一行）
-    if (salaryType === 'daily' && holidayCount > 0 && baseSalary > 0) {
-      const holidayAllowance = baseSalary * holidayCount;
+    // 過濾掉被排除的假日（每個假日用 excluded_statutory_holiday_YYYY-MM-DD 標記）
+    const nonExcludedHolidays = validHolidays.filter((h) => {
+      const dateStr = toDateStr(h.date);
+      return !excluded.has(`statutory_holiday_${dateStr}`) && !excluded.has('statutory_holiday');
+    });
+    const effectiveHolidayCount = nonExcludedHolidays.length;
+    if (salaryType === 'daily' && effectiveHolidayCount > 0 && baseSalary > 0) {
+      const holidayAllowance = baseSalary * effectiveHolidayCount;
       allowanceTotal += holidayAllowance;
       items.push({
         item_type: 'allowance',
         item_name: '法定假日津貼',
         unit_price: baseSalary,
-        quantity: holidayCount,
+        quantity: effectiveHolidayCount,
         amount: holidayAllowance,
-        remarks: validHolidays.map((h) => h.name).join('、'),
+        remarks: nonExcludedHolidays.map((h) => h.name).join('、'),
         sort_order: sortOrder++,
       });
     }
@@ -177,6 +185,8 @@ export class PayrollCalculationService {
       },
     ];
     for (const af of allowanceFields) {
+      // 排除規則：如果該津貼已被用戶手動排除，則跳過
+      if (excluded.has(af.field)) continue;
       // 連結優先規則：如果該津貼已由價目表自動產生，則跳過固定津貼
       if (linkedAllowanceKeys.has(af.field)) continue;
 
@@ -269,6 +279,8 @@ export class PayrollCalculationService {
       },
     ];
     for (const os of otSlots) {
+      // 排除規則：如果該 OT slot 已被用戶手動排除，則跳過
+      if (excluded.has(`salary-ot-${os.field}`)) continue;
       const rate = Number((salarySetting as any)[os.field]) || 0;
       if (rate === 0) continue;
       const filteredLogs = workLogs.filter((wl) => {
