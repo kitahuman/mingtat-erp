@@ -1907,11 +1907,9 @@ export class VerificationService {
   // 已匯入資料列表
   // ══════════════════════════════════════════════════════════════
   async getRecords(query: VerificationRecordsQueryDto) {
-    console.log('[getRecords] query.filter_source:', query.filter_source);
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const where = this.buildRecordsWhere(query);
-    console.log('[getRecords] where:', JSON.stringify(where, null, 2));
     const orderBy = this.buildRecordsOrderBy(query.sort_field, query.sort_direction);
 
     const [total, records] = await Promise.all([

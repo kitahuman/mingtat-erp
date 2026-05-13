@@ -23,12 +23,12 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
 import { VerificationService } from './verification.service';
 import { OcrService } from './ocr.service';
-import { VERIFICATION_RECORD_FILTER_COLUMNS } from './dto/verification-records-query.dto';
-import type {
-  VerificationRecordFilterColumn,
+import {
+  VERIFICATION_RECORD_FILTER_COLUMNS,
   VerificationRecordFilterOptionsQueryDto,
   VerificationRecordsQueryDto,
 } from './dto/verification-records-query.dto';
+import type { VerificationRecordFilterColumn } from './dto/verification-records-query.dto';
 import { GpsService } from './gps.service';
 import {
   FileValidationPipe,
