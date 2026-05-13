@@ -26,6 +26,28 @@ interface Option { value: string | number; label: string; _raw?: any; shortLabel
 
 const LIMIT_OPTIONS = [25, 50, 100];
 
+const MONTH_SHORTCUTS = [
+  { label: '本月', monthOffset: 0 },
+  { label: '上月', monthOffset: -1 },
+  { label: '上上月', monthOffset: -2 },
+] as const;
+
+const formatDatePart = (value: number): string => String(value).padStart(2, '0');
+
+const toDateInputValue = (date: Date): string => (
+  `${date.getFullYear()}-${formatDatePart(date.getMonth() + 1)}-${formatDatePart(date.getDate())}`
+);
+
+const getMonthRange = (monthOffset: number): { dateFrom: string; dateTo: string } => {
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + monthOffset + 1, 0);
+  return {
+    dateFrom: toDateInputValue(firstDay),
+    dateTo: toDateInputValue(lastDay),
+  };
+};
+
 const SOURCE_LABELS: Record<string, { text: string; cls: string }> = {
   attendance: { text: '打卡', cls: 'bg-amber-100 text-amber-700' },
   manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
@@ -516,8 +538,12 @@ export default function WorkLogsPage() {
       if (fleetIds.length) params.fleet_driver_id = fleetIds.join(',');
     }
     if (filterEquipment) params.equipment_number = filterEquipment;
-    if (filterDateFrom)  params.date_from        = filterDateFrom;
-    if (filterDateTo)    params.date_to          = filterDateTo;
+    if (filterDateFrom) {
+      params.date_from = filterDateFrom;
+      params.date_to = filterDateTo || filterDateFrom;
+    } else if (filterDateTo) {
+      params.date_to = filterDateTo;
+    }
     for (const [col, vals] of Object.entries(columnFilters)) {
       if (vals && vals.size > 0) {
         params[`filter_${col}`] = Array.from(vals).join(',');
@@ -955,6 +981,13 @@ export default function WorkLogsPage() {
     setColumnFilters({});
     setPage(1);
   };
+
+  const applyMonthShortcut = useCallback((monthOffset: number) => {
+    const { dateFrom, dateTo } = getMonthRange(monthOffset);
+    setFilterDateFrom(dateFrom);
+    setFilterDateTo(dateTo);
+    setPage(1);
+  }, []);
 
   const hasFilters = !!(filterPublisher.length || filterStatus.length || filterCompany.length || filterClient.length ||
     filterQuotation.length || filterContract.length || filterEmployee.length || filterEquipment || filterDateFrom || filterDateTo ||
@@ -1530,6 +1563,18 @@ export default function WorkLogsPage() {
             <DateInput value={filterDateTo}
               onChange={val => { setFilterDateTo(val || ''); setPage(1); }}
               className="w-32 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
+          </div>
+          <div className="flex items-end gap-1 self-end">
+            {MONTH_SHORTCUTS.map(shortcut => (
+              <button
+                key={shortcut.label}
+                type="button"
+                onClick={() => applyMonthShortcut(shortcut.monthOffset)}
+                className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                {shortcut.label}
+              </button>
+            ))}
           </div>
           {hasFilters && (
             <button onClick={resetFilters}

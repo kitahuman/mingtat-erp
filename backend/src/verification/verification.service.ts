@@ -1797,7 +1797,7 @@ export class VerificationService {
     const conditions: Prisma.VerificationRecordWhereInput[] = [];
 
     if (filters.source && filters.source.length > 0) {
-      conditions.push({ source: { source_code: { in: filters.source } } });
+      conditions.push({ source: { is: { source_code: { in: filters.source } } } });
     }
 
     const textColumns: VerificationRecordTextFilterColumn[] = [
@@ -1831,7 +1831,7 @@ export class VerificationService {
     const { source_type, date_from, date_to, search, match_status } = query;
 
     if (source_type && source_type !== 'all') {
-      conditions.push({ source: { source_code: source_type } });
+      conditions.push({ source: { is: { source_code: source_type } } });
     }
 
     if (date_from || date_to) {

@@ -551,12 +551,9 @@ export default function VerificationRecordsPage() {
   );
 
   const fetchFilterOptions = useCallback(async () => {
-    const params: Record<string, string> = { page: '1', limit: '20' };
-    if (activeTab !== 'all') params.source_type = activeTab;
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
+    const params = buildParams(1);
     try {
-      const results: [string, VerificationRecordFilterOption[]][] = [];
+      const results: [VerificationRecordFilterColumn, VerificationRecordFilterOption[]][] = [];
       for (const column of FILTER_COLUMNS) {
         const response = await verificationApi.getRecordFilterOptions(column, params);
         results.push([column, response.data.options || []]);
@@ -565,7 +562,7 @@ export default function VerificationRecordsPage() {
     } catch {
       // 篩選選項載入失敗不阻塞主要列表顯示。
     }
-  }, [activeTab, dateFrom, dateTo]);
+  }, [buildParams]);
 
   useEffect(() => {
     fetchRecords(1);
