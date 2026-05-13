@@ -111,6 +111,11 @@ const VALUE_OPTIONS: Array<{ value: PivotValueType; label: string }> = [
   { value: 'mid_shift_count', label: '中直次數' },
 ];
 
+const STATUS_OPTIONS: Option[] = [
+  { value: 'confirmed', label: '已確認' },
+  { value: 'unconfirmed', label: '未確認' },
+];
+
 const EMPTY_METRIC: PivotMetric = { value: 0, unit: '' };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -232,26 +237,59 @@ function buildAxisTree(items: PivotAxisItem[]): AxisNode[] {
   return roots;
 }
 
-function flattenRows(nodes: AxisNode[], _collapsed: Set<string>, maxDepth: number): RowEntry[] {
+function flattenRows(nodes: AxisNode[], collapsed: Set<string>, maxDepth: number): RowEntry[] {
   const rows: RowEntry[] = [];
-  const visit = (node: AxisNode) => {
+
+  const pushLeaf = (node: AxisNode, omitFirstLabel: boolean) => {
+    const displayLabels = omitFirstLabel ? node.labels.slice(1) : node.labels;
+    rows.push({
+      key: node.leafKey || node.key,
+      labels: node.labels,
+      depth: omitFirstLabel ? Math.max(node.depth, 2) : node.depth,
+      label: displayLabels.join(' / ') || node.label,
+      isGroup: false,
+      isLeaf: true,
+      canToggle: false,
+    });
+  };
+
+  const visitLeaf = (node: AxisNode, omitFirstLabel: boolean) => {
     const hasChildren = node.children.length > 0;
     const isLeafRow = !hasChildren || node.depth >= maxDepth;
     if (isLeafRow) {
-      rows.push({
-        key: node.leafKey || node.key,
-        labels: node.labels,
-        depth: node.depth,
-        label: node.labels.join(' / '),
-        isGroup: false,
-        isLeaf: true,
-        canToggle: false,
-      });
+      pushLeaf(node, omitFirstLabel);
       return;
     }
-    node.children.forEach(visit);
+    node.children.forEach((child) => visitLeaf(child, omitFirstLabel));
   };
-  nodes.forEach(visit);
+
+  if (maxDepth <= 1) {
+    nodes.forEach((node) => visitLeaf(node, false));
+    return rows;
+  }
+
+  nodes.forEach((node) => {
+    const hasChildren = node.children.length > 0;
+    if (!hasChildren) {
+      pushLeaf(node, false);
+      return;
+    }
+
+    rows.push({
+      key: node.key,
+      labels: node.labels,
+      depth: 1,
+      label: `${node.label} :`,
+      isGroup: true,
+      isLeaf: false,
+      canToggle: true,
+    });
+
+    if (!collapsed.has(node.key)) {
+      node.children.forEach((child) => visitLeaf(child, true));
+    }
+  });
+
   return rows;
 }
 
@@ -321,6 +359,19 @@ function getFieldOptions(response: unknown, category: string): Option[] {
     return { value: String(record.label || ''), label: String(record.label || '') };
   }).filter((option) => option.value);
   return [{ value: '(空白)', label: '(空白)' }, ...result];
+}
+
+function formatTitleDate(date: string): string {
+  return date ? date.replace(/-/g, '/') : '未指定';
+}
+
+function getOptionLabels(values: string[], options: Option[]): string[] {
+  const optionMap = new Map(options.map((option) => [option.value, option.label]));
+  return values.map((value) => optionMap.get(value) || value).filter(Boolean);
+}
+
+function getDimensionLabel(value: PivotDimension): string {
+  return DIMENSION_OPTIONS.find((option) => option.value === value && option.value !== 'none')?.label || '';
 }
 
 function CsvButton({ onClick }: { onClick: () => void }) {
@@ -584,10 +635,38 @@ export default function SummaryTab() {
   const colTree = useMemo(() => buildAxisTree(pivot?.cols || []), [pivot]);
   const visibleRows = useMemo(() => flattenRows(rowTree, collapsedRows, Math.max(rowFields.length, 1)), [rowTree, collapsedRows, rowFields.length]);
   const visibleCols = useMemo(() => flattenCols(colTree, collapsedCols, Math.max(colFields.length, 1)), [colTree, collapsedCols, colFields.length]);
+  const pivotTitle = useMemo(() => {
+    const parts: string[] = [];
+    const addSelectedFilter = (values: string[], options: Option[]) => {
+      if (values.length === 0) return;
+      const labels = getOptionLabels(values, options);
+      if (labels.length > 0) parts.push(labels.join('、'));
+    };
+
+    addSelectedFilter(companyIds, companies);
+    addSelectedFilter(clientIds, clients);
+    addSelectedFilter(employeeIds, employees);
+    addSelectedFilter(equipmentNumbers, equipmentOptions);
+    addSelectedFilter(selectedMachineTypes, machineTypes);
+    addSelectedFilter(startLocations, locationOptions);
+    addSelectedFilter(endLocations, locationOptions);
+    addSelectedFilter(selectedContracts, contractOptions);
+    addSelectedFilter(selectedQuotations, quotationOptions);
+    addSelectedFilter(selectedDayNights, dayNights);
+    addSelectedFilter(selectedServiceTypes, serviceTypes);
+    addSelectedFilter(selectedStatuses, STATUS_OPTIONS);
+    parts.push(`${formatTitleDate(dateFrom)} - ${formatTitleDate(dateTo)}`);
+    return `Pivot Table 交叉表 >> ${parts.join(' ')}`;
+  }, [companyIds, companies, clientIds, clients, employeeIds, employees, equipmentNumbers, equipmentOptions, selectedMachineTypes, machineTypes, startLocations, locationOptions, endLocations, selectedContracts, contractOptions, selectedQuotations, quotationOptions, selectedDayNights, dayNights, selectedServiceTypes, serviceTypes, selectedStatuses, dateFrom, dateTo]);
+  const rowAxisHeader = useMemo(() => {
+    const labels = rowFields.map(getDimensionLabel).filter(Boolean);
+    return labels.length > 0 ? labels.join(' / ') : '直軸';
+  }, [rowFields]);
   const maxVisibleValue = useMemo(() => {
     if (!pivot) return 0;
     let max = 0;
     visibleRows.forEach((row) => {
+      if (row.isGroup) return;
       visibleCols.forEach((col) => {
         max = Math.max(max, aggregateMetric(pivot, row.labels, col.labels).value);
       });
@@ -619,13 +698,13 @@ export default function SummaryTab() {
 
   const exportCsv = () => {
     if (!pivot) return;
-    const headers = ['直軸', ...visibleCols.map((col) => col.labels.join(' / ')), '合計'];
+    const headers = [rowAxisHeader, ...visibleCols.map((col) => col.labels.join(' / ')), '合計'];
     const lines = [headers];
     visibleRows.forEach((row) => {
       lines.push([
-        row.labels.join(' / '),
-        ...visibleCols.map((col) => metricText(aggregateMetric(pivot, row.labels, col.labels))),
-        metricText(aggregateMetric(pivot, row.labels, [])),
+        row.label,
+        ...visibleCols.map((col) => row.isGroup ? '' : metricText(aggregateMetric(pivot, row.labels, col.labels))),
+        row.isGroup ? '' : metricText(aggregateMetric(pivot, row.labels, [])),
       ]);
     });
     lines.push(['合計', ...visibleCols.map((col) => metricText(aggregateMetric(pivot, [], col.labels))), metricText(pivot.grandTotal)]);
@@ -695,7 +774,7 @@ export default function SummaryTab() {
                   <MultiSelectComboBox label="報價單" values={selectedQuotations} onChange={setSelectedQuotations} options={quotationOptions} />
                   <MultiSelectComboBox label="日夜班" values={selectedDayNights} onChange={setSelectedDayNights} options={dayNights} />
                   <MultiSelectComboBox label="服務類型" values={selectedServiceTypes} onChange={setSelectedServiceTypes} options={serviceTypes} />
-                  <MultiSelectComboBox label="確認狀態" values={selectedStatuses} onChange={setSelectedStatuses} options={[{ value: 'confirmed', label: '已確認' }, { value: 'unconfirmed', label: '未確認' }]} />
+                  <MultiSelectComboBox label="確認狀態" values={selectedStatuses} onChange={setSelectedStatuses} options={STATUS_OPTIONS} />
                 </div>
               </div>
             )}
@@ -724,7 +803,7 @@ export default function SummaryTab() {
       <div className="p-3 pt-2">
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-            <div className="text-sm font-semibold text-gray-800">Pivot Table 交叉表</div>
+            <div className="text-sm font-semibold text-gray-800">{pivotTitle}</div>
             <div className="text-xs text-gray-500">{loading ? '載入中...' : `直軸 ${visibleRows.length} 項，橫軸 ${visibleCols.length} 項`}</div>
           </div>
           {error && <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
@@ -733,7 +812,7 @@ export default function SummaryTab() {
               <thead className="sticky top-0 z-20 bg-gray-100">
                 {Array.from({ length: Math.max(colFields.length, 1) }).map((_, depthIndex) => (
                   <tr key={`head-${depthIndex}`}>
-                    {depthIndex === 0 && <th rowSpan={Math.max(colFields.length, 1)} className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">直軸</th>}
+                    {depthIndex === 0 && <th rowSpan={Math.max(colFields.length, 1)} className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">{rowAxisHeader}</th>}
                     {visibleCols.map((col) => (
                       <th key={`${col.key}-${depthIndex}`} className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700">
                         {depthIndex === col.labels.length - 1 && col.canToggle && (
@@ -763,6 +842,9 @@ export default function SummaryTab() {
                       {row.label}
                     </th>
                     {visibleCols.map((col) => {
+                      if (row.isGroup) {
+                        return <td key={`${row.key}-${col.key}`} className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800" />;
+                      }
                       const metric = aggregateMetric(pivot, row.labels, col.labels);
                       const intensity = maxVisibleValue > 0 ? Math.min(metric.value / maxVisibleValue, 1) : 0;
                       const background = metric.value > 0 ? `rgba(37, 99, 235, ${0.08 + intensity * 0.26})` : undefined;
@@ -773,7 +855,7 @@ export default function SummaryTab() {
                       );
                     })}
                     <td className="sticky right-0 z-10 border-b border-l border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">
-                      {metricText(aggregateMetric(pivot, row.labels, []))}
+                      {row.isGroup ? '' : metricText(aggregateMetric(pivot, row.labels, []))}
                     </td>
                   </tr>
                 ))}
