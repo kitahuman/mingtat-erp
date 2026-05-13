@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
-import { UpdatePayrollDto, UpdatePayrollWorkLogDto } from './dto/update-payroll.dto';
+import { UpdatePayrollDto, UpdatePayrollWorkLogDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
 import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
 
@@ -261,6 +261,14 @@ export class PayrollController {
     },
   ) {
     return this.payrollService.setDailyAllowances(+id, body);
+  }
+
+  @Post(':id/exclude-badge')
+  excludeBadge(
+    @Param('id') id: string,
+    @Body() body: ExcludeBadgeDto,
+  ) {
+    return this.payrollService.excludeBadge(+id, body.date, body.badge_key);
   }
 
   // 取得員工可用的津貼選項

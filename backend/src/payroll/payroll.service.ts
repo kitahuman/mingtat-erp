@@ -2128,6 +2128,36 @@ export class PayrollService {
     return this.calcService.buildAllowanceOptions(salarySetting);
   }
 
+  async excludeBadge(id: number, date: string, badgeKey: string) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    const excludedKey = `excluded_${badgeKey}`;
+    const excludedDate = new Date(date);
+    const existing = await this.prisma.payrollDailyAllowance.findFirst({
+      where: {
+        payroll_id: id,
+        date: excludedDate,
+        allowance_key: excludedKey,
+      },
+    });
+
+    if (!existing) {
+      await this.prisma.payrollDailyAllowance.create({
+        data: {
+          payroll_id: id,
+          date: excludedDate,
+          allowance_key: excludedKey,
+          allowance_name: `已移除的津貼: ${badgeKey}`,
+          amount: 0,
+          is_auto: false,
+        },
+      });
+    }
+
+    return { success: true };
+  }
+
   // ── 統計摘要 ──────────────────────────────────────────────────
   async getSummary(query: PayrollQuery) {
     const where: any = {};

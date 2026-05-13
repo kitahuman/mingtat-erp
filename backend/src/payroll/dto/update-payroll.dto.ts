@@ -47,3 +47,11 @@ export class UpdatePayrollWorkLogDto {
   @IsOptional() @IsBoolean() is_mid_shift?: boolean;
   @IsOptional() @Type(() => Number) @IsNumber() matched_rate?: number;
 }
+
+export class ExcludeBadgeDto {
+  @IsString()
+  date: string;
+
+  @IsString()
+  badge_key: string;
+}

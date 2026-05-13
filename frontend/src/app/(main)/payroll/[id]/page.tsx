@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { payrollApi, fieldOptionsApi } from '@/lib/api';
 import Link from 'next/link';
@@ -37,11 +37,13 @@ const TAB_LABELS: Record<TabKey, string> = {
 
 type AllowanceBadge = {
   key: string;
-  label: string;
+  label: ReactNode;
   amount: number;
   className: string;
   removable?: boolean;
   id?: number;
+  badgeKey?: string;
+  date?: string;
 };
 
 type UnmatchedGroup = {
@@ -768,6 +770,7 @@ function DailyCalculationView({
   salarySetting,
   onAddAllowance,
   onRemoveAllowance,
+  onExcludeBadge,
   onSaveTopUpOverride,
 }: {
   dailyCalc: any[];
@@ -778,6 +781,7 @@ function DailyCalculationView({
   salarySetting?: any;
   onAddAllowance: (date: string, key: string, name: string, amount: number) => Promise<void>;
   onRemoveAllowance: (daId: number) => Promise<void>;
+  onExcludeBadge: (date: string, badgeKey: string) => Promise<void>;
   onSaveTopUpOverride: (date: string, amount: number) => Promise<void>;
 }) {
   const isDaily = salaryType === 'daily' || !salaryType;
@@ -828,6 +832,9 @@ function DailyCalculationView({
           label: item.name || item.item_name || item.key || '固定津貼',
           amount,
           className: 'bg-green-100 text-green-700 border-green-200',
+          removable: isDraft,
+          badgeKey: item.key,
+          date: day.date,
         });
       }
     });
@@ -844,7 +851,7 @@ function DailyCalculationView({
               {item.allowance_name || item.allowance_key || '每日津貼'}
               {isAuto && <span className="text-[10px] bg-blue-500 text-white px-1 rounded-sm scale-90 origin-left" title="自動連結">A</span>}
             </span>
-          ) as any,
+          ),
           amount,
           className: item.allowance_key === 'statutory_holiday'
             ? 'bg-amber-100 text-amber-700 border-amber-200'
@@ -868,14 +875,20 @@ function DailyCalculationView({
     otSlots.forEach((slot) => {
       const rate = Number(salarySetting?.[slot.field]) || 0;
       if (rate <= 0) return;
+      const badgeKey = `salary-ot-${slot.field}`;
+      const isExcluded = (day.daily_allowances || []).some((item: { allowance_key?: string }) => item.allowance_key === `excluded_${badgeKey}`);
+      if (isExcluded) return;
       const hasEligibleOt = workLogs.some((wl: any) => (Number(wl.ot_quantity) || 0) > 0 && (!slot.condition || slot.condition(wl)));
       if (!hasEligibleOt) return;
       salaryOtBadgeCount += 1;
       badges.push({
-        key: `salary-ot-${slot.field}`,
+        key: badgeKey,
         label: slot.label,
         amount: rate,
         className: 'bg-purple-100 text-purple-700 border-purple-200',
+        removable: isDraft,
+        badgeKey,
+        date: day.date,
       });
     });
 
@@ -1016,8 +1029,21 @@ function DailyCalculationView({
                           {allowanceBadges.map((badge) => (
                             <span key={badge.key} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-xs ${badge.className}`}>
                               {badge.label} ${badge.amount.toLocaleString()}
-                              {badge.removable && badge.id && (
-                                <button onClick={() => onRemoveAllowance(badge.id!)} className="ml-0.5 text-blue-400 hover:text-red-500">&times;</button>
+                              {badge.removable && (
+                                <button
+                                  onClick={() => {
+                                    if (badge.id) {
+                                      onRemoveAllowance(badge.id);
+                                      return;
+                                    }
+                                    if (badge.badgeKey && badge.date) {
+                                      onExcludeBadge(badge.date, badge.badgeKey);
+                                    }
+                                  }}
+                                  className="ml-0.5 text-blue-400 hover:text-red-500"
+                                >
+                                  &times;
+                                </button>
                               )}
                             </span>
                           ))}
@@ -1483,7 +1509,17 @@ export default function PayrollDetailPage() {
       await payrollApi.removeDailyAllowance(payroll.id, daId);
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.message || '操作失敗');
+      alert(err.response?.data?.message || '移除失敗');
+    }
+  };
+
+  const handleExcludeBadge = async (date: string, badgeKey: string) => {
+    if (!confirm('確定要移除此津貼？')) return;
+    try {
+      await payrollApi.excludeBadge(payroll.id, { date, badge_key: badgeKey });
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '移除失敗');
     }
   };
 
@@ -1811,6 +1847,7 @@ export default function PayrollDetailPage() {
             salarySetting={payroll.salary_setting}
             onAddAllowance={handleAddDailyAllowance}
             onRemoveAllowance={handleRemoveDailyAllowance}
+            onExcludeBadge={handleExcludeBadge}
             onSaveTopUpOverride={handleSaveTopUpOverride}
           />
         )}
@@ -2139,13 +2176,14 @@ export default function PayrollDetailPage() {
                       const val = e.target.value;
                       try {
                         await payrollApi.update(payroll.id, { mpf_relevant_income: val || null });
-                        alert('已更新 MPF 計算薪金，請按「重新計算」以更新糧單');
+                        await payrollApi.recalculate(payroll.id, {});
+                        await loadData();
                       } catch (err: any) {
                         alert(err.response?.data?.message || '更新失敗');
                       }
                     }}
                   />
-                  <span className="text-xs text-gray-400">修改後請按「重新計算」</span>
+
                 </div>
               ) : (
                 <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>

@@ -103,19 +103,6 @@ export class PayrollCalculationService {
           sort_order: sortOrder++,
         });
       }
-      // 法定假日津貼：假日沒上班，給一天日薪作為津貼（獨立一行）
-      if (holidayCount > 0 && baseSalary > 0) {
-        const holidayAllowance = baseSalary * holidayCount;
-        items.push({
-          item_type: 'allowance',
-          item_name: '法定假日津貼',
-          unit_price: baseSalary,
-          quantity: holidayCount,
-          amount: holidayAllowance,
-          remarks: validHolidays.map((h) => h.name).join('、'),
-          sort_order: sortOrder++,
-        });
-      }
     } else {
       workDays = workDateSet.size;
       workNights = nightWorkDateSet.size;
@@ -132,6 +119,21 @@ export class PayrollCalculationService {
 
     // ── (2) 津貼計算 ──
     let allowanceTotal = 0;
+
+    // 法定假日津貼：假日沒上班，給一天日薪作為津貼（獨立一行）
+    if (salaryType === 'daily' && holidayCount > 0 && baseSalary > 0) {
+      const holidayAllowance = baseSalary * holidayCount;
+      allowanceTotal += holidayAllowance;
+      items.push({
+        item_type: 'allowance',
+        item_name: '法定假日津貼',
+        unit_price: baseSalary,
+        quantity: holidayCount,
+        amount: holidayAllowance,
+        remarks: validHolidays.map((h) => h.name).join('、'),
+        sort_order: sortOrder++,
+      });
+    }
 
     // Phase 2: 連結優先規則 - 如果某個 allowance_key 在 PayrollDailyAllowance 中已有自動記錄，則跳過固定津貼計算
     // 注意：workLogs 這裡如果包含了 _linked_allowance_keys 標記，我們可以用它來跳過
@@ -437,7 +439,9 @@ export class PayrollCalculationService {
       mpf_deduction: mpfDeduction,
       mpf_plan: mpfPlan,
       mpf_employer: mpfEmployer,
-      mpf_relevant_income: grossIncome,
+      mpf_relevant_income: (mpfRelevantIncome !== undefined && mpfRelevantIncome !== null)
+        ? Number(mpfRelevantIncome)
+        : grossIncome,
       gross_income: grossIncome,
       net_amount: netAmount,
       items,
@@ -576,6 +580,7 @@ export class PayrollCalculationService {
   private buildDailyFixedAllowanceDisplay(
     dayWorkLogs: any[],
     salarySetting: any | null,
+    dayAllowances: any[],
   ): { key: string; name: string; amount: number }[] {
     if (!salarySetting || dayWorkLogs.length === 0) return [];
 
@@ -585,11 +590,17 @@ export class PayrollCalculationService {
     ];
 
     return displayAllowances
-      .filter((item) =>
-        item.key === 'allowance_rent'
+      .filter((item) => {
+        // 檢查是否有排除記錄
+        const isExcluded = dayAllowances.some(
+          (da) => da.allowance_key === `excluded_${item.key}`,
+        );
+        if (isExcluded) return false;
+
+        return item.key === 'allowance_rent'
           ? dayWorkLogs.some((wl) => wl.unit === '天')
-          : true,
-      )
+          : true;
+      })
       .map((item) => ({
         ...item,
         amount: Number((salarySetting as any)[item.key]) || 0,
@@ -684,6 +695,7 @@ export class PayrollCalculationService {
       const fixedAllowancesPerDay = this.buildDailyFixedAllowanceDisplay(
         dayPwls,
         salarySetting,
+        dayAllowances,
       );
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
@@ -838,6 +850,7 @@ export class PayrollCalculationService {
       const fixedAllowancesPerDay = this.buildDailyFixedAllowanceDisplay(
         dayWls,
         salarySetting,
+        dayAllowances,
       );
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {

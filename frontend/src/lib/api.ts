@@ -381,6 +381,8 @@ export const payrollApi = {
     date: string;
     allowances: { allowance_key: string; allowance_name: string; amount: number; remarks?: string }[];
   }) => api.post(`/payroll/${payrollId}/daily-allowances/batch`, data),
+  excludeBadge: (payrollId: number, data: { date: string; badge_key: string }) =>
+    api.post(`/payroll/${payrollId}/exclude-badge`, data),
 
   // ── 糧單付款記錄管理 ──
   addPayrollPayment: (payrollId: number, data: {
