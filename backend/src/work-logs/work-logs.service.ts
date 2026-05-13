@@ -353,7 +353,6 @@ export class WorkLogsService {
     client: { relation: 'client', field: 'name', foreignKey: 'client_id' },
     quotation: { relation: 'quotation', field: 'quotation_no', foreignKey: 'quotation_id' },
     contract: { relation: 'contract', field: 'contract_no', foreignKey: 'contract_id' },
-    employee: { relation: 'employee', field: 'name_zh', foreignKey: 'employee_id' },
   };
 
   private readonly dateFilterFields = ['scheduled_date', 'wl_whatsapp_reported_at'];
@@ -442,6 +441,28 @@ export class WorkLogsService {
       const blankSelected = this.hasBlankFilterValue(vals);
       const relation = this.relationFilterConfig[field];
 
+      if (field === 'employee') {
+        const conditions: WhereClause[] = [];
+        if (nonBlank.length > 0) {
+          conditions.push({
+            OR: [
+              { employee: { name_zh: { in: nonBlank } } },
+              { fleet_driver: { OR: [{ name_zh: { in: nonBlank } }, { short_name: { in: nonBlank } }] } },
+            ],
+          });
+        }
+        if (blankSelected) {
+          conditions.push({
+            AND: [
+              { employee_id: null },
+              { work_log_fleet_driver_id: null },
+            ],
+          });
+        }
+        this.applyOrConditions(where, conditions);
+        continue;
+      }
+
       if (relation) {
         const conditions: WhereClause[] = [];
         if (nonBlank.length > 0) {
@@ -502,6 +523,30 @@ export class WorkLogsService {
     if (!this.columnFilterFields.includes(column)) return [];
 
     const where = this.buildWorkLogWhere(query, column);
+
+    if (column === 'employee') {
+      const rows = await this.prisma.workLog.findMany({
+        where,
+        select: {
+          employee_id: true,
+          work_log_fleet_driver_id: true,
+          employee: { select: { name_zh: true } },
+          fleet_driver: { select: { name_zh: true, short_name: true } },
+        },
+        take: 2000,
+      });
+      const names = new Set<string>();
+      for (const row of rows as any[]) {
+        if (row.employee?.name_zh) {
+          names.add(row.employee.name_zh);
+        } else if (row.fleet_driver?.name_zh || row.fleet_driver?.short_name) {
+          names.add(row.fleet_driver.name_zh || row.fleet_driver.short_name);
+        } else if (row.employee_id == null && row.work_log_fleet_driver_id == null) {
+          names.add('(空白)');
+        }
+      }
+      return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-Hant')).slice(0, 500);
+    }
 
     const relation = this.relationFilterConfig[column];
     if (relation) {

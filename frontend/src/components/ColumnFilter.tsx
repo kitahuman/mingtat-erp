@@ -125,12 +125,46 @@ export default function ColumnFilter({
   }, [isOpen]);
 
   const handleToggleAll = () => {
+    if (searchTerm && filteredValues.length < allUniqueValues.length) {
+      // When search narrows the list, toggle only the currently visible values.
+      if (isAllSelected) {
+        const newSelected = new Set(allUniqueValues);
+        filteredValues.forEach(v => newSelected.delete(v));
+        onFilterChange(columnKey, newSelected.size === 0 ? new Set() : newSelected);
+      } else {
+        const allFilteredSelected = filteredValues.every(v => selectedValues.has(v));
+        const newSelected = new Set(selectedValues);
+        if (allFilteredSelected) {
+          filteredValues.forEach(v => newSelected.delete(v));
+        } else {
+          filteredValues.forEach(v => newSelected.add(v));
+        }
+
+        if (newSelected.size === allUniqueValues.length) {
+          onFilterChange(columnKey, null);
+        } else if (newSelected.size === 0) {
+          onFilterChange(columnKey, new Set());
+        } else {
+          onFilterChange(columnKey, newSelected);
+        }
+      }
+      return;
+    }
+
     if (isAllSelected) {
       onFilterChange(columnKey, new Set());
     } else {
       onFilterChange(columnKey, null);
     }
   };
+
+  const isSelectAllChecked = useMemo(() => {
+    if (searchTerm && filteredValues.length < allUniqueValues.length) {
+      if (isAllSelected) return true;
+      return filteredValues.length > 0 && filteredValues.every(v => selectedValues.has(v));
+    }
+    return isAllSelected;
+  }, [searchTerm, filteredValues, allUniqueValues, isAllSelected, selectedValues]);
 
   const handleToggleValue = (value: string) => {
     let newSelected: Set<string>;
@@ -193,7 +227,7 @@ export default function ColumnFilter({
             <label className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
               <input
                 type="checkbox"
-                checked={isAllSelected}
+                checked={isSelectAllChecked}
                 onChange={handleToggleAll}
                 className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
