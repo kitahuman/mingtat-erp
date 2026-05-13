@@ -703,19 +703,24 @@ export class VerificationService {
   // ══════════════════════════════════════════════════════════════
   private async backfillRecordFromWorkLog(recordId: number, workLog: any): Promise<void> {
     try {
-      // workLog 可能已經 include employee，但不一定有 client，所以重新查詢確保完整
+      // workLog 可能已經 include employee，但不一定有 client/fleet_driver，所以重新查詢確保完整
       const wl = await this.prisma.workLog.findUnique({
         where: { id: workLog.id },
         select: {
           employee: { select: { name_zh: true } },
+          fleet_driver: { select: { name_zh: true } },
           client: { select: { name: true } },
+          start_location: true,
         },
       });
       if (!wl) return;
 
       const updateData: Record<string, string> = {};
-      if (wl.employee?.name_zh) updateData.record_driver_name = wl.employee.name_zh;
+      // 司機：優先用 employee，其次用 fleet_driver（外判司機）
+      const driverName = wl.employee?.name_zh || (wl as any).fleet_driver?.name_zh;
+      if (driverName) updateData.record_driver_name = driverName;
       if (wl.client?.name) updateData.record_customer = wl.client.name;
+      if ((wl as any).start_location) updateData.record_location_from = (wl as any).start_location;
 
       if (Object.keys(updateData).length > 0) {
         await this.prisma.verificationRecord.update({
@@ -1973,7 +1978,8 @@ export class VerificationService {
             orderBy: { chit_seq: 'asc' },
           },
           matches: {
-            select: { id: true, match_status: true },
+            select: { id: true, match_status: true, match_work_record_id: true },
+            take: 1,
           },
         },
         orderBy,
@@ -1981,6 +1987,21 @@ export class VerificationService {
         take: limit,
       }),
     ]);
+
+    // Auto-backfill: 已配對但缺司機/客戶/出發地的記錄，從 work_log 補回
+    const recordsToBackfill = records.filter(
+      (r: any) =>
+        r.matches?.length > 0 &&
+        r.matches[0]?.match_status !== 'missing' &&
+        r.matches[0]?.match_work_record_id > 0 &&
+        (!r.record_driver_name || !r.record_customer || !r.record_location_from),
+    );
+    if (recordsToBackfill.length > 0) {
+      // Fire-and-forget backfill (non-blocking)
+      this.backfillMissingRecords(recordsToBackfill).catch((err) =>
+        console.warn('[getRecords] backfill error:', err),
+      );
+    }
 
     return {
       data: records,
@@ -2347,5 +2368,49 @@ export class VerificationService {
     const isoMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (isoMatch) return dateStr;
     return null;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 批量補回已配對但缺司機/客戶/出發地的記錄
+  // ══════════════════════════════════════════════════════════════
+  private async backfillMissingRecords(records: any[]): Promise<void> {
+    for (const record of records) {
+      const match = record.matches?.[0];
+      if (!match?.match_work_record_id || match.match_work_record_id <= 0) continue;
+
+      try {
+        const wl = await this.prisma.workLog.findUnique({
+          where: { id: match.match_work_record_id },
+          select: {
+            employee: { select: { name_zh: true } },
+            fleet_driver: { select: { name_zh: true } },
+            client: { select: { name: true } },
+            start_location: true,
+          },
+        });
+        if (!wl) continue;
+
+        const updateData: Record<string, string> = {};
+        if (!record.record_driver_name) {
+          const driverName = wl.employee?.name_zh || (wl as any).fleet_driver?.name_zh;
+          if (driverName) updateData.record_driver_name = driverName;
+        }
+        if (!record.record_customer && wl.client?.name) {
+          updateData.record_customer = wl.client.name;
+        }
+        if (!record.record_location_from && (wl as any).start_location) {
+          updateData.record_location_from = (wl as any).start_location;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await this.prisma.verificationRecord.update({
+            where: { id: record.id },
+            data: updateData,
+          });
+        }
+      } catch (err) {
+        console.warn(`[backfillMissingRecords] Failed for record ${record.id}:`, err);
+      }
+    }
   }
 }

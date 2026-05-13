@@ -463,7 +463,7 @@ export class MatchingService {
       const matchedReceipts = receiptRecords.filter(
         (r: any) =>
           r.record_work_date?.toISOString().slice(0, 10) === date &&
-          this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm,
+          this.fuzzyPlateMatch(this.normalizeVehicle(r.record_vehicle_no), vehicleNorm),
       );
       if (matchedReceipts.length > 0) {
         const bestReceipt = matchedReceipts[0];
@@ -499,7 +499,7 @@ export class MatchingService {
       const matchedSlips = slipRecords.filter(
         (r: any) =>
           r.record_work_date?.toISOString().slice(0, 10) === date &&
-          this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm,
+          this.fuzzyPlateMatch(this.normalizeVehicle(r.record_vehicle_no), vehicleNorm),
       );
       if (matchedSlips.length > 0) {
         const bestSlip = matchedSlips[0];
@@ -532,7 +532,7 @@ export class MatchingService {
       const matchedGps = gpsSummaries.filter(
         (g: any) =>
           g.gps_summary_date?.toISOString().slice(0, 10) === date &&
-          this.normalizeVehicle(g.gps_summary_vehicle_no) === vehicleNorm,
+          this.fuzzyPlateMatch(this.normalizeVehicle(g.gps_summary_vehicle_no), vehicleNorm),
       );
       if (matchedGps.length > 0) {
         const bestGps = matchedGps[0];
@@ -605,8 +605,8 @@ export class MatchingService {
       const matchedWa = waOrderItems.filter(
         (item: any) =>
           item.order_date === date &&
-          (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
-            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm ||
+          (this.fuzzyPlateMatch(this.normalizeVehicle(item.wa_item_vehicle_no), vehicleNorm) ||
+            this.fuzzyPlateMatch(this.normalizeVehicle(item.wa_item_machine_code), vehicleNorm) ||
             (fleetNicknames.length > 0 && fleetNicknames.some(nick =>
               this.nameMatch(item.wa_item_driver_nickname, nick, nick)))),
       );
@@ -1209,6 +1209,25 @@ export class MatchingService {
     return plate.toUpperCase().replace(/[\s\-]/g, '');
   }
 
+  private fuzzyPlateMatch(plate1: string, plate2: string): boolean {
+    if (!plate1 || !plate2) return false;
+    const p1 = plate1.toUpperCase().replace(/\s+/g, '');
+    const p2 = plate2.toUpperCase().replace(/\s+/g, '');
+    if (p1 === p2) return true;
+    // * 當萬用字符，每個 * 配對一個字符
+    if (p1.includes('*') || p2.includes('*')) {
+      const pattern = p1.includes('*') ? p1 : p2;
+      const target = p1.includes('*') ? p2 : p1;
+      const regexStr = '^' + pattern.replace(/\*/g, '.') + '$';
+      try {
+        return new RegExp(regexStr, 'i').test(target);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   private nameMatch(
     name1: string | null | undefined,
     name2: string,
@@ -1292,9 +1311,9 @@ export class MatchingService {
       }],
     };
 
-    // 入帳票（支援多票號配對）
+    // 入帳票（支援多票號配對，* 當萬用字符）
     const matchedReceipts = vehicleNorm
-      ? receiptRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
+      ? receiptRecords.filter((r: any) => this.fuzzyPlateMatch(this.normalizeVehicle(r.record_vehicle_no), vehicleNorm))
       : [];
     if (matchedReceipts.length > 0) {
       sources['chit'] = {
@@ -1325,7 +1344,7 @@ export class MatchingService {
 
     // 飛仔 OCR
     const matchedSlips = vehicleNorm
-      ? slipRecords.filter((r: any) => this.normalizeVehicle(r.record_vehicle_no) === vehicleNorm)
+      ? slipRecords.filter((r: any) => this.fuzzyPlateMatch(this.normalizeVehicle(r.record_vehicle_no), vehicleNorm))
       : [];
     if (matchedSlips.length > 0) {
       sources['delivery_note'] = {
@@ -1347,7 +1366,7 @@ export class MatchingService {
 
     // GPS
     const matchedGps = vehicleNorm
-      ? gpsSummaries.filter((g: any) => this.normalizeVehicle(g.gps_summary_vehicle_no) === vehicleNorm)
+      ? gpsSummaries.filter((g: any) => this.fuzzyPlateMatch(this.normalizeVehicle(g.gps_summary_vehicle_no), vehicleNorm))
       : [];
     if (matchedGps.length > 0) {
       sources['gps'] = {
@@ -1396,7 +1415,7 @@ export class MatchingService {
         select: { plate_no: true, short_name: true },
       });
       for (const d of allFleetDrivers) {
-        if (d.plate_no && this.normalizeVehicle(d.plate_no) === vehicleNorm && d.short_name) {
+        if (d.plate_no && this.fuzzyPlateMatch(this.normalizeVehicle(d.plate_no), vehicleNorm) && d.short_name) {
           const nicks = d.short_name.split(/[,，]/).map((n: string) => n.trim()).filter(Boolean);
           fleetNicknames = [...fleetNicknames, ...nicks];
         }
@@ -1405,8 +1424,8 @@ export class MatchingService {
     const matchedWa = vehicleNorm
       ? waOrderItems.filter((item: any) =>
           item.order_date === date &&
-          (this.normalizeVehicle(item.wa_item_vehicle_no) === vehicleNorm ||
-            this.normalizeVehicle(item.wa_item_machine_code) === vehicleNorm ||
+          (this.fuzzyPlateMatch(this.normalizeVehicle(item.wa_item_vehicle_no), vehicleNorm) ||
+            this.fuzzyPlateMatch(this.normalizeVehicle(item.wa_item_machine_code), vehicleNorm) ||
             (fleetNicknames.length > 0 && fleetNicknames.some(nick =>
               this.nameMatch(item.wa_item_driver_nickname, nick, nick)))),
         )
