@@ -262,9 +262,9 @@ function flattenCols(nodes: AxisNode[], collapsed: Set<string>, maxDepth: number
     const isGroup = hasChildren && node.depth < maxDepth;
     if (isGroup && !collapsed.has(node.key)) {
       node.children.forEach(visit);
-      cols.push({ key: node.key, labels: node.labels, depth: node.depth, label: `${node.label} 小計`, isSubtotal: true, isLeaf: false, canToggle: true });
+      cols.push({ key: node.key, labels: node.labels, depth: node.depth, label: node.label, isSubtotal: true, isLeaf: false, canToggle: true });
     } else {
-      cols.push({ key: node.leafKey || node.key, labels: node.labels, depth: node.depth, label: isGroup ? `${node.label} 小計` : node.label, isSubtotal: isGroup, isLeaf: !isGroup, canToggle: isGroup });
+      cols.push({ key: node.leafKey || node.key, labels: node.labels, depth: node.depth, label: node.label, isSubtotal: isGroup, isLeaf: !isGroup, canToggle: isGroup });
     }
   };
   nodes.forEach(visit);
@@ -617,11 +617,11 @@ export default function SummaryTab() {
 
   const exportCsv = () => {
     if (!pivot) return;
-    const headers = ['直軸', ...visibleCols.map((col) => col.labels.join(' / ') + (col.isSubtotal ? ' 小計' : '')), '合計'];
+    const headers = ['直軸', ...visibleCols.map((col) => col.labels.join(' / ')), '合計'];
     const lines = [headers];
     visibleRows.forEach((row) => {
       lines.push([
-        row.labels.join(' / ') + (row.isGroup ? ' 小計' : ''),
+        row.labels.join(' / '),
         ...visibleCols.map((col) => metricText(aggregateMetric(pivot, row.labels, col.labels))),
         metricText(aggregateMetric(pivot, row.labels, [])),
       ]);
@@ -739,8 +739,7 @@ export default function SummaryTab() {
                             {collapsedCols.has(col.key) ? '+' : '−'}
                           </button>
                         )}
-                        {col.labels[depthIndex] || (col.isSubtotal && depthIndex === col.labels.length ? '小計' : '')}
-                        {col.isSubtotal && depthIndex === col.labels.length - 1 ? ' 小計' : ''}
+                        {col.labels[depthIndex] || ''}
                       </th>
                     ))}
                     {depthIndex === 0 && <th rowSpan={Math.max(colFields.length, 1)} className="sticky right-0 z-30 min-w-[120px] border-b border-l border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700">合計</th>}
