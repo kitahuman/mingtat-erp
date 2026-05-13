@@ -307,6 +307,7 @@ export default function VerificationRecordsPage() {
     match_status: [],
   });
   const [openFilter, setOpenFilter] = useState<VerificationRecordFilterColumn | null>(null);
+  const [filterSearch, setFilterSearch] = useState('');
 
   // 自訂欄位
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -694,7 +695,7 @@ export default function VerificationRecordsPage() {
             <div className="relative inline-block">
               <button
                 type="button"
-                onClick={() => setOpenFilter((prev) => (prev === column.filterColumn ? null : column.filterColumn || null))}
+                onClick={() => { setFilterSearch(''); setOpenFilter((prev) => (prev === column.filterColumn ? null : column.filterColumn || null)); }}
                 className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded border text-[10px] transition-colors ${
                   selectedValues.length > 0
                     ? 'border-primary-500 bg-primary-50 text-primary-700'
@@ -709,22 +710,39 @@ export default function VerificationRecordsPage() {
                   <div className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-700">
                     篩選：{column.label}
                   </div>
+                  {options.length > 6 && (
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <input
+                        type="text"
+                        value={filterSearch}
+                        onChange={(e) => setFilterSearch(e.target.value)}
+                        placeholder="搜尋..."
+                        className="w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                        autoFocus
+                      />
+                    </div>
+                  )}
                   <div className="max-h-64 overflow-y-auto py-1">
-                    {options.length === 0 ? (
-                      <div className="px-3 py-3 text-xs text-gray-400">沒有可選值</div>
-                    ) : (
-                      options.map((option) => (
-                        <label key={option.value} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={selectedValues.includes(option.value)}
-                            onChange={() => handleToggleFilterValue(column.filterColumn as VerificationRecordFilterColumn, option.value)}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="truncate">{option.label}</span>
-                        </label>
-                      ))
-                    )}
+                    {(() => {
+                      const filtered = filterSearch
+                        ? options.filter((o) => o.label.toLowerCase().includes(filterSearch.toLowerCase()) || o.value.toLowerCase().includes(filterSearch.toLowerCase()))
+                        : options;
+                      return filtered.length === 0 ? (
+                        <div className="px-3 py-3 text-xs text-gray-400">{filterSearch ? '沒有符合的選項' : '沒有可選值'}</div>
+                      ) : (
+                        filtered.map((option) => (
+                          <label key={option.value} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              checked={selectedValues.includes(option.value)}
+                              onChange={() => handleToggleFilterValue(column.filterColumn as VerificationRecordFilterColumn, option.value)}
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="truncate">{option.label}</span>
+                          </label>
+                        ))
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
                     <span className="text-[11px] text-gray-400">已選 {selectedValues.length} 項</span>
