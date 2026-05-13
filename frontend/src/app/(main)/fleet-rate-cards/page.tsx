@@ -44,6 +44,7 @@ export default function FleetRateCardsPage() {
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '天', remarks: '', status: 'active',
+    effective_date: new Date().toISOString().slice(0, 10), expiry_date: '',
   });
 
   const load = () => {
@@ -75,6 +76,7 @@ export default function FleetRateCardsPage() {
       origin: '', destination: '',
       rate: 0, mid_shift_rate: 0, ot_rate: 0,
       unit: '天', remarks: '', status: 'active',
+      effective_date: new Date().toISOString().slice(0, 10), expiry_date: '',
     });
   };
 
@@ -340,6 +342,21 @@ export default function FleetRateCardsPage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
                 <input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" placeholder="0" />
+              </div>
+            </div>
+          </div>
+
+          {/* 有效期 */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-bold text-gray-700 mb-3">有效期及來源</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">生效日期 <span className="text-red-500">*</span></label>
+                <input type="date" value={form.effective_date} onChange={e => setForm({...form, effective_date: e.target.value})} className="input-field" required />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">到期日期</label>
+                <input type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} className="input-field" />
               </div>
             </div>
           </div>

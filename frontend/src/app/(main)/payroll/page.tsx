@@ -272,6 +272,7 @@ export default function PayrollPage() {
     origin: '', destination: '',
     rate: 0, mid_shift_rate: 0, ot_rate: 0,
     unit: '車', remarks: '', status: 'active',
+    effective_date: new Date().toISOString().slice(0, 10), expiry_date: '',
   });
   const [addRateSubmitting, setAddRateSubmitting] = useState(false);
   const [addRateError, setAddRateError] = useState('');
@@ -406,6 +407,7 @@ export default function PayrollPage() {
       destination: group.destination || '',
       rate: 0, mid_shift_rate: 0, ot_rate: 0,
       unit: '車', remarks: '', status: 'active',
+      effective_date: new Date().toISOString().slice(0, 10), expiry_date: '',
     });
     setAddRateError('');
     setShowAddRateModal(true);
@@ -883,6 +885,16 @@ export default function PayrollPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">名稱（備註）</label>
             <input type="text" className="input w-full" value={addRateForm.name || ''} onChange={e => setAddRateForm((f: any) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">生效日期 <span className="text-red-500">*</span></label>
+              <input type="date" className="input w-full" value={addRateForm.effective_date || ''} onChange={e => setAddRateForm((f: any) => ({ ...f, effective_date: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
+              <input type="date" className="input w-full" value={addRateForm.expiry_date || ''} onChange={e => setAddRateForm((f: any) => ({ ...f, expiry_date: e.target.value }))} />
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowAddRateModal(false)} className="btn-secondary">取消</button>
