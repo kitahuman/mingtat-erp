@@ -1507,6 +1507,7 @@ export default function PayrollDetailPage() {
   const handleRemoveDailyAllowance = async (daId: number) => {
     try {
       await payrollApi.removeDailyAllowance(payroll.id, daId);
+      await payrollApi.recalculate(payroll.id);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '移除失敗');
@@ -1517,6 +1518,7 @@ export default function PayrollDetailPage() {
     if (!confirm('確定要移除此津貼？')) return;
     try {
       await payrollApi.excludeBadge(payroll.id, { date, badge_key: badgeKey });
+      await payrollApi.recalculate(payroll.id);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '移除失敗');
