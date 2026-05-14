@@ -610,9 +610,23 @@ export default function InvoiceDetailPage() {
 
       {/* Linked Work Logs */}
       <div className="card mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">關聯工作紀錄</h2>
-          <span className="text-sm text-gray-500">共 {linkedWorkLogs.length} 筆</span>
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">關聯工作紀錄</h2>
+            <p className="mt-0.5 text-xs text-gray-500">可進入整理視窗調整發票用草稿，不會改動原始工作紀錄。</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">共 {linkedWorkLogs.length} 筆</span>
+            <button
+              type="button"
+              onClick={() => router.push(`/invoices/${invoiceId}/prepare`)}
+              disabled={linkedWorkLogs.length === 0}
+              className="rounded bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+              title={linkedWorkLogs.length === 0 ? '尚未關聯任何工作紀錄' : '進入整理視窗'}
+            >
+              整理視窗
+            </button>
+          </div>
         </div>
         {linkedWorkLogsLoading ? (
           <div className="py-6 text-center text-sm text-gray-400">載入中...</div>

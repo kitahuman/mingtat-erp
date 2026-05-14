@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsArray, IsObject, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateInvoiceDto {
@@ -62,4 +62,27 @@ export class RecordPaymentDto {
 
 export class InvoiceWorkLogsDto {
   @IsArray() work_log_ids: number[];
+}
+
+export type InvoiceWorkLogDraftScalar = string | number | boolean | null;
+export type InvoiceWorkLogDraftValue =
+  | InvoiceWorkLogDraftScalar
+  | InvoiceWorkLogDraftScalar[]
+  | { [key: string]: InvoiceWorkLogDraftScalar | InvoiceWorkLogDraftScalar[] };
+export type InvoiceWorkLogDraftData = Record<string, InvoiceWorkLogDraftValue>;
+
+export class InvoiceWorkLogDraftItemDto {
+  @Type(() => Number)
+  @IsNumber()
+  work_log_id: number;
+
+  @IsObject()
+  draft_data: InvoiceWorkLogDraftData;
+}
+
+export class SaveInvoicePrepareDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceWorkLogDraftItemDto)
+  drafts: InvoiceWorkLogDraftItemDto[];
 }

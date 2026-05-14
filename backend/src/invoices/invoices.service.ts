@@ -3,10 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentInService } from '../payment-in/payment-in.service';
 import { WhereClause } from '../common/types';
+import { InvoiceWorkLogDraftData, SaveInvoicePrepareDto } from './dto/create-invoice.dto';
 
 @Injectable()
 export class InvoicesService {
@@ -44,6 +46,21 @@ export class InvoicesService {
     },
     items: { orderBy: { sort_order: 'asc' as const } },
   };
+
+  private workLogIncludeRelations = {
+    publisher: true,
+    company_profile: true,
+    company: true,
+    client: true,
+    quotation: true,
+    contract: true,
+    employee: true,
+    project: true,
+    fleet_driver: { include: { subcontractor: true } },
+    verification_confirmations: {
+      select: { source_code: true, status: true },
+    },
+  } as const;
 
   /**
    * Generate invoice number: {company_prefix}S{client_english_code}{YYMM}{SEQ:03d}
@@ -637,6 +654,120 @@ export class InvoicesService {
     });
 
     return links.map((link) => link.work_log);
+  }
+
+  private isEmptyDraftData(draftData: InvoiceWorkLogDraftData): boolean {
+    return Object.keys(draftData || {}).length === 0;
+  }
+
+  async getPrepare(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, invoice_no: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const [links, drafts] = await Promise.all([
+      this.prisma.invoiceWorkLog.findMany({
+        where: { invoice_id: invoiceId },
+        include: {
+          work_log: {
+            include: this.workLogIncludeRelations,
+          },
+        },
+        orderBy: { work_log: { scheduled_date: 'desc' } },
+      }),
+      this.prisma.invoiceWorkLogDraft.findMany({
+        where: { invoice_id: invoiceId },
+        orderBy: { updated_at: 'desc' },
+      }),
+    ]);
+
+    return {
+      invoice: { id: invoice.id, invoice_no: invoice.invoice_no },
+      work_logs: links.map((link) => link.work_log),
+      drafts: drafts.map((draft) => ({
+        id: draft.id,
+        invoice_id: draft.invoice_id,
+        work_log_id: draft.work_log_id,
+        draft_data: draft.draft_data,
+        updated_at: draft.updated_at,
+      })),
+    };
+  }
+
+  async savePrepare(invoiceId: number, dto: SaveInvoicePrepareDto) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const drafts = dto.drafts || [];
+    const uniqueWorkLogIds = [...new Set(drafts.map((draft) => Number(draft.work_log_id)).filter(Boolean))];
+    if (uniqueWorkLogIds.length === 0) {
+      return { saved: 0, deleted: 0 };
+    }
+
+    const linkedWorkLogs = await this.prisma.invoiceWorkLog.findMany({
+      where: { invoice_id: invoiceId, work_log_id: { in: uniqueWorkLogIds } },
+      select: { work_log_id: true },
+    });
+    const linkedIds = new Set(linkedWorkLogs.map((link) => link.work_log_id));
+    const invalidIds = uniqueWorkLogIds.filter((workLogId) => !linkedIds.has(workLogId));
+    if (invalidIds.length > 0) {
+      throw new BadRequestException(`工作紀錄未連結至此發票: ${invalidIds.join(', ')}`);
+    }
+
+    let saved = 0;
+    let deleted = 0;
+    await this.prisma.$transaction(async (tx) => {
+      for (const draft of drafts) {
+        const workLogId = Number(draft.work_log_id);
+        if (!workLogId || !linkedIds.has(workLogId)) continue;
+
+        if (this.isEmptyDraftData(draft.draft_data)) {
+          const result = await tx.invoiceWorkLogDraft.deleteMany({
+            where: { invoice_id: invoiceId, work_log_id: workLogId },
+          });
+          deleted += result.count;
+          continue;
+        }
+
+        await tx.invoiceWorkLogDraft.upsert({
+          where: {
+            invoice_id_work_log_id: {
+              invoice_id: invoiceId,
+              work_log_id: workLogId,
+            },
+          },
+          create: {
+            invoice_id: invoiceId,
+            work_log_id: workLogId,
+            draft_data: draft.draft_data as Prisma.InputJsonObject,
+          },
+          update: {
+            draft_data: draft.draft_data as Prisma.InputJsonObject,
+          },
+        });
+        saved += 1;
+      }
+    });
+
+    return { saved, deleted };
+  }
+
+  async clearPrepare(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const result = await this.prisma.invoiceWorkLogDraft.deleteMany({
+      where: { invoice_id: invoiceId },
+    });
+    return { deleted: result.count };
   }
 
   async updateStatus(id: number, status: string) {

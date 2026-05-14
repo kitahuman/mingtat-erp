@@ -806,6 +806,9 @@ export const invoicesApi = {
   linkWorkLogs: (id: number, workLogIds: number[]) => api.post(`/invoices/${id}/work-logs`, { work_log_ids: workLogIds }),
   unlinkWorkLogs: (id: number, workLogIds: number[]) => api.delete(`/invoices/${id}/work-logs`, { data: { work_log_ids: workLogIds } }),
   getLinkedWorkLogs: (id: number) => api.get(`/invoices/${id}/work-logs`),
+  getPrepare: (id: number) => api.get(`/invoices/${id}/prepare`),
+  savePrepare: (id: number, data: { drafts: { work_log_id: number; draft_data: Record<string, unknown> }[] }) => api.put(`/invoices/${id}/prepare`, data),
+  clearPrepare: (id: number) => api.delete(`/invoices/${id}/prepare`),
   delete: (id: number) => api.delete(`/invoices/${id}`),
 };
 
