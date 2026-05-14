@@ -478,18 +478,24 @@ export class MatchingService {
           status: 'found',
           match_score: this.weightedScore(fieldScores),
           field_scores: fieldScores,
-          details: matchedReceipts.map((r: any) => ({
-            id: r.id,
-            vehicle: r.record_vehicle_no,
-            employee: r.record_driver_name || '—',
-            customer: r.record_customer || '—',
-            location: r.record_location_to || r.record_location_from || '—',
-            contract: r.record_contract_no || '—',
-            chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
-            time_in: r.record_time_in,
-            time_out: r.record_time_out,
-            weight: r.record_weight_net,
-          })),
+          details: matchedReceipts.map((r: any) => {
+            const raw = r.record_raw_data as any || {};
+            return {
+              id: r.id,
+              date: r.record_work_date ? r.record_work_date.toISOString().slice(0, 10) : '—',
+              vehicle: r.record_vehicle_no,
+              employee: r.record_driver_name || '—',
+              customer: r.record_customer || '—',
+              location: r.record_location_to || r.record_location_from || '—',
+              contract: r.record_contract_no || '—',
+              facility: raw.facility || '—',
+              account_no: raw.account_no || '—',
+              chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
+              time_in: r.record_time_in,
+              time_out: r.record_time_out,
+              weight: r.record_weight_net,
+            };
+          }),
         };
       } else {
         sources['chit'] = this.missingSource('入帳票');
@@ -751,15 +757,21 @@ export class MatchingService {
           status: 'found',
           match_score: this.weightedScore(fieldScores),
           field_scores: fieldScores,
-          details: matchedReceipts.map((r: any) => ({
-            id: r.id,
-            vehicle: r.record_vehicle_no,
-            employee: r.record_driver_name || '—',
-            customer: r.record_customer || '—',
-            location: r.record_location_to || r.record_location_from || '—',
-            contract: r.record_contract_no || '—',
-            chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
-          })),
+          details: matchedReceipts.map((r: any) => {
+            const raw = r.record_raw_data as any || {};
+            return {
+              id: r.id,
+              date: r.record_work_date ? r.record_work_date.toISOString().slice(0, 10) : '—',
+              vehicle: r.record_vehicle_no,
+              employee: r.record_driver_name || '—',
+              customer: r.record_customer || '—',
+              location: r.record_location_to || r.record_location_from || '—',
+              contract: r.record_contract_no || '—',
+              facility: raw.facility || '—',
+              account_no: raw.account_no || '—',
+              chit_nos: r.chits?.map((c: any) => c.chit_no) || [],
+            };
+          }),
         };
       } else {
         sources['chit'] = this.missingSource('入帳票');
@@ -1330,6 +1342,7 @@ export class MatchingService {
           }
           return {
             id: r.id,
+            date: r.record_work_date ? r.record_work_date.toISOString().slice(0, 10) : '—',
             facility: raw.facility || '—',
             vehicle: r.record_vehicle_no || '—',
             account_no: raw.account_no || '—',

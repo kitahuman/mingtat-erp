@@ -252,6 +252,7 @@ export default function WorkLogsPage() {
   const [manualMatchResults, setManualMatchResults] = useState<any[]>([]);
   const [manualMatchLoading, setManualMatchLoading] = useState(false);
   const [manualMatchSelected, setManualMatchSelected] = useState<any[]>([]);
+  const [chitDetailsPopup, setChitDetailsPopup] = useState<{ workLogId: number; sourceKey: string; details: any[] } | null>(null);
 
   const handleVerify = async (workLogId: number) => {
     if (openVerifyId === workLogId) {
@@ -1940,8 +1941,16 @@ export default function WorkLogsPage() {
                                                 ))}
                                               </div>
                                             )}
-                                            {d.weight_net != null && d.weight_net !== '—' && <div>⚖️ 凈重: {d.weight_net} T</div>}
-                                            {src.details.length > 1 && <div className="text-gray-400 text-[10px]">共 {src.details.length} 筆</div>}
+                                            {d.weight_net != null && d.weight_net !== '—' && <div>⚖️ 净重: {d.weight_net} T</div>}
+                                            {src.details.length > 1 && (
+                                              <button
+                                                type="button"
+                                                className="text-blue-500 hover:text-blue-700 underline text-[10px] cursor-pointer"
+                                                onClick={() => setChitDetailsPopup({ workLogId: row.id, sourceKey: key, details: src.details })}
+                                              >
+                                                共 {src.details.length} 筆 — 點擊查看詳情
+                                              </button>
+                                            )}
                                           </div>
                                         );
                                         if (key === 'delivery_note') return (
@@ -1958,7 +1967,23 @@ export default function WorkLogsPage() {
                                             {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
                                             {d.trip_count != null && <div>🔄 行程: {d.trip_count} 次</div>}
                                             {d.distance != null && <div>📐 距離: {d.distance} km</div>}
-                                            {d.locations && d.locations !== '—' && <div>📍 {d.locations}</div>}
+                                            {d.locations && d.locations !== '—' && (() => {
+                                              const loc = d.locations as string;
+                                              const maxLen = 40;
+                                              if (loc.length <= maxLen) return <div>📍 {loc}</div>;
+                                              return (
+                                                <div>
+                                                  <div>📍 {loc.slice(0, maxLen)}...</div>
+                                                  <button
+                                                    type="button"
+                                                    className="text-blue-500 hover:text-blue-700 underline text-[10px] cursor-pointer"
+                                                    onClick={() => setChitDetailsPopup({ workLogId: row.id, sourceKey: key, details: src.details })}
+                                                  >
+                                                    更多路線詳情
+                                                  </button>
+                                                </div>
+                                              );
+                                            })()}
                                           </div>
                                         );
                                         if (key === 'attendance') {
@@ -2528,6 +2553,62 @@ export default function WorkLogsPage() {
       {/* End of records tab */}
       </div>
       )}
+
+      {/* 詳情 Popup - 入帳票多筆詳情 / GPS 路線詳情 */}
+      {chitDetailsPopup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setChitDetailsPopup(null)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
+              <h3 className="font-bold text-gray-800">
+                {chitDetailsPopup.sourceKey === 'chit' ? '🧾 入帳票配對詳情' : chitDetailsPopup.sourceKey === 'gps' ? '📍 GPS 路線詳情' : '📝 配對詳情'}
+                <span className="ml-2 text-sm font-normal text-gray-500">(共 {chitDetailsPopup.details.length} 筆)</span>
+              </h3>
+              <button onClick={() => setChitDetailsPopup(null)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="p-4 space-y-3">
+              {chitDetailsPopup.sourceKey === 'chit' && chitDetailsPopup.details.map((item: any, idx: number) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {item.date && item.date !== '—' && <span>📅 {item.date}</span>}
+                    {item.vehicle && item.vehicle !== '—' && <span>🚗 {item.vehicle}</span>}
+                    {item.facility && item.facility !== '—' && <span>🏭 {item.facility}</span>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {item.account_no && item.account_no !== '—' && <span>💳 戶口: {item.account_no}</span>}
+                    {item.weight_net != null && item.weight_net !== '—' && <span>⚖️ 净重: {item.weight_net} T</span>}
+                  </div>
+                  {item.chit_nos?.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="font-semibold">🧾 入帳票:</span>
+                      {item.chit_nos.map((no: string, i: number) => (
+                        <span key={i} className="bg-green-50 border border-green-200 rounded px-1.5 py-0.5 font-mono text-green-700">{no}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {chitDetailsPopup.sourceKey === 'gps' && chitDetailsPopup.details.map((item: any, idx: number) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+                  <div className="flex items-center gap-3">
+                    {item.vehicle && item.vehicle !== '—' && <span>🚗 {item.vehicle}</span>}
+                    {item.trip_count != null && <span>🔄 行程: {item.trip_count} 次</span>}
+                    {item.distance != null && <span>📐 {item.distance} km</span>}
+                  </div>
+                  {item.locations && item.locations !== '—' && (
+                    <div className="text-gray-600 break-all">📍 {item.locations}</div>
+                  )}
+                </div>
+              ))}
+              {chitDetailsPopup.sourceKey !== 'chit' && chitDetailsPopup.sourceKey !== 'gps' && chitDetailsPopup.details.map((item: any, idx: number) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 text-xs">
+                  <pre className="whitespace-pre-wrap text-gray-600">{JSON.stringify(item, null, 2)}</pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

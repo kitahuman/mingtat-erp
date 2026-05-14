@@ -292,6 +292,7 @@ export default function VerificationRecordsPage() {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [matchActionPopup, setMatchActionPopup] = useState<number | null>(null);
 
   // 篩選條件
   const [search, setSearch] = useState('');
@@ -605,23 +606,30 @@ export default function VerificationRecordsPage() {
           const matched = isMatchStatus(record);
           const isActionLoading = actionLoadingId === record.id;
           return (
-            <div className="flex flex-col gap-1">
-              <MatchStatusBadge matched={matched} />
-              {matched && (
-                <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                type="button"
+                className="cursor-pointer"
+                onClick={() => matched && setMatchActionPopup(matchActionPopup === record.id ? null : record.id)}
+                disabled={!matched}
+              >
+                <MatchStatusBadge matched={matched} />
+              </button>
+              {matched && matchActionPopup === record.id && (
+                <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[100px]">
                   <button
                     type="button"
-                    onClick={() => handleCancelMatch(record.id)}
+                    onClick={() => { handleCancelMatch(record.id); setMatchActionPopup(null); }}
                     disabled={isActionLoading || batchDeleting}
-                    className="rounded border border-red-200 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
                   >
                     取消配對
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleRematch(record.id)}
+                    onClick={() => { handleRematch(record.id); setMatchActionPopup(null); }}
                     disabled={isActionLoading || batchDeleting}
-                    className="rounded border border-primary-200 px-1.5 py-0.5 text-[11px] font-medium text-primary-600 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded border border-primary-200 px-2 py-1 text-[11px] font-medium text-primary-600 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
                   >
                     重新配對
                   </button>
