@@ -809,6 +809,9 @@ export const invoicesApi = {
   getPrepare: (id: number) => api.get(`/invoices/${id}/prepare`),
   savePrepare: (id: number, data: { drafts: { work_log_id: number; draft_data: Record<string, unknown> }[] }) => api.put(`/invoices/${id}/prepare`, data),
   clearPrepare: (id: number) => api.delete(`/invoices/${id}/prepare`),
+  getPricingData: (id: number) => api.get(`/invoices/${id}/pricing-data`),
+  matchRates: (id: number, data: { groups: any[] }) => api.post(`/invoices/${id}/match-rates`, data),
+  updateItems: (id: number, data: { items: any[] }) => api.put(`/invoices/${id}/items`, data),
   delete: (id: number) => api.delete(`/invoices/${id}`),
 };
 

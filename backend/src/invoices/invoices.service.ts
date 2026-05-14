@@ -8,7 +8,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentInService } from '../payment-in/payment-in.service';
 import { WhereClause } from '../common/types';
-import { InvoiceWorkLogDraftData, SaveInvoicePrepareDto } from './dto/create-invoice.dto';
+import { InvoiceWorkLogDraftData, SaveInvoicePrepareDto, MatchInvoiceRatesDto, UpdateInvoiceItemsDto, InvoicePricingGroupDto } from './dto/create-invoice.dto';
 
 @Injectable()
 export class InvoicesService {
@@ -768,6 +768,251 @@ export class InvoicesService {
       where: { invoice_id: invoiceId },
     });
     return { deleted: result.count };
+  }
+
+  private normalizePricingText(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    return text.length > 0 ? text : null;
+  }
+
+  private hasPricingValue(value: unknown): boolean {
+    return this.normalizePricingText(value) !== null;
+  }
+
+  private rateCardTextMatches(rateCardValue: unknown, groupValue: unknown): boolean {
+    const cardText = this.normalizePricingText(rateCardValue);
+    const groupText = this.normalizePricingText(groupValue);
+    if (!cardText || !groupText) return true;
+    return cardText === groupText;
+  }
+
+  private rateCardNumberMatches(rateCardValue: unknown, groupValue: unknown): boolean {
+    const cardNumber = Number(rateCardValue) || 0;
+    const groupNumber = Number(groupValue) || 0;
+    if (!cardNumber || !groupNumber) return true;
+    return cardNumber === groupNumber;
+  }
+
+  private getPricingMatchDate(group: InvoicePricingGroupDto, invoiceDate: Date): Date {
+    const raw = this.normalizePricingText(group.work_date) || invoiceDate;
+    const date = raw instanceof Date ? raw : new Date(raw);
+    return Number.isNaN(date.getTime()) ? invoiceDate : date;
+  }
+
+  private mergeDraftIntoWorkLog(workLog: any, draftData: unknown) {
+    const draft = draftData && typeof draftData === 'object' ? (draftData as Record<string, unknown>) : {};
+    return {
+      ...workLog,
+      ...draft,
+      _draft_data: draft,
+      _has_draft: Object.keys(draft).length > 0,
+    };
+  }
+
+  private resolveInvoiceRate(card: any, dayNight: unknown): { unit_price: number; unit: string } {
+    const label = this.normalizePricingText(dayNight) || this.normalizePricingText(card.day_night) || '';
+    if (label.includes('夜') || label.toLowerCase().includes('night')) {
+      return {
+        unit_price: Number(card.night_rate) || Number(card.rate) || 0,
+        unit: card.night_unit || card.unit || card.day_unit || '',
+      };
+    }
+    if (label.includes('中') || label.toLowerCase().includes('mid')) {
+      return {
+        unit_price: Number(card.mid_shift_rate) || Number(card.rate) || 0,
+        unit: card.mid_shift_unit || card.unit || card.day_unit || '',
+      };
+    }
+    return {
+      unit_price: Number(card.day_rate) || Number(card.rate) || 0,
+      unit: card.day_unit || card.unit || '',
+    };
+  }
+
+  private buildRateMatchItemName(group: InvoicePricingGroupDto): string {
+    const parts = [group.tonnage, group.machine_type, group.day_night].map((value) => this.normalizePricingText(value)).filter(Boolean);
+    const origin = this.normalizePricingText(group.origin);
+    const destination = this.normalizePricingText(group.destination);
+    if (origin || destination) parts.push(`${origin || '—'}→${destination || '—'}`);
+    return parts.join(' ') || '發票項目';
+  }
+
+  private async matchSingleRateCard(group: InvoicePricingGroupDto, invoice: any) {
+    const companyId = Number(group.company_id || invoice.company_id) || null;
+    const clientId = Number(group.client_id || invoice.client_id) || null;
+    if (!companyId || !clientId) return null;
+
+    const matchDate = this.getPricingMatchDate(group, invoice.date);
+    const candidates = await this.prisma.rateCard.findMany({
+      where: {
+        status: 'active',
+        rate_card_type: 'client',
+        deleted_at: null,
+        company_id: companyId,
+        client_id: clientId,
+        OR: [
+          { effective_date: null },
+          { effective_date: { lte: matchDate } },
+        ],
+        AND: [
+          {
+            OR: [
+              { expiry_date: null },
+              { expiry_date: { gte: matchDate } },
+            ],
+          },
+        ],
+      },
+      orderBy: [
+        { effective_date: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+
+    const scored = candidates
+      .filter((card) => this.rateCardTextMatches(card.client_contract_no, group.client_contract_no || invoice.client_contract_no))
+      .filter((card) => this.rateCardTextMatches(card.service_type, group.service_type))
+      .filter((card) => this.rateCardNumberMatches(card.source_quotation_id, group.quotation_id || invoice.quotation_id))
+      .filter((card) => this.rateCardTextMatches(card.day_night, group.day_night))
+      .filter((card) => this.rateCardTextMatches(card.tonnage, group.tonnage))
+      .filter((card) => this.rateCardTextMatches(card.machine_type, group.machine_type))
+      .filter((card) => this.rateCardTextMatches(card.origin, group.origin))
+      .filter((card) => this.rateCardTextMatches(card.destination, group.destination))
+      .map((card) => {
+        const specificity = [
+          card.client_contract_no,
+          card.service_type,
+          card.source_quotation_id,
+          card.day_night,
+          card.tonnage,
+          card.machine_type,
+          card.origin,
+          card.destination,
+        ].filter((value) => this.hasPricingValue(value)).length;
+        return { card, specificity };
+      })
+      .sort((a, b) => b.specificity - a.specificity || b.card.id - a.card.id);
+
+    return scored[0]?.card || null;
+  }
+
+  async getPricingData(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: this.includeRelations,
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const [links, drafts] = await Promise.all([
+      this.prisma.invoiceWorkLog.findMany({
+        where: { invoice_id: invoiceId },
+        include: { work_log: { include: this.workLogIncludeRelations } },
+        orderBy: { work_log: { scheduled_date: 'desc' } },
+      }),
+      this.prisma.invoiceWorkLogDraft.findMany({
+        where: { invoice_id: invoiceId },
+        orderBy: { updated_at: 'desc' },
+      }),
+    ]);
+
+    const draftByWorkLogId = new Map(drafts.map((draft) => [draft.work_log_id, draft.draft_data]));
+    return {
+      invoice,
+      items: invoice.items || [],
+      work_logs: links.map((link) => this.mergeDraftIntoWorkLog(link.work_log, draftByWorkLogId.get(link.work_log_id))),
+      drafts: drafts.map((draft) => ({
+        id: draft.id,
+        invoice_id: draft.invoice_id,
+        work_log_id: draft.work_log_id,
+        draft_data: draft.draft_data,
+        updated_at: draft.updated_at,
+      })),
+    };
+  }
+
+  async matchRates(invoiceId: number, dto: MatchInvoiceRatesDto) {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const groups = dto.groups || [];
+    const results: any[] = [];
+    for (const group of groups) {
+      const card = await this.matchSingleRateCard(group, invoice);
+      if (!card) {
+        results.push({
+          ...group,
+          matched: false,
+          item_name: this.buildRateMatchItemName(group),
+          quantity: Number(group.count) || 0,
+          unit_price: null,
+          unit: null,
+          rate_card_id: null,
+          rate_card_name: null,
+        });
+        continue;
+      }
+
+      const resolved = this.resolveInvoiceRate(card, group.day_night);
+      results.push({
+        ...group,
+        matched: true,
+        rate_card_id: card.id,
+        rate_card_name: card.name || card.description || `RateCard #${card.id}`,
+        item_name: this.buildRateMatchItemName(group),
+        quantity: Number(group.count) || 0,
+        unit_price: resolved.unit_price,
+        unit: resolved.unit,
+      });
+    }
+    return { results };
+  }
+
+  async updateItems(invoiceId: number, dto: UpdateInvoiceItemsDto) {
+    const existing = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!existing || existing.deleted_at) throw new NotFoundException('發票不存在');
+
+    const items = dto.items || [];
+    const normalizedItems = items.map((item, idx) => {
+      const quantity = Number(item.quantity) || 0;
+      const unitPrice = Number(item.unit_price) || 0;
+      const amount = item.amount !== undefined && item.amount !== null
+        ? Number(item.amount) || 0
+        : Math.round(quantity * unitPrice * 100) / 100;
+      return {
+        invoice_id: invoiceId,
+        item_name: item.item_name || null,
+        description: item.description || null,
+        quantity,
+        unit: item.unit || null,
+        unit_price: unitPrice,
+        amount,
+        sort_order: item.sort_order || idx + 1,
+      };
+    });
+
+    const retentionRate = Number(existing.retention_rate) || 0;
+    const otherCharges = Array.isArray(existing.other_charges) ? existing.other_charges as any[] : [];
+    const { subtotal, retention_amount, total_amount } = this.calcTotals(normalizedItems, retentionRate, otherCharges);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoiceItem.deleteMany({ where: { invoice_id: invoiceId } });
+      if (normalizedItems.length > 0) await tx.invoiceItem.createMany({ data: normalizedItems });
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          subtotal,
+          retention_amount,
+          total_amount,
+          outstanding: Math.max(0, Math.round((total_amount - Number(existing.paid_amount)) * 100) / 100),
+        },
+      });
+    });
+
+    return this.prisma.invoiceItem.findMany({
+      where: { invoice_id: invoiceId },
+      orderBy: { sort_order: 'asc' },
+    });
   }
 
   async updateStatus(id: number, status: string) {

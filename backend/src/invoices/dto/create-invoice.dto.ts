@@ -86,3 +86,42 @@ export class SaveInvoicePrepareDto {
   @Type(() => InvoiceWorkLogDraftItemDto)
   drafts: InvoiceWorkLogDraftItemDto[];
 }
+
+export class InvoicePricingGroupDto {
+  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsString() service_type?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
+  @IsOptional() @IsString() day_night?: string;
+  @IsOptional() @IsString() tonnage?: string;
+  @IsOptional() @IsString() machine_type?: string;
+  @IsOptional() @IsString() origin?: string;
+  @IsOptional() @IsString() destination?: string;
+  @IsOptional() @IsString() work_date?: string;
+  @Type(() => Number) @IsNumber() count: number;
+}
+
+export class MatchInvoiceRatesDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InvoicePricingGroupDto)
+  groups: InvoicePricingGroupDto[];
+}
+
+export class UpdateInvoiceItemDto {
+  @IsOptional() @IsString() item_name?: string;
+  @IsOptional() @IsString() description?: string;
+  @Type(() => Number) @IsNumber() quantity: number;
+  @IsOptional() @IsString() unit?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() unit_price?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() sort_order?: number;
+}
+
+export class UpdateInvoiceItemsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateInvoiceItemDto)
+  items: UpdateInvoiceItemDto[];
+}

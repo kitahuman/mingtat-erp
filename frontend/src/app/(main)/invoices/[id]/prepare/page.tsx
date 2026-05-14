@@ -584,13 +584,12 @@ export default function InvoicePreparePage() {
             {resetting ? '重置中…' : '重置'}
           </button>
           <Link href={`/invoices/${invoiceId}`} className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap">返回發票</Link>
-          <button
-            disabled
-            title="即將推出"
-            className="px-3 py-1.5 text-sm bg-gray-200 text-gray-500 rounded cursor-not-allowed whitespace-nowrap"
+          <Link
+            href={`/invoices/${invoiceId}/pricing`}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap font-medium"
           >
             下一步
-          </button>
+          </Link>
         </div>
       </div>
 

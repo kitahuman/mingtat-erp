@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto, InvoiceWorkLogsDto, SaveInvoicePrepareDto } from './dto/create-invoice.dto';
+import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto, InvoiceWorkLogsDto, SaveInvoicePrepareDto, MatchInvoiceRatesDto, UpdateInvoiceItemsDto } from './dto/create-invoice.dto';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
@@ -51,6 +51,21 @@ export class InvoicesController {
   @Delete(':id/prepare')
   clearPrepare(@Param('id') id: number) {
     return this.service.clearPrepare(Number(id));
+  }
+
+  @Get(':id/pricing-data')
+  getPricingData(@Param('id') id: number) {
+    return this.service.getPricingData(Number(id));
+  }
+
+  @Post(':id/match-rates')
+  matchRates(@Param('id') id: number, @Body() dto: MatchInvoiceRatesDto) {
+    return this.service.matchRates(Number(id), dto);
+  }
+
+  @Put(':id/items')
+  updateItems(@Param('id') id: number, @Body() dto: UpdateInvoiceItemsDto) {
+    return this.service.updateItems(Number(id), dto);
   }
 
   @Post(':id/work-logs')
