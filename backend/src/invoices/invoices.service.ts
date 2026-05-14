@@ -46,22 +46,31 @@ export class InvoicesService {
   };
 
   /**
-   * Generate invoice number: {internal_prefix}S{YYYY}{SEQ:03d}
-   * e.g. DCLSWH2026001 where internal_prefix=DCLSWH, S=Sale, 2026=year, 001=seq
+   * Generate invoice number: {company_prefix}S{client_english_code}{YYMM}{SEQ:03d}
+   * e.g. DTCSWH2601001 where company_prefix=DTCS, client_english_code=WH, YYMM=2601.
    */
   private async generateInvoiceNo(
     companyId: number,
+    clientId: number | null,
     date: Date,
   ): Promise<string> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });
-    const prefix = company?.internal_prefix
-      ? `${company.internal_prefix}S`
-      : 'INVS';
+    const companyPrefix = company?.internal_prefix || 'INV';
 
-    const year = String(date.getUTCFullYear());
-    const yearMonth = year; // use year only for the sequence key
+    let clientCode = '';
+    if (clientId) {
+      const client = await this.prisma.partner.findUnique({
+        where: { id: clientId },
+      });
+      clientCode = client?.english_code || '';
+    }
+
+    const prefix = `${companyPrefix}S${clientCode}`;
+    const yy = String(date.getUTCFullYear()).slice(-2);
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const yearMonth = `${yy}${mm}`;
 
     return await this.prisma.$transaction(async (tx) => {
       let seq = await tx.invoiceSequence.findFirst({
@@ -79,7 +88,7 @@ export class InvoicesService {
         data: { last_seq: seq.last_seq + 1 },
       });
 
-      return `${prefix}${year}${String(updated.last_seq).padStart(3, '0')}`;
+      return `${prefix}${yearMonth}${String(updated.last_seq).padStart(3, '0')}`;
     });
   }
 
@@ -219,7 +228,8 @@ export class InvoicesService {
     if (!companyId) throw new BadRequestException('請選擇公司');
 
     const invoiceDate = new Date(dto.date);
-    const invoiceNo = await this.generateInvoiceNo(companyId, invoiceDate);
+    const clientId = dto.client_id ? Number(dto.client_id) : null;
+    const invoiceNo = await this.generateInvoiceNo(companyId, clientId, invoiceDate);
     const retentionRate = Number(dto.retention_rate) || 0;
     const otherCharges: { name: string; amount: number }[] = Array.isArray(
       dto.other_charges,
@@ -240,7 +250,7 @@ export class InvoicesService {
         client_contract_no: dto.client_contract_no || null,
         date: invoiceDate,
         due_date: dto.due_date ? new Date(dto.due_date) : null,
-        client_id: dto.client_id ? Number(dto.client_id) : null,
+        client_id: clientId,
         project_id: dto.project_id ? Number(dto.project_id) : null,
         quotation_id: dto.quotation_id ? Number(dto.quotation_id) : null,
         company_id: companyId,
@@ -330,6 +340,7 @@ export class InvoicesService {
     const invoiceDate = dto?.date ? new Date(dto.date) : new Date();
     const invoiceNo = await this.generateInvoiceNo(
       quotation.company_id,
+      quotation.client_id,
       invoiceDate,
     );
     const retentionRate = dto?.retention_rate || 0;
@@ -408,6 +419,11 @@ export class InvoicesService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: Record<string, any> = {};
     if (dto.date !== undefined) data.date = new Date(dto.date);
+    if (dto.company_id !== undefined) {
+      const companyId = Number(dto.company_id);
+      if (!companyId) throw new BadRequestException('請選擇公司');
+      data.company_id = companyId;
+    }
     if (dto.due_date !== undefined)
       data.due_date = dto.due_date ? new Date(dto.due_date) : null;
     if (dto.client_id !== undefined)
@@ -424,6 +440,32 @@ export class InvoicesService {
       data.retention_rate = Number(dto.retention_rate) || 0;
     if (dto.payment_terms !== undefined) data.payment_terms = dto.payment_terms;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
+
+    const companyChanged =
+      dto.company_id !== undefined && Number(dto.company_id) !== existing.company_id;
+    const clientChanged =
+      dto.client_id !== undefined &&
+      (dto.client_id ? Number(dto.client_id) : null) !== existing.client_id;
+    const dateChanged =
+      dto.date !== undefined &&
+      new Date(dto.date).toISOString() !== existing.date.toISOString();
+
+    if (companyChanged || clientChanged || dateChanged) {
+      const newCompanyId =
+        dto.company_id !== undefined ? Number(dto.company_id) : existing.company_id;
+      const newClientId =
+        dto.client_id !== undefined
+          ? dto.client_id
+            ? Number(dto.client_id)
+            : null
+          : existing.client_id;
+      const newDate = dto.date !== undefined ? new Date(dto.date) : existing.date;
+      data.invoice_no = await this.generateInvoiceNo(
+        newCompanyId,
+        newClientId,
+        newDate,
+      );
+    }
 
     // Update items if provided
     if (dto.items) {
@@ -523,6 +565,78 @@ export class InvoicesService {
     }
 
     return invoice;
+  }
+
+  async linkWorkLogs(invoiceId: number, workLogIds: number[]) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const uniqueIds = [...new Set((workLogIds || []).map(Number).filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('請選擇至少一筆工作紀錄');
+    }
+
+    const existingWorkLogs = await this.prisma.workLog.findMany({
+      where: { id: { in: uniqueIds }, deleted_at: null },
+      select: { id: true },
+    });
+    const existingIds = existingWorkLogs.map((wl) => wl.id);
+    if (existingIds.length === 0) {
+      throw new NotFoundException('工作紀錄不存在');
+    }
+
+    await this.prisma.invoiceWorkLog.createMany({
+      data: existingIds.map((workLogId) => ({
+        invoice_id: invoiceId,
+        work_log_id: workLogId,
+      })),
+      skipDuplicates: true,
+    });
+
+    return { linked: existingIds.length };
+  }
+
+  async unlinkWorkLogs(invoiceId: number, workLogIds: number[]) {
+    const uniqueIds = [...new Set((workLogIds || []).map(Number).filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('請選擇至少一筆工作紀錄');
+    }
+
+    const result = await this.prisma.invoiceWorkLog.deleteMany({
+      where: {
+        invoice_id: invoiceId,
+        work_log_id: { in: uniqueIds },
+      },
+    });
+
+    return { unlinked: result.count };
+  }
+
+  async getLinkedWorkLogs(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const links = await this.prisma.invoiceWorkLog.findMany({
+      where: { invoice_id: invoiceId },
+      include: {
+        work_log: {
+          include: {
+            employee: true,
+            client: true,
+            company: true,
+            fleet_driver: { include: { subcontractor: true } },
+          },
+        },
+      },
+      orderBy: { work_log: { scheduled_date: 'desc' } },
+    });
+
+    return links.map((link) => link.work_log);
   }
 
   async updateStatus(id: number, status: string) {

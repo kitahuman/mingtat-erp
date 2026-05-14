@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto } from './dto/create-invoice.dto';
+import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto, InvoiceWorkLogsDto } from './dto/create-invoice.dto';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
@@ -36,6 +36,21 @@ export class InvoicesController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: number, @Body('status') status: string) {
     return this.service.updateStatus(Number(id), status);
+  }
+
+  @Post(':id/work-logs')
+  linkWorkLogs(@Param('id') id: number, @Body() dto: InvoiceWorkLogsDto) {
+    return this.service.linkWorkLogs(Number(id), dto.work_log_ids || []);
+  }
+
+  @Delete(':id/work-logs')
+  unlinkWorkLogs(@Param('id') id: number, @Body() dto: InvoiceWorkLogsDto) {
+    return this.service.unlinkWorkLogs(Number(id), dto.work_log_ids || []);
+  }
+
+  @Get(':id/work-logs')
+  getLinkedWorkLogs(@Param('id') id: number) {
+    return this.service.getLinkedWorkLogs(Number(id));
   }
 
   @Post(':id/record-payment')

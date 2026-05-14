@@ -59,3 +59,7 @@ export class RecordPaymentDto {
   @IsOptional() @IsString() reference_no?: string;
   @IsOptional() @IsString() remarks?: string;
 }
+
+export class InvoiceWorkLogsDto {
+  @IsArray() work_log_ids: number[];
+}

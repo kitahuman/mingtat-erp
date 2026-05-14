@@ -803,6 +803,9 @@ export const invoicesApi = {
   recordPayment: (id: number, data: any) => api.post(`/invoices/${id}/record-payment`, data),
   deletePayment: (id: number, paymentId: number) => api.delete(`/invoices/${id}/payment/${paymentId}`),
   getPayments: (id: number) => api.get(`/invoices/${id}/payments`),
+  linkWorkLogs: (id: number, workLogIds: number[]) => api.post(`/invoices/${id}/work-logs`, { work_log_ids: workLogIds }),
+  unlinkWorkLogs: (id: number, workLogIds: number[]) => api.delete(`/invoices/${id}/work-logs`, { data: { work_log_ids: workLogIds } }),
+  getLinkedWorkLogs: (id: number) => api.get(`/invoices/${id}/work-logs`),
   delete: (id: number) => api.delete(`/invoices/${id}`),
 };
 

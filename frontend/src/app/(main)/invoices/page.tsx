@@ -81,6 +81,7 @@ export default function InvoicesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<any>({ ...defaultForm });
+  const [workLogIdsFromQuery, setWorkLogIdsFromQuery] = useState<number[]>([]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -123,6 +124,23 @@ export default function InvoicesPage() {
     quotationsApi.list({ limit: 500 }).then(res => setQuotations(res.data?.data || res.data || []));
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const workLogIdsParam = params.get('work_log_ids') || '';
+    if (!workLogIdsParam) return;
+    const ids = workLogIdsParam
+      .split(',')
+      .map(id => Number(id))
+      .filter(id => Number.isInteger(id) && id > 0);
+    setWorkLogIdsFromQuery(ids);
+    setShowCreate(true);
+    setForm(prev => ({
+      ...prev,
+      invoice_title: prev.invoice_title || '工作紀錄發票',
+      remarks: prev.remarks || `由 ${ids.length} 筆工作紀錄建立（只關聯模式，不自動計算價錢）`,
+    }));
+  }, []);
+
   const clientPartners = partners.filter((p: any) => p.partner_type === 'client');
 
   const handleCreate = async () => {
@@ -152,6 +170,9 @@ export default function InvoicesPage() {
         })),
       };
       const res = await invoicesApi.create(payload);
+      if (workLogIdsFromQuery.length > 0) {
+        await invoicesApi.linkWorkLogs(res.data.id, workLogIdsFromQuery);
+      }
       setShowCreate(false);
       setForm({ ...defaultForm });
       router.push(`/invoices/${res.data.id}`);
@@ -294,6 +315,11 @@ export default function InvoicesPage() {
       {showCreate && (
         <Modal isOpen={showCreate} title="新增發票" onClose={() => setShowCreate(false)} size="xl">
           <div className="space-y-5">
+            {workLogIdsFromQuery.length > 0 && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
+                建立後會以「只關聯」模式自動連結 {workLogIdsFromQuery.length} 筆已選工作紀錄，不會自動計算發票項目或價錢。
+              </div>
+            )}
             {/* Row 1: Company, Client */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

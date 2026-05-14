@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   workLogsApi, companiesApi, partnersApi,
   contractsApi, quotationsApi, employeesApi, usersApi, fieldOptionsApi,
-  vehiclesApi, machineryApi, subconFleetDriversApi,
+  vehiclesApi, machineryApi, subconFleetDriversApi, invoicesApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import EditableCell from './EditableCell';
@@ -172,6 +172,7 @@ export default function WorkLogsPage() {
   const [quotations, setQuotations]           = useState<Option[]>([]);
   const [employees, setEmployees]             = useState<Option[]>([]);
   const [users, setUsers]                     = useState<Option[]>([]);
+  const [invoiceOptions, setInvoiceOptions]   = useState<Option[]>([]);
   const [fieldOptions, setFieldOptions]       = useState<Record<string, Option[]>>({});
   const [allEquipment, setAllEquipment]       = useState<Option[]>([]);
   const [dynamicTopFilterOptions, setDynamicTopFilterOptions] = useState<Record<string, string[]>>({});
@@ -213,6 +214,11 @@ export default function WorkLogsPage() {
   // ── Selection ───────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
+  const [invoiceLinkOpen, setInvoiceLinkOpen] = useState(false);
+  const [invoiceLinkMode, setInvoiceLinkMode] = useState<'existing' | 'new'>('existing');
+  const [invoiceLinkType, setInvoiceLinkType] = useState<'link-only' | 'link-and-calc'>('link-only');
+  const [targetInvoiceId, setTargetInvoiceId] = useState<string | number | null>(null);
+  const [invoiceLinkLoading, setInvoiceLinkLoading] = useState(false);
 
   // ── Attachment Viewer ──────────────────────────────────────────
   const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false);
@@ -515,7 +521,8 @@ export default function WorkLogsPage() {
       machineryApi.simple().catch(() => ({ data: [] })),
       subconFleetDriversApi.simple().catch(() => ({ data: [] })),
       subconFleetDriversApi.simpleDrivers().catch(() => ({ data: [] })),
-    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet, fleetDrivers]) => {
+      invoicesApi.list({ limit: 500 }).catch(() => ({ data: [] })),
+    ]).then(([cp, pt, qt, qo, em, us, fo, veh, mach, subconFleet, fleetDrivers, inv]) => {
       setCompanies((cp.data || []).map((c: any) => ({
         value: c.id,
         label: c.internal_prefix ? `${c.internal_prefix} ${c.name}` : c.name,
@@ -538,6 +545,12 @@ export default function WorkLogsPage() {
       }));
       setEmployees([...employeeList, ...fleetDriverList]);
       setUsers((us.data?.data || us.data || []).map((u: any) => ({ value: u.id, label: u.displayName || u.username })));
+      const invData = inv.data?.data || inv.data || [];
+      setInvoiceOptions(invData.map((invoice: any) => ({
+        value: invoice.id,
+        label: `${invoice.invoice_no}${invoice.client?.name ? ' - ' + invoice.client.name : ''}${invoice.date ? ' (' + fmtDate(invoice.date) + ')' : ''}`,
+        _raw: invoice,
+      })));
       const grouped: Record<string, Option[]> = {};
       for (const [cat, opts] of Object.entries(fo.data || {})) {
         grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
@@ -972,6 +985,35 @@ export default function WorkLogsPage() {
     await fetchLogs();
   };
 
+  const handleLinkWorkLogsToInvoice = async () => {
+    if (selected.size === 0) return;
+    const workLogIds = Array.from(selected);
+
+    if (invoiceLinkMode === 'new') {
+      const params = new URLSearchParams({ work_log_ids: workLogIds.join(','), mode: 'link-only' });
+      window.location.href = `/invoices?${params.toString()}`;
+      return;
+    }
+
+    if (!targetInvoiceId) {
+      showToast('請先選擇目標發票');
+      return;
+    }
+
+    setInvoiceLinkLoading(true);
+    try {
+      await invoicesApi.linkWorkLogs(Number(targetInvoiceId), workLogIds);
+      showToast(`已將 ${workLogIds.length} 筆工作紀錄加入發票`, 'success');
+      setInvoiceLinkOpen(false);
+      setTargetInvoiceId(null);
+      setSelected(new Set());
+    } catch (e: any) {
+      showToast('加入發票失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+    } finally {
+      setInvoiceLinkLoading(false);
+    }
+  };
+
   const handleBulkUpdateSuccess = async () => {
     setSelected(new Set());
     await fetchLogs();
@@ -1369,6 +1411,10 @@ export default function WorkLogsPage() {
                 className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">
                 批量刪除
               </button>
+              <button onClick={() => setInvoiceLinkOpen(true)}
+                className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700">
+                加入發票
+              </button>
             </>
           )}
           <ColumnCustomizer
@@ -1481,6 +1527,107 @@ export default function WorkLogsPage() {
       {/* ── Tab Content: Work Records (existing content) ────────── */}
       {activeTab === 'records' && (
         <div className="flex min-h-0 flex-1 flex-col">
+
+      {/* ── Invoice Link Dialog ─────────────────────────────────── */}
+      {invoiceLinkOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">加入發票</h2>
+                <p className="mt-1 text-sm text-gray-500">將已選取的 {selected.size} 筆工作紀錄與發票建立關聯。</p>
+              </div>
+              <button
+                onClick={() => setInvoiceLinkOpen(false)}
+                className="text-2xl leading-none text-gray-400 hover:text-gray-600"
+                aria-label="關閉"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-5 px-5 py-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">處理方式</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceLinkMode('existing')}
+                    className={`rounded border px-3 py-2 text-sm ${invoiceLinkMode === 'existing' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    加到現有發票
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceLinkMode('new')}
+                    className={`rounded border px-3 py-2 text-sm ${invoiceLinkMode === 'new' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    生成新發票
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">關聯模式</label>
+                <div className="space-y-2 rounded border border-gray-200 p-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      checked={invoiceLinkType === 'link-only'}
+                      onChange={() => setInvoiceLinkType('link-only')}
+                    />
+                    只關聯
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-400">
+                    <input
+                      type="radio"
+                      disabled
+                      checked={invoiceLinkType === 'link-and-calc'}
+                      onChange={() => setInvoiceLinkType('link-and-calc')}
+                    />
+                    關聯並計算價錢（即將推出）
+                  </label>
+                </div>
+              </div>
+
+              {invoiceLinkMode === 'existing' ? (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">選擇發票</label>
+                  <SearchableSelect
+                    value={targetInvoiceId}
+                    onChange={setTargetInvoiceId}
+                    options={invoiceOptions}
+                    placeholder="搜尋發票號碼"
+                  />
+                  {invoiceOptions.length === 0 && (
+                    <p className="mt-2 text-xs text-amber-600">目前沒有可選擇的發票，請先建立發票。</p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+                  會前往發票頁面並帶入所選工作紀錄 ID；Phase 1 僅建立關聯，不會自動計算價錢。
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setInvoiceLinkOpen(false)}
+                className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleLinkWorkLogsToInvoice}
+                disabled={invoiceLinkLoading || (invoiceLinkMode === 'existing' && !targetInvoiceId)}
+                className="rounded bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                {invoiceLinkLoading ? '處理中…' : invoiceLinkMode === 'existing' ? '加入發票' : '生成新發票'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Batch Edit Dialog ────────────────────────────────────── */}     <BatchEditDialog
         open={batchEditOpen}

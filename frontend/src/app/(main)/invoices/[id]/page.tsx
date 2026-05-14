@@ -54,6 +54,8 @@ export default function InvoiceDetailPage() {
   const [paymentForm, setPaymentForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account_id: '', reference_no: '', remarks: '' });
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
+  const [linkedWorkLogs, setLinkedWorkLogs] = useState<any[]>([]);
+  const [linkedWorkLogsLoading, setLinkedWorkLogsLoading] = useState(false);
 
   const loadInvoice = async () => {
     try {
@@ -82,9 +84,22 @@ export default function InvoiceDetailPage() {
     } catch { }
   };
 
+  const loadLinkedWorkLogs = async () => {
+    setLinkedWorkLogsLoading(true);
+    try {
+      const res = await invoicesApi.getLinkedWorkLogs(invoiceId);
+      setLinkedWorkLogs(res.data || []);
+    } catch {
+      setLinkedWorkLogs([]);
+    } finally {
+      setLinkedWorkLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadInvoice();
     loadPayments();
+    loadLinkedWorkLogs();
     partnersApi.simple().then(res => setPartners(res.data || []));
     companiesApi.simple().then(res => setCompanies(res.data || []));
     projectsApi.list({ limit: 500 }).then(res => setProjects(res.data?.data || res.data || []));
@@ -118,6 +133,17 @@ export default function InvoiceDetailPage() {
   const formRetention = formSubtotal * (Number(form.retention_rate) || 0) / 100;
   const formOtherChargesTotal = (form.other_charges || []).reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
   const formTotal = formSubtotal - formRetention + formOtherChargesTotal;
+
+  const handleUnlinkWorkLog = async (workLogId: number) => {
+    if (isReadOnly) return;
+    if (!confirm('確定要解除此工作紀錄與發票的關聯嗎？')) return;
+    try {
+      await invoicesApi.unlinkWorkLogs(invoiceId, [workLogId]);
+      await loadLinkedWorkLogs();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '解除關聯失敗');
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -579,6 +605,64 @@ export default function InvoiceDetailPage() {
               <div className="text-lg font-bold text-gray-900">總額：HKD {fmt$(invoice.total_amount)}</div>
             </div>
           </>
+        )}
+      </div>
+
+      {/* Linked Work Logs */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">關聯工作紀錄</h2>
+          <span className="text-sm text-gray-500">共 {linkedWorkLogs.length} 筆</span>
+        </div>
+        {linkedWorkLogsLoading ? (
+          <div className="py-6 text-center text-sm text-gray-400">載入中...</div>
+        ) : linkedWorkLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">員工</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">服務類型</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">起點</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">終點</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">單號</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {linkedWorkLogs.map((log: any) => {
+                  const workerName = log.work_log_fleet_driver_id
+                    ? (log.fleet_driver?.name_zh || log.fleet_driver?.subcontractor?.name || log.fleet_driver?.plate_no || '街車')
+                    : (log.employee?.name_zh || '—');
+                  return (
+                    <tr key={log.id}>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(log.scheduled_date)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{workerName}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{log.client?.code || log.client?.name || log.unverified_client_name || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div>{log.service_type || '—'}</div>
+                        {log.remarks && <div className="mt-0.5 text-xs text-gray-500">{log.remarks}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{log.start_location || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{log.end_location || '—'}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-600">{log.work_order_no || log.receipt_no || '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        {!isReadOnly ? (
+                          <button onClick={() => handleUnlinkWorkLog(log.id)} className="text-xs text-red-600 hover:text-red-700">解除關聯</button>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="py-4 text-sm text-gray-400">尚未關聯任何工作紀錄</p>
         )}
       </div>
 

@@ -1238,6 +1238,7 @@ model WorkLog {
   verification_confirmations VerificationConfirmation[]
   attendance_anomalies       AttendanceAnomaly[]
   subcon_payroll_items       SubconPayrollItem[]
+  invoice_work_logs          InvoiceWorkLog[]
 
   // ── Performance indexes ──
   @@index([scheduled_date])
@@ -1966,6 +1967,7 @@ model Invoice {
   company                Company               @relation(fields: [company_id], references: [id])
   items                  InvoiceItem[]
   payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
+  invoice_work_logs      InvoiceWorkLog[]
 
   // ── Performance indexes ──
   @@index([client_id])
@@ -1991,6 +1993,20 @@ model InvoiceItem {
   invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
 
   @@map("invoice_items")
+}
+
+model InvoiceWorkLog {
+  id          Int      @id @default(autoincrement())
+  invoice_id  Int
+  work_log_id Int
+  created_at  DateTime @default(now())
+
+  invoice  Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  work_log WorkLog @relation(fields: [work_log_id], references: [id], onDelete: Cascade)
+
+  @@unique([invoice_id, work_log_id])
+  @@index([work_log_id])
+  @@map("invoice_work_logs")
 }
 
 model InvoiceSequence {
