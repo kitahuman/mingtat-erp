@@ -667,8 +667,6 @@ export default function WorkLogsPage() {
     setLoading(true);
     try {
       const params = buildListParams({ page, limit });
-      console.log('[DEBUG fetchLogs] params:', JSON.stringify(params));
-
       const res = await workLogsApi.list(params);
       setRows(res.data?.data || []);
       setTotal(res.data?.total || 0);
@@ -1671,11 +1669,9 @@ export default function WorkLogsPage() {
                           data={rows}
                           activeFilters={columnFilters}
                           onFilterChange={(key, vals) => {
-                            console.log('[DEBUG onFilterChange]', key, vals ? `Set(${vals.size}): [${Array.from(vals).join(', ')}]` : 'null');
                             setColumnFilters(prev => {
                               const next = { ...prev };
                               if (vals === null) { delete next[key]; } else { next[key] = vals; }
-                              console.log('[DEBUG columnFilters next]', Object.fromEntries(Object.entries(next).map(([k, v]) => [k, v ? Array.from(v) : null])));
                               return next;
                             });
                             setPage(1);
