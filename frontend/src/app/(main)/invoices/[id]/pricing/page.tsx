@@ -943,6 +943,100 @@ function buildPivotRowPricingGroup(
   };
 }
 
+function cleanPivotLabel(label: string | null | undefined): string | null {
+  const normalized = normalizeText(label);
+  if (!normalized || normalized === BLANK) return null;
+  return normalized;
+}
+
+function uniqueCleanPivotLabels(
+  labels: Array<string | null | undefined>,
+): string[] {
+  return Array.from(
+    new Set(labels.map((label) => cleanPivotLabel(label)).filter(Boolean) as string[]),
+  );
+}
+
+function formatMetricValue(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.00$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function metricQuantityText(metric: PivotMetric): string {
+  const valueText = formatMetricValue(Number(metric.value) || 0);
+  return metric.unit ? `${valueText}${metric.unit}` : valueText;
+}
+
+function fieldLabelEntries(row: RowEntry, rowFields: PivotDimension[]) {
+  return rowFields
+    .map((field, index) => ({ field, label: cleanPivotLabel(row.labels[index]) }))
+    .filter((entry): entry is { field: PivotDimension; label: string } =>
+      Boolean(entry.label),
+    );
+}
+
+function buildPivotItemName(
+  row: RowEntry,
+  workLogs: any[],
+  rowFields: PivotDimension[],
+): string {
+  const entries = fieldLabelEntries(row, rowFields);
+  const origin = entries.find((entry) => entry.field === "start_location")?.label;
+  const destination = entries.find((entry) => entry.field === "end_location")?.label;
+  const nonRouteLabels = entries
+    .filter(
+      (entry) =>
+        entry.field !== "start_location" && entry.field !== "end_location",
+    )
+    .map((entry) => entry.label);
+
+  const baseParts: string[] = [];
+  if (nonRouteLabels.length > 0) baseParts.push(nonRouteLabels.join(" / "));
+  if (origin || destination) baseParts.push(`${origin || "—"} 至 ${destination || "—"}`);
+  if (baseParts.length === 0) {
+    const rowLabels = uniqueCleanPivotLabels(row.labels);
+    baseParts.push(rowLabels.join(" / ") || row.label || "Pivot 項目");
+  }
+
+  const matchedLogs = workLogs.filter((workLog) =>
+    rowMatchesWorkLog(row, workLog, rowFields),
+  );
+  const tonnageLabels = uniqueCleanPivotLabels(
+    matchedLogs.map((workLog) => normalizeText(workLog.tonnage)),
+  );
+  const machineTypeLabels = uniqueCleanPivotLabels(
+    matchedLogs.map((workLog) => normalizeText(workLog.machine_type)),
+  );
+  const baseText = baseParts.join(" / ");
+  const tonnageText =
+    tonnageLabels.length === 1 && !baseText.includes(tonnageLabels[0])
+      ? tonnageLabels[0]
+      : "";
+  const machineTypeText =
+    machineTypeLabels.length === 1 && !baseText.includes(machineTypeLabels[0])
+      ? machineTypeLabels[0]
+      : "";
+  const specText = `${tonnageText}${machineTypeText}`.trim();
+
+  if (!specText) return baseText;
+  return `${baseText} - ${specText}`;
+}
+
+function buildPivotDescription(
+  pivot: WorkLogPivotResult,
+  row: RowEntry,
+): string {
+  return pivot.cols
+    .map((col) => {
+      const metric = aggregateMetric(pivot, row.labels, col.labels);
+      if ((Number(metric.value) || 0) <= 0) return null;
+      const colLabel = uniqueCleanPivotLabels(col.labels).join(" / ") || "全部";
+      return `${colLabel} - ${metricQuantityText(metric)}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function normalizeDraftItem(item: any, index: number): InvoiceItemDraft {
   return {
     item_name: item?.item_name || "",
@@ -1775,19 +1869,22 @@ export default function InvoicePricingPage() {
   };
 
   const addPivotRowToItems = (row: RowEntry) => {
-    if (readOnly || row.isGroup) return;
+    if (readOnly || row.isGroup || !pivot) return;
     const metric = aggregateMetric(pivot, row.labels, []);
     const rowPrice = rowPrices[row.key] || { unit_price: 0 };
     const unitPrice = Number(rowPrice.unit_price) || 0;
+    const quantity = Number(metric.value) || 0;
+    const itemName = buildPivotItemName(row, filteredWorkLogs, rowFields);
+    const description = buildPivotDescription(pivot, row);
     setItems((current) => [
       ...current,
       {
-        item_name: rowPrice.item_name || row.label || "Pivot 項目",
-        description: rowPrice.description || row.label,
-        quantity: Number(metric.value) || 0,
-        unit: rowPrice.unit || metric.unit || "JOB",
+        item_name: itemName,
+        description: description || rowPrice.description || row.label,
+        quantity,
+        unit: metric.unit || rowPrice.unit || "JOB",
         unit_price: unitPrice,
-        amount: Math.round((Number(metric.value) || 0) * unitPrice * 100) / 100,
+        amount: Math.round(quantity * unitPrice * 100) / 100,
         sort_order: current.length + 1,
         matched: rowPrice.matched,
         rate_card_id: rowPrice.rate_card_id || null,
@@ -1999,6 +2096,13 @@ export default function InvoicePricingPage() {
                     10 欄位組合：{pricingGroups.length} 組
                   </div>
                   <CsvButton onClick={exportCsv} />
+                  <button
+                    onClick={handleMatchRates}
+                    disabled={matching || filteredWorkLogs.length === 0}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    {matching ? "配對中..." : "配對價目表"}
+                  </button>
                   <button
                     onClick={() => setControlsOpen((open) => !open)}
                     className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -2476,7 +2580,7 @@ export default function InvoicePricingPage() {
                     Invoice Items 編輯器
                   </h2>
                   <p className="text-sm text-gray-500">
-                    「配對價目表」會填入左側 Pivot
+                    左側「配對價目表」會填入 Pivot
                     單價；按每行「加到右邊」建立草稿，按「確認生成」才會寫入
                     InvoiceItems。
                   </p>
@@ -2487,13 +2591,6 @@ export default function InvoicePricingPage() {
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     隱藏右側
-                  </button>
-                  <button
-                    onClick={handleMatchRates}
-                    disabled={matching || filteredWorkLogs.length === 0}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                  >
-                    {matching ? "配對中..." : "配對價目表"}
                   </button>
                   <button
                     onClick={handleSaveItems}
@@ -2535,7 +2632,7 @@ export default function InvoicePricingPage() {
                         colSpan={7}
                         className="px-3 py-8 text-center text-gray-500"
                       >
-                        尚未有項目。可先按「配對價目表」自動產生，或手動新增。
+                        尚未有項目。可先在左側 Pivot 配對價目表後按「加到右邊」，或手動新增。
                       </td>
                     </tr>
                   )}
