@@ -39,6 +39,9 @@ export default function BankReconciliationPage() {
   // ── Selection mode state ──
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const reconciliationGridColumns = selectionMode
+    ? '2.75rem minmax(5rem, 0.7fr) minmax(20rem, 3fr) minmax(5rem, 0.75fr) minmax(6rem, 0.85fr) minmax(6rem, 0.85fr) minmax(5rem, 0.75fr) minmax(8rem, 1.1fr) minmax(4rem, 0.55fr) minmax(4.5rem, 0.65fr)'
+    : 'minmax(5rem, 0.7fr) minmax(22rem, 3.4fr) minmax(5rem, 0.75fr) minmax(6rem, 0.85fr) minmax(6rem, 0.85fr) minmax(6rem, 0.9fr) minmax(5rem, 0.75fr) minmax(8rem, 1.1fr) minmax(4rem, 0.55fr) minmax(4.5rem, 0.65fr)';
 
   // ── Edit modal state ──
   const [editTx, setEditTx] = useState<any>(null);
@@ -553,10 +556,10 @@ export default function BankReconciliationPage() {
       )}
 
       {/* ═══ Bookkeeping Table (Left-Right Layout) ═══ */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
         {/* Table Header */}
         <div className="bg-gray-50 border-b">
-          <div className="grid grid-cols-12 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <div className="grid min-w-[1120px] text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ gridTemplateColumns: reconciliationGridColumns }}>
             {/* Checkbox column in selection mode */}
             {selectionMode && (
               <div className="col-span-1 px-2 py-3 flex items-center justify-center border-r border-gray-200">
@@ -569,29 +572,29 @@ export default function BankReconciliationPage() {
               </div>
             )}
             {/* Left: From Statement */}
-            <div className={`${selectionMode ? 'col-span-6' : 'col-span-7'} px-4 py-3 border-r border-gray-200`}>
+            <div className="px-4 py-3 border-r border-gray-200" style={{ gridColumn: `span ${selectionMode ? 5 : 6} / span ${selectionMode ? 5 : 6}` }}>
               <span className="text-blue-700">From Statement（月結單）</span>
             </div>
             {/* Right: From System */}
-            <div className="col-span-4 px-4 py-3">
+            <div className="px-4 py-3" style={{ gridColumn: 'span 3 / span 3' }}>
               <span className="text-purple-700">From System（系統記錄）</span>
             </div>
             {/* Status */}
-            <div className="col-span-1 px-2 py-3 text-center">狀態</div>
+            <div className="px-2 py-3 text-center">狀態</div>
           </div>
           {/* Sub-headers */}
-          <div className="grid grid-cols-12 text-[11px] font-medium text-gray-500 border-t border-gray-100">
-            {selectionMode && <div className="col-span-1" />}
-            <div className={`${selectionMode ? '' : 'col-span-1'} px-4 py-2 border-r border-gray-100 ${selectionMode ? 'col-span-1' : ''}`}>Date</div>
-            <div className="col-span-2 px-2 py-2 border-r border-gray-100">Transaction</div>
-            <div className={`px-2 py-2 border-r border-gray-100 text-center ${selectionMode ? 'col-span-1' : 'col-span-1'}`}>Ref No</div>
-            <div className="col-span-1 px-2 py-2 border-r border-gray-100 text-right">Withdrawals</div>
-            <div className="col-span-1 px-2 py-2 border-r border-gray-200 text-right">Deposits</div>
-            {!selectionMode && <div className="col-span-1 px-2 py-2 border-r border-gray-200 text-right">Balance</div>}
-            <div className="col-span-1 px-2 py-2 border-r border-gray-100">類別</div>
-            <div className="col-span-2 px-2 py-2 border-r border-gray-100">名稱</div>
-            <div className="col-span-1 px-2 py-2">關聯</div>
-            <div className="col-span-1 px-2 py-2 text-center">核對</div>
+          <div className="grid min-w-[1120px] text-[11px] font-medium text-gray-500 border-t border-gray-100" style={{ gridTemplateColumns: reconciliationGridColumns }}>
+            {selectionMode && <div />}
+            <div className="px-4 py-2 border-r border-gray-100">Date</div>
+            <div className="px-2 py-2 border-r border-gray-100">Transaction</div>
+            <div className="px-2 py-2 border-r border-gray-100 text-center">Ref No</div>
+            <div className="px-2 py-2 border-r border-gray-100 text-right">Withdrawals</div>
+            <div className="px-2 py-2 border-r border-gray-200 text-right">Deposits</div>
+            {!selectionMode && <div className="px-2 py-2 border-r border-gray-200 text-right">Balance</div>}
+            <div className="px-2 py-2 border-r border-gray-100">類別</div>
+            <div className="px-2 py-2 border-r border-gray-100">名稱</div>
+            <div className="px-2 py-2">關聯</div>
+            <div className="px-2 py-2 text-center">核對</div>
           </div>
         </div>
 
@@ -609,10 +612,10 @@ export default function BankReconciliationPage() {
               const matchInfo = getMatchedInfo(tx);
               const isSelected = selectedIds.has(tx.id);
               return (
-                <div key={tx.id} className={`group grid grid-cols-12 text-sm hover:bg-gray-50 transition-colors ${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''} ${isSelected ? 'bg-blue-50' : ''}`}>
+                <div key={tx.id} className={`group grid min-w-[1120px] text-sm hover:bg-gray-50 transition-colors ${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''} ${isSelected ? 'bg-blue-50' : ''}`} style={{ gridTemplateColumns: reconciliationGridColumns }}>
                   {/* Checkbox */}
                   {selectionMode && (
-                    <div className="col-span-1 px-2 py-2.5 flex items-center justify-center border-r border-gray-50">
+                    <div className="px-2 py-2.5 flex items-center justify-center border-r border-gray-50">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -623,7 +626,7 @@ export default function BankReconciliationPage() {
                   )}
 
                   {/* Left: Statement columns */}
-                  <div className={`${selectionMode ? '' : 'col-span-1'} px-4 py-2.5 border-r border-gray-50 text-xs text-gray-600 ${selectionMode ? 'col-span-1' : ''}`}>
+                  <div className="px-4 py-2.5 border-r border-gray-50 text-xs text-gray-600">
                     <div>{format(new Date(tx.date), 'dd/MM/yy')}</div>
                     <div className="flex items-center gap-1 mt-0.5">
                       {getSourceBadge(tx.bank_txn_source || 'csv')}
@@ -637,38 +640,38 @@ export default function BankReconciliationPage() {
                       )}
                     </div>
                   </div>
-                  <div className="col-span-2 px-2 py-2.5 border-r border-gray-50 truncate text-xs" title={tx.description}>
+                  <div className="px-2 py-2.5 border-r border-gray-50 whitespace-normal break-words leading-relaxed text-xs" title={tx.description}>
                     {tx.description || '—'}
                   </div>
-                  <div className={`px-2 py-2.5 border-r border-gray-50 text-center text-xs text-gray-500 ${selectionMode ? 'col-span-1' : 'col-span-1'}`}>
+                  <div className="px-2 py-2.5 border-r border-gray-50 text-center text-xs text-gray-500">
                     {tx.reference_no || '—'}
                   </div>
-                  <div className="col-span-1 px-2 py-2.5 border-r border-gray-50 text-right text-xs">
+                  <div className="px-2 py-2.5 border-r border-gray-50 text-right text-xs">
                     {isWithdrawal ? (
                       <span className="text-red-600 font-medium">{fmtMoney(Math.abs(Number(tx.amount)))}</span>
                     ) : '—'}
                   </div>
-                  <div className="col-span-1 px-2 py-2.5 border-r border-gray-50 text-right text-xs">
+                  <div className="px-2 py-2.5 border-r border-gray-50 text-right text-xs">
                     {!isWithdrawal ? (
                       <span className="text-green-600 font-medium">{fmtMoney(Number(tx.amount))}</span>
                     ) : '—'}
                   </div>
                   {!selectionMode && (
-                    <div className="col-span-1 px-2 py-2.5 border-r border-gray-200 text-right text-xs text-gray-500">
+                    <div className="px-2 py-2.5 border-r border-gray-200 text-right text-xs text-gray-500">
                       {tx.balance != null ? fmtMoney(Number(tx.balance)) : '—'}
                     </div>
                   )}
 
                   {/* Right: System columns */}
-                  <div className="col-span-1 px-2 py-2.5 border-r border-gray-50 text-xs text-gray-600">
+                  <div className="px-2 py-2.5 border-r border-gray-50 text-xs text-gray-600">
                     {tx.match_status === 'matched' ? matchInfo.category : (
                       tx.match_status === 'excluded' ? <span className="text-gray-400 italic">已排除</span> : ''
                     )}
                   </div>
-                  <div className="col-span-2 px-2 py-2.5 border-r border-gray-50 truncate text-xs" title={matchInfo.name}>
+                  <div className="px-2 py-2.5 border-r border-gray-50 truncate text-xs" title={matchInfo.name}>
                     {tx.match_status === 'matched' ? matchInfo.name : ''}
                   </div>
-                  <div className="col-span-1 px-2 py-2.5 text-xs">
+                  <div className="px-2 py-2.5 text-xs">
                     {tx.match_status === 'matched' && matchInfo.link ? (
                       <a href={matchInfo.link} className="text-blue-600 hover:underline" title="查看詳情">
                         查看 →
@@ -677,7 +680,7 @@ export default function BankReconciliationPage() {
                   </div>
 
                   {/* Status + Actions */}
-                  <div className="col-span-1 px-2 py-2 flex items-center justify-center gap-1 relative">
+                  <div className="px-2 py-2 flex items-center justify-center gap-1 relative">
                     {tx.match_status === 'unmatched' ? (
                       <div className="flex gap-1">
                         <button
