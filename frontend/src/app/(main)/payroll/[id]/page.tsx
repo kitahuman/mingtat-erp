@@ -96,13 +96,35 @@ function buildUnmatchedGroups(pwls: any[]): UnmatchedGroup[] {
 function PayrollItemsSummary({
   items,
   payroll,
+  payrollId,
+  isEditable,
+  onSaved,
   className = 'mt-6',
 }: {
   items: any[];
   payroll: any;
+  payrollId: number;
+  isEditable: boolean;
+  onSaved: () => Promise<void> | void;
   className?: string;
 }) {
+  const { isReadOnly } = useAuth();
+  const [savingItemId, setSavingItemId] = useState<number | null>(null);
+
   if (!items || items.length === 0) return null;
+
+  const canEditExcluded = isEditable && !isReadOnly;
+  const handleToggleExcluded = async (item: any, checked: boolean) => {
+    setSavingItemId(item.id);
+    try {
+      await payrollApi.updateItem(payrollId, item.id, { payroll_item_excluded: checked });
+      await onSaved();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新薪酬項目失敗');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
 
   return (
     <div className={className}>
@@ -111,6 +133,7 @@ function PayrollItemsSummary({
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-2 text-center font-medium text-gray-600">排除</th>
               <th className="px-4 py-2 text-left font-medium text-gray-600">項目</th>
               <th className="px-4 py-2 text-right font-medium text-gray-600">單價</th>
               <th className="px-4 py-2 text-right font-medium text-gray-600">天數/數量</th>
@@ -129,29 +152,51 @@ function PayrollItemsSummary({
                 item.item_type === 'allowance' ? 'bg-green-100 text-green-700' :
                 item.item_type === 'ot' ? 'bg-purple-100 text-purple-700' :
                 item.item_type === 'mpf_deduction' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
+              const isExcluded = Boolean(item.payroll_item_excluded);
+              const rowClass = isExcluded
+                ? 'bg-gray-50 text-gray-400'
+                : item.item_type === 'base_salary'
+                  ? 'bg-blue-50'
+                  : item.item_type === 'allowance' && item.item_name?.includes('法定')
+                    ? 'bg-yellow-50'
+                    : item.item_type === 'mpf_deduction'
+                      ? 'bg-red-50'
+                      : '';
+              const excludedClass = isExcluded ? 'line-through opacity-60' : '';
               return (
-                <tr key={item.id} className={`border-b ${item.item_type === 'base_salary' ? 'bg-blue-50' : item.item_type === 'allowance' && item.item_name?.includes('法定') ? 'bg-yellow-50' : item.item_type === 'mpf_deduction' ? 'bg-red-50' : ''}`}>
-                  <td className="px-4 py-2">
+                <tr key={item.id} className={`border-b ${rowClass}`}>
+                  <td className="px-4 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isExcluded}
+                      disabled={!canEditExcluded || savingItemId === item.id}
+                      onChange={(e) => handleToggleExcluded(item, e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      title={canEditExcluded ? '勾選後此薪酬項目不計入糧單金額' : '只有草稿或準備中糧單可編輯'}
+                    />
+                  </td>
+                  <td className={`px-4 py-2 ${excludedClass}`}>
                     <span className={`inline-block px-2 py-0.5 rounded text-xs mr-2 ${badgeColor}`}>{typeLabel}</span>
                     <span className="font-medium">{item.item_name}</span>
+                    {isExcluded && <span className="ml-2 text-[11px] text-gray-500 no-underline">已排除</span>}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono">
+                  <td className={`px-4 py-2 text-right font-mono ${excludedClass}`}>
                     {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
                       ? `${(Number(item.quantity) * 100).toFixed(0)}%`
                       : `$${Number(item.unit_price).toLocaleString()}`}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono">{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}</td>
-                  <td className={`px-4 py-2 text-right font-mono font-bold ${isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
+                  <td className={`px-4 py-2 text-right font-mono ${excludedClass}`}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}</td>
+                  <td className={`px-4 py-2 text-right font-mono font-bold ${excludedClass} ${isExcluded ? 'text-gray-400' : isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
                     {isDeduction ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2 text-gray-500 text-xs">{item.remarks || '-'}</td>
+                  <td className={`px-4 py-2 text-gray-500 text-xs ${excludedClass}`}>{item.remarks || '-'}</td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={3} className="px-4 py-2 text-right font-bold">應收總額</td>
+              <td colSpan={4} className="px-4 py-2 text-right font-bold">應收總額</td>
               <td className="px-4 py-2 text-right font-mono font-bold text-primary-600">${Number(payroll.gross_amount).toLocaleString()}</td>
               <td></td>
             </tr>
@@ -2032,7 +2077,13 @@ export default function PayrollDetailPage() {
         )}
 
         {!isPreparing && items.length > 0 && (
-          <PayrollItemsSummary items={items} payroll={payroll} />
+          <PayrollItemsSummary
+            items={items}
+            payroll={payroll}
+            payrollId={payroll.id}
+            isEditable={isDraft}
+            onSaved={loadData}
+          />
         )}
       </div>
 

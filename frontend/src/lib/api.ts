@@ -459,6 +459,10 @@ export const payrollApi = {
   remove: (id: number) => api.delete(`/payroll/${id}`),
   summary: (params?: any) => api.get("/payroll/summary", { params }),
 
+  // ── 薪酬項目管理 ──
+  updateItem: (payrollId: number, itemId: number, data: any) =>
+    api.put(`/payroll/${payrollId}/items/${itemId}`, data),
+
   // ── 糧單工作記錄管理 ──
   updateWorkLog: (payrollId: number, pwlId: number, data: any) =>
     api.put(`/payroll/${payrollId}/work-logs/${pwlId}`, data),

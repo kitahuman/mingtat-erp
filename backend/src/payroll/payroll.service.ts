@@ -168,11 +168,12 @@ export class PayrollService {
 
     // Calculate gross_amount (sum of positive items) and deduction_total (sum of negative items)
     const items = payroll.items || [];
-    const grossAmount = items.reduce((sum: number, item: any) => {
+    const activeItems = items.filter((item: any) => !item.payroll_item_excluded);
+    const grossAmount = activeItems.reduce((sum: number, item: any) => {
       const amt = Number(item.amount);
       return sum + (amt > 0 ? amt : 0);
     }, 0);
-    const deductionTotal = items.reduce((sum: number, item: any) => {
+    const deductionTotal = activeItems.reduce((sum: number, item: any) => {
       const amt = Number(item.amount);
       return sum + (amt < 0 ? amt : 0);
     }, 0);
@@ -202,6 +203,48 @@ export class PayrollService {
         0,
       ),
     };
+  }
+
+
+  private buildPayrollItemSignature(item: any): string {
+    return [item.item_type || '', item.item_name || '', item.sort_order ?? ''].join('|');
+  }
+
+  private async rebuildPayrollTotalsFromItems(payrollId: number) {
+    const [items, adjustments] = await Promise.all([
+      this.prisma.payrollItem.findMany({ where: { payroll_id: payrollId } }),
+      this.prisma.payrollAdjustment.findMany({ where: { payroll_id: payrollId } }),
+    ]);
+    const activeItems = items.filter((item: any) => !item.payroll_item_excluded);
+    const sumByType = (type: string) => activeItems
+      .filter((item: any) => item.item_type === type)
+      .reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+    const baseAmount = sumByType('base_salary');
+    const allowanceTotal = sumByType('allowance');
+    const otTotal = sumByType('ot');
+    const commissionTotal = sumByType('commission');
+    const mpfDeduction = Math.abs(sumByType('mpf_deduction'));
+    const adjustmentTotal = adjustments.reduce(
+      (sum: number, adj: any) => sum + Number(adj.amount),
+      0,
+    );
+    const netAmount = activeItems.reduce(
+      (sum: number, item: any) => sum + Number(item.amount),
+      0,
+    ) + adjustmentTotal;
+
+    await this.prisma.payroll.update({
+      where: { id: payrollId },
+      data: {
+        base_amount: baseAmount,
+        allowance_total: allowanceTotal,
+        ot_total: otTotal,
+        commission_total: commissionTotal,
+        mpf_deduction: mpfDeduction,
+        adjustment_total: adjustmentTotal,
+        net_amount: netAmount,
+      },
+    });
   }
 
   /**
@@ -713,13 +756,19 @@ export class PayrollService {
       holidayDatesForCalc,
       excludedBadgeKeysFinalize,
     );
-    // Update payroll items
+    // Update payroll items; preserve manually excluded items by stable item signature.
+    const previouslyExcludedItemKeys = new Set(
+      ((payroll as any).items || [])
+        .filter((item: any) => item.payroll_item_excluded)
+        .map((item: any) => this.buildPayrollItemSignature(item)),
+    );
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
     for (const item of calc.items) {
       await this.prisma.payrollItem.create({
         data: {
           ...item,
           payroll_id: id,
+          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(this.buildPayrollItemSignature(item)),
         },
       });
     }
@@ -1694,13 +1743,19 @@ export class PayrollService {
       0,
     );
 
-    // Update payroll items
+    // Update payroll items; preserve manually excluded items by stable item signature.
+    const previouslyExcludedItemKeys = new Set(
+      ((payroll as any).items || [])
+        .filter((item: any) => item.payroll_item_excluded)
+        .map((item: any) => this.buildPayrollItemSignature(item)),
+    );
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
     for (const item of calc.items) {
       await this.prisma.payrollItem.create({
         data: {
           ...item,
           payroll_id: id,
+          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(this.buildPayrollItemSignature(item)),
         },
       });
     }
@@ -1724,8 +1779,34 @@ export class PayrollService {
         net_amount: calc.net_amount + adjustmentTotal,
       },
     });
+    await this.rebuildPayrollTotalsFromItems(id);
 
     return this.findOne(id);
+  }
+
+
+  async updatePayrollItem(payrollId: number, itemId: number, body: any) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單項目');
+    }
+
+    const item = await this.prisma.payrollItem.findFirst({
+      where: { id: itemId, payroll_id: payrollId },
+    });
+    if (!item) throw new NotFoundException('Payroll item not found');
+
+    await this.prisma.payrollItem.update({
+      where: { id: itemId },
+      data: {
+        payroll_item_excluded: Boolean(body.payroll_item_excluded),
+      },
+    });
+    await this.rebuildPayrollTotalsFromItems(payrollId);
+    return this.findOne(payrollId);
   }
 
   // ── 編輯糧單工作記錄（只改糧單記錄）──────────────────────────

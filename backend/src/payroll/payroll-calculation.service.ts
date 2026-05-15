@@ -16,6 +16,23 @@ export function toDateStr(d: Date | string | null | undefined): string {
   return d.toISOString().slice(0, 10);
 }
 
+function isAgeAtLeastOn(
+  dateOfBirth: Date | string | null | undefined,
+  targetDate: Date | string | null | undefined,
+  ageThreshold: number,
+): boolean {
+  if (!dateOfBirth || !targetDate) return false;
+  const dob = new Date(dateOfBirth);
+  const target = new Date(targetDate);
+  if (isNaN(dob.getTime()) || isNaN(target.getTime())) return false;
+  let age = target.getFullYear() - dob.getFullYear();
+  const monthDiff = target.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && target.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return age >= ageThreshold;
+}
+
 /**
  * PayrollCalculationService
  *
@@ -336,6 +353,7 @@ export class PayrollCalculationService {
     let mpfDeduction = 0;
     let mpfEmployer = 0;
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
+    const isMpfAgeExempt = isAgeAtLeastOn(emp?.date_of_birth, dateTo, 65);
 
     const MPF_INDUSTRY_TIERS = [
       { min: 0, max: 280, employer: 10, employee: 0 },
@@ -349,7 +367,18 @@ export class PayrollCalculationService {
       { min: 950, max: Infinity, employer: 50, employee: 50 },
     ];
 
-    if (mpfPlan === 'industry') {
+    if (isMpfAgeExempt) {
+      items.push({
+        item_type: 'mpf_deduction',
+        item_name: '強積金（65歲或以上免供）',
+        unit_price: 0,
+        quantity: 0,
+        amount: 0,
+        remarks: '計糧期完結日已滿65歲，僱員扣款及僱主供款均為$0',
+        payroll_item_excluded: true,
+        sort_order: sortOrder++,
+      });
+    } else if (mpfPlan === 'industry') {
       const dayIncomeMap = new Map<
         string,
         { dayIncome: number; nightIncome: number; hasDay: boolean; hasNight: boolean }

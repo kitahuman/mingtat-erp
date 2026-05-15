@@ -48,6 +48,11 @@ export class UpdatePayrollWorkLogDto {
   @IsOptional() @Type(() => Number) @IsNumber() matched_rate?: number;
 }
 
+
+export class UpdatePayrollItemDto {
+  @IsOptional() @IsBoolean() payroll_item_excluded?: boolean;
+}
+
 export class ExcludeBadgeDto {
   @IsString()
   date: string;

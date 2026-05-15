@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PayrollService } from './payroll.service';
-import { UpdatePayrollDto, UpdatePayrollWorkLogDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
+import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
 import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
 
@@ -69,6 +69,16 @@ export class PayrollController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdatePayrollDto, @Request() req: any) {
     return this.payrollService.update(+id, body, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  }
+
+  // 更新薪酬項目（例如 excluded checkbox）
+  @Put(':id/items/:itemId')
+  updatePayrollItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: UpdatePayrollItemDto,
+  ) {
+    return this.payrollService.updatePayrollItem(+id, +itemId, body);
   }
 
   @Post('bulk/confirm')
