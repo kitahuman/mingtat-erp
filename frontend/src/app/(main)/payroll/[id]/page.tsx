@@ -113,7 +113,8 @@ function PayrollItemsSummary({
 
   if (!items || items.length === 0) return null;
 
-  const canEditExcluded = isEditable && !isReadOnly;
+  const readOnlyMode = isReadOnly('payroll');
+  const canEditExcluded = isEditable && !readOnlyMode;
   const handleToggleExcluded = async (item: any, checked: boolean) => {
     setSavingItemId(item.id);
     try {
@@ -172,7 +173,7 @@ function PayrollItemsSummary({
                       disabled={!canEditExcluded || savingItemId === item.id}
                       onChange={(e) => handleToggleExcluded(item, e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      title={canEditExcluded ? '勾選後此薪酬項目不計入糧單金額' : '只有草稿或準備中糧單可編輯'}
+                      title={canEditExcluded ? '勾選後此薪酬項目不計入糧單金額' : readOnlyMode ? '目前帳號沒有此頁面的編輯權限' : '只有草稿或準備中糧單可編輯'}
                     />
                   </td>
                   <td className={`px-4 py-2 ${excludedClass}`}>
