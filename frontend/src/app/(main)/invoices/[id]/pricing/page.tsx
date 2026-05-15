@@ -5,8 +5,14 @@ import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import DateInput from "@/components/DateInput";
-import { fieldOptionsApi, invoicesApi } from "@/lib/api";
+import { fieldOptionsApi, invoicesApi, companiesApi, partnersApi, contractsApi, quotationsApi, employeesApi, vehiclesApi, machineryApi, subconFleetDriversApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import ColumnFilter from "@/components/ColumnFilter";
+import ColumnCustomizer from "@/components/ColumnCustomizer";
+import { useColumnConfig } from "@/hooks/useColumnConfig";
+import { fmtDate } from "@/lib/dateUtils";
+import EditableCell from "../../../work-logs/EditableCell";
+import { STATUS_OPTIONS, getStatusLabel } from "../../../work-logs/constants";
 
 const fmtMoney = (value: unknown) =>
   `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,6 +38,7 @@ type PivotDimension =
 
 type PivotValueType = "count" | "quantity_sum" | "ot_sum" | "mid_shift_count";
 type QuickRange = "week" | "month" | "lastMonth" | "quarter";
+type SortOrder = 'ASC' | 'DESC';
 
 interface Option {
   value: string;
@@ -85,6 +92,7 @@ interface PricingDraftPayload {
   };
   row_prices?: Record<string, PivotRowPrice>;
   draft_items?: InvoiceItemDraft[];
+  work_log_drafts?: Record<number, Record<string, any>>;
 }
 
 interface PivotAxisItem {
@@ -160,6 +168,48 @@ interface WorkLogFilterOptions {
   serviceTypes: Option[];
 }
 
+const COLUMNS = [
+  { key: 'status',           label: '狀態',      width: 'w-20' },
+  { key: 'scheduled_date',   label: '約定日期',  width: 'w-28' },
+  { key: 'service_type',     label: '服務類型',  width: 'w-28' },
+  { key: 'company',          label: '公司',      width: 'w-24' },
+  { key: 'client',           label: '客戶公司',  width: 'w-28' },
+  { key: 'quotation',        label: '報價單',    width: 'w-32' },
+  { key: 'client_contract_no', label: '客戶合約', width: 'w-32' },
+  { key: 'contract',         label: '合約',      width: 'w-32' },
+  { key: 'employee',         label: '員工',      width: 'w-24' },
+  { key: 'tonnage',          label: '噸數',      width: 'w-16' },
+  { key: 'machine_type',     label: '機種',      width: 'w-24' },
+  { key: 'equipment_number', label: '機號',      width: 'w-28' },
+  { key: 'day_night',        label: '日夜班',    width: 'w-14' },
+  { key: 'start_location',   label: '起點',      width: 'w-40' },
+  { key: 'end_location',     label: '終點',      width: 'w-40' },
+  { key: 'quantity',         label: '數量',      width: 'w-20' },
+  { key: 'unit',             label: '工資單位',  width: 'w-16' },
+  { key: 'ot_quantity',      label: 'OT數量',    width: 'w-24' },
+  { key: 'ot_unit',          label: 'OT單位',    width: 'w-16' },
+  { key: 'is_mid_shift',     label: '中直',      width: 'w-16' },
+  { key: 'is_confirmed',     label: '已確認',    width: 'w-20' },
+];
+
+const colKeyToField: Record<string, string> = {
+  company: 'company_id',
+  client: 'client_id',
+  quotation: 'quotation_id',
+  contract: 'contract_id',
+  employee: 'employee_id',
+};
+
+const normalizeDateValue = (value: any): any => {
+  if (!value) return value ?? null;
+  return typeof value === 'string' ? value.split('T')[0] : value;
+};
+
+const normalizeComparable = (value: any): any => {
+  if (value === undefined || value === '') return null;
+  return value;
+};
+
 const DIMENSION_OPTIONS: Array<{ value: PivotDimension; label: string }> = [
   { value: "none", label: "（無）— 空置" },
   { value: "employee", label: "員工" },
@@ -185,10 +235,6 @@ const VALUE_OPTIONS: Array<{ value: PivotValueType; label: string }> = [
   { value: "mid_shift_count", label: "中直次數" },
 ];
 
-const STATUS_OPTIONS: Option[] = [
-  { value: "confirmed", label: "已確認" },
-  { value: "unconfirmed", label: "未確認" },
-];
 
 function normalizeText(value: unknown): string | null {
   if (value === null || value === undefined) return null;

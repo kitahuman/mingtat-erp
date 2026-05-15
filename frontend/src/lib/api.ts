@@ -1072,6 +1072,7 @@ export const invoicesApi = {
       pivot_config: Record<string, unknown>;
       row_prices: Record<string, unknown>;
       draft_items: any[];
+      work_log_drafts?: Record<number, Record<string, any>>;
     },
   ) => api.put(`/invoices/${id}/pricing-draft`, data),
   matchRates: (id: number, data: { groups: any[] }) =>
