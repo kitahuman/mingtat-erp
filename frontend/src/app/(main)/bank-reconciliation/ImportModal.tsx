@@ -26,6 +26,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [bankName, setBankName] = useState('');
   const [statementPeriod, setStatementPeriod] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
@@ -45,6 +46,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     setParsedRows([]);
     setBankName('');
     setStatementPeriod('');
+    setOpeningBalance(null);
     setError('');
     setImportResult(null);
     setIdentifiedCompanyName('');
@@ -171,6 +173,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
       }
       setBankName(data.bank_name || '');
       setStatementPeriod(data.statement_period || '');
+      setOpeningBalance(data.opening_balance ?? null);
 
       // Set AI-identified company and account
       if (data.identified_company_name) setIdentifiedCompanyName(data.identified_company_name);
@@ -198,7 +201,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
   };
 
   // ── Import ───────────────────────────────────────────────────
-  const handleImport = async () => {
+  const handleImport = async (confirmBalanceMismatch = false) => {
     const selected = parsedRows.filter(r => r._selected);
     if (selected.length === 0) { setError('請至少選擇一筆交易記錄'); return; }
     setStep('importing');
@@ -213,7 +216,26 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
         balance: r.balance ?? null,
       }));
       const source = mode === 'pdf' ? 'pdf' : 'csv';
-      const res = await bankReconciliationApi.importTransactions(bankAccountId, rows, source);
+      const res = await bankReconciliationApi.importTransactions(
+        bankAccountId,
+        rows,
+        source,
+        openingBalance,
+        confirmBalanceMismatch,
+      );
+
+      if (res.data?.balanceMismatch) {
+        setStep('preview');
+        setLoading(false);
+        const actual = fmtMoney(res.data.actualBalance);
+        const expected = fmtMoney(res.data.expectedBalance);
+        const ok = window.confirm(`期初結餘（$${actual}）與上月期末結餘（$${expected}）不符，是否確認匯入？`);
+        if (ok) {
+          await handleImport(true);
+        }
+        return;
+      }
+
       setImportResult(res.data);
       setStep('done');
       onSuccess();
@@ -400,10 +422,11 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
         {step === 'preview' && (
           <>
             {/* Bank info banner (PDF only) */}
-            {(bankName || statementPeriod) && (
+            {(bankName || statementPeriod || openingBalance != null) && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex flex-wrap items-center gap-4 text-sm">
                 {bankName && <span><strong>銀行：</strong>{bankName}</span>}
                 {statementPeriod && <span><strong>對帳期間：</strong>{statementPeriod}</span>}
+                {openingBalance != null && <span><strong>B/F BALANCE：</strong>${fmtMoney(openingBalance)}</span>}
                 <span className="ml-auto text-blue-600 text-xs">AI 辨識結果，請核對後確認匯入</span>
               </div>
             )}
@@ -491,7 +514,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                 重新上傳
               </button>
               <button
-                onClick={handleImport}
+                onClick={() => handleImport(false)}
                 disabled={selectedCount === 0}
                 className="px-6 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >

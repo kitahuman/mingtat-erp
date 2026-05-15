@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BankAccountsService {
@@ -33,6 +34,7 @@ export class BankAccountsService {
     account_no: string;
     currency?: string;
     company_id?: number;
+    opening_balance?: number | string | null;
     remarks?: string;
   }) {
     return this.prisma.bankAccount.create({
@@ -42,6 +44,7 @@ export class BankAccountsService {
         account_no: data.account_no,
         currency: data.currency || 'HKD',
         company_id: data.company_id || null,
+        opening_balance: data.opening_balance != null && data.opening_balance !== '' ? new Prisma.Decimal(data.opening_balance) : null,
         remarks: data.remarks || null,
       },
       include: {
@@ -58,6 +61,7 @@ export class BankAccountsService {
       account_no?: string;
       currency?: string;
       company_id?: number;
+      opening_balance?: number | string | null;
       is_active?: boolean;
       remarks?: string;
     },
@@ -67,6 +71,11 @@ export class BankAccountsService {
     // Allow explicitly setting company_id to null
     if ('company_id' in data) {
       updateData.company_id = data.company_id || null;
+    }
+    if ('opening_balance' in data) {
+      updateData.opening_balance = data.opening_balance != null && data.opening_balance !== ''
+        ? new Prisma.Decimal(data.opening_balance)
+        : null;
     }
     return this.prisma.bankAccount.update({
       where: { id },
@@ -99,6 +108,7 @@ export class BankAccountsService {
         bank_name: true,
         account_no: true,
         currency: true,
+        opening_balance: true,
         company_id: true,
         company: { select: { id: true, name: true } },
       },

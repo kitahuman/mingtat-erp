@@ -7,6 +7,7 @@ export class CreateBankAccountDto {
   @IsString() account_no: string;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() opening_balance?: number;
   @IsOptional() @IsBoolean() is_active?: boolean;
   @IsOptional() @IsString() remarks?: string;
 }
@@ -17,6 +18,7 @@ export class UpdateBankAccountDto {
   @IsOptional() @IsString() account_no?: string;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() opening_balance?: number;
   @IsOptional() @IsBoolean() is_active?: boolean;
   @IsOptional() @IsString() remarks?: string;
 }

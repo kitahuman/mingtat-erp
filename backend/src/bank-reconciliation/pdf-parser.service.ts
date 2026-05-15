@@ -21,6 +21,7 @@ export interface PdfParseResult {
   account_no?: string;
   statement_date?: string;
   statement_period?: string;  // e.g. "2026年2月1日 至 2026年2月28日"
+  opening_balance?: number | null; // B/F BALANCE 承前結餘
   transactions: ParsedTransaction[];
   raw_text?: string;
   // AI-identified company and account info
@@ -92,7 +93,8 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 4. **OCBC 銀行（華僑銀行）**：日期格式 DDMMMYY（如 11FEB26），欄位：DATE, PARTICULARS, WITHDRAWAL, DEPOSIT, BALANCE
 
 重要規則：
-- 忽略 B/F BALANCE（承前結餘）、C/F BALANCE（結餘）、TRANSACTION TOTAL 等非交易行
+- 忽略 C/F BALANCE（結餘）、TRANSACTION TOTAL 等非交易行
+- B/F BALANCE（承前結餘）不作為交易行，但必須提取其金額作為 opening_balance
 - 忽略頁眉、頁腳、廣告、注意事項等非交易內容
 - 存入（Deposit/存入）金額為正數，提取（Withdrawal/提取）金額為負數
 - 支票號碼（如 CHEQUE 312928、CHQ NO.001618、CLEARING CHEQUE 200331）提取為 reference_no
@@ -106,6 +108,7 @@ ${identificationContext}
   "account_no": "帳號（如有）",
   "statement_date": "月結單截止日期 YYYY-MM-DD（如有）",
   "statement_period": "月結單期間（如 2026年2月1日 至 2026年2月28日）",
+  "opening_balance": 數字（B/F BALANCE / 承前結餘金額；如沒有則 null）,
   ${companies.length > 0 || bankAccounts.length > 0 ? `"identified_company_name": "識別到的公司名稱或 null",
   "identified_company_id": 數字或null,
   "identified_bank_account_id": 數字或null,
@@ -171,6 +174,8 @@ ${identificationContext}
         const n = typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : Number(v);
         return isNaN(n) ? undefined : n;
       };
+
+      parsed.opening_balance = cleanNum(parsed.opening_balance) ?? null;
 
       parsed.transactions = parsed.transactions
         .filter(tx => tx.date && (tx.amount !== undefined || tx.withdrawals !== undefined || tx.deposits !== undefined))

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { bankAccountsApi, companiesApi } from '@/lib/api';
+import { bankAccountsApi, companiesApi, bankReconciliationApi } from '@/lib/api';
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
@@ -42,6 +42,19 @@ export default function BankAccountsPage() {
     return map;
   }, [companies]);
 
+  const fmtMoney = (val: any) => Number(val || 0).toLocaleString('en-HK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const handleRecalculate = async (id: number) => {
+    if (isReadOnly() || !id) return;
+    if (!confirm('確定要根據此帳戶的期初結餘重新計算所有月結單交易結餘嗎？')) return;
+    try {
+      const res = await bankReconciliationApi.syncBalances(id);
+      alert(`已重新計算 ${res.data.updated ?? 0} 筆交易，期末結餘：$${fmtMoney(res.data.endingBalance)}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '重新計算結餘失敗');
+    }
+  };
+
   const columns: InlineColumn[] = [
     { key: 'bank_name', label: '銀行名稱', editable: true },
     { key: 'account_name', label: '帳戶名稱', editable: true },
@@ -56,6 +69,13 @@ export default function BankAccountsPage() {
         { label: 'USD', value: 'USD' },
         { label: 'RMB', value: 'RMB' },
       ] 
+    },
+    {
+      key: 'opening_balance',
+      label: '期初結餘 (B/F)',
+      editable: true,
+      editType: 'number',
+      render: (val) => <span className="font-mono">${fmtMoney(val)}</span>,
     },
     {
       key: 'company_id',
@@ -85,16 +105,36 @@ export default function BankAccountsPage() {
       render: (val) => val ? <span className="text-green-600 font-medium">啟用</span> : <span className="text-red-600 font-medium">停用</span>
     },
     { key: 'remarks', label: '備註', editable: true },
+    {
+      key: '_recalculate_balance',
+      label: '結餘重算',
+      render: (_val: any, row: any) => (
+        <button
+          type="button"
+          disabled={isReadOnly() || row.id === 0}
+          onClick={(e) => { e.stopPropagation(); handleRecalculate(row.id); }}
+          className="px-2 py-1 text-xs border rounded text-blue-700 border-blue-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          重新計算結餘
+        </button>
+      ),
+    },
   ];
 
   const handleSave = async (id: number, row: any) => {
     try {
       const payload = { ...row };
       // Convert company_id: empty string → null, string → number
+      delete payload._recalculate_balance;
       if (payload.company_id === '' || payload.company_id === null || payload.company_id === undefined) {
         payload.company_id = null;
       } else {
         payload.company_id = Number(payload.company_id);
+      }
+      if (payload.opening_balance === '' || payload.opening_balance === null || payload.opening_balance === undefined) {
+        payload.opening_balance = null;
+      } else {
+        payload.opening_balance = Number(payload.opening_balance);
       }
       if (id === 0) {
         await bankAccountsApi.create(payload);
@@ -124,7 +164,7 @@ export default function BankAccountsPage() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">銀行帳戶管理</h1>
           <button 
-            onClick={() => setData([{ id: 0, bank_name: '', account_name: '', account_no: '', currency: 'HKD', company_id: '', is_active: true }, ...data])}
+            onClick={() => setData([{ id: 0, bank_name: '', account_name: '', account_no: '', currency: 'HKD', opening_balance: 0, company_id: '', is_active: true }, ...data])}
             className="btn-primary"
           >
             + 新增帳戶

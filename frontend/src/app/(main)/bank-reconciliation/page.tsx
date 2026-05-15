@@ -22,12 +22,10 @@ export default function BankReconciliationPage() {
 
   // ── Data state ──
   const [summary, setSummary] = useState<any>(null);
-  const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [openingBalance, setOpeningBalance] = useState<number>(0);
   const limit = 50;
 
   // ── Modal state ──
@@ -129,7 +127,7 @@ export default function BankReconciliationPage() {
         bankReconciliationApi.getSummary(selectedAccountId, Object.keys(summaryParams).length > 0 ? summaryParams : undefined),
       ]);
       const items = txRes.data.items;
-      setRawTransactions(items);
+      setTransactions(items);
       setTotal(txRes.data.total);
       setSummary(summaryRes.data);
     } catch (err) {
@@ -300,42 +298,9 @@ export default function BankReconciliationPage() {
     }
   };
 
-  // ── Balance Recalculation ──
-  const recalculateBalances = useCallback((txs: any[], startBalance: number) => {
-    // We need to calculate chronologically: from oldest to newest.
-    // The current transactions are sorted by date desc, id desc.
-    const sorted = [...txs].sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      if (dateA !== dateB) return dateA - dateB;
-      return a.id - b.id;
-    });
-
-    let currentBalance = startBalance;
-    const idToBalance: Record<number, number> = {};
-
-    sorted.forEach(tx => {
-      currentBalance += Number(tx.amount);
-      idToBalance[tx.id] = currentBalance;
-    });
-
-    return txs.map(tx => ({
-      ...tx,
-      balance: idToBalance[tx.id]
-    }));
-  }, []);
-
-  // Update transactions when openingBalance or raw transactions change
-  useEffect(() => {
-    if (rawTransactions.length > 0) {
-      const updated = recalculateBalances(rawTransactions, openingBalance);
-      setTransactions(updated);
-    } else {
-      setTransactions([]);
-    }
-  }, [openingBalance, rawTransactions, recalculateBalances]);
-
   // ── Helpers ──
+  const selectedAccount = accounts.find((a: any) => a.id === selectedAccountId);
+
   const fmtMoney = (val: any) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const getMatchStatusIcon = (status: string) => {
@@ -468,7 +433,6 @@ export default function BankReconciliationPage() {
               onChange={(e) => {
                 setSelectedAccountId(Number(e.target.value));
                 setPage(1);
-                setOpeningBalance(0); // Reset opening balance when switching accounts
               }}
             >
               {filteredAccounts.length === 0 && <option value="">— 無帳戶 —</option>}
@@ -543,14 +507,9 @@ export default function BankReconciliationPage() {
             <div className="text-lg font-bold text-red-600">${fmtMoney(summary.total_withdrawals)}</div>
           </div>
           <div className="bg-white p-3 rounded-xl border shadow-sm border-l-4 border-l-blue-400">
-            <div className="text-xs text-gray-500 font-medium">期初餘額 (Opening)</div>
-            <input
-              type="number"
-              step="0.01"
-              className="w-full mt-1 text-lg font-bold border-none p-0 focus:ring-0"
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(Number(e.target.value))}
-            />
+            <div className="text-xs text-gray-500 font-medium">帳戶期初結餘 (B/F)</div>
+            <div className="mt-1 text-lg font-bold">${fmtMoney(selectedAccount?.opening_balance)}</div>
+            <div className="text-[10px] text-gray-400 mt-1">可於銀行帳戶設定修改並重新計算</div>
           </div>
         </div>
       )}

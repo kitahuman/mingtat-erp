@@ -120,8 +120,13 @@ export class BankReconciliationController {
     @Param('bankAccountId') bankAccountId: string,
     @Body('rows') rows: any[],
     @Body('source') source?: string,
+    @Body('opening_balance') openingBalance?: number | null,
+    @Body('confirm_balance_mismatch') confirmBalanceMismatch?: boolean,
   ) {
-    return this.service.importTransactions(+bankAccountId, rows, source || 'csv');
+    return this.service.importTransactions(+bankAccountId, rows, source || 'csv', {
+      opening_balance: openingBalance,
+      confirm_balance_mismatch: confirmBalanceMismatch,
+    });
   }
 
   /**

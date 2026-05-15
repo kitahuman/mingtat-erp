@@ -1117,8 +1117,19 @@ export const bankAccountsApi = {
 export const bankReconciliationApi = {
   findTransactions: (params: any) =>
     api.get("/bank-reconciliation/transactions", { params }),
-  importTransactions: (bankAccountId: number, rows: any[], source?: string) =>
-    api.post(`/bank-reconciliation/import/${bankAccountId}`, { rows, source }),
+  importTransactions: (
+    bankAccountId: number,
+    rows: any[],
+    source?: string,
+    openingBalance?: number | null,
+    confirmBalanceMismatch?: boolean,
+  ) =>
+    api.post(`/bank-reconciliation/import/${bankAccountId}`, {
+      rows,
+      source,
+      opening_balance: openingBalance,
+      confirm_balance_mismatch: confirmBalanceMismatch,
+    }),
   createTransaction: (data: any) =>
     api.post("/bank-reconciliation/transactions", data),
   updateTransaction: (id: number, data: any) =>

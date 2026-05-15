@@ -159,25 +159,21 @@ export class BankReconciliationService {
    * This ensures that any change in amount or date is reflected in all subsequent balances.
    */
   async syncBalances(bankAccountId: number) {
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: { id: true, opening_balance: true },
+    });
+    if (!bankAccount) throw new NotFoundException('銀行帳戶不存在');
+
     // Get all transactions for this account, sorted chronologically
     const txs = await this.prisma.bankTransaction.findMany({
       where: { bank_account_id: bankAccountId },
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
     });
 
-    if (txs.length === 0) return;
+    let currentBalance = bankAccount.opening_balance ?? new Prisma.Decimal(0);
+    const startBalance = currentBalance;
 
-    // We need a starting balance. If the first transaction had a balance,
-    // we can assume the opening balance was (balance - amount).
-    // But since we don't have an explicit "opening balance" field in the DB yet,
-    // we'll just re-calculate based on the existing sequence.
-    let currentBalance = new Prisma.Decimal(0);
-    
-    // If there are existing records, we might want to preserve the very first one's balance logic
-    // but for a full sync, we start from 0 or a known opening balance.
-    // Given the requirement "First line Balance = Opening Balance + Deposits - Withdrawals",
-    // and we don't have Opening Balance in DB, we'll assume it's 0 or based on the first record.
-    
     for (const tx of txs) {
       currentBalance = currentBalance.add(tx.amount);
       await this.prisma.bankTransaction.update({
@@ -185,6 +181,12 @@ export class BankReconciliationService {
         data: { balance: currentBalance },
       });
     }
+
+    return {
+      updated: txs.length,
+      openingBalance: startBalance.toNumber(),
+      endingBalance: currentBalance.toNumber(),
+    };
   }
 
   /** Delete a single transaction */
@@ -264,9 +266,52 @@ export class BankReconciliationService {
 
   // ── Import ──
 
-  async importTransactions(bankAccountId: number, rows: any[], source: string = 'csv') {
+  async importTransactions(
+    bankAccountId: number,
+    rows: any[],
+    source: string = 'csv',
+    options: { opening_balance?: number | string | null; confirm_balance_mismatch?: boolean } = {},
+  ) {
     const batchId = `import_${Date.now()}`;
-    const results = { imported: 0, skipped: 0 };
+    const results = { imported: 0, skipped: 0, balanceMismatch: false };
+
+    if (!rows || rows.length === 0) {
+      throw new BadRequestException('沒有可匯入的交易記錄');
+    }
+
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: { id: true, opening_balance: true },
+    });
+    if (!bankAccount) throw new NotFoundException('銀行帳戶不存在');
+
+    let parsedOpeningBalance: Prisma.Decimal | null = null;
+    if (options.opening_balance !== undefined && options.opening_balance !== null && options.opening_balance !== '') {
+      parsedOpeningBalance = new Prisma.Decimal(options.opening_balance);
+
+      const lastExistingTx = await this.prisma.bankTransaction.findFirst({
+        where: { bank_account_id: bankAccountId },
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        select: { balance: true },
+      });
+
+      if (lastExistingTx?.balance != null) {
+        const expectedBalance = new Prisma.Decimal(lastExistingTx.balance);
+        if (expectedBalance.minus(parsedOpeningBalance).abs().greaterThan(new Prisma.Decimal('0.01')) && !options.confirm_balance_mismatch) {
+          return {
+            ...results,
+            balanceMismatch: true,
+            expectedBalance: expectedBalance.toNumber(),
+            actualBalance: parsedOpeningBalance.toNumber(),
+          };
+        }
+      } else {
+        await this.prisma.bankAccount.update({
+          where: { id: bankAccountId },
+          data: { opening_balance: parsedOpeningBalance },
+        });
+      }
+    }
 
     for (const row of rows) {
       const amount = new Prisma.Decimal(row.amount);
@@ -296,7 +341,7 @@ export class BankReconciliationService {
           description,
           amount,
           debit_credit: amount.greaterThanOrEqualTo(0) ? 'credit' : 'debit',
-          balance: row.balance ? new Prisma.Decimal(row.balance) : null,
+          balance: row.balance != null ? new Prisma.Decimal(row.balance) : null,
           reference_no,
           import_batch: batchId,
           match_status: 'unmatched',

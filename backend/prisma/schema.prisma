@@ -2104,6 +2104,7 @@ model BankAccount {
   bank_name    String   @db.VarChar(200) // 銀行名稱
   account_no   String   @db.VarChar(100) // 帳號
   currency     String   @default("HKD") @db.VarChar(10) // 幣種
+  opening_balance Decimal? @db.Decimal(15, 2) // B/F BALANCE 期初結餘
   company_id   Int? // 所屬公司
   is_active    Boolean  @default(true)
   remarks      String?  @db.Text
