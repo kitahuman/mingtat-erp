@@ -8,7 +8,14 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentInService } from '../payment-in/payment-in.service';
 import { WhereClause } from '../common/types';
-import { InvoiceWorkLogDraftData, SaveInvoicePrepareDto, MatchInvoiceRatesDto, UpdateInvoiceItemsDto, InvoicePricingGroupDto } from './dto/create-invoice.dto';
+import {
+  InvoiceWorkLogDraftData,
+  SaveInvoicePrepareDto,
+  MatchInvoiceRatesDto,
+  UpdateInvoiceItemsDto,
+  InvoicePricingGroupDto,
+  SaveInvoicePricingDraftDto,
+} from './dto/create-invoice.dto';
 
 @Injectable()
 export class InvoicesService {
@@ -165,8 +172,19 @@ export class InvoicesService {
     const limit = Number(query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    const allowedSortFields = ['id', 'invoice_no', 'date', 'due_date', 'total_amount', 'paid_amount', 'status', 'created_at'];
-    const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
+    const allowedSortFields = [
+      'id',
+      'invoice_no',
+      'date',
+      'due_date',
+      'total_amount',
+      'paid_amount',
+      'status',
+      'created_at',
+    ];
+    const sortBy = allowedSortFields.includes(query.sortBy || '')
+      ? query.sortBy!
+      : 'date';
     const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
     const relationSortMap: Record<string, any> = {
       client: { client: { name: sortOrder } },
@@ -246,7 +264,11 @@ export class InvoicesService {
 
     const invoiceDate = new Date(dto.date);
     const clientId = dto.client_id ? Number(dto.client_id) : null;
-    const invoiceNo = await this.generateInvoiceNo(companyId, clientId, invoiceDate);
+    const invoiceNo = await this.generateInvoiceNo(
+      companyId,
+      clientId,
+      invoiceDate,
+    );
     const retentionRate = Number(dto.retention_rate) || 0;
     const otherCharges: { name: string; amount: number }[] = Array.isArray(
       dto.other_charges,
@@ -459,7 +481,8 @@ export class InvoicesService {
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
     const companyChanged =
-      dto.company_id !== undefined && Number(dto.company_id) !== existing.company_id;
+      dto.company_id !== undefined &&
+      Number(dto.company_id) !== existing.company_id;
     const clientChanged =
       dto.client_id !== undefined &&
       (dto.client_id ? Number(dto.client_id) : null) !== existing.client_id;
@@ -469,14 +492,17 @@ export class InvoicesService {
 
     if (companyChanged || clientChanged || dateChanged) {
       const newCompanyId =
-        dto.company_id !== undefined ? Number(dto.company_id) : existing.company_id;
+        dto.company_id !== undefined
+          ? Number(dto.company_id)
+          : existing.company_id;
       const newClientId =
         dto.client_id !== undefined
           ? dto.client_id
             ? Number(dto.client_id)
             : null
           : existing.client_id;
-      const newDate = dto.date !== undefined ? new Date(dto.date) : existing.date;
+      const newDate =
+        dto.date !== undefined ? new Date(dto.date) : existing.date;
       data.invoice_no = await this.generateInvoiceNo(
         newCompanyId,
         newClientId,
@@ -588,9 +614,12 @@ export class InvoicesService {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
-    const uniqueIds = [...new Set((workLogIds || []).map(Number).filter(Boolean))];
+    const uniqueIds = [
+      ...new Set((workLogIds || []).map(Number).filter(Boolean)),
+    ];
     if (uniqueIds.length === 0) {
       throw new BadRequestException('請選擇至少一筆工作紀錄');
     }
@@ -616,7 +645,9 @@ export class InvoicesService {
   }
 
   async unlinkWorkLogs(invoiceId: number, workLogIds: number[]) {
-    const uniqueIds = [...new Set((workLogIds || []).map(Number).filter(Boolean))];
+    const uniqueIds = [
+      ...new Set((workLogIds || []).map(Number).filter(Boolean)),
+    ];
     if (uniqueIds.length === 0) {
       throw new BadRequestException('請選擇至少一筆工作紀錄');
     }
@@ -636,7 +667,8 @@ export class InvoicesService {
       where: { id: invoiceId },
       select: { id: true, deleted_at: true },
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const links = await this.prisma.invoiceWorkLog.findMany({
       where: { invoice_id: invoiceId },
@@ -660,12 +692,21 @@ export class InvoicesService {
     return Object.keys(draftData || {}).length === 0;
   }
 
+  private toJsonInput(
+    value: unknown,
+    fallback: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    if (value === null || value === undefined) return fallback;
+    return value as Prisma.InputJsonValue;
+  }
+
   async getPrepare(invoiceId: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
       select: { id: true, invoice_no: true, deleted_at: true },
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const [links, drafts] = await Promise.all([
       this.prisma.invoiceWorkLog.findMany({
@@ -701,10 +742,15 @@ export class InvoicesService {
       where: { id: invoiceId },
       select: { id: true, deleted_at: true },
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const drafts = dto.drafts || [];
-    const uniqueWorkLogIds = [...new Set(drafts.map((draft) => Number(draft.work_log_id)).filter(Boolean))];
+    const uniqueWorkLogIds = [
+      ...new Set(
+        drafts.map((draft) => Number(draft.work_log_id)).filter(Boolean),
+      ),
+    ];
     if (uniqueWorkLogIds.length === 0) {
       return { saved: 0, deleted: 0 };
     }
@@ -714,9 +760,13 @@ export class InvoicesService {
       select: { work_log_id: true },
     });
     const linkedIds = new Set(linkedWorkLogs.map((link) => link.work_log_id));
-    const invalidIds = uniqueWorkLogIds.filter((workLogId) => !linkedIds.has(workLogId));
+    const invalidIds = uniqueWorkLogIds.filter(
+      (workLogId) => !linkedIds.has(workLogId),
+    );
     if (invalidIds.length > 0) {
-      throw new BadRequestException(`工作紀錄未連結至此發票: ${invalidIds.join(', ')}`);
+      throw new BadRequestException(
+        `工作紀錄未連結至此發票: ${invalidIds.join(', ')}`,
+      );
     }
 
     let saved = 0;
@@ -762,7 +812,8 @@ export class InvoicesService {
       where: { id: invoiceId },
       select: { id: true, deleted_at: true },
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const result = await this.prisma.invoiceWorkLogDraft.deleteMany({
       where: { invoice_id: invoiceId },
@@ -780,28 +831,40 @@ export class InvoicesService {
     return this.normalizePricingText(value) !== null;
   }
 
-  private rateCardTextMatches(rateCardValue: unknown, groupValue: unknown): boolean {
+  private rateCardTextMatches(
+    rateCardValue: unknown,
+    groupValue: unknown,
+  ): boolean {
     const cardText = this.normalizePricingText(rateCardValue);
     const groupText = this.normalizePricingText(groupValue);
     if (!cardText || !groupText) return true;
     return cardText === groupText;
   }
 
-  private rateCardNumberMatches(rateCardValue: unknown, groupValue: unknown): boolean {
+  private rateCardNumberMatches(
+    rateCardValue: unknown,
+    groupValue: unknown,
+  ): boolean {
     const cardNumber = Number(rateCardValue) || 0;
     const groupNumber = Number(groupValue) || 0;
     if (!cardNumber || !groupNumber) return true;
     return cardNumber === groupNumber;
   }
 
-  private getPricingMatchDate(group: InvoicePricingGroupDto, invoiceDate: Date): Date {
+  private getPricingMatchDate(
+    group: InvoicePricingGroupDto,
+    invoiceDate: Date,
+  ): Date {
     const raw = this.normalizePricingText(group.work_date) || invoiceDate;
     const date = raw instanceof Date ? raw : new Date(raw);
     return Number.isNaN(date.getTime()) ? invoiceDate : date;
   }
 
   private mergeDraftIntoWorkLog(workLog: any, draftData: unknown) {
-    const draft = draftData && typeof draftData === 'object' ? (draftData as Record<string, unknown>) : {};
+    const draft =
+      draftData && typeof draftData === 'object'
+        ? (draftData as Record<string, unknown>)
+        : {};
     return {
       ...workLog,
       ...draft,
@@ -810,8 +873,14 @@ export class InvoicesService {
     };
   }
 
-  private resolveInvoiceRate(card: any, dayNight: unknown): { unit_price: number; unit: string } {
-    const label = this.normalizePricingText(dayNight) || this.normalizePricingText(card.day_night) || '';
+  private resolveInvoiceRate(
+    card: any,
+    dayNight: unknown,
+  ): { unit_price: number; unit: string } {
+    const label =
+      this.normalizePricingText(dayNight) ||
+      this.normalizePricingText(card.day_night) ||
+      '';
     if (label.includes('夜') || label.toLowerCase().includes('night')) {
       return {
         unit_price: Number(card.night_rate) || Number(card.rate) || 0,
@@ -831,14 +900,20 @@ export class InvoicesService {
   }
 
   private buildRateMatchItemName(group: InvoicePricingGroupDto): string {
-    const parts = [group.tonnage, group.machine_type, group.day_night].map((value) => this.normalizePricingText(value)).filter(Boolean);
+    const parts = [group.tonnage, group.machine_type, group.day_night]
+      .map((value) => this.normalizePricingText(value))
+      .filter(Boolean);
     const origin = this.normalizePricingText(group.origin);
     const destination = this.normalizePricingText(group.destination);
-    if (origin || destination) parts.push(`${origin || '—'}→${destination || '—'}`);
+    if (origin || destination)
+      parts.push(`${origin || '—'}→${destination || '—'}`);
     return parts.join(' ') || '發票項目';
   }
 
-  private async matchSingleRateCard(group: InvoicePricingGroupDto, invoice: any) {
+  private async matchSingleRateCard(
+    group: InvoicePricingGroupDto,
+    invoice: any,
+  ) {
     const companyId = Number(group.company_id || invoice.company_id) || null;
     const clientId = Number(group.client_id || invoice.client_id) || null;
     if (!companyId || !clientId) return null;
@@ -851,34 +926,43 @@ export class InvoicesService {
         deleted_at: null,
         company_id: companyId,
         client_id: clientId,
-        OR: [
-          { effective_date: null },
-          { effective_date: { lte: matchDate } },
-        ],
+        OR: [{ effective_date: null }, { effective_date: { lte: matchDate } }],
         AND: [
           {
-            OR: [
-              { expiry_date: null },
-              { expiry_date: { gte: matchDate } },
-            ],
+            OR: [{ expiry_date: null }, { expiry_date: { gte: matchDate } }],
           },
         ],
       },
-      orderBy: [
-        { effective_date: 'desc' },
-        { id: 'desc' },
-      ],
+      orderBy: [{ effective_date: 'desc' }, { id: 'desc' }],
     });
 
     const scored = candidates
-      .filter((card) => this.rateCardTextMatches(card.client_contract_no, group.client_contract_no || invoice.client_contract_no))
-      .filter((card) => this.rateCardTextMatches(card.service_type, group.service_type))
-      .filter((card) => this.rateCardNumberMatches(card.source_quotation_id, group.quotation_id || invoice.quotation_id))
-      .filter((card) => this.rateCardTextMatches(card.day_night, group.day_night))
+      .filter((card) =>
+        this.rateCardTextMatches(
+          card.client_contract_no,
+          group.client_contract_no || invoice.client_contract_no,
+        ),
+      )
+      .filter((card) =>
+        this.rateCardTextMatches(card.service_type, group.service_type),
+      )
+      .filter((card) =>
+        this.rateCardNumberMatches(
+          card.source_quotation_id,
+          group.quotation_id || invoice.quotation_id,
+        ),
+      )
+      .filter((card) =>
+        this.rateCardTextMatches(card.day_night, group.day_night),
+      )
       .filter((card) => this.rateCardTextMatches(card.tonnage, group.tonnage))
-      .filter((card) => this.rateCardTextMatches(card.machine_type, group.machine_type))
+      .filter((card) =>
+        this.rateCardTextMatches(card.machine_type, group.machine_type),
+      )
       .filter((card) => this.rateCardTextMatches(card.origin, group.origin))
-      .filter((card) => this.rateCardTextMatches(card.destination, group.destination))
+      .filter((card) =>
+        this.rateCardTextMatches(card.destination, group.destination),
+      )
       .map((card) => {
         const specificity = [
           card.client_contract_no,
@@ -902,7 +986,8 @@ export class InvoicesService {
       where: { id: invoiceId },
       include: this.includeRelations,
     });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const [links, drafts] = await Promise.all([
       this.prisma.invoiceWorkLog.findMany({
@@ -916,11 +1001,18 @@ export class InvoicesService {
       }),
     ]);
 
-    const draftByWorkLogId = new Map(drafts.map((draft) => [draft.work_log_id, draft.draft_data]));
+    const draftByWorkLogId = new Map(
+      drafts.map((draft) => [draft.work_log_id, draft.draft_data]),
+    );
     return {
       invoice,
       items: invoice.items || [],
-      work_logs: links.map((link) => this.mergeDraftIntoWorkLog(link.work_log, draftByWorkLogId.get(link.work_log_id))),
+      work_logs: links.map((link) =>
+        this.mergeDraftIntoWorkLog(
+          link.work_log,
+          draftByWorkLogId.get(link.work_log_id),
+        ),
+      ),
       drafts: drafts.map((draft) => ({
         id: draft.id,
         invoice_id: draft.invoice_id,
@@ -931,9 +1023,72 @@ export class InvoicesService {
     };
   }
 
+  async getPricingDraft(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, invoice_no: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
+
+    const draft = await this.prisma.invoicePricingDraft.findUnique({
+      where: { invoice_id: invoiceId },
+    });
+
+    return {
+      invoice: { id: invoice.id, invoice_no: invoice.invoice_no },
+      draft: draft
+        ? {
+            id: draft.id,
+            invoice_id: draft.invoice_id,
+            pivot_config: draft.pivot_config,
+            row_prices: draft.row_prices,
+            draft_items: draft.draft_items,
+            updated_at: draft.updated_at,
+          }
+        : null,
+    };
+  }
+
+  async savePricingDraft(invoiceId: number, dto: SaveInvoicePricingDraftDto) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, deleted_at: true },
+    });
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
+
+    const draft = await this.prisma.invoicePricingDraft.upsert({
+      where: { invoice_id: invoiceId },
+      create: {
+        invoice_id: invoiceId,
+        pivot_config: this.toJsonInput(dto.pivot_config, {}),
+        row_prices: this.toJsonInput(dto.row_prices, {}),
+        draft_items: this.toJsonInput(dto.draft_items, []),
+      },
+      update: {
+        pivot_config: this.toJsonInput(dto.pivot_config, {}),
+        row_prices: this.toJsonInput(dto.row_prices, {}),
+        draft_items: this.toJsonInput(dto.draft_items, []),
+      },
+    });
+
+    return {
+      id: draft.id,
+      invoice_id: draft.invoice_id,
+      pivot_config: draft.pivot_config,
+      row_prices: draft.row_prices,
+      draft_items: draft.draft_items,
+      updated_at: draft.updated_at,
+    };
+  }
+
   async matchRates(invoiceId: number, dto: MatchInvoiceRatesDto) {
-    const invoice = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const groups = dto.groups || [];
     const results: any[] = [];
@@ -969,16 +1124,20 @@ export class InvoicesService {
   }
 
   async updateItems(invoiceId: number, dto: UpdateInvoiceItemsDto) {
-    const existing = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
-    if (!existing || existing.deleted_at) throw new NotFoundException('發票不存在');
+    const existing = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!existing || existing.deleted_at)
+      throw new NotFoundException('發票不存在');
 
     const items = dto.items || [];
     const normalizedItems = items.map((item, idx) => {
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unit_price) || 0;
-      const amount = item.amount !== undefined && item.amount !== null
-        ? Number(item.amount) || 0
-        : Math.round(quantity * unitPrice * 100) / 100;
+      const amount =
+        item.amount !== undefined && item.amount !== null
+          ? Number(item.amount) || 0
+          : Math.round(quantity * unitPrice * 100) / 100;
       return {
         invoice_id: invoiceId,
         item_name: item.item_name || null,
@@ -992,19 +1151,30 @@ export class InvoicesService {
     });
 
     const retentionRate = Number(existing.retention_rate) || 0;
-    const otherCharges = Array.isArray(existing.other_charges) ? existing.other_charges as any[] : [];
-    const { subtotal, retention_amount, total_amount } = this.calcTotals(normalizedItems, retentionRate, otherCharges);
+    const otherCharges = Array.isArray(existing.other_charges)
+      ? (existing.other_charges as any[])
+      : [];
+    const { subtotal, retention_amount, total_amount } = this.calcTotals(
+      normalizedItems,
+      retentionRate,
+      otherCharges,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.invoiceItem.deleteMany({ where: { invoice_id: invoiceId } });
-      if (normalizedItems.length > 0) await tx.invoiceItem.createMany({ data: normalizedItems });
+      if (normalizedItems.length > 0)
+        await tx.invoiceItem.createMany({ data: normalizedItems });
       await tx.invoice.update({
         where: { id: invoiceId },
         data: {
           subtotal,
           retention_amount,
           total_amount,
-          outstanding: Math.max(0, Math.round((total_amount - Number(existing.paid_amount)) * 100) / 100),
+          outstanding: Math.max(
+            0,
+            Math.round((total_amount - Number(existing.paid_amount)) * 100) /
+              100,
+          ),
         },
       });
     });

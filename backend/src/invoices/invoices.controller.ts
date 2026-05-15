@@ -1,7 +1,28 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto, InvoiceWorkLogsDto, SaveInvoicePrepareDto, MatchInvoiceRatesDto, UpdateInvoiceItemsDto } from './dto/create-invoice.dto';
+import {
+  CreateInvoiceDto,
+  UpdateInvoiceDto,
+  RecordPaymentDto,
+  InvoiceWorkLogsDto,
+  SaveInvoicePrepareDto,
+  MatchInvoiceRatesDto,
+  UpdateInvoiceItemsDto,
+  SaveInvoicePricingDraftDto,
+} from './dto/create-invoice.dto';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
@@ -20,17 +41,39 @@ export class InvoicesController {
 
   @Post()
   create(@Body() dto: CreateInvoiceDto, @Request() req: any) {
-    return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+    return this.service.create(
+      dto,
+      req.user?.id || req.user?.userId || 0,
+      req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
+        req.ip ||
+        undefined,
+    );
   }
 
   @Post('from-quotation/:quotationId')
-  createFromQuotation(@Param('quotationId') quotationId: number, @Body() dto: CreateInvoiceDto, @Request() req: any) {
-    return this.service.createFromQuotation(Number(quotationId), dto, req.user?.id || req.user?.userId || 0);
+  createFromQuotation(
+    @Param('quotationId') quotationId: number,
+    @Body() dto: CreateInvoiceDto,
+    @Request() req: any,
+  ) {
+    return this.service.createFromQuotation(
+      Number(quotationId),
+      dto,
+      req.user?.id || req.user?.userId || 0,
+    );
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: UpdateInvoiceDto, @Request() req: any) {
-    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
+  update(
+    @Param('id') id: number,
+    @Body() dto: UpdateInvoiceDto,
+    @Request() req: any,
+  ) {
+    return this.service.update(
+      Number(id),
+      dto,
+      req.user?.id || req.user?.userId || 0,
+    );
   }
 
   @Patch(':id/status')
@@ -56,6 +99,19 @@ export class InvoicesController {
   @Get(':id/pricing-data')
   getPricingData(@Param('id') id: number) {
     return this.service.getPricingData(Number(id));
+  }
+
+  @Get(':id/pricing-draft')
+  getPricingDraft(@Param('id') id: number) {
+    return this.service.getPricingDraft(Number(id));
+  }
+
+  @Put(':id/pricing-draft')
+  savePricingDraft(
+    @Param('id') id: number,
+    @Body() dto: SaveInvoicePricingDraftDto,
+  ) {
+    return this.service.savePricingDraft(Number(id), dto);
   }
 
   @Post(':id/match-rates')
@@ -89,7 +145,10 @@ export class InvoicesController {
   }
 
   @Delete(':id/payment/:paymentId')
-  deletePayment(@Param('id') id: number, @Param('paymentId') paymentId: number) {
+  deletePayment(
+    @Param('id') id: number,
+    @Param('paymentId') paymentId: number,
+  ) {
     return this.service.deletePayment(Number(id), Number(paymentId));
   }
 
@@ -100,6 +159,12 @@ export class InvoicesController {
 
   @Delete(':id')
   remove(@Param('id') id: number, @Request() req: any) {
-    return this.service.delete(Number(id), req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+    return this.service.delete(
+      Number(id),
+      req.user?.id || req.user?.userId || 0,
+      req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
+        req.ip ||
+        undefined,
+    );
   }
 }

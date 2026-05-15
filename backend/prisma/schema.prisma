@@ -390,16 +390,16 @@ model Vehicle {
 }
 
 model VehiclePlate {
-  id                 Int      @id @default(autoincrement())
-  plate_number       String   @unique
+  id                 Int       @id @default(autoincrement())
+  plate_number       String    @unique
   owner_company_id   Int
   status             String    @default("idle")
   plate_expiry_date  DateTime? @db.Date
   plate_owned_date   DateTime? @db.Date
   plate_notes        String?   @db.Text
   current_vehicle_id Int?      @unique
-  created_at         DateTime @default(now())
-  updated_at         DateTime @default(now()) @updatedAt
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @default(now()) @updatedAt
 
   owner_company             Company                  @relation("vehicle_plate_owner", fields: [owner_company_id], references: [id])
   current_vehicle           Vehicle?                 @relation("VehiclePlateCurrentVehicle", fields: [current_vehicle_id], references: [id])
@@ -1156,65 +1156,65 @@ model FieldOption {
 // ══════════════════════════════════════════════════════════════
 
 model WorkLog {
-  id                      Int       @id @default(autoincrement())
-  publisher_id            Int?
-  status                  String    @default("editing")
-  service_type            String?
-  scheduled_date          DateTime? @db.Date
-  company_profile_id      Int?
-  company_id              Int?
-  client_id               Int?
-  quotation_id            Int?
-  contract_id             Int?
-  client_contract_no      String?
-  employee_id             Int?
-  machine_type            String?
-  equipment_number        String?
-  equipment_source        String?
-  tonnage                 String?
-  day_night               String?
-  start_location          String?   @db.Text
-  start_time              String?
-  end_location            String?   @db.Text
-  end_time                String?
-  quantity                Decimal?  @db.Decimal(10, 2)
-  unit                    String?
-  ot_quantity             Decimal?  @db.Decimal(10, 2)
-  ot_unit                 String?
-  is_mid_shift            Boolean   @default(false)
-  goods_quantity          Decimal?  @db.Decimal(10, 2)
-  matched_rate_card_id    Int?
-  matched_rate            Decimal?  @db.Decimal(12, 2)
-  matched_unit            String?
-  matched_ot_rate         Decimal?  @db.Decimal(12, 2)
-  price_match_status      String?
-  price_match_note        String?   @db.Text
-  matched_client_rate_card_id    Int?
-  matched_client_rate            Decimal?  @db.Decimal(12, 2)
-  matched_client_unit            String?
-  matched_client_ot_rate         Decimal?  @db.Decimal(12, 2)
-  client_price_match_status      String?
-  client_price_match_note        String?   @db.Text
-  receipt_no              String?
-  work_order_no           String?
-  is_confirmed            Boolean   @default(false)
-  is_paid                 Boolean   @default(false)
-  unverified_client_name  String? // 員工自行輸入的未確認客戶名
-  source                  String    @default("manual") // allowed: manual | whatsapp_clockin | employee_portal | attendance | report
-  is_location_new         Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
-  ai_parsed_data          Json? // AI 原始解析結果（WhatsApp 打卡）
-  wl_whatsapp_reported_at DateTime? // WhatsApp 訊息實際報工時間（UTC 儲存）
-  work_content            String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
-  work_log_product_name   String?   @db.Text // 商品名稱
-  work_log_product_unit   String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
-  work_log_photo_urls     Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
-  work_log_signature_url  String?   @db.Text // 員工簽名圖片 URL
-  remarks                 String?   @db.Text
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @default(now()) @updatedAt
-  deleted_at              DateTime? // 軯刪除時間時戳
-  deleted_by              Int?
-  deletedBy               User?     @relation("WorkLogDeletedBy", fields: [deleted_by], references: [id])
+  id                          Int       @id @default(autoincrement())
+  publisher_id                Int?
+  status                      String    @default("editing")
+  service_type                String?
+  scheduled_date              DateTime? @db.Date
+  company_profile_id          Int?
+  company_id                  Int?
+  client_id                   Int?
+  quotation_id                Int?
+  contract_id                 Int?
+  client_contract_no          String?
+  employee_id                 Int?
+  machine_type                String?
+  equipment_number            String?
+  equipment_source            String?
+  tonnage                     String?
+  day_night                   String?
+  start_location              String?   @db.Text
+  start_time                  String?
+  end_location                String?   @db.Text
+  end_time                    String?
+  quantity                    Decimal?  @db.Decimal(10, 2)
+  unit                        String?
+  ot_quantity                 Decimal?  @db.Decimal(10, 2)
+  ot_unit                     String?
+  is_mid_shift                Boolean   @default(false)
+  goods_quantity              Decimal?  @db.Decimal(10, 2)
+  matched_rate_card_id        Int?
+  matched_rate                Decimal?  @db.Decimal(12, 2)
+  matched_unit                String?
+  matched_ot_rate             Decimal?  @db.Decimal(12, 2)
+  price_match_status          String?
+  price_match_note            String?   @db.Text
+  matched_client_rate_card_id Int?
+  matched_client_rate         Decimal?  @db.Decimal(12, 2)
+  matched_client_unit         String?
+  matched_client_ot_rate      Decimal?  @db.Decimal(12, 2)
+  client_price_match_status   String?
+  client_price_match_note     String?   @db.Text
+  receipt_no                  String?
+  work_order_no               String?
+  is_confirmed                Boolean   @default(false)
+  is_paid                     Boolean   @default(false)
+  unverified_client_name      String? // 員工自行輸入的未確認客戶名
+  source                      String    @default("manual") // allowed: manual | whatsapp_clockin | employee_portal | attendance | report
+  is_location_new             Boolean   @default(false) // WhatsApp 來源新建地點，待管理員確認
+  ai_parsed_data              Json? // AI 原始解析結果（WhatsApp 打卡）
+  wl_whatsapp_reported_at     DateTime? // WhatsApp 訊息實際報工時間（UTC 儲存）
+  work_content                String?   @db.Text // 工作內容（工程部工作性質、機械部工作內容）
+  work_log_product_name       String?   @db.Text // 商品名稱
+  work_log_product_unit       String?   @db.Text // 商品單位（從 field_options product_unit 選擇）
+  work_log_photo_urls         Json?     @db.JsonB // ["url1", "url2", ...] 員工上傳的相片 URL
+  work_log_signature_url      String?   @db.Text // 員工簽名圖片 URL
+  remarks                     String?   @db.Text
+  created_at                  DateTime  @default(now())
+  updated_at                  DateTime  @default(now()) @updatedAt
+  deleted_at                  DateTime? // 軯刪除時間時戳
+  deleted_by                  Int?
+  deletedBy                   User?     @relation("WorkLogDeletedBy", fields: [deleted_by], references: [id])
 
   project_id               Int?
   work_log_fleet_driver_id Int?
@@ -1970,6 +1970,7 @@ model Invoice {
   payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
   invoice_work_logs      InvoiceWorkLog[]
   work_log_drafts        InvoiceWorkLogDraft[]
+  pricing_draft          InvoicePricingDraft?
 
   // ── Performance indexes ──
   @@index([client_id])
@@ -2024,6 +2025,19 @@ model InvoiceWorkLogDraft {
   @@unique([invoice_id, work_log_id])
   @@index([work_log_id])
   @@map("invoice_work_log_drafts")
+}
+
+model InvoicePricingDraft {
+  id           Int      @id @default(autoincrement())
+  invoice_id   Int      @unique
+  pivot_config Json     @db.JsonB
+  row_prices   Json     @db.JsonB
+  draft_items  Json     @db.JsonB
+  updated_at   DateTime @default(now()) @updatedAt
+
+  invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@map("invoice_pricing_drafts")
 }
 
 model InvoiceSequence {
@@ -2355,15 +2369,15 @@ model VerificationWaMessage {
 
 // 9. verification_wa_order — WhatsApp 解析後的 Order
 model VerificationWaOrder {
-  id                     Int      @id @default(autoincrement())
-  wa_order_msg_id        Int?
-  wa_order_date          DateTime @db.Date
-  wa_order_shift         String   @default("day") @db.VarChar(10) // day | night
-  wa_order_status        String   @default("tentative") @db.VarChar(20) // tentative | confirmed
-  wa_order_version       Int      @default(1)
-  wa_order_sender_name   String?  @db.VarChar(100)
-  wa_order_sender_role   String?  @db.VarChar(50)
-  wa_order_raw_text      String?  @db.Text
+  id                         Int      @id @default(autoincrement())
+  wa_order_msg_id            Int?
+  wa_order_date              DateTime @db.Date
+  wa_order_shift             String   @default("day") @db.VarChar(10) // day | night
+  wa_order_status            String   @default("tentative") @db.VarChar(20) // tentative | confirmed
+  wa_order_version           Int      @default(1)
+  wa_order_sender_name       String?  @db.VarChar(100)
+  wa_order_sender_role       String?  @db.VarChar(50)
+  wa_order_raw_text          String?  @db.Text
   wa_order_item_count        Int      @default(0)
   wa_order_ai_model          String?  @db.VarChar(50)
   wa_order_ai_confidence     Decimal? @db.Decimal(5, 2)
@@ -2377,15 +2391,15 @@ model VerificationWaOrder {
   wa_order_match_stats       Json?
   wa_order_created_at        DateTime @default(now())
 
-  message             VerificationWaMessage?        @relation(fields: [wa_order_msg_id], references: [id])
-  items               VerificationWaOrderItem[]
-  mod_logs            VerificationWaModLog[]
-  parent_order        VerificationWaOrder?          @relation("WaOrderParent", fields: [wa_order_parent_id], references: [id], onDelete: SetNull)
-  child_orders        VerificationWaOrder[]         @relation("WaOrderParent")
-  replaces_order      VerificationWaOrder?          @relation("WaOrderReplacement", fields: [wa_order_replaces_order_id], references: [id], onDelete: SetNull)
-  replaced_by_orders  VerificationWaOrder[]         @relation("WaOrderReplacement")
-  merge_logs_as_new   VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogNewOrder")
-  merge_logs_as_base  VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogBaseOrder")
+  message            VerificationWaMessage?        @relation(fields: [wa_order_msg_id], references: [id])
+  items              VerificationWaOrderItem[]
+  mod_logs           VerificationWaModLog[]
+  parent_order       VerificationWaOrder?          @relation("WaOrderParent", fields: [wa_order_parent_id], references: [id], onDelete: SetNull)
+  child_orders       VerificationWaOrder[]         @relation("WaOrderParent")
+  replaces_order     VerificationWaOrder?          @relation("WaOrderReplacement", fields: [wa_order_replaces_order_id], references: [id], onDelete: SetNull)
+  replaced_by_orders VerificationWaOrder[]         @relation("WaOrderReplacement")
+  merge_logs_as_new  VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogNewOrder")
+  merge_logs_as_base VerificationWaOrderMergeLog[] @relation("WaOrderMergeLogBaseOrder")
 
   @@index([wa_order_date])
   @@index([wa_order_shift])
@@ -2434,22 +2448,22 @@ model VerificationWaOrderItem {
 
 // 10b. verification_wa_order_merge_logs — WhatsApp Order merge/replace 決策紀錄
 model VerificationWaOrderMergeLog {
-  id                          Int      @id @default(autoincrement())
-  merge_log_new_order_id      Int
-  merge_log_base_order_id     Int?
-  merge_log_source_msg_id     Int
-  merge_log_decision          String   @db.VarChar(30)
-  merge_log_ai_update_mode    String?  @db.VarChar(30)
-  merge_log_old_item_count    Int      @default(0)
-  merge_log_new_item_count    Int      @default(0)
-  merge_log_merged_item_count Int      @default(0)
-  merge_log_matched_item_count Int     @default(0)
-  merge_log_decision_payload  Json?
-  merge_log_created_at        DateTime @default(now())
+  id                           Int      @id @default(autoincrement())
+  merge_log_new_order_id       Int
+  merge_log_base_order_id      Int?
+  merge_log_source_msg_id      Int
+  merge_log_decision           String   @db.VarChar(30)
+  merge_log_ai_update_mode     String?  @db.VarChar(30)
+  merge_log_old_item_count     Int      @default(0)
+  merge_log_new_item_count     Int      @default(0)
+  merge_log_merged_item_count  Int      @default(0)
+  merge_log_matched_item_count Int      @default(0)
+  merge_log_decision_payload   Json?
+  merge_log_created_at         DateTime @default(now())
 
-  new_order VerificationWaOrder   @relation("WaOrderMergeLogNewOrder", fields: [merge_log_new_order_id], references: [id], onDelete: Cascade)
-  base_order VerificationWaOrder? @relation("WaOrderMergeLogBaseOrder", fields: [merge_log_base_order_id], references: [id], onDelete: SetNull)
-  message   VerificationWaMessage @relation(fields: [merge_log_source_msg_id], references: [id], onDelete: Cascade)
+  new_order  VerificationWaOrder   @relation("WaOrderMergeLogNewOrder", fields: [merge_log_new_order_id], references: [id], onDelete: Cascade)
+  base_order VerificationWaOrder?  @relation("WaOrderMergeLogBaseOrder", fields: [merge_log_base_order_id], references: [id], onDelete: SetNull)
+  message    VerificationWaMessage @relation(fields: [merge_log_source_msg_id], references: [id], onDelete: Cascade)
 
   @@index([merge_log_new_order_id])
   @@index([merge_log_base_order_id])

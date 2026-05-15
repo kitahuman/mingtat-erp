@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNumber, IsArray, IsObject, ValidateNested } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsArray,
+  IsObject,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateInvoiceDto {
@@ -107,6 +114,17 @@ export class MatchInvoiceRatesDto {
   @ValidateNested({ each: true })
   @Type(() => InvoicePricingGroupDto)
   groups: InvoicePricingGroupDto[];
+}
+
+export class SaveInvoicePricingDraftDto {
+  @IsObject()
+  pivot_config: Record<string, unknown>;
+
+  @IsObject()
+  row_prices: Record<string, unknown>;
+
+  @IsArray()
+  draft_items: Record<string, unknown>[];
 }
 
 export class UpdateInvoiceItemDto {
