@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -39,10 +39,13 @@ type PivotDimension =
 type PivotValueType = "count" | "quantity_sum" | "ot_sum" | "mid_shift_count";
 type QuickRange = "week" | "month" | "lastMonth" | "quarter";
 type SortOrder = 'ASC' | 'DESC';
+type LeftViewMode = "pivot" | "list";
 
 interface Option {
-  value: string;
+  value: string | number;
   label: string;
+  _raw?: any;
+  shortLabel?: string;
 }
 
 interface PricingGroup {
@@ -89,6 +92,8 @@ interface PricingDraftPayload {
     colFields?: PivotDimension[];
     valueType?: PivotValueType;
     filters?: Record<string, unknown>;
+    leftViewMode?: LeftViewMode;
+    listNewRows?: any[];
   };
   row_prices?: Record<string, PivotRowPrice>;
   draft_items?: InvoiceItemDraft[];
@@ -543,7 +548,7 @@ function normalizeOptions(options: Option[]): Option[] {
 }
 
 function optionValues(options: Option[]): string[] {
-  return options.map((option) => option.value);
+  return options.map((option) => String(option.value));
 }
 
 function sameStringArray(a: string[], b: string[]): boolean {
@@ -1282,7 +1287,7 @@ function MultiSelectComboBox({
   const [search, setSearch] = useState("");
   const selectedSet = useMemo(() => new Set(values), [values]);
   const selectedOptions = useMemo(
-    () => options.filter((option) => selectedSet.has(option.value)),
+    () => options.filter((option) => selectedSet.has(String(option.value))),
     [options, selectedSet],
   );
   const filteredOptions = useMemo(() => {
@@ -1291,7 +1296,7 @@ function MultiSelectComboBox({
     return options.filter(
       (option) =>
         option.label.toLowerCase().includes(keyword) ||
-        option.value.toLowerCase().includes(keyword),
+        String(option.value).toLowerCase().includes(keyword),
     );
   }, [options, search]);
   const allSelected = areAllOptionsSelected(values, options);
@@ -1369,13 +1374,13 @@ function MultiSelectComboBox({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => toggleValue(option.value)}
+                onClick={() => toggleValue(String(option.value))}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-blue-50"
               >
                 <input
                   type="checkbox"
                   readOnly
-                  checked={selectedSet.has(option.value)}
+                  checked={selectedSet.has(String(option.value))}
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
@@ -1434,8 +1439,68 @@ export default function InvoicePricingPage() {
   const [rightPanelHidden, setRightPanelHidden] = useState(false);
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
   const [collapsedCols, setCollapsedCols] = useState<Set<string>>(new Set());
+  const [leftViewMode, setLeftViewMode] = useState<LeftViewMode>("pivot");
+  const [listDrafts, setListDrafts] = useState<Map<string, Record<string, any>>>(new Map());
+  const [listSavedDraftIds, setListSavedDraftIds] = useState<Set<string>>(new Set());
+  const [listNewRows, setListNewRows] = useState<any[]>([]);
+  const [listSortBy, setListSortBy] = useState('scheduled_date');
+  const [listSortOrder, setListSortOrder] = useState<SortOrder>('DESC');
+  const [listColumnFilters, setListColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [clients, setClients] = useState<Option[]>([]);
+  const [contracts, setContracts] = useState<Option[]>([]);
+  const [quotations, setQuotations] = useState<Option[]>([]);
+  const [employees, setEmployees] = useState<Option[]>([]);
+  const [fieldOptions, setFieldOptions] = useState<Record<string, Option[]>>({});
+  const [allEquipment, setAllEquipment] = useState<Option[]>([]);
   const filterOptionsRef = useRef<Record<string, Option[]>>({});
   const filterSelectionInitializedRef = useRef<Record<string, boolean>>({});
+
+  const {
+    columnConfigs: listColumnConfigs,
+    visibleColumns: listVisibleColumns,
+    handleColumnConfigChange: handleListColumnConfigChange,
+    handleReset: handleListColumnReset,
+  } = useColumnConfig('invoice-pricing-work-logs', COLUMNS);
+
+  const loadReferenceData = useCallback(async () => {
+    try {
+      const [cp, pt, ct, qo, em, fo, veh, mach, subconFleet, fleetDrivers] = await Promise.all([
+        companiesApi.simple(),
+        partnersApi.simple(),
+        contractsApi.simple(),
+        quotationsApi.list({ limit: 500 }),
+        employeesApi.list({ limit: 500, status: 'active' }),
+        fieldOptionsApi.getAll(),
+        vehiclesApi.simple().catch(() => ({ data: [] })),
+        machineryApi.simple().catch(() => ({ data: [] })),
+        subconFleetDriversApi.simple().catch(() => ({ data: [] })),
+        subconFleetDriversApi.simpleDrivers().catch(() => ({ data: [] })),
+      ]);
+
+      setCompanies((cp.data || []).map((c: any) => ({
+        value: c.id,
+        label: c.internal_prefix ? `${c.internal_prefix} ${c.name}` : c.name,
+        _raw: c,
+        shortLabel: c.internal_prefix || c.name,
+      })));
+      setClients((pt.data || []).map((p: any) => ({ value: p.id, label: p.name, _raw: p, shortLabel: p.code || p.name })));
+      setContracts((ct.data || []).map((c: any) => ({ value: c.id, label: c.contract_no + (c.contract_name ? ' ' + c.contract_name : ''), _raw: c })));
+      const qoData = qo.data?.data || qo.data || [];
+      setQuotations(qoData.map((q: any) => ({ value: q.id, label: q.quotation_no + (q.contract_name ? ' ' + q.contract_name : ''), _raw: q })));
+      const employeeList = (em.data?.data || []).map((e: any) => ({ value: `emp_${e.id}`, label: e.name_zh || e.name || String(e.id), _raw: e }));
+      const fleetDriverList = (fleetDrivers.data || []).map((d: any) => ({ value: d.value, label: d.label, _raw: d }));
+      setEmployees([...employeeList, ...fleetDriverList]);
+      const grouped: Record<string, Option[]> = {};
+      for (const [cat, opts] of Object.entries(fo.data || {})) {
+        grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
+      }
+      setFieldOptions(grouped);
+      setAllEquipment([...(veh.data || []), ...(mach.data || []), ...(subconFleet.data || [])]);
+    } catch (err) {
+      console.error('load pricing references failed', err);
+    }
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -1453,6 +1518,19 @@ export default function InvoicePricingPage() {
       const filters = pivotConfig.filters || {};
       setInvoice(pricingRes.data.invoice);
       setWorkLogs(loadedWorkLogs);
+      setLeftViewMode(pivotConfig.leftViewMode === "list" ? "list" : "pivot");
+      setListNewRows(Array.isArray(pivotConfig.listNewRows) ? pivotConfig.listNewRows : []);
+      const nextListDrafts = new Map<string, Record<string, any>>();
+      const nextSavedDraftIds = new Set<string>();
+      for (const draft of pricingRes.data.drafts || []) {
+        const workLogId = String(draft.work_log_id);
+        nextSavedDraftIds.add(workLogId);
+        if (draft.draft_data && Object.keys(draft.draft_data).length > 0) {
+          nextListDrafts.set(workLogId, { ...draft.draft_data });
+        }
+      }
+      setListDrafts(nextListDrafts);
+      setListSavedDraftIds(nextSavedDraftIds);
       setItems(
         Array.isArray(pricingDraft?.draft_items) &&
           pricingDraft.draft_items.length > 0
@@ -1557,9 +1635,18 @@ export default function InvoicePricingPage() {
     if (invoiceId) loadData();
   }, [invoiceId]);
 
+  useEffect(() => {
+    void loadReferenceData();
+  }, [loadReferenceData]);
+
+  const allPricingWorkLogs = useMemo(
+    () => [...workLogs, ...listNewRows],
+    [workLogs, listNewRows],
+  );
+
   const filterOptions = useMemo(
-    () => createOptionsFromWorkLogs(workLogs),
-    [workLogs],
+    () => createOptionsFromWorkLogs(allPricingWorkLogs),
+    [allPricingWorkLogs],
   );
 
   const syncFilterOptions = (
@@ -1625,7 +1712,7 @@ export default function InvoicePricingPage() {
 
   const filteredWorkLogs = useMemo(
     () =>
-      workLogs.filter(
+      allPricingWorkLogs.filter(
         (workLog) =>
           isWithinDateRange(workLog, dateFrom, dateTo) &&
           matchesSelected(
@@ -1690,7 +1777,7 @@ export default function InvoicePricingPage() {
           ),
       ),
     [
-      workLogs,
+      allPricingWorkLogs,
       dateFrom,
       dateTo,
       employeeIds,
@@ -1709,7 +1796,7 @@ export default function InvoicePricingPage() {
     ],
   );
 
-  const pricingGroups = useMemo(() => buildPricingGroups(workLogs), [workLogs]);
+  const pricingGroups = useMemo(() => buildPricingGroups(allPricingWorkLogs), [allPricingWorkLogs]);
   const pivot = useMemo(
     () => buildLocalPivot(filteredWorkLogs, rowFields, colFields, valueType),
     [filteredWorkLogs, rowFields, colFields, valueType],
@@ -1995,6 +2082,8 @@ export default function InvoicePricingPage() {
           rowFields,
           colFields,
           valueType,
+          leftViewMode,
+          listNewRows,
           filters: {
             dateFrom,
             dateTo,
@@ -2021,6 +2110,16 @@ export default function InvoicePricingPage() {
           sort_order: idx + 1,
         })),
       });
+      const draftIds = new Set<string>([...Array.from(listSavedDraftIds), ...Array.from(listDrafts.keys())]);
+      const prepareDrafts = Array.from(draftIds)
+        .filter((workLogId) => /^\d+$/.test(workLogId))
+        .map((workLogId) => ({
+          work_log_id: Number(workLogId),
+          draft_data: listDrafts.get(workLogId) || {},
+        }));
+      if (prepareDrafts.length > 0) {
+        await invoicesApi.savePrepare(invoiceId, { drafts: prepareDrafts });
+      }
       alert("Step B 草稿已儲存");
     } catch (err: any) {
       alert(err.response?.data?.message || "儲存 Step B 草稿失敗");
@@ -2053,11 +2152,274 @@ export default function InvoicePricingPage() {
     }
   };
 
+
+  const getListRowKey = (row: any): string => String(row.id);
+
+  const findOptionByValue = (options: Option[], value: string | number | null | undefined): Option | undefined => {
+    if (value === null || value === undefined || value === '') return undefined;
+    return options.find(o => String(o.value) === String(value));
+  };
+
+  const getShortOptionLabel = (options: Option[], value: string | number | null | undefined): string | undefined => {
+    const option = findOptionByValue(options, value);
+    return option?.shortLabel || option?.label;
+  };
+
+  const getListCellValue = (row: any, field: string): any => {
+    const key = getListRowKey(row);
+    const draft = listDrafts.get(key);
+    if (draft && field in draft) return draft[field];
+    if (field === 'employee_id') {
+      if (draft && 'work_log_fleet_driver_id' in draft && draft.work_log_fleet_driver_id) return `fleet_${draft.work_log_fleet_driver_id}`;
+      if (draft && 'employee_id' in draft && draft.employee_id) return `emp_${draft.employee_id}`;
+      if (row.work_log_fleet_driver_id) return `fleet_${row.work_log_fleet_driver_id}`;
+      if (row.employee_id) return `emp_${row.employee_id}`;
+      return null;
+    }
+    if (field === 'scheduled_date') return normalizeDateValue(row.scheduled_date);
+    return normalizeComparable(row[field]);
+  };
+
+  const isListCellDirty = (row: any, field: string): boolean => {
+    if (row._is_new_draft) return true;
+    const draft = listDrafts.get(getListRowKey(row));
+    if (!draft) return false;
+    if (field === 'employee_id') return 'employee_id' in draft || 'work_log_fleet_driver_id' in draft;
+    return field in draft;
+  };
+
+  const setListDraftField = (row: any, field: string, value: any) => {
+    const rowKey = getListRowKey(row);
+    const normalizedValue = field === 'scheduled_date' ? normalizeDateValue(value) : normalizeComparable(value);
+
+    const applyToRow = (currentRow: any) => {
+      const nextRow = { ...currentRow };
+      if (field === 'employee_id') {
+        if (typeof value === 'string' && value.startsWith('emp_')) {
+          nextRow.employee_id = Number(value.replace('emp_', ''));
+          nextRow.work_log_fleet_driver_id = null;
+        } else if (typeof value === 'string' && value.startsWith('fleet_')) {
+          nextRow.employee_id = null;
+          nextRow.work_log_fleet_driver_id = Number(value.replace('fleet_', ''));
+        } else {
+          nextRow.employee_id = null;
+          nextRow.work_log_fleet_driver_id = null;
+        }
+      } else {
+        nextRow[field] = normalizedValue;
+      }
+      return nextRow;
+    };
+
+    if (row._is_new_draft) {
+      setListNewRows((current) => current.map((item) => getListRowKey(item) === rowKey ? applyToRow(item) : item));
+      return;
+    }
+
+    setListDrafts((current) => {
+      const next = new Map(current);
+      const draft = { ...(next.get(rowKey) || {}) };
+      if (field === 'employee_id') {
+        if (typeof value === 'string' && value.startsWith('emp_')) {
+          draft.employee_id = Number(value.replace('emp_', ''));
+          draft.work_log_fleet_driver_id = null;
+        } else if (typeof value === 'string' && value.startsWith('fleet_')) {
+          draft.employee_id = null;
+          draft.work_log_fleet_driver_id = Number(value.replace('fleet_', ''));
+        } else {
+          draft.employee_id = null;
+          draft.work_log_fleet_driver_id = null;
+        }
+      } else {
+        draft[field] = normalizedValue;
+      }
+      next.set(rowKey, draft);
+      return next;
+    });
+  };
+
+  const getListCompanyDisplayName = (row: any, value: string | number | null | undefined): string => {
+    if (row.company && typeof row.company === 'object' && String(row.company.id) === String(value)) {
+      return row.company.internal_prefix || row.company.name || row.company.name_en || '—';
+    }
+    return getShortOptionLabel(companies, value) || getCompanyLabel(row) || '—';
+  };
+
+  const getListClientDisplayName = (row: any, value: string | number | null | undefined): string => {
+    if (row.client && typeof row.client === 'object' && String(row.client.id) === String(value)) {
+      return row.client.code || row.client.name || row.client.name_en || '—';
+    }
+    return getShortOptionLabel(clients, value) || getClientLabel(row) || '—';
+  };
+
+  const getListDisplayValue = (row: any, field: string): string => {
+    const val = getListCellValue(row, field);
+    if (field === 'status') return getStatusLabel(val) || val || '—';
+    if (field === 'company_id') return getListCompanyDisplayName(row, val);
+    if (field === 'client_id') return getListClientDisplayName(row, val);
+    if (field === 'quotation_id') return row.quotation?.quotation_no && !isListCellDirty(row, field) ? row.quotation.quotation_no : quotations.find(o => String(o.value) === String(val))?.label || '—';
+    if (field === 'contract_id') return row.contract?.contract_no && !isListCellDirty(row, field) ? row.contract.contract_no : contracts.find(o => String(o.value) === String(val))?.label || '—';
+    if (field === 'employee_id') {
+      if (isListCellDirty(row, field) || row._is_new_draft) return employees.find(o => String(o.value) === String(val))?.label || '—';
+      if (row.work_log_fleet_driver_id) return employees.find(o => String(o.value) === `fleet_${row.work_log_fleet_driver_id}`)?.label || '—';
+      return row.employee?.name_zh || employees.find(o => String(o.value) === `emp_${row.employee_id}`)?.label || '—';
+    }
+    if (field === 'scheduled_date') return val ? fmtDate(val) : '—';
+    if (field === 'is_mid_shift' || field === 'is_confirmed') return val ? '✓' : '—';
+    return val != null && val !== '' ? String(val) : '—';
+  };
+
+  const getFilteredListQuotations = (row: any): Option[] => {
+    const clientId = getListCellValue(row, 'client_id');
+    if (!clientId) return quotations;
+    return quotations.filter((q: any) => !q._raw || q._raw.client_id === clientId || q._raw.client_id === Number(clientId));
+  };
+
+  const getFilteredListContracts = (row: any): Option[] => {
+    const clientId = getListCellValue(row, 'client_id');
+    if (!clientId) return contracts;
+    return contracts.filter((c: any) => !c._raw || c._raw.client_id === clientId || c._raw.client_id === Number(clientId));
+  };
+
+  const renderListCell = (row: any, field: string) => {
+    const val = getListCellValue(row, field);
+    const dirty = isListCellDirty(row, field);
+    const display = getListDisplayValue(row, field);
+    const onChange = (v: any) => {
+      if (field === 'client_id') {
+        setListDraftField(row, 'client_id', v);
+        setListDraftField(row, 'quotation_id', null);
+        setListDraftField(row, 'contract_id', null);
+      } else {
+        setListDraftField(row, field, v);
+      }
+    };
+
+    switch (field) {
+      case 'status':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={STATUS_OPTIONS} isDirty={dirty} disabled={readOnly} />;
+      case 'scheduled_date':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="date" isDirty={dirty} disabled={readOnly} />;
+      case 'service_type':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['service_type'] || []} isDirty={dirty} disabled={readOnly} />;
+      case 'company_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={companies} isDirty={dirty} disabled={readOnly} />;
+      case 'client_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={clients} isDirty={dirty} disabled={readOnly} />;
+      case 'quotation_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={getFilteredListQuotations(row)} isDirty={dirty} disabled={readOnly} />;
+      case 'contract_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={getFilteredListContracts(row)} isDirty={dirty} disabled={readOnly} />;
+      case 'client_contract_no':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['client_contract_no'] || []} createCategory="client_contract_no" isDirty={dirty} disabled={readOnly} />;
+      case 'employee_id':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="select" options={employees} isDirty={dirty} disabled={readOnly} />;
+      case 'machine_type':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['machine_type'] || []} isDirty={dirty} disabled={readOnly} />;
+      case 'equipment_number':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={allEquipment} isDirty={dirty} disabled={readOnly} />;
+      case 'tonnage':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['tonnage'] || []} isDirty={dirty} disabled={readOnly} />;
+      case 'day_night':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['day_night'] || []} isDirty={dirty} disabled={readOnly} />;
+      case 'start_location':
+      case 'end_location':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox_create" options={fieldOptions['location'] || []} createCategory="location" isDirty={dirty} disabled={readOnly} />;
+      case 'quantity':
+      case 'ot_quantity':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="number" isDirty={dirty} disabled={readOnly} />;
+      case 'unit':
+      case 'ot_unit':
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="combobox" options={fieldOptions['wage_unit'] || unitOptions} isDirty={dirty} disabled={readOnly} />;
+      case 'is_mid_shift':
+      case 'is_confirmed':
+        return <EditableCell value={val} onChange={onChange} type="checkbox" isDirty={dirty} disabled={readOnly} />;
+      default:
+        return <EditableCell value={val} displayValue={display} onChange={onChange} type="text" isDirty={dirty} disabled={readOnly} />;
+    }
+  };
+
+  const getListSortValue = (row: any, colKey: string): string | number => {
+    const field = colKeyToField[colKey] || colKey;
+    const value = getListCellValue(row, field);
+    if (typeof value === 'number') return value;
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    return getListDisplayValue(row, field).toLowerCase();
+  };
+
+  const handleListFilterChange = (columnKey: string, selectedValues: Set<string> | null) => {
+    setListColumnFilters(prev => {
+      const next = { ...prev };
+      if (!selectedValues || selectedValues.size === 0) delete next[columnKey];
+      else next[columnKey] = selectedValues;
+      return next;
+    });
+  };
+
+  const listRows = useMemo(() => {
+    let next = allPricingWorkLogs.filter(row => {
+      for (const [colKey, values] of Object.entries(listColumnFilters)) {
+        const field = colKeyToField[colKey] || colKey;
+        const display = getListDisplayValue(row, field);
+        if (!values.has(display)) return false;
+      }
+      return true;
+    });
+    next = [...next].sort((a, b) => {
+      const av = getListSortValue(a, listSortBy);
+      const bv = getListSortValue(b, listSortBy);
+      const result = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'zh-Hant');
+      return listSortOrder === 'ASC' ? result : -result;
+    });
+    return next;
+  }, [allPricingWorkLogs, listColumnFilters, listSortBy, listSortOrder, listDrafts, listNewRows, companies, clients, contracts, quotations, employees]);
+
+  const handleListSort = (colKey: string) => {
+    if (listSortBy === colKey) setListSortOrder(prev => prev === 'ASC' ? 'DESC' : 'ASC');
+    else {
+      setListSortBy(colKey);
+      setListSortOrder('ASC');
+    }
+  };
+
+  const handleAddListRow = () => {
+    const today = formatDateInput(new Date());
+    const newRow = {
+      id: `draft_${Date.now()}`,
+      _is_new_draft: true,
+      status: 'editing',
+      scheduled_date: today,
+      company_id: invoice?.company_id || null,
+      client_id: invoice?.client_id || null,
+      quantity: 1,
+      unit: unitOptions[0]?.value || 'JOB',
+      ot_quantity: 0,
+      ot_unit: null,
+      is_mid_shift: false,
+      is_confirmed: false,
+    };
+    setListNewRows((current) => [newRow, ...current]);
+    setLeftViewMode('list');
+  };
+
+  const handleDuplicateListRow = (row: any) => {
+    const duplicated: any = {
+      id: `draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      _is_new_draft: true,
+    };
+    for (const column of COLUMNS) {
+      const field = colKeyToField[column.key] || column.key;
+      duplicated[field] = getListCellValue(row, field);
+    }
+    setListNewRows((current) => [duplicated, ...current]);
+    setLeftViewMode('list');
+  };
+
   const unmatchedCount = matchResults.filter(
     (result) => !result.matched,
   ).length;
-  const summary = pivot.summary;
-
   if (loading) {
     return <div className="p-6 text-gray-500">載入計價資料中...</div>;
   }
@@ -2115,7 +2477,7 @@ export default function InvoicePricingPage() {
             onClick={() => setLeftPanelHidden(false)}
             className="rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-left text-sm font-semibold text-blue-700 hover:bg-blue-100"
           >
-            展開左側 Pivot Table
+            展開左側工作紀錄 / Pivot Table
           </button>
         ) : (
           <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -2123,12 +2485,12 @@ export default function InvoicePricingPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">
-                    Pivot Table
+                    工作紀錄與 Pivot Table
                   </h2>
                   <p className="text-sm text-gray-500">
-                    已載入 {workLogs.length} 筆工作紀錄，篩選後{" "}
+                    已載入 {allPricingWorkLogs.length} 筆工作紀錄，Pivot 篩選後{" "}
                     {filteredWorkLogs.length}{" "}
-                    筆；所有篩選、分組和值計算均在前端完成。
+                    筆；可切換列表直接整理計價草稿。
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -2138,56 +2500,60 @@ export default function InvoicePricingPage() {
                   >
                     隱藏左側
                   </button>
-                  <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-                    10 欄位組合：{pricingGroups.length} 組
+                  <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setLeftViewMode("pivot")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${leftViewMode === "pivot" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      交叉表
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeftViewMode("list")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${leftViewMode === "list" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      列表
+                    </button>
                   </div>
-                  <CsvButton onClick={exportCsv} />
-                  <button
-                    onClick={handleMatchRates}
-                    disabled={matching || filteredWorkLogs.length === 0}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                  >
-                    {matching ? "配對中..." : "配對價目表"}
-                  </button>
-                  <button
-                    onClick={() => setControlsOpen((open) => !open)}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    {controlsOpen ? "收起控制區" : "展開控制區"}
-                  </button>
+                  {leftViewMode === "pivot" ? (
+                    <>
+                      <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                        10 欄位組合：{pricingGroups.length} 組
+                      </div>
+                      <CsvButton onClick={exportCsv} />
+                      <button
+                        onClick={handleMatchRates}
+                        disabled={matching || filteredWorkLogs.length === 0}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                      >
+                        {matching ? "配對中..." : "配對價目表"}
+                      </button>
+                      <button
+                        onClick={() => setControlsOpen((open) => !open)}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                      >
+                        {controlsOpen ? "收起控制區" : "展開控制區"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <ColumnCustomizer columns={listColumnConfigs} onChange={handleListColumnConfigChange} onReset={handleListColumnReset} />
+                      <button
+                        onClick={handleAddListRow}
+                        disabled={readOnly}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                      >
+                        新增列
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="bg-gray-50 p-3 pb-1">
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard
-                  title="總工作紀錄數"
-                  value={String(summary.totalRecords || 0)}
-                  subtitle={`已確認 ${summary.confirmedCount || 0} / 未確認 ${(summary.totalRecords || 0) - (summary.confirmedCount || 0)}`}
-                />
-                <SummaryCard
-                  title="總工作量"
-                  value={metricText({
-                    value: summary.totalQuantity || 0,
-                    unit: "",
-                  })}
-                  subtitle="依 quantity 欄位合計"
-                />
-                <SummaryCard
-                  title="價格匹配率"
-                  value={`${Math.round((summary.priceMatchRate || 0) * 1000) / 10}%`}
-                  subtitle="已匹配單價的工作紀錄比例"
-                />
-                <SummaryCard
-                  title="員工/機械覆蓋數"
-                  value={`${summary.employeeCount || 0} / ${summary.equipmentCount || 0}`}
-                  subtitle="員工數 / 車牌機號數"
-                />
-              </div>
-            </div>
 
-            {controlsOpen && (
+            {leftViewMode === "pivot" && controlsOpen && (
               <div className="space-y-2 bg-gray-50 px-3 py-2">
                 <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
                   <button
@@ -2379,6 +2745,80 @@ export default function InvoicePricingPage() {
               </div>
             )}
 
+
+            {leftViewMode === "list" && (
+              <div className="overflow-auto p-4">
+                <table className="min-w-full border-collapse text-xs">
+                  <thead className="sticky top-0 z-20 bg-gray-100 shadow-sm">
+                    <tr>
+                      <th className="sticky left-0 z-30 w-20 bg-gray-100 px-2 py-2 text-left font-semibold text-gray-700 border-b border-r">ID</th>
+                      {listVisibleColumns.map((col: any) => {
+                        const field = colKeyToField[col.key] || col.key;
+                        return (
+                          <th
+                            key={col.key}
+                            className={`${col.width || col._width || 'w-28'} bg-gray-100 px-2 py-2 text-left font-semibold text-gray-700 border-b border-r whitespace-nowrap`}
+                          >
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => handleListSort(col.key)} className="hover:text-blue-600">
+                                {col.label}{listSortBy === col.key ? (listSortOrder === 'ASC' ? ' ↑' : ' ↓') : ''}
+                              </button>
+                              <ColumnFilter
+                                columnKey={col.key}
+                                data={allPricingWorkLogs.map(row => ({ ...row, [col.key]: getListDisplayValue(row, field) }))}
+                                activeFilters={listColumnFilters}
+                                onFilterChange={handleListFilterChange}
+                              />
+                            </div>
+                          </th>
+                        );
+                      })}
+                      <th className="sticky right-0 z-30 w-24 bg-gray-100 px-2 py-2 text-center font-semibold text-gray-700 border-b border-l">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {listRows.map(row => (
+                      <tr key={getListRowKey(row)} className={`border-b border-gray-100 hover:bg-gray-50 ${row._is_new_draft ? 'bg-blue-50/30' : ''}`}>
+                        <td className="sticky left-0 z-10 bg-white px-2 py-1.5 font-mono text-gray-600 border-r">
+                          {row._is_new_draft ? '草稿' : `#${row.id}`}
+                        </td>
+                        {listVisibleColumns.map((col: any) => {
+                          const field = colKeyToField[col.key] || col.key;
+                          const dirty = isListCellDirty(row, field);
+                          return (
+                            <td key={col.key} className={`${dirty ? 'bg-amber-50' : ''} border-r align-top ${col.width || col._width || 'w-28'}`}>
+                              {renderListCell(row, field)}
+                            </td>
+                          );
+                        })}
+                        <td className="sticky right-0 z-10 border-l bg-white px-2 py-1.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateListRow(row)}
+                            disabled={readOnly}
+                            className="rounded border border-blue-200 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                          >
+                            複製
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {listRows.length === 0 && (
+                      <tr>
+                        <td colSpan={listVisibleColumns.length + 2} className="px-4 py-10 text-center text-sm text-gray-400">
+                          沒有符合條件的工作紀錄
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <div className="border-t border-gray-200 bg-white px-3 py-2 text-xs text-gray-500">
+                  顯示 {listRows.length} / {allPricingWorkLogs.length} 筆。列表編輯會存入 Step B 草稿；既有工作紀錄欄位會同步存為發票整理草稿，新增與複製列會保留在 Step B 草稿。
+                </div>
+              </div>
+            )}
+
+            {leftViewMode === "pivot" && (
             <div className="overflow-auto p-4">
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
@@ -2607,6 +3047,7 @@ export default function InvoicePricingPage() {
                 </div>
               </div>
             </div>
+            )}
           </section>
         )}
 
