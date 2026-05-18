@@ -97,6 +97,14 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 - B/F BALANCE（承前結餘）不作為交易行，但必須提取其金額作為 opening_balance
 - 忽略頁眉、頁腳、廣告、注意事項等非交易內容
 - 存入（Deposit/存入）金額為正數，提取（Withdrawal/提取）金額為負數
+- 判斷每筆交易正負號時，必須先讀取 PDF 字面內容中的金額數字，再依照金額出現在 Deposit/Deposits/存入 欄位或 Withdrawal/Withdrawals/提取 欄位的位置判斷正負；**欄位位置是最重要的主要依據**，尤其 HSBC 月結單的欄位順序為 Deposit, Withdrawal, Balance，不可只看數字或描述自行猜測
+- 如果金額位於 Deposit/Deposits/存入 欄位，該筆交易必須填入 deposits，amount 必須為正數；如果金額位於 Withdrawal/Withdrawals/提取 欄位，該筆交易必須填入 withdrawals，amount 必須為負數
+- 必須用 transaction description 交叉驗證欄位判斷：包含 "ATM WITHDRAWAL"、"WITHDRAWAL"、"CHEQUE"、"CHQ"、"CLEARING CHEQUE"、"CHARGES"、"FEE"、"AUTOPAY"、"PAYMENT"、"TRANSFER OUT" 等語意通常為支出；包含 "CHEQUE DEPOSIT"、"CASH DEPOSIT"、"CASH"、"DEPOSIT"、"TRANSFER IN"、"CREDIT" 等語意通常為存入。注意 "CHEQUE DEPOSIT" 是存入，但單獨 "CHEQUE" 或 "CLEARING CHEQUE" 通常是支出
+- 必須盡量使用月結單上的 running balance 驗算交易正負號，但要彈性適應不同銀行格式：如果每筆交易都有 balance，逐筆驗算「前一筆 balance + deposits - withdrawals = 本筆 balance」或「前一筆 balance + amount = 本筆 balance」；第一筆交易以前 opening_balance / B/F BALANCE 作為前一筆 balance
+- 如果只有部分交易顯示 balance（例如每天只在最後一筆交易後顯示當日結餘，或只在某些交易行顯示結餘），不要報錯、不要跳過交易，也不要要求每筆都有 balance；應使用相鄰可用 balance 點驗算該段區間的交易總和：前一個可用 balance + 該區間 deposits 總和 - 該區間 withdrawals 總和 = 下一個可用 balance。若區間總和不符，必須檢查並修正該區間內可能判錯正負號的交易
+- 如果某些交易前後都沒有可用 balance 可驗算，仍必須輸出該交易，並以 PDF 的 Deposit/Withdrawal 欄位位置為主要依據、transaction description 為交叉驗證依據判斷 deposits、withdrawals 和 amount，不可因無法驗算 balance 而跳過或留空
+- 若 PDF 欄位位置、description 語意與可用的 running balance 驗算結果有衝突，優先順序為：1) running balance 驗算結果（銀行計算，一定正確）作為最終判斷；2) PDF 的 Deposit/Withdrawal 欄位位置；3) transaction description。也就是說，在有足夠 balance 資訊時，最終輸出的 withdrawals、deposits、amount 必須能讓 running balance 或可用 balance 區間總和相符
+- 特別注意 HSBC ATM 提款案例：例如描述含 "ATM" 或 "ATM WITHDRAWAL"，金額 50,000 位於 Withdrawal 欄，且 balance 較前一筆少 50,000，必須輸出 withdrawals: 50000、deposits: null、amount: -50000，絕不可誤判為存入
 - 支票號碼（如 CHEQUE 312928、CHQ NO.001618、CLEARING CHEQUE 200331）提取為 reference_no
 - 如果同一日期有多筆交易，每筆都要單獨列出
 - 日期統一轉換為 YYYY-MM-DD 格式（如 "2-Feb" 需根據月結單期間判斷年份）
