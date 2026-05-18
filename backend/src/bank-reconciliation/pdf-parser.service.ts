@@ -101,7 +101,10 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 - 如果金額位於 Deposit/Deposits/存入 欄位，該筆交易必須填入 deposits，amount 必須為正數；如果金額位於 Withdrawal/Withdrawals/提取 欄位，該筆交易必須填入 withdrawals，amount 必須為負數
 - 必須用 transaction description 交叉驗證欄位判斷：包含 "ATM WITHDRAWAL"、"WITHDRAWAL"、"CHEQUE"、"CHQ"、"CLEARING CHEQUE"、"CHARGES"、"FEE"、"AUTOPAY"、"PAYMENT"、"TRANSFER OUT" 等語意通常為支出；包含 "CHEQUE DEPOSIT"、"CASH DEPOSIT"、"CASH"、"DEPOSIT"、"TRANSFER IN"、"CREDIT" 等語意通常為存入。注意 "CHEQUE DEPOSIT" 是存入，但單獨 "CHEQUE" 或 "CLEARING CHEQUE" 通常是支出
 - 必須盡量使用月結單上的 running balance 驗算交易正負號，但要彈性適應不同銀行格式：如果每筆交易都有 balance，逐筆驗算「前一筆 balance + deposits - withdrawals = 本筆 balance」或「前一筆 balance + amount = 本筆 balance」；第一筆交易以前 opening_balance / B/F BALANCE 作為前一筆 balance
-- 如果只有部分交易顯示 balance（例如每天只在最後一筆交易後顯示當日結餘，或只在某些交易行顯示結餘），不要報錯、不要跳過交易，也不要要求每筆都有 balance；應使用相鄰可用 balance 點驗算該段區間的交易總和：前一個可用 balance + 該區間 deposits 總和 - 該區間 withdrawals 總和 = 下一個可用 balance。若區間總和不符，必須檢查並修正該區間內可能判錯正負號的交易
+- 如果只有部分交易顯示 balance（例如每天只在最後一筆交易後顯示當日結餘，或只在某些交易行顯示結餘），不要報錯、不要跳過交易，也不要要求每筆都有 balance；應使用相鄰可用 balance 點驗算該段區間的交易總和：前一個可用 balance + 該區間 deposits 總和 - 該區間 withdrawals 總和 = 下一個可用 balance。若區間總和不符，必須檢查並修正該區間內可能判錯正負號或讀錯金額數字的交易
+- running balance 驗算不只用來驗證存入/支出方向，也必須用來核對金額數字本身是否正確。當「前一筆 balance ± 本筆金額 ≠ 本筆 balance」或區間總和不符時，不只可能是正負判斷錯誤，也可能是 OCR / 視覺讀取把金額讀錯（例如把 19,760 讀成 19,700、漏讀千分位、小數點位置錯誤、把相鄰欄位數字混淆）
+- 發現 running balance 驗算不符時，必須依序處理：1) 先嘗試翻轉正負方向，看是否能與 balance 相符；2) 如果翻轉正負仍不相符，必須重新檢查 PDF 中該筆或該區間的金額數字是否讀取正確；3) 在逐筆有 balance 的情況下，用 balance 差值反推正確金額，正確金額 = |本筆 balance - 前一筆 balance|，再依 balance 增減決定 deposits 或 withdrawals；4) 在只有區間 balance 的情況下，用「下一個可用 balance - 前一個可用 balance」核對該區間交易淨額，找出可能讀錯的金額並修正
+- running balance 是銀行計算結果，必須視為最可靠依據；在有足夠 balance 資訊可驗算時，AI 應以 running balance 修正自己讀取的金額和方向，最終輸出的 amount、withdrawals、deposits 必須能與可用 balance 驗算相符
 - 如果某些交易前後都沒有可用 balance 可驗算，仍必須輸出該交易，並以 PDF 的 Deposit/Withdrawal 欄位位置為主要依據、transaction description 為交叉驗證依據判斷 deposits、withdrawals 和 amount，不可因無法驗算 balance 而跳過或留空
 - 若 PDF 欄位位置、description 語意與可用的 running balance 驗算結果有衝突，優先順序為：1) running balance 驗算結果（銀行計算，一定正確）作為最終判斷；2) PDF 的 Deposit/Withdrawal 欄位位置；3) transaction description。也就是說，在有足夠 balance 資訊時，最終輸出的 withdrawals、deposits、amount 必須能讓 running balance 或可用 balance 區間總和相符
 - 特別注意 HSBC ATM 提款案例：例如描述含 "ATM" 或 "ATM WITHDRAWAL"，金額 50,000 位於 Withdrawal 欄，且 balance 較前一筆少 50,000，必須輸出 withdrawals: 50000、deposits: null、amount: -50000，絕不可誤判為存入
