@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { createOpenAIClient } from '../common/openai-client';
-import { readFileSync, unlinkSync, existsSync } from 'fs';
+import { readFileSync, unlinkSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -40,16 +40,19 @@ export class PdfParserService {
    * Otherwise, falls back to vision-based parsing.
    */
   async parsePdf(
-    filePath: string,
+    fileInput: string | Buffer | { path?: string; buffer?: Buffer; originalname?: string },
     companies: any[] = [],
     bankAccounts: any[] = [],
   ): Promise<PdfParseResult> {
+    const normalizedFile = this.normalizePdfInput(fileInput);
+    const filePath = normalizedFile.filePath;
+    const pdfBuffer = normalizedFile.buffer;
     let extractedText = '';
     let useVision = false;
 
     try {
       // Step 1: Try text extraction
-      extractedText = await this.extractTextFromPdf(filePath);
+      extractedText = await this.extractTextFromPdf(pdfBuffer);
       
       // If text is too short or looks like garbage, fallback to vision
       if (!extractedText || extractedText.trim().length < 50) {
@@ -238,18 +241,52 @@ ${identificationContext}
           try { unlinkSync(tmpPath); } catch {}
         }
       });
+      if (normalizedFile.shouldCleanupPath && filePath && existsSync(filePath)) {
+        try { unlinkSync(filePath); } catch {}
+      }
     }
+  }
+
+  /**
+   * Normalize uploaded PDF input into a Buffer for text parsing and a path for vision fallback.
+   */
+  private normalizePdfInput(fileInput: string | Buffer | { path?: string; buffer?: Buffer; originalname?: string }): { buffer: Buffer; filePath: string; shouldCleanupPath: boolean } {
+    if (Buffer.isBuffer(fileInput)) {
+      const tmpPath = join(tmpdir(), `bank_statement_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+      writeFileSync(tmpPath, fileInput);
+      return { buffer: fileInput, filePath: tmpPath, shouldCleanupPath: true };
+    }
+
+    if (typeof fileInput === 'string') {
+      return { buffer: readFileSync(fileInput), filePath: fileInput, shouldCleanupPath: false };
+    }
+
+    if (fileInput?.buffer && Buffer.isBuffer(fileInput.buffer)) {
+      const tmpPath = fileInput.path || join(tmpdir(), `bank_statement_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+      if (!fileInput.path) writeFileSync(tmpPath, fileInput.buffer);
+      return { buffer: fileInput.buffer, filePath: tmpPath, shouldCleanupPath: !fileInput.path };
+    }
+
+    if (fileInput?.path) {
+      return { buffer: readFileSync(fileInput.path), filePath: fileInput.path, shouldCleanupPath: false };
+    }
+
+    throw new BadRequestException('PDF 文件內容無效：未能取得上傳文件的 buffer 或 path。');
   }
 
   /**
    * Extract text content from PDF using pdf-parse.
    */
-  private async extractTextFromPdf(filePath: string): Promise<string> {
-    const dataBuffer = readFileSync(filePath);
-    // Use require for pdf-parse to avoid ESM/CommonJS issues in NestJS
-    const pdfParse = require('pdf-parse');
-    const data = await pdfParse(dataBuffer);
-    return data.text;
+  private async extractTextFromPdf(dataBuffer: Buffer): Promise<string> {
+    // pdf-parse v2 exposes PDFParse class; the v1 callable default export no longer exists.
+    const { PDFParse } = require('pdf-parse');
+    const parser = new PDFParse({ data: dataBuffer });
+    try {
+      const data = await parser.getText();
+      return data.text || '';
+    } finally {
+      await parser.destroy();
+    }
   }
 
   /**

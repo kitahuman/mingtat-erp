@@ -169,12 +169,12 @@ export class BankReconciliationController {
     } catch {}
 
     try {
-      const result = await this.pdfParser.parsePdf(file.path, companies, bankAccounts);
+      const result = await this.pdfParser.parsePdf(file, companies, bankAccounts);
       return result;
     } finally {
       // Clean up uploaded PDF after parsing
       try {
-        if (existsSync(file.path)) {
+        if (file.path && existsSync(file.path)) {
           unlinkSync(file.path);
         }
       } catch {}
