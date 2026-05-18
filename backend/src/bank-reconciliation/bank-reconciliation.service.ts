@@ -572,6 +572,12 @@ export class BankReconciliationService {
   }
 
   async getSummary(bankAccountId: number, dateFrom?: string, dateTo?: string) {
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: { id: true, opening_balance: true },
+    });
+    if (!bankAccount) throw new NotFoundException('銀行帳戶不存在');
+
     const where: Prisma.BankTransactionWhereInput = { bank_account_id: bankAccountId };
     if (dateFrom || dateTo) {
       where.date = {};
@@ -580,6 +586,49 @@ export class BankReconciliationService {
     }
 
     const txs = await this.prisma.bankTransaction.findMany({ where });
+
+    // Calculate B/F (Balance Forward) and C/D (Closing Date)
+    let bf_balance = bankAccount.opening_balance ?? new Prisma.Decimal(0);
+    let cd_balance = bf_balance;
+
+    if (dateFrom || dateTo) {
+      // If date filter is applied, find B/F from last transaction before dateFrom
+      const dateFromObj = dateFrom ? new Date(dateFrom) : null;
+      if (dateFromObj) {
+        const lastBefore = await this.prisma.bankTransaction.findFirst({
+          where: {
+            bank_account_id: bankAccountId,
+            date: { lt: dateFromObj },
+          },
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
+          select: { balance: true },
+        });
+        bf_balance = lastBefore?.balance ?? bankAccount.opening_balance ?? new Prisma.Decimal(0);
+      }
+      // C/D is the balance of the last transaction in the filtered range
+      if (txs.length > 0) {
+        const lastInRange = txs.reduce((latest, current) => {
+          const latestDate = new Date(latest.date);
+          const currentDate = new Date(current.date);
+          return currentDate > latestDate || (currentDate.getTime() === latestDate.getTime() && current.id > latest.id)
+            ? current
+            : latest;
+        });
+        cd_balance = lastInRange.balance ?? bf_balance;
+      }
+    } else {
+      // No date filter: B/F is opening_balance, C/D is last transaction balance
+      if (txs.length > 0) {
+        const lastTx = txs.reduce((latest, current) => {
+          const latestDate = new Date(latest.date);
+          const currentDate = new Date(current.date);
+          return currentDate > latestDate || (currentDate.getTime() === latestDate.getTime() && current.id > latest.id)
+            ? current
+            : latest;
+        });
+        cd_balance = lastTx.balance ?? bf_balance;
+      }
+    }
 
     const summary = {
       total_count: txs.length,
@@ -598,6 +647,8 @@ export class BankReconciliationService {
       unmatched_amount: txs
         .filter(t => t.match_status === 'unmatched')
         .reduce((sum, t) => sum.add(t.amount.abs()), new Prisma.Decimal(0)),
+      bf_balance: bf_balance.toNumber(),
+      cd_balance: cd_balance.toNumber(),
     };
 
     return summary;

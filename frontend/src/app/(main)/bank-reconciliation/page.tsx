@@ -512,7 +512,7 @@ export default function BankReconciliationPage() {
 
       {/* ═══ Summary Cards ═══ */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           <div className="bg-white p-3 rounded-xl border shadow-sm">
             <div className="text-xs text-gray-500">總交易</div>
             <div className="text-xl font-bold">{summary.total_count}</div>
@@ -537,10 +537,22 @@ export default function BankReconciliationPage() {
             <div className="text-xs text-gray-500">總提取</div>
             <div className="text-lg font-bold text-red-600">${fmtMoney(summary.total_withdrawals)}</div>
           </div>
-          <div className="bg-white p-3 rounded-xl border shadow-sm border-l-4 border-l-blue-400">
-            <div className="text-xs text-gray-500 font-medium">帳戶期初結餘 (B/F)</div>
-            <div className="mt-1 text-lg font-bold">${fmtMoney(selectedAccount?.opening_balance)}</div>
-            <div className="text-[10px] text-gray-400 mt-1">可於銀行帳戶設定修改並重新計算</div>
+
+        </div>
+      )}
+
+      {/* ═══ B/F & C/D Balance Cards ═══ */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+            <div className="text-xs text-blue-600 font-medium">B/F 結餘（期初）</div>
+            <div className="mt-2 text-2xl font-bold text-blue-700">${fmtMoney(summary.bf_balance)}</div>
+            <div className="text-[10px] text-blue-500 mt-1">篩選期間開始前的結餘</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-xl border border-green-200 shadow-sm">
+            <div className="text-xs text-green-600 font-medium">C/D 結餘（結轉）</div>
+            <div className="mt-2 text-2xl font-bold text-green-700">${fmtMoney(summary.cd_balance)}</div>
+            <div className="text-[10px] text-green-500 mt-1">篩選期間結束時的結餘</div>
           </div>
         </div>
       )}
