@@ -107,6 +107,11 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 - 特別注意 HSBC ATM 提款案例：例如描述含 "ATM" 或 "ATM WITHDRAWAL"，金額 50,000 位於 Withdrawal 欄，且 balance 較前一筆少 50,000，必須輸出 withdrawals: 50000、deposits: null、amount: -50000，絕不可誤判為存入
 - 支票號碼（如 CHEQUE 312928、CHQ NO.001618、CLEARING CHEQUE 200331）提取為 reference_no
 - 如果同一日期有多筆交易，每筆都要單獨列出
+- 不要因為多筆交易金額相同就判斷為重複交易或跳過後面的交易；金額相同不代表是重複交易，銀行月結單中常見多筆相同金額但支票號碼、參考編號或 running balance 不同的獨立交易
+- 判斷交易是否重複時，必須同時比較日期、description（包含 reference_no / 支票號碼 / 參考編號）、金額、withdrawals、deposits、balance 是否全部完全相同；只有所有欄位完全一致時才可視為重複，這在正常月結單中幾乎不會發生
+- 如果 reference_no / 支票號碼 / 參考編號不同，一定不是重複交易，必須分別輸出；如果 running balance 不同，一定不是重複交易，必須分別輸出
+- 特別注意相同金額支票案例：例如 CLEARING CHEQUE 200364 和 CLEARING CHEQUE 200371 都是 19,000.00，或 CLEARING CHEQUE 200360 和 CLEARING CHEQUE 200367 都是 19,760.00，只要支票號碼或 balance 不同，全部都是獨立交易，必須逐筆輸出，不可合併或跳過
+- 寧可多輸出一筆「疑似重複」的交易，也不要漏掉真實交易；漏交易會導致 running balance 驗算不符
 - 日期統一轉換為 YYYY-MM-DD 格式（如 "2-Feb" 需根據月結單期間判斷年份）
 ${identificationContext}
 
