@@ -6,6 +6,7 @@ import Modal from '@/components/Modal';
 
 type ImportMode = 'csv' | 'pdf';
 type Step = 'upload' | 'preview' | 'importing' | 'done';
+type ProgressStage = 'idle' | 'uploading' | 'parsing' | 'importing' | 'done';
 
 interface ParsedRow {
   date: string;
@@ -28,6 +29,8 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
   const [statementPeriod, setStatementPeriod] = useState('');
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progressStage, setProgressStage] = useState<ProgressStage>('idle');
+  const [progressMessage, setProgressMessage] = useState('');
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +51,8 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     setStatementPeriod('');
     setOpeningBalance(null);
     setError('');
+    setProgressStage('idle');
+    setProgressMessage('');
     setImportResult(null);
     setIdentifiedCompanyName('');
     setIdentifiedCompanyId(null);
@@ -105,6 +110,62 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     if (val == null) return '—';
     return Number(val).toLocaleString('en-HK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  const progressSteps = [
+    { stage: 'uploading' as ProgressStage, label: '上傳 PDF' },
+    { stage: 'parsing' as ProgressStage, label: 'AI 辨識' },
+    { stage: 'importing' as ProgressStage, label: '匯入交易' },
+    { stage: 'done' as ProgressStage, label: '完成' },
+  ];
+
+  const progressOrder: Record<ProgressStage, number> = {
+    idle: 0,
+    uploading: 1,
+    parsing: 2,
+    importing: 3,
+    done: 4,
+  };
+
+  const renderProgressStatus = () => {
+    if (!progressMessage || progressStage === 'idle') return null;
+    const currentOrder = progressOrder[progressStage];
+
+    return (
+      <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
+        <div className="flex items-center gap-3">
+          {progressStage !== 'done' ? (
+            <svg className="animate-spin h-5 w-5 text-purple-600 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="h-5 w-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+          )}
+          <div>
+            <p className="text-sm font-medium text-purple-900">{progressMessage}</p>
+            {progressStage === 'parsing' && (
+              <p className="text-xs text-purple-700 mt-0.5">AI 解析 PDF 可能需要 10–30 秒，請稍候，不要關閉視窗。</p>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {progressSteps.map(item => {
+            const stepOrder = progressOrder[item.stage];
+            const active = currentOrder === stepOrder;
+            const completed = currentOrder > stepOrder;
+            return (
+              <div key={item.stage} className="space-y-1">
+                <div className={`h-1.5 rounded-full transition-colors ${completed ? 'bg-green-500' : active ? 'bg-purple-600 animate-pulse' : 'bg-purple-100'}`} />
+                <p className={`text-[11px] text-center ${completed ? 'text-green-700' : active ? 'text-purple-700 font-medium' : 'text-gray-400'}`}>{item.label}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   // ── CSV Parsing ──────────────────────────────────────────────
   const parseCSV = (text: string): ParsedRow[] => {
@@ -164,8 +225,17 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     if (!pdfFile) return;
     setLoading(true);
     setError('');
+    setProgressStage('uploading');
+    setProgressMessage('正在上傳 PDF...');
+    const parsingTimer = window.setTimeout(() => {
+      setProgressStage('parsing');
+      setProgressMessage('AI 正在辨識交易記錄...');
+    }, 800);
     try {
       const res = await bankReconciliationApi.parsePdf(pdfFile, companies, bankAccounts);
+      window.clearTimeout(parsingTimer);
+      setProgressStage('parsing');
+      setProgressMessage('AI 正在辨識交易記錄...');
       const data = res.data;
       if (!data.transactions || data.transactions.length === 0) {
         setError('AI 未能從 PDF 中提取任何交易記錄，請確認 PDF 格式正確');
@@ -192,9 +262,14 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
         _selected: true,
       }));
       setParsedRows(rows);
+      setProgressStage('idle');
+      setProgressMessage('');
       setStep('preview');
     } catch (err: any) {
+      window.clearTimeout(parsingTimer);
       setError(err.response?.data?.message || 'AI 解析失敗，請稍後再試');
+      setProgressStage('idle');
+      setProgressMessage('');
     } finally {
       setLoading(false);
     }
@@ -207,6 +282,8 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     setStep('importing');
     setLoading(true);
     setError('');
+    setProgressStage('importing');
+    setProgressMessage(`已辨識 ${selected.length} 筆交易，正在匯入...`);
     try {
       const rows = selected.map(r => ({
         date: r.date,
@@ -226,6 +303,8 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
 
       if (res.data?.balanceMismatch) {
         setStep('preview');
+        setProgressStage('idle');
+        setProgressMessage('');
         setLoading(false);
         const actual = fmtMoney(res.data.actualBalance);
         const expected = fmtMoney(res.data.expectedBalance);
@@ -236,11 +315,15 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
         return;
       }
 
+      setProgressStage('done');
+      setProgressMessage('匯入完成');
       setImportResult(res.data);
       setStep('done');
       onSuccess();
     } catch (err: any) {
       setError(err.response?.data?.message || '匯入失敗，請稍後再試');
+      setProgressStage('idle');
+      setProgressMessage('');
       setStep('preview');
     } finally {
       setLoading(false);
@@ -278,12 +361,9 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
 
         {/* ── Importing ── */}
         {step === 'importing' && (
-          <div className="text-center py-12">
-            <svg className="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <p className="text-gray-600">正在匯入並自動配對...</p>
+          <div className="py-12 space-y-4">
+            {renderProgressStatus()}
+            <p className="text-center text-sm text-gray-500">系統正在匯入並自動配對交易，請稍候。</p>
           </div>
         )}
 
@@ -394,9 +474,10 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                   const f = e.target.files?.[0];
                   if (f) setPdfFile(f);
                 }} />
+                {renderProgressStatus()}
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 <div className="flex justify-end gap-2 pt-2 border-t">
-                  <button onClick={handleClose} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg">取消</button>
+                  <button onClick={handleClose} disabled={loading} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg disabled:opacity-50">取消</button>
                   <button
                     onClick={parsePDF}
                     disabled={!pdfFile || loading}
