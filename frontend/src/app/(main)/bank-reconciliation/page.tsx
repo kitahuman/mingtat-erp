@@ -19,6 +19,7 @@ export default function BankReconciliationPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // ── Data state ──
   const [summary, setSummary] = useState<any>(null);
@@ -116,6 +117,7 @@ export default function BankReconciliationPage() {
         bank_account_id: selectedAccountId,
         page,
         limit,
+        sort_order: sortOrder,
       };
       const summaryParams: any = {};
       if (dateFrom) { txParams.date_from = dateFrom; summaryParams.date_from = dateFrom; }
@@ -135,7 +137,7 @@ export default function BankReconciliationPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAccountId, page, dateFrom, dateTo, statusFilter]);
+  }, [selectedAccountId, page, dateFrom, dateTo, statusFilter, sortOrder]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -302,6 +304,17 @@ export default function BankReconciliationPage() {
   const selectedAccount = accounts.find((a: any) => a.id === selectedAccountId);
 
   const fmtMoney = (val: any) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const formatDateInput = (date: Date) => format(date, 'yyyy-MM-dd');
+
+  const applyMonthShortcut = (monthOffset: number) => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0);
+    setDateFrom(formatDateInput(firstDay));
+    setDateTo(formatDateInput(lastDay));
+    setPage(1);
+  };
 
   const getMatchStatusIcon = (status: string) => {
     switch (status) {
@@ -479,6 +492,24 @@ export default function BankReconciliationPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 -mt-3">
+        <span className="text-xs font-medium text-gray-500">日期快捷：</span>
+        {[
+          { label: '本月', offset: 0 },
+          { label: '上月', offset: -1 },
+          { label: '上上月', offset: -2 },
+        ].map((shortcut) => (
+          <button
+            key={shortcut.label}
+            type="button"
+            onClick={() => applyMonthShortcut(shortcut.offset)}
+            className="px-3 py-1.5 text-xs border rounded-lg bg-white hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+          >
+            {shortcut.label}
+          </button>
+        ))}
+      </div>
+
       {/* ═══ Summary Cards ═══ */}
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -515,7 +546,30 @@ export default function BankReconciliationPage() {
       )}
 
       {/* ═══ Bookkeeping Table (Left-Right Layout) ═══ */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b bg-white">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">交易列表</h2>
+            <p className="text-xs text-gray-500">目前排序：{sortOrder === 'desc' ? '倒序（日期由新到舊）' : '順序（日期由舊到新）'}</p>
+          </div>
+          <div className="inline-flex rounded-lg border bg-gray-50 p-1 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => { setSortOrder('asc'); setPage(1); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'asc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              順序
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSortOrder('desc'); setPage(1); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'desc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              倒序
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
         {/* Table Header */}
         <div className="bg-gray-50 border-b">
           <div className="grid min-w-[1120px] text-xs font-semibold text-gray-600 uppercase tracking-wider" style={{ gridTemplateColumns: reconciliationGridColumns }}>

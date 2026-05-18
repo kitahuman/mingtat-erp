@@ -8,6 +8,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
+# Install system dependencies
+RUN apk add --no-cache poppler-utils
+
 # Install all dependencies (including dev for build)
 RUN npm ci
 
@@ -39,6 +42,9 @@ ENV NODE_ENV=production
 
 # Copy package files
 COPY package.json package-lock.json ./
+
+# Install system dependencies
+RUN apk add --no-cache poppler-utils
 
 # Install production dependencies only
 RUN npm ci --omit=dev

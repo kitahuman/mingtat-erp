@@ -17,8 +17,10 @@ export class BankReconciliationService {
     match_status?: string;
     page?: number;
     limit?: number;
+    sort_order?: string;
   }) {
     const { bank_account_id, date_from, date_to, match_status, page = 1, limit = 50 } = params;
+    const sortOrder: Prisma.SortOrder = params.sort_order === 'asc' ? 'asc' : 'desc';
     const where: Prisma.BankTransactionWhereInput = { bank_account_id };
 
     if (date_from || date_to) {
@@ -34,7 +36,7 @@ export class BankReconciliationService {
     const [items, total] = await Promise.all([
       this.prisma.bankTransaction.findMany({
         where,
-        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        orderBy: [{ date: sortOrder }, { id: sortOrder }],
         skip: (page - 1) * limit,
         take: limit,
       }),
