@@ -28,6 +28,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
   const [bankName, setBankName] = useState('');
   const [statementPeriod, setStatementPeriod] = useState('');
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
+  const [statementClosingBalance, setStatementClosingBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [progressStage, setProgressStage] = useState<ProgressStage>('idle');
   const [progressMessage, setProgressMessage] = useState('');
@@ -50,6 +51,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     setBankName('');
     setStatementPeriod('');
     setOpeningBalance(null);
+    setStatementClosingBalance(null);
     setError('');
     setProgressStage('idle');
     setProgressMessage('');
@@ -245,6 +247,15 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
       setStatementPeriod(data.statement_period || '');
       setOpeningBalance(data.opening_balance ?? null);
 
+      const pdfClosingBalance =
+        data.closing_balance ??
+        data.ending_balance ??
+        data.statement_closing_balance ??
+        data.closingBalance ??
+        [...(data.transactions || [])].reverse().find((t: any) => t.balance != null)?.balance ??
+        null;
+      setStatementClosingBalance(pdfClosingBalance != null ? Number(pdfClosingBalance) : null);
+
       // Set AI-identified company and account
       if (data.identified_company_name) setIdentifiedCompanyName(data.identified_company_name);
       if (data.identified_company_id) setIdentifiedCompanyId(data.identified_company_id);
@@ -341,6 +352,25 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
 
   const selectedCount = parsedRows.filter(r => r._selected).length;
 
+  const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+
+  const calculatedBalances: (number | null)[] = (() => {
+    if (openingBalance == null) return parsedRows.map(() => null);
+    let runningBalance = Number(openingBalance);
+    return parsedRows.map(row => {
+      runningBalance = roundMoney(runningBalance + Number(row.amount || 0));
+      return runningBalance;
+    });
+  })();
+
+  const calculatedClosingBalance = calculatedBalances.length > 0
+    ? calculatedBalances[calculatedBalances.length - 1]
+    : openingBalance;
+  const balanceDifference = calculatedClosingBalance != null && statementClosingBalance != null
+    ? roundMoney(calculatedClosingBalance - statementClosingBalance)
+    : null;
+  const balanceMatches = balanceDifference != null ? Math.abs(balanceDifference) < 0.01 : null;
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="匯入銀行月結單" size="xl">
       <div className="space-y-4">
@@ -421,6 +451,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                       try {
                         const rows = parseCSV(csvText);
                         if (rows.length === 0) { setError('無法解析任何交易記錄，請檢查 CSV 格式'); return; }
+                        setStatementClosingBalance(null);
                         setParsedRows(rows);
                         setStep('preview');
                       } catch (err: any) {
@@ -508,6 +539,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                 {bankName && <span><strong>銀行：</strong>{bankName}</span>}
                 {statementPeriod && <span><strong>對帳期間：</strong>{statementPeriod}</span>}
                 {openingBalance != null && <span><strong>B/F BALANCE：</strong>${fmtMoney(openingBalance)}</span>}
+                {statementClosingBalance != null && <span><strong>月結單期末結餘：</strong>${fmtMoney(statementClosingBalance)}</span>}
                 <span className="ml-auto text-blue-600 text-xs">AI 辨識結果，請核對後確認匯入</span>
               </div>
             )}
@@ -544,6 +576,32 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
               </button>
             </div>
 
+            {openingBalance != null && (
+              <div className={`p-3 rounded-lg border text-sm ${balanceMatches === false ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-medium text-gray-800">
+                    計算期末結餘：${fmtMoney(calculatedClosingBalance)}
+                  </span>
+                  {statementClosingBalance != null && balanceMatches === true && (
+                    <span className="text-green-700 font-medium">✓ 與月結單期末結餘一致</span>
+                  )}
+                  {statementClosingBalance != null && balanceMatches === false && (
+                    <span className="text-red-700 font-medium">
+                      計算結餘與月結單不符，差額 ${fmtMoney(Math.abs(balanceDifference || 0))}
+                    </span>
+                  )}
+                </div>
+                <p className={`mt-1 text-xs ${balanceMatches === false ? 'text-red-700' : 'text-green-700'}`}>
+                  結餘欄已由前端從 B/F BALANCE 開始，按每筆存入/提取重新計算；{statementClosingBalance != null ? '請用此結果核對 AI 是否漏交易、讀錯金額或判錯正負。' : '月結單期末結餘未提供，請自行核對最後一筆計算結餘。'}
+                </p>
+                {statementClosingBalance != null && balanceMatches === false && (
+                  <p className="mt-1 text-xs text-red-700">
+                    可能有交易金額或正負判斷錯誤；仍可繼續匯入，但建議先檢查紅色差額。
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="overflow-x-auto border rounded-lg max-h-80">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0">
@@ -578,7 +636,12 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                       <td className="px-2 py-1.5 text-right text-green-600">
                         {row.deposits !== undefined ? fmtMoney(row.deposits) : (row.amount >= 0 ? fmtMoney(row.amount) : '—')}
                       </td>
-                      <td className="px-2 py-1.5 text-right text-gray-600">{fmtMoney(row.balance)}</td>
+                      <td
+                        className="px-2 py-1.5 text-right text-gray-600"
+                        title={row.balance != null ? `PDF 原始結餘：$${fmtMoney(row.balance)}` : undefined}
+                      >
+                        {fmtMoney(calculatedBalances[idx] ?? row.balance)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
