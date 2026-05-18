@@ -767,6 +767,7 @@ export default function BankReconciliationPage() {
           )}
         </div>
       </div>
+      </div>
 
       {/* ── Pagination ── */}
       {total > limit && (
