@@ -4,41 +4,29 @@ import puppeteer from 'puppeteer';
 import { existsSync, readFileSync } from 'fs';
 import { extname, join, normalize } from 'path';
 
-export type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
+export type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
 
-export interface InvoicePdfOptions {
-  language?: InvoicePdfLanguage;
-  showBank?: boolean;
-  showClientAddress?: boolean;
-  showClientPhone?: boolean;
+export interface QuotationPdfOptions {
+  language?: QuotationPdfLanguage;
   showSignature?: boolean;
   overridePaymentTerms?: string;
 }
 
-interface BankInfo {
-  bank_name?: string;
-  account_name?: string;
-  account_no?: string;
-  show_bank?: boolean;
-  show_account_name?: boolean;
-  show_account_no?: boolean;
-}
-
 @Injectable()
-export class InvoicePdfService {
+export class QuotationPdfService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async generateInvoiceHtml(
-    invoiceId: number,
-    options: InvoicePdfOptions = {},
+  async generateQuotationHtml(
+    quotationId: number,
+    options: QuotationPdfOptions = {},
   ) {
-    const { html } = await this.buildInvoiceHtmlData(invoiceId, options);
+    const { html } = await this.buildQuotationHtmlData(quotationId, options);
     return html;
   }
 
-  async generateInvoicePdf(invoiceId: number, options: InvoicePdfOptions = {}) {
-    const { invoice, html } = await this.buildInvoiceHtmlData(
-      invoiceId,
+  async generateQuotationPdf(quotationId: number, options: QuotationPdfOptions = {}) {
+    const { quotation, html } = await this.buildQuotationHtmlData(
+      quotationId,
       options,
     );
 
@@ -57,7 +45,7 @@ export class InvoicePdfService {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
       const companyName = this.escapeHtml(
-        invoice.company?.name_en || invoice.company?.name || 'Invoice',
+        quotation.company?.name_en || quotation.company?.name || 'Quotation',
       );
       const pdf = await page.pdf({
         format: 'A4',
@@ -66,7 +54,7 @@ export class InvoicePdfService {
         headerTemplate: '<div></div>',
         footerTemplate: `
           <div style="width:100%; font-family:Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
-            ${companyName} · Invoice · Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+            ${companyName} · Quotation · Page <span class="pageNumber"></span> of <span class="totalPages"></span>
           </div>
         `,
         margin: { top: '11mm', right: '11mm', bottom: '13mm', left: '11mm' },
@@ -77,126 +65,51 @@ export class InvoicePdfService {
     }
   }
 
-  private async buildInvoiceHtmlData(
-    invoiceId: number,
-    options: InvoicePdfOptions = {},
+  private async buildQuotationHtmlData(
+    quotationId: number,
+    options: QuotationPdfOptions = {},
   ) {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { id: quotationId },
       include: {
         items: { orderBy: { sort_order: 'asc' } },
         client: true,
-        company: {
-          include: {
-            bank_accounts: {
-              where: { is_active: true },
-              orderBy: { id: 'asc' },
-            },
-          },
-        },
+        company: true,
         project: true,
-        quotation: true,
       },
     });
 
-    if (!invoice || invoice.deleted_at)
-      throw new NotFoundException('發票不存在');
+    if (!quotation || quotation.deleted_at)
+      throw new NotFoundException('報價單不存在');
 
-    const language = this.normalizeLanguage(
-      options.language ||
-        (invoice.invoice_language as InvoicePdfLanguage) ||
-        'zh',
-    );
-    const showBank = options.showBank ?? invoice.invoice_show_bank;
-    const showClientAddress =
-      options.showClientAddress ?? invoice.invoice_show_client_address;
-    const showClientPhone =
-      options.showClientPhone ?? invoice.invoice_show_client_phone;
+    const language = this.normalizeLanguage(options.language || 'zh');
     const showSignature = options.showSignature ?? true;
 
     return {
-      invoice,
-      html: this.buildHtml(invoice as any, {
+      quotation,
+      html: this.buildHtml(quotation as any, {
         language,
-        showBank,
-        showClientAddress,
-        showClientPhone,
         showSignature,
-        overridePaymentTerms: options.overridePaymentTerms || '',
+        overridePaymentTerms: options.overridePaymentTerms,
       }),
     };
   }
 
-  private buildHtml(invoice: any, options: Required<InvoicePdfOptions>) {
+  private buildHtml(quotation: any, options: Required<QuotationPdfOptions>) {
     const labels = this.labels(options.language);
-    const company = invoice.company || {};
-    const client = invoice.client || {};
+    const company = quotation.company || {};
+    const client = quotation.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const logoDataUri = this.logoDataUri(company.company_logo_url);
-    // Use existing BankAccount records linked to the company (from bank_accounts module)
-    const bankAccounts = (company as any).bank_accounts || [];
-    const bankInfo: BankInfo =
-      bankAccounts.length > 0
-        ? {
-            bank_name: bankAccounts[0].bank_name,
-            account_name: bankAccounts[0].account_name,
-            account_no: bankAccounts[0].account_no,
-            show_bank: true,
-            show_account_name: true,
-            show_account_no: true,
-          }
-        : this.parseBankInfo(company.invoice_bank_info);
-    const paymentTerms = options.overridePaymentTerms 
-      ? options.overridePaymentTerms
-      : (invoice.invoice_custom_payment_terms ||
-        invoice.payment_terms ||
-        company.invoice_default_payment_terms ||
-        '');
+    
+    const paymentTerms = options.overridePaymentTerms !== undefined 
+      ? options.overridePaymentTerms 
+      : (quotation.payment_terms || '');
 
-    const otherCharges = Array.isArray(invoice.other_charges)
-      ? invoice.other_charges
-      : [];
-    const surchargeTotal = otherCharges.reduce((sum: number, charge: any) => {
-      const amount = Number(charge?.amount || 0);
-      return amount > 0 ? sum + amount : sum;
-    }, 0);
-    const deductionTotal = otherCharges.reduce((sum: number, charge: any) => {
-      const amount = Number(charge?.amount || 0);
-      return amount < 0 ? sum + Math.abs(amount) : sum;
-    }, 0);
-    const retentionRate = Number(invoice.retention_rate || 0);
-    const retentionAmount = Number(invoice.retention_amount || 0);
-
-    const clientLines = [
-      options.showClientAddress && client.address
-        ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(client.address)}</span></div>`
-        : '',
-      options.showClientPhone && client.phone
-        ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>`
-        : '',
-    ].join('');
-
-    const bankRows = [
-      options.showBank && bankInfo.show_bank !== false && bankInfo.bank_name
-        ? `<tr><td>${labels.bank}</td><td>${this.escapeHtml(bankInfo.bank_name)}</td></tr>`
-        : '',
-      options.showBank &&
-      bankInfo.show_account_name !== false &&
-      bankInfo.account_name
-        ? `<tr><td>${labels.accountName}</td><td>${this.escapeHtml(bankInfo.account_name)}</td></tr>`
-        : '',
-      options.showBank &&
-      bankInfo.show_account_no !== false &&
-      bankInfo.account_no
-        ? `<tr><td>${labels.accountNo}</td><td>${this.escapeHtml(bankInfo.account_no)}</td></tr>`
-        : '',
-    ].join('');
-
-    const itemRows = (invoice.items || [])
+    const itemRows = (quotation.items || [])
       .map((item: any, idx: number) => {
-        const name = item.item_name || item.description || '';
-        const description =
-          item.item_name && item.description ? item.description : '';
+        const name = item.item_name || '';
+        const description = item.item_description || '';
         return `
         <tr>
           <td class="center">${idx + 1}</td>
@@ -214,33 +127,7 @@ export class InvoicePdfService {
       .join('');
 
     const totalsRows = [
-      this.totalRow(labels.subtotal, this.formatMoney(invoice.subtotal), false),
-      surchargeTotal > 0
-        ? this.totalRow(
-            labels.surcharge,
-            `+${this.formatMoney(surchargeTotal)}`,
-            false,
-          )
-        : '',
-      deductionTotal > 0
-        ? this.totalRow(
-            labels.deduction,
-            `-${this.formatMoney(deductionTotal)}`,
-            false,
-          )
-        : '',
-      retentionRate > 0 && retentionAmount > 0
-        ? this.totalRow(
-            `${labels.retention} ${this.formatPercent(retentionRate)}`,
-            `-${this.formatMoney(retentionAmount)}`,
-            false,
-          )
-        : '',
-      this.totalRow(
-        labels.netAmountDue,
-        this.formatMoney(invoice.total_amount),
-        true,
-      ),
+      this.totalRow(labels.total, this.formatMoney(quotation.total_amount), true),
     ].join('');
 
     return `<!DOCTYPE html>
@@ -258,7 +145,7 @@ export class InvoicePdfService {
     .invoice-page { width: 188mm; margin: 0 auto; background: #ffffff; }
     .top-rule { height: 5px; background: ${theme}; margin-bottom: 17px; border-radius: 2px; }
     .header, .info-row, .after-table, .footer-row { display: table; width: 100%; table-layout: fixed; }
-    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .payment-section, .note-area, .signature-area { display: table-cell; vertical-align: top; }
+    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .note-area, .signature-area { display: table-cell; vertical-align: top; }
     .company-block { width: 64%; padding-right: 18px; }
     .brand-block { width: 36%; text-align: right; }
     .company-name-cn { font-size: 25px; font-weight: 800; color: ${theme}; letter-spacing: 0.6px; margin: 0 0 2px 0; line-height: 1.15; }
@@ -276,8 +163,7 @@ export class InvoicePdfService {
     .client-box, .details-box { border: 1px solid #d9e2ec; border-left: 4px solid ${theme}; padding: 10px 12px; min-height: 88px; background: #fbfdff; }
     .client-name { font-size: 13px; font-weight: 800; color: #243b53; margin-bottom: 5px; }
     .muted { color: #52606d; }
-    .details-table, .payment-table { width: 100%; border-collapse: collapse; }
-    .details-table { font-size: 11px; }
+    .details-table { width: 100%; border-collapse: collapse; font-size: 11px; }
     .details-table td { padding: 3px 0; vertical-align: top; }
     .details-table td:first-child { color: #52606d; width: 42%; font-weight: 700; }
     .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
@@ -298,15 +184,8 @@ export class InvoicePdfService {
     .totals-label { text-align: right; font-weight: 800; color: #243b53; }
     .grand-total td { background: #f4f7fb !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
     .after-table { margin-top: 15px; page-break-inside: avoid; }
-    .terms-section { width: 43%; padding-right: 14px; }
-    .payment-section { width: 57%; }
-    .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 10px 12px; min-height: 88px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .payment-box { border: 1.2px solid ${theme}; padding: 10px 12px; background: #ffffff; min-height: 116px; }
-    .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid #d9e2ec; padding-bottom: 5px; }
-    .payment-table { font-size: 10.8px; }
-    .payment-table td { padding: 3px 0; vertical-align: top; }
-    .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
-    .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
+    .terms-section { width: 100%; }
+    .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 10px 12px; min-height: 60px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
     .note-area { width: 100%; color: #52606d; font-size: 10px; line-height: 1.45; margin-bottom: 20px; }
     .signature-container { display: table; width: 100%; table-layout: fixed; margin-top: 30px; }
@@ -330,30 +209,30 @@ export class InvoicePdfService {
       </div>
       <div class="brand-block">
         ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(company.name_en || company.name || 'COMPANY')}</span></div>`}
-        <div class="invoice-title">${labels.invoiceTitle}</div>
+        <div class="invoice-title">${labels.quotationTitle}</div>
       </div>
     </div>
     <div class="subtle-line"></div>
     <div class="info-row">
       <div class="client-section">
-        <div class="section-label">${labels.billTo}</div>
+        <div class="section-label">${labels.to}</div>
         <div class="client-box">
           <div class="client-name">${this.escapeHtml(client.name || '')}</div>
-          ${clientLines}
+          ${client.address ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(client.address)}</span></div>` : ''}
+          ${client.phone ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>` : ''}
         </div>
       </div>
       <div class="invoice-details">
-        <div class="section-label">${labels.invoiceDetails}</div>
+        <div class="section-label">${labels.quotationDetails}</div>
         <div class="details-box">
           <table class="details-table">
-            <tr><td>${labels.invoiceNo}</td><td>${this.escapeHtml(invoice.invoice_no || '')}</td></tr>
-            <tr><td>${labels.invoiceDate}</td><td>${this.formatDate(invoice.date, options.language)}</td></tr>
-            <tr><td>${labels.dueDate}</td><td>${invoice.due_date ? this.formatDate(invoice.due_date, options.language) : '-'}</td></tr>
+            <tr><td>${labels.quotationNo}</td><td>${this.escapeHtml(quotation.quotation_no || '')}</td></tr>
+            <tr><td>${labels.quotationDate}</td><td>${this.formatDate(quotation.quotation_date, options.language)}</td></tr>
           </table>
         </div>
       </div>
     </div>
-    <div class="invoice-subject">${this.escapeHtml(invoice.invoice_title || invoice.project?.project_name || invoice.quotation?.project_name || labels.invoiceTitle)}</div>
+    <div class="invoice-subject">${this.escapeHtml(quotation.project_name || labels.quotationTitle)}</div>
     <table class="items">
       <thead>
         <tr>
@@ -370,26 +249,21 @@ export class InvoicePdfService {
         ${totalsRows}
       </tbody>
     </table>
+
     <div class="after-table">
       <div class="terms-section">
         <div class="section-label">${labels.paymentTerms}</div>
         <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
       </div>
-      <div class="payment-section">
-        ${
-          options.showBank && bankRows
-            ? `
-        <div class="payment-box">
-          <div class="payment-title">${labels.paymentDetails}</div>
-          <table class="payment-table">${bankRows}</table>
-        </div>`
-            : ''
-        }
-      </div>
     </div>
+
     <div class="footer-row">
-      <div class="note-area">${invoice.remarks ? this.escapeMultiline(invoice.remarks) : ''}</div>
-      
+      <div class="note-area">
+        ${quotation.validity_period ? `<div><strong>${labels.validityPeriod}:</strong> ${this.escapeHtml(quotation.validity_period)}</div>` : ''}
+        ${quotation.exclusions ? `<div><strong>${labels.exclusions}:</strong> ${this.escapeMultiline(quotation.exclusions)}</div>` : ''}
+        ${quotation.external_remark ? `<div style="margin-top:5px;">${this.escapeMultiline(quotation.external_remark)}</div>` : ''}
+      </div>
+
       ${options.showSignature ? `
       <div class="signature-container">
         <div class="signature-block">
@@ -420,14 +294,13 @@ export class InvoicePdfService {
     `;
   }
 
-  private labels(language: InvoicePdfLanguage) {
+  private labels(language: QuotationPdfLanguage) {
     const bilingual = {
-      invoiceTitle: 'INVOICE 發票',
-      billTo: '致 Bill To',
-      invoiceDetails: '發票資料 Invoice Details',
-      invoiceNo: 'Invoice No.',
-      invoiceDate: 'Invoice Date',
-      dueDate: 'Due Date',
+      quotationTitle: 'QUOTATION 報價單',
+      to: '致 To',
+      quotationDetails: '報價單資料 Quotation Details',
+      quotationNo: 'Quotation No.',
+      quotationDate: 'Quotation Date',
       address: '地址 Address',
       phone: '電話 Phone',
       no: '編號',
@@ -436,27 +309,21 @@ export class InvoicePdfService {
       unit: '單位類型',
       unitPrice: '單價',
       amount: '金額',
-      subtotal: '小計 Subtotal (HKD)',
-      surcharge: '附加費 Surcharge',
-      deduction: '扣款 Deduction',
-      retention: 'Less Retention',
-      netAmountDue: '總數 Net Amount Due (HKD)',
+      total: '總數 Total (HKD)',
       paymentTerms: '付款條款 Payment Terms',
-      paymentDetails: '付款資料 Payment Details',
-      bank: 'Bank',
-      accountName: 'Account Name',
-      accountNo: 'Account No.',
       authorizedSignature: 'Authorized Signature / 公司簽署',
       clientConfirmation: 'Client Confirmation / 客戶確認',
       clientSignatureDate: 'Authorized Signature & Date / 簽署及日期',
       noItems: '沒有項目 No items',
+      validityPeriod: '有效期 Validity Period',
+      exclusions: '不包括 Exclusions',
     };
     if (language === 'en') {
       return {
         ...bilingual,
-        invoiceTitle: 'INVOICE',
-        billTo: 'Bill To',
-        invoiceDetails: 'Invoice Details',
+        quotationTitle: 'QUOTATION',
+        to: 'To',
+        quotationDetails: 'Quotation Details',
         address: 'Address',
         phone: 'Phone',
         no: 'No.',
@@ -465,55 +332,40 @@ export class InvoicePdfService {
         unit: 'Unit',
         unitPrice: 'Unit Price',
         amount: 'Amount',
-        subtotal: 'Subtotal (HKD)',
-        surcharge: 'Surcharge',
-        deduction: 'Deduction',
-        netAmountDue: 'Net Amount Due (HKD)',
+        total: 'Total (HKD)',
         paymentTerms: 'Payment Terms',
-        paymentDetails: 'Payment Details',
         authorizedSignature: 'Authorized Signature',
         clientConfirmation: 'Client Confirmation',
         clientSignatureDate: 'Authorized Signature & Date',
         noItems: 'No items',
+        validityPeriod: 'Validity Period',
+        exclusions: 'Exclusions',
       };
     }
     if (language === 'zh') {
       return {
         ...bilingual,
-        invoiceTitle: '發票',
-        billTo: '致',
-        invoiceDetails: '發票資料',
-        invoiceDate: '發票日期',
-        dueDate: '到期日',
+        quotationTitle: '報價單',
+        to: '致',
+        quotationDetails: '報價單資料',
+        quotationDate: '報價單日期',
         address: '地址',
         phone: '電話',
-        subtotal: '小計 (HKD)',
-        surcharge: '附加費',
-        deduction: '扣款',
-        retention: '保留金',
-        netAmountDue: '總數 (HKD)',
+        total: '總數 (HKD)',
         paymentTerms: '付款條款',
-        paymentDetails: '付款資料',
-        bank: '銀行',
-        accountName: '戶口名稱',
-        accountNo: '戶口號碼',
         authorizedSignature: '公司簽署',
         clientConfirmation: '客戶確認',
         clientSignatureDate: '簽署及日期',
         noItems: '沒有項目',
+        validityPeriod: '有效期',
+        exclusions: '不包括',
       };
     }
     return bilingual;
   }
 
-  private normalizeLanguage(language: string): InvoicePdfLanguage {
+  private normalizeLanguage(language: string): QuotationPdfLanguage {
     return language === 'en' || language === 'bilingual' ? language : 'zh';
-  }
-
-  private parseBankInfo(value: any): BankInfo {
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value
-      : {};
   }
 
   private logoDataUri(logoUrl?: string | null) {
@@ -540,7 +392,7 @@ export class InvoicePdfService {
       : '#1a365d';
   }
 
-  private formatDate(value: Date | string, language: InvoicePdfLanguage) {
+  private formatDate(value: Date | string, language: QuotationPdfLanguage) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     if (language === 'en') return date.toISOString().slice(0, 10);
@@ -559,10 +411,6 @@ export class InvoicePdfService {
   private formatQuantity(value: any) {
     const num = Number(value || 0);
     return num.toLocaleString('en-US', { maximumFractionDigits: 4 });
-  }
-
-  private formatPercent(value: number) {
-    return `${Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
   }
 
   private escapeHtml(value: any) {

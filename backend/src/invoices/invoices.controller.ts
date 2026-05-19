@@ -55,6 +55,8 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_signature') showSignature: string,
+    @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const pdf = await this.invoicePdfService.generateInvoicePdf(Number(id), {
@@ -62,6 +64,8 @@ export class InvoicesController {
       showBank: this.parseBool(showBank),
       showClientAddress: this.parseBool(showClientAddress),
       showClientPhone: this.parseBool(showClientPhone),
+      showSignature: this.parseBool(showSignature),
+      overridePaymentTerms,
     });
 
     res.set({
@@ -79,6 +83,8 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_signature') showSignature: string,
+    @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.invoicePdfService.generateInvoiceHtml(Number(id), {
@@ -86,6 +92,8 @@ export class InvoicesController {
       showBank: this.parseBool(showBank),
       showClientAddress: this.parseBool(showClientAddress),
       showClientPhone: this.parseBool(showClientPhone),
+      showSignature: this.parseBool(showSignature),
+      overridePaymentTerms,
     });
 
     res.set({
@@ -102,6 +110,8 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_signature') showSignature: string,
+    @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.previewPdfHtml(
@@ -110,6 +120,8 @@ export class InvoicesController {
       showBank,
       showClientAddress,
       showClientPhone,
+      showSignature,
+      overridePaymentTerms,
       res,
     );
   }

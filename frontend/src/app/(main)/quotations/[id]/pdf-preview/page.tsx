@@ -2,36 +2,30 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { invoicesApi, paymentTermTemplatesApi } from '@/lib/api';
+import { quotationsApi, paymentTermTemplatesApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
 
-type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
+type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
 
 type PdfPreviewOptions = {
-  language: InvoicePdfLanguage;
-  show_bank: boolean;
-  show_client_address: boolean;
-  show_client_phone: boolean;
+  language: QuotationPdfLanguage;
   show_signature: boolean;
   override_payment_terms: string;
 };
 
 const DEFAULT_OPTIONS: PdfPreviewOptions = {
   language: 'zh',
-  show_bank: true,
-  show_client_address: true,
-  show_client_phone: true,
   show_signature: true,
   override_payment_terms: '',
 };
 
-export default function InvoicePdfPreviewPage() {
+export default function QuotationPdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const invoiceId = Number(id);
+  const quotationId = Number(id);
 
-  const [invoice, setInvoice] = useState<any>(null);
+  const [quotation, setQuotation] = useState<any>(null);
   const [options, setOptions] = useState<PdfPreviewOptions>(DEFAULT_OPTIONS);
   const [html, setHtml] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
@@ -41,46 +35,37 @@ export default function InvoicePdfPreviewPage() {
   const requestParams = useMemo(
     () => ({
       language: options.language,
-      show_bank: options.show_bank,
-      show_client_address: options.show_client_address,
-      show_client_phone: options.show_client_phone,
       show_signature: options.show_signature,
       override_payment_terms: options.override_payment_terms,
     }),
     [
       options.language,
-      options.show_bank,
-      options.show_client_address,
-      options.show_client_phone,
       options.show_signature,
       options.override_payment_terms,
     ],
   );
 
   useEffect(() => {
-    if (!Number.isFinite(invoiceId)) return;
+    if (!Number.isFinite(quotationId)) return;
 
-    invoicesApi
-      .get(invoiceId)
+    quotationsApi
+      .get(quotationId)
       .then((res) => {
-        setInvoice(res.data);
-        setOptions(prev => ({ 
-          ...prev, 
-          override_payment_terms: res.data.invoice_custom_payment_terms || res.data.payment_terms || '' 
-        }));
+        setQuotation(res.data);
+        setOptions(prev => ({ ...prev, override_payment_terms: res.data.payment_terms || '' }));
       })
-      .catch(() => router.push('/invoices'));
-  }, [invoiceId, router]);
+      .catch(() => router.push('/quotations'));
+  }, [quotationId, router]);
 
   useEffect(() => {
-    if (!Number.isFinite(invoiceId)) return;
+    if (!Number.isFinite(quotationId)) return;
 
     let active = true;
     setLoadingPreview(true);
     setError('');
 
-    invoicesApi
-      .getPdfHtml(invoiceId, requestParams)
+    quotationsApi
+      .getPdfHtml(quotationId, requestParams)
       .then((res) => {
         if (!active) return;
         setHtml(
@@ -99,17 +84,17 @@ export default function InvoicePdfPreviewPage() {
     return () => {
       active = false;
     };
-  }, [invoiceId, requestParams]);
+  }, [quotationId, requestParams]);
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
     try {
-      const res = await invoicesApi.exportPdf(invoiceId, requestParams);
+      const res = await quotationsApi.exportPdf(quotationId, requestParams);
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${invoice?.invoice_no || `invoice-${invoiceId}`}.pdf`;
+      link.download = `${quotation?.quotation_no || `quotation-${quotationId}`}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -144,14 +129,14 @@ export default function InvoicePdfPreviewPage() {
       name,
       content: options.override_payment_terms,
       source_type: sourceType,
-      company_id: sourceType === 'company' ? invoice?.company_id : undefined,
-      client_id: sourceType === 'client' ? invoice?.client_id : undefined,
+      company_id: sourceType === 'company' ? quotation?.company_id : undefined,
+      client_id: sourceType === 'client' ? quotation?.client_id : undefined,
     });
   };
 
   const handleSaveToDocument = async () => {
-    await invoicesApi.update(invoiceId, {
-      invoice_custom_payment_terms: options.override_payment_terms,
+    await quotationsApi.update(quotationId, {
+      payment_terms: options.override_payment_terms,
     });
   };
 
@@ -161,10 +146,10 @@ export default function InvoicePdfPreviewPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex flex-col gap-1">
             <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              發票 PDF 預覽
+              報價單 PDF 預覽
             </div>
             <h1 className="font-mono text-lg font-bold text-gray-900">
-              {invoice?.invoice_no || `Invoice #${invoiceId}`}
+              {quotation?.quotation_no || `Quotation #${quotationId}`}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <button
@@ -182,7 +167,7 @@ export default function InvoicePdfPreviewPage() {
                 列印
               </button>
               <button
-                onClick={() => router.push(`/invoices/${invoiceId}`)}
+                onClick={() => router.push(`/quotations/${quotationId}`)}
                 className="btn-secondary py-1.5 px-3 text-sm"
               >
                 返回
@@ -197,7 +182,7 @@ export default function InvoicePdfPreviewPage() {
                 <select
                   value={options.language}
                   onChange={(e) =>
-                    updateOption('language', e.target.value as InvoicePdfLanguage)
+                    updateOption('language', e.target.value as QuotationPdfLanguage)
                   }
                   className="input-field h-8 min-w-[100px] py-0 text-sm"
                 >
@@ -206,29 +191,19 @@ export default function InvoicePdfPreviewPage() {
                   <option value="bilingual">雙語</option>
                 </select>
               </label>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={options.show_bank}
-                    onChange={(e) => updateOption('show_bank', e.target.checked)}
-                  />
-                  銀行資料
-                </label>
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={options.show_signature}
-                    onChange={(e) => updateOption('show_signature', e.target.checked)}
-                  />
-                  簽名欄
-                </label>
-              </div>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={options.show_signature}
+                  onChange={(e) => updateOption('show_signature', e.target.checked)}
+                />
+                顯示簽名欄
+              </label>
             </div>
 
             <PaymentTermsSelector
-              companyId={invoice?.company_id}
-              clientId={invoice?.client_id}
+              companyId={quotation?.company_id}
+              clientId={quotation?.client_id}
               value={options.override_payment_terms}
               onChange={(val) => updateOption('override_payment_terms', val)}
               onSaveAsTemplate={handleSaveAsTemplate}
@@ -256,7 +231,7 @@ export default function InvoicePdfPreviewPage() {
           {html ? (
             <iframe
               ref={iframeRef}
-              title="發票 PDF HTML 預覽"
+              title="報價單 PDF HTML 預覽"
               srcDoc={html}
               className="h-full w-full border-0 bg-white"
             />

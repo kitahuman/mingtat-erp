@@ -1,12 +1,67 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request, Res, StreamableFile } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { QuotationsService } from './quotations.service';
+import { QuotationPdfService } from './quotation-pdf.service';
+import type { QuotationPdfLanguage } from './quotation-pdf.service';
 import { CreateQuotationDto, UpdateQuotationDto } from './dto/create-quotation.dto';
 
 @Controller('quotations')
 @UseGuards(AuthGuard('jwt'))
 export class QuotationsController {
-  constructor(private readonly service: QuotationsService) {}
+  constructor(
+    private readonly service: QuotationsService,
+    private readonly quotationPdfService: QuotationPdfService,
+  ) {}
+
+  private parseBool(value: string | undefined) {
+    return value === undefined
+      ? undefined
+      : !['false', '0', 'no'].includes(String(value).toLowerCase());
+  }
+
+  @Get(':id/pdf')
+  async exportPdf(
+    @Param('id') id: number,
+    @Query('language') language: QuotationPdfLanguage,
+    @Query('show_signature') showSignature: string,
+    @Query('override_payment_terms') overridePaymentTerms: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const pdf = await this.quotationPdfService.generateQuotationPdf(Number(id), {
+      language,
+      showSignature: this.parseBool(showSignature),
+      overridePaymentTerms,
+    });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="quotation-${Number(id)}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return new StreamableFile(pdf);
+  }
+
+  @Get(':id/pdf-html')
+  async previewPdfHtml(
+    @Param('id') id: number,
+    @Query('language') language: QuotationPdfLanguage,
+    @Query('show_signature') showSignature: string,
+    @Query('override_payment_terms') overridePaymentTerms: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const html = await this.quotationPdfService.generateQuotationHtml(Number(id), {
+      language,
+      showSignature: this.parseBool(showSignature),
+      overridePaymentTerms,
+    });
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    return html;
+  }
 
   @Get()
   findAll(@Query() query: any) {

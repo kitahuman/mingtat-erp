@@ -207,84 +207,7 @@ export default function QuotationDetailPage() {
 
   const unitOptions = (form.quotation_type === 'rental' ? RENTAL_UNITS : PROJECT_UNITS);
 
-  const handlePrint = () => {
-    const typeText = quotation.quotation_type === 'rental' ? '報 價 單 QUOTATION (Rate Card)' : '報 價 單 QUOTATION';
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(`
-      <html><head><title>報價單 ${quotation.quotation_no}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { font-size: 20px; margin: 0; }
-        .header p { font-size: 12px; color: #666; margin: 2px 0; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 13px; }
-        .info-grid .label { font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #f5f5f5; font-weight: bold; }
-        .text-right { text-align: right; }
-        .total-row { font-weight: bold; background: #f0f0f0; }
-        .remarks { margin-top: 20px; font-size: 12px; }
-        .remarks h3 { font-size: 14px; margin-bottom: 5px; }
-        .item-name { font-weight: bold; }
-        .item-desc { color: #555; font-size: 12px; margin-top: 2px; white-space: pre-wrap; }
-        @media print { body { padding: 20px; } }
-      </style></head><body>
-      <div class="header">
-        <h1>${quotation.company?.name || ''}</h1>
-        <p>${quotation.company?.address || ''}</p>
-        <p>電話: ${quotation.company?.phone || ''}</p>
-      </div>
-      <h2 style="text-align:center; margin-bottom: 20px;">${typeText}</h2>
-      <div class="info-grid">
-        <div><span class="label">報價單號：</span><span style="font-family:monospace">${quotation.quotation_no}</span></div>
-        <div><span class="label">日期：</span>${fmtDate(quotation.quotation_date)}</div>
-        <div><span class="label">致：</span>${quotation.client?.name || '-'}</div>
-        ${quotation.contract_name ? `<div><span class="label">合約：</span><span style="font-family:monospace">${quotation.contract_name}</span></div>` : ''}
-        ${quotation.quotation_type === 'project' ? `<div><span class="label">工程名稱：</span>${quotation.project_name || '-'}</div>` : `<div><span class="label">服務說明：</span>${quotation.project_name || '-'}</div>`}
-      </div>
-      <table>
-        <thead><tr><th style="width:40px">編號</th><th>項目</th><th style="width:70px" class="text-right">數量</th><th style="width:60px">單位</th><th style="width:90px" class="text-right">單價</th><th style="width:100px" class="text-right">金額</th></tr></thead>
-        <tbody>
-          ${(quotation.items || []).map((item: any, idx: number) => {
-            const qty = Number(item.quantity);
-            const rateOnly = !qty || qty === 0;
-            const amt = rateOnly ? 0 : qty * Number(item.unit_price);
-            return `<tr>
-              <td>${idx + 1}</td>
-              <td>
-                ${item.item_name ? `<div class="item-name">${item.item_name}</div>` : (item.description || '')}
-                ${item.item_description ? `<div class="item-desc">${item.item_description}</div>` : ''}
-              </td>
-              <td class="text-right">${rateOnly ? '-' : qty.toLocaleString()}</td>
-              <td>${item.unit || ''}</td>
-              <td class="text-right">$${Number(item.unit_price).toLocaleString()}</td>
-              <td class="text-right">${rateOnly ? '<em>Rate Only</em>' : '$' + amt.toLocaleString()}</td>
-            </tr>`;
-          }).join('')}
-          <tr class="total-row">
-            <td colspan="5" class="text-right">總金額：</td>
-            <td class="text-right">HKD $${Number(quotation.total_amount).toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="remarks">
-        <h3>REMARKS 備註：</h3>
-        ${quotation.validity_period ? `<p>1. ${quotation.validity_period}</p>` : ''}
-        ${quotation.payment_terms ? `<p>2. ${quotation.payment_terms}</p>` : ''}
-        ${quotation.exclusions ? `<p>3. ${quotation.exclusions}</p>` : ''}
-        ${quotation.external_remark ? `<p>4. ${quotation.external_remark}</p>` : ''}
-      </div>
-      <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-        <div style="text-align: center; width: 200px;"><div style="border-top: 1px solid #333; padding-top: 5px;">公司蓋章</div></div>
-        <div style="text-align: center; width: 200px;"><div style="border-top: 1px solid #333; padding-top: 5px;">客戶確認</div></div>
-      </div>
-      </body></html>
-    `);
-    w.document.close();
-    w.print();
-  };
+
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
@@ -312,7 +235,9 @@ export default function QuotationDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
-          <button onClick={handlePrint} className="btn-secondary">列印 / PDF</button>
+          <Link href={`/quotations/${quotation.id}/pdf-preview`} className="btn-secondary">
+            <span className="mr-1">📄</span> 匯出 PDF
+          </Link>
           <button onClick={() => { setSyncResult(null); setSyncForm({ effective_date: quotation.quotation_date || new Date().toISOString().slice(0, 10), expiry_date: '', overwrite: false }); setShowSyncModal(true); }} className="btn-secondary">同步至價目表</button>
           {quotation?.status === 'draft' && (
             <button onClick={() => handleStatusChange('sent')} className="btn-secondary">標記已發送</button>

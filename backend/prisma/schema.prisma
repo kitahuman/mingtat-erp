@@ -110,6 +110,7 @@ model Company {
   payrolls                     Payroll[]
   payment_outs                 PaymentOut[]
   bank_accounts                BankAccount[]
+  payment_term_templates       PaymentTermTemplate[]
 
   @@map("companies")
 }
@@ -603,6 +604,7 @@ model Partner {
   acceptance_reports_client AcceptanceReport[]         @relation("acceptance_report_client")
   daily_reports_client      DailyReport[]              @relation("daily_report_client")
   subcon_payrolls           SubconPayroll[]            @relation("subcon_payroll_partner")
+  payment_term_templates    PaymentTermTemplate[]
 
   @@map("partners")
 }
@@ -860,6 +862,23 @@ model Quotation {
   @@index([quotation_type])
   @@index([deleted_at])
   @@map("quotations")
+}
+
+model PaymentTermTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  content     String   @db.Text
+  source_type String   @default("global") // global | company | client
+  company_id  Int?
+  client_id   Int?
+  is_default  Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
+
+  company Company? @relation(fields: [company_id], references: [id])
+  client  Partner? @relation(fields: [client_id], references: [id])
+
+  @@map("payment_term_templates")
 }
 
 model QuotationItem {

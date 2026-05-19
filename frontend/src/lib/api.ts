@@ -336,6 +336,10 @@ export const quotationsApi = {
     api.get(`/quotations/by-project/${projectId}`),
   syncToRateCards: (id: number, options?: any) =>
     api.post(`/quotations/${id}/sync-to-rate-cards`, options || {}),
+  getPdfHtml: (id: number, params: any) =>
+    api.get(`/quotations/${id}/pdf-html`, { params }),
+  exportPdf: (id: number, params: any) =>
+    api.get(`/quotations/${id}/pdf`, { params, responseType: 'blob' }),
 };
 
 // Field Options (選項管理)
@@ -1012,6 +1016,17 @@ export interface CreatePaymentInAllocationPayload {
   payment_in_allocation_amount: number;
   payment_in_allocation_remarks?: string;
 }
+
+// Payment Term Templates
+export const paymentTermTemplatesApi = {
+  list: (params: { company_id?: number; client_id?: number }) =>
+    api.get('/payment-term-templates', { params }),
+  get: (id: number) => api.get(`/payment-term-templates/${id}`),
+  create: (data: any) => api.post('/payment-term-templates', data),
+  update: (id: number, data: any) =>
+    api.put(`/payment-term-templates/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-term-templates/${id}`),
+};
 
 export const paymentInAllocationApi = {
   listByPaymentIn: (paymentInId: number) =>
