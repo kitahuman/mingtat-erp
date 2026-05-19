@@ -57,7 +57,7 @@ export class ExpensesController {
   updateItem(
     @Param('id', ParseIntPipe) id: number,
     @Param('itemId', ParseIntPipe) itemId: number,
-    @Body() dto: UpdateExpenseDto,
+    @Body() dto: CreateExpenseItemDto,
   ) {
     return this.service.updateItem(id, itemId, dto);
   }
