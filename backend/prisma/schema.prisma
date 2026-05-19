@@ -267,6 +267,7 @@ model Employee {
   acceptance_reports_inspected        AcceptanceReport[]      @relation("acceptance_report_inspector")
   nicknames                           EmployeeNickname[]
   attendance_anomalies                AttendanceAnomaly[]
+  employment_history                  EmploymentHistory[]
 
   // ── Performance indexes ──
   @@index([company_id])
@@ -277,6 +278,22 @@ model Employee {
   @@index([phone])
   @@index([emp_code])
   @@map("employees")
+}
+
+model EmploymentHistory {
+  id          Int      @id @default(autoincrement())
+  employee_id Int
+  event_type  String   @db.VarChar(20)
+  event_date  DateTime @db.Date
+  reason      String?  @db.Text
+  created_at  DateTime @default(now())
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+
+  @@index([employee_id])
+  @@index([event_date])
+  @@index([event_type])
+  @@map("employment_history")
 }
 
 model EmployeeNickname {

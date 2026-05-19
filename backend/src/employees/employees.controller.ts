@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards , Request} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { EmployeesService } from './employees.service';
-import { CreateEmployeeDto, UpdateEmployeeDto, TransferEmployeeDto, ConvertToRegularDto, AddSalarySettingDto } from './dto/create-employee.dto';
+import { CreateEmployeeDto, UpdateEmployeeDto, TransferEmployeeDto, ConvertToRegularDto, AddSalarySettingDto, ReinstateEmployeeDto } from './dto/create-employee.dto';
 import { MergeEmployeeDto } from './dto/merge-employee.dto';
 
 @Controller('employees')
@@ -17,6 +17,11 @@ export class EmployeesController {
   @Get('filter-options/:column')
   getFilterOptions(@Param('column') column: string, @Query() query: any) {
     return this.service.getFilterOptions(column, query);
+  }
+
+  @Get(':id/employment-history')
+  getEmploymentHistory(@Param('id') id: number) {
+    return this.service.getEmploymentHistory(+id);
   }
 
   @Get(':id')
@@ -40,8 +45,8 @@ export class EmployeesController {
   }
 
   @Post(':id/reinstate')
-  reinstate(@Param('id') id: number) {
-    return this.service.reinstate(+id);
+  reinstate(@Param('id') id: number, @Body() dto: ReinstateEmployeeDto) {
+    return this.service.reinstate(+id, dto);
   }
 
   @Post(':id/salary-settings')

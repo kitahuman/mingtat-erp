@@ -671,26 +671,48 @@ export class EmployeesService {
   ) {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
+
+    const terminationDate = new Date(dto.termination_date);
+
     // 離職時註銷員工編號（加上 [revoked] 後綴，新員工不會重用此編號）
     const revokedCode =
       emp.emp_code && !emp.emp_code.includes('[revoked]')
         ? `${emp.emp_code} [revoked]`
         : emp.emp_code;
-    await this.prisma.employee.update({
-      where: { id },
-      data: {
-        status: 'inactive',
-        emp_code: revokedCode,
-        termination_date: new Date(dto.termination_date),
-        termination_reason: dto.termination_reason || null,
-      },
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({
+        where: { id },
+        data: {
+          status: 'inactive',
+          emp_code: revokedCode,
+          termination_date: terminationDate,
+          termination_reason: dto.termination_reason || null,
+        },
+      });
+
+      await tx.employmentHistory.create({
+        data: {
+          employee_id: id,
+          event_type: 'termination',
+          event_date: terminationDate,
+          reason: dto.termination_reason || null,
+        },
+      });
     });
+
     return this.findOne(id);
   }
 
-  async reinstate(id: number) {
+  async reinstate(
+    id: number,
+    dto: { reinstate_date: string; remarks?: string },
+  ) {
     const emp = await this.prisma.employee.findUnique({ where: { id } });
     if (!emp) throw new NotFoundException('員工不存在');
+
+    const reinstateDate = new Date(dto.reinstate_date);
+
     // 復職時恢復員工編號（移除 [revoked] 後綴）
     let restoredCode = emp.emp_code
       ? emp.emp_code.replace(' [revoked]', '')
@@ -714,16 +736,45 @@ export class EmployeesService {
       restoredCode = 'E' + String(maxNum + 1).padStart(3, '0');
     }
 
-    await this.prisma.employee.update({
-      where: { id },
-      data: {
-        status: 'active',
-        emp_code: restoredCode,
-        termination_date: null,
-        termination_reason: null,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({
+        where: { id },
+        data: {
+          status: 'active',
+          emp_code: restoredCode,
+          termination_date: null,
+          termination_reason: null,
+        },
+      });
+
+      await tx.employmentHistory.create({
+        data: {
+          employee_id: id,
+          event_type: 'reinstatement',
+          event_date: reinstateDate,
+          reason: dto.remarks || null,
+        },
+      });
     });
+
     return this.findOne(id);
+  }
+
+  async getEmploymentHistory(employeeId: number) {
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true },
+    });
+    if (!emp) throw new NotFoundException('員工不存在');
+
+    return this.prisma.employmentHistory.findMany({
+      where: { employee_id: employeeId },
+      orderBy: [
+        { event_date: 'desc' },
+        { created_at: 'desc' },
+        { id: 'desc' },
+      ],
+    });
   }
 
   async addSalarySetting(employeeId: number, dto: any) {

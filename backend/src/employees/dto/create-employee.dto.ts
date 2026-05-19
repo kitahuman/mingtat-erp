@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateEmployeeDto {
@@ -113,6 +113,13 @@ export class ConvertToRegularDto {
   @IsOptional() @Type(() => Number) @IsNumber() base_salary?: number;
   @IsOptional() @Type(() => Number) @IsNumber() base_salary_night?: number;
   @IsOptional() @IsString() salary_type?: string;
+}
+
+export class ReinstateEmployeeDto {
+  @IsDateString()
+  reinstate_date: string;
+
+  @IsOptional() @IsString() remarks?: string;
 }
 
 export class AddSalarySettingDto {

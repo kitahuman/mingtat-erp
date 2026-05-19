@@ -76,6 +76,58 @@ function calcAge(dob: string | null): string {
   return age.toString();
 }
 
+type EmploymentHistoryEvent = {
+  id: number;
+  event_type: 'termination' | 'reinstatement';
+  event_date: string;
+  reason?: string | null;
+  created_at?: string;
+};
+
+type EmploymentHistoryRow = {
+  key: string;
+  terminationDate?: string | null;
+  terminationReason?: string | null;
+  reinstateDate?: string | null;
+  remarks?: string | null;
+  sortDate: string;
+};
+
+function buildEmploymentHistoryRows(events: EmploymentHistoryEvent[]): EmploymentHistoryRow[] {
+  const pendingReinstatements: EmploymentHistoryEvent[] = [];
+  const rows: EmploymentHistoryRow[] = [];
+
+  for (const event of events) {
+    if (event.event_type === 'reinstatement') {
+      pendingReinstatements.push(event);
+      continue;
+    }
+
+    const matchedReinstatement = pendingReinstatements.shift();
+    rows.push({
+      key: `termination-${event.id}-${matchedReinstatement?.id || 'open'}`,
+      terminationDate: event.event_date,
+      terminationReason: event.reason,
+      reinstateDate: matchedReinstatement?.event_date || null,
+      remarks: matchedReinstatement?.reason || null,
+      sortDate: matchedReinstatement?.event_date || event.event_date,
+    });
+  }
+
+  for (const event of pendingReinstatements) {
+    rows.push({
+      key: `reinstatement-${event.id}`,
+      terminationDate: null,
+      terminationReason: null,
+      reinstateDate: event.event_date,
+      remarks: event.reason,
+      sortDate: event.event_date,
+    });
+  }
+
+  return rows.sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -88,9 +140,12 @@ export default function EmployeeDetailPage() {
   const [showSalaryModal, setShowSalaryModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [showReinstateModal, setShowReinstateModal] = useState(false);
+  const [employmentHistoryRows, setEmploymentHistoryRows] = useState<EmploymentHistoryRow[]>([]);
   const [salaryForm, setSalaryForm] = useState<any>({ effective_date: '', base_salary: 0, salary_type: 'monthly', allowance_night: 0, allowance_rent: 0, allowance_3runway: 0, ot_rate_standard: 0, notes: '' });
   const [transferForm, setTransferForm] = useState<any>({ to_company_id: '', transfer_date: '', notes: '' });
   const [terminateForm, setTerminateForm] = useState<any>({ termination_date: '', termination_reason: '' });
+  const [reinstateForm, setReinstateForm] = useState<any>({ reinstate_date: new Date().toISOString().slice(0, 10), remarks: '' });
   const [showAllCerts, setShowAllCerts] = useState(false);
   // Nickname management
   const [nicknames, setNicknames] = useState<Array<{ id: number; emp_nickname_value: string; emp_nickname_source: string | null }>>([]);
@@ -136,6 +191,9 @@ export default function EmployeeDetailPage() {
       setLoading(false);
     }).catch(() => router.push('/employees'));
     loadPettyCash(Number(params.id));
+    employeesApi.getEmploymentHistory(Number(params.id)).then(res => {
+      setEmploymentHistoryRows(buildEmploymentHistoryRows(res.data || []));
+    }).catch(() => setEmploymentHistoryRows([]));
     // Load nicknames
     employeesApi.getNicknames(Number(params.id)).then(res => {
       setNicknames(res.data || []);
@@ -233,10 +291,15 @@ export default function EmployeeDetailPage() {
     } catch (err: any) { alert(err.response?.data?.message || '操作失敗'); }
   };
 
-  const handleReinstate = async () => {
-    if (!confirm('確定要將此員工復職嗎？')) return;
+  const handleReinstate = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      await employeesApi.reinstate(emp.id);
+      await employeesApi.reinstate(emp.id, {
+        reinstate_date: reinstateForm.reinstate_date,
+        remarks: reinstateForm.remarks || undefined,
+      });
+      setShowReinstateModal(false);
+      setReinstateForm({ reinstate_date: new Date().toISOString().slice(0, 10), remarks: '' });
       loadData();
     } catch (err: any) { alert(err.response?.data?.message || '操作失敗'); }
   };
@@ -288,7 +351,7 @@ export default function EmployeeDetailPage() {
         </div>
         <div className="flex gap-2">
           {isTerminated ? (
-            <button onClick={handleReinstate} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">復職</button>
+            <button onClick={() => { setReinstateForm({ reinstate_date: new Date().toISOString().slice(0, 10), remarks: '' }); setShowReinstateModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">復職</button>
           ) : (
             <button onClick={() => setShowTerminateModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">離職</button>
           )}
@@ -359,6 +422,37 @@ export default function EmployeeDetailPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Employment History */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">任職紀錄</h2>
+        {employmentHistoryRows.length === 0 ? (
+          <p className="text-gray-500">暫無任職紀錄</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">離職日期</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">離職原因</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">復職日期</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">復職備註</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {employmentHistoryRows.map(row => (
+                  <tr key={row.key}>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{row.terminationDate ? fmtDate(row.terminationDate) : '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.terminationReason || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{row.reinstateDate ? fmtDate(row.reinstateDate) : '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.remarks || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Linked User Account */}
@@ -741,6 +835,21 @@ export default function EmployeeDetailPage() {
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowTerminateModal(false)} className="btn-secondary">取消</button>
             <button type="submit" className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">確認離職</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Reinstate Modal */}
+      <Modal isOpen={showReinstateModal} onClose={() => setShowReinstateModal(false)} title="員工復職">
+        <form onSubmit={handleReinstate} className="space-y-4">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+            確定要將 <strong>{emp?.name_zh}</strong> 復職嗎？復職後員工狀態將改為「在職」。
+          </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">復職日期 *</label><DateInput value={reinstateForm.reinstate_date} onChange={v => setReinstateForm({...reinstateForm, reinstate_date: v})} className="input-field" required /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">復職備註</label><textarea value={reinstateForm.remarks} onChange={e => setReinstateForm({...reinstateForm, remarks: e.target.value})} className="input-field" rows={3} placeholder="請輸入復職備註（選填）" /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setShowReinstateModal(false)} className="btn-secondary">取消</button>
+            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">確認復職</button>
           </div>
         </form>
       </Modal>

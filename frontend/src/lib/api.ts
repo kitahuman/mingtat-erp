@@ -146,7 +146,10 @@ export const employeesApi = {
     id: number,
     data: { termination_date: string; termination_reason?: string },
   ) => api.post(`/employees/${id}/terminate`, data),
-  reinstate: (id: number) => api.post(`/employees/${id}/reinstate`),
+  reinstate: (id: number, data: { reinstate_date: string; remarks?: string }) =>
+    api.post(`/employees/${id}/reinstate`, data),
+  getEmploymentHistory: (id: number) =>
+    api.get(`/employees/${id}/employment-history`),
   convertToRegular: (id: number, data: any) =>
     api.post(`/employees/${id}/convert-to-regular`, data),
   delete: (id: number) => api.delete(`/employees/${id}`),
