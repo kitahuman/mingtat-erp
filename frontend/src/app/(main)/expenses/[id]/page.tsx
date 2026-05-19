@@ -752,7 +752,7 @@ export default function ExpenseDetailPage() {
             <Field label="總金額">
               <span className="font-semibold text-base">
                 HK${' '}
-                {Number(expense.total_amount).toLocaleString('en', {
+                {(items.length > 0 ? itemsTotal : Number(expense.total_amount)).toLocaleString('en', {
                   minimumFractionDigits: 2,
                 })}
               </span>

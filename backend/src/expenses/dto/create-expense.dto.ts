@@ -15,14 +15,18 @@ export class CreateExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() category_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() employee_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() machinery_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() vehicle_id?: number;
+  @IsOptional() @IsString() machine_code?: string;
   @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() contract_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() project_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
+  @IsOptional() @IsString() item?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() receipt_no?: string;
   @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() payment_status?: string;
+  @IsOptional() @IsString() payment_date?: string;
   @IsOptional() @Type(() => Number) @IsNumber() subtotal?: number;
   @IsOptional() @Type(() => Number) @IsNumber() tax_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
@@ -31,6 +35,8 @@ export class CreateExpenseDto {
   @IsOptional() @IsString() expense_type?: string;
   @IsOptional() @IsString() cheque_number?: string;
   @IsOptional() @IsString() cheque_date?: string;
+  @IsOptional() @IsString() source?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() source_ref_id?: number;
   /** 付款方式：SELF_PAID（本人代付）| COMPANY_PAID（公司付款） */
   @IsOptional() @IsString() @IsIn(EXPENSE_PAYMENT_METHODS) expense_payment_method?: ExpensePaymentMethod;
   @IsOptional() @IsArray() items?: any[];
