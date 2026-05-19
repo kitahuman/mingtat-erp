@@ -188,8 +188,9 @@ export default function ExpensesPage() {
 
   // Filtered partners for supplier combobox
   const filteredPartners = useMemo(() => {
-    if (!supplierInput) return partners.slice(0, 20);
-    return partners.filter((p: any) =>
+    const suppliers = partners.filter((p: any) => p.partner_type === 'supplier');
+    if (!supplierInput) return suppliers.slice(0, 20);
+    return suppliers.filter((p: any) =>
       p.name.toLowerCase().includes(supplierInput.toLowerCase()) ||
       (p.code && p.code.toLowerCase().includes(supplierInput.toLowerCase()))
     ).slice(0, 20);
@@ -201,17 +202,32 @@ export default function ExpensesPage() {
     return parent?.children || [];
   };
 
+  const selectedCategory = useMemo(() => {
+    for (const parent of categoryTree) {
+      const child = (parent.children || []).find((c: any) => Number(c.id) === Number(form.category_id));
+      if (child) return { parent, child };
+    }
+    return null;
+  }, [categoryTree, form.category_id]);
+
+  const selectedCategoryIsPettyCash = selectedCategory?.parent?.name === '人事費用' && selectedCategory?.child?.name === '零用金';
+
   // ── Create handler ───────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (selectedCategoryIsPettyCash && !form.employee_id) {
+        alert('零用金支出必須選擇領取員工，系統才可同步建立員工零用金紀錄。');
+        return;
+      }
       const payload: any = { ...form };
       delete payload._parent_category_id;
       const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : undefined;
       }
-      if (!payload.payment_date) delete payload.payment_date;
+      if (payload.payment_status !== 'paid' && payload.payment_status !== 'partially_paid') payload.payment_date = undefined;
+      else if (!payload.payment_date) delete payload.payment_date;
       if (payload.total_amount) payload.total_amount = Number(payload.total_amount);
       // payment_status is already a string, no conversion needed
 
@@ -316,6 +332,14 @@ export default function ExpensesPage() {
       ),
       render: (_: any, row: any) => row.employee?.name_zh || '-',
       filterRender: (_: any, row: any) => row.employee?.name_zh || '-',
+    },
+    {
+      key: 'created_by',
+      label: '發佈人',
+      sortable: true,
+      editable: false,
+      render: (_: any, row: any) => row.creator?.displayName || row.creator?.username || '-',
+      filterRender: (_: any, row: any) => row.creator?.displayName || row.creator?.username || '-',
     },
     {
       key: 'item',
@@ -680,6 +704,11 @@ export default function ExpensesPage() {
                 placeholder="搜尋員工..."
                 className="w-full"
               />
+              {selectedCategoryIsPettyCash && (
+                <p className="mt-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                  此支出會記錄為「員工領取零用金」，必須選擇領取員工；新增後會同步增加該員工的零用金餘額。
+                </p>
+              )}
             </div>
             {/* Item */}
             <div>
@@ -696,7 +725,7 @@ export default function ExpensesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">付款狀態</label>
               <select
                 value={form.payment_status}
-                onChange={e => setForm({ ...form, payment_status: e.target.value })}
+                onChange={e => setForm({ ...form, payment_status: e.target.value, payment_date: (e.target.value === 'paid' || e.target.value === 'partially_paid') ? form.payment_date : '' })}
                 className="input-field"
               >
                 <option value="unpaid">未付款</option>
@@ -723,10 +752,12 @@ export default function ExpensesPage() {
               </div>
             </div>
             {/* Payment Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
-              <DateInput value={form.payment_date} onChange={value => setForm({ ...form, payment_date: value })} className="input-field" />
-            </div>
+            {(form.payment_status === 'paid' || form.payment_status === 'partially_paid') && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">付款日期</label>
+                <DateInput value={form.payment_date} onChange={value => setForm({ ...form, payment_date: value })} className="input-field" />
+              </div>
+            )}
             {/* Payment Ref */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款內容（支票號碼/交易號碼）</label>

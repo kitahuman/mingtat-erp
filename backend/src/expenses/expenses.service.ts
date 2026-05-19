@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PettyCashService } from '../petty-cash/petty-cash.service';
 
 const EXPENSE_INCLUDE = {
   company: true,
   supplier: true,
+  creator: { select: { id: true, displayName: true, username: true } },
   category: { include: { parent: true } },
   employee: true,
   machinery: true,
@@ -30,6 +32,7 @@ export class ExpensesService {
   constructor(
     private prisma: PrismaService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly pettyCashService: PettyCashService,
   ) {}
 
   async findAll(query: {
@@ -78,7 +81,7 @@ export class ExpensesService {
     const allowedSortFields = [
       'id', 'date', 'company_id', 'supplier_name', 'category_id',
       'employee_id', 'item', 'total_amount', 'is_paid',
-      'payment_date', 'payment_ref', 'machine_code', 'created_at', 'source',
+      'payment_date', 'payment_ref', 'machine_code', 'created_at', 'created_by', 'source',
       'expense_payment_method',
     ];
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'date';
@@ -150,7 +153,9 @@ export class ExpensesService {
     await this.assertVehicleIsNotScrappedByExpenseData(data);
     // Set default source if not provided
     if (!data.source) data.source = 'MANUAL';
+    if (userId) data.created_by = userId;
     const saved = await this.prisma.expense.create({ data });
+    await this.pettyCashService.createTopupFromExpense(saved.id);
     if (userId) {
       try {
         await this.auditLogsService.log({
@@ -169,7 +174,7 @@ export class ExpensesService {
   async update(id: number, dto: any, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('支出記錄不存在');
-    const { id: _id, created_at, updated_at, ...rest } = dto;
+    const { id: _id, created_at, updated_at, created_by, creator, ...rest } = dto;
     const data = this.normalizeDto(rest);
     await this.assertVehicleIsNotScrappedByExpenseData(data);
     const updated = await this.prisma.expense.update({ where: { id }, data });

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { payrollApi, fieldOptionsApi } from '@/lib/api';
+import { payrollApi, fieldOptionsApi, pettyCashApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
@@ -1285,6 +1285,7 @@ export default function PayrollDetailPage() {
   const [unsettledExpenses, setUnsettledExpenses] = useState<any[]>([]);
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<number[]>([]);
   const [reimbursementLoading, setReimbursementLoading] = useState(false);
+  const [pettyCashRecords, setPettyCashRecords] = useState<any[]>([]);
 
   const loadData = async () => {
     try {
@@ -1292,6 +1293,12 @@ export default function PayrollDetailPage() {
       setPayroll(res.data);
       setPaymentDate(res.data.payment_date || '');
       setChequeNumber(res.data.cheque_number || '');
+      try {
+        const pcRes = await pettyCashApi.getPayrollSettlement(Number(res.data.id));
+        setPettyCashRecords(pcRes.data?.records || []);
+      } catch {
+        setPettyCashRecords([]);
+      }
     } catch {
       router.push('/payroll');
     }
@@ -1668,6 +1675,10 @@ export default function PayrollDetailPage() {
   const unmatchedGroups = buildUnmatchedGroups(pwls);
   const isPreparing = payroll.status === 'preparing';
   const isDraft = payroll.status === 'draft' || isPreparing;
+  const pettyCashDeducted = pettyCashRecords
+    .filter((r: any) => r.type === 'DEDUCT')
+    .reduce((sum: number, r: any) => sum + Math.abs(Number(r.amount || 0)), 0);
+  const pettyCashShortfall = Math.max(0, Number(payroll.reimbursement_total || 0) - pettyCashDeducted);
 
   const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
@@ -2205,8 +2216,42 @@ export default function PayrollDetailPage() {
       </div>
       }
 
+      {/* ── Petty Cash Settlement ── */}
+      {!isPreparing && pettyCashRecords.length > 0 && <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">零用金結算</h2>
+          <Link href={`/employees/${emp?.id}`} className="text-sm text-primary-600 hover:underline">查看員工零用金紀錄</Link>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="rounded-lg bg-green-50 border border-green-100 p-4">
+            <p className="text-xs text-gray-500">已用零用金抵扣報銷</p>
+            <p className="font-bold text-lg text-green-700 font-mono">-${pettyCashDeducted.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
+            <p className="text-xs text-gray-500">報銷超出零用金並加回糧單</p>
+            <p className="font-bold text-lg text-blue-700 font-mono">+${pettyCashShortfall.toLocaleString()}</p>
+          </div>
+        </div>
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr><th className="px-4 py-2 text-left">日期</th><th className="px-4 py-2 text-left">類型</th><th className="px-4 py-2 text-right">金額</th><th className="px-4 py-2 text-right">結算後餘額</th><th className="px-4 py-2 text-left">說明</th></tr></thead>
+            <tbody>
+              {pettyCashRecords.map((r: any) => (
+                <tr key={r.id} className="border-b">
+                  <td className="px-4 py-2 font-medium">{fmtDate(r.date)}</td>
+                  <td className="px-4 py-2">{r.type === 'DEDUCT' ? '扣除報銷' : r.type === 'CARRY_FORWARD' ? 'C/D 結餘' : '調整'}</td>
+                  <td className={`px-4 py-2 text-right font-mono ${Number(r.amount) < 0 ? 'text-red-600' : 'text-green-700'}`}>{Number(r.amount) >= 0 ? '+' : '-'}${Math.abs(Number(r.amount)).toLocaleString()}</td>
+                  <td className={`px-4 py-2 text-right font-mono ${Number(r.balance) < 0 ? 'text-red-600' : ''}`}>${Number(r.balance).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-gray-500">{r.description || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>}
+
       {/* ── Summary Cards (bottom) ── */}
-      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <div className="card">
           <p className="text-xs text-gray-500">應收總額</p>
           <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
@@ -2228,6 +2273,10 @@ export default function PayrollDetailPage() {
         <div className="card">
           <p className="text-xs text-gray-500">員工報銷</p>
           <p className="font-bold text-lg text-blue-600 font-mono">${Number(payroll.reimbursement_total || 0).toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">零用金抵扣</p>
+          <p className="font-bold text-lg text-green-700 font-mono">-${pettyCashDeducted.toLocaleString()}</p>
         </div>
       </div>
 

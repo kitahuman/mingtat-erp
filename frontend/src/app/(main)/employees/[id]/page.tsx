@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
+import { employeesApi, companiesApi, fieldOptionsApi, pettyCashApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
@@ -102,6 +102,26 @@ export default function EmployeeDetailPage() {
   const [certTypes, setCertTypes] = useState<Array<{ id: number; label: string }>>([]);
   // other_certificates JSON: { [label]: { cert_no: string, expiry_date: string } }
   const [otherCerts, setOtherCerts] = useState<Record<string, { cert_no: string; expiry_date: string }>>({});
+  const [pettyCashData, setPettyCashData] = useState<any>(null);
+  const [pettyCashLoading, setPettyCashLoading] = useState(false);
+  const [showPettyCashModal, setShowPettyCashModal] = useState(false);
+  const [pettyCashForm, setPettyCashForm] = useState<any>({
+    date: new Date().toISOString().slice(0, 10),
+    amount: '',
+    description: '',
+  });
+
+  const loadPettyCash = async (employeeId: number) => {
+    setPettyCashLoading(true);
+    try {
+      const res = await pettyCashApi.getRecords(employeeId, { limit: 100 });
+      setPettyCashData(res.data);
+    } catch {
+      setPettyCashData(null);
+    } finally {
+      setPettyCashLoading(false);
+    }
+  };
 
   const loadData = () => {
     employeesApi.get(Number(params.id)).then(res => {
@@ -115,6 +135,7 @@ export default function EmployeeDetailPage() {
       } catch { setOtherCerts({}); }
       setLoading(false);
     }).catch(() => router.push('/employees'));
+    loadPettyCash(Number(params.id));
     // Load nicknames
     employeesApi.getNicknames(Number(params.id)).then(res => {
       setNicknames(res.data || []);
@@ -175,6 +196,21 @@ export default function EmployeeDetailPage() {
       setSalaryForm({ effective_date: '', base_salary: 0, salary_type: 'monthly', allowance_night: 0, allowance_rent: 0, allowance_3runway: 0, ot_rate_standard: 0, notes: '' });
       loadData();
     } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
+  };
+
+  const handlePettyCashTopup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await pettyCashApi.topup({
+        employee_id: emp.id,
+        amount: Number(pettyCashForm.amount),
+        date: pettyCashForm.date,
+        description: pettyCashForm.description || undefined,
+      });
+      setShowPettyCashModal(false);
+      setPettyCashForm({ date: new Date().toISOString().slice(0, 10), amount: '', description: '' });
+      loadData();
+    } catch (err: any) { alert(err.response?.data?.message || '派發零用金失敗'); }
   };
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -519,6 +555,51 @@ export default function EmployeeDetailPage() {
         ) : <p className="text-gray-500 text-sm">暫無薪資紀錄</p>}
       </div>
 
+      {/* Petty Cash Records */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">零用金紀錄</h2>
+            <p className="text-sm text-gray-500 mt-1">員工領取零用金、報銷抵扣及餘額 C/D 紀錄</p>
+          </div>
+          {!isReadOnly && (
+            <button onClick={() => setShowPettyCashModal(true)} className="text-sm text-primary-600 hover:underline">派發零用金</button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="text-sm text-gray-500">目前零用金餘額</div>
+            <div className={`mt-1 text-2xl font-bold font-mono ${Number(pettyCashData?.balance || 0) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+              ${Number(pettyCashData?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 md:col-span-2">
+            <div className="text-sm text-gray-500">計糧規則</div>
+            <div className="mt-1 text-sm text-gray-700">有零用金餘額時，確認糧單會先以餘額抵扣已附加報銷；若報銷大於零用金，差額會保留在糧單發放給員工。</div>
+          </div>
+        </div>
+        {pettyCashLoading ? (
+          <p className="text-gray-500 text-sm">載入零用金紀錄中...</p>
+        ) : pettyCashData?.records?.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">類型</th><th className="px-3 py-2 text-right">金額</th><th className="px-3 py-2 text-right">餘額</th><th className="px-3 py-2 text-left">說明</th></tr></thead>
+              <tbody>
+                {pettyCashData.records.map((r: any) => (
+                  <tr key={r.id} className="border-b">
+                    <td className="px-3 py-2 font-medium">{fmtDate(r.date)}</td>
+                    <td className="px-3 py-2">{r.type === 'TOPUP' ? '零用金+' : r.type === 'DEDUCT' ? '扣除報銷' : r.type === 'CARRY_FORWARD' ? 'C/D 結餘' : '調整'}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${Number(r.amount) < 0 ? 'text-red-600' : 'text-green-700'}`}>{Number(r.amount) >= 0 ? '+' : ''}${Number(r.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${Number(r.balance) < 0 ? 'text-red-600' : ''}`}>${Number(r.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-2 text-gray-500">{r.description || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="text-gray-500 text-sm">暫無零用金紀錄</p>}
+      </div>
+
       {/* Nickname Management */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">花名管理
@@ -590,6 +671,31 @@ export default function EmployeeDetailPage() {
           </div>
         ) : <p className="text-gray-500 text-sm">暫無調動紀錄</p>}
       </div>
+
+      {/* Petty Cash Modal */}
+      <Modal isOpen={showPettyCashModal} onClose={() => setShowPettyCashModal(false)} title="派發零用金">
+        <form onSubmit={handlePettyCashTopup} className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+            將為 <strong>{emp?.name_zh || emp?.name_en}</strong> 新增一筆「員工領取零用金」紀錄，並同步增加零用金餘額。
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">派發日期 *</label>
+            <DateInput value={pettyCashForm.date} onChange={v => setPettyCashForm({ ...pettyCashForm, date: v })} className="input-field" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">金額 *</label>
+            <input type="number" min="0.01" step="0.01" value={pettyCashForm.amount} onChange={e => setPettyCashForm({ ...pettyCashForm, amount: e.target.value })} className="input-field" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+            <textarea value={pettyCashForm.description} onChange={e => setPettyCashForm({ ...pettyCashForm, description: e.target.value })} className="input-field" rows={3} placeholder="例如：由財務派發" />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setShowPettyCashModal(false)} className="btn-secondary">取消</button>
+            <button type="submit" className="btn-primary">確認派發</button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Salary Modal */}
       <Modal isOpen={showSalaryModal} onClose={() => setShowSalaryModal(false)} title="新增薪資設定" size="lg">

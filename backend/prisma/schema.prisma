@@ -50,6 +50,7 @@ model User {
   deleted_quotations         Quotation[]                @relation("QuotationDeletedBy")
   deleted_rate_cards         RateCard[]                 @relation("RateCardDeletedBy")
   deleted_expenses           Expense[]                  @relation("ExpenseDeletedBy")
+  created_expenses           Expense[]                  @relation("ExpenseCreatedBy")
   deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
   deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
@@ -240,6 +241,7 @@ model Employee {
   company_id                          Int?
   status                              String                  @default("active")
   notes                               String?                 @db.Text
+  petty_cash_balance                  Decimal                 @default(0) @db.Decimal(12, 2)
   created_at                          DateTime                @default(now())
   updated_at                          DateTime                @default(now()) @updatedAt
   deleted_at                          DateTime? // 軯刪除時間時戳
@@ -251,6 +253,7 @@ model Employee {
   work_logs                           WorkLog[]
   payrolls                            Payroll[]
   expenses                            Expense[]
+  petty_cash_records                  PettyCashRecord[]
   attendances                         EmployeeAttendance[]
   mid_shift_approvals                 EmployeeAttendance[]    @relation("mid_shift_approver")
   leaves                              EmployeeLeave[]
@@ -1320,6 +1323,7 @@ model Payroll {
   payment_outs            PaymentOut[]
   payroll_expenses        PayrollExpense[]
   settled_expenses        Expense[]               @relation("expense_settled_payroll")
+  petty_cash_records      PettyCashRecord[]
   payment_out_allocations PaymentOutAllocation[]  @relation("PayrollPaymentOutAllocations")
 
   // ── Performance indexes ──
@@ -1333,16 +1337,16 @@ model Payroll {
 }
 
 model PayrollItem {
-  id         Int     @id @default(autoincrement())
-  payroll_id Int
-  item_type  String
-  item_name  String
-  unit_price Decimal @default(0) @db.Decimal(12, 2)
-  quantity   Decimal @default(0) @db.Decimal(10, 2)
-  amount                 Decimal @default(0) @db.Decimal(12, 2)
-  remarks                String? @db.Text
-  sort_order             Int     @default(0)
-  payroll_item_excluded  Boolean @default(false)
+  id                    Int     @id @default(autoincrement())
+  payroll_id            Int
+  item_type             String
+  item_name             String
+  unit_price            Decimal @default(0) @db.Decimal(12, 2)
+  quantity              Decimal @default(0) @db.Decimal(10, 2)
+  amount                Decimal @default(0) @db.Decimal(12, 2)
+  remarks               String? @db.Text
+  sort_order            Int     @default(0)
+  payroll_item_excluded Boolean @default(false)
 
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 
@@ -1599,7 +1603,9 @@ model Expense {
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now()) @updatedAt
   deleted_at             DateTime? // 軯刪除時間時戳
+  created_by             Int?
   deleted_by             Int?
+  creator                User?     @relation("ExpenseCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
   deletedBy              User?     @relation("ExpenseDeletedBy", fields: [deleted_by], references: [id])
 
   company     Company?            @relation(fields: [company_id], references: [id])
@@ -1622,9 +1628,11 @@ model Expense {
 
   // Reimbursement settlement
   expense_settled_payroll_id Int?
-  settled_payroll            Payroll?         @relation("expense_settled_payroll", fields: [expense_settled_payroll_id], references: [id], onDelete: SetNull)
+  settled_payroll            Payroll?          @relation("expense_settled_payroll", fields: [expense_settled_payroll_id], references: [id], onDelete: SetNull)
   payroll_expenses           PayrollExpense[]
+  petty_cash_records         PettyCashRecord[]
 
+  @@index([created_by])
   @@map("expenses")
 }
 
@@ -1645,6 +1653,35 @@ model PayrollExpense {
   @@index([payroll_expense_payroll_id])
   @@index([payroll_expense_expense_id])
   @@map("payroll_expenses")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Petty Cash Records (零用金紀錄)
+// ══════════════════════════════════════════════════════════════
+
+model PettyCashRecord {
+  id          Int      @id @default(autoincrement())
+  employee_id Int
+  date        DateTime @db.Date
+  type        String   @db.VarChar(30) // TOPUP | DEDUCT | ADJUST | CARRY_FORWARD
+  amount      Decimal  @db.Decimal(12, 2)
+  balance     Decimal  @db.Decimal(12, 2)
+  description String?  @db.Text
+  expense_id  Int?
+  payroll_id  Int?
+  period      String?
+  created_at  DateTime @default(now())
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  expense  Expense? @relation(fields: [expense_id], references: [id], onDelete: SetNull)
+  payroll  Payroll? @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+
+  @@index([employee_id])
+  @@index([expense_id])
+  @@index([payroll_id])
+  @@index([period])
+  @@index([type])
+  @@map("petty_cash_records")
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2099,17 +2136,17 @@ model RetentionRelease {
 // ══════════════════════════════════════════════════════════════
 
 model BankAccount {
-  id           Int      @id @default(autoincrement())
-  account_name String   @db.VarChar(200) // 帳戶名稱
-  bank_name    String   @db.VarChar(200) // 銀行名稱
-  account_no   String   @db.VarChar(100) // 帳號
-  currency     String   @default("HKD") @db.VarChar(10) // 幣種
+  id              Int      @id @default(autoincrement())
+  account_name    String   @db.VarChar(200) // 帳戶名稱
+  bank_name       String   @db.VarChar(200) // 銀行名稱
+  account_no      String   @db.VarChar(100) // 帳號
+  currency        String   @default("HKD") @db.VarChar(10) // 幣種
   opening_balance Decimal? @db.Decimal(15, 2) // B/F BALANCE 期初結餘
-  company_id   Int? // 所屬公司
-  is_active    Boolean  @default(true)
-  remarks      String?  @db.Text
-  created_at   DateTime @default(now())
-  updated_at   DateTime @default(now()) @updatedAt
+  company_id      Int? // 所屬公司
+  is_active       Boolean  @default(true)
+  remarks         String?  @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now()) @updatedAt
 
   company      Company?          @relation(fields: [company_id], references: [id], onDelete: SetNull)
   transactions BankTransaction[]

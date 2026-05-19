@@ -10,6 +10,7 @@ import { PayrollCalculationService } from './payroll-calculation.service';
 import { StatutoryHolidaysService } from '../statutory-holidays/statutory-holidays.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { FleetRateCardsService } from '../fleet-rate-cards/fleet-rate-cards.service';
+import { PettyCashService } from '../petty-cash/petty-cash.service';
 import { PayrollQuery } from '../common/types';
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
@@ -35,6 +36,7 @@ export class PayrollService {
     private readonly auditLogsService: AuditLogsService,
     private readonly calcService: PayrollCalculationService,
     private readonly fleetRateCardsService: FleetRateCardsService,
+    private readonly pettyCashService: PettyCashService,
   ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
@@ -1161,7 +1163,10 @@ export class PayrollService {
     // Mark attached reimbursement expenses as settled
     await this.settlePayrollExpenses(id);
 
-    return { confirmed: true, expenses_generated: expenseCount };
+    // Petty cash settlement is an additional backward-compatible step.
+    const pettyCashSettlement = await this.pettyCashService.settleForPayroll(id);
+
+    return { confirmed: true, expenses_generated: expenseCount, petty_cash_settlement: pettyCashSettlement };
   }
 
   // ── 撤銷確認（回到草稿）────────────────────────────────────────
@@ -1187,7 +1192,10 @@ export class PayrollService {
       data: { status: 'draft' },
     });
 
-    return { unconfirmed: true, expenses_deleted: deletedCount };
+    // Petty cash rollback is an additional backward-compatible step.
+    const pettyCashRollback = await this.pettyCashService.rollbackForPayroll(id);
+
+    return { unconfirmed: true, expenses_deleted: deletedCount, petty_cash_rollback: pettyCashRollback };
   }
 
   // ── 批量確認 ──────────────────────────────────────────────────

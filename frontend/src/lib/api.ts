@@ -176,6 +176,16 @@ export const employeesApi = {
   backfillEmpCodes: () => api.post("/employees/backfill-emp-codes"),
 };
 
+// Petty Cash
+export const pettyCashApi = {
+  getRecords: (employeeId: number, params?: any) =>
+    api.get(`/petty-cash/${employeeId}`, { params }),
+  getBalance: (employeeId: number) => api.get(`/petty-cash/${employeeId}/balance`),
+  getPayrollSettlement: (payrollId: number) => api.get(`/petty-cash/payroll/${payrollId}`),
+  topup: (data: any) => api.post('/petty-cash/topup', data),
+  adjust: (data: any) => api.post('/petty-cash/adjust', data),
+};
+
 // Vehicles
 export const vehiclesApi = {
   simple: () => api.get("/vehicles/simple"),

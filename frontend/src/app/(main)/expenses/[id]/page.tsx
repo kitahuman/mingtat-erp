@@ -115,6 +115,8 @@ export default function ExpenseDetailPage() {
       employee_id: e.employee_id || '',
       item: e.item || '',
       total_amount: e.total_amount != null ? Number(e.total_amount) : '',
+      payment_status: e.payment_status || (e.is_paid ? 'paid' : 'unpaid'),
+      payment_date: e.payment_date ? e.payment_date.slice(0, 10) : '',
       remarks: e.remarks || '',
       machine_code: e.machine_code || '',
       machinery_id: e.machinery_id || '',
@@ -136,6 +138,7 @@ export default function ExpenseDetailPage() {
         payload[f] = payload[f] ? Number(payload[f]) : null;
       }
       if (payload.total_amount !== '') payload.total_amount = Number(payload.total_amount);
+      if (payload.payment_status !== 'paid' && payload.payment_status !== 'partially_paid') payload.payment_date = null;
       await expensesApi.update(expenseId, payload);
       await loadExpense();
       setEditMode(false);
@@ -153,6 +156,7 @@ export default function ExpenseDetailPage() {
   };
 
   const companyOptions = companies.map((c: any) => ({ value: c.id, label: c.internal_prefix || c.name }));
+  const supplierOptions = partners.filter((p: any) => p.partner_type === 'supplier').map((p: any) => ({ value: p.id, label: p.name }));
   const partnerOptions = partners.map((p: any) => ({ value: p.id, label: p.name }));
   const employeeOptions = employees.map((e: any) => ({ value: e.id, label: e.name_zh }));
   const machineryOptions = machineryList.map((m: any) => ({ value: m.id, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` }));
@@ -314,7 +318,15 @@ export default function ExpenseDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">供應商</label>
-              <input type="text" value={form.supplier_name} onChange={e => setForm({ ...form, supplier_name: e.target.value, supplier_partner_id: '' })} className="input-field text-sm" placeholder="輸入供應商名稱" />
+              <SearchableSelect
+                value={form.supplier_partner_id || null}
+                onChange={v => {
+                  const supplier = supplierOptions.find((p: any) => String(p.value) === String(v ?? ''));
+                  setForm({ ...form, supplier_partner_id: v || '', supplier_name: supplier?.label || '' });
+                }}
+                options={supplierOptions}
+                placeholder="搜尋供應商..."
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">大類別</label>
@@ -335,9 +347,24 @@ export default function ExpenseDetailPage() {
               <SearchableSelect value={form.employee_id || null} onChange={v => setForm({ ...form, employee_id: v })} options={employeeOptions} placeholder="搜尋員工..." />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
-              <DateInput value={form.payment_date} onChange={v => setForm({ ...form, payment_date: v })} className="input-field text-sm" />
+              <label className="block text-xs font-medium text-gray-600 mb-1">付款狀態</label>
+              <select
+                value={form.payment_status}
+                onChange={e => setForm({ ...form, payment_status: e.target.value, payment_date: (e.target.value === 'paid' || e.target.value === 'partially_paid') ? form.payment_date : '' })}
+                className="input-field text-sm"
+              >
+                <option value="unpaid">未付款</option>
+                <option value="partially_paid">部分付款</option>
+                <option value="paid">已付款</option>
+                <option value="cancelled">取消</option>
+              </select>
             </div>
+            {(form.payment_status === 'paid' || form.payment_status === 'partially_paid') && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
+                <DateInput value={form.payment_date} onChange={v => setForm({ ...form, payment_date: v })} className="input-field text-sm" />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">總金額</label>
               <input type="number" step="0.01" value={form.total_amount} onChange={e => setForm({ ...form, total_amount: e.target.value })} className="input-field text-sm" />
@@ -377,6 +404,7 @@ export default function ExpenseDetailPage() {
             <Field label="供應商">{expense.supplier?.name || expense.supplier_name}</Field>
             <Field label="類別">{categoryLabel}</Field>
             <Field label="報銷者">{expense.employee?.name_zh}</Field>
+            <Field label="發佈人">{expense.creator?.displayName || expense.creator?.username}</Field>
             <Field label="項目">{expense.item}</Field>
             <Field label="總金額">
               <span className="font-semibold text-base">HK$ {Number(expense.total_amount).toLocaleString('en', { minimumFractionDigits: 2 })}</span>

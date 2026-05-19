@@ -9,6 +9,7 @@ import { PricingModule } from '../common/pricing.module';
 import { StatutoryHolidaysModule } from '../statutory-holidays/statutory-holidays.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { FleetRateCardsModule } from '../fleet-rate-cards/fleet-rate-cards.module';
+import { PettyCashModule } from '../petty-cash/petty-cash.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { FleetRateCardsModule } from '../fleet-rate-cards/fleet-rate-cards.modul
     StatutoryHolidaysModule,
     AuditLogsModule,
     FleetRateCardsModule,
+    PettyCashModule,
   ],
   providers: [PayrollService, PayrollCalculationService],
   controllers: [PayrollController],
