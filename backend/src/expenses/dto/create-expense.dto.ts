@@ -42,6 +42,7 @@ export class UpdateExpenseDto extends CreateExpenseDto {}
 export class CreateExpenseItemDto {
   @IsString() description: string;
   @IsOptional() @Type(() => Number) @IsNumber() quantity?: number;
+  @IsOptional() @IsString() unit?: string;
   @IsOptional() @Type(() => Number) @IsNumber() unit_price?: number;
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() sort_order?: number;

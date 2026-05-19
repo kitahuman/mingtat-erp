@@ -251,7 +251,7 @@ export class ExpensesService {
 
   // ── Expense Items ──────────────────────────────────────────────
 
-  async createItem(expenseId: number, dto: { description: string; quantity?: number; unit_price?: number; amount?: number }) {
+  async createItem(expenseId: number, dto: { description: string; quantity?: number; unit?: string; unit_price?: number; amount?: number }) {
     const expense = await this.prisma.expense.findUnique({ where: { id: expenseId } });
     if (!expense) throw new NotFoundException('支出記錄不存在');
 
@@ -269,6 +269,7 @@ export class ExpensesService {
         expense_id: expenseId,
         description: dto.description,
         quantity: qty,
+        unit: dto.unit?.trim() || null,
         unit_price: unitPrice,
         amount,
         sort_order: (maxOrder._max.sort_order || 0) + 1,
@@ -293,6 +294,7 @@ export class ExpensesService {
       data: {
         description: dto.description ?? item.description,
         quantity: qty,
+        unit: dto.unit !== undefined ? (dto.unit?.trim() || null) : item.unit,
         unit_price: unitPrice,
         amount,
       },

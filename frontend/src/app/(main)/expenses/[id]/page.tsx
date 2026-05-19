@@ -71,9 +71,10 @@ export default function ExpenseDetailPage() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [unitOptions, setUnitOptions] = useState<any[]>([]);
 
   // Items state
-  const [itemForm, setItemForm] = useState({ description: '', quantity: '1', unit_price: '', amount: '' });
+  const [itemForm, setItemForm] = useState({ description: '', quantity: '1', unit: '', unit_price: '', amount: '' });
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemForm, setEditingItemForm] = useState<any>({});
   const [itemSaving, setItemSaving] = useState(false);
@@ -105,6 +106,7 @@ export default function ExpenseDetailPage() {
     quotationsApi.list({ limit: 9999 }).then(r => setQuotations(r.data.data || []));
     expenseCategoriesApi.getTree().then(r => setCategoryTree(r.data || []));
     fieldOptionsApi.getByCategory('payment_method').then(r => setPaymentMethods(r.data || []));
+    fieldOptionsApi.getByCategory('wage_unit').then(r => setUnitOptions((r.data || []).filter((o: any) => o.is_active !== false)));
   }, []);
 
   function toForm(e: any) {
@@ -178,6 +180,7 @@ export default function ExpenseDetailPage() {
     return parts.join(' · ');
   };
   const quotationOptions = quotations.map((q: any) => ({ value: q.id, label: formatQuotationLabel(q) }));
+  const unitSelectOptions = unitOptions.map((o: any) => ({ value: o.value || o.label || o.name, label: o.label || o.value || o.name }));
 
   // ── Items ──────────────────────────────────────────────────────────────────
   const calcItemAmount = (qty: string, up: string) => {
@@ -193,8 +196,8 @@ export default function ExpenseDetailPage() {
       const qty = parseFloat(itemForm.quantity) || 1;
       const up = parseFloat(itemForm.unit_price) || 0;
       const amt = itemForm.amount ? parseFloat(itemForm.amount) : qty * up;
-      await expensesApi.createItem(expenseId, { description: itemForm.description, quantity: qty, unit_price: up, amount: amt });
-      setItemForm({ description: '', quantity: '1', unit_price: '', amount: '' });
+      await expensesApi.createItem(expenseId, { description: itemForm.description, quantity: qty, unit: itemForm.unit || null, unit_price: up, amount: amt });
+      setItemForm({ description: '', quantity: '1', unit: '', unit_price: '', amount: '' });
       await loadExpense();
     } catch (err: any) {
       alert(err.response?.data?.message || '新增細項失敗');
@@ -209,7 +212,7 @@ export default function ExpenseDetailPage() {
       const qty = parseFloat(editingItemForm.quantity) || 1;
       const up = parseFloat(editingItemForm.unit_price) || 0;
       const amt = editingItemForm.amount ? parseFloat(editingItemForm.amount) : qty * up;
-      await expensesApi.updateItem(expenseId, itemId, { description: editingItemForm.description, quantity: qty, unit_price: up, amount: amt });
+      await expensesApi.updateItem(expenseId, itemId, { description: editingItemForm.description, quantity: qty, unit: editingItemForm.unit || null, unit_price: up, amount: amt });
       setEditingItemId(null);
       await loadExpense();
     } catch (err: any) {
@@ -470,6 +473,7 @@ export default function ExpenseDetailPage() {
               <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase">
                 <th className="text-left py-2 pr-3 font-medium w-1/2">描述</th>
                 <th className="text-right py-2 px-3 font-medium w-20">數量</th>
+                <th className="text-left py-2 px-3 font-medium w-24">單位</th>
                 <th className="text-right py-2 px-3 font-medium w-28">單價</th>
                 <th className="text-right py-2 px-3 font-medium w-28">金額</th>
                 <th className="py-2 pl-3 w-20"></th>
@@ -485,6 +489,12 @@ export default function ExpenseDetailPage() {
                       </td>
                       <td className="py-2 px-3">
                         <input type="number" step="0.001" value={editingItemForm.quantity} onChange={e => { const q = e.target.value; setEditingItemForm({ ...editingItemForm, quantity: q, amount: calcItemAmount(q, editingItemForm.unit_price) }); }} className="input-field text-sm text-right w-full" />
+                      </td>
+                      <td className="py-2 px-3">
+                        <select value={editingItemForm.unit || ''} onChange={e => setEditingItemForm({ ...editingItemForm, unit: e.target.value })} className="input-field text-sm w-full">
+                          <option value="">—</option>
+                          {unitSelectOptions.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
                       </td>
                       <td className="py-2 px-3">
                         <input type="number" step="0.01" value={editingItemForm.unit_price} onChange={e => { const u = e.target.value; setEditingItemForm({ ...editingItemForm, unit_price: u, amount: calcItemAmount(editingItemForm.quantity, u) }); }} className="input-field text-sm text-right w-full" />
@@ -503,11 +513,12 @@ export default function ExpenseDetailPage() {
                     <>
                       <td className="py-2.5 pr-3 text-gray-800">{item.description}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.quantity)}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{item.unit || '—'}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.unit_price) > 0 ? Number(item.unit_price).toLocaleString('en', { minimumFractionDigits: 2 }) : '—'}</td>
                       <td className="py-2.5 px-3 text-right font-semibold text-gray-800">HK$ {Number(item.amount).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
                       <td className="py-2.5 pl-3">
                         <div className="flex gap-2">
-                          <button onClick={() => { setEditingItemId(item.id); setEditingItemForm({ description: item.description, quantity: String(Number(item.quantity)), unit_price: String(Number(item.unit_price)), amount: String(Number(item.amount)) }); }} className="text-xs text-blue-600 hover:text-blue-800">編輯</button>
+                          <button onClick={() => { setEditingItemId(item.id); setEditingItemForm({ description: item.description, quantity: String(Number(item.quantity)), unit: item.unit || '', unit_price: String(Number(item.unit_price)), amount: String(Number(item.amount)) }); }} className="text-xs text-blue-600 hover:text-blue-800">編輯</button>
                           <button onClick={() => handleDeleteItem(item.id)} className="text-xs text-red-500 hover:text-red-700">刪除</button>
                         </div>
                       </td>
@@ -516,13 +527,13 @@ export default function ExpenseDetailPage() {
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-gray-400 text-sm">尚未新增細項</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-gray-400 text-sm">尚未新增細項</td></tr>
               )}
             </tbody>
             {items.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td colSpan={3} className="py-2.5 pr-3 text-right text-sm font-semibold text-gray-700">合計</td>
+                  <td colSpan={4} className="py-2.5 pr-3 text-right text-sm font-semibold text-gray-700">合計</td>
                   <td className="py-2.5 px-3 text-right text-sm font-bold text-gray-900">HK$ {itemsTotal.toLocaleString('en', { minimumFractionDigits: 2 })}</td>
                   <td></td>
                 </tr>
@@ -535,19 +546,26 @@ export default function ExpenseDetailPage() {
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">新增細項</p>
           <div className="grid grid-cols-12 gap-2 items-end">
-            <div className="col-span-12 md:col-span-5">
+            <div className="col-span-12 md:col-span-4">
               <label className="block text-xs text-gray-500 mb-1">描述 *</label>
               <input type="text" value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e.target.value })} className="input-field text-sm" placeholder="細項描述" />
             </div>
-            <div className="col-span-4 md:col-span-2">
+            <div className="col-span-6 md:col-span-2">
               <label className="block text-xs text-gray-500 mb-1">數量</label>
               <input type="number" step="0.001" value={itemForm.quantity} onChange={e => { const q = e.target.value; setItemForm({ ...itemForm, quantity: q, amount: calcItemAmount(q, itemForm.unit_price) }); }} className="input-field text-sm" />
             </div>
-            <div className="col-span-4 md:col-span-2">
+            <div className="col-span-6 md:col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">單位</label>
+              <select value={itemForm.unit} onChange={e => setItemForm({ ...itemForm, unit: e.target.value })} className="input-field text-sm">
+                <option value="">—</option>
+                {unitSelectOptions.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="col-span-6 md:col-span-2">
               <label className="block text-xs text-gray-500 mb-1">單價</label>
               <input type="number" step="0.01" value={itemForm.unit_price} onChange={e => { const u = e.target.value; setItemForm({ ...itemForm, unit_price: u, amount: calcItemAmount(itemForm.quantity, u) }); }} className="input-field text-sm" placeholder="0.00" />
             </div>
-            <div className="col-span-4 md:col-span-2">
+            <div className="col-span-6 md:col-span-1">
               <label className="block text-xs text-gray-500 mb-1">金額</label>
               <input type="number" step="0.01" value={itemForm.amount} onChange={e => setItemForm({ ...itemForm, amount: e.target.value })} className="input-field text-sm" placeholder="自動計算" />
             </div>

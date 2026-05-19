@@ -2071,7 +2071,14 @@ export default function WorkLogsPage() {
                                             {d.location && d.location !== '—' && <div>📍 {d.location}</div>}
                                           </div>
                                         );
-                                        if (key === 'chit') return (
+                                        if (key === 'chit') {
+                                          const totalNetWeight = src.details.reduce((sum: number, detail: any) => {
+                                            const value = detail.weight_net;
+                                            if (value == null || value === '—') return sum;
+                                            const numericValue = typeof value === 'number' ? value : parseFloat(String(value).replace(/,/g, ''));
+                                            return Number.isFinite(numericValue) ? sum + numericValue : sum;
+                                          }, 0);
+                                          return (
                                           <div className="space-y-1 text-gray-600">
                                             {d.facility && d.facility !== '—' && <div>🏭 設施: {d.facility}</div>}
                                             {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
@@ -2089,6 +2096,9 @@ export default function WorkLogsPage() {
                                               </div>
                                             )}
                                             {d.weight_net != null && d.weight_net !== '—' && <div>⚖️ 净重: {d.weight_net} T</div>}
+                                            {src.details.length > 1 && totalNetWeight > 0 && (
+                                              <div className="font-semibold text-gray-700">總淨重: {totalNetWeight.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T</div>
+                                            )}
                                             {src.details.length > 1 && (
                                               <button
                                                 type="button"
@@ -2100,6 +2110,7 @@ export default function WorkLogsPage() {
                                             )}
                                           </div>
                                         );
+                                        }
                                         if (key === 'delivery_note') return (
                                           <div className="space-y-0.5 text-gray-600">
                                             {d.vehicle && d.vehicle !== '—' && <div>🚗 {d.vehicle}</div>}
