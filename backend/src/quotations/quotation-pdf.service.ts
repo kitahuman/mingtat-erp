@@ -90,7 +90,7 @@ export class QuotationPdfService {
       html: this.buildHtml(quotation as any, {
         language,
         showSignature,
-        overridePaymentTerms: options.overridePaymentTerms,
+        overridePaymentTerms: options.overridePaymentTerms ?? '',
       }),
     };
   }

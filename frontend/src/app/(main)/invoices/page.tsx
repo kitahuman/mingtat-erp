@@ -179,9 +179,6 @@ export default function InvoicesPage() {
     setForm((prev) => ({
       ...prev,
       invoice_title: prev.invoice_title || '工作紀錄發票',
-      remarks:
-        prev.remarks ||
-        `由 ${ids.length} 筆工作紀錄建立（只關聯模式，不自動計算價錢）`,
     }));
   }, []);
 

@@ -141,107 +141,101 @@ export default function QuotationPdfPreviewPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              報價單 PDF 預覽
-            </div>
-            <h1 className="font-mono text-lg font-bold text-gray-900">
-              {quotation?.quotation_no || `Quotation #${quotationId}`}
-            </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleDownloadPdf}
-                className="btn-primary py-1.5 px-3 text-sm disabled:opacity-50"
-                disabled={downloading || loadingPreview}
-              >
-                {downloading ? '下載中...' : '下載 PDF'}
-              </button>
-              <button
-                onClick={handlePrint}
-                className="btn-secondary py-1.5 px-3 text-sm"
-                disabled={loadingPreview || !html}
-              >
-                列印
-              </button>
-              <button
-                onClick={() => router.push(`/quotations/${quotationId}`)}
-                className="btn-secondary py-1.5 px-3 text-sm"
-              >
-                返回
-              </button>
-            </div>
+    <main className="flex min-h-screen flex-col gap-4 bg-gray-100 px-4 py-4">
+      <section className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            報價單 PDF 預覽
           </div>
-
-          <div className="flex flex-col gap-3 lg:w-[450px]">
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-              <label className="flex items-center gap-2">
-                <span className="font-medium">語言</span>
-                <select
-                  value={options.language}
-                  onChange={(e) =>
-                    updateOption('language', e.target.value as QuotationPdfLanguage)
-                  }
-                  className="input-field h-8 min-w-[100px] py-0 text-sm"
-                >
-                  <option value="zh">中文</option>
-                  <option value="en">English</option>
-                  <option value="bilingual">雙語</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={options.show_signature}
-                  onChange={(e) => updateOption('show_signature', e.target.checked)}
-                />
-                顯示簽名欄
-              </label>
-            </div>
-
-            <PaymentTermsSelector
-              companyId={quotation?.company_id}
-              clientId={quotation?.client_id}
-              value={options.override_payment_terms}
-              onChange={(val) => updateOption('override_payment_terms', val)}
-              onSaveAsTemplate={handleSaveAsTemplate}
-              onSaveToDocument={handleSaveToDocument}
-            />
-          </div>
+          <h1 className="font-mono text-lg font-bold text-gray-900">
+            {quotation?.quotation_no || `Quotation #${quotationId}`}
+          </h1>
         </div>
-      </div>
 
-      <main className="mx-auto max-w-7xl px-4 pb-8 pt-[280px] lg:pt-[180px]">
-        {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleDownloadPdf}
+            className="btn-primary px-3 py-1.5 text-sm disabled:opacity-50"
+            disabled={downloading || loadingPreview}
+          >
+            {downloading ? '下載中...' : '下載 PDF'}
+          </button>
+          <button
+            onClick={handlePrint}
+            className="btn-secondary px-3 py-1.5 text-sm"
+            disabled={loadingPreview || !html}
+          >
+            列印
+          </button>
+          <button
+            onClick={() => router.push(`/quotations/${quotationId}`)}
+            className="btn-secondary px-3 py-1.5 text-sm"
+          >
+            返回
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2">
+            <span className="font-medium">語言</span>
+            <select
+              value={options.language}
+              onChange={(e) =>
+                updateOption('language', e.target.value as QuotationPdfLanguage)
+              }
+              className="input-field h-8 min-w-[100px] py-0 text-sm"
+            >
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+              <option value="bilingual">雙語</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={options.show_signature}
+              onChange={(e) => updateOption('show_signature', e.target.checked)}
+            />
+            顯示簽名欄
+          </label>
+        </div>
+
+        <div className="mt-3">
+          <PaymentTermsSelector
+            companyId={quotation?.company_id}
+            clientId={quotation?.client_id}
+            value={options.override_payment_terms}
+            onChange={(val) => updateOption('override_payment_terms', val)}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            onSaveToDocument={handleSaveToDocument}
+          />
+        </div>
+      </section>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <section className="min-h-[480px] flex-1 overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm">
+        {loadingPreview ? (
+          <div className="flex h-full min-h-[480px] items-center justify-center bg-white text-sm font-medium text-gray-600">
+            載入預覽中...
+          </div>
+        ) : html ? (
+          <iframe
+            ref={iframeRef}
+            title="報價單 PDF HTML 預覽"
+            srcDoc={html}
+            className="h-full min-h-[480px] w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-full min-h-[480px] items-center justify-center bg-white text-sm text-gray-500">
+            尚無預覽內容
           </div>
         )}
-
-        <div className="relative h-[calc(100vh-20rem)] overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm lg:h-[calc(100vh-14rem)]">
-          {loadingPreview && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
-              <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-600 shadow">
-                載入預覽中...
-              </div>
-            </div>
-          )}
-          {html ? (
-            <iframe
-              ref={iframeRef}
-              title="報價單 PDF HTML 預覽"
-              srcDoc={html}
-              className="h-full w-full border-0 bg-white"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center bg-white text-sm text-gray-500">
-              尚無預覽內容
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }
