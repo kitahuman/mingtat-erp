@@ -32,6 +32,7 @@ import MissingPriceTab from './MissingPriceTab';
 import SummaryTab from './SummaryTab';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { useWorkLogSocket } from '@/hooks/useWorkLogSocket';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
 import { fmtDate } from '@/lib/dateUtils';
@@ -678,13 +679,43 @@ export default function WorkLogsPage() {
     }
   }, []);
 
-  // ── Edit lock ───────────────────────────────────────────────
-  const [lockInfo, setLockInfo] = useState<{
-    locked: boolean;
-    lockedBy?: string;
-    isMe?: boolean;
-  } | null>(null);
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Row-level WebSocket locks and updates ───────────────────
+  const handleRowsUpdated = useCallback(
+    (updatedRows: any[]) => {
+      const updatedById = new Map(
+        updatedRows.map((workLog) => [Number(workLog.id), workLog]),
+      );
+      setRows((prev) =>
+        prev.map((row) => {
+          const updated = updatedById.get(Number(row.id));
+          if (!updated || dirtyRows.has(Number(row.id))) return row;
+          return { ...row, ...updated };
+        }),
+      );
+    },
+    [dirtyRows],
+  );
+
+  const { locks: rowLocks, lockRows, unlockRows } = useWorkLogSocket({
+    onRowsUpdated: handleRowsUpdated,
+  });
+
+  const getRowLock = useCallback(
+    (rowId: number) => rowLocks.get(Number(rowId)) || null,
+    [rowLocks],
+  );
+
+  const isRowLockedByOther = useCallback(
+    (rowId: number) => {
+      const lock = getRowLock(rowId);
+      return !!lock && Number(lock.locked_by.id) !== Number(user?.id);
+    },
+    [getRowLock, user?.id],
+  );
+
+  const unlockDirtyRows = useCallback(() => {
+    unlockRows(Array.from(dirtyRows.keys()));
+  }, [dirtyRows, unlockRows]);
 
   const totalPages = Math.ceil(total / limit);
   const hasDirty = dirtyRows.size > 0;
@@ -992,48 +1023,6 @@ export default function WorkLogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  // ── Edit lock management ────────────────────────────────────
-  const lockKey = `work-logs-page-${page}`;
-
-  useEffect(() => {
-    // Check lock status on page load
-    workLogsApi
-      .editLockStatus(lockKey)
-      .then((res) => {
-        setLockInfo(res.data);
-      })
-      .catch(() => {});
-  }, [lockKey]);
-
-  const acquireLock = useCallback(async () => {
-    try {
-      const res = await workLogsApi.editLockAcquire(lockKey);
-      if (res.data.acquired) {
-        setLockInfo({ locked: true, isMe: true });
-        // Start heartbeat
-        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-        heartbeatRef.current = setInterval(() => {
-          workLogsApi.editLockHeartbeat(lockKey).catch(() => {});
-        }, 60_000); // every 60s
-        return true;
-      } else {
-        setLockInfo({ locked: true, lockedBy: res.data.lockedBy, isMe: false });
-        return false;
-      }
-    } catch {
-      return true; // If lock API fails, allow editing anyway
-    }
-  }, [lockKey]);
-
-  const releaseLock = useCallback(() => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
-    }
-    workLogsApi.editLockRelease(lockKey).catch(() => {});
-    setLockInfo(null);
-  }, [lockKey]);
-
   // ── Sort handler ──────────────────────────────────────────
   const handleSort = useCallback(
     (field: string) => {
@@ -1043,8 +1032,8 @@ export default function WorkLogsPage() {
       )
         return;
       if (hasDirty) {
+        unlockDirtyRows();
         setDirtyRows(new Map());
-        releaseLock();
       }
       setSortBy((prev) => {
         if (prev === field) {
@@ -1056,27 +1045,23 @@ export default function WorkLogsPage() {
       });
       setPage(1);
     },
-    [hasDirty, releaseLock],
+    [hasDirty, unlockDirtyRows],
   );
-
-  // Release lock on unmount
-  useEffect(() => {
-    return () => {
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      workLogsApi.editLockRelease(lockKey).catch(() => {});
-    };
-  }, [lockKey]);
 
   // ── Dirty tracking ─────────────────────────────────────────
   const setCellValue = useCallback(
     async (rowId: number, field: string, value: any) => {
-      // Acquire lock on first edit
-      if (!hasDirty && !lockInfo?.isMe) {
-        const ok = await acquireLock();
-        if (!ok) {
-          alert(
-            `此頁正在被 ${lockInfo?.lockedBy || '其他用戶'} 編輯中，請稍後再試。`,
-          );
+      const existingLock = getRowLock(rowId);
+      if (existingLock && Number(existingLock.locked_by.id) !== Number(user?.id)) {
+        alert(`此行正在被 ${existingLock.locked_by.name} 編輯中，請稍後再試。`);
+        return;
+      }
+
+      if (!dirtyRows.has(rowId)) {
+        const result = await lockRows([rowId]);
+        const conflict = result.conflicts?.[0];
+        if (!result.ok && conflict) {
+          alert(`此行正在被 ${conflict.locked_by.name} 編輯中，請稍後再試。`);
           return;
         }
       }
@@ -1110,6 +1095,7 @@ export default function WorkLogsPage() {
           const { [field]: _, ...rest } = existing;
           if (Object.keys(rest).length === 0) {
             next.delete(rowId);
+            unlockRows([rowId]);
           } else {
             next.set(rowId, rest);
           }
@@ -1119,7 +1105,7 @@ export default function WorkLogsPage() {
         return next;
       });
     },
-    [rows, hasDirty, lockInfo, acquireLock],
+    [rows, dirtyRows, getRowLock, lockRows, unlockRows, user?.id],
   );
 
   // Get the effective value for a cell (dirty value or original)
@@ -1180,12 +1166,16 @@ export default function WorkLogsPage() {
       const res = await workLogsApi.bulkSave(changes);
       const result = res.data;
       if (result.failed > 0) {
+        const successfulIds = result.results
+          .filter((r: any) => r.success)
+          .map((r: any) => Number(r.id));
         const failedIds = result.results
           .filter((r: any) => !r.success)
           .map((r: any) => r.id);
         alert(
           `已儲存 ${result.saved} 筆，${result.failed} 筆失敗（ID: ${failedIds.join(', ')}）`,
         );
+        unlockRows(successfulIds);
         // Remove only successfully saved rows from dirty
         setDirtyRows((prev) => {
           const next = new Map(prev);
@@ -1195,10 +1185,10 @@ export default function WorkLogsPage() {
           return next;
         });
       } else {
+        unlockDirtyRows();
         setDirtyRows(new Map());
       }
       await fetchLogs();
-      releaseLock();
     } catch (e: any) {
       alert('儲存失敗：' + (e.response?.data?.message || e.message));
     } finally {
@@ -1208,16 +1198,16 @@ export default function WorkLogsPage() {
 
   const handleDiscardChanges = () => {
     if (!confirm('確定放棄所有未儲存的修改？')) return;
+    unlockDirtyRows();
     setDirtyRows(new Map());
-    releaseLock();
   };
 
   // ── Page change with unsaved warning ────────────────────────
   const changePage = (newPage: number) => {
     if (hasDirty) {
       if (!confirm('有未儲存的修改，切換分頁將會丟失。確定要繼續嗎？')) return;
+      unlockDirtyRows();
       setDirtyRows(new Map());
-      releaseLock();
     }
     setPage(newPage);
   };
@@ -1226,8 +1216,8 @@ export default function WorkLogsPage() {
     if (hasDirty) {
       if (!confirm('有未儲存的修改，切換每頁筆數將會丟失。確定要繼續嗎？'))
         return;
+      unlockDirtyRows();
       setDirtyRows(new Map());
-      releaseLock();
     }
     setLimit(newLimit);
     setPage(1);
@@ -1302,7 +1292,18 @@ export default function WorkLogsPage() {
 
   // ── Actions ─────────────────────────────────────────────────
   const handleDelete = async (id: number) => {
+    if (isRowLockedByOther(id)) {
+      const lock = getRowLock(id);
+      alert(`此行正在被 ${lock?.locked_by.name || '其他用戶'} 編輯中，無法刪除。`);
+      return;
+    }
     if (!confirm('確定刪除此記錄？')) return;
+    const result = await lockRows([id]);
+    const conflict = result.conflicts?.[0];
+    if (!result.ok && conflict) {
+      alert(`此行正在被 ${conflict.locked_by.name} 編輯中，無法刪除。`);
+      return;
+    }
     try {
       await workLogsApi.remove(id);
       // Remove from dirty if present
@@ -1314,6 +1315,8 @@ export default function WorkLogsPage() {
       await fetchLogs();
     } catch (e: any) {
       alert('刪除失敗：' + (e.response?.data?.message || e.message));
+    } finally {
+      unlockRows([id]);
     }
   };
 
@@ -1365,7 +1368,33 @@ export default function WorkLogsPage() {
     }
   };
 
+  const getEditableSelectedIds = useCallback(() => {
+    const selectedIds = Array.from(selected);
+    return selectedIds.filter((id) => !isRowLockedByOther(id));
+  }, [selected, isRowLockedByOther]);
+
+  const handleOpenBatchEdit = async () => {
+    const editableIds = getEditableSelectedIds();
+    if (editableIds.length !== selected.size) {
+      alert('部分選取的行正在被其他用戶鎖定，請取消選取後再批量編輯。');
+      return;
+    }
+    const result = await lockRows(editableIds);
+    const conflict = result.conflicts?.[0];
+    if (!result.ok && conflict) {
+      alert(`部分選取的行正在被 ${conflict.locked_by.name} 編輯中，請稍後再試。`);
+      return;
+    }
+    setBatchEditOpen(true);
+  };
+
+  const handleCloseBatchEdit = () => {
+    unlockRows(Array.from(selected));
+    setBatchEditOpen(false);
+  };
+
   const handleBulkUpdateSuccess = async () => {
+    unlockRows(Array.from(selected));
     setSelected(new Set());
     await fetchLogs();
   };
@@ -1377,20 +1406,51 @@ export default function WorkLogsPage() {
 
   const handleBulkConfirm = async () => {
     if (selected.size === 0) return;
-    await workLogsApi.bulkConfirm(Array.from(selected));
-    setSelected(new Set());
-    await fetchLogs();
+    const ids = getEditableSelectedIds();
+    if (ids.length !== selected.size) {
+      alert('部分選取的行正在被其他用戶鎖定，無法批量確認。');
+      return;
+    }
+    const result = await lockRows(ids);
+    const conflict = result.conflicts?.[0];
+    if (!result.ok && conflict) {
+      alert(`部分選取的行正在被 ${conflict.locked_by.name} 編輯中，請稍後再試。`);
+      return;
+    }
+    try {
+      await workLogsApi.bulkConfirm(ids);
+      setSelected(new Set());
+      await fetchLogs();
+    } finally {
+      unlockRows(ids);
+    }
   };
 
   const handleBulkUnconfirm = async () => {
     if (selected.size === 0) return;
+    const ids = getEditableSelectedIds();
+    if (ids.length !== selected.size) {
+      alert('部分選取的行正在被其他用戶鎖定，無法批量取消確認。');
+      return;
+    }
     if (!confirm(`確定取消確認選取的 ${selected.size} 筆記錄？`)) return;
-    await workLogsApi.bulkUnconfirm(Array.from(selected));
-    setSelected(new Set());
-    await fetchLogs();
+    const result = await lockRows(ids);
+    const conflict = result.conflicts?.[0];
+    if (!result.ok && conflict) {
+      alert(`部分選取的行正在被 ${conflict.locked_by.name} 編輯中，請稍後再試。`);
+      return;
+    }
+    try {
+      await workLogsApi.bulkUnconfirm(ids);
+      setSelected(new Set());
+      await fetchLogs();
+    } finally {
+      unlockRows(ids);
+    }
   };
 
   const toggleSelect = (id: number, checked: boolean) => {
+    if (checked && isRowLockedByOther(id)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(id);
@@ -1400,7 +1460,8 @@ export default function WorkLogsPage() {
   };
 
   const toggleSelectAll = (checked: boolean) => {
-    if (checked) setSelected(new Set(rows.map((r) => r.id)));
+    if (checked)
+      setSelected(new Set(rows.filter((r) => !isRowLockedByOther(r.id)).map((r) => r.id)));
     else setSelected(new Set());
   };
 
@@ -1410,6 +1471,7 @@ export default function WorkLogsPage() {
       !confirm('有未儲存的修改，重設篩選將會丟失。確定要繼續嗎？')
     )
       return;
+    unlockDirtyRows();
     setDirtyRows(new Map());
     setFilterPublisher([]);
     setFilterStatus([]);
@@ -1610,7 +1672,7 @@ export default function WorkLogsPage() {
     const val = getCellValue(row, field);
     const dirty = isCellDirty(row.id, field);
     const display = getDisplayValue(row, field);
-    const isLocked = lockInfo?.locked && !lockInfo?.isMe;
+    const isLocked = isRowLockedByOther(row.id);
 
     const onChange = (v: any) => {
       // When client changes, also clear quotation and contract
@@ -2232,7 +2294,7 @@ export default function WorkLogsPage() {
                 已選 {selected.size} 筆
               </span>
               <button
-                onClick={() => setBatchEditOpen(true)}
+                onClick={handleOpenBatchEdit}
                 className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
               >
                 批量編輯
@@ -2517,7 +2579,7 @@ export default function WorkLogsPage() {
           {/* ── Batch Edit Dialog ────────────────────────────────────── */}{' '}
           <BatchEditDialog
             open={batchEditOpen}
-            onClose={() => setBatchEditOpen(false)}
+            onClose={handleCloseBatchEdit}
             selectedRows={rows.filter((r) => selected.has(r.id))}
             onSuccess={handleBulkUpdateSuccess}
             companies={companies}
@@ -2528,16 +2590,7 @@ export default function WorkLogsPage() {
             fieldOptions={fieldOptions}
             allEquipment={allEquipment}
           />
-          {/* ── Edit Lock Banner ── */}
-          {lockInfo?.locked && !lockInfo?.isMe && (
-            <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 py-2.5 shrink-0 flex items-center gap-3">
-              <span className="text-red-500 text-lg">🔒</span>
-              <p className="text-sm text-red-800 font-medium">
-                <span className="font-bold">{lockInfo.lockedBy}</span>{' '}
-                正在編輯此頁，您目前只能檢視。
-              </p>
-            </div>
-          )}
+
           {/* ── Unverified Client Banner ── */}
           {(() => {
             const unverifiedCount = rows.filter(
@@ -2778,7 +2831,7 @@ export default function WorkLogsPage() {
                     <input
                       type="checkbox"
                       checked={
-                        rows.length > 0 && rows.every((r) => selected.has(r.id))
+                        rows.length > 0 && rows.filter((r) => !isRowLockedByOther(r.id)).every((r) => selected.has(r.id))
                       }
                       onChange={(e) => toggleSelectAll(e.target.checked)}
                       className="cursor-pointer"
@@ -2944,13 +2997,17 @@ export default function WorkLogsPage() {
                     const hasUnverifiedClient =
                       !row.client_id && !!row.unverified_client_name;
                     const isRowSelected = selected.has(row.id);
-                    const rowBg = isRowSelected
-                      ? 'bg-blue-50'
-                      : rowDirty
-                        ? 'bg-amber-50'
-                        : hasUnverifiedClient
+                    const rowLock = getRowLock(row.id);
+                    const rowLockedByOther = isRowLockedByOther(row.id);
+                    const rowBg = rowLockedByOther
+                      ? 'bg-gray-100'
+                      : isRowSelected
+                        ? 'bg-blue-50'
+                        : rowDirty
                           ? 'bg-amber-50'
-                          : 'bg-white';
+                          : hasUnverifiedClient
+                            ? 'bg-amber-50'
+                            : 'bg-white';
                     const rowNum = (page - 1) * limit + rowIndex + 1;
 
                     return (
@@ -2958,13 +3015,15 @@ export default function WorkLogsPage() {
                         <tr
                           key={row.id}
                           className={`border-b border-gray-100 text-xs ${
-                            isRowSelected
-                              ? 'bg-blue-50'
-                              : rowDirty
-                                ? 'bg-amber-50'
-                                : hasUnverifiedClient
+                            rowLockedByOther
+                              ? 'bg-gray-100 text-gray-500'
+                              : isRowSelected
+                                ? 'bg-blue-50'
+                                : rowDirty
                                   ? 'bg-amber-50'
-                                  : 'hover:bg-blue-100'
+                                  : hasUnverifiedClient
+                                    ? 'bg-amber-50'
+                                    : 'hover:bg-blue-100'
                           }`}
                         >
                           {/* 行數編號 - sticky left */}
@@ -2980,15 +3039,21 @@ export default function WorkLogsPage() {
                             <input
                               type="checkbox"
                               checked={selected.has(row.id)}
+                              disabled={rowLockedByOther}
                               onChange={(e) =>
                                 toggleSelect(row.id, e.target.checked)
                               }
-                              className="cursor-pointer"
+                              className={rowLockedByOther ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                             />
                           </td>
                           {/* ID - scrollable */}
-                          <td className="px-2 py-0 border-r border-gray-200 w-12 text-gray-400 font-mono">
-                            {row.id}
+                          <td className="px-2 py-0 border-r border-gray-200 w-20 text-gray-400 font-mono">
+                            <div>{row.id}</div>
+                            {rowLockedByOther && rowLock && (
+                              <div className="mt-0.5 text-[10px] leading-tight text-gray-600 font-sans whitespace-nowrap">
+                                鎖定：{rowLock.locked_by.name}
+                              </div>
+                            )}
                           </td>
                           {/* Visible COLUMNS in user-defined order */}
                           {(visibleColumns as any[]).map((col: any) => {

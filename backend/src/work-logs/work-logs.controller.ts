@@ -129,32 +129,6 @@ export class WorkLogsController {
     return this.service.bulkSave(changes, req.user?.id || req.user?.userId || 0);
   }
 
-  // ── 編輯鎖定 ─────────────────────────────────────
-
-  @Post('edit-lock/acquire')
-  acquireEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.acquireEditLock(
-      body.lockKey,
-      req.user.id,
-      req.user.displayName || req.user.username,
-    );
-  }
-
-  @Post('edit-lock/heartbeat')
-  heartbeatEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.heartbeatEditLock(body.lockKey, req.user.id);
-  }
-
-  @Post('edit-lock/release')
-  releaseEditLock(@Body() body: { lockKey: string }, @Request() req: any) {
-    return this.service.releaseEditLock(body.lockKey, req.user.id);
-  }
-
-  @Get('edit-lock/status')
-  getEditLockStatus(@Query('lockKey') lockKey: string, @Request() req: any) {
-    return this.service.getEditLockStatus(lockKey, req.user.id);
-  }
-
    // ── 確認地點（WhatsApp 打卡黃色 Highlight 消除）───────────
 
   @Post(':id/confirm-location')

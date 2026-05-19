@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
+import { WorkLogsGateway } from './work-logs.gateway';
 import {
   UnmatchedCombinationsQueryDto,
   AddRateAndRematchDto,
@@ -102,6 +103,7 @@ export class WorkLogsService {
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly workLogsGateway: WorkLogsGateway,
   ) {}
 
   private async assertVehicleIsNotScrappedByWorkLogData(data: any) {
@@ -780,7 +782,13 @@ export class WorkLogsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
+  async update(
+    id: number,
+    dto: any,
+    userId?: number,
+    ipAddress?: string,
+    broadcast = true,
+  ) {
     // Strip all relation objects and metadata to avoid Prisma errors
     const {
       id: _id,
@@ -875,7 +883,11 @@ export class WorkLogsService {
         await this.matchAndSavePrice(updatedWl as any);
       }
     }
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+    if (broadcast && updated) {
+      this.workLogsGateway.broadcastRowsUpdated([updated]);
+    }
+    return updated;
   }
 
   private getChangedFields(before: any, after: any, fields?: string[]) {
@@ -1219,6 +1231,13 @@ export class WorkLogsService {
       );
     }
 
+    if (affectedIds.length > 0) {
+      const updatedRows = await Promise.all(
+        affectedIds.map((workLogId) => this.findOne(workLogId)),
+      );
+      this.workLogsGateway.broadcastRowsUpdated(updatedRows.filter(Boolean));
+    }
+
     return { success: true, updated: affectedIds.length };
   }
   async bulkConfirm(ids: number[], userId?: number) {
@@ -1240,11 +1259,14 @@ export class WorkLogsService {
       where: { id: { in: affectedIds } },
       data: { is_confirmed: true },
     });
+    const afterLogs =
+      affectedIds.length > 0
+        ? await this.prisma.workLog.findMany({
+            where: { id: { in: affectedIds } },
+            orderBy: { id: 'asc' },
+          })
+        : [];
     if (userId && affectedIds.length > 0) {
-      const afterLogs = await this.prisma.workLog.findMany({
-        where: { id: { in: affectedIds } },
-        orderBy: { id: 'asc' },
-      });
       await this.logBulkWorkLogConfirmation({
         userId,
         operation: 'bulk_confirm',
@@ -1252,6 +1274,12 @@ export class WorkLogsService {
         beforeLogs,
         afterLogs,
       });
+    }
+    if (afterLogs.length > 0) {
+      const updatedRows = await Promise.all(
+        afterLogs.map((workLog) => this.findOne(workLog.id)),
+      );
+      this.workLogsGateway.broadcastRowsUpdated(updatedRows.filter(Boolean));
     }
     return { success: true, confirmed: affectedIds.length };
   }
@@ -1274,11 +1302,14 @@ export class WorkLogsService {
       where: { id: { in: affectedIds } },
       data: { is_confirmed: false },
     });
+    const afterLogs =
+      affectedIds.length > 0
+        ? await this.prisma.workLog.findMany({
+            where: { id: { in: affectedIds } },
+            orderBy: { id: 'asc' },
+          })
+        : [];
     if (userId && affectedIds.length > 0) {
-      const afterLogs = await this.prisma.workLog.findMany({
-        where: { id: { in: affectedIds } },
-        orderBy: { id: 'asc' },
-      });
       await this.logBulkWorkLogConfirmation({
         userId,
         operation: 'bulk_unconfirm',
@@ -1286,6 +1317,12 @@ export class WorkLogsService {
         beforeLogs,
         afterLogs,
       });
+    }
+    if (afterLogs.length > 0) {
+      const updatedRows = await Promise.all(
+        afterLogs.map((workLog) => this.findOne(workLog.id)),
+      );
+      this.workLogsGateway.broadcastRowsUpdated(updatedRows.filter(Boolean));
     }
     return { success: true, unconfirmed: affectedIds.length };
   }
@@ -1566,7 +1603,13 @@ export class WorkLogsService {
     for (const { id, data } of safeChanges) {
       try {
         const numericId = Number(id);
-        const updated = await this.update(numericId, data);
+        const updated = await this.update(
+          numericId,
+          data,
+          undefined,
+          undefined,
+          false,
+        );
         results.push({ id: numericId, success: true, data: updated });
 
         const before = beforeById.get(numericId);
@@ -1590,72 +1633,19 @@ export class WorkLogsService {
         results.push({ id, success: false, error: e.message });
       }
     }
+    const updatedRows = results
+      .filter((result) => result.success && result.data)
+      .map((result) => result.data);
+    if (updatedRows.length > 0) {
+      this.workLogsGateway.broadcastRowsUpdated(updatedRows);
+    }
+
     return {
       results,
       saved: results.filter((r) => r.success).length,
       failed: results.filter((r) => !r.success).length,
     };
   }
-  // ── 編輯鎖定 (簡易在記憶體實作) ─────────────────────
-
-  private static editLocks = new Map<
-    string,
-    { userId: number; userName: string; timestamp: number }
-  >();
-
-  acquireEditLock(lockKey: string, userId: number, userName: string) {
-    const existing = WorkLogsService.editLocks.get(lockKey);
-    const now = Date.now();
-    // Lock expires after 5 minutes of no heartbeat
-    if (
-      existing &&
-      existing.userId !== userId &&
-      now - existing.timestamp < 5 * 60 * 1000
-    ) {
-      return {
-        acquired: false,
-        lockedBy: existing.userName,
-        lockedAt: existing.timestamp,
-      };
-    }
-    WorkLogsService.editLocks.set(lockKey, {
-      userId,
-      userName,
-      timestamp: now,
-    });
-    return { acquired: true };
-  }
-
-  heartbeatEditLock(lockKey: string, userId: number) {
-    const existing = WorkLogsService.editLocks.get(lockKey);
-    if (existing && existing.userId === userId) {
-      existing.timestamp = Date.now();
-      return { ok: true };
-    }
-    return { ok: false };
-  }
-
-  releaseEditLock(lockKey: string, userId: number) {
-    const existing = WorkLogsService.editLocks.get(lockKey);
-    if (existing && existing.userId === userId) {
-      WorkLogsService.editLocks.delete(lockKey);
-    }
-    return { ok: true };
-  }
-
-  getEditLockStatus(lockKey: string, userId: number) {
-    const existing = WorkLogsService.editLocks.get(lockKey);
-    const now = Date.now();
-    if (!existing || now - existing.timestamp >= 5 * 60 * 1000) {
-      return { locked: false };
-    }
-    return {
-      locked: true,
-      lockedBy: existing.userName,
-      isMe: existing.userId === userId,
-    };
-  }
-
   // ── 確認地點（消除 WhatsApp 打卡黃色 Highlight）───────────
 
   async confirmLocation(id: number) {

@@ -572,14 +572,6 @@ export const workLogsApi = {
     api.get("/work-logs/location-suggestions", { params: { type, q } }),
   bulkSave: (changes: Array<{ id: number; data: any }>) =>
     api.post("/work-logs/bulk/save", { changes }),
-  editLockAcquire: (lockKey: string) =>
-    api.post("/work-logs/edit-lock/acquire", { lockKey }),
-  editLockHeartbeat: (lockKey: string) =>
-    api.post("/work-logs/edit-lock/heartbeat", { lockKey }),
-  editLockRelease: (lockKey: string) =>
-    api.post("/work-logs/edit-lock/release", { lockKey }),
-  editLockStatus: (lockKey: string) =>
-    api.get("/work-logs/edit-lock/status", { params: { lockKey } }),
   confirmLocation: (id: number) =>
     api.post(`/work-logs/${id}/confirm-location`),
   filterOptions: (column: string, params?: any) =>

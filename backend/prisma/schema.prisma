@@ -27,6 +27,7 @@ model User {
   createdBy   Int?      @map("created_by")
 
   work_logs              WorkLog[]
+  work_log_locks         WorkLogLock[]
   employee_id            Int?      @unique @map("employee_id")
   employee               Employee? @relation(fields: [employee_id], references: [id])
   user_can_company_clock Boolean   @default(false)
@@ -1243,6 +1244,7 @@ model WorkLog {
   subcon_payroll_items       SubconPayrollItem[]
   invoice_work_logs          InvoiceWorkLog[]
   invoice_work_log_drafts    InvoiceWorkLogDraft[]
+  work_log_lock              WorkLogLock?
 
   // ── Performance indexes ──
   @@index([scheduled_date])
@@ -1264,6 +1266,20 @@ model WorkLog {
   @@index([work_log_machinery_id])
   @@index([work_log_vehicle_id])
   @@map("work_logs")
+}
+
+model WorkLogLock {
+  id                String   @id @default(uuid()) @db.Uuid
+  work_log_id       Int      @unique
+  locked_by_user_id Int
+  locked_at         DateTime @default(now()) @db.Timestamptz
+
+  work_log  WorkLog @relation(fields: [work_log_id], references: [id], onDelete: Cascade)
+  locked_by User    @relation(fields: [locked_by_user_id], references: [id], onDelete: Cascade)
+
+  @@index([locked_by_user_id])
+  @@index([locked_at])
+  @@map("work_log_locks")
 }
 
 model WhatsAppMessage {
