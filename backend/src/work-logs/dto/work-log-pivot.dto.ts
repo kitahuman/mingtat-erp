@@ -21,6 +21,7 @@ export const PIVOT_DIMENSIONS = [
 export const PIVOT_VALUE_TYPES = [
   'count',
   'quantity_sum',
+  'goods_quantity_sum',
   'ot_sum',
   'mid_shift_count',
 ] as const;
@@ -61,7 +62,6 @@ export class WorkLogPivotQueryDto {
 
   @IsOptional() @IsString() status?: string;
 }
-
 
 export interface PivotFilterOption {
   value: string;

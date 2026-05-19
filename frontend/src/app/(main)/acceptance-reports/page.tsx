@@ -1,13 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { acceptanceReportsApi, projectsApi, partnersApi, fieldOptionsApi } from '@/lib/api';
+import {
+  acceptanceReportsApi,
+  projectsApi,
+  partnersApi,
+  fieldOptionsApi,
+} from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import DateInput from '@/components/DateInput';
 import { useAuth } from '@/lib/auth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
-const statusLabels: Record<string, string> = { draft: '草稿', submitted: '已提交' };
-const statusColors: Record<string, string> = { draft: 'badge-yellow', submitted: 'badge-green' };
+const statusLabels: Record<string, string> = {
+  draft: '草稿',
+  submitted: '已提交',
+};
+const statusColors: Record<string, string> = {
+  draft: 'badge-yellow',
+  submitted: 'badge-green',
+};
 
 export default function AcceptanceReportsAdminPage() {
   const { isReadOnly } = useAuth();
@@ -33,7 +45,7 @@ export default function AcceptanceReportsAdminPage() {
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
-      setSortOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+      setSortOrder((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
     } else {
       setSortBy(field);
       setSortOrder('DESC');
@@ -41,7 +53,9 @@ export default function AcceptanceReportsAdminPage() {
     setPage(1);
   };
   const SortIcon = ({ field }: { field: string }) => (
-    <span className="ml-1 text-gray-400">{sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}</span>
+    <span className="ml-1 text-gray-400">
+      {sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}
+    </span>
   );
 
   const loadData = async () => {
@@ -67,16 +81,62 @@ export default function AcceptanceReportsAdminPage() {
   };
 
   useEffect(() => {
-    projectsApi.simple().then(res => setProjects(res.data || [])).catch(() => {});
-    partnersApi.simple().then(res => setPartners(res.data || [])).catch(() => {});
-    fieldOptionsApi.getByCategory('client_contract_no').then(res => {
-      setContractOptions((res.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label));
-    }).catch(() => {});
+    projectsApi
+      .simple()
+      .then((res) => setProjects(res.data || []))
+      .catch(() => {});
+    partnersApi
+      .simple()
+      .then((res) => setPartners(res.data || []))
+      .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('client_contract_no')
+      .then((res) => {
+        setContractOptions(
+          (res.data || [])
+            .filter((o: any) => o.is_active !== false)
+            .map((o: any) => o.label),
+        );
+      })
+      .catch(() => {});
   }, []);
+
+  useRefetchOnFocus(() => {
+    projectsApi
+      .simple()
+      .then((res) => setProjects(res.data || []))
+      .catch(() => {});
+    partnersApi
+      .simple()
+      .then((res) => setPartners(res.data || []))
+      .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('client_contract_no')
+      .then((res) => {
+        setContractOptions(
+          (res.data || [])
+            .filter((o: any) => o.is_active !== false)
+            .map((o: any) => o.label),
+        );
+      })
+      .catch(() => {});
+  });
 
   useEffect(() => {
     loadData();
-  }, [page, filterProjectId, filterClientId, filterClientName, filterContractNo, filterStatus, filterDateFrom, filterDateTo, search, sortBy, sortOrder]);
+  }, [
+    page,
+    filterProjectId,
+    filterClientId,
+    filterClientName,
+    filterContractNo,
+    filterStatus,
+    filterDateFrom,
+    filterDateTo,
+    search,
+    sortBy,
+    sortOrder,
+  ]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -87,13 +147,17 @@ export default function AcceptanceReportsAdminPage() {
 
   const handleClientChange = (val: string) => {
     setFilterClientId(val);
-    if (val) { setFilterClientName(''); }
+    if (val) {
+      setFilterClientName('');
+    }
     setPage(1);
   };
 
   const handleClientNameChange = (val: string) => {
     setFilterClientName(val);
-    if (val) { setFilterClientId(''); }
+    if (val) {
+      setFilterClientId('');
+    }
     setPage(1);
   };
 
@@ -111,13 +175,19 @@ export default function AcceptanceReportsAdminPage() {
           <input
             type="text"
             value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="搜尋工程/客戶/合約..."
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <select
             value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-2 border rounded-lg text-sm"
           >
             <option value="">全部狀態</option>
@@ -126,12 +196,18 @@ export default function AcceptanceReportsAdminPage() {
           </select>
           <DateInput
             value={filterDateFrom}
-            onChange={v => { setFilterDateFrom(v); setPage(1); }}
+            onChange={(v) => {
+              setFilterDateFrom(v);
+              setPage(1);
+            }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <DateInput
             value={filterDateTo}
-            onChange={v => { setFilterDateTo(v); setPage(1); }}
+            onChange={(v) => {
+              setFilterDateTo(v);
+              setPage(1);
+            }}
             className="px-3 py-2 border rounded-lg text-sm"
           />
         </div>
@@ -139,39 +215,51 @@ export default function AcceptanceReportsAdminPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <select
             value={filterProjectId}
-            onChange={e => { setFilterProjectId(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterProjectId(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-2 border rounded-lg text-sm"
           >
             <option value="">全部工程</option>
             {projects.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>
+              <option key={p.id} value={p.id}>
+                {p.project_no} - {p.project_name}
+              </option>
             ))}
           </select>
           <select
             value={filterClientId}
-            onChange={e => handleClientChange(e.target.value)}
+            onChange={(e) => handleClientChange(e.target.value)}
             className="px-3 py-2 border rounded-lg text-sm"
           >
             <option value="">全部客戶（選擇）</option>
             {partners.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
             ))}
           </select>
           <input
             type="text"
             value={filterClientName}
-            onChange={e => handleClientNameChange(e.target.value)}
+            onChange={(e) => handleClientNameChange(e.target.value)}
             placeholder="客戶名稱搜尋"
             className="px-3 py-2 border rounded-lg text-sm"
           />
           <select
             value={filterContractNo}
-            onChange={e => { setFilterContractNo(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterContractNo(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-2 border rounded-lg text-sm"
           >
             <option value="">全部客戶合約</option>
-            {contractOptions.map(c => (
-              <option key={c} value={c}>{c}</option>
+            {contractOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         </div>
@@ -188,49 +276,123 @@ export default function AcceptanceReportsAdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_date')}>報告日期<SortIcon field="acceptance_report_date" /></th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">驗收日期</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_project_name')}>工程<SortIcon field="acceptance_report_project_name" /></th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_client_name')}>客戶<SortIcon field="acceptance_report_client_name" /></th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_client_contract_no')}>客戶合約<SortIcon field="acceptance_report_client_contract_no" /></th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">收貨項目</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">驗收人</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">建立人</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort('acceptance_report_status')}>狀態<SortIcon field="acceptance_report_status" /></th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">操作</th>
+                  <th
+                    className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none"
+                    onClick={() => handleSort('acceptance_report_date')}
+                  >
+                    報告日期
+                    <SortIcon field="acceptance_report_date" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    驗收日期
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none"
+                    onClick={() => handleSort('acceptance_report_project_name')}
+                  >
+                    工程
+                    <SortIcon field="acceptance_report_project_name" />
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none"
+                    onClick={() => handleSort('acceptance_report_client_name')}
+                  >
+                    客戶
+                    <SortIcon field="acceptance_report_client_name" />
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none"
+                    onClick={() =>
+                      handleSort('acceptance_report_client_contract_no')
+                    }
+                  >
+                    客戶合約
+                    <SortIcon field="acceptance_report_client_contract_no" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    收貨項目
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    驗收人
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    建立人
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left font-medium text-gray-600 cursor-pointer select-none"
+                    onClick={() => handleSort('acceptance_report_status')}
+                  >
+                    狀態
+                    <SortIcon field="acceptance_report_status" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {reports.map(report => (
+                {reports.map((report) => (
                   <>
                     <tr
                       key={report.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}
+                      onClick={() =>
+                        setExpandedId(
+                          expandedId === report.id ? null : report.id,
+                        )
+                      }
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_date)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(report.acceptance_report_acceptance_date)}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{report.acceptance_report_project_name || report.project?.project_name || '-'}</div>
-                        <div className="text-xs text-gray-400">{report.project?.project_no || ''}</div>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {fmtDate(report.acceptance_report_date)}
                       </td>
-                      <td className="px-4 py-3 text-sm">{report.acceptance_report_client_name || report.client?.name || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{report.acceptance_report_client_contract_no || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {fmtDate(report.acceptance_report_acceptance_date)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">
+                          {report.acceptance_report_project_name ||
+                            report.project?.project_name ||
+                            '-'}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {report.project?.project_no || ''}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {report.acceptance_report_client_name ||
+                          report.client?.name ||
+                          '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {report.acceptance_report_client_contract_no || '-'}
+                      </td>
                       <td className="px-4 py-3 max-w-xs truncate">
                         {report.acceptance_items?.length > 0
                           ? `${report.acceptance_items.length} 個項目`
                           : report.acceptance_report_items || '-'}
                       </td>
-                      <td className="px-4 py-3">{report.acceptance_report_mingtat_inspector_name || report.inspector?.name_zh || '-'}</td>
-                      <td className="px-4 py-3">{report.creator?.displayName || '-'}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[report.acceptance_report_status] || 'badge-gray'}`}>
-                          {statusLabels[report.acceptance_report_status] || report.acceptance_report_status}
+                        {report.acceptance_report_mingtat_inspector_name ||
+                          report.inspector?.name_zh ||
+                          '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {report.creator?.displayName || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[report.acceptance_report_status] || 'badge-gray'}`}
+                        >
+                          {statusLabels[report.acceptance_report_status] ||
+                            report.acceptance_report_status}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleExport(report.id); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExport(report.id);
+                          }}
                           className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                         >
                           列印
@@ -242,54 +404,108 @@ export default function AcceptanceReportsAdminPage() {
                         <td colSpan={10} className="px-4 py-4 bg-blue-50/50">
                           <div className="space-y-3">
                             {report.acceptance_report_site_address && (
-                              <div className="text-sm"><strong>地盤地址：</strong>{report.acceptance_report_site_address}</div>
+                              <div className="text-sm">
+                                <strong>地盤地址：</strong>
+                                {report.acceptance_report_site_address}
+                              </div>
                             )}
                             {/* Dynamic items */}
                             {report.acceptance_items?.length > 0 && (
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-2">收貨項目</h4>
+                                <h4 className="font-medium text-gray-700 mb-2">
+                                  收貨項目
+                                </h4>
                                 <table className="w-full text-xs border rounded-lg overflow-hidden">
                                   <thead className="bg-gray-100">
                                     <tr>
-                                      <th className="px-2 py-1.5 text-left">#</th>
-                                      <th className="px-2 py-1.5 text-left">項目描述</th>
-                                      <th className="px-2 py-1.5 text-left">數量/單位</th>
+                                      <th className="px-2 py-1.5 text-left">
+                                        #
+                                      </th>
+                                      <th className="px-2 py-1.5 text-left">
+                                        項目描述
+                                      </th>
+                                      <th className="px-2 py-1.5 text-left">
+                                        數量/單位
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
-                                    {report.acceptance_items.map((item: any, idx: number) => (
-                                      <tr key={item.id}>
-                                        <td className="px-2 py-1.5">{idx + 1}</td>
-                                        <td className="px-2 py-1.5">{item.acceptance_report_item_description}</td>
-                                        <td className="px-2 py-1.5">{item.acceptance_report_item_quantity_unit || '-'}</td>
-                                      </tr>
-                                    ))}
+                                    {report.acceptance_items.map(
+                                      (item: any, idx: number) => (
+                                        <tr key={item.id}>
+                                          <td className="px-2 py-1.5">
+                                            {idx + 1}
+                                          </td>
+                                          <td className="px-2 py-1.5">
+                                            {
+                                              item.acceptance_report_item_description
+                                            }
+                                          </td>
+                                          <td className="px-2 py-1.5">
+                                            {item.acceptance_report_item_quantity_unit ||
+                                              '-'}
+                                          </td>
+                                        </tr>
+                                      ),
+                                    )}
                                   </tbody>
                                 </table>
                               </div>
                             )}
-                            {!report.acceptance_items?.length && report.acceptance_report_items && (
-                              <div>
-                                <h4 className="font-medium text-gray-700 mb-1">收貨項目</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.acceptance_report_items}</p>
-                              </div>
-                            )}
+                            {!report.acceptance_items?.length &&
+                              report.acceptance_report_items && (
+                                <div>
+                                  <h4 className="font-medium text-gray-700 mb-1">
+                                    收貨項目
+                                  </h4>
+                                  <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                                    {report.acceptance_report_items}
+                                  </p>
+                                </div>
+                              )}
                             <div>
-                              <h4 className="font-medium text-gray-700 mb-1">驗收人員</h4>
+                              <h4 className="font-medium text-gray-700 mb-1">
+                                驗收人員
+                              </h4>
                               <div className="text-sm text-gray-600">
-                                <div>明達方：{report.acceptance_report_mingtat_inspector_name || report.inspector?.name_zh || '-'} ({report.acceptance_report_mingtat_inspector_title || '-'})</div>
-                                <div>客戶方：{report.acceptance_report_client_inspector_name || '-'} ({report.acceptance_report_client_inspector_title || '-'})</div>
+                                <div>
+                                  明達方：
+                                  {report.acceptance_report_mingtat_inspector_name ||
+                                    report.inspector?.name_zh ||
+                                    '-'}{' '}
+                                  (
+                                  {report.acceptance_report_mingtat_inspector_title ||
+                                    '-'}
+                                  )
+                                </div>
+                                <div>
+                                  客戶方：
+                                  {report.acceptance_report_client_inspector_name ||
+                                    '-'}{' '}
+                                  (
+                                  {report.acceptance_report_client_inspector_title ||
+                                    '-'}
+                                  )
+                                </div>
                               </div>
                             </div>
                             {report.acceptance_report_supplementary_notes && (
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-1">補充說明</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{report.acceptance_report_supplementary_notes}</p>
+                                <h4 className="font-medium text-gray-700 mb-1">
+                                  補充說明
+                                </h4>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                                  {report.acceptance_report_supplementary_notes}
+                                </p>
                               </div>
                             )}
                             <div className="text-xs text-gray-400">
-                              建立時間: {new Date(report.acceptance_report_created_at).toLocaleString('zh-HK')}
-                              {report.acceptance_report_submitted_at && ` | 提交時間: ${new Date(report.acceptance_report_submitted_at).toLocaleString('zh-HK')}`}
+                              建立時間:{' '}
+                              {new Date(
+                                report.acceptance_report_created_at,
+                              ).toLocaleString('zh-HK')}
+                              {report.acceptance_report_submitted_at &&
+                                ` | 提交時間: ${new Date(report.acceptance_report_submitted_at).toLocaleString('zh-HK')}`}
                             </div>
                           </div>
                         </td>
@@ -306,17 +522,19 @@ export default function AcceptanceReportsAdminPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">第 {page} / {totalPages} 頁</span>
+          <span className="text-sm text-gray-500">
+            第 {page} / {totalPages} 頁
+          </span>
           <div className="flex gap-2">
             <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
             >
               上一頁
             </button>
             <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-50"
             >

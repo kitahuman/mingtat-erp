@@ -8,6 +8,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -18,11 +19,21 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   cancelled: { label: '已取消', color: 'bg-red-100 text-red-700' },
 };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</dt>
-      <dd className="text-sm text-gray-900">{children || <span className="text-gray-400">—</span>}</dd>
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+        {label}
+      </dt>
+      <dd className="text-sm text-gray-900">
+        {children || <span className="text-gray-400">—</span>}
+      </dd>
     </div>
   );
 }
@@ -61,9 +72,26 @@ export default function PaymentOutDetailPage() {
   }, [loadRecord]);
 
   useEffect(() => {
-    expensesApi.list({ limit: 500 }).then((r) => setExpenses(r.data?.data || [])).catch(() => {});
-    bankAccountsApi.simple().then((r) => setBankAccounts(r.data || [])).catch(() => {});
+    expensesApi
+      .list({ limit: 500 })
+      .then((r) => setExpenses(r.data?.data || []))
+      .catch(() => {});
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts(r.data || []))
+      .catch(() => {});
   }, []);
+
+  useRefetchOnFocus(() => {
+    expensesApi
+      .list({ limit: 500 })
+      .then((r) => setExpenses(r.data?.data || []))
+      .catch(() => {});
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts(r.data || []))
+      .catch(() => {});
+  });
 
   const expenseOptions = useMemo(
     () =>
@@ -109,7 +137,9 @@ export default function PaymentOutDetailPage() {
         expense_id: form.expense_id ? Number(form.expense_id) : null,
         payment_out_description: form.payment_out_description || null,
         payment_out_status: form.payment_out_status || 'unpaid',
-        bank_account_id: form.bank_account_id ? Number(form.bank_account_id) : null,
+        bank_account_id: form.bank_account_id
+          ? Number(form.bank_account_id)
+          : null,
         reference_no: form.reference_no || null,
         remarks: form.remarks || null,
         // preserve payroll_id and company_id on update
@@ -148,7 +178,10 @@ export default function PaymentOutDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-red-500 mb-4">{error || '找不到付款記錄'}</p>
-        <button onClick={() => router.push('/payment-out')} className="btn-secondary">
+        <button
+          onClick={() => router.push('/payment-out')}
+          className="btn-secondary"
+        >
           返回列表
         </button>
       </div>
@@ -166,19 +199,34 @@ export default function PaymentOutDetailPage() {
             onClick={() => router.push('/payment-out')}
             className="text-gray-400 hover:text-gray-600 transition"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">付款記錄 #{record.id}</h1>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+              <h1 className="text-2xl font-bold text-gray-900">
+                付款記錄 #{record.id}
+              </h1>
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}
+              >
                 {statusInfo.label}
               </span>
             </div>
             <p className="text-gray-500 text-sm mt-0.5">
-              建立於 {fmtDate(record.created_at)} · 更新於 {fmtDate(record.updated_at)}
+              建立於 {fmtDate(record.created_at)} · 更新於{' '}
+              {fmtDate(record.updated_at)}
             </p>
           </div>
         </div>
@@ -194,7 +242,11 @@ export default function PaymentOutDetailPage() {
               >
                 取消
               </button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary disabled:opacity-50">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="btn-primary disabled:opacity-50"
+              >
                 {saving ? '儲存中...' : '儲存'}
               </button>
             </>
@@ -203,7 +255,10 @@ export default function PaymentOutDetailPage() {
               <button onClick={() => setEditMode(true)} className="btn-primary">
                 編輯
               </button>
-              <button onClick={handleDelete} className="btn-secondary text-red-600 hover:text-red-700">
+              <button
+                onClick={handleDelete}
+                className="btn-secondary text-red-600 hover:text-red-700"
+              >
                 刪除
               </button>
             </>
@@ -218,14 +273,19 @@ export default function PaymentOutDetailPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-                <DateInput value={form.date}
-                  onChange={val => setForm({ ...form, date: val || '' })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  日期 *
+                </label>
+                <DateInput
+                  value={form.date}
+                  onChange={(val) => setForm({ ...form, date: val || '' })}
                   className="input-field"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">金額 *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  金額 *
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -238,20 +298,31 @@ export default function PaymentOutDetailPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">項目描述</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  項目描述
+                </label>
                 <input
                   type="text"
                   value={form.payment_out_description}
-                  onChange={(e) => setForm({ ...form, payment_out_description: e.target.value })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      payment_out_description: e.target.value,
+                    })
+                  }
                   className="input-field"
                   placeholder="例如：2026年4月 張三的糧單"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  狀態
+                </label>
                 <select
                   value={form.payment_out_status}
-                  onChange={(e) => setForm({ ...form, payment_out_status: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, payment_out_status: e.target.value })
+                  }
                   className="input-field"
                 >
                   <option value="unpaid">未付款</option>
@@ -262,10 +333,14 @@ export default function PaymentOutDetailPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">關聯支出</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  關聯支出
+                </label>
                 <SearchableSelect
                   value={form.expense_id ? Number(form.expense_id) : null}
-                  onChange={(v: any) => setForm({ ...form, expense_id: v || '' })}
+                  onChange={(v: any) =>
+                    setForm({ ...form, expense_id: v || '' })
+                  }
                   options={expenseOptions}
                   placeholder="選擇支出"
                   clearable
@@ -277,10 +352,14 @@ export default function PaymentOutDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Field label="日期">{fmtDate(record.date)}</Field>
             <Field label="金額">
-              <span className="text-lg font-semibold text-gray-900 font-mono">{fmt$(record.amount)}</span>
+              <span className="text-lg font-semibold text-gray-900 font-mono">
+                {fmt$(record.amount)}
+              </span>
             </Field>
             <Field label="狀態">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}
+              >
                 {statusInfo.label}
               </span>
             </Field>
@@ -294,15 +373,26 @@ export default function PaymentOutDetailPage() {
             </Field>
             <Field label="關聯支出">
               {record.expense ? (
-                <Link href={`/expenses/${record.expense.id}`} className="text-primary-600 hover:underline">
-                  #{record.expense.id} {record.expense.item || record.expense.supplier_name || '—'}
+                <Link
+                  href={`/expenses/${record.expense.id}`}
+                  className="text-primary-600 hover:underline"
+                >
+                  #{record.expense.id}{' '}
+                  {record.expense.item || record.expense.supplier_name || '—'}
                 </Link>
               ) : null}
             </Field>
             <Field label="關聯糧單">
               {record.payroll ? (
-                <Link href={`/payroll/${record.payroll.id}`} className="text-indigo-600 hover:underline">
-                  糧單 #{record.payroll.id}　{record.payroll.employee?.name_zh || record.payroll.employee?.name_en || ''}　{record.payroll.period}
+                <Link
+                  href={`/payroll/${record.payroll.id}`}
+                  className="text-indigo-600 hover:underline"
+                >
+                  糧單 #{record.payroll.id}　
+                  {record.payroll.employee?.name_zh ||
+                    record.payroll.employee?.name_en ||
+                    ''}
+                  　{record.payroll.period}
                 </Link>
               ) : null}
             </Field>
@@ -322,25 +412,37 @@ export default function PaymentOutDetailPage() {
 
       {/* Cheque / Transaction Info Card */}
       <div className="card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">支票 / 交易紀錄</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          支票 / 交易紀錄
+        </h2>
         {editMode ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                銀行帳戶
+              </label>
               <SearchableSelect
-                value={form.bank_account_id ? Number(form.bank_account_id) : null}
-                onChange={(v: any) => setForm({ ...form, bank_account_id: v || '' })}
+                value={
+                  form.bank_account_id ? Number(form.bank_account_id) : null
+                }
+                onChange={(v: any) =>
+                  setForm({ ...form, bank_account_id: v || '' })
+                }
                 options={bankAccountOptions}
                 placeholder="選擇銀行帳戶"
                 clearable
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">支票 / 交易號碼</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                支票 / 交易號碼
+              </label>
               <input
                 type="text"
                 value={form.reference_no}
-                onChange={(e) => setForm({ ...form, reference_no: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, reference_no: e.target.value })
+                }
                 className="input-field"
                 placeholder="選填"
               />
@@ -350,12 +452,18 @@ export default function PaymentOutDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Field label="銀行帳戶">
               {record.bank_account ? (
-                <span>{record.bank_account.bank_name} - {record.bank_account.account_name} ({record.bank_account.account_no})</span>
+                <span>
+                  {record.bank_account.bank_name} -{' '}
+                  {record.bank_account.account_name} (
+                  {record.bank_account.account_no})
+                </span>
               ) : null}
             </Field>
             <Field label="支票 / 交易號碼">
               {record.reference_no ? (
-                <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded">{record.reference_no}</span>
+                <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded">
+                  {record.reference_no}
+                </span>
               ) : null}
             </Field>
           </div>
@@ -391,34 +499,55 @@ export default function PaymentOutDetailPage() {
       {/* Linked Bank Transactions (月結單配對) */}
       <div className="card p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">連結月結單</h2>
-        {record.matched_bank_transactions && record.matched_bank_transactions.length > 0 ? (
+        {record.matched_bank_transactions &&
+        record.matched_bank_transactions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">日期</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">銀行帳戶</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">描述</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">金額</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">交易號碼</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">狀態</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    日期
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    銀行帳戶
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    描述
+                  </th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    金額
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    交易號碼
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    狀態
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {record.matched_bank_transactions.map((tx: any) => (
-                  <tr key={tx.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={tx.id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
                     <td className="py-2 px-3">{fmtDate(tx.date)}</td>
                     <td className="py-2 px-3">
                       {tx.bank_account ? (
                         <span className="text-xs">
-                          {tx.bank_account.bank_name} - {tx.bank_account.account_no}
+                          {tx.bank_account.bank_name} -{' '}
+                          {tx.bank_account.account_no}
                         </span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 max-w-xs truncate">{tx.description || '—'}</td>
-                    <td className="py-2 px-3 text-right font-mono">{fmt$(Math.abs(Number(tx.amount)))}</td>
+                    <td className="py-2 px-3 max-w-xs truncate">
+                      {tx.description || '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono">
+                      {fmt$(Math.abs(Number(tx.amount)))}
+                    </td>
                     <td className="py-2 px-3">
                       {tx.reference_no ? (
                         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
@@ -445,32 +574,55 @@ export default function PaymentOutDetailPage() {
 
       {/* Linked Payroll Payments */}
       <div className="card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">關聯薪資付款</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          關聯薪資付款
+        </h2>
         {record.payroll_payments && record.payroll_payments.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">付款日期</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">員工</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">薪資期間</th>
-                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">金額</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">交易號碼</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">銀行帳戶</th>
-                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">備註</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    付款日期
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    員工
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    薪資期間
+                  </th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    金額
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    交易號碼
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    銀行帳戶
+                  </th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    備註
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {record.payroll_payments.map((pp: any) => (
-                  <tr key={pp.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2 px-3">{fmtDate(pp.payroll_payment_date)}</td>
+                  <tr
+                    key={pp.id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="py-2 px-3">
+                      {fmtDate(pp.payroll_payment_date)}
+                    </td>
                     <td className="py-2 px-3">
                       {pp.payroll?.employee ? (
                         <Link
                           href={`/payroll/${pp.payroll.id}`}
                           className="text-primary-600 hover:underline"
                         >
-                          {pp.payroll.employee.name_zh || pp.payroll.employee.name_en || '—'}
+                          {pp.payroll.employee.name_zh ||
+                            pp.payroll.employee.name_en ||
+                            '—'}
                         </Link>
                       ) : (
                         <span className="text-gray-400">—</span>
@@ -491,8 +643,12 @@ export default function PaymentOutDetailPage() {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 text-xs">{pp.payroll_payment_bank_account || '—'}</td>
-                    <td className="py-2 px-3 text-xs text-gray-500">{pp.payroll_payment_remarks || '—'}</td>
+                    <td className="py-2 px-3 text-xs">
+                      {pp.payroll_payment_bank_account || '—'}
+                    </td>
+                    <td className="py-2 px-3 text-xs text-gray-500">
+                      {pp.payroll_payment_remarks || '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

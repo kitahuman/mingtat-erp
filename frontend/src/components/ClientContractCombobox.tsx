@@ -24,6 +24,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Combobox from '@/components/Combobox';
 import { fieldOptionsApi } from '@/lib/api';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 interface Option {
   value: string;
@@ -49,25 +50,31 @@ export default function ClientContractCombobox({
 }: Props) {
   const [options, setOptions] = useState<Option[]>([]);
 
-  // Load options from API on mount
-  useEffect(() => {
-    fieldOptionsApi.getByCategory('client_contract_no')
-      .then(res => {
+  const loadOptions = useCallback(() => {
+    fieldOptionsApi
+      .getByCategory('client_contract_no')
+      .then((res) => {
         const data: { label: string; is_active: boolean }[] = res.data;
         setOptions(
           data
-            .filter(o => o.is_active !== false)
-            .map(o => ({ value: o.label, label: o.label }))
+            .filter((o) => o.is_active !== false)
+            .map((o) => ({ value: o.label, label: o.label })),
         );
       })
       .catch(() => setOptions([]));
   }, []);
 
+  // Load options from API on mount
+  useEffect(() => {
+    loadOptions();
+  }, [loadOptions]);
+  useRefetchOnFocus(loadOptions);
+
   // Merge extra options (deduplicated)
   const mergedOptions: Option[] = (() => {
     if (!extraOptions || extraOptions.length === 0) return options;
-    const labels = new Set(options.map(o => o.label));
-    const extras = extraOptions.filter(o => !labels.has(o.label));
+    const labels = new Set(options.map((o) => o.label));
+    const extras = extraOptions.filter((o) => !labels.has(o.label));
     return [...options, ...extras];
   })();
 
@@ -77,13 +84,16 @@ export default function ClientContractCombobox({
    */
   const handleCreate = useCallback(async (val: string) => {
     // Add to local options immediately so the dropdown shows it next time
-    setOptions(prev => {
-      if (prev.find(o => o.label === val)) return prev;
+    setOptions((prev) => {
+      if (prev.find((o) => o.label === val)) return prev;
       return [...prev, { value: val, label: val }];
     });
     // Persist to API (fire-and-forget; errors are silently ignored)
     try {
-      await fieldOptionsApi.create({ category: 'client_contract_no', label: val });
+      await fieldOptionsApi.create({
+        category: 'client_contract_no',
+        label: val,
+      });
     } catch {}
   }, []);
 

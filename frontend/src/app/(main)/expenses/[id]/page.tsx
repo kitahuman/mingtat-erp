@@ -18,15 +18,26 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
 import { useAuth } from '@/lib/auth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</dt>
-      <dd className="text-sm text-gray-900">{children || <span className="text-gray-400">—</span>}</dd>
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+        {label}
+      </dt>
+      <dd className="text-sm text-gray-900">
+        {children || <span className="text-gray-400">—</span>}
+      </dd>
     </div>
   );
 }
@@ -41,7 +52,9 @@ const PAYMENT_STATUS_MAP: Record<string, { label: string; color: string }> = {
 function PaymentStatusBadge({ status }: { status: string }) {
   const s = PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_MAP.unpaid;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.color}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.color}`}
+    >
       {s.label}
     </span>
   );
@@ -74,7 +87,13 @@ export default function ExpenseDetailPage() {
   const [unitOptions, setUnitOptions] = useState<any[]>([]);
 
   // Items state
-  const [itemForm, setItemForm] = useState({ description: '', quantity: '1', unit: '', unit_price: '', amount: '' });
+  const [itemForm, setItemForm] = useState({
+    description: '',
+    quantity: '1',
+    unit: '',
+    unit_price: '',
+    amount: '',
+  });
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemForm, setEditingItemForm] = useState<any>({});
   const [itemSaving, setItemSaving] = useState(false);
@@ -85,8 +104,9 @@ export default function ExpenseDetailPage() {
 
   const loadExpense = useCallback(() => {
     setLoading(true);
-    expensesApi.get(expenseId)
-      .then(r => {
+    expensesApi
+      .get(expenseId)
+      .then((r) => {
         setExpense(r.data);
         setForm(toForm(r.data));
       })
@@ -94,20 +114,45 @@ export default function ExpenseDetailPage() {
       .finally(() => setLoading(false));
   }, [expenseId]);
 
-  useEffect(() => { loadExpense(); }, [loadExpense]);
+  useEffect(() => {
+    loadExpense();
+  }, [loadExpense]);
+
+  const loadReferenceData = useCallback(() => {
+    companiesApi.simple().then((r) => setCompanies(r.data || []));
+    partnersApi.simple().then((r) => setPartners(r.data || []));
+    employeesApi
+      .list({ limit: 9999 })
+      .then((r) => setEmployees(r.data.data || []));
+    machineryApi
+      .list({ limit: 9999 })
+      .then((r) =>
+        setMachineryList(
+          (r.data.data || []).filter((m: any) => m.status === 'active'),
+        ),
+      );
+    vehiclesApi.simple().then((r) => setVehicleList(r.data || []));
+    projectsApi.simple().then((r) => setProjects(r.data || []));
+    quotationsApi
+      .list({ limit: 9999 })
+      .then((r) => setQuotations(r.data.data || []));
+    expenseCategoriesApi.getTree().then((r) => setCategoryTree(r.data || []));
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods(r.data || []));
+    fieldOptionsApi
+      .getByCategory('wage_unit')
+      .then((r) =>
+        setUnitOptions(
+          (r.data || []).filter((o: any) => o.is_active !== false),
+        ),
+      );
+  }, []);
 
   useEffect(() => {
-    companiesApi.simple().then(r => setCompanies(r.data || []));
-    partnersApi.simple().then(r => setPartners(r.data || []));
-    employeesApi.list({ limit: 9999 }).then(r => setEmployees(r.data.data || []));
-    machineryApi.list({ limit: 9999 }).then(r => setMachineryList((r.data.data || []).filter((m: any) => m.status === 'active')));
-    vehiclesApi.simple().then(r => setVehicleList((r.data || []).filter((v: any) => v.status === 'active')));
-    projectsApi.simple().then(r => setProjects(r.data || []));
-    quotationsApi.list({ limit: 9999 }).then(r => setQuotations(r.data.data || []));
-    expenseCategoriesApi.getTree().then(r => setCategoryTree(r.data || []));
-    fieldOptionsApi.getByCategory('payment_method').then(r => setPaymentMethods(r.data || []));
-    fieldOptionsApi.getByCategory('wage_unit').then(r => setUnitOptions((r.data || []).filter((o: any) => o.is_active !== false)));
-  }, []);
+    loadReferenceData();
+  }, [loadReferenceData]);
+  useRefetchOnFocus(loadReferenceData);
 
   function toForm(e: any) {
     return {
@@ -116,7 +161,8 @@ export default function ExpenseDetailPage() {
       supplier_name: e.supplier_name || '',
       supplier_partner_id: e.supplier_partner_id || '',
       category_id: e.category_id || '',
-      _parent_category_id: e.category?.parent_id || e.category?.parent?.id || '',
+      _parent_category_id:
+        e.category?.parent_id || e.category?.parent?.id || '',
       employee_id: e.employee_id || '',
       item: e.item || '',
       total_amount: e.total_amount != null ? Number(e.total_amount) : '',
@@ -139,12 +185,28 @@ export default function ExpenseDetailPage() {
     try {
       const payload: any = { ...form };
       delete payload._parent_category_id;
-      const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'vehicle_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
+      const numericFields = [
+        'company_id',
+        'supplier_partner_id',
+        'category_id',
+        'employee_id',
+        'machinery_id',
+        'vehicle_id',
+        'client_id',
+        'project_id',
+        'quotation_id',
+        'contract_id',
+      ];
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : null;
       }
-      if (payload.total_amount !== '') payload.total_amount = Number(payload.total_amount);
-      if (payload.payment_status !== 'paid' && payload.payment_status !== 'partially_paid') payload.payment_date = null;
+      if (payload.total_amount !== '')
+        payload.total_amount = Number(payload.total_amount);
+      if (
+        payload.payment_status !== 'paid' &&
+        payload.payment_status !== 'partially_paid'
+      )
+        payload.payment_date = null;
       await expensesApi.update(expenseId, payload);
       await loadExpense();
       setEditMode(false);
@@ -161,15 +223,35 @@ export default function ExpenseDetailPage() {
     return parent?.children || [];
   };
 
-  const companyOptions = companies.map((c: any) => ({ value: c.id, label: c.internal_prefix || c.name }));
-  const supplierOptions = partners.filter((p: any) => p.partner_type === 'supplier').map((p: any) => ({ value: p.id, label: p.name }));
-  const partnerOptions = partners.map((p: any) => ({ value: p.id, label: p.name }));
-  const employeeOptions = employees.map((e: any) => ({ value: e.id, label: e.name_zh }));
+  const companyOptions = companies.map((c: any) => ({
+    value: c.id,
+    label: c.internal_prefix || c.name,
+  }));
+  const supplierOptions = partners
+    .filter((p: any) => p.partner_type === 'supplier')
+    .map((p: any) => ({ value: p.id, label: p.name }));
+  const partnerOptions = partners.map((p: any) => ({
+    value: p.id,
+    label: p.name,
+  }));
+  const employeeOptions = employees.map((e: any) => ({
+    value: e.id,
+    label: e.name_zh,
+  }));
   const equipmentOptions = [
-    ...machineryList.map((m: any) => ({ value: `machinery:${m.id}`, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` })),
-    ...vehicleList.map((v: any) => ({ value: `vehicle:${v.id}`, label: `${v.plate_number} (車輛)` })),
+    ...machineryList.map((m: any) => ({
+      value: `machinery:${m.id}`,
+      label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}`,
+    })),
+    ...vehicleList.map((v: any) => ({
+      value: `vehicle:${v.id}`,
+      label: `${v.plate_number} (車輛)`,
+    })),
   ];
-  const projectOptions = projects.map((p: any) => ({ value: p.id, label: `${p.project_no} ${p.project_name || ''}`.trim() }));
+  const projectOptions = projects.map((p: any) => ({
+    value: p.id,
+    label: `${p.project_no} ${p.project_name || ''}`.trim(),
+  }));
   const formatQuotationLabel = (q: any) => {
     if (!q) return '';
     const parts = [
@@ -179,8 +261,14 @@ export default function ExpenseDetailPage() {
     ].filter(Boolean);
     return parts.join(' · ');
   };
-  const quotationOptions = quotations.map((q: any) => ({ value: q.id, label: formatQuotationLabel(q) }));
-  const unitSelectOptions = unitOptions.map((o: any) => ({ value: o.value || o.label || o.name, label: o.label || o.value || o.name }));
+  const quotationOptions = quotations.map((q: any) => ({
+    value: q.id,
+    label: formatQuotationLabel(q),
+  }));
+  const unitSelectOptions = unitOptions.map((o: any) => ({
+    value: o.value || o.label || o.name,
+    label: o.label || o.value || o.name,
+  }));
 
   // ── Items ──────────────────────────────────────────────────────────────────
   const calcItemAmount = (qty: string, up: string) => {
@@ -196,8 +284,20 @@ export default function ExpenseDetailPage() {
       const qty = parseFloat(itemForm.quantity) || 1;
       const up = parseFloat(itemForm.unit_price) || 0;
       const amt = itemForm.amount ? parseFloat(itemForm.amount) : qty * up;
-      await expensesApi.createItem(expenseId, { description: itemForm.description, quantity: qty, unit: itemForm.unit || null, unit_price: up, amount: amt });
-      setItemForm({ description: '', quantity: '1', unit: '', unit_price: '', amount: '' });
+      await expensesApi.createItem(expenseId, {
+        description: itemForm.description,
+        quantity: qty,
+        unit: itemForm.unit || null,
+        unit_price: up,
+        amount: amt,
+      });
+      setItemForm({
+        description: '',
+        quantity: '1',
+        unit: '',
+        unit_price: '',
+        amount: '',
+      });
       await loadExpense();
     } catch (err: any) {
       alert(err.response?.data?.message || '新增細項失敗');
@@ -211,8 +311,16 @@ export default function ExpenseDetailPage() {
     try {
       const qty = parseFloat(editingItemForm.quantity) || 1;
       const up = parseFloat(editingItemForm.unit_price) || 0;
-      const amt = editingItemForm.amount ? parseFloat(editingItemForm.amount) : qty * up;
-      await expensesApi.updateItem(expenseId, itemId, { description: editingItemForm.description, quantity: qty, unit: editingItemForm.unit || null, unit_price: up, amount: amt });
+      const amt = editingItemForm.amount
+        ? parseFloat(editingItemForm.amount)
+        : qty * up;
+      await expensesApi.updateItem(expenseId, itemId, {
+        description: editingItemForm.description,
+        quantity: qty,
+        unit: editingItemForm.unit || null,
+        unit_price: up,
+        amount: amt,
+      });
       setEditingItemId(null);
       await loadExpense();
     } catch (err: any) {
@@ -250,7 +358,10 @@ export default function ExpenseDetailPage() {
     }
   };
 
-  const handleDeleteAttachment = async (attachmentId: number, fileName: string) => {
+  const handleDeleteAttachment = async (
+    attachmentId: number,
+    fileName: string,
+  ) => {
     if (!confirm(`確定刪除附件「${fileName}」？`)) return;
     try {
       await expensesApi.deleteAttachment(expenseId, attachmentId);
@@ -270,8 +381,18 @@ export default function ExpenseDetailPage() {
   const isImage = (mime?: string) => mime?.startsWith('image/');
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">載入中...</div>;
-  if (error) return <div className="flex items-center justify-center h-64 text-red-500">{error}</div>;
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        載入中...
+      </div>
+    );
+  if (error)
+    return (
+      <div className="flex items-center justify-center h-64 text-red-500">
+        {error}
+      </div>
+    );
   if (!expense) return null;
 
   const categoryLabel = expense.category
@@ -282,85 +403,196 @@ export default function ExpenseDetailPage() {
 
   const items: any[] = expense.items || [];
   const attachments: any[] = expense.attachments || [];
-  const itemsTotal = items.reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+  const itemsTotal = items.reduce(
+    (sum: number, i: any) => sum + Number(i.amount),
+    0,
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm">
+          <button
+            onClick={() => router.back()}
+            className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm"
+          >
             ← 返回
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">支出管理詳情 #{expense.id}</h1>
-            <p className="text-gray-500 text-sm">{fmtDate(expense.date)} · {expense.item || '無項目描述'}</p>
+            <h1 className="text-xl font-bold text-gray-900">
+              支出管理詳情 #{expense.id}
+            </h1>
+            <p className="text-gray-500 text-sm">
+              {fmtDate(expense.date)} · {expense.item || '無項目描述'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <PaymentStatusBadge status={expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')} />
+          <PaymentStatusBadge
+            status={
+              expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')
+            }
+          />
           {editMode ? (
             <>
-              <button onClick={() => { setEditMode(false); setForm(toForm(expense)); }} className="btn-secondary text-sm">取消</button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary text-sm">{saving ? '儲存中...' : '儲存'}</button>
+              <button
+                onClick={() => {
+                  setEditMode(false);
+                  setForm(toForm(expense));
+                }}
+                className="btn-secondary text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="btn-primary text-sm"
+              >
+                {saving ? '儲存中...' : '儲存'}
+              </button>
             </>
           ) : (
-            <button onClick={() => setEditMode(true)} className="btn-primary text-sm">編輯</button>
+            <button
+              onClick={() => setEditMode(true)}
+              className="btn-primary text-sm"
+            >
+              編輯
+            </button>
           )}
         </div>
       </div>
 
       {/* Basic Info Card */}
       <div className="card">
-        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">基本資料</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
+          基本資料
+        </h2>
         {editMode ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">日期 *</label>
-              <DateInput value={form.date} onChange={v => setForm({ ...form, date: v })} className="input-field text-sm" />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                日期 *
+              </label>
+              <DateInput
+                value={form.date}
+                onChange={(v) => setForm({ ...form, date: v })}
+                className="input-field text-sm"
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">公司</label>
-              <select value={form.company_id} onChange={e => setForm({ ...form, company_id: e.target.value })} className="input-field text-sm">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                公司
+              </label>
+              <select
+                value={form.company_id}
+                onChange={(e) =>
+                  setForm({ ...form, company_id: e.target.value })
+                }
+                className="input-field text-sm"
+              >
                 <option value="">請選擇</option>
-                {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix || c.name}</option>)}
+                {companies.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.internal_prefix || c.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">供應商</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                供應商
+              </label>
               <SearchableSelect
                 value={form.supplier_partner_id || null}
-                onChange={v => {
-                  const supplier = supplierOptions.find((p: any) => String(p.value) === String(v ?? ''));
-                  setForm({ ...form, supplier_partner_id: v || '', supplier_name: supplier?.label || '' });
+                onChange={(v) => {
+                  const supplier = supplierOptions.find(
+                    (p: any) => String(p.value) === String(v ?? ''),
+                  );
+                  setForm({
+                    ...form,
+                    supplier_partner_id: v || '',
+                    supplier_name: supplier?.label || '',
+                  });
                 }}
                 options={supplierOptions}
                 placeholder="搜尋供應商..."
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">大類別</label>
-              <select value={form._parent_category_id} onChange={e => setForm({ ...form, _parent_category_id: e.target.value, category_id: '' })} className="input-field text-sm">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                大類別
+              </label>
+              <select
+                value={form._parent_category_id}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    _parent_category_id: e.target.value,
+                    category_id: '',
+                  })
+                }
+                className="input-field text-sm"
+              >
                 <option value="">請選擇</option>
-                {categoryTree.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {categoryTree.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">子類別</label>
-              <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} className="input-field text-sm" disabled={!form._parent_category_id}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                子類別
+              </label>
+              <select
+                value={form.category_id}
+                onChange={(e) =>
+                  setForm({ ...form, category_id: e.target.value })
+                }
+                className="input-field text-sm"
+                disabled={!form._parent_category_id}
+              >
                 <option value="">請選擇</option>
-                {getChildrenForParent(form._parent_category_id).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {getChildrenForParent(form._parent_category_id).map(
+                  (c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ),
+                )}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">報銷者</label>
-              <SearchableSelect value={form.employee_id || null} onChange={v => setForm({ ...form, employee_id: v })} options={employeeOptions} placeholder="搜尋員工..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                報銷者
+              </label>
+              <SearchableSelect
+                value={form.employee_id || null}
+                onChange={(v) => setForm({ ...form, employee_id: v })}
+                options={employeeOptions}
+                placeholder="搜尋員工..."
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款狀態</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                付款狀態
+              </label>
               <select
                 value={form.payment_status}
-                onChange={e => setForm({ ...form, payment_status: e.target.value, payment_date: (e.target.value === 'paid' || e.target.value === 'partially_paid') ? form.payment_date : '' })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    payment_status: e.target.value,
+                    payment_date:
+                      e.target.value === 'paid' ||
+                      e.target.value === 'partially_paid'
+                        ? form.payment_date
+                        : '',
+                  })
+                }
                 className="input-field text-sm"
               >
                 <option value="unpaid">未付款</option>
@@ -369,31 +601,73 @@ export default function ExpenseDetailPage() {
                 <option value="cancelled">取消</option>
               </select>
             </div>
-            {(form.payment_status === 'paid' || form.payment_status === 'partially_paid') && (
+            {(form.payment_status === 'paid' ||
+              form.payment_status === 'partially_paid') && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">付款日期</label>
-                <DateInput value={form.payment_date} onChange={v => setForm({ ...form, payment_date: v })} className="input-field text-sm" />
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  付款日期
+                </label>
+                <DateInput
+                  value={form.payment_date}
+                  onChange={(v) => setForm({ ...form, payment_date: v })}
+                  className="input-field text-sm"
+                />
               </div>
             )}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">總金額</label>
-              <input type="number" step="0.01" value={form.total_amount} onChange={e => setForm({ ...form, total_amount: e.target.value })} className="input-field text-sm" />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                總金額
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.total_amount}
+                onChange={(e) =>
+                  setForm({ ...form, total_amount: e.target.value })
+                }
+                className="input-field text-sm"
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">機號</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                機號
+              </label>
               <SearchableSelect
-                value={form.vehicle_id ? `vehicle:${form.vehicle_id}` : (form.machinery_id ? `machinery:${form.machinery_id}` : null)}
-                onChange={v => {
+                value={
+                  form.vehicle_id
+                    ? `vehicle:${form.vehicle_id}`
+                    : form.machinery_id
+                      ? `machinery:${form.machinery_id}`
+                      : null
+                }
+                onChange={(v) => {
                   if (!v) {
-                    setForm({ ...form, machinery_id: '', vehicle_id: '', machine_code: '' });
+                    setForm({
+                      ...form,
+                      machinery_id: '',
+                      vehicle_id: '',
+                      machine_code: '',
+                    });
                     return;
                   }
                   const [type, rawId] = String(v).split(':');
                   if (type === 'machinery') {
-                    const m = machineryList.find((item: any) => Number(item.id) === Number(rawId));
-                    setForm({ ...form, machinery_id: rawId, vehicle_id: '', machine_code: m?.machine_code || '' });
+                    const m = machineryList.find(
+                      (item: any) => Number(item.id) === Number(rawId),
+                    );
+                    setForm({
+                      ...form,
+                      machinery_id: rawId,
+                      vehicle_id: '',
+                      machine_code: m?.machine_code || '',
+                    });
                   } else if (type === 'vehicle') {
-                    setForm({ ...form, machinery_id: '', vehicle_id: rawId, machine_code: '' });
+                    setForm({
+                      ...form,
+                      machinery_id: '',
+                      vehicle_id: rawId,
+                      machine_code: '',
+                    });
                   }
                 }}
                 options={equipmentOptions}
@@ -401,54 +675,123 @@ export default function ExpenseDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">客戶</label>
-              <SearchableSelect value={form.client_id || null} onChange={v => setForm({ ...form, client_id: v })} options={partnerOptions} placeholder="搜尋客戶..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                客戶
+              </label>
+              <SearchableSelect
+                value={form.client_id || null}
+                onChange={(v) => setForm({ ...form, client_id: v })}
+                options={partnerOptions}
+                placeholder="搜尋客戶..."
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">工程編號</label>
-              <SearchableSelect value={form.project_id || null} onChange={v => setForm({ ...form, project_id: v })} options={projectOptions} placeholder="搜尋工程..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                工程編號
+              </label>
+              <SearchableSelect
+                value={form.project_id || null}
+                onChange={(v) => setForm({ ...form, project_id: v })}
+                options={projectOptions}
+                placeholder="搜尋工程..."
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">客戶報價單</label>
-              <SearchableSelect value={form.quotation_id || null} onChange={v => setForm({ ...form, quotation_id: v })} options={quotationOptions} placeholder="搜尋客戶報價單..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                客戶報價單
+              </label>
+              <SearchableSelect
+                value={form.quotation_id || null}
+                onChange={(v) => setForm({ ...form, quotation_id: v })}
+                options={quotationOptions}
+                placeholder="搜尋客戶報價單..."
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">付款類型</label>
-              <select value={form.expense_payment_method} onChange={e => setForm({ ...form, expense_payment_method: e.target.value })} className="input-field text-sm">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                付款類型
+              </label>
+              <select
+                value={form.expense_payment_method}
+                onChange={(e) =>
+                  setForm({ ...form, expense_payment_method: e.target.value })
+                }
+                className="input-field text-sm"
+              >
                 <option value="SELF_PAID">本人代付</option>
                 <option value="COMPANY_PAID">公司付款</option>
               </select>
             </div>
             <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">備註</label>
-              <textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} className="input-field text-sm" rows={2} />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                備註
+              </label>
+              <textarea
+                value={form.remarks}
+                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                className="input-field text-sm"
+                rows={2}
+              />
             </div>
           </div>
         ) : (
           <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4">
             <Field label="日期">{fmtDate(expense.date)}</Field>
-            <Field label="公司">{expense.company?.internal_prefix || expense.company?.name}</Field>
-            <Field label="供應商">{expense.supplier?.name || expense.supplier_name}</Field>
+            <Field label="公司">
+              {expense.company?.internal_prefix || expense.company?.name}
+            </Field>
+            <Field label="供應商">
+              {expense.supplier?.name || expense.supplier_name}
+            </Field>
             <Field label="類別">{categoryLabel}</Field>
             <Field label="報銷者">{expense.employee?.name_zh}</Field>
-            <Field label="發佈人">{expense.creator?.displayName || expense.creator?.username}</Field>
+            <Field label="發佈人">
+              {expense.creator?.displayName || expense.creator?.username}
+            </Field>
             <Field label="項目">{expense.item}</Field>
             <Field label="總金額">
-              <span className="font-semibold text-base">HK$ {Number(expense.total_amount).toLocaleString('en', { minimumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-base">
+                HK${' '}
+                {Number(expense.total_amount).toLocaleString('en', {
+                  minimumFractionDigits: 2,
+                })}
+              </span>
             </Field>
-            <Field label="付款狀態"><PaymentStatusBadge status={expense.payment_status || (expense.is_paid ? 'paid' : 'unpaid')} /></Field>
+            <Field label="付款狀態">
+              <PaymentStatusBadge
+                status={
+                  expense.payment_status ||
+                  (expense.is_paid ? 'paid' : 'unpaid')
+                }
+              />
+            </Field>
             <Field label="付款類型">
-              {expense.expense_payment_method === 'COMPANY_PAID'
-                ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">公司付款</span>
-                : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">本人代付</span>}
+              {expense.expense_payment_method === 'COMPANY_PAID' ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                  公司付款
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                  本人代付
+                </span>
+              )}
             </Field>
-            <Field label="機號">{expense.vehicle?.plate_number || expense.machinery?.machine_code || expense.machine_code}</Field>
+            <Field label="機號">
+              {expense.vehicle?.plate_number ||
+                expense.machinery?.machine_code ||
+                expense.machine_code}
+            </Field>
             <Field label="客戶">{expense.client?.name}</Field>
             <Field label="工程編號">{expense.project?.project_no}</Field>
-            <Field label="客戶報價單">{formatQuotationLabel(expense.quotation)}</Field>
+            <Field label="客戶報價單">
+              {formatQuotationLabel(expense.quotation)}
+            </Field>
             <Field label="合約">{expense.contract_id}</Field>
             {expense.source && expense.source !== 'MANUAL' && (
-              <Field label="來源">{expense.source}{expense.source_ref_id ? ` #${expense.source_ref_id}` : ''}</Field>
+              <Field label="來源">
+                {expense.source}
+                {expense.source_ref_id ? ` #${expense.source_ref_id}` : ''}
+              </Field>
             )}
             {expense.remarks && (
               <div className="col-span-2 md:col-span-3 lg:col-span-4">
@@ -463,7 +806,10 @@ export default function ExpenseDetailPage() {
       <div className="card">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-800">支出細項</h2>
-          <span className="text-sm text-gray-500">共 {items.length} 項 · 合計 HK$ {itemsTotal.toLocaleString('en', { minimumFractionDigits: 2 })}</span>
+          <span className="text-sm text-gray-500">
+            共 {items.length} 項 · 合計 HK${' '}
+            {itemsTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
+          </span>
         </div>
 
         {/* Items table */}
@@ -481,45 +827,161 @@ export default function ExpenseDetailPage() {
             </thead>
             <tbody>
               {items.map((item: any) => (
-                <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr
+                  key={item.id}
+                  className="border-b border-gray-100 hover:bg-gray-50"
+                >
                   {editingItemId === item.id ? (
                     <>
                       <td className="py-2 pr-3">
-                        <input type="text" value={editingItemForm.description} onChange={e => setEditingItemForm({ ...editingItemForm, description: e.target.value })} className="input-field text-sm w-full" />
+                        <input
+                          type="text"
+                          value={editingItemForm.description}
+                          onChange={(e) =>
+                            setEditingItemForm({
+                              ...editingItemForm,
+                              description: e.target.value,
+                            })
+                          }
+                          className="input-field text-sm w-full"
+                        />
                       </td>
                       <td className="py-2 px-3">
-                        <input type="number" step="0.001" value={editingItemForm.quantity} onChange={e => { const q = e.target.value; setEditingItemForm({ ...editingItemForm, quantity: q, amount: calcItemAmount(q, editingItemForm.unit_price) }); }} className="input-field text-sm text-right w-full" />
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={editingItemForm.quantity}
+                          onChange={(e) => {
+                            const q = e.target.value;
+                            setEditingItemForm({
+                              ...editingItemForm,
+                              quantity: q,
+                              amount: calcItemAmount(
+                                q,
+                                editingItemForm.unit_price,
+                              ),
+                            });
+                          }}
+                          className="input-field text-sm text-right w-full"
+                        />
                       </td>
                       <td className="py-2 px-3">
-                        <select value={editingItemForm.unit || ''} onChange={e => setEditingItemForm({ ...editingItemForm, unit: e.target.value })} className="input-field text-sm w-full">
+                        <select
+                          value={editingItemForm.unit || ''}
+                          onChange={(e) =>
+                            setEditingItemForm({
+                              ...editingItemForm,
+                              unit: e.target.value,
+                            })
+                          }
+                          className="input-field text-sm w-full"
+                        >
                           <option value="">—</option>
-                          {unitSelectOptions.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          {unitSelectOptions.map((o: any) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
                         </select>
                       </td>
                       <td className="py-2 px-3">
-                        <input type="number" step="0.01" value={editingItemForm.unit_price} onChange={e => { const u = e.target.value; setEditingItemForm({ ...editingItemForm, unit_price: u, amount: calcItemAmount(editingItemForm.quantity, u) }); }} className="input-field text-sm text-right w-full" />
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editingItemForm.unit_price}
+                          onChange={(e) => {
+                            const u = e.target.value;
+                            setEditingItemForm({
+                              ...editingItemForm,
+                              unit_price: u,
+                              amount: calcItemAmount(
+                                editingItemForm.quantity,
+                                u,
+                              ),
+                            });
+                          }}
+                          className="input-field text-sm text-right w-full"
+                        />
                       </td>
                       <td className="py-2 px-3">
-                        <input type="number" step="0.01" value={editingItemForm.amount} onChange={e => setEditingItemForm({ ...editingItemForm, amount: e.target.value })} className="input-field text-sm text-right w-full" />
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editingItemForm.amount}
+                          onChange={(e) =>
+                            setEditingItemForm({
+                              ...editingItemForm,
+                              amount: e.target.value,
+                            })
+                          }
+                          className="input-field text-sm text-right w-full"
+                        />
                       </td>
                       <td className="py-2 pl-3">
                         <div className="flex gap-1">
-                          <button onClick={() => handleUpdateItem(item.id)} disabled={itemSaving} className="text-xs text-green-600 hover:text-green-800 font-medium">儲存</button>
-                          <button onClick={() => setEditingItemId(null)} className="text-xs text-gray-500 hover:text-gray-700">取消</button>
+                          <button
+                            onClick={() => handleUpdateItem(item.id)}
+                            disabled={itemSaving}
+                            className="text-xs text-green-600 hover:text-green-800 font-medium"
+                          >
+                            儲存
+                          </button>
+                          <button
+                            onClick={() => setEditingItemId(null)}
+                            className="text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            取消
+                          </button>
                         </div>
                       </td>
                     </>
                   ) : (
                     <>
-                      <td className="py-2.5 pr-3 text-gray-800">{item.description}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.quantity)}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{item.unit || '—'}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{Number(item.unit_price) > 0 ? Number(item.unit_price).toLocaleString('en', { minimumFractionDigits: 2 }) : '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-gray-800">HK$ {Number(item.amount).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-2.5 pr-3 text-gray-800">
+                        {item.description}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-gray-600">
+                        {Number(item.quantity)}
+                      </td>
+                      <td className="py-2.5 px-3 text-gray-600">
+                        {item.unit || '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-gray-600">
+                        {Number(item.unit_price) > 0
+                          ? Number(item.unit_price).toLocaleString('en', {
+                              minimumFractionDigits: 2,
+                            })
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-gray-800">
+                        HK${' '}
+                        {Number(item.amount).toLocaleString('en', {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
                       <td className="py-2.5 pl-3">
                         <div className="flex gap-2">
-                          <button onClick={() => { setEditingItemId(item.id); setEditingItemForm({ description: item.description, quantity: String(Number(item.quantity)), unit: item.unit || '', unit_price: String(Number(item.unit_price)), amount: String(Number(item.amount)) }); }} className="text-xs text-blue-600 hover:text-blue-800">編輯</button>
-                          <button onClick={() => handleDeleteItem(item.id)} className="text-xs text-red-500 hover:text-red-700">刪除</button>
+                          <button
+                            onClick={() => {
+                              setEditingItemId(item.id);
+                              setEditingItemForm({
+                                description: item.description,
+                                quantity: String(Number(item.quantity)),
+                                unit: item.unit || '',
+                                unit_price: String(Number(item.unit_price)),
+                                amount: String(Number(item.amount)),
+                              });
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            編輯
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-xs text-red-500 hover:text-red-700"
+                          >
+                            刪除
+                          </button>
                         </div>
                       </td>
                     </>
@@ -527,14 +989,31 @@ export default function ExpenseDetailPage() {
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-gray-400 text-sm">尚未新增細項</td></tr>
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-6 text-center text-gray-400 text-sm"
+                  >
+                    尚未新增細項
+                  </td>
+                </tr>
               )}
             </tbody>
             {items.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td colSpan={4} className="py-2.5 pr-3 text-right text-sm font-semibold text-gray-700">合計</td>
-                  <td className="py-2.5 px-3 text-right text-sm font-bold text-gray-900">HK$ {itemsTotal.toLocaleString('en', { minimumFractionDigits: 2 })}</td>
+                  <td
+                    colSpan={4}
+                    className="py-2.5 pr-3 text-right text-sm font-semibold text-gray-700"
+                  >
+                    合計
+                  </td>
+                  <td className="py-2.5 px-3 text-right text-sm font-bold text-gray-900">
+                    HK${' '}
+                    {itemsTotal.toLocaleString('en', {
+                      minimumFractionDigits: 2,
+                    })}
+                  </td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -544,33 +1023,95 @@ export default function ExpenseDetailPage() {
 
         {/* Add item form */}
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">新增細項</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            新增細項
+          </p>
           <div className="grid grid-cols-12 gap-2 items-end">
             <div className="col-span-12 md:col-span-4">
               <label className="block text-xs text-gray-500 mb-1">描述 *</label>
-              <input type="text" value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e.target.value })} className="input-field text-sm" placeholder="細項描述" />
+              <input
+                type="text"
+                value={itemForm.description}
+                onChange={(e) =>
+                  setItemForm({ ...itemForm, description: e.target.value })
+                }
+                className="input-field text-sm"
+                placeholder="細項描述"
+              />
             </div>
             <div className="col-span-6 md:col-span-2">
               <label className="block text-xs text-gray-500 mb-1">數量</label>
-              <input type="number" step="0.001" value={itemForm.quantity} onChange={e => { const q = e.target.value; setItemForm({ ...itemForm, quantity: q, amount: calcItemAmount(q, itemForm.unit_price) }); }} className="input-field text-sm" />
+              <input
+                type="number"
+                step="0.001"
+                value={itemForm.quantity}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setItemForm({
+                    ...itemForm,
+                    quantity: q,
+                    amount: calcItemAmount(q, itemForm.unit_price),
+                  });
+                }}
+                className="input-field text-sm"
+              />
             </div>
             <div className="col-span-6 md:col-span-2">
               <label className="block text-xs text-gray-500 mb-1">單位</label>
-              <select value={itemForm.unit} onChange={e => setItemForm({ ...itemForm, unit: e.target.value })} className="input-field text-sm">
+              <select
+                value={itemForm.unit}
+                onChange={(e) =>
+                  setItemForm({ ...itemForm, unit: e.target.value })
+                }
+                className="input-field text-sm"
+              >
                 <option value="">—</option>
-                {unitSelectOptions.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {unitSelectOptions.map((o: any) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="col-span-6 md:col-span-2">
               <label className="block text-xs text-gray-500 mb-1">單價</label>
-              <input type="number" step="0.01" value={itemForm.unit_price} onChange={e => { const u = e.target.value; setItemForm({ ...itemForm, unit_price: u, amount: calcItemAmount(itemForm.quantity, u) }); }} className="input-field text-sm" placeholder="0.00" />
+              <input
+                type="number"
+                step="0.01"
+                value={itemForm.unit_price}
+                onChange={(e) => {
+                  const u = e.target.value;
+                  setItemForm({
+                    ...itemForm,
+                    unit_price: u,
+                    amount: calcItemAmount(itemForm.quantity, u),
+                  });
+                }}
+                className="input-field text-sm"
+                placeholder="0.00"
+              />
             </div>
             <div className="col-span-6 md:col-span-1">
               <label className="block text-xs text-gray-500 mb-1">金額</label>
-              <input type="number" step="0.01" value={itemForm.amount} onChange={e => setItemForm({ ...itemForm, amount: e.target.value })} className="input-field text-sm" placeholder="自動計算" />
+              <input
+                type="number"
+                step="0.01"
+                value={itemForm.amount}
+                onChange={(e) =>
+                  setItemForm({ ...itemForm, amount: e.target.value })
+                }
+                className="input-field text-sm"
+                placeholder="自動計算"
+              />
             </div>
             <div className="col-span-12 md:col-span-1">
-              <button onClick={handleAddItem} disabled={itemSaving || !itemForm.description.trim()} className="btn-primary text-sm w-full">新增</button>
+              <button
+                onClick={handleAddItem}
+                disabled={itemSaving || !itemForm.description.trim()}
+                className="btn-primary text-sm w-full"
+              >
+                新增
+              </button>
             </div>
           </div>
         </div>
@@ -603,29 +1144,63 @@ export default function ExpenseDetailPage() {
             className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors"
           >
             <p className="text-gray-400 text-sm">點擊或拖放文件到此處上載</p>
-            <p className="text-gray-300 text-xs mt-1">支持圖片、PDF、Word、Excel 等格式，單個文件最大 20MB</p>
+            <p className="text-gray-300 text-xs mt-1">
+              支持圖片、PDF、Word、Excel 等格式，單個文件最大 20MB
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {attachments.map((att: any) => (
-              <div key={att.id} className="border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:border-gray-300 transition-colors">
+              <div
+                key={att.id}
+                className="border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:border-gray-300 transition-colors"
+              >
                 {/* Preview */}
                 {isImage(att.mime_type) ? (
-                  <a href={`${API_BASE}${att.file_url}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                    <img src={`${API_BASE}${att.file_url}`} alt={att.file_name} className="w-12 h-12 object-cover rounded border border-gray-200" />
+                  <a
+                    href={`${API_BASE}${att.file_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0"
+                  >
+                    <img
+                      src={`${API_BASE}${att.file_url}`}
+                      alt={att.file_name}
+                      className="w-12 h-12 object-cover rounded border border-gray-200"
+                    />
                   </a>
                 ) : (
                   <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
-                    <span className="text-xl">{att.mime_type?.includes('pdf') ? '📄' : att.mime_type?.includes('sheet') || att.mime_type?.includes('excel') ? '📊' : '📎'}</span>
+                    <span className="text-xl">
+                      {att.mime_type?.includes('pdf')
+                        ? '📄'
+                        : att.mime_type?.includes('sheet') ||
+                            att.mime_type?.includes('excel')
+                          ? '📊'
+                          : '📎'}
+                    </span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <a href={`${API_BASE}${att.file_url}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:text-blue-800 truncate block" title={att.file_name}>
+                  <a
+                    href={`${API_BASE}${att.file_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800 truncate block"
+                    title={att.file_name}
+                  >
                     {att.file_name}
                   </a>
-                  <p className="text-xs text-gray-400 mt-0.5">{formatFileSize(att.file_size)} · {fmtDate(att.uploaded_at)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatFileSize(att.file_size)} · {fmtDate(att.uploaded_at)}
+                  </p>
                 </div>
-                <button onClick={() => handleDeleteAttachment(att.id, att.file_name)} className="shrink-0 text-gray-300 hover:text-red-500 transition-colors text-lg leading-none">×</button>
+                <button
+                  onClick={() => handleDeleteAttachment(att.id, att.file_name)}
+                  className="shrink-0 text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
+                >
+                  ×
+                </button>
               </div>
             ))}
             {/* Add more button */}
@@ -649,7 +1224,8 @@ export default function ExpenseDetailPage() {
 
       {/* Meta info */}
       <div className="text-xs text-gray-400 text-right">
-        建立時間：{new Date(expense.created_at).toLocaleString('zh-HK')} · 最後更新：{new Date(expense.updated_at).toLocaleString('zh-HK')}
+        建立時間：{new Date(expense.created_at).toLocaleString('zh-HK')} ·
+        最後更新：{new Date(expense.updated_at).toLocaleString('zh-HK')}
       </div>
     </div>
   );

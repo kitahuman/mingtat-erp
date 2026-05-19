@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { fieldOptionsApi } from '@/lib/api';
+import { useRefetchOnFocus } from './useRefetchOnFocus';
 
 interface FieldOption {
   id: number;
@@ -16,19 +17,22 @@ interface FieldOption {
  * Also returns addOption() to optimistically add a new option locally + persist to API.
  */
 export function useFieldOptions(category: string) {
-  const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+  const [options, setOptions] = useState<{ value: string; label: string }[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadOptions = useCallback(() => {
     if (!category) return;
     setLoading(true);
-    fieldOptionsApi.getByCategory(category)
-      .then(res => {
+    fieldOptionsApi
+      .getByCategory(category)
+      .then((res) => {
         const data: FieldOption[] = res.data;
         setOptions(
           data
-            .filter(opt => opt.is_active !== false)
-            .map(opt => ({ value: opt.label, label: opt.label }))
+            .filter((opt) => opt.is_active !== false)
+            .map((opt) => ({ value: opt.label, label: opt.label })),
         );
       })
       .catch(() => {
@@ -37,17 +41,26 @@ export function useFieldOptions(category: string) {
       .finally(() => setLoading(false));
   }, [category]);
 
-  const addOption = useCallback(async (label: string) => {
-    // Optimistically add to local state immediately
-    setOptions(prev => {
-      if (prev.find(o => o.label === label)) return prev;
-      return [...prev, { value: label, label }];
-    });
-    // Persist to API (ignore errors – value is already selected in form)
-    try {
-      await fieldOptionsApi.create({ category, label });
-    } catch {}
-  }, [category]);
+  useEffect(() => {
+    loadOptions();
+  }, [loadOptions]);
+
+  useRefetchOnFocus(loadOptions, { enabled: Boolean(category) });
+
+  const addOption = useCallback(
+    async (label: string) => {
+      // Optimistically add to local state immediately
+      setOptions((prev) => {
+        if (prev.find((o) => o.label === label)) return prev;
+        return [...prev, { value: label, label }];
+      });
+      // Persist to API (ignore errors – value is already selected in form)
+      try {
+        await fieldOptionsApi.create({ category, label });
+      } catch {}
+    },
+    [category],
+  );
 
   return { options, loading, addOption };
 }
@@ -58,37 +71,50 @@ export function useFieldOptions(category: string) {
  * Also returns addOption(category, label) to optimistically add a new option.
  */
 export function useMultiFieldOptions(categories: string[]) {
-  const [optionsMap, setOptionsMap] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [optionsMap, setOptionsMap] = useState<
+    Record<string, { value: string; label: string }[]>
+  >({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const categoryKey = categories.join(',');
+
+  const loadOptions = useCallback(() => {
     if (categories.length === 0) return;
     setLoading(true);
     Promise.all(
-      categories.map(cat =>
-        fieldOptionsApi.getByCategory(cat)
-          .then(res => ({ category: cat, data: res.data as FieldOption[] }))
-          .catch(() => ({ category: cat, data: [] as FieldOption[] }))
-      )
-    ).then(results => {
-      const map: Record<string, { value: string; label: string }[]> = {};
-      for (const { category, data } of results) {
-        map[category] = data
-          .filter(opt => opt.is_active !== false)
-          .map(opt => ({ value: opt.label, label: opt.label }));
-      }
-      setOptionsMap(map);
-    }).finally(() => setLoading(false));
-  }, [categories.join(',')]);
+      categories.map((cat) =>
+        fieldOptionsApi
+          .getByCategory(cat)
+          .then((res) => ({ category: cat, data: res.data as FieldOption[] }))
+          .catch(() => ({ category: cat, data: [] as FieldOption[] })),
+      ),
+    )
+      .then((results) => {
+        const map: Record<string, { value: string; label: string }[]> = {};
+        for (const { category, data } of results) {
+          map[category] = data
+            .filter((opt) => opt.is_active !== false)
+            .map((opt) => ({ value: opt.label, label: opt.label }));
+        }
+        setOptionsMap(map);
+      })
+      .finally(() => setLoading(false));
+  }, [categoryKey]);
+
+  useEffect(() => {
+    loadOptions();
+  }, [loadOptions]);
+
+  useRefetchOnFocus(loadOptions, { enabled: categories.length > 0 });
 
   /**
    * Optimistically add a new option to a specific category in the local state,
    * then persist it to the API.
    */
   const addOption = useCallback(async (category: string, label: string) => {
-    setOptionsMap(prev => {
+    setOptionsMap((prev) => {
       const existing = prev[category] || [];
-      if (existing.find(o => o.label === label)) return prev;
+      if (existing.find((o) => o.label === label)) return prev;
       return { ...prev, [category]: [...existing, { value: label, label }] };
     });
     try {

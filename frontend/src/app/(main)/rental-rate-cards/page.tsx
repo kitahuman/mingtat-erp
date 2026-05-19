@@ -13,8 +13,15 @@ import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
-const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location'];
+const FIELD_OPTION_CATEGORIES = [
+  'tonnage',
+  'machine_type',
+  'service_type',
+  'wage_unit',
+  'location',
+];
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '生效中' },
@@ -44,42 +51,83 @@ export default function RentalRateCardsPage() {
   const unitOptions = optionsMap['wage_unit'] || [];
   const locationOptions = optionsMap['location'] || [];
   const [form, setForm] = useState<any>({
-    company_id: '', client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
-    name: '', tonnage: '', machine_type: '',
-    origin: '', destination: '',
-    rate: 0, mid_shift_rate: 0, ot_rate: 0,
-    unit: '天', effective_date: '', expiry_date: '',
-    day_night: '日', remarks: '', status: 'active',
+    company_id: '',
+    client_id: '',
+    quotation_id: '',
+    client_contract_no: '',
+    service_type: '',
+    name: '',
+    tonnage: '',
+    machine_type: '',
+    origin: '',
+    destination: '',
+    rate: 0,
+    mid_shift_rate: 0,
+    ot_rate: 0,
+    unit: '天',
+    effective_date: '',
+    expiry_date: '',
+    day_night: '日',
+    remarks: '',
+    status: 'active',
   });
 
   const resetForm = () => {
     setForm({
-      company_id: '', client_id: '', quotation_id: '', client_contract_no: '', service_type: '',
-      name: '', tonnage: '', machine_type: '',
-      origin: '', destination: '',
-      rate: 0, mid_shift_rate: 0, ot_rate: 0,
-      unit: '天', effective_date: '', expiry_date: '',
-      day_night: '日', remarks: '', status: 'active',
+      company_id: '',
+      client_id: '',
+      quotation_id: '',
+      client_contract_no: '',
+      service_type: '',
+      name: '',
+      tonnage: '',
+      machine_type: '',
+      origin: '',
+      destination: '',
+      rate: 0,
+      mid_shift_rate: 0,
+      ot_rate: 0,
+      unit: '天',
+      effective_date: '',
+      expiry_date: '',
+      day_night: '日',
+      remarks: '',
+      status: 'active',
     });
   };
 
   const load = () => {
     setLoading(true);
-    rateCardsApi.list({
-      page, limit: 20, search,
-      rate_card_type: 'rental',
-      status: statusFilter || undefined,
-      service_type: serviceTypeFilter || undefined,
-      sortBy, sortOrder,
-    }).then(res => { setData(res.data.data); setTotal(res.data.total); })
+    rateCardsApi
+      .list({
+        page,
+        limit: 20,
+        search,
+        rate_card_type: 'rental',
+        status: statusFilter || undefined,
+        service_type: serviceTypeFilter || undefined,
+        sortBy,
+        sortOrder,
+      })
+      .then((res) => {
+        setData(res.data.data);
+        setTotal(res.data.total);
+      })
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [page, search, statusFilter, serviceTypeFilter, sortBy, sortOrder]);
   useEffect(() => {
-    companiesApi.simple().then(res => setCompanies(res.data));
-    partnersApi.simple().then(res => setPartners(res.data));
+    load();
+  }, [page, search, statusFilter, serviceTypeFilter, sortBy, sortOrder]);
+  useEffect(() => {
+    companiesApi.simple().then((res) => setCompanies(res.data));
+    partnersApi.simple().then((res) => setPartners(res.data));
   }, []);
+
+  useRefetchOnFocus(() => {
+    companiesApi.simple().then((res) => setCompanies(res.data));
+    partnersApi.simple().then((res) => setPartners(res.data));
+  });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,71 +148,247 @@ export default function RentalRateCardsPage() {
       await rateCardsApi.create(payload);
       setShowModal(false);
       load();
-    } catch (err: any) { alert(err.response?.data?.message || '新增失敗'); }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '新增失敗');
+    }
   };
 
   const handleInlineSave = async (id: number, formData: any) => {
     const payload: any = {};
-    const textFields = ['service_type', 'name', 'tonnage', 'machine_type', 'origin', 'destination', 'client_contract_no', 'remarks', 'status', 'day_night', 'unit'];
+    const textFields = [
+      'service_type',
+      'name',
+      'tonnage',
+      'machine_type',
+      'origin',
+      'destination',
+      'client_contract_no',
+      'remarks',
+      'status',
+      'day_night',
+      'unit',
+    ];
     const numFields = ['rate', 'mid_shift_rate', 'ot_rate'];
     const dateFields = ['effective_date', 'expiry_date'];
-    textFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
-    numFields.forEach(f => { if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0; });
-    dateFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f] || null; });
+    textFields.forEach((f) => {
+      if (formData[f] !== undefined) payload[f] = formData[f];
+    });
+    numFields.forEach((f) => {
+      if (formData[f] !== undefined) payload[f] = Number(formData[f]) || 0;
+    });
+    dateFields.forEach((f) => {
+      if (formData[f] !== undefined) payload[f] = formData[f] || null;
+    });
     await rateCardsApi.update(id, payload);
     load();
   };
 
-
-
   const clientOptions = partners
     .filter((p: any) => p.partner_type === 'client')
-    .map((p: any) => ({ value: p.id, label: p.code ? `${p.code} - ${p.name}` : p.name }));
+    .map((p: any) => ({
+      value: p.id,
+      label: p.code ? `${p.code} - ${p.name}` : p.name,
+    }));
 
   const columns = [
     // 欄位順序：狀態、來源報價單、客戶、公司、合約、服務類型、日/夜、名稱、噸數、機種、起點、終點、費率、單位、OT費率、中直費率
-    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: STATUS_OPTIONS, render: (v: any) => {
-      const map: Record<string, { label: string; cls: string }> = {
-        active: { label: '生效中', cls: 'badge-green' },
-        cancelled: { label: '取消', cls: 'badge-red' },
-        deleted: { label: '已刪除', cls: 'badge-gray' },
-        inactive: { label: '停用', cls: 'badge-gray' },
-      };
-      const s = map[v] || { label: v, cls: 'badge-gray' };
-      return <span className={s.cls}>{s.label}</span>;
-    }, filterRender: (v: any) => ({ active: '生效中', cancelled: '取消', deleted: '已刪除', inactive: '停用' }[v] || v) },
-    { key: 'source_quotation', label: '來源報價單', sortable: true, editable: false, render: (_: any, row: any) => row.source_quotation ? (
-      <span className="font-mono text-xs text-primary-600">{row.source_quotation.quotation_no}</span>
-    ) : '-' },
-    { key: 'client', label: '客戶', sortable: true, editable: false, render: (_: any, row: any) => row.client?.name || '-', filterRender: (_: any, row: any) => row.client?.name || '-' },
-    { key: 'company', label: '公司', sortable: true, editable: false, render: (_: any, row: any) => row.company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.company?.internal_prefix || '-' },
-    { key: 'client_contract_no', label: '客戶合約', sortable: true, editable: true, render: (v: any) => v || '-',
+    {
+      key: 'status',
+      label: '狀態',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: STATUS_OPTIONS,
+      render: (v: any) => {
+        const map: Record<string, { label: string; cls: string }> = {
+          active: { label: '生效中', cls: 'badge-green' },
+          cancelled: { label: '取消', cls: 'badge-red' },
+          deleted: { label: '已刪除', cls: 'badge-gray' },
+          inactive: { label: '停用', cls: 'badge-gray' },
+        };
+        const s = map[v] || { label: v, cls: 'badge-gray' };
+        return <span className={s.cls}>{s.label}</span>;
+      },
+      filterRender: (v: any) =>
+        ({
+          active: '生效中',
+          cancelled: '取消',
+          deleted: '已刪除',
+          inactive: '停用',
+        })[v] || v,
+    },
+    {
+      key: 'source_quotation',
+      label: '來源報價單',
+      sortable: true,
+      editable: false,
+      render: (_: any, row: any) =>
+        row.source_quotation ? (
+          <span className="font-mono text-xs text-primary-600">
+            {row.source_quotation.quotation_no}
+          </span>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      key: 'client',
+      label: '客戶',
+      sortable: true,
+      editable: false,
+      render: (_: any, row: any) => row.client?.name || '-',
+      filterRender: (_: any, row: any) => row.client?.name || '-',
+    },
+    {
+      key: 'company',
+      label: '公司',
+      sortable: true,
+      editable: false,
+      render: (_: any, row: any) => row.company?.internal_prefix || '-',
+      filterRender: (_: any, row: any) => row.company?.internal_prefix || '-',
+    },
+    {
+      key: 'client_contract_no',
+      label: '客戶合約',
+      sortable: true,
+      editable: true,
+      render: (v: any) => v || '-',
       editRender: (value: any, onChange: any) => (
         <ClientContractCombobox
           value={value || ''}
-          onChange={v => onChange(v || '')}
+          onChange={(v) => onChange(v || '')}
           placeholder="客戶合約"
         />
-      )
+      ),
     },
-    { key: 'service_type', label: '服務類型', sortable: true, editable: true, editType: 'select' as const, editOptions: serviceTypeOptions, render: (v: any) => v || '-' },
-    { key: 'day_night', label: '日/夜', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '-' }, { value: '日', label: '日' }, { value: '夜', label: '夜' }], render: (v: any) => v || '-' },
-    { key: 'name', label: '名稱', sortable: true, editable: true, editType: 'text' as const, render: (v: any) => v || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions], render: (v: any) => v || '-' },
-    { key: 'machine_type', label: '機種', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...vehicleTypeOptions], render: (v: any) => v || '-' },
-    { key: 'origin', label: '起點', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...locationOptions], render: (v: any) => v || '-' },
-    { key: 'destination', label: '終點', sortable: true, editable: true, editType: 'select' as const, editOptions: [{ value: '', label: '不適用' }, ...locationOptions], render: (v: any) => v || '-' },
-    { key: 'rate', label: '費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any, row: any) => { const r = Number(v || row.day_rate || 0); return r > 0 ? <span className="font-mono">${r.toLocaleString()}</span> : '-'; } },
-    { key: 'unit', label: '單位', sortable: true, editable: true, editType: 'select' as const, editOptions: unitOptions },
-    { key: 'ot_rate', label: 'OT費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => Number(v) > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
-    { key: 'mid_shift_rate', label: '中直費率', sortable: true, editable: true, editType: 'number' as const, className: 'text-right', render: (v: any) => Number(v) > 0 ? <span className="font-mono">${Number(v).toLocaleString()}</span> : '-' },
+    {
+      key: 'service_type',
+      label: '服務類型',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: serviceTypeOptions,
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'day_night',
+      label: '日/夜',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: [
+        { value: '', label: '-' },
+        { value: '日', label: '日' },
+        { value: '夜', label: '夜' },
+      ],
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'name',
+      label: '名稱',
+      sortable: true,
+      editable: true,
+      editType: 'text' as const,
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'tonnage',
+      label: '噸數',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: [{ value: '', label: '不適用' }, ...tonnageOptions],
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'machine_type',
+      label: '機種',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: [{ value: '', label: '不適用' }, ...vehicleTypeOptions],
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'origin',
+      label: '起點',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: [{ value: '', label: '不適用' }, ...locationOptions],
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'destination',
+      label: '終點',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: [{ value: '', label: '不適用' }, ...locationOptions],
+      render: (v: any) => v || '-',
+    },
+    {
+      key: 'rate',
+      label: '費率',
+      sortable: true,
+      editable: true,
+      editType: 'number' as const,
+      className: 'text-right',
+      render: (v: any, row: any) => {
+        const r = Number(v || row.day_rate || 0);
+        return r > 0 ? (
+          <span className="font-mono">${r.toLocaleString()}</span>
+        ) : (
+          '-'
+        );
+      },
+    },
+    {
+      key: 'unit',
+      label: '單位',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: unitOptions,
+    },
+    {
+      key: 'ot_rate',
+      label: 'OT費率',
+      sortable: true,
+      editable: true,
+      editType: 'number' as const,
+      className: 'text-right',
+      render: (v: any) =>
+        Number(v) > 0 ? (
+          <span className="font-mono">${Number(v).toLocaleString()}</span>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      key: 'mid_shift_rate',
+      label: '中直費率',
+      sortable: true,
+      editable: true,
+      editType: 'number' as const,
+      className: 'text-right',
+      render: (v: any) =>
+        Number(v) > 0 ? (
+          <span className="font-mono">${Number(v).toLocaleString()}</span>
+        ) : (
+          '-'
+        ),
+    },
   ];
 
   const {
-    columnConfigs, columnWidths, visibleColumns,
-    handleColumnConfigChange, handleReset, handleColumnResize,
+    columnConfigs,
+    columnWidths,
+    visibleColumns,
+    handleColumnConfigChange,
+    handleReset,
+    handleColumnResize,
   } = useColumnConfig('rental-rate-cards', columns);
-
 
   const handleInlineDelete = async (id: number) => {
     await rateCardsApi.delete(id);
@@ -176,11 +400,15 @@ export default function RentalRateCardsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">客戶價目表</h1>
-          <p className="text-gray-500 text-sm mt-1">管理客戶報價（收入端），支援日/夜/中直/OT多維度費率</p>
+          <p className="text-gray-500 text-sm mt-1">
+            管理客戶報價（收入端），支援日/夜/中直/OT多維度費率
+          </p>
         </div>
         <div className="flex gap-2">
           <CsvImportModal module="rate-cards" onImportComplete={load} />
-          <button onClick={() => setShowModal(true)} className="btn-primary">新增客戶價目</button>
+          <button onClick={() => setShowModal(true)} className="btn-primary">
+            新增客戶價目
+          </button>
         </div>
       </div>
 
@@ -204,16 +432,37 @@ export default function RentalRateCardsPage() {
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
-          onSort={(f, o) => { setSortBy(f); setSortOrder(o); }}
+          onSort={(f, o) => {
+            setSortBy(f);
+            setSortOrder(o);
+          }}
           onSave={handleInlineSave}
-        onDelete={handleInlineDelete}
+          onDelete={handleInlineDelete}
           filters={
             <div className="flex gap-2">
-              <select value={serviceTypeFilter} onChange={e => { setServiceTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+              <select
+                value={serviceTypeFilter}
+                onChange={(e) => {
+                  setServiceTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+              >
                 <option value="">全部類型</option>
-                {serviceTypeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {serviceTypeOptions.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
-              <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+              >
                 <option value="">全部狀態</option>
                 <option value="active">生效中</option>
                 <option value="cancelled">取消</option>
@@ -226,80 +475,144 @@ export default function RentalRateCardsPage() {
       </div>
 
       {/* Create Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增客戶價目" size="xl">
-        <form onSubmit={handleCreate} className="space-y-4 max-h-[75vh] overflow-y-auto">
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="新增客戶價目"
+        size="xl"
+      >
+        <form
+          onSubmit={handleCreate}
+          className="space-y-4 max-h-[75vh] overflow-y-auto"
+        >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">開票公司 *</label>
-              <select value={form.company_id} onChange={e => setForm({...form, company_id: e.target.value})} className="input-field" required>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                開票公司 *
+              </label>
+              <select
+                value={form.company_id}
+                onChange={(e) =>
+                  setForm({ ...form, company_id: e.target.value })
+                }
+                className="input-field"
+                required
+              >
                 <option value="">請選擇</option>
-                {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+                {companies.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.internal_prefix
+                      ? `${c.internal_prefix} - ${c.name}`
+                      : c.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">客戶 *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                客戶 *
+              </label>
               <SearchableSelect
                 value={form.client_id}
-                onChange={(val) => setForm({...form, client_id: val || ''})}
+                onChange={(val) => setForm({ ...form, client_id: val || '' })}
                 options={clientOptions}
                 placeholder="搜尋客戶..."
                 clearable={true}
               />
-              {!form.client_id && <input tabIndex={-1} autoComplete="off" style={{ position: 'absolute', opacity: 0, height: 0, width: 0 }} value={form.client_id} onChange={() => {}} required />}
+              {!form.client_id && (
+                <input
+                  tabIndex={-1}
+                  autoComplete="off"
+                  style={{
+                    position: 'absolute',
+                    opacity: 0,
+                    height: 0,
+                    width: 0,
+                  }}
+                  value={form.client_id}
+                  onChange={() => {}}
+                  required
+                />
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                客戶合約
+              </label>
               <ClientContractCombobox
                 value={form.client_contract_no}
-                onChange={(v) => setForm({...form, client_contract_no: v || ''})}
+                onChange={(v) =>
+                  setForm({ ...form, client_contract_no: v || '' })
+                }
                 placeholder="客戶合約"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">服務類型</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                服務類型
+              </label>
               <Combobox
                 value={form.service_type}
-                onChange={(val) => setForm({...form, service_type: val || ''})}
+                onChange={(val) =>
+                  setForm({ ...form, service_type: val || '' })
+                }
                 options={serviceTypeOptions}
                 placeholder="選擇或輸入服務類型"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">名稱</label>
-              <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="input-field" placeholder="例如 20噸泥頭車" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                名稱
+              </label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="input-field"
+                placeholder="例如 20噸泥頭車"
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">噸數</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                噸數
+              </label>
               <Combobox
                 value={form.tonnage}
-                onChange={(val) => setForm({...form, tonnage: val || ''})}
+                onChange={(val) => setForm({ ...form, tonnage: val || '' })}
                 options={tonnageOptions}
                 placeholder="選擇或輸入噸數"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">機種</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                機種
+              </label>
               <Combobox
                 value={form.machine_type}
-                onChange={(val) => setForm({...form, machine_type: val || ''})}
+                onChange={(val) =>
+                  setForm({ ...form, machine_type: val || '' })
+                }
                 options={vehicleTypeOptions}
                 placeholder="選擇或輸入機種"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">起點</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                起點
+              </label>
               <Combobox
                 value={form.origin}
-                onChange={(val) => setForm({...form, origin: val || ''})}
+                onChange={(val) => setForm({ ...form, origin: val || '' })}
                 options={locationOptions}
                 placeholder="選擇或輸入起點"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">終點</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                終點
+              </label>
               <Combobox
                 value={form.destination}
-                onChange={(val) => setForm({...form, destination: val || ''})}
+                onChange={(val) => setForm({ ...form, destination: val || '' })}
                 options={locationOptions}
                 placeholder="選擇或輸入終點"
               />
@@ -311,12 +624,28 @@ export default function RentalRateCardsPage() {
             <h3 className="text-sm font-bold text-gray-700 mb-3">有效期</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">生效日期</label>
- <DateInput value={form.effective_date} onChange={val => setForm({ ...form, effective_date: val || '' })} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  生效日期
+                </label>
+                <DateInput
+                  value={form.effective_date}
+                  onChange={(val) =>
+                    setForm({ ...form, effective_date: val || '' })
+                  }
+                  className="input-field"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">到期日期</label>
- <DateInput value={form.expiry_date} onChange={val => setForm({ ...form, expiry_date: val || '' })} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  到期日期
+                </label>
+                <DateInput
+                  value={form.expiry_date}
+                  onChange={(val) =>
+                    setForm({ ...form, expiry_date: val || '' })
+                  }
+                  className="input-field"
+                />
               </div>
             </div>
           </div>
@@ -326,8 +655,16 @@ export default function RentalRateCardsPage() {
             <h3 className="text-sm font-bold text-gray-700 mb-3">費率設定</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">日/夜</label>
-                <select value={form.day_night || ''} onChange={e => setForm({...form, day_night: e.target.value})} className="input-field">
+                <label className="block text-xs text-gray-500 mb-1">
+                  日/夜
+                </label>
+                <select
+                  value={form.day_night || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, day_night: e.target.value })
+                  }
+                  className="input-field"
+                >
                   <option value="">無</option>
                   <option value="日">日</option>
                   <option value="夜">夜</option>
@@ -336,31 +673,80 @@ export default function RentalRateCardsPage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">費率</label>
                 <div className="flex gap-1">
-                  <input type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="input-field flex-1" placeholder="0" />
-                  <select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} className="input-field w-20">
-                    {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                  <input
+                    type="number"
+                    value={form.rate}
+                    onChange={(e) => setForm({ ...form, rate: e.target.value })}
+                    className="input-field flex-1"
+                    placeholder="0"
+                  />
+                  <select
+                    value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    className="input-field w-20"
+                  >
+                    {unitOptions.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">中直費率</label>
-                <input type="number" value={form.mid_shift_rate} onChange={e => setForm({...form, mid_shift_rate: e.target.value})} className="input-field" placeholder="0" />
+                <label className="block text-xs text-gray-500 mb-1">
+                  中直費率
+                </label>
+                <input
+                  type="number"
+                  value={form.mid_shift_rate}
+                  onChange={(e) =>
+                    setForm({ ...form, mid_shift_rate: e.target.value })
+                  }
+                  className="input-field"
+                  placeholder="0"
+                />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">OT 費率</label>
-                <input type="number" value={form.ot_rate} onChange={e => setForm({...form, ot_rate: e.target.value})} className="input-field" placeholder="0" />
+                <label className="block text-xs text-gray-500 mb-1">
+                  OT 費率
+                </label>
+                <input
+                  type="number"
+                  value={form.ot_rate}
+                  onChange={(e) =>
+                    setForm({ ...form, ot_rate: e.target.value })
+                  }
+                  className="input-field"
+                  placeholder="0"
+                />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">備註（包油/不包油、包司機等）</label>
-            <textarea value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} className="input-field" rows={2} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              備註（包油/不包油、包司機等）
+            </label>
+            <textarea
+              value={form.remarks}
+              onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+              className="input-field"
+              rows={2}
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button>
-            <button type="submit" className="btn-primary">新增</button>
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button type="submit" className="btn-primary">
+              新增
+            </button>
           </div>
         </form>
       </Modal>

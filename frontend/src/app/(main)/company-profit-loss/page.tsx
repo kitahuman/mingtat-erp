@@ -1,10 +1,17 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { companyProfitLossApi, companiesApi } from '@/lib/api';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 function formatMoney(n: number): string {
   if (n === 0) return '$0.00';
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    '$' +
+    n.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
 }
 
 function formatPercent(n: number): string {
@@ -12,10 +19,18 @@ function formatPercent(n: number): string {
 }
 
 const MONTHS = [
-  { value: 1, label: '1月' }, { value: 2, label: '2月' }, { value: 3, label: '3月' },
-  { value: 4, label: '4月' }, { value: 5, label: '5月' }, { value: 6, label: '6月' },
-  { value: 7, label: '7月' }, { value: 8, label: '8月' }, { value: 9, label: '9月' },
-  { value: 10, label: '10月' }, { value: 11, label: '11月' }, { value: 12, label: '12月' },
+  { value: 1, label: '1月' },
+  { value: 2, label: '2月' },
+  { value: 3, label: '3月' },
+  { value: 4, label: '4月' },
+  { value: 5, label: '5月' },
+  { value: 6, label: '6月' },
+  { value: 7, label: '7月' },
+  { value: 8, label: '8月' },
+  { value: 9, label: '9月' },
+  { value: 10, label: '10月' },
+  { value: 11, label: '11月' },
+  { value: 12, label: '12月' },
 ];
 
 const QUARTERS = [
@@ -61,7 +76,9 @@ export default function CompanyProfitLossPage() {
   const [period, setPeriod] = useState<string>('financial_year');
   const [year, setYear] = useState<number>(getCurrentFinancialYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
-  const [quarter, setQuarter] = useState<number>(Math.ceil((now.getMonth() + 1) / 3));
+  const [quarter, setQuarter] = useState<number>(
+    Math.ceil((now.getMonth() + 1) / 3),
+  );
   const [fyQuarter, setFyQuarter] = useState<number>(getCurrentFyQuarter());
   const [companyId, setCompanyId] = useState<string>('');
   const [companies, setCompanies] = useState<any[]>([]);
@@ -70,8 +87,18 @@ export default function CompanyProfitLossPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    companiesApi.simple().then(res => setCompanies(res.data || [])).catch(() => {});
+    companiesApi
+      .simple()
+      .then((res) => setCompanies(res.data || []))
+      .catch(() => {});
   }, []);
+
+  useRefetchOnFocus(() => {
+    companiesApi
+      .simple()
+      .then((res) => setCompanies(res.data || []))
+      .catch(() => {});
+  });
 
   useEffect(() => {
     loadData();
@@ -104,11 +131,13 @@ export default function CompanyProfitLossPage() {
 
   // Generate year options (current year ± 5)
   const years: number[] = [];
-  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--) years.push(y);
+  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--)
+    years.push(y);
 
   // Generate financial year options
   const fyYears: number[] = [];
-  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--) fyYears.push(y);
+  for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 5; y--)
+    fyYears.push(y);
 
   // When period changes, adjust the year accordingly
   const handlePeriodChange = (newPeriod: string) => {
@@ -125,7 +154,8 @@ export default function CompanyProfitLossPage() {
     if (period === 'month') return `${year}年${month}月`;
     if (period === 'quarter') return `${year}年第${quarter}季`;
     if (period === 'year') return `${year}年度`;
-    if (period === 'financial_year') return `${year}/${(year + 1).toString().slice(-2)}會計年度（${year}年4月 - ${year + 1}年3月）`;
+    if (period === 'financial_year')
+      return `${year}/${(year + 1).toString().slice(-2)}會計年度（${year}年4月 - ${year + 1}年3月）`;
     if (period === 'fy_quarter') {
       const qLabels: Record<number, string> = {
         1: `${year}年4-6月`,
@@ -152,7 +182,10 @@ export default function CompanyProfitLossPage() {
   const payrollCosts = data?.payroll_costs || {};
 
   // Trend chart calculations
-  const maxTrendVal = Math.max(...trendData.map(t => Math.max(t.revenue, t.cost)), 1);
+  const maxTrendVal = Math.max(
+    ...trendData.map((t) => Math.max(t.revenue, t.cost)),
+    1,
+  );
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -160,7 +193,9 @@ export default function CompanyProfitLossPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">公司損益表</h1>
-          <p className="text-sm text-gray-500 mt-0.5">匯總所有工程及公司營運的損益數據</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            匯總所有工程及公司營運的損益數據
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {/* Company selector */}
@@ -171,7 +206,9 @@ export default function CompanyProfitLossPage() {
           >
             <option value="">全部公司</option>
             {companies.map((c: any) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
 
@@ -189,14 +226,16 @@ export default function CompanyProfitLossPage() {
           </select>
 
           {/* Year selector — for financial year, show FY format */}
-          {(period === 'financial_year' || period === 'fy_quarter') ? (
+          {period === 'financial_year' || period === 'fy_quarter' ? (
             <select
               value={year}
               onChange={(e) => setYear(parseInt(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              {fyYears.map(y => (
-                <option key={y} value={y}>{y}/{(y + 1).toString().slice(-2)}年度</option>
+              {fyYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}/{(y + 1).toString().slice(-2)}年度
+                </option>
               ))}
             </select>
           ) : (
@@ -205,8 +244,10 @@ export default function CompanyProfitLossPage() {
               onChange={(e) => setYear(parseInt(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              {years.map(y => (
-                <option key={y} value={y}>{y}年</option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}年
+                </option>
               ))}
             </select>
           )}
@@ -218,8 +259,10 @@ export default function CompanyProfitLossPage() {
               onChange={(e) => setMonth(parseInt(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              {MONTHS.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+              {MONTHS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
               ))}
             </select>
           )}
@@ -231,8 +274,10 @@ export default function CompanyProfitLossPage() {
               onChange={(e) => setQuarter(parseInt(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              {QUARTERS.map(q => (
-                <option key={q.value} value={q.value}>{q.label}</option>
+              {QUARTERS.map((q) => (
+                <option key={q.value} value={q.value}>
+                  {q.label}
+                </option>
               ))}
             </select>
           )}
@@ -244,8 +289,10 @@ export default function CompanyProfitLossPage() {
               onChange={(e) => setFyQuarter(parseInt(e.target.value))}
               className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              {FY_QUARTERS.map(q => (
-                <option key={q.value} value={q.value}>{q.label}</option>
+              {FY_QUARTERS.map((q) => (
+                <option key={q.value} value={q.value}>
+                  {q.label}
+                </option>
               ))}
             </select>
           )}
@@ -254,8 +301,18 @@ export default function CompanyProfitLossPage() {
             onClick={handlePrint}
             className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+              />
             </svg>
             列印
           </button>
@@ -272,18 +329,28 @@ export default function CompanyProfitLossPage() {
 
       {/* Period Info Banner */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 text-sm text-indigo-800 print:hidden">
-        <span className="font-medium">報表期間：</span>{getPeriodDisplayText()}
+        <span className="font-medium">報表期間：</span>
+        {getPeriodDisplayText()}
         {data?.period?.date_from && data?.period?.date_to && (
           <span className="ml-2 text-indigo-600">
-            （{new Date(data.period.date_from).toLocaleDateString('en-GB')} 至 {new Date(data.period.date_to).toLocaleDateString('en-GB')}）
+            （{new Date(data.period.date_from).toLocaleDateString('en-GB')} 至{' '}
+            {new Date(data.period.date_to).toLocaleDateString('en-GB')}）
           </span>
         )}
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <SummaryCard label="收入總計" value={formatMoney(revenue.total_revenue || 0)} color="blue" />
-        <SummaryCard label="成本總計" value={formatMoney(costs.total_cost || 0)} color="red" />
+        <SummaryCard
+          label="收入總計"
+          value={formatMoney(revenue.total_revenue || 0)}
+          color="blue"
+        />
+        <SummaryCard
+          label="成本總計"
+          value={formatMoney(costs.total_cost || 0)}
+          color="red"
+        />
         <SummaryCard
           label="毛利"
           value={formatMoney(pl.gross_profit || 0)}
@@ -306,14 +373,40 @@ export default function CompanyProfitLossPage() {
         <div className="p-6">
           <table className="w-full text-sm">
             <tbody>
-              <ReportRow label="工程收入合計（累計認證）" value={revenue.project_revenue || 0} />
-              <ReportRow label="發票收入合計" value={revenue.invoice_revenue || 0} />
+              <ReportRow
+                label="工程收入合計（累計認證）"
+                value={revenue.project_revenue || 0}
+              />
+              <ReportRow
+                label="發票收入合計"
+                value={revenue.invoice_revenue || 0}
+              />
               <ReportRow label="其他收入" value={revenue.other_income || 0} />
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
-              <ReportRow label="收入總計" value={revenue.total_revenue || 0} bold />
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
-              <ReportRow label="累計已收款" value={revenue.total_received || 0} />
-              <ReportRow label="應收帳款" value={revenue.accounts_receivable || 0} bold highlight />
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
+              <ReportRow
+                label="收入總計"
+                value={revenue.total_revenue || 0}
+                bold
+              />
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
+              <ReportRow
+                label="累計已收款"
+                value={revenue.total_received || 0}
+              />
+              <ReportRow
+                label="應收帳款"
+                value={revenue.accounts_receivable || 0}
+                bold
+                highlight
+              />
             </tbody>
           </table>
         </div>
@@ -328,66 +421,158 @@ export default function CompanyProfitLossPage() {
           <table className="w-full text-sm">
             <tbody>
               {/* Direct Costs */}
-              <tr><td colSpan={2} className="py-2 font-semibold text-gray-700">工程直接成本</td></tr>
+              <tr>
+                <td colSpan={2} className="py-2 font-semibold text-gray-700">
+                  工程直接成本
+                </td>
+              </tr>
               {(costs.direct_breakdown || []).length > 0 ? (
                 (costs.direct_breakdown || []).map((item: any, i: number) => (
-                  <ReportRow key={i} label={`  ${item.category}`} value={item.amount} indent />
+                  <ReportRow
+                    key={i}
+                    label={`  ${item.category}`}
+                    value={item.amount}
+                    indent
+                  />
                 ))
               ) : (
-                <tr><td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">暫無數據</td></tr>
+                <tr>
+                  <td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">
+                    暫無數據
+                  </td>
+                </tr>
               )}
-              <ReportRow label="直接成本小計" value={costs.direct_cost_total || 0} bold />
+              <ReportRow
+                label="直接成本小計"
+                value={costs.direct_cost_total || 0}
+                bold
+              />
 
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
 
               {/* Indirect Costs */}
-              <tr><td colSpan={2} className="py-2 font-semibold text-gray-700">工程間接成本</td></tr>
+              <tr>
+                <td colSpan={2} className="py-2 font-semibold text-gray-700">
+                  工程間接成本
+                </td>
+              </tr>
               {(costs.indirect_breakdown || []).length > 0 ? (
                 (costs.indirect_breakdown || []).map((item: any, i: number) => (
-                  <ReportRow key={i} label={`  ${item.category}`} value={item.amount} indent />
+                  <ReportRow
+                    key={i}
+                    label={`  ${item.category}`}
+                    value={item.amount}
+                    indent
+                  />
                 ))
               ) : (
-                <tr><td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">暫無數據</td></tr>
+                <tr>
+                  <td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">
+                    暫無數據
+                  </td>
+                </tr>
               )}
-              <ReportRow label="間接成本小計" value={costs.indirect_cost_total || 0} bold />
+              <ReportRow
+                label="間接成本小計"
+                value={costs.indirect_cost_total || 0}
+                bold
+              />
 
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
 
               {/* Operating Expenses */}
-              <tr><td colSpan={2} className="py-2 font-semibold text-gray-700">公司營運開支</td></tr>
+              <tr>
+                <td colSpan={2} className="py-2 font-semibold text-gray-700">
+                  公司營運開支
+                </td>
+              </tr>
               {(costs.operating_breakdown || []).length > 0 ? (
-                (costs.operating_breakdown || []).map((item: any, i: number) => (
-                  <ReportRow key={i} label={`  ${item.category}`} value={item.amount} indent />
-                ))
+                (costs.operating_breakdown || []).map(
+                  (item: any, i: number) => (
+                    <ReportRow
+                      key={i}
+                      label={`  ${item.category}`}
+                      value={item.amount}
+                      indent
+                    />
+                  ),
+                )
               ) : (
-                <tr><td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">暫無數據</td></tr>
+                <tr>
+                  <td colSpan={2} className="py-1 pl-8 text-gray-400 text-xs">
+                    暫無數據
+                  </td>
+                </tr>
               )}
-              <ReportRow label="營運開支小計" value={costs.operating_expense_total || 0} bold />
+              <ReportRow
+                label="營運開支小計"
+                value={costs.operating_expense_total || 0}
+                bold
+              />
 
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
               <ReportRow label="成本總計" value={costs.total_cost || 0} bold />
-              <tr><td colSpan={2} className="py-2"><hr className="border-gray-200" /></td></tr>
+              <tr>
+                <td colSpan={2} className="py-2">
+                  <hr className="border-gray-200" />
+                </td>
+              </tr>
               <ReportRow label="累計已付款" value={costs.total_paid || 0} />
-              <ReportRow label="應付帳款" value={costs.accounts_payable || 0} bold highlight />
+              <ReportRow
+                label="應付帳款"
+                value={costs.accounts_payable || 0}
+                bold
+                highlight
+              />
             </tbody>
           </table>
         </div>
       </div>
 
       {/* Payroll Summary */}
-      {(payrollCosts.payroll_expense_total > 0 || payrollCosts.payroll_count > 0) && (
+      {(payrollCosts.payroll_expense_total > 0 ||
+        payrollCosts.payroll_count > 0) && (
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           <div className="px-6 py-4 border-b bg-amber-50">
             <h2 className="text-lg font-semibold text-amber-900">糧單摘要</h2>
-            <p className="text-xs text-amber-600 mt-0.5">糧單確認後自動產生的支出已包含在上方成本明細中</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              糧單確認後自動產生的支出已包含在上方成本明細中
+            </p>
           </div>
           <div className="p-6">
             <table className="w-full text-sm">
               <tbody>
-                <ReportRow label="糧單數量" value={payrollCosts.payroll_count || 0} isCount />
-                <ReportRow label="糧單支出總額（已計入成本）" value={payrollCosts.payroll_expense_total || 0} />
-                <ReportRow label="已付糧單款項" value={payrollCosts.payroll_paid_total || 0} />
-                <ReportRow label="未付糧單款項" value={payrollCosts.payroll_outstanding || 0} bold highlight />
+                <ReportRow
+                  label="糧單數量"
+                  value={payrollCosts.payroll_count || 0}
+                  isCount
+                />
+                <ReportRow
+                  label="糧單支出總額（已計入成本）"
+                  value={payrollCosts.payroll_expense_total || 0}
+                />
+                <ReportRow
+                  label="已付糧單款項"
+                  value={payrollCosts.payroll_paid_total || 0}
+                />
+                <ReportRow
+                  label="未付糧單款項"
+                  value={payrollCosts.payroll_outstanding || 0}
+                  bold
+                  highlight
+                />
               </tbody>
             </table>
           </div>
@@ -403,14 +588,42 @@ export default function CompanyProfitLossPage() {
           <table className="w-full text-sm">
             <tbody>
               <ReportRow label="收入總計" value={revenue.total_revenue || 0} />
-              <ReportRow label="減：直接成本" value={-(costs.direct_cost_total || 0)} negative />
-              <tr><td colSpan={2} className="py-1"><hr className="border-gray-300 border-dashed" /></td></tr>
-              <ReportRowHL label="毛利" value={pl.gross_profit || 0} rate={pl.gross_profit_rate || 0} />
+              <ReportRow
+                label="減：直接成本"
+                value={-(costs.direct_cost_total || 0)}
+                negative
+              />
+              <tr>
+                <td colSpan={2} className="py-1">
+                  <hr className="border-gray-300 border-dashed" />
+                </td>
+              </tr>
+              <ReportRowHL
+                label="毛利"
+                value={pl.gross_profit || 0}
+                rate={pl.gross_profit_rate || 0}
+              />
 
-              <ReportRow label="減：間接成本" value={-(costs.indirect_cost_total || 0)} negative />
-              <ReportRow label="減：營運開支" value={-(costs.operating_expense_total || 0)} negative />
-              <tr><td colSpan={2} className="py-1"><hr className="border-gray-300 border-dashed" /></td></tr>
-              <ReportRowHL label="營業利潤" value={pl.operating_profit || 0} rate={pl.operating_profit_rate || 0} />
+              <ReportRow
+                label="減：間接成本"
+                value={-(costs.indirect_cost_total || 0)}
+                negative
+              />
+              <ReportRow
+                label="減：營運開支"
+                value={-(costs.operating_expense_total || 0)}
+                negative
+              />
+              <tr>
+                <td colSpan={2} className="py-1">
+                  <hr className="border-gray-300 border-dashed" />
+                </td>
+              </tr>
+              <ReportRowHL
+                label="營業利潤"
+                value={pl.operating_profit || 0}
+                rate={pl.operating_profit_rate || 0}
+              />
             </tbody>
           </table>
         </div>
@@ -419,7 +632,9 @@ export default function CompanyProfitLossPage() {
       {/* Monthly Trend Chart */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden print:break-before-page">
         <div className="px-6 py-4 border-b bg-purple-50">
-          <h2 className="text-lg font-semibold text-purple-900">月度趨勢圖（近 12 個月）</h2>
+          <h2 className="text-lg font-semibold text-purple-900">
+            月度趨勢圖（近 12 個月）
+          </h2>
         </div>
         <div className="p-6">
           {trendData.length > 0 ? (
@@ -442,7 +657,10 @@ export default function CompanyProfitLossPage() {
               {/* Chart */}
               <div className="flex items-end gap-1 h-64 border-b border-l border-gray-200 pl-1 pb-1">
                 {trendData.map((item, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end group relative">
+                  <div
+                    key={i}
+                    className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end group relative"
+                  >
                     {/* Tooltip */}
                     <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-2 whitespace-nowrap z-10">
                       <div className="font-semibold mb-1">{item.label}</div>
@@ -450,21 +668,35 @@ export default function CompanyProfitLossPage() {
                       <div>成本: {formatMoney(item.cost)}</div>
                       <div>利潤: {formatMoney(item.profit)}</div>
                     </div>
-                    <div className="flex items-end gap-px w-full justify-center" style={{ height: '100%' }}>
+                    <div
+                      className="flex items-end gap-px w-full justify-center"
+                      style={{ height: '100%' }}
+                    >
                       <div
                         className="bg-blue-500 rounded-t w-1/4 min-w-[4px] transition-all"
-                        style={{ height: `${maxTrendVal > 0 ? (item.revenue / maxTrendVal) * 100 : 0}%`, minHeight: item.revenue > 0 ? '2px' : '0' }}
+                        style={{
+                          height: `${maxTrendVal > 0 ? (item.revenue / maxTrendVal) * 100 : 0}%`,
+                          minHeight: item.revenue > 0 ? '2px' : '0',
+                        }}
                       />
                       <div
                         className="bg-red-400 rounded-t w-1/4 min-w-[4px] transition-all"
-                        style={{ height: `${maxTrendVal > 0 ? (item.cost / maxTrendVal) * 100 : 0}%`, minHeight: item.cost > 0 ? '2px' : '0' }}
+                        style={{
+                          height: `${maxTrendVal > 0 ? (item.cost / maxTrendVal) * 100 : 0}%`,
+                          minHeight: item.cost > 0 ? '2px' : '0',
+                        }}
                       />
                       <div
                         className={`rounded-t w-1/4 min-w-[4px] transition-all ${item.profit >= 0 ? 'bg-green-500' : 'bg-orange-500'}`}
-                        style={{ height: `${maxTrendVal > 0 ? (Math.abs(item.profit) / maxTrendVal) * 100 : 0}%`, minHeight: Math.abs(item.profit) > 0 ? '2px' : '0' }}
+                        style={{
+                          height: `${maxTrendVal > 0 ? (Math.abs(item.profit) / maxTrendVal) * 100 : 0}%`,
+                          minHeight: Math.abs(item.profit) > 0 ? '2px' : '0',
+                        }}
                       />
                     </div>
-                    <span className="text-[10px] text-gray-400 mt-1 whitespace-nowrap">{item.label.split('/')[1]}</span>
+                    <span className="text-[10px] text-gray-400 mt-1 whitespace-nowrap">
+                      {item.label.split('/')[1]}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -480,16 +712,25 @@ export default function CompanyProfitLossPage() {
 
 // ── Sub-components ──────────────────────────────────────────
 
-function SummaryCard({ label, value, sub, color }: {
+function SummaryCard({
+  label,
+  value,
+  sub,
+  color,
+}: {
   label: string;
   value: string;
   sub?: string;
   color?: 'blue' | 'green' | 'red';
 }) {
-  const colorClass = color === 'blue' ? 'text-blue-600'
-    : color === 'green' ? 'text-green-600'
-    : color === 'red' ? 'text-red-600'
-    : 'text-gray-900';
+  const colorClass =
+    color === 'blue'
+      ? 'text-blue-600'
+      : color === 'green'
+        ? 'text-green-600'
+        : color === 'red'
+          ? 'text-red-600'
+          : 'text-gray-900';
 
   return (
     <div className="bg-white rounded-xl shadow-sm border p-4">
@@ -500,7 +741,15 @@ function SummaryCard({ label, value, sub, color }: {
   );
 }
 
-function ReportRow({ label, value, bold, indent, highlight, negative, isCount }: {
+function ReportRow({
+  label,
+  value,
+  bold,
+  indent,
+  highlight,
+  negative,
+  isCount,
+}: {
   label: string;
   value: number;
   bold?: boolean;
@@ -511,17 +760,25 @@ function ReportRow({ label, value, bold, indent, highlight, negative, isCount }:
 }) {
   return (
     <tr className={highlight ? 'bg-gray-50' : ''}>
-      <td className={`py-1.5 ${indent ? 'pl-8' : 'pl-2'} ${bold ? 'font-semibold' : ''} text-gray-700`}>
+      <td
+        className={`py-1.5 ${indent ? 'pl-8' : 'pl-2'} ${bold ? 'font-semibold' : ''} text-gray-700`}
+      >
         {label}
       </td>
-      <td className={`py-1.5 text-right pr-2 font-mono ${bold ? 'font-semibold' : ''} ${negative ? 'text-red-600' : ''}`}>
+      <td
+        className={`py-1.5 text-right pr-2 font-mono ${bold ? 'font-semibold' : ''} ${negative ? 'text-red-600' : ''}`}
+      >
         {isCount ? value : formatMoney(value)}
       </td>
     </tr>
   );
 }
 
-function ReportRowHL({ label, value, rate }: {
+function ReportRowHL({
+  label,
+  value,
+  rate,
+}: {
   label: string;
   value: number;
   rate: number;
@@ -530,9 +787,13 @@ function ReportRowHL({ label, value, rate }: {
   return (
     <tr className="bg-gray-50">
       <td className="py-2 pl-2 font-bold text-gray-900">{label}</td>
-      <td className={`py-2 text-right pr-2 font-mono font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+      <td
+        className={`py-2 text-right pr-2 font-mono font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}
+      >
         {formatMoney(value)}
-        <span className="text-xs font-normal ml-2">({formatPercent(rate)})</span>
+        <span className="text-xs font-normal ml-2">
+          ({formatPercent(rate)})
+        </span>
       </td>
     </tr>
   );

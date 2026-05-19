@@ -23,7 +23,6 @@ import {
   WorkLogPivotSummary,
 } from './dto/work-log-pivot.dto';
 
-
 interface PivotNamedRelation {
   name?: string | null;
   name_zh?: string | null;
@@ -54,6 +53,7 @@ interface PivotWorkLogRecord {
   end_location: string | null;
   quantity: unknown;
   unit: string | null;
+  goods_quantity: unknown;
   ot_quantity: unknown;
   ot_unit: string | null;
   is_mid_shift: boolean;
@@ -104,8 +104,12 @@ export class WorkLogsService {
   ) {}
 
   private async assertVehicleIsNotScrappedByWorkLogData(data: any) {
-    const vehicleId = data.work_log_vehicle_id ? Number(data.work_log_vehicle_id) : null;
-    const equipmentNumber = data.equipment_number ? String(data.equipment_number) : null;
+    const vehicleId = data.work_log_vehicle_id
+      ? Number(data.work_log_vehicle_id)
+      : null;
+    const equipmentNumber = data.equipment_number
+      ? String(data.equipment_number)
+      : null;
     if (!vehicleId && !equipmentNumber) return;
     const vehicle = await this.prisma.vehicle.findFirst({
       where: vehicleId
@@ -114,13 +118,18 @@ export class WorkLogsService {
       select: { id: true, plate_number: true, status: true },
     });
     if (vehicle?.status === 'scrapped') {
-      throw new BadRequestException(`已劏車的車輛${vehicle.plate_number ? `（${vehicle.plate_number}）` : ''}不能新增或更新工作紀錄`);
+      throw new BadRequestException(
+        `已劏車的車輛${vehicle.plate_number ? `（${vehicle.plate_number}）` : ''}不能新增或更新工作紀錄`,
+      );
     }
   }
 
   // ── 工作記錄 CRUD ──────────────────────────────────────────
 
-  private buildWorkLogWhere(query: WorkLogQuery, excludeColumnFilter?: string): WhereClause {
+  private buildWorkLogWhere(
+    query: WorkLogQuery,
+    excludeColumnFilter?: string,
+  ): WhereClause {
     const {
       publisher_id,
       status,
@@ -186,19 +195,31 @@ export class WorkLogsService {
     }
 
     if (start_location) {
-      where.start_location = { contains: String(start_location), mode: 'insensitive' };
+      where.start_location = {
+        contains: String(start_location),
+        mode: 'insensitive',
+      };
     }
     if (end_location) {
-      where.end_location = { contains: String(end_location), mode: 'insensitive' };
+      where.end_location = {
+        contains: String(end_location),
+        mode: 'insensitive',
+      };
     }
     if (work_order_no) {
-      where.work_order_no = { contains: String(work_order_no), mode: 'insensitive' };
+      where.work_order_no = {
+        contains: String(work_order_no),
+        mode: 'insensitive',
+      };
     }
     if (receipt_no) {
       where.receipt_no = { contains: String(receipt_no), mode: 'insensitive' };
     }
     if (work_log_product_name) {
-      where.work_log_product_name = { contains: String(work_log_product_name), mode: 'insensitive' };
+      where.work_log_product_name = {
+        contains: String(work_log_product_name),
+        mode: 'insensitive',
+      };
     }
     this.applyColumnFilters(where, query, excludeColumnFilter);
 
@@ -347,17 +368,43 @@ export class WorkLogsService {
     'remarks',
   ];
 
-  private readonly relationFilterConfig: Record<string, { relation: string; field: string; foreignKey: string }> = {
-    publisher: { relation: 'publisher', field: 'displayName', foreignKey: 'publisher_id' },
+  private readonly relationFilterConfig: Record<
+    string,
+    { relation: string; field: string; foreignKey: string }
+  > = {
+    publisher: {
+      relation: 'publisher',
+      field: 'displayName',
+      foreignKey: 'publisher_id',
+    },
     company: { relation: 'company', field: 'name', foreignKey: 'company_id' },
     client: { relation: 'client', field: 'name', foreignKey: 'client_id' },
-    quotation: { relation: 'quotation', field: 'quotation_no', foreignKey: 'quotation_id' },
-    contract: { relation: 'contract', field: 'contract_no', foreignKey: 'contract_id' },
+    quotation: {
+      relation: 'quotation',
+      field: 'quotation_no',
+      foreignKey: 'quotation_id',
+    },
+    contract: {
+      relation: 'contract',
+      field: 'contract_no',
+      foreignKey: 'contract_id',
+    },
   };
 
-  private readonly dateFilterFields = ['scheduled_date', 'wl_whatsapp_reported_at'];
-  private readonly booleanFilterFields = ['is_mid_shift', 'is_confirmed', 'is_paid'];
-  private readonly numericFilterFields = ['quantity', 'ot_quantity', 'goods_quantity'];
+  private readonly dateFilterFields = [
+    'scheduled_date',
+    'wl_whatsapp_reported_at',
+  ];
+  private readonly booleanFilterFields = [
+    'is_mid_shift',
+    'is_confirmed',
+    'is_paid',
+  ];
+  private readonly numericFilterFields = [
+    'quantity',
+    'ot_quantity',
+    'goods_quantity',
+  ];
 
   private splitFilterValues(raw: unknown): string[] {
     if (raw === null || raw === undefined) return [];
@@ -385,7 +432,10 @@ export class WorkLogsService {
     where.AND = [...existingConditions, condition];
   }
 
-  private applyOrConditions(where: WhereClause, conditions: WhereClause[]): void {
+  private applyOrConditions(
+    where: WhereClause,
+    conditions: WhereClause[],
+  ): void {
     if (conditions.length === 0) return;
     if (conditions.length === 1) {
       Object.assign(where, conditions[0]);
@@ -395,21 +445,36 @@ export class WorkLogsService {
   }
 
   private parseHongKongDateTime(value: string): Date | null {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    const match = value.match(
+      /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
+    );
     if (!match) return null;
-    const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
-    const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute), Number(second));
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] =
+      match;
+    const utcMs = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour) - 8,
+      Number(minute),
+      Number(second),
+    );
     return new Date(utcMs);
   }
 
-  private formatHongKongDate(value: Date | null | undefined, includeTime = false): string {
+  private formatHongKongDate(
+    value: Date | null | undefined,
+    includeTime = false,
+  ): string {
     if (!value) return '';
     const formatter = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Hong_Kong',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-      ...(includeTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
+      ...(includeTime
+        ? { hour: '2-digit', minute: '2-digit', hour12: false }
+        : {}),
     });
     return formatter.format(value).replace(', ', ' ');
   }
@@ -431,7 +496,11 @@ export class WorkLogsService {
     return { gte: start, lt: end };
   }
 
-  private applyColumnFilters(where: WhereClause, query: WorkLogQuery, excludeColumn?: string) {
+  private applyColumnFilters(
+    where: WhereClause,
+    query: WorkLogQuery,
+    excludeColumn?: string,
+  ) {
     for (const field of this.columnFilterFields) {
       if (field === excludeColumn) continue;
       const vals = this.splitFilterValues(query[`filter_${field}`]);
@@ -447,16 +516,20 @@ export class WorkLogsService {
           conditions.push({
             OR: [
               { employee: { name_zh: { in: nonBlank } } },
-              { fleet_driver: { OR: [{ name_zh: { in: nonBlank } }, { short_name: { in: nonBlank } }] } },
+              {
+                fleet_driver: {
+                  OR: [
+                    { name_zh: { in: nonBlank } },
+                    { short_name: { in: nonBlank } },
+                  ],
+                },
+              },
             ],
           });
         }
         if (blankSelected) {
           conditions.push({
-            AND: [
-              { employee_id: null },
-              { work_log_fleet_driver_id: null },
-            ],
+            AND: [{ employee_id: null }, { work_log_fleet_driver_id: null }],
           });
         }
         this.applyOrConditions(where, conditions);
@@ -466,7 +539,9 @@ export class WorkLogsService {
       if (relation) {
         const conditions: WhereClause[] = [];
         if (nonBlank.length > 0) {
-          conditions.push({ [relation.relation]: { [relation.field]: { in: nonBlank } } });
+          conditions.push({
+            [relation.relation]: { [relation.field]: { in: nonBlank } },
+          });
         }
         if (blankSelected) {
           conditions.push(
@@ -482,7 +557,9 @@ export class WorkLogsService {
         const ranges = nonBlank
           .map((v) => this.makeDateRange(v))
           .filter((range): range is { gte: Date; lt: Date } => Boolean(range));
-        const conditions: WhereClause[] = ranges.map((range) => ({ [field]: range }));
+        const conditions: WhereClause[] = ranges.map((range) => ({
+          [field]: range,
+        }));
         if (blankSelected) conditions.push({ [field]: null });
         this.applyOrConditions(where, conditions);
         continue;
@@ -490,7 +567,13 @@ export class WorkLogsService {
 
       if (this.booleanFilterFields.includes(field)) {
         const bools = nonBlank
-          .map((v) => (v === '是' || v === 'true' ? true : v === '否' || v === 'false' ? false : null))
+          .map((v) =>
+            v === '是' || v === 'true'
+              ? true
+              : v === '否' || v === 'false'
+                ? false
+                : null,
+          )
           .filter((v): v is boolean => v !== null);
         if (bools.length === 1) where[field] = bools[0];
         else if (bools.length > 1) where[field] = { in: bools };
@@ -509,7 +592,8 @@ export class WorkLogsService {
 
       const conditions: WhereClause[] = [];
       if (nonBlank.length === 1) conditions.push({ [field]: nonBlank[0] });
-      else if (nonBlank.length > 1) conditions.push({ [field]: { in: nonBlank } });
+      else if (nonBlank.length > 1)
+        conditions.push({ [field]: { in: nonBlank } });
       if (blankSelected) conditions.push({ [field]: null }, { [field]: '' });
       this.applyOrConditions(where, conditions);
     }
@@ -519,7 +603,10 @@ export class WorkLogsService {
    * 取得指定欄位的不重複值清單，供前端欄標題篩選器使用。
    * 會套用其他篩選條件，但排除目標欄位自身篩選。
    */
-  async getFilterOptions(column: string, query: WorkLogQuery = {}): Promise<string[]> {
+  async getFilterOptions(
+    column: string,
+    query: WorkLogQuery = {},
+  ): Promise<string[]> {
     if (!this.columnFilterFields.includes(column)) return [];
 
     const where = this.buildWorkLogWhere(query, column);
@@ -541,21 +628,34 @@ export class WorkLogsService {
           names.add(row.employee.name_zh);
         } else if (row.fleet_driver?.name_zh || row.fleet_driver?.short_name) {
           names.add(row.fleet_driver.name_zh || row.fleet_driver.short_name);
-        } else if (row.employee_id == null && row.work_log_fleet_driver_id == null) {
+        } else if (
+          row.employee_id == null &&
+          row.work_log_fleet_driver_id == null
+        ) {
           names.add('(空白)');
         }
       }
-      return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-Hant')).slice(0, 500);
+      return Array.from(names)
+        .sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+        .slice(0, 500);
     }
 
     const relation = this.relationFilterConfig[column];
     if (relation) {
       const rows = await this.prisma.workLog.findMany({
         where,
-        select: { [relation.relation]: { select: { [relation.field]: true } } } as any,
+        select: {
+          [relation.relation]: { select: { [relation.field]: true } },
+        } as any,
         take: 2000,
       });
-      return Array.from(new Set(rows.map((row: any) => row[relation.relation]?.[relation.field] || '(空白)')))
+      return Array.from(
+        new Set(
+          rows.map(
+            (row: any) => row[relation.relation]?.[relation.field] || '(空白)',
+          ),
+        ),
+      )
         .sort((a, b) => a.localeCompare(b, 'zh-Hant'))
         .slice(0, 500);
     }
@@ -567,19 +667,35 @@ export class WorkLogsService {
         orderBy: { [column]: 'desc' } as any,
         take: 2000,
       });
-      return Array.from(new Set(rows.map((row: any) => {
-        const val = row[column];
-        if (!val) return '';
-        // For DATE type fields, use UTC date string directly (no timezone conversion).
-        if (column === 'scheduled_date') {
-          return val instanceof Date ? val.toISOString().split('T')[0] : String(val).split('T')[0];
-        }
-        return this.formatHongKongDate(val, column === 'wl_whatsapp_reported_at');
-      }).filter(Boolean))).slice(0, 500);
+      return Array.from(
+        new Set(
+          rows
+            .map((row: any) => {
+              const val = row[column];
+              if (!val) return '';
+              // For DATE type fields, use UTC date string directly (no timezone conversion).
+              if (column === 'scheduled_date') {
+                return val instanceof Date
+                  ? val.toISOString().split('T')[0]
+                  : String(val).split('T')[0];
+              }
+              return this.formatHongKongDate(
+                val,
+                column === 'wl_whatsapp_reported_at',
+              );
+            })
+            .filter(Boolean),
+        ),
+      ).slice(0, 500);
     }
 
     if (this.booleanFilterFields.includes(column)) {
-      const rows = await this.prisma.workLog.findMany({ where, select: { [column]: true } as any, distinct: [column as any], take: 500 });
+      const rows = await this.prisma.workLog.findMany({
+        where,
+        select: { [column]: true } as any,
+        distinct: [column as any],
+        take: 500,
+      });
       return rows.map((row: any) => (row[column] ? '是' : '否'));
     }
 
@@ -591,7 +707,11 @@ export class WorkLogsService {
       take: 500,
     });
     return rows
-      .map((row: any) => (row[column] == null || row[column] === '' ? '(空白)' : String(row[column])))
+      .map((row: any) =>
+        row[column] == null || row[column] === ''
+          ? '(空白)'
+          : String(row[column]),
+      )
       .sort((a: string, b: string) => a.localeCompare(b, 'zh-Hant'));
   }
 
@@ -758,12 +878,15 @@ export class WorkLogsService {
   }
 
   private getChangedFields(before: any, after: any, fields?: string[]) {
-    const keys = fields && fields.length > 0
-      ? fields
-      : Array.from(new Set([
-          ...Object.keys(before || {}),
-          ...Object.keys(after || {}),
-        ]));
+    const keys =
+      fields && fields.length > 0
+        ? fields
+        : Array.from(
+            new Set([
+              ...Object.keys(before || {}),
+              ...Object.keys(after || {}),
+            ]),
+          );
     const changes: Record<string, { before: any; after: any }> = {};
 
     for (const key of keys) {
@@ -936,7 +1059,9 @@ export class WorkLogsService {
 
   async bulkUpdate(ids: number[], field: string, value: any, userId?: number) {
     const safeIds = Array.isArray(ids)
-      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      ? ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
       : [];
     if (safeIds.length === 0) {
       return { success: true, updated: 0 };
@@ -1017,9 +1142,8 @@ export class WorkLogsService {
       orderBy: { id: 'asc' },
     });
     const affectedIds = beforeLogs.map((log) => log.id);
-    const auditFields = field === 'machine_type'
-      ? ['machine_type', 'equipment_source']
-      : [field];
+    const auditFields =
+      field === 'machine_type' ? ['machine_type', 'equipment_source'] : [field];
 
     if (field === 'machine_type') {
       // Also update equipment_source
@@ -1065,7 +1189,9 @@ export class WorkLogsService {
           where: { id: { in: affectedIds } },
           include: { company: true, client: true },
         });
-        await Promise.all(updatedLogs.map((log) => this.matchAndSavePrice(log)));
+        await Promise.all(
+          updatedLogs.map((log) => this.matchAndSavePrice(log)),
+        );
       }
     }
 
@@ -1096,7 +1222,9 @@ export class WorkLogsService {
   }
   async bulkConfirm(ids: number[], userId?: number) {
     const safeIds = Array.isArray(ids)
-      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      ? ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
       : [];
     if (safeIds.length === 0) {
       return { success: true, confirmed: 0 };
@@ -1128,7 +1256,9 @@ export class WorkLogsService {
   }
   async bulkUnconfirm(ids: number[], userId?: number) {
     const safeIds = Array.isArray(ids)
-      ? ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      ? ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
       : [];
     if (safeIds.length === 0) {
       return { success: true, unconfirmed: 0 };
@@ -1582,7 +1712,9 @@ export class WorkLogsService {
     };
 
     if (query.company_id) {
-      conditions.push(`COALESCE(wl.company_id, wl.company_profile_id) = $${paramIdx++}`);
+      conditions.push(
+        `COALESCE(wl.company_id, wl.company_profile_id) = $${paramIdx++}`,
+      );
       params.push(Number(query.company_id));
     }
     addTextFilter(query.company_name, 'COALESCE(co.name, cp.name)');
@@ -1660,18 +1792,24 @@ export class WorkLogsService {
 
     // Count total distinct combinations
     const countSql = `SELECT COUNT(*) AS total FROM (SELECT 1 ${fromClause} WHERE ${whereClause} GROUP BY ${groupByCols}) sub`;
-    const countResult = await this.prisma.$queryRawUnsafe<{ total: number }[]>(countSql, ...params);
+    const countResult = await this.prisma.$queryRawUnsafe<{ total: number }[]>(
+      countSql,
+      ...params,
+    );
     const total = Number(countResult[0]?.total || 0);
 
     // Count total unmatched work_logs
     const unmatchedCountSql = `SELECT COUNT(*)::int AS cnt FROM work_logs wl WHERE wl.deleted_at IS NULL AND (wl.client_price_match_status = 'unmatched' OR wl.client_price_match_status IS NULL)`;
-    const unmatchedResult = await this.prisma.$queryRawUnsafe<{ cnt: number }[]>(unmatchedCountSql);
+    const unmatchedResult =
+      await this.prisma.$queryRawUnsafe<{ cnt: number }[]>(unmatchedCountSql);
     const totalUnmatched = Number(unmatchedResult[0]?.cnt || 0);
 
     // Main query with pagination
     const offset = (page - 1) * limit;
     const dataSql = `SELECT ${selectCols} ${fromClause} WHERE ${whereClause} GROUP BY ${groupByCols} ORDER BY ${sortCol} ${sortDir} NULLS LAST LIMIT ${limit} OFFSET ${offset}`;
-    const rawRows = await this.prisma.$queryRawUnsafe<Record<string, unknown>[]>(dataSql, ...params);
+    const rawRows = await this.prisma.$queryRawUnsafe<
+      Record<string, unknown>[]
+    >(dataSql, ...params);
 
     const data: UnmatchedCombinationRow[] = rawRows.map((r) => ({
       company_id: r.company_id != null ? Number(r.company_id) : null,
@@ -1730,7 +1868,9 @@ export class WorkLogsService {
       ot_rate: dto.ot_rate ?? 0,
       mid_shift_rate: dto.mid_shift_rate ?? 0,
       unit: dto.unit || '日',
-      effective_date: dto.effective_date ? new Date(dto.effective_date) : new Date(),
+      effective_date: dto.effective_date
+        ? new Date(dto.effective_date)
+        : new Date(),
       rate_card_type: 'client',
       status: 'active',
       deleted_at: null,
@@ -1742,18 +1882,26 @@ export class WorkLogsService {
       if (v !== undefined) cleanData[k] = v;
     }
 
-    const saved = await this.prisma.rateCard.create({ data: cleanData as never });
+    const saved = await this.prisma.rateCard.create({
+      data: cleanData as never,
+    });
 
     // 2. Find affected client-unmatched work_logs with matching conditions
     const where: Record<string, unknown> = {
       deleted_at: null,
       AND: [
-        { OR: [{ client_price_match_status: 'unmatched' }, { client_price_match_status: null }] },
+        {
+          OR: [
+            { client_price_match_status: 'unmatched' },
+            { client_price_match_status: null },
+          ],
+        },
         { OR: [{ company_id: companyId }, { company_profile_id: companyId }] },
       ],
       client_id: clientId,
     };
-    if (dto.client_contract_no) where.client_contract_no = dto.client_contract_no;
+    if (dto.client_contract_no)
+      where.client_contract_no = dto.client_contract_no;
     if (dto.service_type) where.service_type = dto.service_type;
     if (dto.quotation_id) where.quotation_id = dto.quotation_id;
     if (dto.day_night) where.day_night = dto.day_night;
@@ -1777,12 +1925,13 @@ export class WorkLogsService {
     return { rateCard: { id: saved.id }, rematchedCount };
   }
 
-
   // ── Pivot Table 整理分析 ─────────────────────────────────────
 
   async getPivot(query: WorkLogPivotQueryDto): Promise<WorkLogPivotResult> {
     const rowFields = this.parsePivotDimensions(query.row_fields, ['employee']);
-    const colFields = this.parsePivotDimensions(query.col_fields, ['scheduled_date']);
+    const colFields = this.parsePivotDimensions(query.col_fields, [
+      'scheduled_date',
+    ]);
     const valueType: PivotValueType = query.value_type || 'quantity_sum';
     const where = this.buildPivotWhere(query);
 
@@ -1806,6 +1955,7 @@ export class WorkLogsService {
         end_location: true,
         quantity: true,
         unit: true,
+        goods_quantity: true,
         ot_quantity: true,
         ot_unit: true,
         is_mid_shift: true,
@@ -1813,7 +1963,9 @@ export class WorkLogsService {
         price_match_status: true,
         matched_rate_card_id: true,
         company: { select: { name: true, internal_prefix: true } },
-        company_profile: { select: { chinese_name: true, english_name: true, code: true } },
+        company_profile: {
+          select: { chinese_name: true, english_name: true, code: true },
+        },
         client: { select: { name: true } },
         quotation: { select: { quotation_no: true } },
         contract: { select: { contract_no: true } },
@@ -1834,21 +1986,54 @@ export class WorkLogsService {
     const allCol = this.makePivotAxisParts([], []);
 
     for (const log of logs) {
-      const rowParts = rowFields.length > 0 ? this.getPivotAxisParts(log, rowFields) : allRow;
-      const colParts = colFields.length > 0 ? this.getPivotAxisParts(log, colFields) : allCol;
-      rowMap.set(rowParts.key, { key: rowParts.key, values: rowParts.values, labels: rowParts.labels });
-      colMap.set(colParts.key, { key: colParts.key, values: colParts.values, labels: colParts.labels });
+      const rowParts =
+        rowFields.length > 0 ? this.getPivotAxisParts(log, rowFields) : allRow;
+      const colParts =
+        colFields.length > 0 ? this.getPivotAxisParts(log, colFields) : allCol;
+      rowMap.set(rowParts.key, {
+        key: rowParts.key,
+        values: rowParts.values,
+        labels: rowParts.labels,
+      });
+      colMap.set(colParts.key, {
+        key: colParts.key,
+        values: colParts.values,
+        labels: colParts.labels,
+      });
 
       const metric = this.getPivotMetricForLog(log, valueType);
-      this.addPivotMetric(cellAccumulators, `${rowParts.key}|${colParts.key}`, metric.value, metric.unit);
-      this.addPivotMetric(rowAccumulators, rowParts.key, metric.value, metric.unit);
-      this.addPivotMetric(colAccumulators, colParts.key, metric.value, metric.unit);
+      this.addPivotMetric(
+        cellAccumulators,
+        `${rowParts.key}|${colParts.key}`,
+        metric.value,
+        metric.unit,
+      );
+      this.addPivotMetric(
+        rowAccumulators,
+        rowParts.key,
+        metric.value,
+        metric.unit,
+      );
+      this.addPivotMetric(
+        colAccumulators,
+        colParts.key,
+        metric.value,
+        metric.unit,
+      );
       this.addToPivotAccumulator(grandAccumulator, metric.value, metric.unit);
     }
 
     if (logs.length === 0) {
-      rowMap.set(allRow.key, { key: allRow.key, values: allRow.values, labels: allRow.labels });
-      colMap.set(allCol.key, { key: allCol.key, values: allCol.values, labels: allCol.labels });
+      rowMap.set(allRow.key, {
+        key: allRow.key,
+        values: allRow.values,
+        labels: allRow.labels,
+      });
+      colMap.set(allCol.key, {
+        key: allCol.key,
+        values: allCol.values,
+        labels: allCol.labels,
+      });
     }
 
     return {
@@ -1862,8 +2047,9 @@ export class WorkLogsService {
     };
   }
 
-
-  async getPivotFilterOptions(query: WorkLogPivotQueryDto): Promise<WorkLogPivotFilterOptions> {
+  async getPivotFilterOptions(
+    query: WorkLogPivotQueryDto,
+  ): Promise<WorkLogPivotFilterOptions> {
     const where = this.buildPivotWhere(query);
 
     const [
@@ -1906,48 +2092,115 @@ export class WorkLogsService {
       this.prisma.workLog.findMany({
         where,
         distinct: ['employee_id'],
-        select: { employee_id: true, employee: { select: { name_zh: true, name_en: true, emp_code: true } } },
+        select: {
+          employee_id: true,
+          employee: {
+            select: { name_zh: true, name_en: true, emp_code: true },
+          },
+        },
       }),
-      this.prisma.workLog.findMany({ where, distinct: ['equipment_number'], select: { equipment_number: true } }),
-      this.prisma.workLog.findMany({ where, distinct: ['machine_type'], select: { machine_type: true } }),
-      this.prisma.workLog.findMany({ where, distinct: ['start_location'], select: { start_location: true } }),
-      this.prisma.workLog.findMany({ where, distinct: ['end_location'], select: { end_location: true } }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['equipment_number'],
+        select: { equipment_number: true },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['machine_type'],
+        select: { machine_type: true },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['start_location'],
+        select: { start_location: true },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['end_location'],
+        select: { end_location: true },
+      }),
       this.prisma.workLog.findMany({
         where,
         distinct: ['contract_id', 'client_contract_no'],
-        select: { contract_id: true, client_contract_no: true, contract: { select: { contract_no: true } } },
+        select: {
+          contract_id: true,
+          client_contract_no: true,
+          contract: { select: { contract_no: true } },
+        },
       }),
       this.prisma.workLog.findMany({
         where,
         distinct: ['quotation_id'],
-        select: { quotation_id: true, quotation: { select: { quotation_no: true } } },
+        select: {
+          quotation_id: true,
+          quotation: { select: { quotation_no: true } },
+        },
       }),
-      this.prisma.workLog.findMany({ where, distinct: ['day_night'], select: { day_night: true } }),
-      this.prisma.workLog.findMany({ where, distinct: ['service_type'], select: { service_type: true } }),
-      this.prisma.workLog.findMany({ where, distinct: ['is_confirmed'], select: { is_confirmed: true } }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['day_night'],
+        select: { day_night: true },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['service_type'],
+        select: { service_type: true },
+      }),
+      this.prisma.workLog.findMany({
+        where,
+        distinct: ['is_confirmed'],
+        select: { is_confirmed: true },
+      }),
     ]);
 
     return {
       companies: this.buildPivotCompanyFilterOptions(companyRows),
-      clients: this.buildPivotRelationFilterOptions(clientRows, 'client_id', (row) => row.client?.name),
-      employees: this.buildPivotRelationFilterOptions(employeeRows, 'employee_id', (row) => row.employee?.name_zh || row.employee?.name_en || row.employee?.emp_code),
-      equipment_numbers: this.buildPivotStringFilterOptions(equipmentRows, 'equipment_number'),
-      machine_types: this.buildPivotStringFilterOptions(machineTypeRows, 'machine_type'),
-      start_locations: this.buildPivotStringFilterOptions(startLocationRows, 'start_location'),
-      end_locations: this.buildPivotStringFilterOptions(endLocationRows, 'end_location'),
+      clients: this.buildPivotRelationFilterOptions(
+        clientRows,
+        'client_id',
+        (row) => row.client?.name,
+      ),
+      employees: this.buildPivotRelationFilterOptions(
+        employeeRows,
+        'employee_id',
+        (row) =>
+          row.employee?.name_zh ||
+          row.employee?.name_en ||
+          row.employee?.emp_code,
+      ),
+      equipment_numbers: this.buildPivotStringFilterOptions(
+        equipmentRows,
+        'equipment_number',
+      ),
+      machine_types: this.buildPivotStringFilterOptions(
+        machineTypeRows,
+        'machine_type',
+      ),
+      start_locations: this.buildPivotStringFilterOptions(
+        startLocationRows,
+        'start_location',
+      ),
+      end_locations: this.buildPivotStringFilterOptions(
+        endLocationRows,
+        'end_location',
+      ),
       contracts: this.buildPivotContractFilterOptions(contractRows),
       quotations: this.buildPivotQuotationFilterOptions(quotationRows),
       day_nights: this.buildPivotStringFilterOptions(dayNightRows, 'day_night'),
-      service_types: this.buildPivotStringFilterOptions(serviceTypeRows, 'service_type'),
+      service_types: this.buildPivotStringFilterOptions(
+        serviceTypeRows,
+        'service_type',
+      ),
       statuses: this.buildPivotStatusFilterOptions(statusRows),
     };
   }
 
-  async getPivotSummary(query: WorkLogPivotQueryDto): Promise<WorkLogPivotSummary> {
+  async getPivotSummary(
+    query: WorkLogPivotQueryDto,
+  ): Promise<WorkLogPivotSummary> {
     const result = await this.getPivot(query);
     return result.summary;
   }
-
 
   private normalizePivotFilterOptionValue(value: unknown): string {
     if (value === null || value === undefined) return '(空白)';
@@ -1955,17 +2208,24 @@ export class WorkLogsService {
     return normalized || '(空白)';
   }
 
-  private addPivotFilterOption(options: Map<string, PivotFilterOption>, value: unknown, label?: unknown): void {
+  private addPivotFilterOption(
+    options: Map<string, PivotFilterOption>,
+    value: unknown,
+    label?: unknown,
+  ): void {
     const optionValue = this.normalizePivotFilterOptionValue(value);
-    const optionLabel = optionValue === '(空白)'
-      ? '(空白)'
-      : this.normalizePivotFilterOptionValue(label ?? value);
+    const optionLabel =
+      optionValue === '(空白)'
+        ? '(空白)'
+        : this.normalizePivotFilterOptionValue(label ?? value);
     if (!options.has(optionValue)) {
       options.set(optionValue, { value: optionValue, label: optionLabel });
     }
   }
 
-  private sortPivotFilterOptions(options: Map<string, PivotFilterOption>): PivotFilterOption[] {
+  private sortPivotFilterOptions(
+    options: Map<string, PivotFilterOption>,
+  ): PivotFilterOption[] {
     return Array.from(options.values()).sort((a, b) => {
       if (a.value === '(空白)') return -1;
       if (b.value === '(空白)') return 1;
@@ -1973,9 +2233,14 @@ export class WorkLogsService {
     });
   }
 
-  private buildPivotStringFilterOptions<T extends Record<string, unknown>>(rows: T[], field: keyof T): PivotFilterOption[] {
+  private buildPivotStringFilterOptions<T extends Record<string, unknown>>(
+    rows: T[],
+    field: keyof T,
+  ): PivotFilterOption[] {
     const options = new Map<string, PivotFilterOption>();
-    rows.forEach((row) => this.addPivotFilterOption(options, row[field], row[field]));
+    rows.forEach((row) =>
+      this.addPivotFilterOption(options, row[field], row[field]),
+    );
     return this.sortPivotFilterOptions(options);
   }
 
@@ -1985,38 +2250,48 @@ export class WorkLogsService {
     getLabel: (row: T) => unknown,
   ): PivotFilterOption[] {
     const options = new Map<string, PivotFilterOption>();
-    rows.forEach((row) => this.addPivotFilterOption(options, row[valueField], getLabel(row)));
+    rows.forEach((row) =>
+      this.addPivotFilterOption(options, row[valueField], getLabel(row)),
+    );
     return this.sortPivotFilterOptions(options);
   }
 
-  private buildPivotCompanyFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+  private buildPivotCompanyFilterOptions(
+    rows: Array<Record<string, any>>,
+  ): PivotFilterOption[] {
     const options = new Map<string, PivotFilterOption>();
     rows.forEach((row) => {
       const profile = row.company_profile;
       const profileCompany = profile?.company;
       const value = row.company_id ?? profile?.company_id;
-      const label = row.company?.internal_prefix
-        || row.company?.name
-        || profileCompany?.internal_prefix
-        || profileCompany?.name
-        || profile?.code
-        || profile?.chinese_name
-        || profile?.english_name;
+      const label =
+        row.company?.internal_prefix ||
+        row.company?.name ||
+        profileCompany?.internal_prefix ||
+        profileCompany?.name ||
+        profile?.code ||
+        profile?.chinese_name ||
+        profile?.english_name;
       this.addPivotFilterOption(options, value, label);
     });
     return this.sortPivotFilterOptions(options);
   }
 
-  private buildPivotContractFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+  private buildPivotContractFilterOptions(
+    rows: Array<Record<string, any>>,
+  ): PivotFilterOption[] {
     const options = new Map<string, PivotFilterOption>();
     rows.forEach((row) => {
-      const value = row.contract?.contract_no || row.client_contract_no || row.contract_id;
+      const value =
+        row.contract?.contract_no || row.client_contract_no || row.contract_id;
       this.addPivotFilterOption(options, value, value);
     });
     return this.sortPivotFilterOptions(options);
   }
 
-  private buildPivotQuotationFilterOptions(rows: Array<Record<string, any>>): PivotFilterOption[] {
+  private buildPivotQuotationFilterOptions(
+    rows: Array<Record<string, any>>,
+  ): PivotFilterOption[] {
     const options = new Map<string, PivotFilterOption>();
     rows.forEach((row) => {
       const value = row.quotation?.quotation_no || row.quotation_id;
@@ -2025,16 +2300,23 @@ export class WorkLogsService {
     return this.sortPivotFilterOptions(options);
   }
 
-  private buildPivotStatusFilterOptions(rows: Array<{ is_confirmed: boolean }>): PivotFilterOption[] {
+  private buildPivotStatusFilterOptions(
+    rows: Array<{ is_confirmed: boolean }>,
+  ): PivotFilterOption[] {
     const values = new Set(rows.map((row) => row.is_confirmed));
     const options: PivotFilterOption[] = [];
     if (values.has(true)) options.push({ value: 'confirmed', label: '已確認' });
-    if (values.has(false)) options.push({ value: 'unconfirmed', label: '未確認' });
+    if (values.has(false))
+      options.push({ value: 'unconfirmed', label: '未確認' });
     return options;
   }
 
-  private parsePivotDimensions(raw: string | undefined, fallback: PivotDimension[]): PivotDimension[] {
-    const source = raw === undefined || raw.trim() === '' ? fallback.join(',') : raw;
+  private parsePivotDimensions(
+    raw: string | undefined,
+    fallback: PivotDimension[],
+  ): PivotDimension[] {
+    const source =
+      raw === undefined || raw.trim() === '' ? fallback.join(',') : raw;
     const allowed = new Set<string>(PIVOT_DIMENSIONS);
     const dimensions: PivotDimension[] = [];
     for (const part of source.split(',')) {
@@ -2047,7 +2329,9 @@ export class WorkLogsService {
     return dimensions;
   }
 
-  private buildPivotWhere(query: WorkLogPivotQueryDto): Prisma.WorkLogWhereInput {
+  private buildPivotWhere(
+    query: WorkLogPivotQueryDto,
+  ): Prisma.WorkLogWhereInput {
     const where: Prisma.WorkLogWhereInput = { deleted_at: null };
 
     if (query.date_from || query.date_to) {
@@ -2057,17 +2341,41 @@ export class WorkLogsService {
     }
 
     this.applyPivotCompanyFilter(where, query.company_ids || query.company_id);
-    this.applyPivotNumberFilter(where, 'client_id', query.client_ids || query.client_id);
-    this.applyPivotNumberFilter(where, 'employee_id', query.employee_ids || query.employee_id);
-    this.applyPivotStringFilter(where, 'equipment_number', query.equipment_numbers);
-    this.applyPivotStringFilter(where, 'machine_type', query.machine_types || query.machine_type);
+    this.applyPivotNumberFilter(
+      where,
+      'client_id',
+      query.client_ids || query.client_id,
+    );
+    this.applyPivotNumberFilter(
+      where,
+      'employee_id',
+      query.employee_ids || query.employee_id,
+    );
+    this.applyPivotStringFilter(
+      where,
+      'equipment_number',
+      query.equipment_numbers,
+    );
+    this.applyPivotStringFilter(
+      where,
+      'machine_type',
+      query.machine_types || query.machine_type,
+    );
     this.applyPivotStringFilter(where, 'tonnage', query.tonnage);
     this.applyPivotStringFilter(where, 'start_location', query.start_locations);
     this.applyPivotStringFilter(where, 'end_location', query.end_locations);
     this.applyPivotContractFilter(where, query.contracts);
     this.applyPivotQuotationFilter(where, query.quotations);
-    this.applyPivotStringFilter(where, 'day_night', query.day_nights || query.day_night);
-    this.applyPivotStringFilter(where, 'service_type', query.service_types || query.service_type);
+    this.applyPivotStringFilter(
+      where,
+      'day_night',
+      query.day_nights || query.day_night,
+    );
+    this.applyPivotStringFilter(
+      where,
+      'service_type',
+      query.service_types || query.service_type,
+    );
 
     const confirmed = this.parsePivotConfirmationFilter(query.status);
     if (confirmed !== null) where.is_confirmed = confirmed;
@@ -2081,22 +2389,36 @@ export class WorkLogsService {
       .filter((value) => Number.isFinite(value));
   }
 
-  private makePivotNumberFilter(values: number[]): number | { in: number[] } | undefined {
+  private makePivotNumberFilter(
+    values: number[],
+  ): number | { in: number[] } | undefined {
     if (values.length === 0) return undefined;
     return values.length === 1 ? values[0] : { in: values };
   }
 
-  private makePivotStringFilter(values: string[]): string | { in: string[] } | undefined {
+  private makePivotStringFilter(
+    values: string[],
+  ): string | { in: string[] } | undefined {
     if (values.length === 0) return undefined;
     return values.length === 1 ? values[0] : { in: values };
   }
 
-  private addPivotAndCondition(where: Prisma.WorkLogWhereInput, condition: Prisma.WorkLogWhereInput) {
+  private addPivotAndCondition(
+    where: Prisma.WorkLogWhereInput,
+    condition: Prisma.WorkLogWhereInput,
+  ) {
     const existing = where.AND;
-    where.AND = Array.isArray(existing) ? [...existing, condition] : existing ? [existing, condition] : [condition];
+    where.AND = Array.isArray(existing)
+      ? [...existing, condition]
+      : existing
+        ? [existing, condition]
+        : [condition];
   }
 
-  private applyPivotCompanyFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+  private applyPivotCompanyFilter(
+    where: Prisma.WorkLogWhereInput,
+    raw: string | undefined,
+  ) {
     const values = this.splitFilterValues(raw);
     if (values.length === 0) return;
     const blankSelected = this.hasBlankFilterValue(values);
@@ -2104,7 +2426,9 @@ export class WorkLogsService {
     const conditions: Prisma.WorkLogWhereInput[] = [];
     if (idFilter) {
       conditions.push({ company_id: idFilter });
-      conditions.push({ company_profile: { is: { company_id: idFilter } } } as Prisma.WorkLogWhereInput);
+      conditions.push({
+        company_profile: { is: { company_id: idFilter } },
+      } as Prisma.WorkLogWhereInput);
     }
     if (blankSelected) {
       conditions.push({ company_id: null, company_profile_id: null });
@@ -2122,7 +2446,9 @@ export class WorkLogsService {
     const values = this.splitFilterValues(raw);
     if (values.length === 0) return;
     const blankSelected = this.hasBlankFilterValue(values);
-    const numericFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
+    const numericFilter = this.makePivotNumberFilter(
+      this.getPivotNumberValues(raw),
+    );
     if (blankSelected && numericFilter) {
       this.addPivotAndCondition(where, {
         OR: [{ [field]: numericFilter }, { [field]: null }],
@@ -2136,7 +2462,14 @@ export class WorkLogsService {
 
   private applyPivotStringFilter(
     where: Prisma.WorkLogWhereInput,
-    field: 'equipment_number' | 'machine_type' | 'tonnage' | 'day_night' | 'service_type' | 'start_location' | 'end_location',
+    field:
+      | 'equipment_number'
+      | 'machine_type'
+      | 'tonnage'
+      | 'day_night'
+      | 'service_type'
+      | 'start_location'
+      | 'end_location',
     raw: string | undefined,
   ) {
     const values = this.splitFilterValues(raw);
@@ -2146,11 +2479,7 @@ export class WorkLogsService {
     if (blankSelected && nonBlank.length > 0) {
       // Include both blank (null/empty) and specific values
       this.addPivotAndCondition(where, {
-        OR: [
-          { [field]: { in: nonBlank } },
-          { [field]: null },
-          { [field]: '' },
-        ],
+        OR: [{ [field]: { in: nonBlank } }, { [field]: null }, { [field]: '' }],
       });
     } else if (blankSelected) {
       // Only blank selected
@@ -2163,7 +2492,10 @@ export class WorkLogsService {
     }
   }
 
-  private applyPivotContractFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+  private applyPivotContractFilter(
+    where: Prisma.WorkLogWhereInput,
+    raw: string | undefined,
+  ) {
     const values = this.splitFilterValues(raw);
     if (values.length === 0) return;
     const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
@@ -2172,24 +2504,36 @@ export class WorkLogsService {
     if (idFilter) conditions.push({ contract_id: idFilter });
     if (textFilter) {
       conditions.push({ client_contract_no: textFilter });
-      conditions.push({ contract: { is: { contract_no: textFilter } } } as Prisma.WorkLogWhereInput);
+      conditions.push({
+        contract: { is: { contract_no: textFilter } },
+      } as Prisma.WorkLogWhereInput);
     }
     this.addPivotAndCondition(where, { OR: conditions });
   }
 
-  private applyPivotQuotationFilter(where: Prisma.WorkLogWhereInput, raw: string | undefined) {
+  private applyPivotQuotationFilter(
+    where: Prisma.WorkLogWhereInput,
+    raw: string | undefined,
+  ) {
     const values = this.splitFilterValues(raw);
     if (values.length === 0) return;
     const idFilter = this.makePivotNumberFilter(this.getPivotNumberValues(raw));
     const textFilter = this.makePivotStringFilter(values);
     const conditions: Prisma.WorkLogWhereInput[] = [];
     if (idFilter) conditions.push({ quotation_id: idFilter });
-    if (textFilter) conditions.push({ quotation: { is: { quotation_no: textFilter } } } as Prisma.WorkLogWhereInput);
+    if (textFilter)
+      conditions.push({
+        quotation: { is: { quotation_no: textFilter } },
+      } as Prisma.WorkLogWhereInput);
     this.addPivotAndCondition(where, { OR: conditions });
   }
 
-  private parsePivotConfirmationFilter(raw: string | undefined): boolean | null {
-    const values = this.splitFilterValues(raw).map((value) => value.toLowerCase());
+  private parsePivotConfirmationFilter(
+    raw: string | undefined,
+  ): boolean | null {
+    const values = this.splitFilterValues(raw).map((value) =>
+      value.toLowerCase(),
+    );
     const confirmedValues = new Set(['confirmed', 'true', '1', '已確認']);
     const unconfirmedValues = new Set(['unconfirmed', 'false', '0', '未確認']);
     const hasConfirmed = values.some((value) => confirmedValues.has(value));
@@ -2199,12 +2543,20 @@ export class WorkLogsService {
     return null;
   }
 
-  private getPivotAxisParts(log: PivotWorkLogRecord, fields: PivotDimension[]): PivotAxisParts {
-    const labels = fields.map((field) => this.getPivotDimensionLabel(log, field));
+  private getPivotAxisParts(
+    log: PivotWorkLogRecord,
+    fields: PivotDimension[],
+  ): PivotAxisParts {
+    const labels = fields.map((field) =>
+      this.getPivotDimensionLabel(log, field),
+    );
     return this.makePivotAxisParts(labels, labels);
   }
 
-  private makePivotAxisParts(values: string[], labels: string[]): PivotAxisParts {
+  private makePivotAxisParts(
+    values: string[],
+    labels: string[],
+  ): PivotAxisParts {
     const safeValues = values.length > 0 ? values : ['全部'];
     const safeLabels = labels.length > 0 ? labels : ['全部'];
     return {
@@ -2214,17 +2566,32 @@ export class WorkLogsService {
     };
   }
 
-  private getPivotDimensionLabel(log: PivotWorkLogRecord, field: PivotDimension): string {
+  private getPivotDimensionLabel(
+    log: PivotWorkLogRecord,
+    field: PivotDimension,
+  ): string {
     const blank = '(空白)';
     switch (field) {
       case 'employee':
-        return log.employee?.name_zh || log.fleet_driver?.name_zh || log.fleet_driver?.short_name || blank;
+        return (
+          log.employee?.name_zh ||
+          log.fleet_driver?.name_zh ||
+          log.fleet_driver?.short_name ||
+          blank
+        );
       case 'equipment_number':
         return log.equipment_number || blank;
       case 'client':
         return log.client?.name || blank;
       case 'company':
-        return log.company?.internal_prefix || log.company?.name || log.company_profile?.code || log.company_profile?.chinese_name || log.company_profile?.english_name || blank;
+        return (
+          log.company?.internal_prefix ||
+          log.company?.name ||
+          log.company_profile?.code ||
+          log.company_profile?.chinese_name ||
+          log.company_profile?.english_name ||
+          blank
+        );
       case 'machine_type':
         return log.machine_type || blank;
       case 'start_location':
@@ -2239,7 +2606,9 @@ export class WorkLogsService {
         if (log.scheduled_date instanceof Date) {
           return log.scheduled_date.toISOString().split('T')[0];
         }
-        return log.scheduled_date ? String(log.scheduled_date).split('T')[0] : blank;
+        return log.scheduled_date
+          ? String(log.scheduled_date).split('T')[0]
+          : blank;
       case 'week':
         return this.formatPivotWeek(log.scheduled_date) || blank;
       case 'month':
@@ -2253,14 +2622,25 @@ export class WorkLogsService {
     }
   }
 
-  private getPivotMetricForLog(log: PivotWorkLogRecord, valueType: PivotValueType): PivotMetric {
+  private getPivotMetricForLog(
+    log: PivotWorkLogRecord,
+    valueType: PivotValueType,
+  ): PivotMetric {
     switch (valueType) {
       case 'count':
         return { value: 1, unit: '筆' };
       case 'quantity_sum':
-        return { value: this.toPivotNumber(log.quantity), unit: log.unit || '' };
+        return {
+          value: this.toPivotNumber(log.quantity),
+          unit: log.unit || '',
+        };
+      case 'goods_quantity_sum':
+        return { value: this.toPivotNumber(log.goods_quantity), unit: '件' };
       case 'ot_sum':
-        return { value: this.toPivotNumber(log.ot_quantity), unit: log.ot_unit || '' };
+        return {
+          value: this.toPivotNumber(log.ot_quantity),
+          unit: log.ot_unit || '',
+        };
       case 'mid_shift_count':
         return { value: log.is_mid_shift ? 1 : 0, unit: '次' };
     }
@@ -2270,19 +2650,33 @@ export class WorkLogsService {
     return { value: 0, units: new Map<string, number>() };
   }
 
-  private addPivotMetric(map: Map<string, PivotAccumulator>, key: string, value: number, unit: string) {
+  private addPivotMetric(
+    map: Map<string, PivotAccumulator>,
+    key: string,
+    value: number,
+    unit: string,
+  ) {
     if (!map.has(key)) map.set(key, this.createPivotAccumulator());
     const accumulator = map.get(key);
     if (accumulator) this.addToPivotAccumulator(accumulator, value, unit);
   }
 
-  private addToPivotAccumulator(accumulator: PivotAccumulator, value: number, unit: string) {
+  private addToPivotAccumulator(
+    accumulator: PivotAccumulator,
+    value: number,
+    unit: string,
+  ) {
     accumulator.value += value;
     const normalizedUnit = unit || '';
-    accumulator.units.set(normalizedUnit, (accumulator.units.get(normalizedUnit) || 0) + 1);
+    accumulator.units.set(
+      normalizedUnit,
+      (accumulator.units.get(normalizedUnit) || 0) + 1,
+    );
   }
 
-  private finalizePivotAccumulatorMap(map: Map<string, PivotAccumulator>): Record<string, PivotMetric> {
+  private finalizePivotAccumulatorMap(
+    map: Map<string, PivotAccumulator>,
+  ): Record<string, PivotMetric> {
     const result: Record<string, PivotMetric> = {};
     for (const [key, accumulator] of map.entries()) {
       result[key] = this.finalizePivotAccumulator(accumulator);
@@ -2310,7 +2704,9 @@ export class WorkLogsService {
   }
 
   private sortPivotAxisItems(items: PivotAxisItem[]): PivotAxisItem[] {
-    return items.sort((a, b) => a.labels.join('\u0000').localeCompare(b.labels.join('\u0000'), 'zh-Hant'));
+    return items.sort((a, b) =>
+      a.labels.join('\u0000').localeCompare(b.labels.join('\u0000'), 'zh-Hant'),
+    );
   }
 
   private buildPivotSummary(logs: PivotWorkLogRecord[]): WorkLogPivotSummary {
@@ -2323,9 +2719,11 @@ export class WorkLogsService {
     for (const log of logs) {
       totalQuantity += this.toPivotNumber(log.quantity);
       if (log.is_confirmed) confirmedCount += 1;
-      if (log.price_match_status === 'matched' || log.matched_rate_card_id) matchedCount += 1;
+      if (log.price_match_status === 'matched' || log.matched_rate_card_id)
+        matchedCount += 1;
       if (log.employee_id) employees.add(`employee:${log.employee_id}`);
-      if (log.work_log_fleet_driver_id) employees.add(`fleet:${log.work_log_fleet_driver_id}`);
+      if (log.work_log_fleet_driver_id)
+        employees.add(`fleet:${log.work_log_fleet_driver_id}`);
       if (log.equipment_number) equipment.add(log.equipment_number);
     }
 
@@ -2333,7 +2731,8 @@ export class WorkLogsService {
       totalRecords: logs.length,
       confirmedCount,
       totalQuantity: Number(totalQuantity.toFixed(2)),
-      priceMatchRate: logs.length > 0 ? Number((matchedCount / logs.length).toFixed(3)) : 0,
+      priceMatchRate:
+        logs.length > 0 ? Number((matchedCount / logs.length).toFixed(3)) : 0,
       employeeCount: employees.size,
       equipmentCount: equipment.size,
     };
@@ -2346,11 +2745,19 @@ export class WorkLogsService {
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : 0;
     }
-    if (typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+    if (
+      typeof value === 'object' &&
+      'toNumber' in value &&
+      typeof value.toNumber === 'function'
+    ) {
       const parsed = value.toNumber();
       return Number.isFinite(parsed) ? parsed : 0;
     }
-    if (typeof value === 'object' && 'toString' in value && typeof value.toString === 'function') {
+    if (
+      typeof value === 'object' &&
+      'toString' in value &&
+      typeof value.toString === 'function'
+    ) {
       const parsed = Number(value.toString());
       return Number.isFinite(parsed) ? parsed : 0;
     }
@@ -2366,12 +2773,16 @@ export class WorkLogsService {
     const dateText = this.formatHongKongDate(value);
     if (!dateText) return '';
     const [yearText, monthText, dayText] = dateText.split('-');
-    const date = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
+    const date = new Date(
+      Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)),
+    );
     const day = date.getUTCDay() || 7;
     date.setUTCDate(date.getUTCDate() + 4 - day);
     const weekYear = date.getUTCFullYear();
     const yearStart = new Date(Date.UTC(weekYear, 0, 1));
-    const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    const week = Math.ceil(
+      ((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+    );
     return `${weekYear}-W${String(week).padStart(2, '0')}`;
   }
 

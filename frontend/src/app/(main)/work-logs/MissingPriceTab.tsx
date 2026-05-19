@@ -2,16 +2,24 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  workLogsApi, companiesApi, partnersApi, quotationsApi, fieldOptionsApi,
+  workLogsApi,
+  companiesApi,
+  partnersApi,
+  quotationsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import ColumnFilter from '@/components/ColumnFilter';
 import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface Option { value: string | number; label: string; }
+interface Option {
+  value: string | number;
+  label: string;
+}
 
 interface UnmatchedRow {
   company_id: number | null;
@@ -56,32 +64,105 @@ interface ColDef {
 // ── Column definitions ─────────────────────────────────────────────────────
 
 const COLS: ColDef[] = [
-  { key: 'company_name',       label: '公司',     sortKey: 'company_name',       filterKey: 'company_name',       width: 'min-w-[7rem]' },
-  { key: 'client_name',        label: '客戶',     sortKey: 'client_name',        filterKey: 'client_name',        width: 'min-w-[9rem]' },
-  { key: 'client_contract_no', label: '客戶合約', sortKey: 'client_contract_no', filterKey: 'client_contract_no', width: 'min-w-[7rem]' },
-  { key: 'service_type',       label: '服務類型', sortKey: 'service_type',       filterKey: 'service_type',       width: 'min-w-[6rem]' },
-  { key: 'quotation_no',       label: '報價單',   sortKey: 'quotation_no',       filterKey: 'quotation_no',       width: 'min-w-[9rem]' },
-  { key: 'day_night',          label: '日夜',     sortKey: 'day_night',          filterKey: 'day_night',          width: 'min-w-[4rem]' },
-  { key: 'tonnage',            label: '噸數',     sortKey: 'tonnage',            filterKey: 'tonnage',            width: 'min-w-[5rem]' },
-  { key: 'machine_type',       label: '機種',     sortKey: 'machine_type',       filterKey: 'machine_type',       width: 'min-w-[6rem]' },
-  { key: 'start_location',     label: '起點',     sortKey: 'start_location',     filterKey: 'start_location',     width: 'min-w-[7rem]' },
-  { key: 'end_location',       label: '終點',     sortKey: 'end_location',       filterKey: 'end_location',       width: 'min-w-[7rem]' },
-  { key: 'count',              label: '受影響筆數', sortKey: 'count',            filterKey: '',                   width: 'min-w-[5rem]' },
+  {
+    key: 'company_name',
+    label: '公司',
+    sortKey: 'company_name',
+    filterKey: 'company_name',
+    width: 'min-w-[7rem]',
+  },
+  {
+    key: 'client_name',
+    label: '客戶',
+    sortKey: 'client_name',
+    filterKey: 'client_name',
+    width: 'min-w-[9rem]',
+  },
+  {
+    key: 'client_contract_no',
+    label: '客戶合約',
+    sortKey: 'client_contract_no',
+    filterKey: 'client_contract_no',
+    width: 'min-w-[7rem]',
+  },
+  {
+    key: 'service_type',
+    label: '服務類型',
+    sortKey: 'service_type',
+    filterKey: 'service_type',
+    width: 'min-w-[6rem]',
+  },
+  {
+    key: 'quotation_no',
+    label: '報價單',
+    sortKey: 'quotation_no',
+    filterKey: 'quotation_no',
+    width: 'min-w-[9rem]',
+  },
+  {
+    key: 'day_night',
+    label: '日夜',
+    sortKey: 'day_night',
+    filterKey: 'day_night',
+    width: 'min-w-[4rem]',
+  },
+  {
+    key: 'tonnage',
+    label: '噸數',
+    sortKey: 'tonnage',
+    filterKey: 'tonnage',
+    width: 'min-w-[5rem]',
+  },
+  {
+    key: 'machine_type',
+    label: '機種',
+    sortKey: 'machine_type',
+    filterKey: 'machine_type',
+    width: 'min-w-[6rem]',
+  },
+  {
+    key: 'start_location',
+    label: '起點',
+    sortKey: 'start_location',
+    filterKey: 'start_location',
+    width: 'min-w-[7rem]',
+  },
+  {
+    key: 'end_location',
+    label: '終點',
+    sortKey: 'end_location',
+    filterKey: 'end_location',
+    width: 'min-w-[7rem]',
+  },
+  {
+    key: 'count',
+    label: '受影響筆數',
+    sortKey: 'count',
+    filterKey: '',
+    width: 'min-w-[5rem]',
+  },
 ];
 
 const RATE_COLS = [
-  { key: 'rate'          as const, label: '費率',     required: true  },
-  { key: 'ot_rate'       as const, label: 'OT費率',   required: false },
-  { key: 'mid_shift_rate'as const, label: '中直費率', required: false },
+  { key: 'rate' as const, label: '費率', required: true },
+  { key: 'ot_rate' as const, label: 'OT費率', required: false },
+  { key: 'mid_shift_rate' as const, label: '中直費率', required: false },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function rowKey(row: UnmatchedRow): string {
   return [
-    row.company_id, row.client_id, row.client_contract_no,
-    row.service_type, row.quotation_id, row.day_night,
-    row.tonnage, row.machine_type, row.start_location, row.end_location,
+    row.company_id,
+    row.client_id,
+    row.client_contract_no,
+    row.service_type,
+    row.quotation_id,
+    row.day_night,
+    row.tonnage,
+    row.machine_type,
+    row.start_location,
+    row.end_location,
   ].join('|');
 }
 
@@ -123,40 +204,47 @@ function rowToEditDraft(row: UnmatchedRow): EditDraft {
 
 export default function MissingPriceTab() {
   // ── Reference data ────────────────────────────────────────────────────────
-  const [companies, setCompanies]   = useState<Option[]>([]);
-  const [clients, setClients]       = useState<Option[]>([]);
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [clients, setClients] = useState<Option[]>([]);
   const [quotations, setQuotations] = useState<Option[]>([]);
-  const [fieldOptions, setFieldOptions] = useState<Record<string, Option[]>>({});
+  const [fieldOptions, setFieldOptions] = useState<Record<string, Option[]>>(
+    {},
+  );
 
   // ── Table data ────────────────────────────────────────────────────────────
-  const [data, setData]                     = useState<UnmatchedRow[]>([]);
-  const [total, setTotal]                   = useState(0);
+  const [data, setData] = useState<UnmatchedRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [totalUnmatched, setTotalUnmatched] = useState(0);
-  const [page, setPage]                     = useState(1);
-  const [totalPages, setTotalPages]         = useState(0);
-  const [loading, setLoading]               = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(false);
   const LIMIT = 50;
 
   // ── Sort ──────────────────────────────────────────────────────────────────
-  const [sortBy, setSortBy]       = useState('count');
+  const [sortBy, setSortBy] = useState('count');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
   // ── Column filters ────────────────────────────────────────────────────────
-  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
 
   // ── Inline edit ───────────────────────────────────────────────────────────
-  const [editingKey, setEditingKey]   = useState<string | null>(null);
-  const [editDraft, setEditDraft]     = useState<EditDraft | null>(null);
-  const [editRates, setEditRates]     = useState<RateInputs>(emptyRates());
-  const [savingEdit, setSavingEdit]   = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [editRates, setEditRates] = useState<RateInputs>(emptyRates());
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // ── Quick-add rate inputs (per row, when not editing) ─────────────────────
-  const [rateInputs, setRateInputs]   = useState<Record<string, RateInputs>>({});
-  const [submitting, setSubmitting]   = useState<Record<string, boolean>>({});
+  const [rateInputs, setRateInputs] = useState<Record<string, RateInputs>>({});
+  const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
   const [successRows, setSuccessRows] = useState<Set<string>>(new Set());
 
   // ── Toast ─────────────────────────────────────────────────────────────────
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: 'success' | 'error';
+  } | null>(null);
 
   // ── Load reference data ───────────────────────────────────────────────────
   useEffect(() => {
@@ -165,27 +253,87 @@ export default function MissingPriceTab() {
       partnersApi.simple(),
       quotationsApi.list({ limit: 500 }),
       fieldOptionsApi.getAll(),
-    ]).then(([cp, pt, qt, fo]) => {
-      setCompanies((cp.data || []).map((c: Record<string, unknown>) => ({
-        value: c.id as number,
-        label: c.internal_prefix ? `${c.internal_prefix} ${c.name}` : c.name as string,
-      })));
-      setClients((pt.data || []).map((p: Record<string, unknown>) => ({
-        value: p.id as number,
-        label: p.name as string,
-      })));
-      const qoData: Record<string, unknown>[] = qt.data?.data || qt.data || [];
-      setQuotations(qoData.map((q) => ({
-        value: q.id as number,
-        label: (q.quotation_no as string) + (q.contract_name ? ` ${q.contract_name}` : ''),
-      })));
-      const grouped: Record<string, Option[]> = {};
-      for (const [cat, opts] of Object.entries(fo.data || {})) {
-        grouped[cat] = (opts as Record<string, unknown>[]).map((o) => ({ value: o.label as string, label: o.label as string }));
-      }
-      setFieldOptions(grouped);
-    }).catch(console.error);
+    ])
+      .then(([cp, pt, qt, fo]) => {
+        setCompanies(
+          (cp.data || []).map((c: Record<string, unknown>) => ({
+            value: c.id as number,
+            label: c.internal_prefix
+              ? `${c.internal_prefix} ${c.name}`
+              : (c.name as string),
+          })),
+        );
+        setClients(
+          (pt.data || []).map((p: Record<string, unknown>) => ({
+            value: p.id as number,
+            label: p.name as string,
+          })),
+        );
+        const qoData: Record<string, unknown>[] =
+          qt.data?.data || qt.data || [];
+        setQuotations(
+          qoData.map((q) => ({
+            value: q.id as number,
+            label:
+              (q.quotation_no as string) +
+              (q.contract_name ? ` ${q.contract_name}` : ''),
+          })),
+        );
+        const grouped: Record<string, Option[]> = {};
+        for (const [cat, opts] of Object.entries(fo.data || {})) {
+          grouped[cat] = (opts as Record<string, unknown>[]).map((o) => ({
+            value: o.label as string,
+            label: o.label as string,
+          }));
+        }
+        setFieldOptions(grouped);
+      })
+      .catch(console.error);
   }, []);
+
+  useRefetchOnFocus(() => {
+    Promise.all([
+      companiesApi.simple(),
+      partnersApi.simple(),
+      quotationsApi.list({ limit: 500 }),
+      fieldOptionsApi.getAll(),
+    ])
+      .then(([cp, pt, qt, fo]) => {
+        setCompanies(
+          (cp.data || []).map((c: Record<string, unknown>) => ({
+            value: c.id as number,
+            label: c.internal_prefix
+              ? `${c.internal_prefix} ${c.name}`
+              : (c.name as string),
+          })),
+        );
+        setClients(
+          (pt.data || []).map((p: Record<string, unknown>) => ({
+            value: p.id as number,
+            label: p.name as string,
+          })),
+        );
+        const qoData: Record<string, unknown>[] =
+          qt.data?.data || qt.data || [];
+        setQuotations(
+          qoData.map((q) => ({
+            value: q.id as number,
+            label:
+              (q.quotation_no as string) +
+              (q.contract_name ? ` ${q.contract_name}` : ''),
+          })),
+        );
+        const grouped: Record<string, Option[]> = {};
+        for (const [cat, opts] of Object.entries(fo.data || {})) {
+          grouped[cat] = (opts as Record<string, unknown>[]).map((o) => ({
+            value: o.label as string,
+            label: o.label as string,
+          }));
+        }
+        setFieldOptions(grouped);
+      })
+      .catch(console.error);
+  });
 
   // ── Fetch table data ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -198,11 +346,16 @@ export default function MissingPriceTab() {
         sort_order: sortOrder,
       };
       const filterKeyToParam: Record<string, string> = {
-        company_name: 'company_name', client_name: 'client_name',
-        client_contract_no: 'client_contract_no', service_type: 'service_type',
-        quotation_no: 'quotation_no', day_night: 'day_night',
-        tonnage: 'tonnage', machine_type: 'machine_type',
-        start_location: 'start_location', end_location: 'end_location',
+        company_name: 'company_name',
+        client_name: 'client_name',
+        client_contract_no: 'client_contract_no',
+        service_type: 'service_type',
+        quotation_no: 'quotation_no',
+        day_night: 'day_night',
+        tonnage: 'tonnage',
+        machine_type: 'machine_type',
+        start_location: 'start_location',
+        end_location: 'end_location',
       };
       for (const [col, vals] of Object.entries(columnFilters)) {
         const param = filterKeyToParam[col];
@@ -224,7 +377,9 @@ export default function MissingPriceTab() {
     }
   }, [page, sortBy, sortOrder, columnFilters]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // ── Toast ─────────────────────────────────────────────────────────────────
   function showToast(msg: string, type: 'success' | 'error') {
@@ -247,7 +402,11 @@ export default function MissingPriceTab() {
   function handleColumnFilterChange(key: string, vals: Set<string> | null) {
     setColumnFilters((prev) => {
       const next = { ...prev };
-      if (vals === null) { delete next[key]; } else { next[key] = vals; }
+      if (vals === null) {
+        delete next[key];
+      } else {
+        next[key] = vals;
+      }
       return next;
     });
     setPage(1);
@@ -258,7 +417,10 @@ export default function MissingPriceTab() {
     return rateInputs[key] ?? emptyRates();
   }
   function setRateField(key: string, field: keyof RateInputs, value: string) {
-    setRateInputs((prev) => ({ ...prev, [key]: { ...getRateInputs(key), [field]: value } }));
+    setRateInputs((prev) => ({
+      ...prev,
+      [key]: { ...getRateInputs(key), [field]: value },
+    }));
   }
 
   async function handleAddRate(row: UnmatchedRow) {
@@ -284,11 +446,19 @@ export default function MissingPriceTab() {
         end_location: row.end_location,
         rate,
         ot_rate: inputs.ot_rate ? Number(inputs.ot_rate) : 0,
-        mid_shift_rate: inputs.mid_shift_rate ? Number(inputs.mid_shift_rate) : 0,
+        mid_shift_rate: inputs.mid_shift_rate
+          ? Number(inputs.mid_shift_rate)
+          : 0,
       };
       const res = await workLogsApi.addRateAndRematch(payload);
-      const result = res.data as { rateCard: { id: number }; rematchedCount: number };
-      showToast(`已新增價目 #${result.rateCard.id}，重新匹配了 ${result.rematchedCount} 筆工作記錄`, 'success');
+      const result = res.data as {
+        rateCard: { id: number };
+        rematchedCount: number;
+      };
+      showToast(
+        `已新增價目 #${result.rateCard.id}，重新匹配了 ${result.rematchedCount} 筆工作記錄`,
+        'success',
+      );
       setSuccessRows((p) => new Set(p).add(key));
       await fetchData();
     } catch (err) {
@@ -323,11 +493,19 @@ export default function MissingPriceTab() {
         ...editDraft,
         rate,
         ot_rate: editRates.ot_rate ? Number(editRates.ot_rate) : 0,
-        mid_shift_rate: editRates.mid_shift_rate ? Number(editRates.mid_shift_rate) : 0,
+        mid_shift_rate: editRates.mid_shift_rate
+          ? Number(editRates.mid_shift_rate)
+          : 0,
       };
       const res = await workLogsApi.addRateAndRematch(payload);
-      const result = res.data as { rateCard: { id: number }; rematchedCount: number };
-      showToast(`已儲存價目 #${result.rateCard.id}，重新匹配了 ${result.rematchedCount} 筆工作記錄`, 'success');
+      const result = res.data as {
+        rateCard: { id: number };
+        rematchedCount: number;
+      };
+      showToast(
+        `已儲存價目 #${result.rateCard.id}，重新匹配了 ${result.rematchedCount} 筆工作記錄`,
+        'success',
+      );
       cancelEdit();
       await fetchData();
     } catch (err) {
@@ -348,19 +526,33 @@ export default function MissingPriceTab() {
   // ── Render inline edit cell ───────────────────────────────────────────────
   function renderEditCell(key: string): React.ReactNode {
     if (!editDraft) return null;
-    const cls = 'w-full text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400';
+    const cls =
+      'w-full text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400';
 
     switch (key) {
       case 'company_name':
         return (
           <select
             value={editDraft.company_id ?? ''}
-            onChange={(e) => setEditDraft((d) => d ? { ...d, company_id: e.target.value ? Number(e.target.value) : null } : d)}
+            onChange={(e) =>
+              setEditDraft((d) =>
+                d
+                  ? {
+                      ...d,
+                      company_id: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    }
+                  : d,
+              )
+            }
             className={`${cls} px-1.5 py-0.5`}
           >
             <option value="">請選擇</option>
             {companies.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
             ))}
           </select>
         );
@@ -369,7 +561,11 @@ export default function MissingPriceTab() {
         return (
           <SearchableSelect
             value={editDraft.client_id}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, client_id: val ? Number(val) : null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) =>
+                d ? { ...d, client_id: val ? Number(val) : null } : d,
+              )
+            }
             options={clients}
             placeholder="搜尋客戶..."
             clearable
@@ -381,7 +577,11 @@ export default function MissingPriceTab() {
         return (
           <ClientContractCombobox
             value={editDraft.client_contract_no ?? ''}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, client_contract_no: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) =>
+                d ? { ...d, client_contract_no: val || null } : d,
+              )
+            }
             placeholder="客戶合約"
           />
         );
@@ -390,7 +590,9 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.service_type}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, service_type: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) => (d ? { ...d, service_type: val || null } : d))
+            }
             options={fieldOptions['service_type'] || []}
             placeholder="服務類型"
           />
@@ -400,7 +602,11 @@ export default function MissingPriceTab() {
         return (
           <SearchableSelect
             value={editDraft.quotation_id}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, quotation_id: val ? Number(val) : null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) =>
+                d ? { ...d, quotation_id: val ? Number(val) : null } : d,
+              )
+            }
             options={quotations}
             placeholder="搜尋報價單..."
             clearable
@@ -412,8 +618,15 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.day_night}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, day_night: val || null } : d)}
-            options={fieldOptions['day_night'] || [{ value: '日', label: '日' }, { value: '夜', label: '夜' }]}
+            onChange={(val) =>
+              setEditDraft((d) => (d ? { ...d, day_night: val || null } : d))
+            }
+            options={
+              fieldOptions['day_night'] || [
+                { value: '日', label: '日' },
+                { value: '夜', label: '夜' },
+              ]
+            }
             placeholder="日夜"
           />
         );
@@ -422,7 +635,9 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.tonnage}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, tonnage: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) => (d ? { ...d, tonnage: val || null } : d))
+            }
             options={fieldOptions['tonnage'] || []}
             placeholder="噸數"
           />
@@ -432,7 +647,9 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.machine_type}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, machine_type: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) => (d ? { ...d, machine_type: val || null } : d))
+            }
             options={fieldOptions['machine_type'] || []}
             placeholder="機種"
           />
@@ -442,7 +659,11 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.start_location}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, start_location: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) =>
+                d ? { ...d, start_location: val || null } : d,
+              )
+            }
             options={fieldOptions['location'] || []}
             placeholder="起點"
           />
@@ -452,7 +673,9 @@ export default function MissingPriceTab() {
         return (
           <Combobox
             value={editDraft.end_location}
-            onChange={(val) => setEditDraft((d) => d ? { ...d, end_location: val || null } : d)}
+            onChange={(val) =>
+              setEditDraft((d) => (d ? { ...d, end_location: val || null } : d))
+            }
             options={fieldOptions['location'] || []}
             placeholder="終點"
           />
@@ -471,10 +694,16 @@ export default function MissingPriceTab() {
       <div className="px-4 sm:px-6 py-3 bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-gray-900">客戶價目缺價表</h2>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">
+              客戶價目缺價表
+            </h2>
             <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              共 <span className="font-semibold text-red-600">{total}</span> 個缺單價組合，
-              影響 <span className="font-semibold text-red-600">{totalUnmatched}</span> 筆工作記錄
+              共 <span className="font-semibold text-red-600">{total}</span>{' '}
+              個缺單價組合， 影響{' '}
+              <span className="font-semibold text-red-600">
+                {totalUnmatched}
+              </span>{' '}
+              筆工作記錄
             </p>
           </div>
           <button
@@ -489,7 +718,10 @@ export default function MissingPriceTab() {
 
       {/* ── Table ──────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse" style={{ minWidth: '1600px' }}>
+        <table
+          className="w-full text-sm border-collapse"
+          style={{ minWidth: '1600px' }}
+        >
           <thead className="sticky top-0 z-10 bg-gray-100 border-b border-gray-300">
             <tr>
               {COLS.map((col) => {
@@ -502,7 +734,9 @@ export default function MissingPriceTab() {
                   >
                     <span className="flex items-center gap-0.5">
                       {col.label}
-                      <span className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}>
+                      <span
+                        className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}
+                      >
                         {isActive ? (sortOrder === 'ASC' ? '▲' : '▼') : '▲▼'}
                       </span>
                       {col.filterKey && (
@@ -513,7 +747,8 @@ export default function MissingPriceTab() {
                           onFilterChange={handleColumnFilterChange}
                           serverSide={true}
                           onFetchOptions={async (key) => {
-                            const res = await workLogsApi.unmatchedFilterOptions(key);
+                            const res =
+                              await workLogsApi.unmatchedFilterOptions(key);
                             return res.data as string[];
                           }}
                         />
@@ -523,23 +758,37 @@ export default function MissingPriceTab() {
                 );
               })}
               {RATE_COLS.map((rc) => (
-                <th key={rc.key} className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[5rem]">
-                  {rc.label}{rc.required && <span className="text-red-500 ml-0.5">*</span>}
+                <th
+                  key={rc.key}
+                  className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[5rem]"
+                >
+                  {rc.label}
+                  {rc.required && (
+                    <span className="text-red-500 ml-0.5">*</span>
+                  )}
                 </th>
               ))}
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[7rem]">操作</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap min-w-[7rem]">
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
             {loading && data.length === 0 ? (
               <tr>
-                <td colSpan={COLS.length + RATE_COLS.length + 1} className="text-center py-12 text-gray-400">
+                <td
+                  colSpan={COLS.length + RATE_COLS.length + 1}
+                  className="text-center py-12 text-gray-400"
+                >
                   載入中…
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={COLS.length + RATE_COLS.length + 1} className="text-center py-12 text-gray-400">
+                <td
+                  colSpan={COLS.length + RATE_COLS.length + 1}
+                  className="text-center py-12 text-gray-400"
+                >
                   沒有缺單價的組合 🎉
                 </td>
               </tr>
@@ -557,15 +806,18 @@ export default function MissingPriceTab() {
                       isEditing
                         ? 'bg-blue-50 ring-1 ring-inset ring-blue-300'
                         : isSuccess
-                        ? 'bg-green-50 opacity-60'
-                        : 'hover:bg-gray-50'
+                          ? 'bg-green-50 opacity-60'
+                          : 'hover:bg-gray-50'
                     }`}
                   >
                     {/* ── Data columns ── */}
                     {COLS.map((col) => {
                       if (col.key === 'count') {
                         return (
-                          <td key={col.key} className="px-2 py-1.5 text-gray-700">
+                          <td
+                            key={col.key}
+                            className="px-2 py-1.5 text-gray-700"
+                          >
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                               {row.count}
                             </span>
@@ -603,7 +855,10 @@ export default function MissingPriceTab() {
                               placeholder={rc.required ? '必填' : '選填'}
                               value={editRates[rc.key]}
                               onChange={(e) =>
-                                setEditRates((prev) => ({ ...prev, [rc.key]: e.target.value }))
+                                setEditRates((prev) => ({
+                                  ...prev,
+                                  [rc.key]: e.target.value,
+                                }))
                               }
                               className="w-20 px-1.5 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
                             />
@@ -618,7 +873,9 @@ export default function MissingPriceTab() {
                             min="0"
                             placeholder={rc.required ? '費率 *' : rc.label}
                             value={inputs[rc.key]}
-                            onChange={(e) => setRateField(key, rc.key, e.target.value)}
+                            onChange={(e) =>
+                              setRateField(key, rc.key, e.target.value)
+                            }
                             disabled={isSuccess || !!submitting[key]}
                             className="w-20 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
                           />
@@ -646,7 +903,9 @@ export default function MissingPriceTab() {
                           </button>
                         </div>
                       ) : isSuccess ? (
-                        <span className="text-xs text-green-600 font-medium">✅ 已新增</span>
+                        <span className="text-xs text-green-600 font-medium">
+                          ✅ 已新增
+                        </span>
                       ) : (
                         <div className="flex items-center gap-1 pt-0.5">
                           <button
@@ -704,12 +963,19 @@ export default function MissingPriceTab() {
         <div className="fixed bottom-6 right-6 z-50">
           <div
             className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
-              toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'
+              toast.type === 'error'
+                ? 'bg-red-600 text-white'
+                : 'bg-green-600 text-white'
             }`}
           >
             <span>{toast.type === 'error' ? '⚠️' : '✅'}</span>
             <span>{toast.msg}</span>
-            <button onClick={() => setToast(null)} className="ml-2 opacity-70 hover:opacity-100">×</button>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 opacity-70 hover:opacity-100"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

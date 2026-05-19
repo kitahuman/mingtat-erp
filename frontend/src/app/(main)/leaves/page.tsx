@@ -6,6 +6,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   sick: '病假',
@@ -16,9 +17,12 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 
 const LEAVE_TYPE_BADGE: Record<string, string> = {
   sick: 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  annual: 'bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  unpaid: 'bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  other: 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  annual:
+    'bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  unpaid:
+    'bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  other:
+    'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -28,9 +32,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  approved: 'bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  rejected: 'bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  pending:
+    'bg-yellow-100 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  approved:
+    'bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  rejected:
+    'bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full text-xs font-medium',
 };
 
 const DEFAULT_COLUMNS = [
@@ -68,14 +75,31 @@ export default function LeavesPage() {
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectRemarks, setRejectRemarks] = useState('');
 
-  const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } =
-    useColumnConfig('leaves', DEFAULT_COLUMNS);
+  const {
+    columnConfigs,
+    handleColumnConfigChange,
+    handleReset,
+    columnWidths,
+    handleColumnResize,
+  } = useColumnConfig('leaves', DEFAULT_COLUMNS);
 
   useEffect(() => {
-    employeesApi.list({ limit: 999, status: 'active' }).then(res => {
-      setEmployees(res.data.data || []);
-    }).catch(() => {});
+    employeesApi
+      .list({ limit: 999, status: 'active' })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
   }, []);
+
+  useRefetchOnFocus(() => {
+    employeesApi
+      .list({ limit: 999, status: 'active' })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,9 +123,21 @@ export default function LeavesPage() {
       setTotal(0);
     }
     setLoading(false);
-  }, [page, search, employeeFilter, leaveTypeFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [
+    page,
+    search,
+    employeeFilter,
+    leaveTypeFilter,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+  ]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleSort = (field: string, order: string) => {
     setSortBy(field);
@@ -147,7 +183,9 @@ export default function LeavesPage() {
       label: '員工編號',
       sortable: true,
       render: (_: any, row: any) => (
-        <span className="font-mono text-sm text-gray-700">{row.employee?.emp_code || '-'}</span>
+        <span className="font-mono text-sm text-gray-700">
+          {row.employee?.emp_code || '-'}
+        </span>
       ),
       exportRender: (_: any, row: any) => row.employee?.emp_code || '',
     },
@@ -156,9 +194,12 @@ export default function LeavesPage() {
       label: '員工姓名',
       sortable: true,
       render: (_: any, row: any) => (
-        <span className="font-medium">{row.employee?.name_zh || row.employee?.name_en || '-'}</span>
+        <span className="font-medium">
+          {row.employee?.name_zh || row.employee?.name_en || '-'}
+        </span>
       ),
-      exportRender: (_: any, row: any) => row.employee?.name_zh || row.employee?.name_en || '',
+      exportRender: (_: any, row: any) =>
+        row.employee?.name_zh || row.employee?.name_en || '',
     },
     {
       key: 'leave_type',
@@ -169,30 +210,37 @@ export default function LeavesPage() {
           {LEAVE_TYPE_LABELS[row.leave_type] || row.leave_type || '-'}
         </span>
       ),
-      exportRender: (_: any, row: any) => LEAVE_TYPE_LABELS[row.leave_type] || row.leave_type || '',
+      exportRender: (_: any, row: any) =>
+        LEAVE_TYPE_LABELS[row.leave_type] || row.leave_type || '',
     },
     {
       key: 'date_from',
       label: '開始日期',
       sortable: true,
-      render: (_: any, row: any) => row.date_from ? fmtDate(row.date_from) : '-',
-      exportRender: (_: any, row: any) => row.date_from ? fmtDate(row.date_from) : '',
+      render: (_: any, row: any) =>
+        row.date_from ? fmtDate(row.date_from) : '-',
+      exportRender: (_: any, row: any) =>
+        row.date_from ? fmtDate(row.date_from) : '',
     },
     {
       key: 'date_to',
       label: '結束日期',
       sortable: true,
-      render: (_: any, row: any) => row.date_to ? fmtDate(row.date_to) : '-',
-      exportRender: (_: any, row: any) => row.date_to ? fmtDate(row.date_to) : '',
+      render: (_: any, row: any) => (row.date_to ? fmtDate(row.date_to) : '-'),
+      exportRender: (_: any, row: any) =>
+        row.date_to ? fmtDate(row.date_to) : '',
     },
     {
       key: 'days',
       label: '天數',
       sortable: true,
       render: (_: any, row: any) => (
-        <span className="font-medium text-gray-800">{row.days != null ? `${row.days} 天` : '-'}</span>
+        <span className="font-medium text-gray-800">
+          {row.days != null ? `${row.days} 天` : '-'}
+        </span>
       ),
-      exportRender: (_: any, row: any) => row.days != null ? String(row.days) : '',
+      exportRender: (_: any, row: any) =>
+        row.days != null ? String(row.days) : '',
     },
     {
       key: 'status',
@@ -203,13 +251,17 @@ export default function LeavesPage() {
           {STATUS_LABELS[row.status] || row.status || '-'}
         </span>
       ),
-      exportRender: (_: any, row: any) => STATUS_LABELS[row.status] || row.status || '',
+      exportRender: (_: any, row: any) =>
+        STATUS_LABELS[row.status] || row.status || '',
     },
     {
       key: 'reason',
       label: '原因',
       render: (_: any, row: any) => (
-        <span className="text-sm text-gray-600 max-w-[200px] truncate block" title={row.reason}>
+        <span
+          className="text-sm text-gray-600 max-w-[200px] truncate block"
+          title={row.reason}
+        >
           {row.reason || '-'}
         </span>
       ),
@@ -219,7 +271,10 @@ export default function LeavesPage() {
       key: 'remarks',
       label: '備註',
       render: (_: any, row: any) => (
-        <span className="text-sm text-gray-500 max-w-[150px] truncate block" title={row.remarks}>
+        <span
+          className="text-sm text-gray-500 max-w-[150px] truncate block"
+          title={row.remarks}
+        >
           {row.remarks || '-'}
         </span>
       ),
@@ -233,13 +288,20 @@ export default function LeavesPage() {
           {row.status === 'pending' && (
             <>
               <button
-                onClick={(e) => { e.stopPropagation(); handleApprove(row.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApprove(row.id);
+                }}
                 className="text-green-600 hover:text-green-800 text-xs px-2 py-1 rounded hover:bg-green-50 border border-green-200 transition-colors"
               >
                 批准
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); setRejectId(row.id); setRejectRemarks(''); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRejectId(row.id);
+                  setRejectRemarks('');
+                }}
                 className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 border border-red-200 transition-colors"
               >
                 拒絕
@@ -247,7 +309,10 @@ export default function LeavesPage() {
             </>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row.id);
+            }}
             className="text-gray-400 hover:text-red-600 text-xs px-1.5 py-1 rounded hover:bg-red-50 transition-colors"
             title="刪除"
           >
@@ -264,13 +329,17 @@ export default function LeavesPage() {
       {/* Employee filter */}
       <select
         value={employeeFilter}
-        onChange={e => { setEmployeeFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setEmployeeFilter(e.target.value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5 min-w-[140px]"
       >
         <option value="">全部員工</option>
         {employees.map((emp: any) => (
           <option key={emp.id} value={emp.id}>
-            {emp.emp_code ? `${emp.emp_code} ` : ''}{emp.name_zh || emp.name_en}
+            {emp.emp_code ? `${emp.emp_code} ` : ''}
+            {emp.name_zh || emp.name_en}
           </option>
         ))}
       </select>
@@ -278,7 +347,10 @@ export default function LeavesPage() {
       {/* Leave type filter */}
       <select
         value={leaveTypeFilter}
-        onChange={e => { setLeaveTypeFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setLeaveTypeFilter(e.target.value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5 min-w-[110px]"
       >
         <option value="">全部類型</option>
@@ -291,7 +363,10 @@ export default function LeavesPage() {
       {/* Status filter */}
       <select
         value={statusFilter}
-        onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setStatusFilter(e.target.value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5 min-w-[110px]"
       >
         <option value="">全部狀態</option>
@@ -303,22 +378,36 @@ export default function LeavesPage() {
       {/* Date range */}
       <DateInput
         value={dateFrom}
-        onChange={value => { setDateFrom(value); setPage(1); }}
+        onChange={(value) => {
+          setDateFrom(value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5"
       />
       <span className="text-gray-400 text-sm">至</span>
       <DateInput
         value={dateTo}
-        onChange={value => { setDateTo(value); setPage(1); }}
+        onChange={(value) => {
+          setDateTo(value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5"
       />
 
       {/* Clear filters */}
-      {(employeeFilter || leaveTypeFilter || statusFilter || dateFrom || dateTo) && (
+      {(employeeFilter ||
+        leaveTypeFilter ||
+        statusFilter ||
+        dateFrom ||
+        dateTo) && (
         <button
           onClick={() => {
-            setEmployeeFilter(''); setLeaveTypeFilter(''); setStatusFilter('');
-            setDateFrom(''); setDateTo(''); setPage(1);
+            setEmployeeFilter('');
+            setLeaveTypeFilter('');
+            setStatusFilter('');
+            setDateFrom('');
+            setDateTo('');
+            setPage(1);
           }}
           className="text-xs text-gray-500 hover:text-gray-700 underline"
         >
@@ -332,7 +421,9 @@ export default function LeavesPage() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">請假紀錄</h1>
-        <p className="text-sm text-gray-500 mt-1">員工請假申請管理（病假 / 年假）</p>
+        <p className="text-sm text-gray-500 mt-1">
+          員工請假申請管理（病假 / 年假）
+        </p>
       </div>
 
       <DataTable
@@ -342,7 +433,10 @@ export default function LeavesPage() {
         page={page}
         limit={20}
         onPageChange={setPage}
-        onSearch={(s) => { setSearch(s); setPage(1); }}
+        onSearch={(s) => {
+          setSearch(s);
+          setPage(1);
+        }}
         searchPlaceholder="搜尋員工姓名、編號..."
         filters={filters}
         loading={loading}
@@ -361,12 +455,16 @@ export default function LeavesPage() {
       {rejectId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">拒絕請假申請</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              拒絕請假申請
+            </h3>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">拒絕原因（選填）</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                拒絕原因（選填）
+              </label>
               <textarea
                 value={rejectRemarks}
-                onChange={e => setRejectRemarks(e.target.value)}
+                onChange={(e) => setRejectRemarks(e.target.value)}
                 className="input-field"
                 rows={3}
                 placeholder="請輸入拒絕原因..."
@@ -374,7 +472,10 @@ export default function LeavesPage() {
             </div>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => { setRejectId(null); setRejectRemarks(''); }}
+                onClick={() => {
+                  setRejectId(null);
+                  setRejectRemarks('');
+                }}
                 className="btn-secondary"
               >
                 取消

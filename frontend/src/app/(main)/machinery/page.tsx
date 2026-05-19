@@ -6,12 +6,20 @@ import { machineryApi, companiesApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
 
-const machineTypes = ['挖掘機', '裝載機', '鉸接式自卸卡車', '履帶式裝載機', '推土機', '壓路機'];
+const machineTypes = [
+  '挖掘機',
+  '裝載機',
+  '鉸接式自卸卡車',
+  '履帶式裝載機',
+  '推土機',
+  '壓路機',
+];
 const statusOptions = [
   { value: 'active', label: '使用中' },
   { value: 'maintenance', label: '維修中' },
@@ -32,38 +40,72 @@ export default function MachineryPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [companyFilter, setCompanyFilter] = useState(searchParams.get('owner_company_id') || '');
-  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [companyFilter, setCompanyFilter] = useState(
+    searchParams.get('owner_company_id') || '',
+  );
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('machine_code');
   const [sortOrder, setSortOrder] = useState('ASC');
   const [form, setForm] = useState<any>({
-    machine_code: '', machine_type: '挖掘機', brand: '', model: '', tonnage: '',
-    serial_number: '', owner_company_id: '', inspection_cert_expiry: '', insurance_expiry: ''
+    machine_code: '',
+    machine_type: '挖掘機',
+    brand: '',
+    model: '',
+    tonnage: '',
+    serial_number: '',
+    owner_company_id: '',
+    inspection_cert_expiry: '',
+    insurance_expiry: '',
   });
 
-  useEffect(() => { companiesApi.simple().then(res => setCompanies(res.data)); }, []);
-
-  const buildColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
-    const params: Record<string, string> = {};
-    Object.entries(filters).forEach(([key, values]) => {
-      params[`filter_${key}`] = values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
-    });
-    return params;
+  const loadReferenceData = useCallback(() => {
+    companiesApi.simple().then((res) => setCompanies(res.data));
   }, []);
 
-  const buildListParams = useCallback((overrides?: { page?: number; limit?: number }) => ({
-    page: overrides?.page ?? page,
-    limit: overrides?.limit ?? 20,
-    search: search || undefined,
-    machine_type: typeFilter || undefined,
-    owner_company_id: companyFilter || undefined,
-    sortBy,
-    sortOrder,
-    ...buildColumnFilterParams(columnFilters),
-  }), [page, search, typeFilter, companyFilter, sortBy, sortOrder, columnFilters, buildColumnFilterParams]);
+  useEffect(() => {
+    loadReferenceData();
+  }, [loadReferenceData]);
+  useRefetchOnFocus(loadReferenceData);
+
+  const buildColumnFilterParams = useCallback(
+    (filters: Record<string, Set<string>>) => {
+      const params: Record<string, string> = {};
+      Object.entries(filters).forEach(([key, values]) => {
+        params[`filter_${key}`] =
+          values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
+      });
+      return params;
+    },
+    [],
+  );
+
+  const buildListParams = useCallback(
+    (overrides?: { page?: number; limit?: number }) => ({
+      page: overrides?.page ?? page,
+      limit: overrides?.limit ?? 20,
+      search: search || undefined,
+      machine_type: typeFilter || undefined,
+      owner_company_id: companyFilter || undefined,
+      sortBy,
+      sortOrder,
+      ...buildColumnFilterParams(columnFilters),
+    }),
+    [
+      page,
+      search,
+      typeFilter,
+      companyFilter,
+      sortBy,
+      sortOrder,
+      columnFilters,
+      buildColumnFilterParams,
+    ],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,33 +120,63 @@ export default function MachineryPage() {
     setLoading(false);
   }, [buildListParams]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await machineryApi.create({ ...form, owner_company_id: Number(form.owner_company_id), tonnage: form.tonnage ? Number(form.tonnage) : null });
+      await machineryApi.create({
+        ...form,
+        owner_company_id: Number(form.owner_company_id),
+        tonnage: form.tonnage ? Number(form.tonnage) : null,
+      });
       setShowModal(false);
-      setForm({ machine_code: '', machine_type: '挖掘機', brand: '', model: '', tonnage: '', serial_number: '', owner_company_id: '', inspection_cert_expiry: '', insurance_expiry: '' });
+      setForm({
+        machine_code: '',
+        machine_type: '挖掘機',
+        brand: '',
+        model: '',
+        tonnage: '',
+        serial_number: '',
+        owner_company_id: '',
+        inspection_cert_expiry: '',
+        insurance_expiry: '',
+      });
       load();
-    } catch (err: any) { alert(err.response?.data?.message || '建立失敗'); }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '建立失敗');
+    }
   };
 
-  const handleSort = (field: string, order: string) => { setSortBy(field); setSortOrder(order); setPage(1); };
+  const handleSort = (field: string, order: string) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPage(1);
+  };
 
   const handleColumnFilterChange = (filters: Record<string, Set<string>>) => {
     setColumnFilters(filters);
     setPage(1);
   };
 
-  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
-    const res = await machineryApi.filterOptions(columnKey, buildListParams({ page: 1, limit: 20 }));
-    return Array.isArray(res.data) ? res.data : [];
-  }, [buildListParams]);
+  const handleFetchFilterOptions = useCallback(
+    async (columnKey: string): Promise<string[]> => {
+      const res = await machineryApi.filterOptions(
+        columnKey,
+        buildListParams({ page: 1, limit: 20 }),
+      );
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    [buildListParams],
+  );
 
   const handleExportFetchAll = useCallback(async () => {
     if (total === 0) return [];
-    const res = await machineryApi.list(buildListParams({ page: 1, limit: total }));
+    const res = await machineryApi.list(
+      buildListParams({ page: 1, limit: total }),
+    );
     return res.data.data || [];
   }, [buildListParams, total]);
 
@@ -123,33 +195,122 @@ export default function MachineryPage() {
     load();
   };
 
-  const renderExpiry = (v: string) => v ? <ExpiryBadge date={v} showLabel={false} /> : '-';
+  const renderExpiry = (v: string) =>
+    v ? <ExpiryBadge date={v} showLabel={false} /> : '-';
   const filterExpiry = (v: string) => fmtDate(v);
   const renderStatus = (v: string) => (
-    <span className={v === 'active' ? 'badge-green' : v === 'maintenance' ? 'badge-yellow' : 'badge-red'}>
+    <span
+      className={
+        v === 'active'
+          ? 'badge-green'
+          : v === 'maintenance'
+            ? 'badge-yellow'
+            : 'badge-red'
+      }
+    >
       {statusLabels[v] || '停用'}
     </span>
   );
   const filterStatus = (v: string) => statusLabels[v] || '停用';
 
   const columns = [
-    { key: 'machine_code', label: '編號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => <span className="font-mono font-bold">{v}</span> },
-    { key: 'machine_type', label: '類型', sortable: true, editable: true, editType: 'select' as const, editOptions: machineTypes.map(t => ({ value: t, label: t })) },
-    { key: 'brand', label: '品牌', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'model', label: '型號', sortable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'serial_number', label: '序號', sortable: true, filterable: true, editable: true, editType: 'text' as const, render: (v: string) => v || '-' },
-    { key: 'tonnage', label: '噸數', sortable: true, editable: true, editType: 'number' as const, render: (v: number) => v ? `${v}T` : '-', filterRender: (v: number) => v ? `${v}T` : '-' },
-    { key: 'owner_company', label: '所屬公司', sortable: true, editable: false, render: (_: any, row: any) => row.owner_company?.internal_prefix || '-', filterRender: (_: any, row: any) => row.owner_company?.internal_prefix || '-' },
-    { key: 'inspection_cert_expiry', label: '驗機紙到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry },
-    { key: 'insurance_expiry', label: '保險到期', sortable: true, editable: true, editType: 'date' as const, render: (v: string) => fmtDate(v), filterRender: filterExpiry },
-    { key: 'status', label: '狀態', sortable: true, editable: true, editType: 'select' as const, editOptions: statusOptions, render: renderStatus, filterRender: filterStatus },
+    {
+      key: 'machine_code',
+      label: '編號',
+      sortable: true,
+      editable: true,
+      editType: 'text' as const,
+      render: (v: string) => <span className="font-mono font-bold">{v}</span>,
+    },
+    {
+      key: 'machine_type',
+      label: '類型',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: machineTypes.map((t) => ({ value: t, label: t })),
+    },
+    {
+      key: 'brand',
+      label: '品牌',
+      sortable: true,
+      editable: true,
+      editType: 'text' as const,
+      render: (v: string) => v || '-',
+    },
+    {
+      key: 'model',
+      label: '型號',
+      sortable: true,
+      editable: true,
+      editType: 'text' as const,
+      render: (v: string) => v || '-',
+    },
+    {
+      key: 'serial_number',
+      label: '序號',
+      sortable: true,
+      filterable: true,
+      editable: true,
+      editType: 'text' as const,
+      render: (v: string) => v || '-',
+    },
+    {
+      key: 'tonnage',
+      label: '噸數',
+      sortable: true,
+      editable: true,
+      editType: 'number' as const,
+      render: (v: number) => (v ? `${v}T` : '-'),
+      filterRender: (v: number) => (v ? `${v}T` : '-'),
+    },
+    {
+      key: 'owner_company',
+      label: '所屬公司',
+      sortable: true,
+      editable: false,
+      render: (_: any, row: any) => row.owner_company?.internal_prefix || '-',
+      filterRender: (_: any, row: any) =>
+        row.owner_company?.internal_prefix || '-',
+    },
+    {
+      key: 'inspection_cert_expiry',
+      label: '驗機紙到期',
+      sortable: true,
+      editable: true,
+      editType: 'date' as const,
+      render: (v: string) => fmtDate(v),
+      filterRender: filterExpiry,
+    },
+    {
+      key: 'insurance_expiry',
+      label: '保險到期',
+      sortable: true,
+      editable: true,
+      editType: 'date' as const,
+      render: (v: string) => fmtDate(v),
+      filterRender: filterExpiry,
+    },
+    {
+      key: 'status',
+      label: '狀態',
+      sortable: true,
+      editable: true,
+      editType: 'select' as const,
+      editOptions: statusOptions,
+      render: renderStatus,
+      filterRender: filterStatus,
+    },
   ];
 
   const {
-    columnConfigs, columnWidths, visibleColumns,
-    handleColumnConfigChange, handleReset, handleColumnResize,
+    columnConfigs,
+    columnWidths,
+    visibleColumns,
+    handleColumnConfigChange,
+    handleReset,
+    handleColumnResize,
   } = useColumnConfig('machinery', columns);
-
 
   const handleInlineDelete = async (id: number) => {
     await machineryApi.delete(id);
@@ -166,7 +327,9 @@ export default function MachineryPage() {
         {hasMinRole('clerk') && (
           <div className="flex gap-2">
             <CsvImportModal module="machinery" onImportComplete={load} />
-            <button onClick={() => setShowModal(true)} className="btn-primary">新增機械</button>
+            <button onClick={() => setShowModal(true)} className="btn-primary">
+              新增機械
+            </button>
           </div>
         )}
       </div>
@@ -185,7 +348,10 @@ export default function MachineryPage() {
           page={page}
           limit={20}
           onPageChange={setPage}
-          onSearch={(s) => { setSearch(s); setPage(1); }}
+          onSearch={(s) => {
+            setSearch(s);
+            setPage(1);
+          }}
           searchPlaceholder="搜尋編號、品牌、型號或序號..."
           onRowClick={(row) => router.push(`/machinery/${row.id}`)}
           loading={loading}
@@ -201,42 +367,184 @@ export default function MachineryPage() {
           onExportFetchAll={handleExportFetchAll}
           filters={
             <div className="flex gap-2">
-              <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+              <select
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+              >
                 <option value="">全部類型</option>
-                {machineTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                {machineTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
-              <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }} className="input-field w-auto">
+              <select
+                value={companyFilter}
+                onChange={(e) => {
+                  setCompanyFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+              >
                 <option value="">全部公司</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix || c.name}</option>)}
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.internal_prefix || c.name}
+                  </option>
+                ))}
               </select>
             </div>
           }
         />
       </div>
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="新增機械" size="lg">
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="新增機械"
+        size="lg"
+      >
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">機械編號 *</label><input value={form.machine_code} onChange={e => setForm({...form, machine_code: e.target.value})} className="input-field" placeholder="如 DC23" required /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">類型 *</label>
-              <select value={form.machine_type} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field">
-                {machineTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                機械編號 *
+              </label>
+              <input
+                value={form.machine_code}
+                onChange={(e) =>
+                  setForm({ ...form, machine_code: e.target.value })
+                }
+                className="input-field"
+                placeholder="如 DC23"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                類型 *
+              </label>
+              <select
+                value={form.machine_type}
+                onChange={(e) =>
+                  setForm({ ...form, machine_type: e.target.value })
+                }
+                className="input-field"
+              >
+                {machineTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">品牌</label><input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">型號</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">序號</label><input value={form.serial_number} onChange={e => setForm({...form, serial_number: e.target.value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">所屬公司 *</label>
-              <select value={form.owner_company_id} onChange={e => setForm({...form, owner_company_id: e.target.value})} className="input-field" required>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                品牌
+              </label>
+              <input
+                value={form.brand}
+                onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                型號
+              </label>
+              <input
+                value={form.model}
+                onChange={(e) => setForm({ ...form, model: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                噸數
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={form.tonnage}
+                onChange={(e) => setForm({ ...form, tonnage: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                序號
+              </label>
+              <input
+                value={form.serial_number}
+                onChange={(e) =>
+                  setForm({ ...form, serial_number: e.target.value })
+                }
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                所屬公司 *
+              </label>
+              <select
+                value={form.owner_company_id}
+                onChange={(e) =>
+                  setForm({ ...form, owner_company_id: e.target.value })
+                }
+                className="input-field"
+                required
+              >
                 <option value="">請選擇</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.internal_prefix
+                      ? `${c.internal_prefix} - ${c.name}`
+                      : c.name}
+                  </option>
+                ))}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">驗機紙到期日</label><DateInput value={form.inspection_cert_expiry} onChange={value => setForm({...form, inspection_cert_expiry: value})} className="input-field" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">保險到期日</label><DateInput value={form.insurance_expiry} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                驗機紙到期日
+              </label>
+              <DateInput
+                value={form.inspection_cert_expiry}
+                onChange={(value) =>
+                  setForm({ ...form, inspection_cert_expiry: value })
+                }
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                保險到期日
+              </label>
+              <DateInput
+                value={form.insurance_expiry}
+                onChange={(value) =>
+                  setForm({ ...form, insurance_expiry: value })
+                }
+                className="input-field"
+              />
+            </div>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">建立</button></div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button type="submit" className="btn-primary">
+              建立
+            </button>
+          </div>
         </form>
       </Modal>
     </div>

@@ -9,6 +9,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import AttendanceEditModal from './AttendanceEditModal';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 // Lazy load MiniMap to avoid SSR issues
 const MiniMap = lazy(() => import('@/components/MiniMap'));
@@ -19,8 +20,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_BADGE: Record<string, string> = {
-  clock_in: 'bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full text-xs font-medium',
-  clock_out: 'bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  clock_in:
+    'bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  clock_out:
+    'bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-xs font-medium',
 };
 
 const ANOMALY_TYPE_LABELS: Record<string, string> = {
@@ -55,7 +58,9 @@ const DEFAULT_COLUMNS = [
 export default function AttendancesPage() {
   // ── Tab state ──
   const { isReadOnly } = useAuth();
-  const [activeTab, setActiveTab] = useState<'records' | 'anomalies'>('records');
+  const [activeTab, setActiveTab] = useState<'records' | 'anomalies'>(
+    'records',
+  );
 
   // ══════════════════════════════════════════════════════════════
   // Tab 1: 打卡記錄
@@ -67,7 +72,9 @@ export default function AttendancesPage() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('timestamp');
   const [sortOrder, setSortOrder] = useState('DESC');
-  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
 
   // Filters
   const [employeeFilter, setEmployeeFilter] = useState('');
@@ -87,7 +94,10 @@ export default function AttendancesPage() {
   }>({ open: false, lat: 0, lng: 0 });
 
   // Photo modal state
-  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string }>({ open: false, src: '' });
+  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string }>({
+    open: false,
+    src: '',
+  });
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -98,35 +108,70 @@ export default function AttendancesPage() {
     setEditModalOpen(true);
   };
 
-  const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } =
-    useColumnConfig('attendances', DEFAULT_COLUMNS);
+  const {
+    columnConfigs,
+    handleColumnConfigChange,
+    handleReset,
+    columnWidths,
+    handleColumnResize,
+  } = useColumnConfig('attendances', DEFAULT_COLUMNS);
 
   useEffect(() => {
-    employeesApi.list({ limit: 999, status: 'active' }).then(res => {
-      setEmployees(res.data.data || []);
-    }).catch(() => {});
+    employeesApi
+      .list({ limit: 999, status: 'active' })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
   }, []);
 
-  const buildColumnFilterParams = useCallback((filters: Record<string, Set<string>>) => {
-    const params: Record<string, string> = {};
-    Object.entries(filters).forEach(([key, values]) => {
-      params[`filter_${key}`] = values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
-    });
-    return params;
-  }, []);
+  useRefetchOnFocus(() => {
+    employeesApi
+      .list({ limit: 999, status: 'active' })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
+  });
 
-  const buildListParams = useCallback((overrides?: { page?: number; limit?: number }) => ({
-    page: overrides?.page ?? page,
-    limit: overrides?.limit ?? 20,
-    search: search || undefined,
-    employee_id: employeeFilter || undefined,
-    type: typeFilter || undefined,
-    date_from: dateFrom || undefined,
-    date_to: dateTo || undefined,
-    sortBy,
-    sortOrder,
-    ...buildColumnFilterParams(columnFilters),
-  }), [page, search, employeeFilter, typeFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters, buildColumnFilterParams]);
+  const buildColumnFilterParams = useCallback(
+    (filters: Record<string, Set<string>>) => {
+      const params: Record<string, string> = {};
+      Object.entries(filters).forEach(([key, values]) => {
+        params[`filter_${key}`] =
+          values.size > 0 ? Array.from(values).join(',') : '__NO_MATCH__';
+      });
+      return params;
+    },
+    [],
+  );
+
+  const buildListParams = useCallback(
+    (overrides?: { page?: number; limit?: number }) => ({
+      page: overrides?.page ?? page,
+      limit: overrides?.limit ?? 20,
+      search: search || undefined,
+      employee_id: employeeFilter || undefined,
+      type: typeFilter || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      sortBy,
+      sortOrder,
+      ...buildColumnFilterParams(columnFilters),
+    }),
+    [
+      page,
+      search,
+      employeeFilter,
+      typeFilter,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      columnFilters,
+      buildColumnFilterParams,
+    ],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,7 +186,9 @@ export default function AttendancesPage() {
     setLoading(false);
   }, [buildListParams]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleSort = (field: string, order: string) => {
     setSortBy(field);
@@ -154,14 +201,22 @@ export default function AttendancesPage() {
     setPage(1);
   };
 
-  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
-    const res = await attendancesApi.filterOptions(columnKey, buildListParams({ page: 1, limit: 20 }));
-    return Array.isArray(res.data) ? res.data : [];
-  }, [buildListParams]);
+  const handleFetchFilterOptions = useCallback(
+    async (columnKey: string): Promise<string[]> => {
+      const res = await attendancesApi.filterOptions(
+        columnKey,
+        buildListParams({ page: 1, limit: 20 }),
+      );
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    [buildListParams],
+  );
 
   const handleExportFetchAll = useCallback(async () => {
     if (total === 0) return [];
-    const res = await attendancesApi.list(buildListParams({ page: 1, limit: total }));
+    const res = await attendancesApi.list(
+      buildListParams({ page: 1, limit: total }),
+    );
     return res.data.data || [];
   }, [buildListParams, total]);
 
@@ -169,8 +224,12 @@ export default function AttendancesPage() {
     const employeeName = row.employee?.name_zh || row.employee?.name_en || '';
     const time = row.timestamp
       ? new Date(row.timestamp).toLocaleString('zh-HK', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
         })
       : '';
     setMapModal({
@@ -210,7 +269,9 @@ export default function AttendancesPage() {
       label: '員工編號',
       sortable: true,
       render: (_: any, row: any) => (
-        <span className="font-mono text-sm text-gray-700">{row.employee?.emp_code || '-'}</span>
+        <span className="font-mono text-sm text-gray-700">
+          {row.employee?.emp_code || '-'}
+        </span>
       ),
       exportRender: (_: any, row: any) => row.employee?.emp_code || '',
     },
@@ -220,20 +281,27 @@ export default function AttendancesPage() {
       sortable: true,
       render: (_: any, row: any) => (
         <div className="flex flex-col">
-          <span className="font-medium">{row.employee?.name_zh || row.employee?.name_en || '-'}</span>
+          <span className="font-medium">
+            {row.employee?.name_zh || row.employee?.name_en || '-'}
+          </span>
           {row.employee?.employee_is_temporary && (
-            <span className="text-[10px] text-amber-600 font-bold">臨時員工</span>
+            <span className="text-[10px] text-amber-600 font-bold">
+              臨時員工
+            </span>
           )}
         </div>
       ),
-      exportRender: (_: any, row: any) => row.employee?.name_zh || row.employee?.name_en || '',
+      exportRender: (_: any, row: any) =>
+        row.employee?.name_zh || row.employee?.name_en || '',
     },
     {
       key: 'role',
       label: '職位',
       render: (_: any, row: any) => {
         const position = row.employee?.role || '-';
-        return <span className="text-sm text-blue-600 font-medium">{position}</span>;
+        return (
+          <span className="text-sm text-blue-600 font-medium">{position}</span>
+        );
       },
       exportRender: (_: any, row: any) => row.employee?.role || '',
     },
@@ -245,7 +313,8 @@ export default function AttendancesPage() {
         if (!row.timestamp) return '-';
         return fmtDate(row.timestamp);
       },
-      exportRender: (_: any, row: any) => row.timestamp ? fmtDate(row.timestamp) : '',
+      exportRender: (_: any, row: any) =>
+        row.timestamp ? fmtDate(row.timestamp) : '',
     },
     {
       key: 'type',
@@ -256,39 +325,51 @@ export default function AttendancesPage() {
           {TYPE_LABELS[row.type] || row.type || '-'}
         </span>
       ),
-      exportRender: (_: any, row: any) => TYPE_LABELS[row.type] || row.type || '',
+      exportRender: (_: any, row: any) =>
+        TYPE_LABELS[row.type] || row.type || '',
     },
     {
       key: 'is_mid_shift',
       label: '中直',
-      render: (_: any, row: any) => (
+      render: (_: any, row: any) =>
         row.is_mid_shift ? (
-          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold">是</span>
+          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold">
+            是
+          </span>
         ) : (
           <span className="text-gray-300 text-xs">否</span>
-        )
-      ),
-      exportRender: (_: any, row: any) => row.is_mid_shift ? '是' : '否',
+        ),
+      exportRender: (_: any, row: any) => (row.is_mid_shift ? '是' : '否'),
     },
     {
       key: 'mid_shift_status',
       label: '中直批核狀態',
       filterable: false,
       render: (_: any, row: any) => {
-        if (!row.is_mid_shift) return <span className="text-gray-300 text-xs">未申請</span>;
+        if (!row.is_mid_shift)
+          return <span className="text-gray-300 text-xs">未申請</span>;
         if (row.mid_shift_approved) {
           return (
             <div className="flex flex-col">
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold border border-green-200">已批核</span>
-              <span className="text-[10px] text-gray-500 mt-0.5">{row.mid_shift_approver?.name_zh || '系統'}</span>
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold border border-green-200">
+                已批核
+              </span>
+              <span className="text-[10px] text-gray-500 mt-0.5">
+                {row.mid_shift_approver?.name_zh || '系統'}
+              </span>
             </div>
           );
         }
-        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-bold border border-amber-200">待批核</span>;
+        return (
+          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-bold border border-amber-200">
+            待批核
+          </span>
+        );
       },
       exportRender: (_: any, row: any) => {
         if (!row.is_mid_shift) return '未申請';
-        if (row.mid_shift_approved) return `已批核 (${row.mid_shift_approver?.name_zh || '系統'})`;
+        if (row.mid_shift_approved)
+          return `已批核 (${row.mid_shift_approver?.name_zh || '系統'})`;
         return '待批核';
       },
     },
@@ -300,12 +381,20 @@ export default function AttendancesPage() {
       render: (_: any, row: any) => {
         if (!row.timestamp) return '-';
         const d = new Date(row.timestamp);
-        return d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return d.toLocaleTimeString('zh-HK', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
       },
       exportRender: (_: any, row: any) => {
         if (!row.timestamp) return '';
         const d = new Date(row.timestamp);
-        return d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return d.toLocaleTimeString('zh-HK', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
       },
     },
     {
@@ -317,30 +406,53 @@ export default function AttendancesPage() {
           return (
             <div className="space-y-1">
               {row.address && (
-                <p className="text-xs text-gray-700 font-medium leading-tight max-w-[200px] truncate" title={row.address}>
+                <p
+                  className="text-xs text-gray-700 font-medium leading-tight max-w-[200px] truncate"
+                  title={row.address}
+                >
                   {'📍'} {row.address}
                 </p>
               )}
               <button
-                onClick={(e) => { e.stopPropagation(); openMapModal(row); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openMapModal(row);
+                }}
                 className="text-blue-600 hover:text-blue-800 hover:underline text-xs flex items-center gap-1 transition-colors"
                 title="點擊查看地圖"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                  />
                 </svg>
-                {Number(row.latitude).toFixed(5)}, {Number(row.longitude).toFixed(5)}
+                {Number(row.latitude).toFixed(5)},{' '}
+                {Number(row.longitude).toFixed(5)}
               </button>
             </div>
           );
         }
-        if (row.address) return <span className="text-xs text-gray-600">{'📍'} {row.address}</span>;
+        if (row.address)
+          return (
+            <span className="text-xs text-gray-600">
+              {'📍'} {row.address}
+            </span>
+          );
         return <span className="text-gray-400 text-xs">-</span>;
       },
       exportRender: (_: any, row: any) => {
         const parts: string[] = [];
         if (row.address) parts.push(row.address);
-        if (row.latitude && row.longitude) parts.push(`${row.latitude}, ${row.longitude}`);
+        if (row.latitude && row.longitude)
+          parts.push(`${row.latitude}, ${row.longitude}`);
         return parts.join(' | ') || '';
       },
     },
@@ -356,18 +468,24 @@ export default function AttendancesPage() {
             src={photoSrc}
             alt="打卡相片"
             className="w-10 h-10 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setPhotoModal({ open: true, src: photoSrc }); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPhotoModal({ open: true, src: photoSrc });
+            }}
           />
         );
       },
-      exportRender: (_: any, row: any) => row.photo_url || (row.attendance_photo_base64 ? '[base64相片]' : ''),
+      exportRender: (_: any, row: any) =>
+        row.photo_url || (row.attendance_photo_base64 ? '[base64相片]' : ''),
     },
     {
       key: 'work_notes',
       label: '工作備註',
       filterable: false,
       render: (_: any, row: any) => (
-        <span className="text-sm text-blue-700 font-medium">{row.work_notes || '-'}</span>
+        <span className="text-sm text-blue-700 font-medium">
+          {row.work_notes || '-'}
+        </span>
       ),
       exportRender: (_: any, row: any) => row.work_notes || '',
     },
@@ -387,13 +505,19 @@ export default function AttendancesPage() {
       render: (_: any, row: any) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={(e) => { e.stopPropagation(); handleEdit(row.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row.id);
+            }}
             className="text-blue-500 hover:text-blue-700 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
           >
             編輯
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row.id);
+            }}
             className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
           >
             刪除
@@ -409,13 +533,17 @@ export default function AttendancesPage() {
       {/* Employee filter */}
       <select
         value={employeeFilter}
-        onChange={e => { setEmployeeFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setEmployeeFilter(e.target.value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5 min-w-[140px]"
       >
         <option value="">全部員工</option>
         {employees.map((emp: any) => (
           <option key={emp.id} value={emp.id}>
-            {emp.emp_code ? `${emp.emp_code} ` : ''}{emp.name_zh || emp.name_en}
+            {emp.emp_code ? `${emp.emp_code} ` : ''}
+            {emp.name_zh || emp.name_en}
           </option>
         ))}
       </select>
@@ -423,7 +551,10 @@ export default function AttendancesPage() {
       {/* Type filter */}
       <select
         value={typeFilter}
-        onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setTypeFilter(e.target.value);
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5 min-w-[120px]"
       >
         <option value="">全部類型</option>
@@ -432,20 +563,31 @@ export default function AttendancesPage() {
       </select>
 
       {/* Date from */}
-      <DateInput value={dateFrom}
-        onChange={val => { setDateFrom(val || ''); setPage(1); }}
+      <DateInput
+        value={dateFrom}
+        onChange={(val) => {
+          setDateFrom(val || '');
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5"
       />
       <span className="text-gray-400">至</span>
-      <DateInput value={dateTo}
-        onChange={val => { setDateTo(val || ''); setPage(1); }}
+      <DateInput
+        value={dateTo}
+        onChange={(val) => {
+          setDateTo(val || '');
+          setPage(1);
+        }}
         className="input-field text-sm py-1.5"
       />
 
       <input
         type="text"
         value={search}
-        onChange={e => { setSearch(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
         placeholder="搜尋地址/備註..."
         className="input-field text-sm py-1.5"
       />
@@ -487,7 +629,14 @@ export default function AttendancesPage() {
       setAnomalyTotal(0);
     }
     setAnomalyLoading(false);
-  }, [anomalyPage, anomalyDateFrom, anomalyDateTo, anomalyType, anomalyEmployee, anomalyStatus]);
+  }, [
+    anomalyPage,
+    anomalyDateFrom,
+    anomalyDateTo,
+    anomalyType,
+    anomalyEmployee,
+    anomalyStatus,
+  ]);
 
   useEffect(() => {
     if (activeTab === 'anomalies') loadAnomalies();
@@ -507,7 +656,9 @@ export default function AttendancesPage() {
       alert(`掃描完成，新增 ${res.data.anomalies_created || 0} 筆異常記錄`);
       loadAnomalies();
     } catch (e: any) {
-      alert('掃描失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+      alert(
+        '掃描失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'),
+      );
     }
     setScanLoading(false);
   };
@@ -515,12 +666,16 @@ export default function AttendancesPage() {
   const handleResolve = async (id: number) => {
     setResolvingId(id);
     try {
-      await attendancesApi.resolveAnomaly(id, { anomaly_resolved_notes: resolveNotes || undefined });
+      await attendancesApi.resolveAnomaly(id, {
+        anomaly_resolved_notes: resolveNotes || undefined,
+      });
       setResolveNotes('');
       setResolvingId(null);
       loadAnomalies();
     } catch (e: any) {
-      alert('操作失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+      alert(
+        '操作失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'),
+      );
       setResolvingId(null);
     }
   };
@@ -530,7 +685,9 @@ export default function AttendancesPage() {
       await attendancesApi.unresolveAnomaly(id);
       loadAnomalies();
     } catch (e: any) {
-      alert('操作失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+      alert(
+        '操作失敗: ' + (e?.response?.data?.message || e?.message || '未知錯誤'),
+      );
     }
   };
 
@@ -612,7 +769,9 @@ export default function AttendancesPage() {
               <div className="flex items-center justify-between text-sm bg-gray-50 p-3 rounded-lg">
                 <div>
                   <p className="text-gray-500">員工</p>
-                  <p className="font-bold text-gray-900">{mapModal.employeeName}</p>
+                  <p className="font-bold text-gray-900">
+                    {mapModal.employeeName}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-gray-500">打卡時間</p>
@@ -622,11 +781,19 @@ export default function AttendancesPage() {
               {mapModal.address && (
                 <div className="text-sm">
                   <p className="text-gray-500 mb-1">詳細地址</p>
-                  <p className="text-gray-900 font-medium">{'📍'} {mapModal.address}</p>
+                  <p className="text-gray-900 font-medium">
+                    {'📍'} {mapModal.address}
+                  </p>
                 </div>
               )}
               <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-200">
-                <Suspense fallback={<div className="h-full w-full bg-gray-100 animate-pulse flex items-center justify-center">載入地圖中...</div>}>
+                <Suspense
+                  fallback={
+                    <div className="h-full w-full bg-gray-100 animate-pulse flex items-center justify-center">
+                      載入地圖中...
+                    </div>
+                  }
+                >
                   <MiniMap latitude={mapModal.lat} longitude={mapModal.lng} />
                 </Suspense>
               </div>
@@ -663,7 +830,10 @@ export default function AttendancesPage() {
           <AttendanceEditModal
             isOpen={editModalOpen}
             recordId={editRecordId}
-            onClose={() => { setEditModalOpen(false); setEditRecordId(null); }}
+            onClose={() => {
+              setEditModalOpen(false);
+              setEditRecordId(null);
+            }}
             onSaved={() => load()}
           />
         </>
@@ -676,29 +846,48 @@ export default function AttendancesPage() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex flex-wrap gap-3 items-end">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">開始日期</label>
-                <DateInput value={anomalyDateFrom}
-                  onChange={val => { setAnomalyDateFrom(val || ''); setAnomalyPage(1); }}
+                <label className="block text-xs text-gray-500 mb-1">
+                  開始日期
+                </label>
+                <DateInput
+                  value={anomalyDateFrom}
+                  onChange={(val) => {
+                    setAnomalyDateFrom(val || '');
+                    setAnomalyPage(1);
+                  }}
                   className="input-field text-sm py-1.5"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">結束日期</label>
-                <DateInput value={anomalyDateTo}
-                  onChange={val => { setAnomalyDateTo(val || ''); setAnomalyPage(1); }}
+                <label className="block text-xs text-gray-500 mb-1">
+                  結束日期
+                </label>
+                <DateInput
+                  value={anomalyDateTo}
+                  onChange={(val) => {
+                    setAnomalyDateTo(val || '');
+                    setAnomalyPage(1);
+                  }}
                   className="input-field text-sm py-1.5"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">異常類型</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  異常類型
+                </label>
                 <select
                   value={anomalyType}
-                  onChange={e => { setAnomalyType(e.target.value); setAnomalyPage(1); }}
+                  onChange={(e) => {
+                    setAnomalyType(e.target.value);
+                    setAnomalyPage(1);
+                  }}
                   className="input-field text-sm py-1.5 min-w-[160px]"
                 >
                   <option value="">全部類型</option>
                   {Object.entries(ANOMALY_TYPE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -706,13 +895,17 @@ export default function AttendancesPage() {
                 <label className="block text-xs text-gray-500 mb-1">員工</label>
                 <select
                   value={anomalyEmployee}
-                  onChange={e => { setAnomalyEmployee(e.target.value); setAnomalyPage(1); }}
+                  onChange={(e) => {
+                    setAnomalyEmployee(e.target.value);
+                    setAnomalyPage(1);
+                  }}
                   className="input-field text-sm py-1.5 min-w-[140px]"
                 >
                   <option value="">全部員工</option>
                   {employees.map((emp: any) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.emp_code ? `${emp.emp_code} ` : ''}{emp.name_zh || emp.name_en}
+                      {emp.emp_code ? `${emp.emp_code} ` : ''}
+                      {emp.name_zh || emp.name_en}
                     </option>
                   ))}
                 </select>
@@ -721,7 +914,10 @@ export default function AttendancesPage() {
                 <label className="block text-xs text-gray-500 mb-1">狀態</label>
                 <select
                   value={anomalyStatus}
-                  onChange={e => { setAnomalyStatus(e.target.value); setAnomalyPage(1); }}
+                  onChange={(e) => {
+                    setAnomalyStatus(e.target.value);
+                    setAnomalyPage(1);
+                  }}
                   className="input-field text-sm py-1.5 min-w-[120px]"
                 >
                   <option value="all">全部</option>
@@ -747,56 +943,97 @@ export default function AttendancesPage() {
               <div className="text-center text-gray-400 py-12">
                 <div className="text-4xl mb-2">{'✓'}</div>
                 <div>沒有異常記錄</div>
-                <div className="text-xs mt-1">選擇日期範圍後點擊「掃描異常」以檢查</div>
+                <div className="text-xs mt-1">
+                  選擇日期範圍後點擊「掃描異常」以檢查
+                </div>
               </div>
             ) : (
               <>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">日期</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">員工</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">異常類型</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">描述</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">關聯記錄</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">狀態</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">操作</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        日期
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        員工
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        異常類型
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        描述
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        關聯記錄
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        狀態
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">
+                        操作
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {anomalies.map((a: any) => (
-                      <tr key={a.id} className={`hover:bg-gray-50 ${a.anomaly_is_resolved ? 'opacity-60' : ''}`}>
+                      <tr
+                        key={a.id}
+                        className={`hover:bg-gray-50 ${a.anomaly_is_resolved ? 'opacity-60' : ''}`}
+                      >
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">
                           {a.anomaly_date ? fmtDate(a.anomaly_date) : '-'}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex flex-col">
-                            <span className="font-medium text-gray-800">{a.employee?.name_zh || '-'}</span>
+                            <span className="font-medium text-gray-800">
+                              {a.employee?.name_zh || '-'}
+                            </span>
                             {a.employee?.emp_code && (
-                              <span className="text-[10px] text-gray-400 font-mono">{a.employee.emp_code}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {a.employee.emp_code}
+                              </span>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ANOMALY_TYPE_BADGE[a.anomaly_type] || 'bg-gray-100 text-gray-700'}`}>
-                            {ANOMALY_TYPE_LABELS[a.anomaly_type] || a.anomaly_type}
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${ANOMALY_TYPE_BADGE[a.anomaly_type] || 'bg-gray-100 text-gray-700'}`}
+                          >
+                            {ANOMALY_TYPE_LABELS[a.anomaly_type] ||
+                              a.anomaly_type}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-600 max-w-[300px]">
-                          <span className="line-clamp-2">{a.anomaly_description}</span>
+                          <span className="line-clamp-2">
+                            {a.anomaly_description}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500 space-y-0.5">
                           {a.attendance && (
                             <div>
-                              <span className="text-teal-600 font-medium">打卡</span> #{a.attendance.id}{' '}
-                              {a.attendance.type === 'clock_in' ? '開工' : '收工'}{' '}
-                              {a.attendance.timestamp && new Date(a.attendance.timestamp).toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' })}
+                              <span className="text-teal-600 font-medium">
+                                打卡
+                              </span>{' '}
+                              #{a.attendance.id}{' '}
+                              {a.attendance.type === 'clock_in'
+                                ? '開工'
+                                : '收工'}{' '}
+                              {a.attendance.timestamp &&
+                                new Date(
+                                  a.attendance.timestamp,
+                                ).toLocaleTimeString('zh-HK', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
                             </div>
                           )}
                           {a.work_log && (
                             <div>
-                              <span className="text-blue-600 font-medium">工作紀錄</span> #{a.work_log.id}{' '}
-                              {a.work_log.day_night || ''}{' '}
+                              <span className="text-blue-600 font-medium">
+                                工作紀錄
+                              </span>{' '}
+                              #{a.work_log.id} {a.work_log.day_night || ''}{' '}
                               {a.work_log.start_location || ''}
                             </div>
                           )}
@@ -804,18 +1041,28 @@ export default function AttendancesPage() {
                         <td className="px-4 py-3 whitespace-nowrap">
                           {a.anomaly_is_resolved ? (
                             <div className="flex flex-col">
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold">已處理</span>
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold">
+                                已處理
+                              </span>
                               {a.resolver && (
-                                <span className="text-[10px] text-gray-400 mt-0.5">{a.resolver.displayName || a.resolver.username}</span>
+                                <span className="text-[10px] text-gray-400 mt-0.5">
+                                  {a.resolver.displayName ||
+                                    a.resolver.username}
+                                </span>
                               )}
                               {a.anomaly_resolved_notes && (
-                                <span className="text-[10px] text-gray-400 mt-0.5 max-w-[120px] truncate" title={a.anomaly_resolved_notes}>
+                                <span
+                                  className="text-[10px] text-gray-400 mt-0.5 max-w-[120px] truncate"
+                                  title={a.anomaly_resolved_notes}
+                                >
                                   {a.anomaly_resolved_notes}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold">未處理</span>
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold">
+                              未處理
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -833,10 +1080,12 @@ export default function AttendancesPage() {
                                   <input
                                     type="text"
                                     value={resolveNotes}
-                                    onChange={e => setResolveNotes(e.target.value)}
+                                    onChange={(e) =>
+                                      setResolveNotes(e.target.value)
+                                    }
                                     placeholder="備註（選填）"
                                     className="input-field text-xs py-1 w-32"
-                                    onClick={e => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
                                   />
                                   <button
                                     onClick={() => handleResolve(a.id)}
@@ -845,7 +1094,10 @@ export default function AttendancesPage() {
                                     確認
                                   </button>
                                   <button
-                                    onClick={() => { setResolvingId(null); setResolveNotes(''); }}
+                                    onClick={() => {
+                                      setResolvingId(null);
+                                      setResolveNotes('');
+                                    }}
                                     className="text-xs text-gray-500 hover:text-gray-700 px-1 py-1"
                                   >
                                     取消
@@ -870,18 +1122,25 @@ export default function AttendancesPage() {
                 {/* 分頁 */}
                 <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
                   <span className="text-xs text-gray-500">
-                    共 {anomalyTotal} 筆，第 {anomalyPage}/{anomalyTotalPages || 1} 頁
+                    共 {anomalyTotal} 筆，第 {anomalyPage}/
+                    {anomalyTotalPages || 1} 頁
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setAnomalyPage(Math.max(1, anomalyPage - 1))}
+                      onClick={() =>
+                        setAnomalyPage(Math.max(1, anomalyPage - 1))
+                      }
                       disabled={anomalyPage <= 1}
                       className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
                     >
                       上一頁
                     </button>
                     <button
-                      onClick={() => setAnomalyPage(Math.min(anomalyTotalPages, anomalyPage + 1))}
+                      onClick={() =>
+                        setAnomalyPage(
+                          Math.min(anomalyTotalPages, anomalyPage + 1),
+                        )
+                      }
                       disabled={anomalyPage >= anomalyTotalPages}
                       className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
                     >

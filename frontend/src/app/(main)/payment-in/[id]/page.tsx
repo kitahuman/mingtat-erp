@@ -13,6 +13,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const fmt$ = (v: unknown) =>
   `$${Number(v ?? 0).toLocaleString('en-US', {
@@ -172,11 +173,27 @@ export default function PaymentInDetailPage() {
       .catch(() => {});
   }, []);
 
+  useRefetchOnFocus(() => {
+    projectsApi
+      .list({ limit: 500 })
+      .then((r) => setProjects((r.data?.data || []) as ProjectMini[]))
+      .catch(() => {});
+    contractsApi
+      .list({ limit: 500 })
+      .then((r) => setContracts((r.data?.data || []) as ContractMini[]))
+      .catch(() => {});
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
+      .catch(() => {});
+  });
+
   const projectOptions: SelectOption[] = useMemo(
     () =>
       projects.map((p) => ({
         value: p.id,
-        label: `${p.project_no ?? ''} ${p.project_name ?? ''}`.trim() || `#${p.id}`,
+        label:
+          `${p.project_no ?? ''} ${p.project_name ?? ''}`.trim() || `#${p.id}`,
       })),
     [projects],
   );
@@ -185,7 +202,9 @@ export default function PaymentInDetailPage() {
     () =>
       contracts.map((c) => ({
         value: c.id,
-        label: `${c.contract_no ?? ''} ${c.contract_name ?? ''}`.trim() || `#${c.id}`,
+        label:
+          `${c.contract_no ?? ''} ${c.contract_name ?? ''}`.trim() ||
+          `#${c.id}`,
       })),
     [contracts],
   );
@@ -220,7 +239,10 @@ export default function PaymentInDetailPage() {
     try {
       const payload: Record<string, unknown> = {
         date: form.date,
-        amount: typeof form.amount === 'number' ? form.amount : parseFloat(form.amount),
+        amount:
+          typeof form.amount === 'number'
+            ? form.amount
+            : parseFloat(form.amount),
         source_type: form.source_type,
         source_ref_id: form.source_ref_id ? Number(form.source_ref_id) : null,
         project_id: form.project_id ? Number(form.project_id) : null,
@@ -375,8 +397,9 @@ export default function PaymentInDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   日期 *
                 </label>
-                <DateInput value={form.date}
-                  onChange={val => setForm({ ...form, date: val || '' })}
+                <DateInput
+                  value={form.date}
+                  onChange={(val) => setForm({ ...form, date: val || '' })}
                   className="input-field"
                 />
               </div>
@@ -391,7 +414,8 @@ export default function PaymentInDetailPage() {
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      amount: e.target.value === '' ? '' : parseFloat(e.target.value),
+                      amount:
+                        e.target.value === '' ? '' : parseFloat(e.target.value),
                     })
                   }
                   className="input-field"
@@ -411,7 +435,9 @@ export default function PaymentInDetailPage() {
                   }
                   className="input-field"
                 >
-                  <option value="payment_certificate">Payment Certificate</option>
+                  <option value="payment_certificate">
+                    Payment Certificate
+                  </option>
                   <option value="invoice">發票</option>
                   <option value="retention_release">扣留金釋放</option>
                   <option value="other">其他收入</option>
@@ -442,9 +468,9 @@ export default function PaymentInDetailPage() {
                 </label>
                 <SearchableSelect
                   value={form.project_id ? Number(form.project_id) : null}
-                onChange={(v: string | number | null) =>
-                  setForm({ ...form, project_id: v == null ? '' : Number(v) })
-                }
+                  onChange={(v: string | number | null) =>
+                    setForm({ ...form, project_id: v == null ? '' : Number(v) })
+                  }
                   options={projectOptions}
                   placeholder="選擇項目"
                   clearable
@@ -456,9 +482,12 @@ export default function PaymentInDetailPage() {
                 </label>
                 <SearchableSelect
                   value={form.contract_id ? Number(form.contract_id) : null}
-                onChange={(v: string | number | null) =>
-                  setForm({ ...form, contract_id: v == null ? '' : Number(v) })
-                }
+                  onChange={(v: string | number | null) =>
+                    setForm({
+                      ...form,
+                      contract_id: v == null ? '' : Number(v),
+                    })
+                  }
                   options={contractOptions}
                   placeholder="選擇合約"
                   clearable
@@ -501,8 +530,7 @@ export default function PaymentInDetailPage() {
                   href={`/contracts/${record.contract.id}`}
                   className="text-primary-600 hover:underline"
                 >
-                  {record.contract.contract_no}{' '}
-                  {record.contract.contract_name}
+                  {record.contract.contract_no} {record.contract.contract_name}
                 </Link>
               ) : null}
             </Field>
@@ -522,9 +550,14 @@ export default function PaymentInDetailPage() {
                 銀行帳戶
               </label>
               <SearchableSelect
-                value={form.bank_account_id ? Number(form.bank_account_id) : null}
+                value={
+                  form.bank_account_id ? Number(form.bank_account_id) : null
+                }
                 onChange={(v: string | number | null) =>
-                  setForm({ ...form, bank_account_id: v == null ? '' : Number(v) })
+                  setForm({
+                    ...form,
+                    bank_account_id: v == null ? '' : Number(v),
+                  })
                 }
                 options={bankAccountOptions}
                 placeholder="選擇銀行帳戶"

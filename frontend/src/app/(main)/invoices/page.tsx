@@ -2,13 +2,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter } from 'next/navigation';
-import { invoicesApi, partnersApi, companiesApi, projectsApi, quotationsApi } from '@/lib/api';
+import {
+  invoicesApi,
+  partnersApi,
+  companiesApi,
+  projectsApi,
+  quotationsApi,
+} from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
-const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt$ = (v: any) =>
+  `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const STATUS_OPTIONS = [
   { value: '', label: '全部狀態' },
@@ -35,7 +43,13 @@ const STATUS_COLORS: Record<string, string> = {
   void: 'bg-red-100 text-red-700',
 };
 
-const defaultItem = () => ({ item_name: '', description: '', quantity: 1, unit: 'JOB', unit_price: 0 });
+const defaultItem = () => ({
+  item_name: '',
+  description: '',
+  quantity: 1,
+  unit: 'JOB',
+  unit_price: 0,
+});
 const defaultCharge = () => ({ name: '', amount: 0 });
 
 const defaultForm = {
@@ -85,7 +99,7 @@ export default function InvoicesPage() {
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
-      setSortOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+      setSortOrder((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
     } else {
       setSortBy(field);
       setSortOrder('DESC');
@@ -93,7 +107,9 @@ export default function InvoicesPage() {
     setPage(1);
   };
   const SortIcon = ({ field }: { field: string }) => (
-    <span className="ml-1 text-gray-400">{sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}</span>
+    <span className="ml-1 text-gray-400">
+      {sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}
+    </span>
   );
 
   const fetchData = useCallback(async () => {
@@ -113,16 +129,42 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, clientFilter, dateFrom, dateTo, search, sortBy, sortOrder]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  }, [
+    page,
+    statusFilter,
+    clientFilter,
+    dateFrom,
+    dateTo,
+    search,
+    sortBy,
+    sortOrder,
+  ]);
 
   useEffect(() => {
-    partnersApi.simple().then(res => setPartners(res.data || []));
-    companiesApi.simple().then(res => setCompanies(res.data || []));
-    projectsApi.list({ limit: 500 }).then(res => setProjects(res.data?.data || res.data || []));
-    quotationsApi.list({ limit: 500 }).then(res => setQuotations(res.data?.data || res.data || []));
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    partnersApi.simple().then((res) => setPartners(res.data || []));
+    companiesApi.simple().then((res) => setCompanies(res.data || []));
+    projectsApi
+      .list({ limit: 500 })
+      .then((res) => setProjects(res.data?.data || res.data || []));
+    quotationsApi
+      .list({ limit: 500 })
+      .then((res) => setQuotations(res.data?.data || res.data || []));
   }, []);
+
+  useRefetchOnFocus(() => {
+    partnersApi.simple().then((res) => setPartners(res.data || []));
+    companiesApi.simple().then((res) => setCompanies(res.data || []));
+    projectsApi
+      .list({ limit: 500 })
+      .then((res) => setProjects(res.data?.data || res.data || []));
+    quotationsApi
+      .list({ limit: 500 })
+      .then((res) => setQuotations(res.data?.data || res.data || []));
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -130,21 +172,28 @@ export default function InvoicesPage() {
     if (!workLogIdsParam) return;
     const ids = workLogIdsParam
       .split(',')
-      .map(id => Number(id))
-      .filter(id => Number.isInteger(id) && id > 0);
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
     setWorkLogIdsFromQuery(ids);
     setShowCreate(true);
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       invoice_title: prev.invoice_title || '工作紀錄發票',
-      remarks: prev.remarks || `由 ${ids.length} 筆工作紀錄建立（只關聯模式，不自動計算價錢）`,
+      remarks:
+        prev.remarks ||
+        `由 ${ids.length} 筆工作紀錄建立（只關聯模式，不自動計算價錢）`,
     }));
   }, []);
 
-  const clientPartners = partners.filter((p: any) => p.partner_type === 'client');
+  const clientPartners = partners.filter(
+    (p: any) => p.partner_type === 'client',
+  );
 
   const handleCreate = async () => {
-    if (!form.company_id) { alert('請選擇公司'); return; }
+    if (!form.company_id) {
+      alert('請選擇公司');
+      return;
+    }
     setCreating(true);
     try {
       const payload = {
@@ -159,7 +208,9 @@ export default function InvoicesPage() {
         retention_rate: Number(form.retention_rate) || 0,
         payment_terms: form.payment_terms || undefined,
         remarks: form.remarks || undefined,
-        other_charges: form.other_charges.filter((c: any) => c.name && Number(c.amount) !== 0),
+        other_charges: form.other_charges.filter(
+          (c: any) => c.name && Number(c.amount) !== 0,
+        ),
         items: form.items.map((item: any, idx: number) => ({
           item_name: item.item_name || undefined,
           description: item.description || undefined,
@@ -184,8 +235,13 @@ export default function InvoicesPage() {
   };
 
   // Items helpers
-  const addItem = () => setForm({ ...form, items: [...form.items, defaultItem()] });
-  const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_: any, i: number) => i !== idx) });
+  const addItem = () =>
+    setForm({ ...form, items: [...form.items, defaultItem()] });
+  const removeItem = (idx: number) =>
+    setForm({
+      ...form,
+      items: form.items.filter((_: any, i: number) => i !== idx),
+    });
   const updateItem = (idx: number, field: string, value: any) => {
     const items = [...form.items];
     items[idx] = { ...items[idx], [field]: value };
@@ -193,18 +249,36 @@ export default function InvoicesPage() {
   };
 
   // Other charges helpers
-  const addCharge = () => setForm({ ...form, other_charges: [...form.other_charges, defaultCharge()] });
-  const removeCharge = (idx: number) => setForm({ ...form, other_charges: form.other_charges.filter((_: any, i: number) => i !== idx) });
+  const addCharge = () =>
+    setForm({
+      ...form,
+      other_charges: [...form.other_charges, defaultCharge()],
+    });
+  const removeCharge = (idx: number) =>
+    setForm({
+      ...form,
+      other_charges: form.other_charges.filter(
+        (_: any, i: number) => i !== idx,
+      ),
+    });
   const updateCharge = (idx: number, field: string, value: any) => {
     const charges = [...form.other_charges];
     charges[idx] = { ...charges[idx], [field]: value };
     setForm({ ...form, other_charges: charges });
   };
 
-  const itemAmount = (item: any) => (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
-  const formSubtotal = (form.items || []).reduce((sum: number, item: any) => sum + itemAmount(item), 0);
-  const formRetention = formSubtotal * (Number(form.retention_rate) || 0) / 100;
-  const formOtherTotal = (form.other_charges || []).reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
+  const itemAmount = (item: any) =>
+    (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+  const formSubtotal = (form.items || []).reduce(
+    (sum: number, item: any) => sum + itemAmount(item),
+    0,
+  );
+  const formRetention =
+    (formSubtotal * (Number(form.retention_rate) || 0)) / 100;
+  const formOtherTotal = (form.other_charges || []).reduce(
+    (sum: number, c: any) => sum + (Number(c.amount) || 0),
+    0,
+  );
   const formTotal = formSubtotal - formRetention + formOtherTotal;
 
   const totalPages = Math.ceil(total / 50);
@@ -217,7 +291,10 @@ export default function InvoicesPage() {
           <p className="text-gray-500 mt-1">共 {total} 張發票</p>
         </div>
         <button
-          onClick={() => { setForm({ ...defaultForm, company_id: companies[0]?.id || '' }); setShowCreate(true); }}
+          onClick={() => {
+            setForm({ ...defaultForm, company_id: companies[0]?.id || '' });
+            setShowCreate(true);
+          }}
           className="btn-primary"
         >
           新增發票
@@ -228,29 +305,84 @@ export default function InvoicesPage() {
       <div className="card mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">搜尋</label>
-            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="發票編號、客戶、合約..." className="input-field" />
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              搜尋
+            </label>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="發票編號、客戶、合約..."
+              className="input-field"
+            />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">狀態</label>
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="input-field">
-              {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              狀態
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="input-field"
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">客戶</label>
-            <select value={clientFilter} onChange={e => { setClientFilter(e.target.value); setPage(1); }} className="input-field">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              客戶
+            </label>
+            <select
+              value={clientFilter}
+              onChange={(e) => {
+                setClientFilter(e.target.value);
+                setPage(1);
+              }}
+              className="input-field"
+            >
               <option value="">全部客戶</option>
-              {clientPartners.map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+              {clientPartners.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.code ? `${p.code} - ${p.name}` : p.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">日期（從）</label>
-            <DateInput value={dateFrom} onChange={value => { setDateFrom(value); setPage(1); }} className="input-field" />
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              日期（從）
+            </label>
+            <DateInput
+              value={dateFrom}
+              onChange={(value) => {
+                setDateFrom(value);
+                setPage(1);
+              }}
+              className="input-field"
+            />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">日期（至）</label>
-            <DateInput value={dateTo} onChange={value => { setDateTo(value); setPage(1); }} className="input-field" />
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              日期（至）
+            </label>
+            <DateInput
+              value={dateTo}
+              onChange={(value) => {
+                setDateTo(value);
+                setPage(1);
+              }}
+              className="input-field"
+            />
           </div>
         </div>
       </div>
@@ -260,52 +392,156 @@ export default function InvoicesPage() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('invoice_no')}>發票編號<SortIcon field="invoice_no" /></th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">發票名稱</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('date')}>日期<SortIcon field="date" /></th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('due_date')}>到期日<SortIcon field="due_date" /></th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶合約</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">關聯報價單</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('total_amount')}>總額<SortIcon field="total_amount" /></th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('paid_amount')}>已收<SortIcon field="paid_amount" /></th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">未收</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none" onClick={() => handleSort('status')}>狀態<SortIcon field="status" /></th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('invoice_no')}
+              >
+                發票編號
+                <SortIcon field="invoice_no" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                發票名稱
+              </th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('date')}
+              >
+                日期
+                <SortIcon field="date" />
+              </th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('due_date')}
+              >
+                到期日
+                <SortIcon field="due_date" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                客戶
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                客戶合約
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                關聯報價單
+              </th>
+              <th
+                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('total_amount')}
+              >
+                總額
+                <SortIcon field="total_amount" />
+              </th>
+              <th
+                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('paid_amount')}
+              >
+                已收
+                <SortIcon field="paid_amount" />
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                未收
+              </th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
+                onClick={() => handleSort('status')}
+              >
+                狀態
+                <SortIcon field="status" />
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
-              <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">載入中...</td></tr>
-            ) : data.length === 0 ? (
-              <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">暫無發票記錄</td></tr>
-            ) : data.map((inv: any) => (
-              <tr key={inv.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/invoices/${inv.id}`)}>
-                <td className="px-4 py-3 text-sm font-mono font-medium text-primary-600">{inv.invoice_no}</td>
-                <td className="px-4 py-3 text-sm text-gray-700">{inv.invoice_title || '-'}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{fmtDate(inv.date)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{fmtDate(inv.due_date)}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">{inv.client?.code ? `${inv.client.code} - ${inv.client.name}` : (inv.client?.name || '-')}</td>
-                <td className="px-4 py-3 text-sm font-mono text-indigo-600">{inv.client_contract_no || '-'}</td>
-                <td className="px-4 py-3 text-sm font-mono text-gray-500">{inv.quotation?.quotation_no || '-'}</td>
-                <td className="px-4 py-3 text-sm text-right font-medium">{fmt$(inv.total_amount)}</td>
-                <td className="px-4 py-3 text-sm text-right text-green-600">{fmt$(inv.paid_amount)}</td>
-                <td className="px-4 py-3 text-sm text-right text-red-600">{fmt$(inv.outstanding)}</td>
-                <td className="px-4 py-3 text-sm">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}>
-                    {STATUS_LABELS[inv.status] || inv.status}
-                  </span>
+              <tr>
+                <td
+                  colSpan={11}
+                  className="px-4 py-8 text-center text-gray-400"
+                >
+                  載入中...
                 </td>
               </tr>
-            ))}
+            ) : data.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={11}
+                  className="px-4 py-8 text-center text-gray-400"
+                >
+                  暫無發票記錄
+                </td>
+              </tr>
+            ) : (
+              data.map((inv: any) => (
+                <tr
+                  key={inv.id}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => router.push(`/invoices/${inv.id}`)}
+                >
+                  <td className="px-4 py-3 text-sm font-mono font-medium text-primary-600">
+                    {inv.invoice_no}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {inv.invoice_title || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {fmtDate(inv.date)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {fmtDate(inv.due_date)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900">
+                    {inv.client?.code
+                      ? `${inv.client.code} - ${inv.client.name}`
+                      : inv.client?.name || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-indigo-600">
+                    {inv.client_contract_no || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono text-gray-500">
+                    {inv.quotation?.quotation_no || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-medium">
+                    {fmt$(inv.total_amount)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-green-600">
+                    {fmt$(inv.paid_amount)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-red-600">
+                    {fmt$(inv.outstanding)}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}
+                    >
+                      {STATUS_LABELS[inv.status] || inv.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
-            <div className="text-sm text-gray-500">第 {page} / {totalPages} 頁，共 {total} 筆</div>
+            <div className="text-sm text-gray-500">
+              第 {page} / {totalPages} 頁，共 {total} 筆
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="btn-secondary text-sm disabled:opacity-50">上一頁</button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="btn-secondary text-sm disabled:opacity-50">下一頁</button>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="btn-secondary text-sm disabled:opacity-50"
+              >
+                上一頁
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="btn-secondary text-sm disabled:opacity-50"
+              >
+                下一頁
+              </button>
             </div>
           </div>
         )}
@@ -313,27 +549,57 @@ export default function InvoicesPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <Modal isOpen={showCreate} title="新增發票" onClose={() => setShowCreate(false)} size="xl">
+        <Modal
+          isOpen={showCreate}
+          title="新增發票"
+          onClose={() => setShowCreate(false)}
+          size="xl"
+        >
           <div className="space-y-5">
             {workLogIdsFromQuery.length > 0 && (
               <div className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
-                建立後會以「只關聯」模式自動連結 {workLogIdsFromQuery.length} 筆已選工作紀錄，不會自動計算發票項目或價錢。
+                建立後會以「只關聯」模式自動連結 {workLogIdsFromQuery.length}{' '}
+                筆已選工作紀錄，不會自動計算發票項目或價錢。
               </div>
             )}
             {/* Row 1: Company, Client */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">公司 <span className="text-red-500">*</span></label>
-                <select value={form.company_id} onChange={e => setForm({ ...form, company_id: e.target.value })} className="input-field">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  公司 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.company_id}
+                  onChange={(e) =>
+                    setForm({ ...form, company_id: e.target.value })
+                  }
+                  className="input-field"
+                >
                   <option value="">請選擇</option>
-                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {companies.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
-                <select value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })} className="input-field">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  客戶
+                </label>
+                <select
+                  value={form.client_id}
+                  onChange={(e) =>
+                    setForm({ ...form, client_id: e.target.value })
+                  }
+                  className="input-field"
+                >
                   <option value="">— 無 —</option>
-                  {clientPartners.map((p: any) => <option key={p.id} value={p.id}>{p.code ? `${p.code} - ${p.name}` : p.name}</option>)}
+                  {clientPartners.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code ? `${p.code} - ${p.name}` : p.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -341,14 +607,28 @@ export default function InvoicesPage() {
             {/* Row 2: Invoice Title, Client Contract No */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">發票名稱</label>
-                <input type="text" value={form.invoice_title} onChange={e => setForm({ ...form, invoice_title: e.target.value })} className="input-field" placeholder="例如：2026年4月工程費用" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  發票名稱
+                </label>
+                <input
+                  type="text"
+                  value={form.invoice_title}
+                  onChange={(e) =>
+                    setForm({ ...form, invoice_title: e.target.value })
+                  }
+                  className="input-field"
+                  placeholder="例如：2026年4月工程費用"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">客戶合約</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  客戶合約
+                </label>
                 <ClientContractCombobox
                   value={form.client_contract_no}
-                  onChange={(val) => setForm({ ...form, client_contract_no: val || '' })}
+                  onChange={(val) =>
+                    setForm({ ...form, client_contract_no: val || '' })
+                  }
                 />
               </div>
             </div>
@@ -356,29 +636,66 @@ export default function InvoicesPage() {
             {/* Row 3: Date, Due Date */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">發票日期</label>
-                <DateInput value={form.date} onChange={value => setForm({ ...form, date: value })} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  發票日期
+                </label>
+                <DateInput
+                  value={form.date}
+                  onChange={(value) => setForm({ ...form, date: value })}
+                  className="input-field"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
-                <DateInput value={form.due_date} onChange={value => setForm({ ...form, due_date: value })} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  到期日
+                </label>
+                <DateInput
+                  value={form.due_date}
+                  onChange={(value) => setForm({ ...form, due_date: value })}
+                  className="input-field"
+                />
               </div>
             </div>
 
             {/* Row 4: Project, Quotation */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">工程項目</label>
-                <select value={form.project_id} onChange={e => setForm({ ...form, project_id: e.target.value })} className="input-field">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  工程項目
+                </label>
+                <select
+                  value={form.project_id}
+                  onChange={(e) =>
+                    setForm({ ...form, project_id: e.target.value })
+                  }
+                  className="input-field"
+                >
                   <option value="">— 無 —</option>
-                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.project_no} - {p.project_name}</option>)}
+                  {projects.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.project_no} - {p.project_name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">關聯報價單</label>
-                <select value={form.quotation_id} onChange={e => setForm({ ...form, quotation_id: e.target.value })} className="input-field">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  關聯報價單
+                </label>
+                <select
+                  value={form.quotation_id}
+                  onChange={(e) =>
+                    setForm({ ...form, quotation_id: e.target.value })
+                  }
+                  className="input-field"
+                >
                   <option value="">— 無 —</option>
-                  {quotations.map((q: any) => <option key={q.id} value={q.id}>{q.quotation_no}{q.project_name ? ` - ${q.project_name}` : ''}</option>)}
+                  {quotations.map((q: any) => (
+                    <option key={q.id} value={q.id}>
+                      {q.quotation_no}
+                      {q.project_name ? ` - ${q.project_name}` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -386,58 +703,161 @@ export default function InvoicesPage() {
             {/* Row 5: Retention Rate, Payment Terms */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">保留金 (%)</label>
-                <input type="number" value={form.retention_rate} onChange={e => setForm({ ...form, retention_rate: e.target.value })} className="input-field" min="0" max="100" step="0.01" placeholder="0" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  保留金 (%)
+                </label>
+                <input
+                  type="number"
+                  value={form.retention_rate}
+                  onChange={(e) =>
+                    setForm({ ...form, retention_rate: e.target.value })
+                  }
+                  className="input-field"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="0"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">付款條件</label>
-                <input type="text" value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} className="input-field" placeholder="例如：30天內付款" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款條件
+                </label>
+                <input
+                  type="text"
+                  value={form.payment_terms}
+                  onChange={(e) =>
+                    setForm({ ...form, payment_terms: e.target.value })
+                  }
+                  className="input-field"
+                  placeholder="例如：30天內付款"
+                />
               </div>
             </div>
 
             {/* Remarks */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
-              <textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} className="input-field" rows={2} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                備註
+              </label>
+              <textarea
+                value={form.remarks}
+                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                className="input-field"
+                rows={2}
+              />
             </div>
 
             {/* Invoice Items */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">發票項目</label>
-                <button type="button" onClick={addItem} className="text-sm text-primary-600 hover:text-primary-700">+ 新增項目</button>
+                <label className="block text-sm font-medium text-gray-700">
+                  發票項目
+                </label>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="text-sm text-primary-600 hover:text-primary-700"
+                >
+                  + 新增項目
+                </button>
               </div>
               <div className="space-y-3">
                 {form.items.map((item: any, idx: number) => (
-                  <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <div
+                    key={idx}
+                    className="border border-gray-200 rounded-lg p-3 space-y-2"
+                  >
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        {idx === 0 && <label className="block text-xs text-gray-500 mb-1">項目標題</label>}
-                        <input type="text" value={item.item_name} onChange={e => updateItem(idx, 'item_name', e.target.value)} className="input-field text-sm" placeholder="項目標題（選填）" />
+                        {idx === 0 && (
+                          <label className="block text-xs text-gray-500 mb-1">
+                            項目標題
+                          </label>
+                        )}
+                        <input
+                          type="text"
+                          value={item.item_name}
+                          onChange={(e) =>
+                            updateItem(idx, 'item_name', e.target.value)
+                          }
+                          className="input-field text-sm"
+                          placeholder="項目標題（選填）"
+                        />
                       </div>
                       <div className="w-8 flex items-end pb-1">
-                        <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-sm" title="刪除">✕</button>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="text-red-400 hover:text-red-600 text-sm"
+                          title="刪除"
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
                     <div>
-                      <input type="text" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} className="input-field text-sm" placeholder="項目描述（選填）" />
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) =>
+                          updateItem(idx, 'description', e.target.value)
+                        }
+                        className="input-field text-sm"
+                        placeholder="項目描述（選填）"
+                      />
                     </div>
                     <div className="grid grid-cols-4 gap-2">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">數量</label>
-                        <input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="input-field text-sm text-right" min="0" step="0.01" />
+                        <label className="block text-xs text-gray-500 mb-1">
+                          數量
+                        </label>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateItem(idx, 'quantity', e.target.value)
+                          }
+                          className="input-field text-sm text-right"
+                          min="0"
+                          step="0.01"
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">單位</label>
-                        <input type="text" value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} className="input-field text-sm" />
+                        <label className="block text-xs text-gray-500 mb-1">
+                          單位
+                        </label>
+                        <input
+                          type="text"
+                          value={item.unit}
+                          onChange={(e) =>
+                            updateItem(idx, 'unit', e.target.value)
+                          }
+                          className="input-field text-sm"
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">單價</label>
-                        <input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} className="input-field text-sm text-right" min="0" step="0.01" />
+                        <label className="block text-xs text-gray-500 mb-1">
+                          單價
+                        </label>
+                        <input
+                          type="number"
+                          value={item.unit_price}
+                          onChange={(e) =>
+                            updateItem(idx, 'unit_price', e.target.value)
+                          }
+                          className="input-field text-sm text-right"
+                          min="0"
+                          step="0.01"
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">金額</label>
-                        <div className="input-field text-sm text-right bg-gray-50">{fmt$(itemAmount(item))}</div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          金額
+                        </label>
+                        <div className="input-field text-sm text-right bg-gray-50">
+                          {fmt$(itemAmount(item))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -448,16 +868,47 @@ export default function InvoicesPage() {
             {/* Other Charges */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">其他費用</label>
-                <button type="button" onClick={addCharge} className="text-sm text-primary-600 hover:text-primary-700">+ 新增費用</button>
+                <label className="block text-sm font-medium text-gray-700">
+                  其他費用
+                </label>
+                <button
+                  type="button"
+                  onClick={addCharge}
+                  className="text-sm text-primary-600 hover:text-primary-700"
+                >
+                  + 新增費用
+                </button>
               </div>
               {form.other_charges.length > 0 && (
                 <div className="space-y-2">
                   {form.other_charges.map((charge: any, idx: number) => (
                     <div key={idx} className="flex gap-2 items-center">
-                      <input type="text" value={charge.name} onChange={e => updateCharge(idx, 'name', e.target.value)} className="input-field text-sm flex-1" placeholder="費用名稱（如：油費、維修費）" />
-                      <input type="number" value={charge.amount} onChange={e => updateCharge(idx, 'amount', e.target.value)} className="input-field text-sm w-32 text-right" placeholder="金額（可負數）" step="0.01" />
-                      <button type="button" onClick={() => removeCharge(idx)} className="text-red-400 hover:text-red-600 text-sm">✕</button>
+                      <input
+                        type="text"
+                        value={charge.name}
+                        onChange={(e) =>
+                          updateCharge(idx, 'name', e.target.value)
+                        }
+                        className="input-field text-sm flex-1"
+                        placeholder="費用名稱（如：油費、維修費）"
+                      />
+                      <input
+                        type="number"
+                        value={charge.amount}
+                        onChange={(e) =>
+                          updateCharge(idx, 'amount', e.target.value)
+                        }
+                        className="input-field text-sm w-32 text-right"
+                        placeholder="金額（可負數）"
+                        step="0.01"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCharge(idx)}
+                        className="text-red-400 hover:text-red-600 text-sm"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -476,12 +927,17 @@ export default function InvoicesPage() {
                   <span>- {fmt$(formRetention)}</span>
                 </div>
               )}
-              {form.other_charges.filter((c: any) => c.name).map((c: any, i: number) => (
-                <div key={i} className="flex justify-between text-blue-600">
-                  <span>{c.name}</span>
-                  <span>{Number(c.amount) >= 0 ? '+' : ''}{fmt$(c.amount)}</span>
-                </div>
-              ))}
+              {form.other_charges
+                .filter((c: any) => c.name)
+                .map((c: any, i: number) => (
+                  <div key={i} className="flex justify-between text-blue-600">
+                    <span>{c.name}</span>
+                    <span>
+                      {Number(c.amount) >= 0 ? '+' : ''}
+                      {fmt$(c.amount)}
+                    </span>
+                  </div>
+                ))}
               <div className="flex justify-between border-t pt-1 font-bold text-gray-900">
                 <span>總額</span>
                 <span className="text-lg">{fmt$(formTotal)}</span>
@@ -489,8 +945,17 @@ export default function InvoicesPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
-              <button onClick={() => setShowCreate(false)} className="btn-secondary">取消</button>
-              <button onClick={handleCreate} disabled={creating} className="btn-primary disabled:opacity-50">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating}
+                className="btn-primary disabled:opacity-50"
+              >
                 {creating ? '建立中...' : '建立發票'}
               </button>
             </div>

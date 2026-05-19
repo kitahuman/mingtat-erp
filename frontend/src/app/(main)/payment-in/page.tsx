@@ -1,23 +1,33 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { paymentInApi, projectsApi, contractsApi, bankAccountsApi } from '@/lib/api';
+import {
+  paymentInApi,
+  projectsApi,
+  contractsApi,
+  bankAccountsApi,
+} from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
-import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
+import InlineEditDataTable, {
+  InlineColumn,
+} from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
-const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt$ = (v: any) =>
+  `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const PAYMENT_IN_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  unpaid: { label: '未收款', color: 'bg-yellow-100 text-yellow-700' },
-  partially_paid: { label: '部分收款', color: 'bg-blue-100 text-blue-700' },
-  paid: { label: '已收款', color: 'bg-green-100 text-green-700' },
-  cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
-};
+const PAYMENT_IN_STATUS_MAP: Record<string, { label: string; color: string }> =
+  {
+    unpaid: { label: '未收款', color: 'bg-yellow-100 text-yellow-700' },
+    partially_paid: { label: '部分收款', color: 'bg-blue-100 text-blue-700' },
+    paid: { label: '已收款', color: 'bg-green-100 text-green-700' },
+    cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
+  };
 
 const SOURCE_TYPE_OPTIONS = [
   { value: 'payment_certificate', label: 'Payment Certificate' },
@@ -98,34 +108,76 @@ export default function PaymentInPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, sourceFilter, projectFilter, contractFilter, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [
+    page,
+    sourceFilter,
+    projectFilter,
+    contractFilter,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+  ]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   useEffect(() => {
-    projectsApi.list({ limit: 500 }).then(r => setProjects(r.data?.data || [])).catch(() => {});
-    contractsApi.list({ limit: 500 }).then(r => setContracts(r.data?.data || [])).catch(() => {});
-    bankAccountsApi.simple().then(r => setBankAccounts(r.data || [])).catch(() => {});
+    projectsApi
+      .list({ limit: 500 })
+      .then((r) => setProjects(r.data?.data || []))
+      .catch(() => {});
+    contractsApi
+      .list({ limit: 500 })
+      .then((r) => setContracts(r.data?.data || []))
+      .catch(() => {});
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts(r.data || []))
+      .catch(() => {});
   }, []);
 
-  const projectOptions = useMemo(() =>
-    projects.map(p => ({ value: p.id, label: `${p.project_no} ${p.project_name}` })),
-    [projects]
+  useRefetchOnFocus(() => {
+    projectsApi
+      .list({ limit: 500 })
+      .then((r) => setProjects(r.data?.data || []))
+      .catch(() => {});
+    contractsApi
+      .list({ limit: 500 })
+      .then((r) => setContracts(r.data?.data || []))
+      .catch(() => {});
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts(r.data || []))
+      .catch(() => {});
+  });
+
+  const projectOptions = useMemo(
+    () =>
+      projects.map((p) => ({
+        value: p.id,
+        label: `${p.project_no} ${p.project_name}`,
+      })),
+    [projects],
   );
 
-  const contractOptions = useMemo(() =>
-    contracts.map(c => ({ value: c.id, label: `${c.contract_no} ${c.contract_name}` })),
-    [contracts]
+  const contractOptions = useMemo(
+    () =>
+      contracts.map((c) => ({
+        value: c.id,
+        label: `${c.contract_no} ${c.contract_name}`,
+      })),
+    [contracts],
   );
 
-  const bankAccountOptions = useMemo(() =>
-    bankAccounts.map(ba => ({
-      value: ba.id,
-      label: `${ba.bank_name} - ${ba.account_name} (${ba.account_no})`,
-    })),
-    [bankAccounts]
+  const bankAccountOptions = useMemo(
+    () =>
+      bankAccounts.map((ba) => ({
+        value: ba.id,
+        label: `${ba.bank_name} - ${ba.account_name} (${ba.account_no})`,
+      })),
+    [bankAccounts],
   );
 
   const handleCreate = async () => {
@@ -138,7 +190,9 @@ export default function PaymentInPage() {
         project_id: form.project_id ? Number(form.project_id) : null,
         contract_id: form.contract_id ? Number(form.contract_id) : null,
         source_ref_id: form.source_ref_id ? Number(form.source_ref_id) : null,
-        bank_account_id: form.bank_account_id ? Number(form.bank_account_id) : null,
+        bank_account_id: form.bank_account_id
+          ? Number(form.bank_account_id)
+          : null,
       });
       setShowCreate(false);
       setForm(defaultForm);
@@ -152,10 +206,20 @@ export default function PaymentInPage() {
 
   const handleSave = async (id: number, updated: any) => {
     const payload: any = { ...updated };
-    if (payload.amount !== undefined) payload.amount = parseFloat(payload.amount);
-    if (payload.project_id !== undefined) payload.project_id = payload.project_id ? Number(payload.project_id) : null;
-    if (payload.contract_id !== undefined) payload.contract_id = payload.contract_id ? Number(payload.contract_id) : null;
-    if (payload.bank_account_id !== undefined) payload.bank_account_id = payload.bank_account_id ? Number(payload.bank_account_id) : null;
+    if (payload.amount !== undefined)
+      payload.amount = parseFloat(payload.amount);
+    if (payload.project_id !== undefined)
+      payload.project_id = payload.project_id
+        ? Number(payload.project_id)
+        : null;
+    if (payload.contract_id !== undefined)
+      payload.contract_id = payload.contract_id
+        ? Number(payload.contract_id)
+        : null;
+    if (payload.bank_account_id !== undefined)
+      payload.bank_account_id = payload.bank_account_id
+        ? Number(payload.bank_account_id)
+        : null;
     await paymentInApi.update(id, payload);
     fetchData();
   };
@@ -187,7 +251,9 @@ export default function PaymentInPage() {
       editType: 'select',
       editOptions: SOURCE_TYPE_OPTIONS,
       render: (v: any) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_TYPE_COLORS[v] || 'bg-gray-100 text-gray-700'}`}>
+        <span
+          className={`px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_TYPE_COLORS[v] || 'bg-gray-100 text-gray-700'}`}
+        >
           {SOURCE_TYPE_LABELS[v] || v}
         </span>
       ),
@@ -196,32 +262,48 @@ export default function PaymentInPage() {
       key: 'contract',
       label: '合約',
       editable: false,
-      render: (_: any, row: any) => row.contract ? (
-        <span className="text-xs">{row.contract.contract_no}</span>
-      ) : <span className="text-gray-400">-</span>,
+      render: (_: any, row: any) =>
+        row.contract ? (
+          <span className="text-xs">{row.contract.contract_no}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
     },
     {
       key: 'project',
       label: '項目',
       editable: false,
-      render: (_: any, row: any) => row.project ? (
-        <span className="text-xs">{row.project.project_no}</span>
-      ) : <span className="text-gray-400">-</span>,
+      render: (_: any, row: any) =>
+        row.project ? (
+          <span className="text-xs">{row.project.project_no}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
     },
     {
       key: 'bank_account_id',
       label: '銀行帳戶',
       editType: 'select',
       editOptions: [{ value: '', label: '（未指定）' }, ...bankAccountOptions],
-      render: (_: any, row: any) => row.bank_account ? (
-        <span className="text-xs">{row.bank_account.bank_name} - {row.bank_account.account_no}</span>
-      ) : <span className="text-gray-400">-</span>,
+      render: (_: any, row: any) =>
+        row.bank_account ? (
+          <span className="text-xs">
+            {row.bank_account.bank_name} - {row.bank_account.account_no}
+          </span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
     },
     {
       key: 'reference_no',
       label: '支票/交易號碼',
       editType: 'text',
-      render: (v: any) => v ? <span className="font-mono text-xs">{v}</span> : <span className="text-gray-400">-</span>,
+      render: (v: any) =>
+        v ? (
+          <span className="font-mono text-xs">{v}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
     },
     {
       key: 'payment_in_status',
@@ -236,7 +318,9 @@ export default function PaymentInPage() {
       render: (v: any) => {
         const s = PAYMENT_IN_STATUS_MAP[v] || PAYMENT_IN_STATUS_MAP.unpaid;
         return (
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}
+          >
             {s.label}
           </span>
         );
@@ -250,13 +334,22 @@ export default function PaymentInPage() {
     },
   ];
 
-  const { columnConfigs, handleColumnConfigChange, handleReset, columnWidths, handleColumnResize } = useColumnConfig('payment-in', columns);
+  const {
+    columnConfigs,
+    handleColumnConfigChange,
+    handleReset,
+    columnWidths,
+    handleColumnResize,
+  } = useColumnConfig('payment-in', columns);
 
   const filters = (
     <div className="flex flex-wrap gap-2 items-center">
       <select
         value={statusFilter}
-        onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setStatusFilter(e.target.value);
+          setPage(1);
+        }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
         <option value="">全部狀態</option>
@@ -267,48 +360,84 @@ export default function PaymentInPage() {
       </select>
       <select
         value={sourceFilter}
-        onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setSourceFilter(e.target.value);
+          setPage(1);
+        }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
         <option value="">全部來源</option>
-        {SOURCE_TYPE_OPTIONS.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+        {SOURCE_TYPE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
       <select
         value={contractFilter}
-        onChange={e => { setContractFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setContractFilter(e.target.value);
+          setPage(1);
+        }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
         <option value="">全部合約</option>
-        {contractOptions.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+        {contractOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
       <select
         value={projectFilter}
-        onChange={e => { setProjectFilter(e.target.value); setPage(1); }}
+        onChange={(e) => {
+          setProjectFilter(e.target.value);
+          setPage(1);
+        }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
         <option value="">全部項目</option>
-        {projectOptions.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+        {projectOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
       <div className="flex items-center gap-1 text-sm">
-        <DateInput value={dateFrom}
-          onChange={val => { setDateFrom(val || ''); setPage(1); }}
+        <DateInput
+          value={dateFrom}
+          onChange={(val) => {
+            setDateFrom(val || '');
+            setPage(1);
+          }}
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
         <span className="text-gray-400">~</span>
-        <DateInput value={dateTo}
-          onChange={val => { setDateTo(val || ''); setPage(1); }}
+        <DateInput
+          value={dateTo}
+          onChange={(val) => {
+            setDateTo(val || '');
+            setPage(1);
+          }}
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
-      {(statusFilter || sourceFilter || projectFilter || contractFilter || dateFrom || dateTo) && (
+      {(statusFilter ||
+        sourceFilter ||
+        projectFilter ||
+        contractFilter ||
+        dateFrom ||
+        dateTo) && (
         <button
-          onClick={() => { setStatusFilter(''); setSourceFilter(''); setProjectFilter(''); setContractFilter(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+          onClick={() => {
+            setStatusFilter('');
+            setSourceFilter('');
+            setProjectFilter('');
+            setContractFilter('');
+            setDateFrom('');
+            setDateTo('');
+            setPage(1);
+          }}
           className="text-xs text-gray-500 hover:text-red-500"
         >
           清除篩選
@@ -322,7 +451,9 @@ export default function PaymentInPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">收款記錄</h1>
-          <p className="text-gray-500 text-sm mt-1">管理所有收款記錄，包括 Payment Certificate、扣留金釋放及其他收入</p>
+          <p className="text-gray-500 text-sm mt-1">
+            管理所有收款記錄，包括 Payment Certificate、扣留金釋放及其他收入
+          </p>
         </div>
         <button onClick={() => setShowCreate(true)} className="btn-primary">
           + 新增收款
@@ -342,7 +473,11 @@ export default function PaymentInPage() {
         loading={loading}
         sortBy={sortBy}
         sortOrder={sortOrder}
-        onSort={(f, o) => { setSortBy(f); setSortOrder(o); setPage(1); }}
+        onSort={(f, o) => {
+          setSortBy(f);
+          setSortOrder(o);
+          setPage(1);
+        }}
         onSave={handleSave}
         onDelete={handleDelete}
         onRowClick={(row: any) => router.push(`/payment-in/${row.id}`)}
@@ -355,23 +490,33 @@ export default function PaymentInPage() {
       />
 
       {/* Create Modal */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="新增收款記錄" size="lg">
+      <Modal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="新增收款記錄"
+        size="lg"
+      >
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">日期 *</label>
-              <DateInput value={form.date}
-                onChange={val => setForm({ ...form, date: val || '' })}
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                日期 *
+              </label>
+              <DateInput
+                value={form.date}
+                onChange={(val) => setForm({ ...form, date: val || '' })}
                 className="input-field"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">金額 *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                金額 *
+              </label>
               <input
                 type="number"
                 step="0.01"
                 value={form.amount}
-                onChange={e => setForm({ ...form, amount: e.target.value })}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 className="input-field"
                 placeholder="0.00"
               />
@@ -379,23 +524,33 @@ export default function PaymentInPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">來源類型</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                來源類型
+              </label>
               <select
                 value={form.source_type}
-                onChange={e => setForm({ ...form, source_type: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, source_type: e.target.value })
+                }
                 className="input-field"
               >
-                {SOURCE_TYPE_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                {SOURCE_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">來源參考 ID</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                來源參考 ID
+              </label>
               <input
                 type="number"
                 value={form.source_ref_id}
-                onChange={e => setForm({ ...form, source_ref_id: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, source_ref_id: e.target.value })
+                }
                 className="input-field"
                 placeholder="選填"
               />
@@ -403,17 +558,23 @@ export default function PaymentInPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">合約</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                合約
+              </label>
               <SearchableSelect
                 value={form.contract_id ? Number(form.contract_id) : null}
-                onChange={(v: any) => setForm({ ...form, contract_id: v || '' })}
+                onChange={(v: any) =>
+                  setForm({ ...form, contract_id: v || '' })
+                }
                 options={contractOptions}
                 placeholder="選擇合約"
                 clearable
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">項目</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                項目
+              </label>
               <SearchableSelect
                 value={form.project_id ? Number(form.project_id) : null}
                 onChange={(v: any) => setForm({ ...form, project_id: v || '' })}
@@ -425,21 +586,31 @@ export default function PaymentInPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">銀行帳戶</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                銀行帳戶
+              </label>
               <SearchableSelect
-                value={form.bank_account_id ? Number(form.bank_account_id) : null}
-                onChange={(v: any) => setForm({ ...form, bank_account_id: v || '' })}
+                value={
+                  form.bank_account_id ? Number(form.bank_account_id) : null
+                }
+                onChange={(v: any) =>
+                  setForm({ ...form, bank_account_id: v || '' })
+                }
                 options={bankAccountOptions}
                 placeholder="選擇銀行帳戶"
                 clearable
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">支票/交易號碼</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                支票/交易號碼
+              </label>
               <input
                 type="text"
                 value={form.reference_no}
-                onChange={e => setForm({ ...form, reference_no: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, reference_no: e.target.value })
+                }
                 className="input-field"
                 placeholder="選填"
               />
@@ -447,10 +618,14 @@ export default function PaymentInPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                狀態
+              </label>
               <select
                 value={form.payment_in_status}
-                onChange={e => setForm({ ...form, payment_in_status: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, payment_in_status: e.target.value })
+                }
                 className="input-field"
               >
                 <option value="unpaid">未收款</option>
@@ -460,19 +635,30 @@ export default function PaymentInPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                備註
+              </label>
               <input
                 type="text"
                 value={form.remarks}
-                onChange={e => setForm({ ...form, remarks: e.target.value })}
+                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
                 className="input-field"
                 placeholder="選填"
               />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setShowCreate(false)} className="btn-secondary">取消</button>
-            <button onClick={handleCreate} disabled={creating} className="btn-primary disabled:opacity-50">
+            <button
+              onClick={() => setShowCreate(false)}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="btn-primary disabled:opacity-50"
+            >
               {creating ? '建立中...' : '建立'}
             </button>
           </div>

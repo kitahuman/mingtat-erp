@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
 import { fmtDate } from '@/lib/dateUtils';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const STATUS_LABELS: Record<string, string> = {
   preparing: '準備中',
@@ -38,9 +39,18 @@ export default function PayrollRecordsPage() {
   const [employees, setEmployees] = useState<any[]>([]);
 
   useEffect(() => {
-    companiesApi.simple().then(res => setCompanies(res.data));
-    employeesApi.list({ limit: 999 }).then(res => setEmployees(res.data.data || []));
+    companiesApi.simple().then((res) => setCompanies(res.data));
+    employeesApi
+      .list({ limit: 999 })
+      .then((res) => setEmployees(res.data.data || []));
   }, []);
+
+  useRefetchOnFocus(() => {
+    companiesApi.simple().then((res) => setCompanies(res.data));
+    employeesApi
+      .list({ limit: 999 })
+      .then((res) => setEmployees(res.data.data || []));
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -61,30 +71,108 @@ export default function PayrollRecordsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [page, period, companyId, statusFilter, employeeId, search, sortBy, sortOrder]);
+  useEffect(() => {
+    loadData();
+  }, [
+    page,
+    period,
+    companyId,
+    statusFilter,
+    employeeId,
+    search,
+    sortBy,
+    sortOrder,
+  ]);
 
   const columns = [
     { key: 'period', label: '月份', sortable: true },
-    { key: 'employee', label: '員工', render: (_v: any, row: any) => (
-      <div>
-        <div className="font-medium">{row.employee?.name_zh}</div>
-        <div className="text-xs text-gray-500">{row.employee?.emp_code}</div>
-      </div>
-    )},
-    { key: 'company', label: '公司', render: (_v: any, row: any) => row.employee?.company?.internal_prefix || row.employee?.company?.name || '-' },
-    { key: 'salary_type', label: '類型', render: (_v: any, row: any) => row.salary_type === 'daily' ? '日薪' : '月薪' },
-    { key: 'base_amount', label: '底薪', render: (_v: any, row: any) => `$${Number(row.base_amount).toLocaleString()}`, className: 'text-right font-mono' },
-    { key: 'allowance_total', label: '津貼', render: (_v: any, row: any) => `$${Number(row.allowance_total).toLocaleString()}`, className: 'text-right font-mono' },
-    { key: 'ot_total', label: 'OT', render: (_v: any, row: any) => `$${Number(row.ot_total).toLocaleString()}`, className: 'text-right font-mono' },
-    { key: 'mpf_deduction', label: '強積金', render: (_v: any, row: any) => <span className="text-red-600">-${Number(row.mpf_deduction).toLocaleString()}</span>, className: 'text-right font-mono' },
-    { key: 'net_amount', label: '淨額', sortable: true, render: (_v: any, row: any) => <span className="font-bold">${Number(row.net_amount).toLocaleString()}</span>, className: 'text-right font-mono' },
-    { key: 'status', label: '狀態', render: (_v: any, row: any) => (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.status] || ''}`}>
-        {STATUS_LABELS[row.status] || row.status}
-      </span>
-    )},
-    { key: 'payment_date', label: '付款日期', render: (_v: any, row: any) => fmtDate(row.payment_date) },
-    { key: 'cheque_number', label: '支票號碼', render: (_v: any, row: any) => row.cheque_number || '-' },
+    {
+      key: 'employee',
+      label: '員工',
+      render: (_v: any, row: any) => (
+        <div>
+          <div className="font-medium">{row.employee?.name_zh}</div>
+          <div className="text-xs text-gray-500">{row.employee?.emp_code}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'company',
+      label: '公司',
+      render: (_v: any, row: any) =>
+        row.employee?.company?.internal_prefix ||
+        row.employee?.company?.name ||
+        '-',
+    },
+    {
+      key: 'salary_type',
+      label: '類型',
+      render: (_v: any, row: any) =>
+        row.salary_type === 'daily' ? '日薪' : '月薪',
+    },
+    {
+      key: 'base_amount',
+      label: '底薪',
+      render: (_v: any, row: any) =>
+        `$${Number(row.base_amount).toLocaleString()}`,
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'allowance_total',
+      label: '津貼',
+      render: (_v: any, row: any) =>
+        `$${Number(row.allowance_total).toLocaleString()}`,
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'ot_total',
+      label: 'OT',
+      render: (_v: any, row: any) =>
+        `$${Number(row.ot_total).toLocaleString()}`,
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'mpf_deduction',
+      label: '強積金',
+      render: (_v: any, row: any) => (
+        <span className="text-red-600">
+          -${Number(row.mpf_deduction).toLocaleString()}
+        </span>
+      ),
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'net_amount',
+      label: '淨額',
+      sortable: true,
+      render: (_v: any, row: any) => (
+        <span className="font-bold">
+          ${Number(row.net_amount).toLocaleString()}
+        </span>
+      ),
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'status',
+      label: '狀態',
+      render: (_v: any, row: any) => (
+        <span
+          className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.status] || ''}`}
+        >
+          {STATUS_LABELS[row.status] || row.status}
+        </span>
+      ),
+    },
+    {
+      key: 'payment_date',
+      label: '付款日期',
+      render: (_v: any, row: any) => fmtDate(row.payment_date),
+    },
+    {
+      key: 'cheque_number',
+      label: '支票號碼',
+      render: (_v: any, row: any) => row.cheque_number || '-',
+    },
   ];
 
   return (
@@ -100,45 +188,70 @@ export default function PayrollRecordsPage() {
       <div className="card mb-4">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">月份</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              月份
+            </label>
             <input
               type="month"
               value={period}
-              onChange={e => { setPeriod(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setPeriod(e.target.value);
+                setPage(1);
+              }}
               className="input-field w-40"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">公司</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              公司
+            </label>
             <select
               value={companyId}
-              onChange={e => { setCompanyId(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setCompanyId(e.target.value);
+                setPage(1);
+              }}
               className="input-field w-48"
             >
               <option value="">全部公司</option>
               {companies.map((cp: any) => (
-                <option key={cp.id} value={cp.id}>{cp.internal_prefix ? cp.internal_prefix + ' - ' : ''}{cp.name}</option>
+                <option key={cp.id} value={cp.id}>
+                  {cp.internal_prefix ? cp.internal_prefix + ' - ' : ''}
+                  {cp.name}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">員工</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              員工
+            </label>
             <select
               value={employeeId}
-              onChange={e => { setEmployeeId(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setEmployeeId(e.target.value);
+                setPage(1);
+              }}
               className="input-field w-48"
             >
               <option value="">全部員工</option>
               {employees.map((emp: any) => (
-                <option key={emp.id} value={emp.id}>{emp.name_zh} ({emp.emp_code || emp.id})</option>
+                <option key={emp.id} value={emp.id}>
+                  {emp.name_zh} ({emp.emp_code || emp.id})
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">狀態</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              狀態
+            </label>
             <select
               value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
               className="input-field w-36"
             >
               <option value="">全部</option>
@@ -150,7 +263,13 @@ export default function PayrollRecordsPage() {
           </div>
           {(period || companyId || employeeId || statusFilter) && (
             <button
-              onClick={() => { setPeriod(''); setCompanyId(''); setEmployeeId(''); setStatusFilter(''); setPage(1); }}
+              onClick={() => {
+                setPeriod('');
+                setCompanyId('');
+                setEmployeeId('');
+                setStatusFilter('');
+                setPage(1);
+              }}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
               清除篩選
@@ -160,20 +279,26 @@ export default function PayrollRecordsPage() {
       </div>
 
       <DataTable
-          exportFilename="糧單記錄"
+        exportFilename="糧單記錄"
         columns={columns}
         data={data}
         total={total}
         page={page}
         limit={limit}
         onPageChange={setPage}
-        onSearch={(s) => { setSearch(s); setPage(1); }}
+        onSearch={(s) => {
+          setSearch(s);
+          setPage(1);
+        }}
         searchPlaceholder="搜尋員工姓名/編號..."
         onRowClick={(row) => router.push(`/payroll/${row.id}`)}
         loading={loading}
         sortBy={sortBy}
         sortOrder={sortOrder}
-        onSort={(key, order) => { setSortBy(key); setSortOrder(order as 'ASC' | 'DESC'); }}
+        onSort={(key, order) => {
+          setSortBy(key);
+          setSortOrder(order as 'ASC' | 'DESC');
+        }}
       />
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Modal from '@/components/Modal';
 import { attendancesApi, employeesApi } from '@/lib/api';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 interface AttendanceEditModalProps {
   isOpen: boolean;
@@ -42,42 +43,58 @@ export default function AttendanceEditModal({
 
   // Load employees list
   useEffect(() => {
-    employeesApi.list({ limit: 999 }).then(res => {
-      setEmployees(res.data.data || []);
-    }).catch(() => {});
+    employeesApi
+      .list({ limit: 999 })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
   }, []);
+
+  useRefetchOnFocus(() => {
+    employeesApi
+      .list({ limit: 999 })
+      .then((res) => {
+        setEmployees(res.data.data || []);
+      })
+      .catch(() => {});
+  });
 
   // Load record when modal opens
   useEffect(() => {
     if (!isOpen || !recordId) return;
     setLoading(true);
-    attendancesApi.get(recordId).then(res => {
-      const r = res.data;
-      setRecord(r);
-      setEmployeeId(r.employee_id || '');
-      setEmpCode(r.employee?.emp_code || '');
-      setType(r.type || 'clock_in');
-      // Convert timestamp to local datetime-local format
-      if (r.timestamp) {
-        const d = new Date(r.timestamp);
-        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-          .toISOString()
-          .slice(0, 16);
-        setTimestamp(local);
-      } else {
-        setTimestamp('');
-      }
-      setAddress(r.address || '');
-      setRemarks(r.remarks || '');
-      setWorkNotes(r.work_notes || '');
-      setIsMidShift(r.is_mid_shift || false);
-      setLatitude(r.latitude != null ? String(r.latitude) : '');
-      setLongitude(r.longitude != null ? String(r.longitude) : '');
-      setEmpSearch('');
-    }).catch(() => {
-      alert('載入打卡記錄失敗');
-      onClose();
-    }).finally(() => setLoading(false));
+    attendancesApi
+      .get(recordId)
+      .then((res) => {
+        const r = res.data;
+        setRecord(r);
+        setEmployeeId(r.employee_id || '');
+        setEmpCode(r.employee?.emp_code || '');
+        setType(r.type || 'clock_in');
+        // Convert timestamp to local datetime-local format
+        if (r.timestamp) {
+          const d = new Date(r.timestamp);
+          const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+          setTimestamp(local);
+        } else {
+          setTimestamp('');
+        }
+        setAddress(r.address || '');
+        setRemarks(r.remarks || '');
+        setWorkNotes(r.work_notes || '');
+        setIsMidShift(r.is_mid_shift || false);
+        setLatitude(r.latitude != null ? String(r.latitude) : '');
+        setLongitude(r.longitude != null ? String(r.longitude) : '');
+        setEmpSearch('');
+      })
+      .catch(() => {
+        alert('載入打卡記錄失敗');
+        onClose();
+      })
+      .finally(() => setLoading(false));
   }, [isOpen, recordId]);
 
   // When employee is selected, auto-fill emp_code
@@ -87,7 +104,7 @@ export default function AttendanceEditModal({
       setEmpCode('');
       return;
     }
-    const emp = employees.find(e => e.id === Number(id));
+    const emp = employees.find((e) => e.id === Number(id));
     if (emp) {
       setEmpCode(emp.emp_code || '');
     }
@@ -113,7 +130,9 @@ export default function AttendanceEditModal({
       onSaved();
       onClose();
     } catch (e: any) {
-      alert('儲存失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'));
+      alert(
+        '儲存失敗：' + (e?.response?.data?.message || e?.message || '未知錯誤'),
+      );
     } finally {
       setSaving(false);
     }
@@ -121,14 +140,17 @@ export default function AttendanceEditModal({
 
   // Filter employees for search
   const filteredEmployees = empSearch
-    ? employees.filter(e =>
-        (e.name_zh || '').includes(empSearch) ||
-        (e.name_en || '').toLowerCase().includes(empSearch.toLowerCase()) ||
-        (e.emp_code || '').toLowerCase().includes(empSearch.toLowerCase())
+    ? employees.filter(
+        (e) =>
+          (e.name_zh || '').includes(empSearch) ||
+          (e.name_en || '').toLowerCase().includes(empSearch.toLowerCase()) ||
+          (e.emp_code || '').toLowerCase().includes(empSearch.toLowerCase()),
       )
     : employees;
 
-  const selectedEmployee = employeeId ? employees.find(e => e.id === Number(employeeId)) : null;
+  const selectedEmployee = employeeId
+    ? employees.find((e) => e.id === Number(employeeId))
+    : null;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="編輯打卡記錄" size="lg">
@@ -146,18 +168,22 @@ export default function AttendanceEditModal({
                 <input
                   type="text"
                   value={empSearch}
-                  onChange={e => setEmpSearch(e.target.value)}
+                  onChange={(e) => setEmpSearch(e.target.value)}
                   placeholder="搜尋員工姓名或編號..."
                   className="input-field text-sm w-full mb-1"
                 />
                 <select
                   value={employeeId}
-                  onChange={e => handleEmployeeChange(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    handleEmployeeChange(
+                      e.target.value === '' ? '' : Number(e.target.value),
+                    )
+                  }
                   className="input-field text-sm w-full"
                   size={Math.min(filteredEmployees.length + 1, 6)}
                 >
                   <option value="">-- 選擇員工 --</option>
-                  {filteredEmployees.map(emp => (
+                  {filteredEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.emp_code ? `[${emp.emp_code}] ` : '[臨時] '}
                       {emp.name_zh || emp.name_en}
@@ -167,7 +193,9 @@ export default function AttendanceEditModal({
                 </select>
               </div>
               <div className="w-36">
-                <label className="block text-xs text-gray-500 mb-1">員工編號（自動帶入）</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  員工編號（自動帶入）
+                </label>
                 <input
                   type="text"
                   value={empCode}
@@ -181,7 +209,9 @@ export default function AttendanceEditModal({
               <p className="text-xs text-gray-500 mt-1">
                 已選：{selectedEmployee.name_zh || selectedEmployee.name_en}
                 {selectedEmployee.employee_is_temporary && (
-                  <span className="ml-1 text-amber-600 font-bold">（臨時員工）</span>
+                  <span className="ml-1 text-amber-600 font-bold">
+                    （臨時員工）
+                  </span>
                 )}
                 {selectedEmployee.role && ` · ${selectedEmployee.role}`}
               </p>
@@ -191,25 +221,31 @@ export default function AttendanceEditModal({
           <div className="grid grid-cols-2 gap-4">
             {/* Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">打卡類型</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                打卡類型
+              </label>
               <select
                 value={type}
-                onChange={e => setType(e.target.value)}
+                onChange={(e) => setType(e.target.value)}
                 className="input-field text-sm w-full"
               >
-                {TYPE_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                {TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
                 ))}
               </select>
             </div>
 
             {/* Timestamp */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">打卡時間</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                打卡時間
+              </label>
               <input
                 type="datetime-local"
                 value={timestamp}
-                onChange={e => setTimestamp(e.target.value)}
+                onChange={(e) => setTimestamp(e.target.value)}
                 className="input-field text-sm w-full"
               />
             </div>
@@ -217,11 +253,13 @@ export default function AttendanceEditModal({
 
           {/* Address */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">地址</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              地址
+            </label>
             <input
               type="text"
               value={address}
-              onChange={e => setAddress(e.target.value)}
+              onChange={(e) => setAddress(e.target.value)}
               className="input-field text-sm w-full"
               placeholder="打卡地址"
             />
@@ -230,24 +268,28 @@ export default function AttendanceEditModal({
           <div className="grid grid-cols-2 gap-4">
             {/* Latitude */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">緯度</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                緯度
+              </label>
               <input
                 type="number"
                 step="any"
                 value={latitude}
-                onChange={e => setLatitude(e.target.value)}
+                onChange={(e) => setLatitude(e.target.value)}
                 className="input-field text-sm w-full"
                 placeholder="緯度"
               />
             </div>
             {/* Longitude */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">經度</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                經度
+              </label>
               <input
                 type="number"
                 step="any"
                 value={longitude}
-                onChange={e => setLongitude(e.target.value)}
+                onChange={(e) => setLongitude(e.target.value)}
                 className="input-field text-sm w-full"
                 placeholder="經度"
               />
@@ -256,11 +298,13 @@ export default function AttendanceEditModal({
 
           {/* Work Notes */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">工作備註</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              工作備註
+            </label>
             <input
               type="text"
               value={workNotes}
-              onChange={e => setWorkNotes(e.target.value)}
+              onChange={(e) => setWorkNotes(e.target.value)}
               className="input-field text-sm w-full"
               placeholder="工作備註"
             />
@@ -268,10 +312,12 @@ export default function AttendanceEditModal({
 
           {/* Remarks */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              備註
+            </label>
             <textarea
               value={remarks}
-              onChange={e => setRemarks(e.target.value)}
+              onChange={(e) => setRemarks(e.target.value)}
               className="input-field text-sm w-full"
               rows={2}
               placeholder="備註"
@@ -284,10 +330,12 @@ export default function AttendanceEditModal({
               type="checkbox"
               id="is_mid_shift"
               checked={isMidShift}
-              onChange={e => setIsMidShift(e.target.checked)}
+              onChange={(e) => setIsMidShift(e.target.checked)}
               className="w-4 h-4 rounded border-gray-300 text-blue-600"
             />
-            <label htmlFor="is_mid_shift" className="text-sm text-gray-700">中直打卡</label>
+            <label htmlFor="is_mid_shift" className="text-sm text-gray-700">
+              中直打卡
+            </label>
           </div>
 
           {/* Action buttons */}

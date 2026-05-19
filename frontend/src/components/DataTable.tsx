@@ -52,7 +52,11 @@ interface DataTableProps {
  * 根據欄位 key 名稱和 label 自動推算合理的最小寬度（px）
  * 確保手機上表格欄位不會被壓縮
  */
-function getColMinWidth(key: string, label: string, explicitWidth?: number): number {
+function getColMinWidth(
+  key: string,
+  label: string,
+  explicitWidth?: number,
+): number {
   // 如果有明確設定的寬度，使用該寬度
   if (explicitWidth) return explicitWidth;
 
@@ -64,13 +68,35 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
 
   // ── ID / 編號類 ──────────────────────────────────────────
   if (k === 'id') return 60;
-  if (k.endsWith('_code') || k === 'emp_code' || k === 'machine_code' || k === 'code') return 90;
-  if (k.endsWith('_no') || k === 'work_order_no' || k === 'quotation_no' || k === 'contract_no' || k === 'receipt_no' || k === 'cheque_number' || k === 'br_number') return 110;
+  if (
+    k.endsWith('_code') ||
+    k === 'emp_code' ||
+    k === 'machine_code' ||
+    k === 'code'
+  )
+    return 90;
+  if (
+    k.endsWith('_no') ||
+    k === 'work_order_no' ||
+    k === 'quotation_no' ||
+    k === 'contract_no' ||
+    k === 'receipt_no' ||
+    k === 'cheque_number' ||
+    k === 'br_number'
+  )
+    return 110;
   if (k === 'plate_no' || k === 'plate_number') return 100;
   if (k === 'id_number') return 130; // 香港身份證
 
   // ── 日期類（最重要！防止日期被截斷）──────────────────────
-  if (k.endsWith('_date') || k.endsWith('_expiry') || k.endsWith('_at') || k === 'period' || k === 'date_of_birth') return 115;
+  if (
+    k.endsWith('_date') ||
+    k.endsWith('_expiry') ||
+    k.endsWith('_at') ||
+    k === 'period' ||
+    k === 'date_of_birth'
+  )
+    return 115;
   if (k.endsWith('_time') || k === 'start_time' || k === 'end_time') return 90;
 
   // ── 姓名類 ──────────────────────────────────────────────
@@ -80,27 +106,68 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
   if (k === 'display_name' || k === 'contact_person') return 110;
 
   // ── 公司 / 合作單位 / 員工 ────────────────────────────────
-  if (k === 'company' || k === 'owner_company' || k === 'company_type') return 120;
+  if (k === 'company' || k === 'owner_company' || k === 'company_type')
+    return 120;
   if (k === 'subcontractor' || k === 'subcontractor_id') return 120;
   if (k === 'employee' || k === 'publisher') return 110;
   if (k === 'client') return 110;
   if (k === 'project' || k === 'project_name' || k === 'project_no') return 120;
 
   // ── 金額類 ──────────────────────────────────────────────
-  if (k.startsWith('allowance_') || k.startsWith('ot_rate') || k === 'ot_rate_standard') return 100;
-  if (k === 'base_salary' || k === 'base_amount' || k === 'net_amount' || k === 'total_amount') return 100;
-  if (k === 'unit_price' || k === 'day_rate' || k === 'night_rate' || k === 'mid_shift_rate') return 100;
-  if (k === 'mpf_deduction' || k === 'ot_total' || k === 'allowance_total') return 100;
-  if (k.endsWith('_amount') || k.endsWith('_salary') || k.endsWith('_rate') || k.endsWith('_total')) return 100;
+  if (
+    k.startsWith('allowance_') ||
+    k.startsWith('ot_rate') ||
+    k === 'ot_rate_standard'
+  )
+    return 100;
+  if (
+    k === 'base_salary' ||
+    k === 'base_amount' ||
+    k === 'net_amount' ||
+    k === 'total_amount'
+  )
+    return 100;
+  if (
+    k === 'unit_price' ||
+    k === 'day_rate' ||
+    k === 'night_rate' ||
+    k === 'mid_shift_rate'
+  )
+    return 100;
+  if (k === 'mpf_deduction' || k === 'ot_total' || k === 'allowance_total')
+    return 100;
+  if (
+    k.endsWith('_amount') ||
+    k.endsWith('_salary') ||
+    k.endsWith('_rate') ||
+    k.endsWith('_total')
+  )
+    return 100;
 
   // ── 類型 / 狀態 / 標籤類 ──────────────────────────────────
   if (k === 'status') return 90;
-  if (k === 'role' || k === 'salary_type' || k === 'machine_type' || k === 'machine_type' || k === 'partner_type' || k === 'quotation_type') return 100;
+  if (
+    k === 'role' ||
+    k === 'salary_type' ||
+    k === 'machine_type' ||
+    k === 'machine_type' ||
+    k === 'partner_type' ||
+    k === 'quotation_type'
+  )
+    return 100;
   if (k === 'day_night' || k === 'service_type') return 90;
   if (k === 'tonnage' || k === 'tonnage') return 80;
 
   // ── 布林值（Y/N）類 ──────────────────────────────────────
-  if (k === 'is_confirmed' || k === 'is_paid' || k === 'is_piece_rate' || k === 'exclude_fuel' || k === 'has_d_cert' || k === 'is_cert_returned') return 80;
+  if (
+    k === 'is_confirmed' ||
+    k === 'is_paid' ||
+    k === 'is_piece_rate' ||
+    k === 'exclude_fuel' ||
+    k === 'has_d_cert' ||
+    k === 'is_cert_returned'
+  )
+    return 80;
   if (k.startsWith('is_') || k.startsWith('has_')) return 80;
 
   // ── 聯絡資料 ──────────────────────────────────────────────
@@ -109,20 +176,29 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
   if (k === 'address') return 160;
 
   // ── 地點 / 路線 ──────────────────────────────────────────
-  if (k === 'origin' || k === 'destination' || k === 'start_location' || k === 'end_location') return 120;
+  if (
+    k === 'origin' ||
+    k === 'destination' ||
+    k === 'start_location' ||
+    k === 'end_location'
+  )
+    return 120;
 
   // ── 車輛 / 機械 ──────────────────────────────────────────
   if (k === 'brand' || k === 'model') return 100;
   if (k === 'equipment_number') return 110;
 
   // ── 數量 / 單位 ──────────────────────────────────────────
-  if (k === 'quantity' || k === 'ot_quantity' || k === 'goods_quantity') return 80;
+  if (k === 'quantity' || k === 'ot_quantity' || k === 'goods_quantity')
+    return 80;
   if (k === 'unit' || k === 'ot_unit' || k === 'wage_unit') return 80;
 
   // ── 其他文字類 ──────────────────────────────────────────
-  if (k === 'description' || k === 'remarks' || k === 'termination_reason') return 140;
+  if (k === 'description' || k === 'remarks' || k === 'termination_reason')
+    return 140;
   if (k === 'contract_name' || k === 'quotation') return 130;
-  if (k === 'subsidiaries' || k === 'internal_prefix' || k === 'english_code') return 100;
+  if (k === 'subsidiaries' || k === 'internal_prefix' || k === 'english_code')
+    return 100;
   if (k === 'source_quotation') return 120;
 
   // ── 證書號碼 ──────────────────────────────────────────────
@@ -135,22 +211,49 @@ function getColMinWidth(key: string, label: string, explicitWidth?: number): num
 }
 
 export default function DataTable({
-  columns, data, total, page, limit, onPageChange, onSearch,
-  searchPlaceholder = '搜尋...', onRowClick, filters, actions, loading,
-  sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
-  columnConfigs, onColumnConfigChange, onColumnConfigReset,
-  columnWidths, onColumnResize,
-  serverSideFilter, columnFilters: externalColumnFilters,
-  onColumnFilterChange, onFetchFilterOptions,
+  columns,
+  data,
+  total,
+  page,
+  limit,
+  onPageChange,
+  onSearch,
+  searchPlaceholder = '搜尋...',
+  onRowClick,
+  filters,
+  actions,
+  loading,
+  sortBy,
+  sortOrder,
+  onSort,
+  exportFilename,
+  onExportFetchAll,
+  columnConfigs,
+  onColumnConfigChange,
+  onColumnConfigReset,
+  columnWidths,
+  onColumnResize,
+  serverSideFilter,
+  columnFilters: externalColumnFilters,
+  onColumnFilterChange,
+  onFetchFilterOptions,
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   // Internal column filters state (used in client-side mode)
-  const [internalColumnFilters, setInternalColumnFilters] = useState<Record<string, Set<string>>>({});
-  const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+  const [internalColumnFilters, setInternalColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
+  const resizingRef = useRef<{
+    key: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   // Use external or internal column filters depending on mode
   const isServerSide = !!(serverSideFilter && onColumnFilterChange);
-  const columnFilters = isServerSide ? (externalColumnFilters || {}) : internalColumnFilters;
+  const columnFilters = isServerSide
+    ? externalColumnFilters || {}
+    : internalColumnFilters;
 
   const handleSearch = () => {
     onSearch?.(searchTerm);
@@ -165,7 +268,10 @@ export default function DataTable({
     }
   };
 
-  const handleFilterChange = (columnKey: string, selectedValues: Set<string> | null) => {
+  const handleFilterChange = (
+    columnKey: string,
+    selectedValues: Set<string> | null,
+  ) => {
     if (isServerSide) {
       // Server-side mode: update external state and trigger re-fetch
       const next = { ...columnFilters };
@@ -177,7 +283,7 @@ export default function DataTable({
       onColumnFilterChange!(next);
     } else {
       // Client-side mode: update internal state
-      setInternalColumnFilters(prev => {
+      setInternalColumnFilters((prev) => {
         const next = { ...prev };
         if (selectedValues === null) {
           delete next[columnKey];
@@ -190,33 +296,36 @@ export default function DataTable({
   };
 
   // Column resize handlers
-  const handleResizeStart = useCallback((e: React.MouseEvent, key: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const th = (e.target as HTMLElement).closest('th');
-    const startWidth = th?.offsetWidth || 120;
-    resizingRef.current = { key, startX: e.clientX, startWidth };
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent, key: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const th = (e.target as HTMLElement).closest('th');
+      const startWidth = th?.offsetWidth || 120;
+      resizingRef.current = { key, startX: e.clientX, startWidth };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const diff = e.clientX - resizingRef.current.startX;
-      const newWidth = Math.max(60, resizingRef.current.startWidth + diff);
-      onColumnResize?.(resizingRef.current.key, newWidth);
-    };
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!resizingRef.current) return;
+        const diff = e.clientX - resizingRef.current.startX;
+        const newWidth = Math.max(60, resizingRef.current.startWidth + diff);
+        onColumnResize?.(resizingRef.current.key, newWidth);
+      };
 
-    const handleMouseUp = () => {
-      resizingRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
+      const handleMouseUp = () => {
+        resizingRef.current = null;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [onColumnResize]);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [onColumnResize],
+  );
 
   // Apply client-side column filters (only in client-side mode)
   const filteredData = useMemo(() => {
@@ -224,20 +333,26 @@ export default function DataTable({
     const activeFilterKeys = Object.keys(columnFilters);
     if (activeFilterKeys.length === 0) return data;
 
-    return data.filter(row => {
-      return activeFilterKeys.every(key => {
+    return data.filter((row) => {
+      return activeFilterKeys.every((key) => {
         const allowed = columnFilters[key];
-        const col = columns.find(c => c.key === key);
+        const col = columns.find((c) => c.key === key);
         const raw = row[key];
         const display = col?.filterRender
           ? col.filterRender(raw, row)
-          : (raw != null ? String(raw) : '-');
+          : raw != null
+            ? String(raw)
+            : '-';
         return allowed.has(display);
       });
     });
   }, [data, columnFilters, columns, isServerSide]);
 
-  const filteredTotal = isServerSide ? total : (Object.keys(columnFilters).length > 0 ? filteredData.length : total);
+  const filteredTotal = isServerSide
+    ? total
+    : Object.keys(columnFilters).length > 0
+      ? filteredData.length
+      : total;
   const totalPages = Math.ceil(filteredTotal / limit);
 
   // Calculate display range
@@ -254,7 +369,8 @@ export default function DataTable({
   const tableMinWidth = useMemo(() => {
     return columns.reduce((sum, col) => {
       const explicit = col._width || (columnWidths && columnWidths[col.key]);
-      return sum + getColMinWidth(col.key, col.label, explicit || col.minWidth);
+      const inferredMin = getColMinWidth(col.key, col.label, col.minWidth);
+      return sum + Math.max(explicit || 0, inferredMin);
     }, 0);
   }, [columns, columnWidths]);
 
@@ -281,14 +397,17 @@ export default function DataTable({
               placeholder={searchPlaceholder}
               className="input-field flex-1"
             />
-            <button onClick={handleSearch} className="btn-primary whitespace-nowrap">搜尋</button>
+            <button
+              onClick={handleSearch}
+              className="btn-primary whitespace-nowrap"
+            >
+              搜尋
+            </button>
           </div>
         )}
         {/* Filters - wrap on mobile */}
         {filters && (
-          <div className="flex flex-wrap gap-2 items-center">
-            {filters}
-          </div>
+          <div className="flex flex-wrap gap-2 items-center">{filters}</div>
         )}
         {actions}
         <div className="flex gap-2 items-center shrink-0">
@@ -314,8 +433,7 @@ export default function DataTable({
           <span>
             {isServerSide
               ? `已套用 ${Object.keys(columnFilters).length} 個欄位篩選，共 ${total} 筆結果`
-              : `已篩選 ${filteredData.length} / ${total} 筆`
-            }
+              : `已篩選 ${filteredData.length} / ${total} 筆`}
           </span>
           <button
             onClick={handleClearAllFilters}
@@ -327,7 +445,9 @@ export default function DataTable({
       )}
 
       {/* Table - always scrollable horizontally */}
-      <div className={`overflow-x-auto border border-gray-200 rounded-lg ${filteredData.length === 0 ? 'min-h-[360px]' : ''}`}>
+      <div
+        className={`overflow-x-auto border border-gray-200 rounded-lg ${filteredData.length === 0 ? 'min-h-[360px]' : ''}`}
+      >
         <table
           className="w-full text-sm"
           style={{
@@ -338,15 +458,24 @@ export default function DataTable({
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {columns.map((col) => {
-                const explicitW = col._width || (columnWidths && columnWidths[col.key]);
-                const minW = getColMinWidth(col.key, col.label, explicitW || col.minWidth);
+                const explicitW =
+                  col._width || (columnWidths && columnWidths[col.key]);
+                const inferredMin = getColMinWidth(
+                  col.key,
+                  col.label,
+                  col.minWidth,
+                );
+                const minW = Math.max(explicitW || 0, inferredMin);
                 return (
                   <th
                     key={col.key}
                     className={`px-3 py-3 text-left font-semibold text-gray-600 relative ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
                     style={
                       explicitW
-                        ? { width: `${explicitW}px`, minWidth: `${explicitW}px` }
+                        ? {
+                            width: `${Math.max(explicitW, minW)}px`,
+                            minWidth: `${minW}px`,
+                          }
                         : { minWidth: `${minW}px` }
                     }
                     onClick={() => col.sortable && handleSort(col.key)}
@@ -355,7 +484,11 @@ export default function DataTable({
                       <span>{col.label}</span>
                       {col.sortable && onSort && (
                         <span className="text-xs text-gray-400 shrink-0">
-                          {sortBy === col.key ? (sortOrder === 'ASC' ? '▲' : '▼') : '▴▾'}
+                          {sortBy === col.key
+                            ? sortOrder === 'ASC'
+                              ? '▲'
+                              : '▼'
+                            : '▴▾'}
                         </span>
                       )}
                       {col.filterable !== false && (
@@ -385,11 +518,25 @@ export default function DataTable({
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">
-                <div className="flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
-              </td></tr>
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-4 py-12 text-center text-gray-500"
+                >
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                  </div>
+                </td>
+              </tr>
             ) : filteredData.length === 0 ? (
-              <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500">暫無資料</td></tr>
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-4 py-12 text-center text-gray-500"
+                >
+                  暫無資料
+                </td>
+              </tr>
             ) : (
               filteredData.map((row, i) => (
                 <tr
@@ -398,19 +545,33 @@ export default function DataTable({
                   className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                 >
                   {columns.map((col) => {
-                    const explicitW = col._width || (columnWidths && columnWidths[col.key]);
-                    const minW = getColMinWidth(col.key, col.label, explicitW || col.minWidth);
+                    const explicitW =
+                      col._width || (columnWidths && columnWidths[col.key]);
+                    const inferredMin = getColMinWidth(
+                      col.key,
+                      col.label,
+                      col.minWidth,
+                    );
+                    const minW = Math.max(explicitW || 0, inferredMin);
                     return (
                       <td
                         key={col.key}
                         className={`px-3 py-3 ${col.className || ''}`}
                         style={
                           explicitW
-                            ? { width: `${explicitW}px`, maxWidth: `${explicitW}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                            ? {
+                                width: `${Math.max(explicitW, minW)}px`,
+                                minWidth: `${minW}px`,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }
                             : { minWidth: `${minW}px`, whiteSpace: 'nowrap' }
                         }
                       >
-                        {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
+                        {col.render
+                          ? col.render(row[col.key], row)
+                          : (row[col.key] ?? '-')}
                       </td>
                     );
                   })}
@@ -427,7 +588,9 @@ export default function DataTable({
           {filteredTotal > 0 ? (
             <>
               顯示 {startRow}-{endRow} 筆，共 {filteredTotal} 筆
-              {hasActiveFilters && !isServerSide && <span className="text-gray-400">（原始 {total} 筆）</span>}
+              {hasActiveFilters && !isServerSide && (
+                <span className="text-gray-400">（原始 {total} 筆）</span>
+              )}
               {totalPages > 1 ? `，第 ${page} / ${totalPages} 頁` : ''}
             </>
           ) : (
