@@ -293,10 +293,17 @@ export class AttendanceMatchingService {
     const wlDayNight = workLog.day_night || '—';
     let attShift = '—';
     if (clockIn?.timestamp) {
-      const hour = new Date(clockIn.timestamp).getHours();
+      // 使用香港時區取得小時數，避免 UTC 導致班次判斷錯誤
+      const hkHour = Number(
+        new Date(clockIn.timestamp).toLocaleString('en-US', {
+          hour: 'numeric',
+          hour12: false,
+          timeZone: 'Asia/Hong_Kong',
+        }),
+      );
       // 6:00-14:00 → 日班, 14:00-22:00 → 中直, 22:00-6:00 → 夜班
-      if (hour >= 6 && hour < 14) attShift = '日';
-      else if (hour >= 14 && hour < 22) attShift = '中直';
+      if (hkHour >= 6 && hkHour < 14) attShift = '日';
+      else if (hkHour >= 14 && hkHour < 22) attShift = '中直';
       else attShift = '夜';
     }
     const shiftMatch =
@@ -430,10 +437,17 @@ export class AttendanceMatchingService {
         if (empAtts.length > 0 && empWls.length > 0) {
           const clockIn = empAtts.find((a: any) => a.type === 'clock_in');
           if (clockIn) {
-            const hour = new Date(clockIn.timestamp).getHours();
+            // 使用香港時區取得小時數，避免 UTC 導致班次判斷錯誤
+            const hkHour = Number(
+              new Date(clockIn.timestamp).toLocaleString('en-US', {
+                hour: 'numeric',
+                hour12: false,
+                timeZone: 'Asia/Hong_Kong',
+              }),
+            );
             let attShift: string;
-            if (hour >= 6 && hour < 14) attShift = '日';
-            else if (hour >= 14 && hour < 22) attShift = '中直';
+            if (hkHour >= 6 && hkHour < 14) attShift = '日';
+            else if (hkHour >= 14 && hkHour < 22) attShift = '中直';
             else attShift = '夜';
 
             for (const wl of empWls) {
