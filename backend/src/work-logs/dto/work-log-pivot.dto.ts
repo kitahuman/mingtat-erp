@@ -37,6 +37,7 @@ export class WorkLogPivotQueryDto {
   @IsOptional() @IsString() col_fields?: string;
 
   @IsOptional() @IsIn(PIVOT_VALUE_TYPES) value_type?: PivotValueType;
+  @IsOptional() @IsString() value_types?: string;
 
   // Legacy single-value filters kept for backwards compatibility.
   @IsOptional() @IsString() company_id?: string;
@@ -109,6 +110,6 @@ export interface WorkLogPivotResult {
   data: Record<string, PivotMetric>;
   rowTotals: Record<string, PivotMetric>;
   colTotals: Record<string, PivotMetric>;
-  grandTotal: PivotMetric;
+  grandTotal: PivotMetric | Record<string, PivotMetric>;
   summary: WorkLogPivotSummary;
 }

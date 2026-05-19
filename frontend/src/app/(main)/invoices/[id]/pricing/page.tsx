@@ -106,6 +106,7 @@ interface PricingDraftPayload {
   pivot_config?: {
     rowFields?: PivotDimension[];
     colFields?: PivotDimension[];
+    valueTypes?: PivotValueType[];
     valueType?: PivotValueType;
     filters?: Record<string, unknown>;
     leftViewMode?: LeftViewMode;
@@ -142,7 +143,8 @@ interface WorkLogPivotResult {
   data: Record<string, PivotMetric>;
   rowTotals: Record<string, PivotMetric>;
   colTotals: Record<string, PivotMetric>;
-  grandTotal: PivotMetric;
+  grandTotal: PivotMetric | Record<string, PivotMetric>;
+  valueTypes?: PivotValueType[];
   summary: PivotSummary;
 }
 
@@ -256,6 +258,41 @@ const VALUE_OPTIONS: Array<{ value: PivotValueType; label: string }> = [
   { value: 'ot_sum', label: 'OT 數量合計' },
   { value: 'mid_shift_count', label: '中直次數' },
 ];
+
+function normalizePivotValueTypes(values: unknown): PivotValueType[] {
+  const input = Array.isArray(values) ? values : [values];
+  const allowed = new Set(VALUE_OPTIONS.map((option) => option.value));
+  const result: PivotValueType[] = [];
+  input.forEach((value) => {
+    if (typeof value !== 'string') return;
+    if (!allowed.has(value as PivotValueType)) return;
+    if (!result.includes(value as PivotValueType)) result.push(value as PivotValueType);
+  });
+  return result.length > 0 ? result : ['quantity_sum'];
+}
+
+function getValueTypeLabel(valueType: PivotValueType): string {
+  return VALUE_OPTIONS.find((option) => option.value === valueType)?.label || valueType;
+}
+
+function metricDataKey(
+  baseKey: string,
+  valueType: PivotValueType,
+  useMetricSuffix: boolean,
+): string {
+  return useMetricSuffix ? `${baseKey}|${valueType}` : baseKey;
+}
+
+function grandTotalMetric(
+  pivot: WorkLogPivotResult | null,
+  valueType: PivotValueType,
+): PivotMetric {
+  if (!pivot) return EMPTY_METRIC;
+  const useMetricSuffix = (pivot.valueTypes || []).length > 1;
+  if (!useMetricSuffix) return (pivot.grandTotal as PivotMetric) || EMPTY_METRIC;
+  const totals = pivot.grandTotal as Record<string, PivotMetric>;
+  return totals?.[valueType] || EMPTY_METRIC;
+}
 
 function normalizeText(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -514,8 +551,10 @@ function aggregateMetric(
   pivot: WorkLogPivotResult | null,
   rowLabels: string[],
   colLabels: string[],
+  valueType: PivotValueType,
 ): PivotMetric {
   if (!pivot) return EMPTY_METRIC;
+  const useMetricSuffix = (pivot.valueTypes || []).length > 1;
   const rowLeaves = pivot.rows.filter((row) =>
     startsWithLabels(row.labels, rowLabels),
   );
@@ -530,14 +569,23 @@ function aggregateMetric(
     isSameLeaf(colLabels, colLeaves[0])
   ) {
     return (
-      pivot.data[`${rowLeaves[0].key}|${colLeaves[0].key}`] || EMPTY_METRIC
+      pivot.data[
+        metricDataKey(
+          `${rowLeaves[0].key}|${colLeaves[0].key}`,
+          valueType,
+          useMetricSuffix,
+        )
+      ] || EMPTY_METRIC
     );
   }
 
   const acc = { value: 0, units: new Map<string, number>() };
   rowLeaves.forEach((row) => {
     colLeaves.forEach((col) =>
-      addMetric(acc, pivot.data[`${row.key}|${col.key}`]),
+      addMetric(
+        acc,
+        pivot.data[metricDataKey(`${row.key}|${col.key}`, valueType, useMetricSuffix)],
+      ),
     );
   });
   return finalizeMetric(acc);
@@ -808,8 +856,10 @@ function buildLocalPivot(
   workLogs: any[],
   rowFields: PivotDimension[],
   colFields: PivotDimension[],
-  valueType: PivotValueType,
+  requestedValueTypes: PivotValueType[],
 ): WorkLogPivotResult {
+  const valueTypes = normalizePivotValueTypes(requestedValueTypes);
+  const useMetricSuffix = valueTypes.length > 1;
   const rows = new Map<string, PivotAxisItem>();
   const cols = new Map<string, PivotAxisItem>();
   const dataAcc = new Map<
@@ -824,7 +874,10 @@ function buildLocalPivot(
     string,
     { value: number; units: Map<string, number> }
   >();
-  const grandAcc = { value: 0, units: new Map<string, number>() };
+  const grandAcc = new Map<
+    PivotValueType,
+    { value: number; units: Map<string, number> }
+  >();
 
   const addToMap = (
     map: Map<string, { value: number; units: Map<string, number> }>,
@@ -836,16 +889,28 @@ function buildLocalPivot(
     addMetric(map.get(key)!, metric);
   };
 
+  const addToGrand = (valueType: PivotValueType, metric: PivotMetric) => {
+    if (!grandAcc.has(valueType))
+      grandAcc.set(valueType, { value: 0, units: new Map<string, number>() });
+    addMetric(grandAcc.get(valueType)!, metric);
+  };
+
   workLogs.forEach((workLog) => {
     const row = makePivotAxisItem(rowFields, workLog);
     const col = makePivotAxisItem(colFields, workLog);
-    const metric = getPivotMetricForLog(workLog, valueType);
     rows.set(row.key, row);
     cols.set(col.key, col);
-    addToMap(dataAcc, `${row.key}|${col.key}`, metric);
-    addToMap(rowAcc, row.key, metric);
-    addToMap(colAcc, col.key, metric);
-    addMetric(grandAcc, metric);
+    valueTypes.forEach((valueType) => {
+      const metric = getPivotMetricForLog(workLog, valueType);
+      addToMap(
+        dataAcc,
+        metricDataKey(`${row.key}|${col.key}`, valueType, useMetricSuffix),
+        metric,
+      );
+      addToMap(rowAcc, metricDataKey(row.key, valueType, useMetricSuffix), metric);
+      addToMap(colAcc, metricDataKey(col.key, valueType, useMetricSuffix), metric);
+      addToGrand(valueType, metric);
+    });
   });
 
   const sortAxisItems = (items: PivotAxisItem[]) =>
@@ -858,6 +923,17 @@ function buildLocalPivot(
     Object.fromEntries(
       Array.from(map.entries()).map(([key, acc]) => [key, finalizeMetric(acc)]),
     );
+  const finalizeGrandTotal = (): PivotMetric | Record<string, PivotMetric> => {
+    const entries = valueTypes.map((valueType) => [
+      valueType,
+      finalizeMetric(
+        grandAcc.get(valueType) || { value: 0, units: new Map<string, number>() },
+      ),
+    ]);
+    return useMetricSuffix
+      ? Object.fromEntries(entries)
+      : (entries[0]?.[1] as PivotMetric) || EMPTY_METRIC;
+  };
   const employeeSet = new Set(
     workLogs.map(getEmployeeLabel).filter((value) => value !== BLANK),
   );
@@ -889,7 +965,8 @@ function buildLocalPivot(
     data: finalizeMap(dataAcc),
     rowTotals: finalizeMap(rowAcc),
     colTotals: finalizeMap(colAcc),
-    grandTotal: finalizeMetric(grandAcc),
+    grandTotal: finalizeGrandTotal(),
+    valueTypes,
     summary: {
       totalRecords: workLogs.length,
       confirmedCount,
@@ -1110,10 +1187,11 @@ function buildPivotItemName(
 function buildPivotDescription(
   pivot: WorkLogPivotResult,
   row: RowEntry,
+  valueType: PivotValueType,
 ): string {
   return pivot.cols
     .map((col) => {
-      const metric = aggregateMetric(pivot, row.labels, col.labels);
+      const metric = aggregateMetric(pivot, row.labels, col.labels, valueType);
       if ((Number(metric.value) || 0) <= 0) return null;
       const colLabel = uniqueCleanPivotLabels(col.labels).join(' / ') || '全部';
       return `${colLabel} - ${metricQuantityText(metric)}`;
@@ -1442,7 +1520,7 @@ export default function InvoicePricingPage() {
   const [colFields, setColFields] = useState<PivotDimension[]>([
     'scheduled_date',
   ]);
-  const [valueType, setValueType] = useState<PivotValueType>('quantity_sum');
+  const [valueTypes, setValueTypes] = useState<PivotValueType[]>(['quantity_sum']);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [companyIds, setCompanyIds] = useState<string[]>([]);
@@ -1640,11 +1718,13 @@ export default function InvoicePricingPage() {
             DIMENSION_OPTIONS.some((option) => option.value === field),
           ),
         );
-      if (
-        pivotConfig.valueType &&
-        VALUE_OPTIONS.some((option) => option.value === pivotConfig.valueType)
-      )
-        setValueType(pivotConfig.valueType);
+      setValueTypes(
+        normalizePivotValueTypes(
+          Array.isArray(pivotConfig.valueTypes)
+            ? pivotConfig.valueTypes
+            : pivotConfig.valueType,
+        ),
+      );
       setDateFrom(typeof filters.dateFrom === 'string' ? filters.dateFrom : '');
       setDateTo(typeof filters.dateTo === 'string' ? filters.dateTo : '');
       setCompanyIds(
@@ -1883,8 +1963,8 @@ export default function InvoicePricingPage() {
     [allPricingWorkLogs],
   );
   const pivot = useMemo(
-    () => buildLocalPivot(filteredWorkLogs, rowFields, colFields, valueType),
-    [filteredWorkLogs, rowFields, colFields, valueType],
+    () => buildLocalPivot(filteredWorkLogs, rowFields, colFields, valueTypes),
+    [filteredWorkLogs, rowFields, colFields, valueTypes],
   );
   const rowTree = useMemo(() => buildAxisTree(pivot.rows || []), [pivot.rows]);
   const colTree = useMemo(() => buildAxisTree(pivot.cols || []), [pivot.cols]);
@@ -1900,7 +1980,7 @@ export default function InvoicePricingPage() {
   useEffect(() => {
     setCollapsedRows(new Set());
     setCollapsedCols(new Set());
-  }, [rowFields, colFields, valueType, filteredWorkLogs]);
+  }, [rowFields, colFields, valueTypes, filteredWorkLogs]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + rowAmount(item), 0);
@@ -1953,19 +2033,32 @@ export default function InvoicePricingPage() {
     return labels.length > 0 ? labels.join(' / ') : '直軸';
   }, [rowFields]);
 
+  const isMultiValue = valueTypes.length > 1;
+  const hasColumnAxis = colFields.length > 0;
+  const primaryValueType = valueTypes[0];
+
   const maxVisibleValue = useMemo(() => {
     let max = 0;
     visibleRows.forEach((row) => {
       if (row.isGroup) return;
-      visibleCols.forEach((col) => {
-        max = Math.max(
-          max,
-          aggregateMetric(pivot, row.labels, col.labels).value,
-        );
+      valueTypes.forEach((valueType) => {
+        if (!hasColumnAxis && isMultiValue) {
+          max = Math.max(
+            max,
+            aggregateMetric(pivot, row.labels, [], valueType).value,
+          );
+          return;
+        }
+        visibleCols.forEach((col) => {
+          max = Math.max(
+            max,
+            aggregateMetric(pivot, row.labels, col.labels, valueType).value,
+          );
+        });
       });
     });
     return max;
-  }, [pivot, visibleRows, visibleCols]);
+  }, [pivot, visibleRows, visibleCols, valueTypes, isMultiValue, hasColumnAxis]);
 
   const toggleRow = (key: string) => {
     setCollapsedRows((current) => {
@@ -1991,45 +2084,138 @@ export default function InvoicePricingPage() {
     setDateTo(range.to);
   };
 
+  const renderMetricCell = (
+    key: string,
+    metric: PivotMetric,
+    className = 'border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800',
+  ) => {
+    const intensity =
+      maxVisibleValue > 0 ? Math.min(metric.value / maxVisibleValue, 1) : 0;
+    const background =
+      metric.value > 0
+        ? `rgba(37, 99, 235, ${0.08 + intensity * 0.26})`
+        : undefined;
+    return (
+      <td key={key} className={className} style={{ backgroundColor: background }}>
+        {metricText(metric)}
+      </td>
+    );
+  };
+
   const exportCsv = () => {
-    const headers = [
-      rowAxisHeader,
-      ...visibleCols.map((col) => col.labels.join(' / ')),
-      '合計',
-      '單價',
-      '金額',
-    ];
+    const headers = isMultiValue
+      ? [
+          rowAxisHeader,
+          ...(hasColumnAxis
+            ? visibleCols.flatMap((col) =>
+                valueTypes.map(
+                  (valueType) =>
+                    `${col.labels.join(' / ')} - ${getValueTypeLabel(valueType)}`,
+                ),
+              )
+            : valueTypes.map(getValueTypeLabel)),
+          ...(hasColumnAxis
+            ? valueTypes.map(
+                (valueType) => `合計 - ${getValueTypeLabel(valueType)}`,
+              )
+            : []),
+          '單價',
+          '金額',
+        ]
+      : [
+          rowAxisHeader,
+          ...visibleCols.map((col) => col.labels.join(' / ')),
+          '合計',
+          '單價',
+          '金額',
+        ];
     const lines = [headers];
     visibleRows.forEach((row) => {
+      const primaryMetric = row.isGroup
+        ? EMPTY_METRIC
+        : aggregateMetric(pivot, row.labels, [], primaryValueType);
+      const unitPrice = Number(rowPrices[row.key]?.unit_price) || 0;
+      if (isMultiValue) {
+        lines.push([
+          row.label,
+          ...(hasColumnAxis
+            ? visibleCols.flatMap((col) =>
+                valueTypes.map((valueType) =>
+                  row.isGroup
+                    ? ''
+                    : metricText(
+                        aggregateMetric(pivot, row.labels, col.labels, valueType),
+                      ),
+                ),
+              )
+            : valueTypes.map((valueType) =>
+                row.isGroup
+                  ? ''
+                  : metricText(aggregateMetric(pivot, row.labels, [], valueType)),
+              )),
+          ...(hasColumnAxis
+            ? valueTypes.map((valueType) =>
+                row.isGroup
+                  ? ''
+                  : metricText(aggregateMetric(pivot, row.labels, [], valueType)),
+              )
+            : []),
+          row.isGroup ? '' : String(unitPrice),
+          row.isGroup
+            ? ''
+            : String(
+                Math.round((primaryMetric.value || 0) * unitPrice * 100) / 100,
+              ),
+        ]);
+        return;
+      }
       lines.push([
         row.label,
         ...visibleCols.map((col) =>
           row.isGroup
             ? ''
-            : metricText(aggregateMetric(pivot, row.labels, col.labels)),
+            : metricText(
+                aggregateMetric(pivot, row.labels, col.labels, primaryValueType),
+              ),
         ),
-        row.isGroup ? '' : metricText(aggregateMetric(pivot, row.labels, [])),
-        row.isGroup ? '' : String(rowPrices[row.key]?.unit_price || 0),
+        row.isGroup ? '' : metricText(primaryMetric),
+        row.isGroup ? '' : String(unitPrice),
         row.isGroup
           ? ''
-          : String(
-              Math.round(
-                (aggregateMetric(pivot, row.labels, []).value || 0) *
-                  (Number(rowPrices[row.key]?.unit_price) || 0) *
-                  100,
-              ) / 100,
-            ),
+          : String(Math.round((primaryMetric.value || 0) * unitPrice * 100) / 100),
       ]);
     });
-    lines.push([
-      '合計',
-      ...visibleCols.map((col) =>
-        metricText(aggregateMetric(pivot, [], col.labels)),
-      ),
-      metricText(pivot.grandTotal),
-      '',
-      '',
-    ]);
+    lines.push(
+      isMultiValue
+        ? [
+            '合計',
+            ...(hasColumnAxis
+              ? visibleCols.flatMap((col) =>
+                  valueTypes.map((valueType) =>
+                    metricText(aggregateMetric(pivot, [], col.labels, valueType)),
+                  ),
+                )
+              : valueTypes.map((valueType) =>
+                  metricText(grandTotalMetric(pivot, valueType)),
+                )),
+            ...(hasColumnAxis
+              ? valueTypes.map((valueType) =>
+                  metricText(grandTotalMetric(pivot, valueType)),
+                )
+              : []),
+            '',
+            '',
+          ]
+        : [
+            '合計',
+            ...visibleCols.map((col) =>
+              metricText(aggregateMetric(pivot, [], col.labels, primaryValueType)),
+            ),
+            metricText(grandTotalMetric(pivot, primaryValueType)),
+            '',
+            '',
+          ],
+    );
     const csv = lines
       .map((line) =>
         line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
@@ -2088,12 +2274,12 @@ export default function InvoicePricingPage() {
 
   const addPivotRowToItems = (row: RowEntry) => {
     if (readOnly || row.isGroup || !pivot) return;
-    const metric = aggregateMetric(pivot, row.labels, []);
+    const metric = aggregateMetric(pivot, row.labels, [], valueTypes[0]);
     const rowPrice = rowPrices[row.key] || { unit_price: 0 };
     const unitPrice = Number(rowPrice.unit_price) || 0;
     const quantity = Number(metric.value) || 0;
     const itemName = buildPivotItemName(row, filteredWorkLogs, rowFields);
-    const description = buildPivotDescription(pivot, row);
+    const description = buildPivotDescription(pivot, row, valueTypes[0]);
     setItems((current) => [
       ...current,
       {
@@ -2119,7 +2305,7 @@ export default function InvoicePricingPage() {
     setMatching(true);
     try {
       const groups = matchableRows.map((row) => {
-        const metric = aggregateMetric(pivot, row.labels, []);
+        const metric = aggregateMetric(pivot, row.labels, [], valueTypes[0]);
         return buildPivotRowPricingGroup(
           row,
           filteredWorkLogs,
@@ -2166,7 +2352,8 @@ export default function InvoicePricingPage() {
         pivot_config: {
           rowFields,
           colFields,
-          valueType,
+          valueTypes,
+          valueType: valueTypes[0],
           leftViewMode,
           listNewRows,
           filters: {
@@ -3078,22 +3265,15 @@ export default function InvoicePricingPage() {
                         onChange={setColFields}
                       />
                       <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                        <label className="block text-sm font-semibold text-gray-800">
-                          值
-                        </label>
-                        <select
-                          value={valueType}
-                          onChange={(event) =>
-                            setValueType(event.target.value as PivotValueType)
+                        <MultiSelectComboBox
+                          label="值"
+                          values={valueTypes}
+                          onChange={(values) =>
+                            setValueTypes(normalizePivotValueTypes(values))
                           }
-                          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-                        >
-                          {VALUE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={VALUE_OPTIONS}
+                          placeholder="選擇值"
+                        />
                       </div>
                     </div>
                   )}
@@ -3215,215 +3395,415 @@ export default function InvoicePricingPage() {
                   <div className="overflow-x-auto">
                     <table className="min-w-full border-separate border-spacing-0 text-sm">
                       <thead className="sticky top-0 z-20 bg-gray-100">
-                        {Array.from({
-                          length: Math.max(colFields.length, 1),
-                        }).map((_, depthIndex) => (
-                          <tr key={`head-${depthIndex}`}>
-                            {depthIndex === 0 && (
-                              <th
-                                rowSpan={Math.max(colFields.length, 1)}
-                                className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700"
-                              >
+                        {isMultiValue ? (
+                          hasColumnAxis ? (
+                            <>
+                              {Array.from({
+                                length: Math.max(colFields.length, 1),
+                              }).map((_, depthIndex) => (
+                                <tr key={`head-${depthIndex}`}>
+                                  {depthIndex === 0 && (
+                                    <th
+                                      rowSpan={Math.max(colFields.length, 1) + 1}
+                                      className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700"
+                                    >
+                                      {rowAxisHeader}
+                                    </th>
+                                  )}
+                                  {visibleCols.map((col) => (
+                                    <th
+                                      key={`${col.key}-${depthIndex}`}
+                                      colSpan={valueTypes.length}
+                                      className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
+                                    >
+                                      {depthIndex === col.labels.length - 1 &&
+                                        col.canToggle && (
+                                          <button
+                                            onClick={() => toggleCol(col.key)}
+                                            className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs"
+                                          >
+                                            {collapsedCols.has(col.key) ? '+' : '−'}
+                                          </button>
+                                        )}
+                                      {col.labels[depthIndex] || ''}
+                                    </th>
+                                  ))}
+                                  {depthIndex === 0 && (
+                                    <>
+                                      <th
+                                        colSpan={valueTypes.length}
+                                        className="min-w-[120px] border-b border-l border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                      >
+                                        合計
+                                      </th>
+                                      <th
+                                        rowSpan={Math.max(colFields.length, 1) + 1}
+                                        className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                      >
+                                        單價
+                                      </th>
+                                      <th
+                                        rowSpan={Math.max(colFields.length, 1) + 1}
+                                        className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                      >
+                                        金額
+                                      </th>
+                                      <th
+                                        rowSpan={Math.max(colFields.length, 1) + 1}
+                                        className="min-w-[110px] border-b border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                      >
+                                        操作
+                                      </th>
+                                    </>
+                                  )}
+                                </tr>
+                              ))}
+                              <tr>
+                                {visibleCols.flatMap((col) =>
+                                  valueTypes.map((valueType) => (
+                                    <th
+                                      key={`${col.key}-${valueType}`}
+                                      className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
+                                    >
+                                      {getValueTypeLabel(valueType)}
+                                    </th>
+                                  )),
+                                )}
+                                {valueTypes.map((valueType) => (
+                                  <th
+                                    key={`total-head-${valueType}`}
+                                    className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  >
+                                    {getValueTypeLabel(valueType)}
+                                  </th>
+                                ))}
+                              </tr>
+                            </>
+                          ) : (
+                            <tr>
+                              <th className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">
                                 {rowAxisHeader}
                               </th>
-                            )}
-                            {visibleCols.map((col) => (
-                              <th
-                                key={`${col.key}-${depthIndex}`}
-                                className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
-                              >
-                                {depthIndex === col.labels.length - 1 &&
-                                  col.canToggle && (
-                                    <button
-                                      onClick={() => toggleCol(col.key)}
-                                      className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs"
-                                    >
-                                      {collapsedCols.has(col.key) ? '+' : '−'}
-                                    </button>
-                                  )}
-                                {col.labels[depthIndex] || ''}
+                              {valueTypes.map((valueType) => (
+                                <th
+                                  key={`value-head-${valueType}`}
+                                  className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
+                                >
+                                  {getValueTypeLabel(valueType)}
+                                </th>
+                              ))}
+                              <th className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700">
+                                單價
                               </th>
-                            ))}
-                            {depthIndex === 0 && (
-                              <>
+                              <th className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700">
+                                金額
+                              </th>
+                              <th className="min-w-[110px] border-b border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700">
+                                操作
+                              </th>
+                            </tr>
+                          )
+                        ) : (
+                          Array.from({
+                            length: Math.max(colFields.length, 1),
+                          }).map((_, depthIndex) => (
+                            <tr key={`head-${depthIndex}`}>
+                              {depthIndex === 0 && (
                                 <th
                                   rowSpan={Math.max(colFields.length, 1)}
-                                  className="min-w-[120px] border-b border-l border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  className="sticky left-0 z-30 whitespace-nowrap border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700"
                                 >
-                                  合計
+                                  {rowAxisHeader}
                                 </th>
+                              )}
+                              {visibleCols.map((col) => (
                                 <th
-                                  rowSpan={Math.max(colFields.length, 1)}
-                                  className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  key={`${col.key}-${depthIndex}`}
+                                  className="min-w-[120px] border-b border-r border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
                                 >
-                                  單價
+                                  {depthIndex === col.labels.length - 1 &&
+                                    col.canToggle && (
+                                      <button
+                                        onClick={() => toggleCol(col.key)}
+                                        className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs"
+                                      >
+                                        {collapsedCols.has(col.key) ? '+' : '−'}
+                                      </button>
+                                    )}
+                                  {col.labels[depthIndex] || ''}
                                 </th>
-                                <th
-                                  rowSpan={Math.max(colFields.length, 1)}
-                                  className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
-                                >
-                                  金額
-                                </th>
-                                <th
-                                  rowSpan={Math.max(colFields.length, 1)}
-                                  className="min-w-[110px] border-b border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
-                                >
-                                  操作
-                                </th>
-                              </>
-                            )}
-                          </tr>
-                        ))}
+                              ))}
+                              {depthIndex === 0 && (
+                                <>
+                                  <th
+                                    rowSpan={Math.max(colFields.length, 1)}
+                                    className="min-w-[120px] border-b border-l border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  >
+                                    合計
+                                  </th>
+                                  <th
+                                    rowSpan={Math.max(colFields.length, 1)}
+                                    className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  >
+                                    單價
+                                  </th>
+                                  <th
+                                    rowSpan={Math.max(colFields.length, 1)}
+                                    className="min-w-[120px] border-b border-r border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  >
+                                    金額
+                                  </th>
+                                  <th
+                                    rowSpan={Math.max(colFields.length, 1)}
+                                    className="min-w-[110px] border-b border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                                  >
+                                    操作
+                                  </th>
+                                </>
+                              )}
+                            </tr>
+                          ))
+                        )}
                       </thead>
                       <tbody>
                         {visibleRows.length === 0 && (
                           <tr>
                             <td
-                              colSpan={visibleCols.length + 5}
+                              colSpan={
+                                1 +
+                                (isMultiValue
+                                  ? hasColumnAxis
+                                    ? visibleCols.length * valueTypes.length + valueTypes.length
+                                    : valueTypes.length
+                                  : visibleCols.length + 1) +
+                                3
+                              }
                               className="px-4 py-10 text-center text-gray-500"
                             >
                               沒有符合條件的工作紀錄
                             </td>
                           </tr>
                         )}
-                        {visibleRows.map((row) => (
-                          <tr
-                            key={row.key}
-                            className={
-                              row.isGroup
-                                ? 'bg-blue-50 font-semibold'
-                                : 'bg-white hover:bg-gray-50'
-                            }
-                          >
-                            <th
-                              className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-200 bg-inherit px-3 py-2 text-left text-gray-800"
-                              style={{
-                                paddingLeft: `${12 + (row.depth - 1) * 18}px`,
-                              }}
-                            >
-                              {row.canToggle && (
-                                <button
-                                  onClick={() => toggleRow(row.key)}
-                                  className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-700"
-                                >
-                                  {collapsedRows.has(row.key) ? '+' : '−'}
-                                </button>
-                              )}
-                              {row.label}
-                            </th>
-                            {visibleCols.map((col) => {
-                              if (row.isGroup) {
-                                return (
-                                  <td
-                                    key={`${row.key}-${col.key}`}
-                                    className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800"
-                                  />
-                                );
+                        {visibleRows.map((row) => {
+                          const totalMetric = row.isGroup
+                            ? EMPTY_METRIC
+                            : aggregateMetric(pivot, row.labels, [], primaryValueType);
+                          const rowPrice = rowPrices[row.key];
+                          const unitPrice = Number(rowPrice?.unit_price) || 0;
+                          const amount =
+                            Math.round(
+                              (Number(totalMetric.value) || 0) * unitPrice * 100,
+                            ) / 100;
+                          const priceStatusClass =
+                            rowPrice?.matched === false
+                              ? 'bg-yellow-50 text-yellow-900'
+                              : rowPrice?.matched === true
+                                ? 'bg-green-50 text-green-900'
+                                : 'bg-white text-gray-900';
+                          return (
+                            <tr
+                              key={row.key}
+                              className={
+                                row.isGroup
+                                  ? 'bg-blue-50 font-semibold'
+                                  : 'bg-white hover:bg-gray-50'
                               }
-                              const metric = aggregateMetric(
-                                pivot,
-                                row.labels,
-                                col.labels,
-                              );
-                              const intensity =
-                                maxVisibleValue > 0
-                                  ? Math.min(metric.value / maxVisibleValue, 1)
-                                  : 0;
-                              const background =
-                                metric.value > 0
-                                  ? `rgba(37, 99, 235, ${0.08 + intensity * 0.26})`
-                                  : undefined;
-                              return (
-                                <td
-                                  key={`${row.key}-${col.key}`}
-                                  className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800"
-                                  style={{ backgroundColor: background }}
-                                >
-                                  {metricText(metric)}
-                                </td>
-                              );
-                            })}
-                            {(() => {
-                              const totalMetric = row.isGroup
-                                ? EMPTY_METRIC
-                                : aggregateMetric(pivot, row.labels, []);
-                              const rowPrice = rowPrices[row.key];
-                              const unitPrice =
-                                Number(rowPrice?.unit_price) || 0;
-                              const amount =
-                                Math.round(
-                                  (Number(totalMetric.value) || 0) *
-                                    unitPrice *
-                                    100,
-                                ) / 100;
-                              const priceStatusClass =
-                                rowPrice?.matched === false
-                                  ? 'bg-yellow-50 text-yellow-900'
-                                  : rowPrice?.matched === true
-                                    ? 'bg-green-50 text-green-900'
-                                    : 'bg-white text-gray-900';
-                              return (
-                                <>
-                                  <td className="border-b border-l border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">
-                                    {row.isGroup ? '' : metricText(totalMetric)}
-                                  </td>
-                                  <td
-                                    className={`border-b border-r border-gray-200 px-2 py-2 ${row.isGroup ? 'bg-gray-50' : priceStatusClass}`}
+                            >
+                              <th
+                                className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-200 bg-inherit px-3 py-2 text-left text-gray-800"
+                                style={{
+                                  paddingLeft: `${12 + (row.depth - 1) * 18}px`,
+                                }}
+                              >
+                                {row.canToggle && (
+                                  <button
+                                    onClick={() => toggleRow(row.key)}
+                                    className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-700"
                                   >
-                                    {!row.isGroup && (
-                                      <input
-                                        type="number"
-                                        value={rowPrice?.unit_price ?? ''}
-                                        onChange={(event) =>
-                                          updateRowUnitPrice(
-                                            row.key,
-                                            Number(event.target.value),
+                                    {collapsedRows.has(row.key) ? '+' : '−'}
+                                  </button>
+                                )}
+                                {row.label}
+                              </th>
+                              {isMultiValue
+                                ? hasColumnAxis
+                                  ? visibleCols.flatMap((col) =>
+                                      valueTypes.map((valueType) =>
+                                        row.isGroup
+                                          ? (
+                                              <td
+                                                key={`${row.key}-${col.key}-${valueType}`}
+                                                className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800"
+                                              />
+                                            )
+                                          : renderMetricCell(
+                                              `${row.key}-${col.key}-${valueType}`,
+                                              aggregateMetric(
+                                                pivot,
+                                                row.labels,
+                                                col.labels,
+                                                valueType,
+                                              ),
+                                            ),
+                                      ),
+                                    )
+                                  : valueTypes.map((valueType) =>
+                                      row.isGroup
+                                        ? (
+                                            <td
+                                              key={`${row.key}-${valueType}`}
+                                              className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800"
+                                            />
                                           )
-                                        }
-                                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm tabular-nums"
-                                        placeholder="0.00"
-                                        disabled={readOnly}
-                                      />
-                                    )}
-                                  </td>
-                                  <td className="border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">
-                                    {row.isGroup ? '' : fmtMoney(amount)}
-                                  </td>
-                                  <td className="border-b border-gray-200 bg-white px-2 py-2 text-center">
-                                    {!row.isGroup && (
-                                      <button
-                                        onClick={() => addPivotRowToItems(row)}
-                                        disabled={readOnly}
-                                        className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                                      >
-                                        加到右邊
-                                      </button>
-                                    )}
-                                  </td>
-                                </>
-                              );
-                            })()}
-                          </tr>
-                        ))}
+                                        : renderMetricCell(
+                                            `${row.key}-${valueType}`,
+                                            aggregateMetric(
+                                              pivot,
+                                              row.labels,
+                                              [],
+                                              valueType,
+                                            ),
+                                          ),
+                                    )
+                                : visibleCols.map((col) =>
+                                    row.isGroup
+                                      ? (
+                                          <td
+                                            key={`${row.key}-${col.key}`}
+                                            className="border-b border-r border-gray-200 px-3 py-2 text-right tabular-nums text-gray-800"
+                                          />
+                                        )
+                                      : renderMetricCell(
+                                          `${row.key}-${col.key}`,
+                                          aggregateMetric(
+                                            pivot,
+                                            row.labels,
+                                            col.labels,
+                                            primaryValueType,
+                                          ),
+                                        ),
+                                  )}
+                              {isMultiValue && hasColumnAxis
+                                ? valueTypes.map((valueType) => (
+                                    <td
+                                      key={`${row.key}-total-${valueType}`}
+                                      className="border-b border-l border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900"
+                                    >
+                                      {row.isGroup
+                                        ? ''
+                                        : metricText(
+                                            aggregateMetric(
+                                              pivot,
+                                              row.labels,
+                                              [],
+                                              valueType,
+                                            ),
+                                          )}
+                                    </td>
+                                  ))
+                                : !isMultiValue && (
+                                    <td className="border-b border-l border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">
+                                      {row.isGroup ? '' : metricText(totalMetric)}
+                                    </td>
+                                  )}
+                              <td
+                                className={`border-b border-r border-gray-200 px-2 py-2 ${row.isGroup ? 'bg-gray-50' : priceStatusClass}`}
+                              >
+                                {!row.isGroup && (
+                                  <input
+                                    type="number"
+                                    value={rowPrice?.unit_price ?? ''}
+                                    onChange={(event) =>
+                                      updateRowUnitPrice(
+                                        row.key,
+                                        Number(event.target.value),
+                                      )
+                                    }
+                                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm tabular-nums"
+                                    placeholder="0.00"
+                                    disabled={readOnly}
+                                  />
+                                )}
+                              </td>
+                              <td className="border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">
+                                {row.isGroup ? '' : fmtMoney(amount)}
+                              </td>
+                              <td className="border-b border-gray-200 bg-white px-2 py-2 text-center">
+                                {!row.isGroup && (
+                                  <button
+                                    onClick={() => addPivotRowToItems(row)}
+                                    disabled={readOnly}
+                                    className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                                  >
+                                    加到右邊
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot className="bg-gray-100">
                         <tr>
                           <th className="sticky left-0 z-30 border-t border-r border-gray-300 bg-gray-100 px-3 py-2 text-left font-bold text-gray-900">
                             合計
                           </th>
-                          {visibleCols.map((col) => (
-                            <td
-                              key={`total-${col.key}`}
-                              className="border-t border-r border-gray-300 px-3 py-2 text-right font-bold tabular-nums text-gray-900"
-                            >
-                              {metricText(
-                                aggregateMetric(pivot, [], col.labels),
+                          {isMultiValue
+                            ? hasColumnAxis
+                              ? visibleCols.flatMap((col) =>
+                                  valueTypes.map((valueType) => (
+                                    <td
+                                      key={`total-${col.key}-${valueType}`}
+                                      className="border-t border-r border-gray-300 px-3 py-2 text-right font-bold tabular-nums text-gray-900"
+                                    >
+                                      {metricText(
+                                        aggregateMetric(
+                                          pivot,
+                                          [],
+                                          col.labels,
+                                          valueType,
+                                        ),
+                                      )}
+                                    </td>
+                                  )),
+                                )
+                              : valueTypes.map((valueType) => (
+                                  <td
+                                    key={`total-${valueType}`}
+                                    className="border-t border-r border-gray-300 px-3 py-2 text-right font-bold tabular-nums text-gray-900"
+                                  >
+                                    {metricText(grandTotalMetric(pivot, valueType))}
+                                  </td>
+                                ))
+                            : visibleCols.map((col) => (
+                                <td
+                                  key={`total-${col.key}`}
+                                  className="border-t border-r border-gray-300 px-3 py-2 text-right font-bold tabular-nums text-gray-900"
+                                >
+                                  {metricText(
+                                    aggregateMetric(
+                                      pivot,
+                                      [],
+                                      col.labels,
+                                      primaryValueType,
+                                    ),
+                                  )}
+                                </td>
+                              ))}
+                          {isMultiValue && hasColumnAxis
+                            ? valueTypes.map((valueType) => (
+                                <td
+                                  key={`grand-total-${valueType}`}
+                                  className="border-t border-l border-gray-300 bg-gray-100 px-3 py-2 text-right font-bold tabular-nums text-gray-900"
+                                >
+                                  {metricText(grandTotalMetric(pivot, valueType))}
+                                </td>
+                              ))
+                            : !isMultiValue && (
+                                <td className="border-t border-l border-gray-300 bg-gray-100 px-3 py-2 text-right font-bold tabular-nums text-gray-900">
+                                  {metricText(grandTotalMetric(pivot, primaryValueType))}
+                                </td>
                               )}
-                            </td>
-                          ))}
-                          <td className="border-t border-l border-gray-300 bg-gray-100 px-3 py-2 text-right font-bold tabular-nums text-gray-900">
-                            {metricText(pivot.grandTotal)}
-                          </td>
                           <td className="border-t border-r border-gray-300 bg-gray-100 px-3 py-2"></td>
                           <td className="border-t border-r border-gray-300 bg-gray-100 px-3 py-2"></td>
                           <td className="border-t border-gray-300 bg-gray-100 px-3 py-2"></td>

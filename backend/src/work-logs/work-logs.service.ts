@@ -12,6 +12,7 @@ import {
 } from './dto/unmatched-combinations.dto';
 import {
   PIVOT_DIMENSIONS,
+  PIVOT_VALUE_TYPES,
   PivotAxisItem,
   PivotDimension,
   PivotFilterOption,
@@ -1932,7 +1933,8 @@ export class WorkLogsService {
     const colFields = this.parsePivotDimensions(query.col_fields, [
       'scheduled_date',
     ]);
-    const valueType: PivotValueType = query.value_type || 'quantity_sum';
+    const valueTypes = this.parsePivotValueTypes(query);
+    const isMultiValue = valueTypes.length > 1;
     const where = this.buildPivotWhere(query);
 
     const logs = (await this.prisma.workLog.findMany({
@@ -1981,6 +1983,7 @@ export class WorkLogsService {
     const rowAccumulators = new Map<string, PivotAccumulator>();
     const colAccumulators = new Map<string, PivotAccumulator>();
     const grandAccumulator = this.createPivotAccumulator();
+    const grandAccumulators = new Map<string, PivotAccumulator>();
 
     const allRow = this.makePivotAxisParts([], []);
     const allCol = this.makePivotAxisParts([], []);
@@ -2001,26 +2004,38 @@ export class WorkLogsService {
         labels: colParts.labels,
       });
 
-      const metric = this.getPivotMetricForLog(log, valueType);
-      this.addPivotMetric(
-        cellAccumulators,
-        `${rowParts.key}|${colParts.key}`,
-        metric.value,
-        metric.unit,
-      );
-      this.addPivotMetric(
-        rowAccumulators,
-        rowParts.key,
-        metric.value,
-        metric.unit,
-      );
-      this.addPivotMetric(
-        colAccumulators,
-        colParts.key,
-        metric.value,
-        metric.unit,
-      );
-      this.addToPivotAccumulator(grandAccumulator, metric.value, metric.unit);
+      for (const valueType of valueTypes) {
+        const metric = this.getPivotMetricForLog(log, valueType);
+        const metricSuffix = isMultiValue ? `|${valueType}` : '';
+        this.addPivotMetric(
+          cellAccumulators,
+          `${rowParts.key}|${colParts.key}${metricSuffix}`,
+          metric.value,
+          metric.unit,
+        );
+        this.addPivotMetric(
+          rowAccumulators,
+          `${rowParts.key}${metricSuffix}`,
+          metric.value,
+          metric.unit,
+        );
+        this.addPivotMetric(
+          colAccumulators,
+          `${colParts.key}${metricSuffix}`,
+          metric.value,
+          metric.unit,
+        );
+        if (isMultiValue) {
+          this.addPivotMetric(
+            grandAccumulators,
+            valueType,
+            metric.value,
+            metric.unit,
+          );
+        } else {
+          this.addToPivotAccumulator(grandAccumulator, metric.value, metric.unit);
+        }
+      }
     }
 
     if (logs.length === 0) {
@@ -2042,7 +2057,9 @@ export class WorkLogsService {
       data: this.finalizePivotAccumulatorMap(cellAccumulators),
       rowTotals: this.finalizePivotAccumulatorMap(rowAccumulators),
       colTotals: this.finalizePivotAccumulatorMap(colAccumulators),
-      grandTotal: this.finalizePivotAccumulator(grandAccumulator),
+      grandTotal: isMultiValue
+        ? this.finalizePivotAccumulatorMap(grandAccumulators)
+        : this.finalizePivotAccumulator(grandAccumulator),
       summary: this.buildPivotSummary(logs),
     };
   }
@@ -2327,6 +2344,22 @@ export class WorkLogsService {
       }
     }
     return dimensions;
+  }
+
+  private parsePivotValueTypes(query: WorkLogPivotQueryDto): PivotValueType[] {
+    const allowed = new Set<string>(PIVOT_VALUE_TYPES);
+    const source =
+      query.value_types && query.value_types.trim()
+        ? query.value_types
+        : query.value_type || 'quantity_sum';
+    const valueTypes: PivotValueType[] = [];
+    for (const part of source.split(',')) {
+      const value = part.trim();
+      if (allowed.has(value) && !valueTypes.includes(value as PivotValueType)) {
+        valueTypes.push(value as PivotValueType);
+      }
+    }
+    return valueTypes.length > 0 ? valueTypes : ['quantity_sum'];
   }
 
   private buildPivotWhere(
