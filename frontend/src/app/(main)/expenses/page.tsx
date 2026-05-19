@@ -9,6 +9,7 @@ import {
   partnersApi,
   employeesApi,
   machineryApi,
+  vehiclesApi,
   projectsApi,
   quotationsApi,
   fieldOptionsApi,
@@ -97,6 +98,7 @@ export default function ExpensesPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [machineryList, setMachineryList] = useState<any[]>([]);
+  const [vehicleList, setVehicleList] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
@@ -123,6 +125,7 @@ export default function ExpensesPage() {
     remarks: '',
     machine_code: '',
     machinery_id: '',
+    vehicle_id: '',
     client_id: '',
     contract_id: '',
     project_id: '',
@@ -160,7 +163,8 @@ export default function ExpensesPage() {
     companiesApi.simple().then(r => setCompanies(r.data || []));
     partnersApi.simple().then(r => setPartners(r.data || []));
     employeesApi.list({ limit: 9999 }).then(r => setEmployees(r.data.data || []));
-    machineryApi.list({ limit: 9999 }).then(r => setMachineryList(r.data.data || []));
+    machineryApi.list({ limit: 9999 }).then(r => setMachineryList((r.data.data || []).filter((m: any) => m.status === 'active')));
+    vehiclesApi.simple().then(r => setVehicleList((r.data || []).filter((v: any) => v.status === 'active')));
     projectsApi.simple().then(r => setProjects(r.data || []));
     quotationsApi.list({ limit: 9999 }).then(r => setQuotations(r.data.data || []));
     expenseCategoriesApi.getTree().then(r => setCategoryTree(r.data || []));
@@ -181,7 +185,16 @@ export default function ExpensesPage() {
   const companyOptions = useMemo(() => companies.map((c: any) => ({ value: c.id, label: c.internal_prefix || c.name })), [companies]);
   const partnerOptions = useMemo(() => partners.map((p: any) => ({ value: p.id, label: p.name })), [partners]);
   const employeeOptions = useMemo(() => employees.map((e: any) => ({ value: e.id, label: e.name_zh })), [employees]);
-  const machineryOptions = useMemo(() => machineryList.map((m: any) => ({ value: m.id, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` })), [machineryList]);
+  const equipmentOptions = useMemo(() => [
+    ...machineryList.map((m: any) => ({
+      value: `machinery:${m.id}`,
+      label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}`,
+    })),
+    ...vehicleList.map((v: any) => ({
+      value: `vehicle:${v.id}`,
+      label: `${v.plate_number} (車輛)`,
+    })),
+  ], [machineryList, vehicleList]);
   const projectOptions = useMemo(() => projects.map((p: any) => ({ value: p.id, label: `${p.project_no} ${p.project_name || ''}`.trim() })), [projects]);
   const quotationOptions = useMemo(() => quotations.map((q: any) => ({ value: q.id, label: q.quotation_no })), [quotations]);
   const paymentMethodOptions = useMemo(() => paymentMethods.filter((m: any) => m.is_active).map((m: any) => ({ value: m.label, label: m.label })), [paymentMethods]);
@@ -222,7 +235,7 @@ export default function ExpensesPage() {
       }
       const payload: any = { ...form };
       delete payload._parent_category_id;
-      const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
+      const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'vehicle_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : undefined;
       }
@@ -244,7 +257,20 @@ export default function ExpensesPage() {
   // ── Inline save ──────────────────────────────────────────────────────────
   const handleInlineSave = async (id: number, formData: any) => {
     const payload = { ...formData };
-    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
+    if (typeof payload.machinery_id === 'string' && payload.machinery_id.includes(':')) {
+      const [type, id] = payload.machinery_id.split(':');
+      if (type === 'machinery') {
+        payload.machinery_id = id;
+        payload.vehicle_id = null;
+        const selectedMachine = machineryList.find((m: any) => Number(m.id) === Number(id));
+        payload.machine_code = selectedMachine?.machine_code || '';
+      } else if (type === 'vehicle') {
+        payload.vehicle_id = id;
+        payload.machinery_id = null;
+        payload.machine_code = '';
+      }
+    }
+    const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'vehicle_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
     for (const f of numericFields) {
       if (f in payload) payload[f] = payload[f] ? Number(payload[f]) : null;
     }
@@ -439,16 +465,16 @@ export default function ExpensesPage() {
       label: '機號',
       sortable: true,
       editable: true,
-      editRender: (value: any, onChange: (v: any) => void) => (
+      editRender: (_value: any, onChange: (v: any) => void, row: any) => (
         <SearchableSelect
-          value={value}
+          value={row.vehicle_id ? `vehicle:${row.vehicle_id}` : (row.machinery_id ? `machinery:${row.machinery_id}` : null)}
           onChange={onChange}
-          options={machineryOptions}
-          placeholder="搜尋機號..."
+          options={equipmentOptions}
+          placeholder="搜尋機號或車牌..."
         />
       ),
-      render: (_: any, row: any) => row.machinery?.machine_code || row.machine_code || '-',
-      filterRender: (_: any, row: any) => row.machinery?.machine_code || row.machine_code || '-',
+      render: (_: any, row: any) => row.vehicle?.plate_number || row.machinery?.machine_code || row.machine_code || '-',
+      filterRender: (_: any, row: any) => row.vehicle?.plate_number || row.machinery?.machine_code || row.machine_code || '-',
     },
     {
       key: 'client_id',
@@ -767,10 +793,22 @@ export default function ExpensesPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">機號</label>
               <SearchableSelect
-                value={form.machinery_id || null}
-                onChange={v => { const m = machineryList.find((m: any) => m.id === Number(v)); setForm({ ...form, machinery_id: v, machine_code: m?.machine_code || '' }); }}
-                options={machineryOptions}
-                placeholder="搜尋機號..."
+                value={form.vehicle_id ? `vehicle:${form.vehicle_id}` : (form.machinery_id ? `machinery:${form.machinery_id}` : null)}
+                onChange={v => {
+                  if (!v) {
+                    setForm({ ...form, machinery_id: '', vehicle_id: '', machine_code: '' });
+                    return;
+                  }
+                  const [type, rawId] = String(v).split(':');
+                  if (type === 'machinery') {
+                    const m = machineryList.find((item: any) => Number(item.id) === Number(rawId));
+                    setForm({ ...form, machinery_id: rawId, vehicle_id: '', machine_code: m?.machine_code || '' });
+                  } else if (type === 'vehicle') {
+                    setForm({ ...form, machinery_id: '', vehicle_id: rawId, machine_code: '' });
+                  }
+                }}
+                options={equipmentOptions}
+                placeholder="搜尋機號或車牌..."
                 className="w-full"
               />
             </div>

@@ -9,6 +9,7 @@ import {
   partnersApi,
   employeesApi,
   machineryApi,
+  vehiclesApi,
   projectsApi,
   quotationsApi,
   fieldOptionsApi,
@@ -65,6 +66,7 @@ export default function ExpenseDetailPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [machineryList, setMachineryList] = useState<any[]>([]);
+  const [vehicleList, setVehicleList] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
@@ -97,7 +99,8 @@ export default function ExpenseDetailPage() {
     companiesApi.simple().then(r => setCompanies(r.data || []));
     partnersApi.simple().then(r => setPartners(r.data || []));
     employeesApi.list({ limit: 9999 }).then(r => setEmployees(r.data.data || []));
-    machineryApi.list({ limit: 9999 }).then(r => setMachineryList(r.data.data || []));
+    machineryApi.list({ limit: 9999 }).then(r => setMachineryList((r.data.data || []).filter((m: any) => m.status === 'active')));
+    vehiclesApi.simple().then(r => setVehicleList((r.data || []).filter((v: any) => v.status === 'active')));
     projectsApi.simple().then(r => setProjects(r.data || []));
     quotationsApi.list({ limit: 9999 }).then(r => setQuotations(r.data.data || []));
     expenseCategoriesApi.getTree().then(r => setCategoryTree(r.data || []));
@@ -120,6 +123,7 @@ export default function ExpenseDetailPage() {
       remarks: e.remarks || '',
       machine_code: e.machine_code || '',
       machinery_id: e.machinery_id || '',
+      vehicle_id: e.vehicle_id || '',
       client_id: e.client_id || '',
       contract_id: e.contract_id || '',
       project_id: e.project_id || '',
@@ -133,7 +137,7 @@ export default function ExpenseDetailPage() {
     try {
       const payload: any = { ...form };
       delete payload._parent_category_id;
-      const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
+      const numericFields = ['company_id', 'supplier_partner_id', 'category_id', 'employee_id', 'machinery_id', 'vehicle_id', 'client_id', 'project_id', 'quotation_id', 'contract_id'];
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : null;
       }
@@ -159,7 +163,10 @@ export default function ExpenseDetailPage() {
   const supplierOptions = partners.filter((p: any) => p.partner_type === 'supplier').map((p: any) => ({ value: p.id, label: p.name }));
   const partnerOptions = partners.map((p: any) => ({ value: p.id, label: p.name }));
   const employeeOptions = employees.map((e: any) => ({ value: e.id, label: e.name_zh }));
-  const machineryOptions = machineryList.map((m: any) => ({ value: m.id, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` }));
+  const equipmentOptions = [
+    ...machineryList.map((m: any) => ({ value: `machinery:${m.id}`, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` })),
+    ...vehicleList.map((v: any) => ({ value: `vehicle:${v.id}`, label: `${v.plate_number} (車輛)` })),
+  ];
   const projectOptions = projects.map((p: any) => ({ value: p.id, label: `${p.project_no} ${p.project_name || ''}`.trim() }));
   const formatQuotationLabel = (q: any) => {
     if (!q) return '';
@@ -371,7 +378,24 @@ export default function ExpenseDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">機號</label>
-              <SearchableSelect value={form.machinery_id || null} onChange={v => setForm({ ...form, machinery_id: v })} options={machineryOptions} placeholder="搜尋機號..." />
+              <SearchableSelect
+                value={form.vehicle_id ? `vehicle:${form.vehicle_id}` : (form.machinery_id ? `machinery:${form.machinery_id}` : null)}
+                onChange={v => {
+                  if (!v) {
+                    setForm({ ...form, machinery_id: '', vehicle_id: '', machine_code: '' });
+                    return;
+                  }
+                  const [type, rawId] = String(v).split(':');
+                  if (type === 'machinery') {
+                    const m = machineryList.find((item: any) => Number(item.id) === Number(rawId));
+                    setForm({ ...form, machinery_id: rawId, vehicle_id: '', machine_code: m?.machine_code || '' });
+                  } else if (type === 'vehicle') {
+                    setForm({ ...form, machinery_id: '', vehicle_id: rawId, machine_code: '' });
+                  }
+                }}
+                options={equipmentOptions}
+                placeholder="搜尋機號或車牌..."
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">客戶</label>
@@ -415,7 +439,7 @@ export default function ExpenseDetailPage() {
                 ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">公司付款</span>
                 : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">本人代付</span>}
             </Field>
-            <Field label="機號">{expense.machinery?.machine_code || expense.machine_code}</Field>
+            <Field label="機號">{expense.vehicle?.plate_number || expense.machinery?.machine_code || expense.machine_code}</Field>
             <Field label="客戶">{expense.client?.name}</Field>
             <Field label="工程編號">{expense.project?.project_no}</Field>
             <Field label="客戶報價單">{formatQuotationLabel(expense.quotation)}</Field>

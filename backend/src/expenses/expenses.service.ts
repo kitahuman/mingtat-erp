@@ -10,6 +10,7 @@ const EXPENSE_INCLUDE = {
   category: { include: { parent: true } },
   employee: true,
   machinery: true,
+  vehicle: true,
   client: true,
   project: true,
   quotation: true,
