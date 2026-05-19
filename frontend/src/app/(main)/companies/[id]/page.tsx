@@ -16,6 +16,34 @@ export default function CompanyDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const getLogoSrc = (path?: string) => {
+    if (!path) return '';
+    if (/^https?:\/\//.test(path)) return path;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+    const origin = apiBase.replace(/\/api\/?$/, '');
+    return `${origin}${path}`;
+  };
+
+  const bankInfo = form.invoice_bank_info || {};
+  const updateBankInfo = (key: string, value: any) => {
+    setForm({ ...form, invoice_bank_info: { ...(form.invoice_bank_info || {}), [key]: value } });
+  };
+
+  const handleLogoUpload = async (file?: File | null) => {
+    if (!file || !company?.id) return;
+    setUploadingLogo(true);
+    try {
+      const res = await companiesApi.uploadLogo(company.id, file);
+      setCompany(res.data);
+      setForm(res.data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Logo 上載失敗');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   useEffect(() => {
     companiesApi.get(Number(params.id)).then(res => {
@@ -98,6 +126,72 @@ export default function CompanyDetailPage() {
               <div className="md:col-span-3"><p className="text-sm text-gray-500">說明</p><p>{company?.description || '-'}</p></div>
             </>
           )}
+        </div>
+      </div>
+
+      {/* Invoice Branding */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">發票設定</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div>
+            <p className="text-sm font-medium text-gray-500 mb-2">公司 Logo</p>
+            <div className="border rounded-lg p-4 bg-gray-50 min-h-[120px] flex items-center justify-center">
+              {company?.company_logo_url ? (
+                <img src={getLogoSrc(company.company_logo_url)} alt="Company logo" className="max-h-24 max-w-full object-contain" />
+              ) : (
+                <span className="text-sm text-gray-400">未上載 Logo</span>
+              )}
+            </div>
+            {editing && !isReadOnly && (
+              <div className="mt-3">
+                <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={e => handleLogoUpload(e.target.files?.[0])} className="block w-full text-sm text-gray-600" disabled={uploadingLogo} />
+                <p className="text-xs text-gray-500 mt-1">{uploadingLogo ? '上載中...' : '支援 PNG、JPG、WebP，將用於 PDF 發票頁首。'}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {editing ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">發票主色</label>
+                  <div className="flex gap-2">
+                    <input type="color" value={form.invoice_color_theme || '#1a365d'} onChange={e => setForm({ ...form, invoice_color_theme: e.target.value })} className="h-10 w-14 rounded border" />
+                    <input value={form.invoice_color_theme || '#1a365d'} onChange={e => setForm({ ...form, invoice_color_theme: e.target.value })} className="input-field" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">銀行名稱</label>
+                  <input value={bankInfo.bank_name || ''} onChange={e => updateBankInfo('bank_name', e.target.value)} className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">戶口名稱</label>
+                  <input value={bankInfo.account_name || ''} onChange={e => updateBankInfo('account_name', e.target.value)} className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">戶口號碼</label>
+                  <input value={bankInfo.account_no || ''} onChange={e => updateBankInfo('account_no', e.target.value)} className="input-field" />
+                </div>
+                <div className="md:col-span-2 flex flex-wrap gap-4 text-sm text-gray-700">
+                  <label><input type="checkbox" className="mr-1" checked={bankInfo.show_bank !== false} onChange={e => updateBankInfo('show_bank', e.target.checked)} />顯示銀行名稱</label>
+                  <label><input type="checkbox" className="mr-1" checked={bankInfo.show_account_name !== false} onChange={e => updateBankInfo('show_account_name', e.target.checked)} />顯示戶口名稱</label>
+                  <label><input type="checkbox" className="mr-1" checked={bankInfo.show_account_no !== false} onChange={e => updateBankInfo('show_account_no', e.target.checked)} />顯示戶口號碼</label>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-500 mb-1">預設付款條款</label>
+                  <textarea value={form.invoice_default_payment_terms || ''} onChange={e => setForm({ ...form, invoice_default_payment_terms: e.target.value })} className="input-field" rows={4} placeholder="可輸入多行付款條款" />
+                </div>
+              </>
+            ) : (
+              <>
+                <div><p className="text-sm text-gray-500">發票主色</p><p className="font-mono"><span className="inline-block w-4 h-4 rounded mr-2 align-middle" style={{ backgroundColor: company?.invoice_color_theme || '#1a365d' }} />{company?.invoice_color_theme || '#1a365d'}</p></div>
+                <div><p className="text-sm text-gray-500">銀行名稱</p><p>{company?.invoice_bank_info?.bank_name || '-'}</p></div>
+                <div><p className="text-sm text-gray-500">戶口名稱</p><p>{company?.invoice_bank_info?.account_name || '-'}</p></div>
+                <div><p className="text-sm text-gray-500">戶口號碼</p><p className="font-mono">{company?.invoice_bank_info?.account_no || '-'}</p></div>
+                <div className="md:col-span-2"><p className="text-sm text-gray-500">預設付款條款</p><p className="whitespace-pre-wrap">{company?.invoice_default_payment_terms || '-'}</p></div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

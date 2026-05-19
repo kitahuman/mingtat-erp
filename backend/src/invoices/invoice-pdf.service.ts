@@ -1,0 +1,394 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import puppeteer from 'puppeteer';
+import { existsSync, readFileSync } from 'fs';
+import { extname, join, normalize } from 'path';
+
+export type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
+
+export interface InvoicePdfOptions {
+  language?: InvoicePdfLanguage;
+  showBank?: boolean;
+  showClientAddress?: boolean;
+  showClientPhone?: boolean;
+}
+
+interface BankInfo {
+  bank_name?: string;
+  account_name?: string;
+  account_no?: string;
+  show_bank?: boolean;
+  show_account_name?: boolean;
+  show_account_no?: boolean;
+}
+
+@Injectable()
+export class InvoicePdfService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async generateInvoicePdf(invoiceId: number, options: InvoicePdfOptions = {}) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        items: { orderBy: { sort_order: 'asc' } },
+        client: true,
+        company: true,
+        project: true,
+        quotation: true,
+      },
+    });
+
+    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
+
+    const language = this.normalizeLanguage(
+      options.language || (invoice.invoice_language as InvoicePdfLanguage) || 'zh',
+    );
+    const showBank = options.showBank ?? invoice.invoice_show_bank;
+    const showClientAddress = options.showClientAddress ?? invoice.invoice_show_client_address;
+    const showClientPhone = options.showClientPhone ?? invoice.invoice_show_client_phone;
+
+    const html = this.buildHtml(invoice as any, {
+      language,
+      showBank,
+      showClientAddress,
+      showClientPhone,
+    });
+
+    const browser = await puppeteer.launch({
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'load' });
+      const companyName = this.escapeHtml(invoice.company?.name_en || invoice.company?.name || 'Invoice');
+      const pdf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        displayHeaderFooter: true,
+        headerTemplate: '<div></div>',
+        footerTemplate: `
+          <div style="width:100%; font-family:Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
+            ${companyName} · Invoice · Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+          </div>
+        `,
+        margin: { top: '11mm', right: '11mm', bottom: '13mm', left: '11mm' },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  private buildHtml(invoice: any, options: Required<InvoicePdfOptions>) {
+    const labels = this.labels(options.language);
+    const company = invoice.company || {};
+    const client = invoice.client || {};
+    const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
+    const logoDataUri = this.logoDataUri(company.company_logo_url);
+    const bankInfo = this.parseBankInfo(company.invoice_bank_info);
+    const paymentTerms =
+      invoice.invoice_custom_payment_terms ||
+      invoice.payment_terms ||
+      company.invoice_default_payment_terms ||
+      '';
+
+    const otherCharges = Array.isArray(invoice.other_charges) ? invoice.other_charges : [];
+    const surchargeTotal = otherCharges.reduce((sum: number, charge: any) => {
+      const amount = Number(charge?.amount || 0);
+      return amount > 0 ? sum + amount : sum;
+    }, 0);
+    const deductionTotal = otherCharges.reduce((sum: number, charge: any) => {
+      const amount = Number(charge?.amount || 0);
+      return amount < 0 ? sum + Math.abs(amount) : sum;
+    }, 0);
+    const retentionRate = Number(invoice.retention_rate || 0);
+    const retentionAmount = Number(invoice.retention_amount || 0);
+
+    const clientLines = [
+      options.showClientAddress && client.address
+        ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(client.address)}</span></div>`
+        : '',
+      options.showClientPhone && client.phone
+        ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>`
+        : '',
+    ].join('');
+
+    const bankRows = [
+      options.showBank && bankInfo.show_bank !== false && bankInfo.bank_name
+        ? `<tr><td>${labels.bank}</td><td>${this.escapeHtml(bankInfo.bank_name)}</td></tr>`
+        : '',
+      options.showBank && bankInfo.show_account_name !== false && bankInfo.account_name
+        ? `<tr><td>${labels.accountName}</td><td>${this.escapeHtml(bankInfo.account_name)}</td></tr>`
+        : '',
+      options.showBank && bankInfo.show_account_no !== false && bankInfo.account_no
+        ? `<tr><td>${labels.accountNo}</td><td>${this.escapeHtml(bankInfo.account_no)}</td></tr>`
+        : '',
+    ].join('');
+
+    const itemRows = (invoice.items || []).map((item: any, idx: number) => {
+      const name = item.item_name || item.description || '';
+      const description = item.item_name && item.description ? item.description : '';
+      return `
+        <tr>
+          <td class="center">${idx + 1}</td>
+          <td>
+            <div class="item-title">${this.escapeHtml(name)}</div>
+            ${description ? `<div class="sub-lines">${this.escapeMultiline(description)}</div>` : ''}
+          </td>
+          <td class="right">${this.formatQuantity(item.quantity)}</td>
+          <td class="center">${this.escapeHtml(item.unit || '')}</td>
+          <td class="right">${this.formatMoney(item.unit_price, false)}</td>
+          <td class="right">${this.formatMoney(item.amount, false)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const totalsRows = [
+      this.totalRow(labels.subtotal, this.formatMoney(invoice.subtotal), false),
+      surchargeTotal > 0 ? this.totalRow(labels.surcharge, `+${this.formatMoney(surchargeTotal)}`, false) : '',
+      deductionTotal > 0 ? this.totalRow(labels.deduction, `-${this.formatMoney(deductionTotal)}`, false) : '',
+      retentionRate > 0 && retentionAmount > 0
+        ? this.totalRow(`${labels.retention} ${this.formatPercent(retentionRate)}`, `-${this.formatMoney(retentionAmount)}`, false)
+        : '',
+      this.totalRow(labels.netAmountDue, this.formatMoney(invoice.total_amount), true),
+    ].join('');
+
+    return `<!DOCTYPE html>
+<html lang="${options.language === 'en' ? 'en' : 'zh-Hant'}">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    @page { size: A4 portrait; margin: 11mm 11mm 13mm 11mm; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; background: #ffffff; color: #1f2933;
+      font-family: "Noto Sans CJK TC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang TC", "Heiti TC", Arial, sans-serif;
+      font-size: 11.5px; line-height: 1.45;
+    }
+    .invoice-page { width: 188mm; margin: 0 auto; background: #ffffff; }
+    .top-rule { height: 5px; background: ${theme}; margin-bottom: 17px; border-radius: 2px; }
+    .header, .info-row, .after-table, .footer-row { display: table; width: 100%; table-layout: fixed; }
+    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .payment-section, .note-area, .signature-area { display: table-cell; vertical-align: top; }
+    .company-block { width: 64%; padding-right: 18px; }
+    .brand-block { width: 36%; text-align: right; }
+    .company-name-cn { font-size: 25px; font-weight: 800; color: ${theme}; letter-spacing: 0.6px; margin: 0 0 2px 0; line-height: 1.15; }
+    .company-name-en { font-size: 14px; font-weight: 700; color: #334e68; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .company-meta { color: #52606d; font-size: 10.6px; line-height: 1.5; }
+    .logo-img { max-width: 175px; max-height: 64px; object-fit: contain; }
+    .logo-placeholder { width: 175px; height: 54px; margin-left: auto; border: 1.4px solid ${theme}; color: ${theme}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; display: table; text-align: center; background: #f4f7fb; }
+    .logo-placeholder span { display: table-cell; vertical-align: middle; padding: 7px; line-height: 1.25; }
+    .invoice-title { margin-top: 13px; color: ${theme}; font-size: 25px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
+    .subtle-line { border-top: 1px solid #d9e2ec; margin: 10px 0 15px 0; }
+    .info-row { margin-bottom: 16px; }
+    .client-section { width: 58%; padding-right: 16px; }
+    .invoice-details { width: 42%; }
+    .section-label { color: ${theme}; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; margin-bottom: 6px; text-transform: uppercase; }
+    .client-box, .details-box { border: 1px solid #d9e2ec; border-left: 4px solid ${theme}; padding: 10px 12px; min-height: 88px; background: #fbfdff; }
+    .client-name { font-size: 13px; font-weight: 800; color: #243b53; margin-bottom: 5px; }
+    .muted { color: #52606d; }
+    .details-table, .payment-table { width: 100%; border-collapse: collapse; }
+    .details-table { font-size: 11px; }
+    .details-table td { padding: 3px 0; vertical-align: top; }
+    .details-table td:first-child { color: #52606d; width: 42%; font-weight: 700; }
+    .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
+    .invoice-subject { margin: 0 0 13px 0; padding: 9px 12px; border-left: 4px solid ${theme}; background: #f4f7fb; color: #243b53; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 7px; font-size: 10.6px; page-break-inside: auto; }
+    .items thead { display: table-header-group; }
+    .items tfoot { display: table-row-group; }
+    .items tr { page-break-inside: avoid; page-break-after: auto; }
+    .items thead th { background: ${theme}; color: #ffffff; padding: 8px 7px; font-weight: 800; text-align: left; border-right: 1px solid rgba(255,255,255,0.18); white-space: nowrap; }
+    .items thead th:last-child { border-right: none; }
+    .items tbody td { padding: 8px 7px; border-bottom: 1px solid #d9e2ec; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
+    .items tbody tr:nth-child(even) td { background: #fbfdff; }
+    .items .center { text-align: center; }
+    .items .right { text-align: right; white-space: nowrap; }
+    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .sub-lines { color: #52606d; font-size: 9.6px; line-height: 1.45; margin-top: 2px; overflow-wrap: anywhere; }
+    .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+    .totals-label { text-align: right; font-weight: 800; color: #243b53; }
+    .grand-total td { background: #f4f7fb !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
+    .after-table { margin-top: 15px; page-break-inside: avoid; }
+    .terms-section { width: 43%; padding-right: 14px; }
+    .payment-section { width: 57%; }
+    .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 10px 12px; min-height: 88px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .payment-box { border: 1.2px solid ${theme}; padding: 10px 12px; background: #ffffff; min-height: 116px; }
+    .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid #d9e2ec; padding-bottom: 5px; }
+    .payment-table { font-size: 10.8px; }
+    .payment-table td { padding: 3px 0; vertical-align: top; }
+    .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
+    .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
+    .footer-row { margin-top: 24px; page-break-inside: avoid; }
+    .note-area { width: 52%; color: #7b8794; font-size: 9.3px; line-height: 1.45; padding-right: 20px; }
+    .signature-area { width: 48%; text-align: right; color: #243b53; }
+    .signature-company { font-weight: 800; margin-bottom: 34px; font-size: 12px; }
+    .signature-line { width: 210px; border-top: 1.2px solid #243b53; margin-left: auto; padding-top: 7px; font-size: 10.5px; color: #52606d; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="invoice-page">
+    <div class="top-rule"></div>
+    <div class="header">
+      <div class="company-block">
+        <div class="company-name-cn">${this.escapeHtml(company.name || '')}</div>
+        ${company.name_en ? `<div class="company-name-en">${this.escapeHtml(company.name_en)}</div>` : ''}
+        <div class="company-meta">
+          ${company.address ? `${this.escapeHtml(company.address)}<br />` : ''}
+          ${company.phone ? `Tel: ${this.escapeHtml(company.phone)}` : ''}
+        </div>
+      </div>
+      <div class="brand-block">
+        ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(company.name_en || company.name || 'COMPANY')}</span></div>`}
+        <div class="invoice-title">${labels.invoiceTitle}</div>
+      </div>
+    </div>
+    <div class="subtle-line"></div>
+    <div class="info-row">
+      <div class="client-section">
+        <div class="section-label">${labels.billTo}</div>
+        <div class="client-box">
+          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+          ${clientLines}
+        </div>
+      </div>
+      <div class="invoice-details">
+        <div class="section-label">${labels.invoiceDetails}</div>
+        <div class="details-box">
+          <table class="details-table">
+            <tr><td>${labels.invoiceNo}</td><td>${this.escapeHtml(invoice.invoice_no || '')}</td></tr>
+            <tr><td>${labels.invoiceDate}</td><td>${this.formatDate(invoice.date, options.language)}</td></tr>
+            <tr><td>${labels.dueDate}</td><td>${invoice.due_date ? this.formatDate(invoice.due_date, options.language) : '-'}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="invoice-subject">${this.escapeHtml(invoice.invoice_title || invoice.project?.project_name || invoice.quotation?.project_name || labels.invoiceTitle)}</div>
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 7%;">${labels.no}</th>
+          <th style="width: 49%;">${labels.item}</th>
+          <th style="width: 11%; text-align: right;">${labels.quantity}</th>
+          <th style="width: 12%; text-align: center;">${labels.unit}</th>
+          <th style="width: 10%; text-align: right;">${labels.unitPrice}</th>
+          <th style="width: 11%; text-align: right;">${labels.amount}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRows || `<tr><td colspan="6" class="center muted">${labels.noItems}</td></tr>`}
+        ${totalsRows}
+      </tbody>
+    </table>
+    <div class="after-table">
+      <div class="terms-section">
+        <div class="section-label">${labels.paymentTerms}</div>
+        <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
+      </div>
+      <div class="payment-section">
+        ${options.showBank && bankRows ? `
+        <div class="payment-box">
+          <div class="payment-title">${labels.paymentDetails}</div>
+          <table class="payment-table">${bankRows}</table>
+        </div>` : ''}
+      </div>
+    </div>
+    <div class="footer-row">
+      <div class="note-area">${invoice.remarks ? this.escapeMultiline(invoice.remarks) : ''}</div>
+      <div class="signature-area">
+        <div class="signature-company">${this.escapeHtml(company.name || company.name_en || '')}</div>
+        <div class="signature-line">${labels.signature}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private totalRow(label: string, value: string, grand: boolean) {
+    return `
+      <tr class="${grand ? 'grand-total' : 'totals-row'}">
+        <td colspan="4"></td>
+        <td class="totals-label">${this.escapeHtml(label)}</td>
+        <td class="right"><strong>${this.escapeHtml(value)}</strong></td>
+      </tr>
+    `;
+  }
+
+  private labels(language: InvoicePdfLanguage) {
+    const bilingual = {
+      invoiceTitle: 'INVOICE 發票', billTo: '致 Bill To', invoiceDetails: '發票資料 Invoice Details',
+      invoiceNo: 'Invoice No.', invoiceDate: 'Invoice Date', dueDate: 'Due Date', address: '地址 Address', phone: '電話 Phone',
+      no: '編號', item: '項目', quantity: '數量', unit: '單位類型', unitPrice: '單價', amount: '金額',
+      subtotal: '小計 Subtotal (HKD)', surcharge: '附加費 Surcharge', deduction: '扣款 Deduction', retention: 'Less Retention', netAmountDue: '總數 Net Amount Due (HKD)',
+      paymentTerms: '付款條款 Payment Terms', paymentDetails: '付款資料 Payment Details', bank: 'Bank', accountName: 'Account Name', accountNo: 'Account No.',
+      signature: 'Authorized Signature / 公司簽署', noItems: '沒有項目 No items',
+    };
+    if (language === 'en') {
+      return { ...bilingual, invoiceTitle: 'INVOICE', billTo: 'Bill To', invoiceDetails: 'Invoice Details', address: 'Address', phone: 'Phone', no: 'No.', item: 'Item', quantity: 'Qty', unit: 'Unit', unitPrice: 'Unit Price', amount: 'Amount', subtotal: 'Subtotal (HKD)', surcharge: 'Surcharge', deduction: 'Deduction', netAmountDue: 'Net Amount Due (HKD)', paymentTerms: 'Payment Terms', paymentDetails: 'Payment Details', signature: 'Authorized Signature', noItems: 'No items' };
+    }
+    if (language === 'zh') {
+      return { ...bilingual, invoiceTitle: '發票', billTo: '致', invoiceDetails: '發票資料', invoiceDate: '發票日期', dueDate: '到期日', address: '地址', phone: '電話', subtotal: '小計 (HKD)', surcharge: '附加費', deduction: '扣款', retention: '保留金', netAmountDue: '總數 (HKD)', paymentTerms: '付款條款', paymentDetails: '付款資料', bank: '銀行', accountName: '戶口名稱', accountNo: '戶口號碼', signature: '公司簽署', noItems: '沒有項目' };
+    }
+    return bilingual;
+  }
+
+  private normalizeLanguage(language: string): InvoicePdfLanguage {
+    return language === 'en' || language === 'bilingual' ? language : 'zh';
+  }
+
+  private parseBankInfo(value: any): BankInfo {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
+
+  private logoDataUri(logoUrl?: string | null) {
+    if (!logoUrl) return '';
+    const relative = logoUrl.replace(/^\/+uploads\//, '');
+    const filePath = normalize(join(process.cwd(), 'uploads', relative));
+    const uploadsRoot = normalize(join(process.cwd(), 'uploads'));
+    if (!filePath.startsWith(uploadsRoot) || !existsSync(filePath)) return '';
+    const ext = extname(filePath).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`;
+  }
+
+  private sanitizeColor(color: string) {
+    return /^#[0-9a-fA-F]{6}$/.test(color) || /^#[0-9a-fA-F]{3}$/.test(color) ? color : '#1a365d';
+  }
+
+  private formatDate(value: Date | string, language: InvoicePdfLanguage) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    if (language === 'en') return date.toISOString().slice(0, 10);
+    return `${date.getUTCFullYear()}年${String(date.getUTCMonth() + 1).padStart(2, '0')}月${String(date.getUTCDate()).padStart(2, '0')}日`;
+  }
+
+  private formatMoney(value: any, withCurrency = true) {
+    const amount = Number(value || 0);
+    const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return withCurrency ? `$${formatted}` : formatted;
+  }
+
+  private formatQuantity(value: any) {
+    const num = Number(value || 0);
+    return num.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  }
+
+  private formatPercent(value: number) {
+    return `${Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
+  }
+
+  private escapeHtml(value: any) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  private escapeMultiline(value: any) {
+    return this.escapeHtml(value).replace(/\n/g, '<br />');
+  }
+}

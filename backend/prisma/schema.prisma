@@ -74,8 +74,12 @@ model Company {
   contact_person  String?
   phone           String?
   address         String?
-  description     String?   @db.Text
-  status          String    @default("active")
+  description                    String?   @db.Text
+  company_logo_url               String?   @db.Text
+  invoice_color_theme            String?   @default("#1a365d") @db.VarChar(20)
+  invoice_bank_info              Json?     @db.JsonB
+  invoice_default_payment_terms  String?   @db.Text
+  status                         String    @default("active")
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
   deleted_at      DateTime? // 軟刪除時間戳
@@ -2009,8 +2013,13 @@ model Invoice {
   total_amount       Decimal   @default(0) @db.Decimal(14, 2)
   paid_amount        Decimal   @default(0) @db.Decimal(14, 2)
   outstanding        Decimal   @default(0) @db.Decimal(14, 2)
-  payment_terms      String?   @db.Text
-  remarks            String?   @db.Text
+  payment_terms                String?   @db.Text
+  invoice_custom_payment_terms String?   @db.Text
+  invoice_language             String?   @default("zh") @db.VarChar(10)
+  invoice_show_bank            Boolean   @default(true)
+  invoice_show_client_address  Boolean   @default(true)
+  invoice_show_client_phone    Boolean   @default(true)
+  remarks                      String?   @db.Text
   created_at         DateTime  @default(now())
   updated_at         DateTime  @default(now()) @updatedAt
   deleted_at         DateTime? // 軯刪除時間時戳

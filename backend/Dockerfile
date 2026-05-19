@@ -3,6 +3,8 @@
 # ============================================
 FROM node:22-alpine AS deps
 
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 WORKDIR /app
 
 # Copy package files
@@ -34,17 +36,19 @@ RUN npm run build
 # ============================================
 # Stage 3: Production runtime
 # ============================================
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy package files
 COPY package.json package-lock.json ./
 
 # Install system dependencies
-RUN apk add --no-cache poppler-utils
+RUN apt-get update && apt-get install -y chromium poppler-utils --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Install production dependencies only
 RUN npm ci --omit=dev

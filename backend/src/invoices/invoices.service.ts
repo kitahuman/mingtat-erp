@@ -49,6 +49,10 @@ export class InvoicesService {
         phone: true,
         address: true,
         internal_prefix: true,
+        company_logo_url: true,
+        invoice_color_theme: true,
+        invoice_bank_info: true,
+        invoice_default_payment_terms: true,
       },
     },
     items: { orderBy: { sort_order: 'asc' as const } },
@@ -246,6 +250,11 @@ export class InvoicesService {
       retention_rate?: number | string;
       other_charges?: { name: string; amount: number }[];
       payment_terms?: string;
+      invoice_custom_payment_terms?: string;
+      invoice_language?: string;
+      invoice_show_bank?: boolean;
+      invoice_show_client_address?: boolean;
+      invoice_show_client_phone?: boolean;
       remarks?: string;
       items?: {
         item_name?: string;
@@ -302,6 +311,11 @@ export class InvoicesService {
         total_amount,
         outstanding: total_amount,
         payment_terms: dto.payment_terms || null,
+        invoice_custom_payment_terms: dto.invoice_custom_payment_terms || null,
+        invoice_language: dto.invoice_language || 'zh',
+        invoice_show_bank: dto.invoice_show_bank ?? true,
+        invoice_show_client_address: dto.invoice_show_client_address ?? true,
+        invoice_show_client_phone: dto.invoice_show_client_phone ?? true,
         remarks: dto.remarks || null,
         items: {
           create: items.map((item, idx) => ({
@@ -478,6 +492,16 @@ export class InvoicesService {
     if (dto.retention_rate !== undefined)
       data.retention_rate = Number(dto.retention_rate) || 0;
     if (dto.payment_terms !== undefined) data.payment_terms = dto.payment_terms;
+    if (dto.invoice_custom_payment_terms !== undefined)
+      data.invoice_custom_payment_terms = dto.invoice_custom_payment_terms || null;
+    if (dto.invoice_language !== undefined)
+      data.invoice_language = dto.invoice_language || 'zh';
+    if (dto.invoice_show_bank !== undefined)
+      data.invoice_show_bank = dto.invoice_show_bank;
+    if (dto.invoice_show_client_address !== undefined)
+      data.invoice_show_client_address = dto.invoice_show_client_address;
+    if (dto.invoice_show_client_phone !== undefined)
+      data.invoice_show_client_phone = dto.invoice_show_client_phone;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
     const companyChanged =

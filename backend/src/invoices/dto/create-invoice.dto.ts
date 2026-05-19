@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsArray,
   IsObject,
+  IsBoolean,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -30,6 +31,11 @@ export class CreateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() paid_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() outstanding?: number;
   @IsOptional() @IsString() payment_terms?: string;
+  @IsOptional() @IsString() invoice_custom_payment_terms?: string;
+  @IsOptional() @IsString() invoice_language?: string;
+  @IsOptional() @IsBoolean() invoice_show_bank?: boolean;
+  @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
+  @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsArray() items?: any[];
 }
@@ -55,6 +61,11 @@ export class UpdateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() paid_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() outstanding?: number;
   @IsOptional() @IsString() payment_terms?: string;
+  @IsOptional() @IsString() invoice_custom_payment_terms?: string;
+  @IsOptional() @IsString() invoice_language?: string;
+  @IsOptional() @IsBoolean() invoice_show_bank?: boolean;
+  @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
+  @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsArray() items?: any[];
 }

@@ -54,6 +54,14 @@ export default function InvoiceDetailPage() {
   const [paymentForm, setPaymentForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', bank_account_id: '', reference_no: '', remarks: '' });
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
+  const [showPdfOptions, setShowPdfOptions] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfOptions, setPdfOptions] = useState({
+    language: 'zh',
+    show_bank: true,
+    show_client_address: true,
+    show_client_phone: true,
+  });
   const [linkedWorkLogs, setLinkedWorkLogs] = useState<any[]>([]);
   const [linkedWorkLogsLoading, setLinkedWorkLogsLoading] = useState(false);
 
@@ -239,6 +247,27 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const res = await invoicesApi.exportPdf(invoiceId, pdfOptions);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${invoice?.invoice_no || `invoice-${invoiceId}`}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowPdfOptions(false);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '匯出 PDF 失敗');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!confirm('確定要刪除此發票嗎？此操作無法復原。')) return;
     try {
@@ -369,6 +398,7 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
+          <button onClick={() => setShowPdfOptions(true)} className="btn-primary">匯出 PDF</button>
           <button onClick={handlePrint} className="btn-secondary">列印 / PDF</button>
           {invoice.status === 'draft' && (
             <button onClick={() => handleStatusChange('issued')} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">開立發票</button>
@@ -392,6 +422,28 @@ export default function InvoiceDetailPage() {
           )}
         </div>
       </div>
+
+      <Modal isOpen={showPdfOptions} onClose={() => setShowPdfOptions(false)} title="匯出 PDF" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">語言 Language</label>
+            <select value={pdfOptions.language} onChange={e => setPdfOptions({ ...pdfOptions, language: e.target.value })} className="input-field">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+              <option value="bilingual">雙語</option>
+            </select>
+          </div>
+          <div className="space-y-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={pdfOptions.show_bank} onChange={e => setPdfOptions({ ...pdfOptions, show_bank: e.target.checked })} />顯示銀行資料</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={pdfOptions.show_client_address} onChange={e => setPdfOptions({ ...pdfOptions, show_client_address: e.target.checked })} />顯示客戶地址</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={pdfOptions.show_client_phone} onChange={e => setPdfOptions({ ...pdfOptions, show_client_phone: e.target.checked })} />顯示客戶電話</label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={() => setShowPdfOptions(false)} className="btn-secondary" disabled={exportingPdf}>取消</button>
+            <button onClick={handleExportPdf} className="btn-primary disabled:opacity-50" disabled={exportingPdf}>{exportingPdf ? '匯出中...' : '下載 PDF'}</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Basic Info */}
       <div className="card mb-6">

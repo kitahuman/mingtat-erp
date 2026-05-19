@@ -89,6 +89,32 @@ export class CompaniesService {
     return this.findOne(id);
   }
 
+  async uploadLogo(id: number, logoUrl: string, userId?: number, ipAddress?: string) {
+    const existing = await this.prisma.company.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('公司不存在');
+
+    const updated = await this.prisma.company.update({
+      where: { id },
+      data: { company_logo_url: logoUrl },
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'companies',
+          targetId: id,
+          changesBefore: { company_logo_url: existing.company_logo_url },
+          changesAfter: { company_logo_url: updated.company_logo_url },
+          ipAddress,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
+    return updated;
+  }
+
   async findAllSimple() {
     return this.prisma.company.findMany({
       where: { status: 'active', company_type: { not: 'external' } },

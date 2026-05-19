@@ -111,6 +111,13 @@ export const companiesApi = {
   get: (id: number) => api.get(`/companies/${id}`),
   create: (data: any) => api.post("/companies", data),
   update: (id: number, data: any) => api.put(`/companies/${id}`, data),
+  uploadLogo: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/companies/${id}/logo`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 // Company Profiles
@@ -1044,6 +1051,8 @@ export const paymentInAllocationApi = {
 export const invoicesApi = {
   list: (params?: any) => api.get("/invoices", { params }),
   get: (id: number) => api.get(`/invoices/${id}`),
+  exportPdf: (id: number, params?: any) =>
+    api.get(`/invoices/${id}/pdf`, { params, responseType: "blob" }),
   create: (data: any) => api.post("/invoices", data),
   createFromQuotation: (quotationId: number, data?: any) =>
     api.post(`/invoices/from-quotation/${quotationId}`, data || {}),

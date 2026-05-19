@@ -10,9 +10,14 @@ import {
   Body,
   UseGuards,
   Request,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { InvoicesService } from './invoices.service';
+import { InvoicePdfService } from './invoice-pdf.service';
+import type { InvoicePdfLanguage } from './invoice-pdf.service';
 import {
   CreateInvoiceDto,
   UpdateInvoiceDto,
@@ -27,11 +32,40 @@ import {
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
 export class InvoicesController {
-  constructor(private readonly service: InvoicesService) {}
+  constructor(
+    private readonly service: InvoicesService,
+    private readonly invoicePdfService: InvoicePdfService,
+  ) {}
 
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  async exportPdf(
+    @Param('id') id: number,
+    @Query('language') language: InvoicePdfLanguage,
+    @Query('show_bank') showBank: string,
+    @Query('show_client_address') showClientAddress: string,
+    @Query('show_client_phone') showClientPhone: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parseBool = (value: string | undefined) =>
+      value === undefined ? undefined : !['false', '0', 'no'].includes(String(value).toLowerCase());
+    const pdf = await this.invoicePdfService.generateInvoicePdf(Number(id), {
+      language,
+      showBank: parseBool(showBank),
+      showClientAddress: parseBool(showClientAddress),
+      showClientPhone: parseBool(showClientPhone),
+    });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="invoice-${Number(id)}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return new StreamableFile(pdf);
   }
 
   @Get(':id')
