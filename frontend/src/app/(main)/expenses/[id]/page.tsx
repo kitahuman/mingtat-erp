@@ -157,7 +157,16 @@ export default function ExpenseDetailPage() {
   const employeeOptions = employees.map((e: any) => ({ value: e.id, label: e.name_zh }));
   const machineryOptions = machineryList.map((m: any) => ({ value: m.id, label: `${m.machine_code}${m.machine_type ? ` (${m.machine_type})` : ''}` }));
   const projectOptions = projects.map((p: any) => ({ value: p.id, label: `${p.project_no} ${p.project_name || ''}`.trim() }));
-  const quotationOptions = quotations.map((q: any) => ({ value: q.id, label: q.quotation_no }));
+  const formatQuotationLabel = (q: any) => {
+    if (!q) return '';
+    const parts = [
+      q.quotation_no,
+      q.client?.name,
+      q.project?.project_no || q.project_name,
+    ].filter(Boolean);
+    return parts.join(' · ');
+  };
+  const quotationOptions = quotations.map((q: any) => ({ value: q.id, label: formatQuotationLabel(q) }));
 
   // ── Items ──────────────────────────────────────────────────────────────────
   const calcItemAmount = (qty: string, up: string) => {
@@ -346,8 +355,8 @@ export default function ExpenseDetailPage() {
               <SearchableSelect value={form.project_id || null} onChange={v => setForm({ ...form, project_id: v })} options={projectOptions} placeholder="搜尋工程..." />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">報價單</label>
-              <SearchableSelect value={form.quotation_id || null} onChange={v => setForm({ ...form, quotation_id: v })} options={quotationOptions} placeholder="搜尋報價單..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">客戶報價單</label>
+              <SearchableSelect value={form.quotation_id || null} onChange={v => setForm({ ...form, quotation_id: v })} options={quotationOptions} placeholder="搜尋客戶報價單..." />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">付款類型</label>
@@ -381,7 +390,7 @@ export default function ExpenseDetailPage() {
             <Field label="機號">{expense.machinery?.machine_code || expense.machine_code}</Field>
             <Field label="客戶">{expense.client?.name}</Field>
             <Field label="工程編號">{expense.project?.project_no}</Field>
-            <Field label="報價單">{expense.quotation?.quotation_no}</Field>
+            <Field label="客戶報價單">{formatQuotationLabel(expense.quotation)}</Field>
             <Field label="合約">{expense.contract_id}</Field>
             {expense.source && expense.source !== 'MANUAL' && (
               <Field label="來源">{expense.source}{expense.source_ref_id ? ` #${expense.source_ref_id}` : ''}</Field>
