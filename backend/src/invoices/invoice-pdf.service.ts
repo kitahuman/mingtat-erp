@@ -32,7 +32,7 @@ export class InvoicePdfService {
       include: {
         items: { orderBy: { sort_order: 'asc' } },
         client: true,
-        company: true,
+        company: { include: { bank_accounts: { where: { is_active: true }, orderBy: { id: 'asc' } } } },
         project: true,
         quotation: true,
       },
@@ -88,7 +88,11 @@ export class InvoicePdfService {
     const client = invoice.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const logoDataUri = this.logoDataUri(company.company_logo_url);
-    const bankInfo = this.parseBankInfo(company.invoice_bank_info);
+    // Use existing BankAccount records linked to the company (from bank_accounts module)
+    const bankAccounts = (company as any).bank_accounts || [];
+    const bankInfo: BankInfo = bankAccounts.length > 0
+      ? { bank_name: bankAccounts[0].bank_name, account_name: bankAccounts[0].account_name, account_no: bankAccounts[0].account_no, show_bank: true, show_account_name: true, show_account_no: true }
+      : this.parseBankInfo(company.invoice_bank_info);
     const paymentTerms =
       invoice.invoice_custom_payment_terms ||
       invoice.payment_terms ||
