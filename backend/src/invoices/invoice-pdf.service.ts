@@ -11,6 +11,7 @@ export interface InvoicePdfOptions {
   showBank?: boolean;
   showClientAddress?: boolean;
   showClientPhone?: boolean;
+  showClientInfo?: boolean;
   showSignature?: boolean;
   overridePaymentTerms?: string;
 }
@@ -57,7 +58,7 @@ export class InvoicePdfService {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
       const companyName = this.escapeHtml(
-        invoice.company?.name_en || invoice.company?.name || 'Invoice',
+        invoice.company?.invoice_company_name_en || invoice.company?.name_en || invoice.company?.name || 'Invoice',
       );
       const pdf = await page.pdf({
         format: 'A4',
@@ -112,6 +113,7 @@ export class InvoicePdfService {
       options.showClientAddress ?? invoice.invoice_show_client_address;
     const showClientPhone =
       options.showClientPhone ?? invoice.invoice_show_client_phone;
+    const showClientInfo = options.showClientInfo ?? true;
     const showSignature = options.showSignature ?? true;
 
     return {
@@ -121,6 +123,7 @@ export class InvoicePdfService {
         showBank,
         showClientAddress,
         showClientPhone,
+        showClientInfo,
         showSignature,
         overridePaymentTerms: options.overridePaymentTerms || '',
       }),
@@ -133,6 +136,14 @@ export class InvoicePdfService {
     const client = invoice.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const logoDataUri = this.logoDataUri(company.company_logo_url);
+    const invoiceCompanyNameEn = company.invoice_company_name_en || company.name_en || '';
+    const invoiceAddress = company.invoice_address || company.address || '';
+    const invoicePhone = company.invoice_phone || company.phone || '';
+    const invoiceFax = company.invoice_fax || '';
+    const companyMetaLines = [
+      invoiceAddress ? this.escapeHtml(invoiceAddress) : '',
+      [invoicePhone ? `Tel: ${this.escapeHtml(invoicePhone)}` : '', invoiceFax ? `Fax: ${this.escapeHtml(invoiceFax)}` : ''].filter(Boolean).join(' &nbsp; '),
+    ].filter(Boolean).join('<br />');
     // Use existing BankAccount records linked to the company (from bank_accounts module)
     const bankAccounts = (company as any).bank_accounts || [];
     const bankInfo: BankInfo =
@@ -175,6 +186,16 @@ export class InvoicePdfService {
         ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>`
         : '',
     ].join('');
+    const clientSectionHtml = options.showClientInfo
+      ? `
+      <div class="client-section">
+        <div class="section-label">${labels.billTo}</div>
+        <div class="client-box">
+          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+          ${clientLines}
+        </div>
+      </div>`
+      : '';
 
     const bankRows = [
       options.showBank && bankInfo.show_bank !== false && bankInfo.bank_name
@@ -272,6 +293,7 @@ export class InvoicePdfService {
     .info-row { margin-bottom: 16px; }
     .client-section { width: 58%; padding-right: 16px; }
     .invoice-details { width: 42%; }
+    .invoice-details.full { width: 100%; }
     .section-label { color: ${theme}; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; margin-bottom: 6px; text-transform: uppercase; }
     .client-box, .details-box { border: 1px solid #d9e2ec; border-left: 4px solid ${theme}; padding: 10px 12px; min-height: 88px; background: #fbfdff; }
     .client-name { font-size: 13px; font-weight: 800; color: #243b53; margin-bottom: 5px; }
@@ -309,11 +331,15 @@ export class InvoicePdfService {
     .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
     .note-area { width: 100%; color: #52606d; font-size: 10px; line-height: 1.45; margin-bottom: 20px; }
-    .signature-container { display: table; width: 100%; table-layout: fixed; margin-top: 30px; }
-    .signature-block { display: table-cell; vertical-align: bottom; width: 50%; }
-    .signature-space { height: 60px; }
-    .signature-line-box { border-top: 1.2px solid #243b53; width: 85%; padding-top: 7px; font-size: 10.5px; color: #52606d; text-align: center; }
-    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 5px; font-size: 11px; }
+    .signature-container { display: flex; width: 100%; justify-content: space-between; align-items: flex-end; gap: 38mm; margin-top: 30px; page-break-inside: avoid; }
+    .signature-block { width: 42%; min-height: 135px; display: flex; flex-direction: column; justify-content: flex-end; }
+    .signature-block.company-stamp { align-items: flex-end; text-align: center; }
+    .signature-space { flex: 1; min-height: 100px; }
+    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; }
+    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; }
+    .company-stamp-box { min-height: 105px; min-width: 145px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 12px; margin-left: auto; }
+    .company-stamp-name { writing-mode: vertical-rl; text-orientation: mixed; font-size: 15px; font-weight: 900; letter-spacing: 1.2px; color: #243b53; min-height: 88px; }
+    .company-stamp-caption { margin-top: 8px; font-size: 10.5px; font-weight: 800; color: #52606d; }
   </style>
 </head>
 <body>
@@ -322,27 +348,18 @@ export class InvoicePdfService {
     <div class="header">
       <div class="company-block">
         <div class="company-name-cn">${this.escapeHtml(company.name || '')}</div>
-        ${company.name_en ? `<div class="company-name-en">${this.escapeHtml(company.name_en)}</div>` : ''}
-        <div class="company-meta">
-          ${company.address ? `${this.escapeHtml(company.address)}<br />` : ''}
-          ${company.phone ? `Tel: ${this.escapeHtml(company.phone)}` : ''}
-        </div>
+        ${invoiceCompanyNameEn ? `<div class="company-name-en">${this.escapeHtml(invoiceCompanyNameEn)}</div>` : ''}
+        <div class="company-meta">${companyMetaLines}</div>
       </div>
       <div class="brand-block">
-        ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(company.name_en || company.name || 'COMPANY')}</span></div>`}
+        ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(invoiceCompanyNameEn || company.name || 'COMPANY')}</span></div>`}
         <div class="invoice-title">${labels.invoiceTitle}</div>
       </div>
     </div>
     <div class="subtle-line"></div>
     <div class="info-row">
-      <div class="client-section">
-        <div class="section-label">${labels.billTo}</div>
-        <div class="client-box">
-          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
-          ${clientLines}
-        </div>
-      </div>
-      <div class="invoice-details">
+      ${clientSectionHtml}
+      <div class="invoice-details${options.showClientInfo ? '' : ' full'}">
         <div class="section-label">${labels.invoiceDetails}</div>
         <div class="details-box">
           <table class="details-table">
@@ -392,15 +409,16 @@ export class InvoicePdfService {
       
       ${options.showSignature ? `
       <div class="signature-container">
-        <div class="signature-block">
-          <div class="signature-label">${this.escapeHtml(company.name || '')}</div>
+        <div class="signature-block client-signature">
+          <div class="signature-label">${labels.clientSignatureStamp}</div>
           <div class="signature-space"></div>
-          <div class="signature-line-box">${labels.authorizedSignature}</div>
+          <div class="signature-line-box">${labels.clientSignatureLine}</div>
         </div>
-        <div class="signature-block">
-          <div class="signature-label">${labels.clientConfirmation}</div>
-          <div class="signature-space"></div>
-          <div class="signature-line-box">${labels.clientSignatureDate}</div>
+        <div class="signature-block company-stamp">
+          <div class="company-stamp-box">
+            <div class="company-stamp-name">${this.escapeHtml(company.name || '')}</div>
+            <div class="company-stamp-caption">${labels.companyStamp}</div>
+          </div>
         </div>
       </div>
       ` : ''}
@@ -449,6 +467,9 @@ export class InvoicePdfService {
       authorizedSignature: 'Authorized Signature / 公司簽署',
       clientConfirmation: 'Client Confirmation / 客戶確認',
       clientSignatureDate: 'Authorized Signature & Date / 簽署及日期',
+      clientSignatureStamp: '客戶簽署/蓋印 Client Signature/Stamp',
+      clientSignatureLine: '客戶簽署/蓋印：____________________',
+      companyStamp: '簽發蓋章',
       noItems: '沒有項目 No items',
     };
     if (language === 'en') {
@@ -474,6 +495,9 @@ export class InvoicePdfService {
         authorizedSignature: 'Authorized Signature',
         clientConfirmation: 'Client Confirmation',
         clientSignatureDate: 'Authorized Signature & Date',
+        clientSignatureStamp: 'Client Signature/Stamp',
+        clientSignatureLine: 'Client Signature/Stamp: ____________________',
+        companyStamp: 'Company Stamp',
         noItems: 'No items',
       };
     }
@@ -500,6 +524,9 @@ export class InvoicePdfService {
         authorizedSignature: '公司簽署',
         clientConfirmation: '客戶確認',
         clientSignatureDate: '簽署及日期',
+        clientSignatureStamp: '客戶簽署/蓋印',
+        clientSignatureLine: '客戶簽署/蓋印：____________________',
+        companyStamp: '簽發蓋章',
         noItems: '沒有項目',
       };
     }

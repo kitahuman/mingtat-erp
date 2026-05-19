@@ -161,6 +161,22 @@ export default function CompanyDetailPage() {
                   </div>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">發票公司英文名</label>
+                  <input value={form.invoice_company_name_en || ''} onChange={e => setForm({ ...form, invoice_company_name_en: e.target.value })} className="input-field" placeholder="留空則使用公司英文名稱" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-500 mb-1">發票地址</label>
+                  <input value={form.invoice_address || ''} onChange={e => setForm({ ...form, invoice_address: e.target.value })} className="input-field" placeholder="留空則使用公司地址" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">發票電話</label>
+                  <input value={form.invoice_phone || ''} onChange={e => setForm({ ...form, invoice_phone: e.target.value })} className="input-field" placeholder="留空則使用公司電話" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">發票傳真</label>
+                  <input value={form.invoice_fax || ''} onChange={e => setForm({ ...form, invoice_fax: e.target.value })} className="input-field" />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">銀行名稱</label>
                   <input value={bankInfo.bank_name || ''} onChange={e => updateBankInfo('bank_name', e.target.value)} className="input-field" />
                 </div>
@@ -185,6 +201,10 @@ export default function CompanyDetailPage() {
             ) : (
               <>
                 <div><p className="text-sm text-gray-500">發票主色</p><p className="font-mono"><span className="inline-block w-4 h-4 rounded mr-2 align-middle" style={{ backgroundColor: company?.invoice_color_theme || '#1a365d' }} />{company?.invoice_color_theme || '#1a365d'}</p></div>
+                <div><p className="text-sm text-gray-500">發票公司英文名</p><p>{company?.invoice_company_name_en || company?.name_en || '-'}</p></div>
+                <div className="md:col-span-2"><p className="text-sm text-gray-500">發票地址</p><p>{company?.invoice_address || company?.address || '-'}</p></div>
+                <div><p className="text-sm text-gray-500">發票電話</p><p>{company?.invoice_phone || company?.phone || '-'}</p></div>
+                <div><p className="text-sm text-gray-500">發票傳真</p><p>{company?.invoice_fax || '-'}</p></div>
                 <div><p className="text-sm text-gray-500">銀行名稱</p><p>{company?.invoice_bank_info?.bank_name || '-'}</p></div>
                 <div><p className="text-sm text-gray-500">戶口名稱</p><p>{company?.invoice_bank_info?.account_name || '-'}</p></div>
                 <div><p className="text-sm text-gray-500">戶口號碼</p><p className="font-mono">{company?.invoice_bank_info?.account_no || '-'}</p></div>

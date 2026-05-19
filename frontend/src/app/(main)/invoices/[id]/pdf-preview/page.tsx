@@ -12,6 +12,7 @@ type PdfPreviewOptions = {
   show_bank: boolean;
   show_client_address: boolean;
   show_client_phone: boolean;
+  show_client_info: boolean;
   show_signature: boolean;
   override_payment_terms: string;
 };
@@ -21,6 +22,7 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   show_bank: true,
   show_client_address: true,
   show_client_phone: true,
+  show_client_info: true,
   show_signature: true,
   override_payment_terms: '',
 };
@@ -44,6 +46,7 @@ export default function InvoicePdfPreviewPage() {
       show_bank: options.show_bank,
       show_client_address: options.show_client_address,
       show_client_phone: options.show_client_phone,
+      show_client_info: options.show_client_info,
       show_signature: options.show_signature,
       override_payment_terms: options.override_payment_terms,
     }),
@@ -52,6 +55,7 @@ export default function InvoicePdfPreviewPage() {
       options.show_bank,
       options.show_client_address,
       options.show_client_phone,
+      options.show_client_info,
       options.show_signature,
       options.override_payment_terms,
     ],
@@ -213,6 +217,14 @@ export default function InvoicePdfPreviewPage() {
                 onChange={(e) => updateOption('show_bank', e.target.checked)}
               />
               銀行資料
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={options.show_client_info}
+                onChange={(e) => updateOption('show_client_info', e.target.checked)}
+              />
+              顯示客人資訊
             </label>
             <label className="flex items-center gap-1.5">
               <input

@@ -79,6 +79,10 @@ model Company {
   invoice_color_theme            String?   @default("#1a365d") @db.VarChar(20)
   invoice_bank_info              Json?     @db.JsonB
   invoice_default_payment_terms  String?   @db.Text
+  invoice_address                String?   @db.Text
+  invoice_phone                  String?
+  invoice_fax                    String?
+  invoice_company_name_en        String?
   status                         String    @default("active")
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
