@@ -26,44 +26,37 @@ interface BankInfo {
 export class InvoicePdfService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async generateInvoiceHtml(
+    invoiceId: number,
+    options: InvoicePdfOptions = {},
+  ) {
+    const { html } = await this.buildInvoiceHtmlData(invoiceId, options);
+    return html;
+  }
+
   async generateInvoicePdf(invoiceId: number, options: InvoicePdfOptions = {}) {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        items: { orderBy: { sort_order: 'asc' } },
-        client: true,
-        company: { include: { bank_accounts: { where: { is_active: true }, orderBy: { id: 'asc' } } } },
-        project: true,
-        quotation: true,
-      },
-    });
-
-    if (!invoice || invoice.deleted_at) throw new NotFoundException('發票不存在');
-
-    const language = this.normalizeLanguage(
-      options.language || (invoice.invoice_language as InvoicePdfLanguage) || 'zh',
+    const { invoice, html } = await this.buildInvoiceHtmlData(
+      invoiceId,
+      options,
     );
-    const showBank = options.showBank ?? invoice.invoice_show_bank;
-    const showClientAddress = options.showClientAddress ?? invoice.invoice_show_client_address;
-    const showClientPhone = options.showClientPhone ?? invoice.invoice_show_client_phone;
-
-    const html = this.buildHtml(invoice as any, {
-      language,
-      showBank,
-      showClientAddress,
-      showClientPhone,
-    });
 
     const browser = await puppeteer.launch({
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      executablePath:
+        process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+      ],
     });
 
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
-      const companyName = this.escapeHtml(invoice.company?.name_en || invoice.company?.name || 'Invoice');
+      const companyName = this.escapeHtml(
+        invoice.company?.name_en || invoice.company?.name || 'Invoice',
+      );
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
@@ -82,6 +75,53 @@ export class InvoicePdfService {
     }
   }
 
+  private async buildInvoiceHtmlData(
+    invoiceId: number,
+    options: InvoicePdfOptions = {},
+  ) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        items: { orderBy: { sort_order: 'asc' } },
+        client: true,
+        company: {
+          include: {
+            bank_accounts: {
+              where: { is_active: true },
+              orderBy: { id: 'asc' },
+            },
+          },
+        },
+        project: true,
+        quotation: true,
+      },
+    });
+
+    if (!invoice || invoice.deleted_at)
+      throw new NotFoundException('發票不存在');
+
+    const language = this.normalizeLanguage(
+      options.language ||
+        (invoice.invoice_language as InvoicePdfLanguage) ||
+        'zh',
+    );
+    const showBank = options.showBank ?? invoice.invoice_show_bank;
+    const showClientAddress =
+      options.showClientAddress ?? invoice.invoice_show_client_address;
+    const showClientPhone =
+      options.showClientPhone ?? invoice.invoice_show_client_phone;
+
+    return {
+      invoice,
+      html: this.buildHtml(invoice as any, {
+        language,
+        showBank,
+        showClientAddress,
+        showClientPhone,
+      }),
+    };
+  }
+
   private buildHtml(invoice: any, options: Required<InvoicePdfOptions>) {
     const labels = this.labels(options.language);
     const company = invoice.company || {};
@@ -90,16 +130,26 @@ export class InvoicePdfService {
     const logoDataUri = this.logoDataUri(company.company_logo_url);
     // Use existing BankAccount records linked to the company (from bank_accounts module)
     const bankAccounts = (company as any).bank_accounts || [];
-    const bankInfo: BankInfo = bankAccounts.length > 0
-      ? { bank_name: bankAccounts[0].bank_name, account_name: bankAccounts[0].account_name, account_no: bankAccounts[0].account_no, show_bank: true, show_account_name: true, show_account_no: true }
-      : this.parseBankInfo(company.invoice_bank_info);
+    const bankInfo: BankInfo =
+      bankAccounts.length > 0
+        ? {
+            bank_name: bankAccounts[0].bank_name,
+            account_name: bankAccounts[0].account_name,
+            account_no: bankAccounts[0].account_no,
+            show_bank: true,
+            show_account_name: true,
+            show_account_no: true,
+          }
+        : this.parseBankInfo(company.invoice_bank_info);
     const paymentTerms =
       invoice.invoice_custom_payment_terms ||
       invoice.payment_terms ||
       company.invoice_default_payment_terms ||
       '';
 
-    const otherCharges = Array.isArray(invoice.other_charges) ? invoice.other_charges : [];
+    const otherCharges = Array.isArray(invoice.other_charges)
+      ? invoice.other_charges
+      : [];
     const surchargeTotal = otherCharges.reduce((sum: number, charge: any) => {
       const amount = Number(charge?.amount || 0);
       return amount > 0 ? sum + amount : sum;
@@ -124,18 +174,24 @@ export class InvoicePdfService {
       options.showBank && bankInfo.show_bank !== false && bankInfo.bank_name
         ? `<tr><td>${labels.bank}</td><td>${this.escapeHtml(bankInfo.bank_name)}</td></tr>`
         : '',
-      options.showBank && bankInfo.show_account_name !== false && bankInfo.account_name
+      options.showBank &&
+      bankInfo.show_account_name !== false &&
+      bankInfo.account_name
         ? `<tr><td>${labels.accountName}</td><td>${this.escapeHtml(bankInfo.account_name)}</td></tr>`
         : '',
-      options.showBank && bankInfo.show_account_no !== false && bankInfo.account_no
+      options.showBank &&
+      bankInfo.show_account_no !== false &&
+      bankInfo.account_no
         ? `<tr><td>${labels.accountNo}</td><td>${this.escapeHtml(bankInfo.account_no)}</td></tr>`
         : '',
     ].join('');
 
-    const itemRows = (invoice.items || []).map((item: any, idx: number) => {
-      const name = item.item_name || item.description || '';
-      const description = item.item_name && item.description ? item.description : '';
-      return `
+    const itemRows = (invoice.items || [])
+      .map((item: any, idx: number) => {
+        const name = item.item_name || item.description || '';
+        const description =
+          item.item_name && item.description ? item.description : '';
+        return `
         <tr>
           <td class="center">${idx + 1}</td>
           <td>
@@ -148,16 +204,37 @@ export class InvoicePdfService {
           <td class="right">${this.formatMoney(item.amount, false)}</td>
         </tr>
       `;
-    }).join('');
+      })
+      .join('');
 
     const totalsRows = [
       this.totalRow(labels.subtotal, this.formatMoney(invoice.subtotal), false),
-      surchargeTotal > 0 ? this.totalRow(labels.surcharge, `+${this.formatMoney(surchargeTotal)}`, false) : '',
-      deductionTotal > 0 ? this.totalRow(labels.deduction, `-${this.formatMoney(deductionTotal)}`, false) : '',
-      retentionRate > 0 && retentionAmount > 0
-        ? this.totalRow(`${labels.retention} ${this.formatPercent(retentionRate)}`, `-${this.formatMoney(retentionAmount)}`, false)
+      surchargeTotal > 0
+        ? this.totalRow(
+            labels.surcharge,
+            `+${this.formatMoney(surchargeTotal)}`,
+            false,
+          )
         : '',
-      this.totalRow(labels.netAmountDue, this.formatMoney(invoice.total_amount), true),
+      deductionTotal > 0
+        ? this.totalRow(
+            labels.deduction,
+            `-${this.formatMoney(deductionTotal)}`,
+            false,
+          )
+        : '',
+      retentionRate > 0 && retentionAmount > 0
+        ? this.totalRow(
+            `${labels.retention} ${this.formatPercent(retentionRate)}`,
+            `-${this.formatMoney(retentionAmount)}`,
+            false,
+          )
+        : '',
+      this.totalRow(
+        labels.netAmountDue,
+        this.formatMoney(invoice.total_amount),
+        true,
+      ),
     ].join('');
 
     return `<!DOCTYPE html>
@@ -291,11 +368,15 @@ export class InvoicePdfService {
         <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
       </div>
       <div class="payment-section">
-        ${options.showBank && bankRows ? `
+        ${
+          options.showBank && bankRows
+            ? `
         <div class="payment-box">
           <div class="payment-title">${labels.paymentDetails}</div>
           <table class="payment-table">${bankRows}</table>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
       </div>
     </div>
     <div class="footer-row">
@@ -322,18 +403,80 @@ export class InvoicePdfService {
 
   private labels(language: InvoicePdfLanguage) {
     const bilingual = {
-      invoiceTitle: 'INVOICE 發票', billTo: '致 Bill To', invoiceDetails: '發票資料 Invoice Details',
-      invoiceNo: 'Invoice No.', invoiceDate: 'Invoice Date', dueDate: 'Due Date', address: '地址 Address', phone: '電話 Phone',
-      no: '編號', item: '項目', quantity: '數量', unit: '單位類型', unitPrice: '單價', amount: '金額',
-      subtotal: '小計 Subtotal (HKD)', surcharge: '附加費 Surcharge', deduction: '扣款 Deduction', retention: 'Less Retention', netAmountDue: '總數 Net Amount Due (HKD)',
-      paymentTerms: '付款條款 Payment Terms', paymentDetails: '付款資料 Payment Details', bank: 'Bank', accountName: 'Account Name', accountNo: 'Account No.',
-      signature: 'Authorized Signature / 公司簽署', noItems: '沒有項目 No items',
+      invoiceTitle: 'INVOICE 發票',
+      billTo: '致 Bill To',
+      invoiceDetails: '發票資料 Invoice Details',
+      invoiceNo: 'Invoice No.',
+      invoiceDate: 'Invoice Date',
+      dueDate: 'Due Date',
+      address: '地址 Address',
+      phone: '電話 Phone',
+      no: '編號',
+      item: '項目',
+      quantity: '數量',
+      unit: '單位類型',
+      unitPrice: '單價',
+      amount: '金額',
+      subtotal: '小計 Subtotal (HKD)',
+      surcharge: '附加費 Surcharge',
+      deduction: '扣款 Deduction',
+      retention: 'Less Retention',
+      netAmountDue: '總數 Net Amount Due (HKD)',
+      paymentTerms: '付款條款 Payment Terms',
+      paymentDetails: '付款資料 Payment Details',
+      bank: 'Bank',
+      accountName: 'Account Name',
+      accountNo: 'Account No.',
+      signature: 'Authorized Signature / 公司簽署',
+      noItems: '沒有項目 No items',
     };
     if (language === 'en') {
-      return { ...bilingual, invoiceTitle: 'INVOICE', billTo: 'Bill To', invoiceDetails: 'Invoice Details', address: 'Address', phone: 'Phone', no: 'No.', item: 'Item', quantity: 'Qty', unit: 'Unit', unitPrice: 'Unit Price', amount: 'Amount', subtotal: 'Subtotal (HKD)', surcharge: 'Surcharge', deduction: 'Deduction', netAmountDue: 'Net Amount Due (HKD)', paymentTerms: 'Payment Terms', paymentDetails: 'Payment Details', signature: 'Authorized Signature', noItems: 'No items' };
+      return {
+        ...bilingual,
+        invoiceTitle: 'INVOICE',
+        billTo: 'Bill To',
+        invoiceDetails: 'Invoice Details',
+        address: 'Address',
+        phone: 'Phone',
+        no: 'No.',
+        item: 'Item',
+        quantity: 'Qty',
+        unit: 'Unit',
+        unitPrice: 'Unit Price',
+        amount: 'Amount',
+        subtotal: 'Subtotal (HKD)',
+        surcharge: 'Surcharge',
+        deduction: 'Deduction',
+        netAmountDue: 'Net Amount Due (HKD)',
+        paymentTerms: 'Payment Terms',
+        paymentDetails: 'Payment Details',
+        signature: 'Authorized Signature',
+        noItems: 'No items',
+      };
     }
     if (language === 'zh') {
-      return { ...bilingual, invoiceTitle: '發票', billTo: '致', invoiceDetails: '發票資料', invoiceDate: '發票日期', dueDate: '到期日', address: '地址', phone: '電話', subtotal: '小計 (HKD)', surcharge: '附加費', deduction: '扣款', retention: '保留金', netAmountDue: '總數 (HKD)', paymentTerms: '付款條款', paymentDetails: '付款資料', bank: '銀行', accountName: '戶口名稱', accountNo: '戶口號碼', signature: '公司簽署', noItems: '沒有項目' };
+      return {
+        ...bilingual,
+        invoiceTitle: '發票',
+        billTo: '致',
+        invoiceDetails: '發票資料',
+        invoiceDate: '發票日期',
+        dueDate: '到期日',
+        address: '地址',
+        phone: '電話',
+        subtotal: '小計 (HKD)',
+        surcharge: '附加費',
+        deduction: '扣款',
+        retention: '保留金',
+        netAmountDue: '總數 (HKD)',
+        paymentTerms: '付款條款',
+        paymentDetails: '付款資料',
+        bank: '銀行',
+        accountName: '戶口名稱',
+        accountNo: '戶口號碼',
+        signature: '公司簽署',
+        noItems: '沒有項目',
+      };
     }
     return bilingual;
   }
@@ -343,7 +486,9 @@ export class InvoicePdfService {
   }
 
   private parseBankInfo(value: any): BankInfo {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value
+      : {};
   }
 
   private logoDataUri(logoUrl?: string | null) {
@@ -353,12 +498,21 @@ export class InvoicePdfService {
     const uploadsRoot = normalize(join(process.cwd(), 'uploads'));
     if (!filePath.startsWith(uploadsRoot) || !existsSync(filePath)) return '';
     const ext = extname(filePath).toLowerCase();
-    const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    const mime =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.webp'
+          ? 'image/webp'
+          : ext === '.gif'
+            ? 'image/gif'
+            : 'image/jpeg';
     return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`;
   }
 
   private sanitizeColor(color: string) {
-    return /^#[0-9a-fA-F]{6}$/.test(color) || /^#[0-9a-fA-F]{3}$/.test(color) ? color : '#1a365d';
+    return /^#[0-9a-fA-F]{6}$/.test(color) || /^#[0-9a-fA-F]{3}$/.test(color)
+      ? color
+      : '#1a365d';
   }
 
   private formatDate(value: Date | string, language: InvoicePdfLanguage) {
@@ -370,7 +524,10 @@ export class InvoicePdfService {
 
   private formatMoney(value: any, withCurrency = true) {
     const amount = Number(value || 0);
-    const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatted = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
     return withCurrency ? `$${formatted}` : formatted;
   }
 

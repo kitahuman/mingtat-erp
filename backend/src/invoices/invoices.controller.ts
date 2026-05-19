@@ -37,6 +37,12 @@ export class InvoicesController {
     private readonly invoicePdfService: InvoicePdfService,
   ) {}
 
+  private parseBool(value: string | undefined) {
+    return value === undefined
+      ? undefined
+      : !['false', '0', 'no'].includes(String(value).toLowerCase());
+  }
+
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
@@ -51,13 +57,11 @@ export class InvoicesController {
     @Query('show_client_phone') showClientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const parseBool = (value: string | undefined) =>
-      value === undefined ? undefined : !['false', '0', 'no'].includes(String(value).toLowerCase());
     const pdf = await this.invoicePdfService.generateInvoicePdf(Number(id), {
       language,
-      showBank: parseBool(showBank),
-      showClientAddress: parseBool(showClientAddress),
-      showClientPhone: parseBool(showClientPhone),
+      showBank: this.parseBool(showBank),
+      showClientAddress: this.parseBool(showClientAddress),
+      showClientPhone: this.parseBool(showClientPhone),
     });
 
     res.set({
@@ -66,6 +70,48 @@ export class InvoicesController {
       'Content-Length': pdf.length,
     });
     return new StreamableFile(pdf);
+  }
+
+  @Get(':id/pdf-html')
+  async previewPdfHtml(
+    @Param('id') id: number,
+    @Query('language') language: InvoicePdfLanguage,
+    @Query('show_bank') showBank: string,
+    @Query('show_client_address') showClientAddress: string,
+    @Query('show_client_phone') showClientPhone: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const html = await this.invoicePdfService.generateInvoiceHtml(Number(id), {
+      language,
+      showBank: this.parseBool(showBank),
+      showClientAddress: this.parseBool(showClientAddress),
+      showClientPhone: this.parseBool(showClientPhone),
+    });
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    return html;
+  }
+
+  @Get(':id/pdf-preview')
+  previewPdfHtmlAlias(
+    @Param('id') id: number,
+    @Query('language') language: InvoicePdfLanguage,
+    @Query('show_bank') showBank: string,
+    @Query('show_client_address') showClientAddress: string,
+    @Query('show_client_phone') showClientPhone: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.previewPdfHtml(
+      id,
+      language,
+      showBank,
+      showClientAddress,
+      showClientPhone,
+      res,
+    );
   }
 
   @Get(':id')
