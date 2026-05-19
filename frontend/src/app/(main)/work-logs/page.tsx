@@ -2382,18 +2382,14 @@ export default function WorkLogsPage() {
       </div>
 
       {/* ── Tab Content: Summary Analysis ────────────────────────────── */}
-      {activeTab === 'summary' && (
-        <div className="flex-1 overflow-y-auto bg-gray-50">
-          <SummaryTab />
-        </div>
-      )}
+      <div className={`flex-1 overflow-y-auto bg-gray-50 ${activeTab === 'summary' ? '' : 'hidden'}`}>
+        <SummaryTab />
+      </div>
 
       {/* ── Tab Content: Missing Price ────────────────────────────── */}
-      {activeTab === 'missing-price' && (
-        <div className="flex-1 overflow-hidden">
-          <MissingPriceTab />
-        </div>
-      )}
+      <div className={`flex-1 overflow-hidden ${activeTab === 'missing-price' ? '' : 'hidden'}`}>
+        <MissingPriceTab />
+      </div>
 
       {/* ── Tab Content: Work Records (existing content) ────────── */}
       {activeTab === 'records' && (
