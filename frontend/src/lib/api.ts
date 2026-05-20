@@ -331,6 +331,10 @@ export const quotationsApi = {
   get: (id: number) => api.get(`/quotations/${id}`),
   create: (data: any) => api.post('/quotations', data),
   update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
+  getRevisions: (id: number) => api.get(`/quotations/${id}/revisions`),
+  createRevision: (id: number, data?: { quotation_no?: string; quotation_date?: string; date?: string }) =>
+    api.post(`/quotations/${id}/revision`, data || {}),
+  setActiveRevision: (id: number) => api.patch(`/quotations/${id}/set-active`),
   updateStatus: (id: number, status: string) =>
     api.patch(`/quotations/${id}/status`, { status }),
   accept: (id: number, options?: any) =>

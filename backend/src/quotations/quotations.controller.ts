@@ -1,10 +1,58 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Query, Body, UseGuards, Request, Res, StreamableFile } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Request,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import { QuotationsService } from './quotations.service';
 import { QuotationPdfService } from './quotation-pdf.service';
 import type { QuotationPdfLanguage } from './quotation-pdf.service';
-import { CreateQuotationDto, UpdateQuotationDto } from './dto/create-quotation.dto';
+import {
+  AcceptQuotationDto,
+  CreateQuotationDto,
+  CreateQuotationRevisionDto,
+  SyncQuotationToRateCardsDto,
+  UpdateQuotationDto,
+} from './dto/create-quotation.dto';
+
+type AuthenticatedRequest = {
+  user?: { id?: number; userId?: number };
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+};
+
+type QuotationListQuery = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  company_id?: number;
+  client_id?: number;
+  status?: string;
+  quotation_type?: string;
+  sortBy?: string;
+  sortOrder?: string;
+};
+
+function getUserId(req: AuthenticatedRequest): number {
+  return req.user?.id || req.user?.userId || 0;
+}
+
+function getIpAddress(req: AuthenticatedRequest): string | undefined {
+  const forwarded = req.headers['x-forwarded-for'];
+  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return forwardedValue?.split(',')[0]?.trim() || req.ip || undefined;
+}
 
 @Controller('quotations')
 @UseGuards(AuthGuard('jwt'))
@@ -72,7 +120,7 @@ export class QuotationsController {
   }
 
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: QuotationListQuery) {
     return this.service.findAll(query);
   }
 
@@ -81,19 +129,41 @@ export class QuotationsController {
     return this.service.findByProject(Number(projectId));
   }
 
+  @Get(':id/revisions')
+  getRevisions(@Param('id') id: number) {
+    return this.service.getRevisions(Number(id));
+  }
+
   @Get(':id')
   findOne(@Param('id') id: number) {
     return this.service.findOne(Number(id));
   }
 
   @Post()
-  create(@Body() dto: CreateQuotationDto, @Request() req: any) {
-    return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  create(@Body() dto: CreateQuotationDto, @Request() req: AuthenticatedRequest) {
+    return this.service.create(dto, getUserId(req), getIpAddress(req));
+  }
+
+  @Post(':id/revision')
+  createRevision(
+    @Param('id') id: number,
+    @Body() dto: CreateQuotationRevisionDto,
+  ) {
+    return this.service.createRevision(Number(id), dto);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: UpdateQuotationDto, @Request() req: any) {
-    return this.service.update(Number(id), dto, req.user?.id || req.user?.userId || 0);
+  update(
+    @Param('id') id: number,
+    @Body() dto: UpdateQuotationDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.service.update(Number(id), dto, getUserId(req));
+  }
+
+  @Patch(':id/set-active')
+  setActive(@Param('id') id: number) {
+    return this.service.setActive(Number(id));
   }
 
   @Patch(':id/status')
@@ -102,17 +172,20 @@ export class QuotationsController {
   }
 
   @Post(':id/accept')
-  acceptQuotation(@Param('id') id: number, @Body() options: any) {
+  acceptQuotation(@Param('id') id: number, @Body() options: AcceptQuotationDto) {
     return this.service.acceptQuotation(Number(id), options);
   }
 
   @Post(':id/sync-to-rate-cards')
-  syncToRateCards(@Param('id') id: number, @Body() options: any) {
+  syncToRateCards(
+    @Param('id') id: number,
+    @Body() options: SyncQuotationToRateCardsDto,
+  ) {
     return this.service.syncToRateCards(Number(id), options);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: number, @Request() req: any) {
-    return this.service.remove(Number(id), req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  remove(@Param('id') id: number, @Request() req: AuthenticatedRequest) {
+    return this.service.remove(Number(id), getUserId(req), getIpAddress(req));
   }
 }

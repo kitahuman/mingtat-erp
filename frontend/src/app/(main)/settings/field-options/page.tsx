@@ -846,7 +846,17 @@ export default function FieldOptionsPage() {
                         checked={primaryId === opt.id} onChange={() => setPrimaryId(opt.id)}
                         className="accent-blue-600" />
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+                          {isLocationTab && typeof opt.worklog_usage_count === 'number' && (
+                            <span
+                              className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-100 px-1.5 py-0.5 rounded-full"
+                              title={`Worklog 使用次數：${opt.worklog_usage_count}（起點 ${opt.start_usage_count ?? 0}，終點 ${opt.end_usage_count ?? 0}）`}
+                            >
+                              Worklog {opt.worklog_usage_count} 次
+                            </span>
+                          )}
+                        </div>
                         {opt.aliases && opt.aliases.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {opt.aliases.map((a, i) => (

@@ -1,14 +1,69 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  AcceptQuotationDto,
+  CreateQuotationDto,
+  CreateQuotationRevisionDto,
+  QuotationItemDto,
+  SyncQuotationToRateCardsDto,
+  UpdateQuotationDto,
+} from './dto/create-quotation.dto';
 
 @Injectable()
 export class QuotationsService {
-  constructor(private prisma: PrismaService, private readonly auditLogsService: AuditLogsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   private readonly allowedSortFields = [
-    'id', 'quotation_no', 'quotation_date', 'project_name', 'total_amount', 'status', 'created_at',
+    'id',
+    'quotation_no',
+    'quotation_date',
+    'project_name',
+    'total_amount',
+    'status',
+    'created_at',
   ];
+
+  private readonly includeRelations = {
+    company: true,
+    client: true,
+    project: true,
+    items: { orderBy: { sort_order: 'asc' as const } },
+  };
+
+  private getQuotationFamilyRootId(quotation: {
+    id: number;
+    quotation_parent_id: number | null;
+  }): number {
+    return quotation.quotation_parent_id ?? quotation.id;
+  }
+
+  private buildRevisionQuotationNo(
+    rootQuotationNo: string,
+    revisionNumber: number,
+  ): string {
+    const baseQuotationNo = rootQuotationNo.replace(/R\d+$/i, '');
+    return `${baseQuotationNo}R${revisionNumber}`;
+  }
+
+  private parseRevisionDate(value: string | undefined, fallback: Date): Date {
+    if (!value) return fallback;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('無效日期');
+    }
+    return date;
+  }
+
+  private calculateQuotationTotal(items: QuotationItemDto[] = []): number {
+    return items.reduce((sum, item) => {
+      return sum + (Number(item.quantity || 0) * Number(item.unit_price || 0));
+    }, 0);
+  }
 
   /**
    * Generate quotation number:
@@ -93,14 +148,22 @@ export class QuotationsService {
   }
 
   async findAll(query: {
-    page?: number; limit?: number; search?: string;
-    company_id?: number; client_id?: number; status?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    company_id?: number;
+    client_id?: number;
+    status?: string;
     quotation_type?: string;
-    sortBy?: string; sortOrder?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
-    const where: any = { deleted_at: null };
+    const where: Prisma.QuotationWhereInput = {
+      deleted_at: null,
+      quotation_is_active: true,
+    };
 
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.client_id) where.client_id = Number(query.client_id);
@@ -134,25 +197,175 @@ export class QuotationsService {
   async findOne(id: number) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { company: true, client: true, items: { orderBy: { sort_order: 'asc' } }, project: true },
+      include: this.includeRelations,
     });
-    if (!quotation) throw new NotFoundException('報價單不存在');
+    if (!quotation || quotation.deleted_at) throw new NotFoundException('報價單不存在');
     return quotation;
   }
 
-  async create(dto: any, userId?: number, ipAddress?: string) {
-    const { items, company, client, project, ...quotationData } = dto;
+  async createRevision(id: number, dto: CreateQuotationRevisionDto = {}) {
+    const source = await this.prisma.quotation.findUnique({
+      where: { id },
+      include: { items: { orderBy: { sort_order: 'asc' } } },
+    });
+    if (!source || source.deleted_at) {
+      throw new NotFoundException('報價單不存在');
+    }
+
+    const rootQuotationId = this.getQuotationFamilyRootId(source);
+
+    return this.prisma.$transaction(async (tx) => {
+      const latestRevision = await tx.quotation.findFirst({
+        where: {
+          deleted_at: null,
+          OR: [{ id: rootQuotationId }, { quotation_parent_id: rootQuotationId }],
+        },
+        orderBy: [{ quotation_revision_number: 'desc' }, { id: 'desc' }],
+        select: { quotation_revision_number: true },
+      });
+      const revisionNumber =
+        (latestRevision?.quotation_revision_number ?? 0) + 1;
+
+      const rootQuotation =
+        source.id === rootQuotationId
+          ? { quotation_no: source.quotation_no }
+          : await tx.quotation.findUnique({
+              where: { id: rootQuotationId },
+              select: { quotation_no: true },
+            });
+      if (!rootQuotation) {
+        throw new NotFoundException('原始報價單不存在');
+      }
+
+      const quotationNo =
+        dto.quotation_no?.trim() ||
+        this.buildRevisionQuotationNo(rootQuotation.quotation_no, revisionNumber);
+
+      return tx.quotation.create({
+        data: {
+          quotation_no: quotationNo,
+          quotation_parent_id: rootQuotationId,
+          quotation_revision_number: revisionNumber,
+          quotation_is_active: false,
+          quotation_type: source.quotation_type,
+          company_id: source.company_id,
+          client_id: source.client_id,
+          quotation_date: this.parseRevisionDate(
+            dto.quotation_date || dto.date,
+            source.quotation_date,
+          ),
+          contract_name: source.contract_name,
+          project_name: source.project_name,
+          project_id: source.project_id,
+          total_amount: source.total_amount,
+          status: source.status,
+          validity_period: source.validity_period,
+          payment_terms: source.payment_terms,
+          exclusions: source.exclusions,
+          external_remark: source.external_remark,
+          internal_remark: source.internal_remark,
+          items: {
+            create: source.items.map((item) => ({
+              sort_order: item.sort_order,
+              item_name: item.item_name,
+              item_description: item.item_description,
+              quantity: item.quantity,
+              unit: item.unit,
+              unit_price: item.unit_price,
+              amount: item.amount,
+              remarks: item.remarks,
+            })),
+          },
+        },
+        include: this.includeRelations,
+      });
+    });
+  }
+
+  async setActive(id: number) {
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { id },
+      select: { id: true, quotation_parent_id: true, deleted_at: true },
+    });
+    if (!quotation || quotation.deleted_at) {
+      throw new NotFoundException('報價單不存在');
+    }
+
+    const rootQuotationId = this.getQuotationFamilyRootId(quotation);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.quotation.updateMany({
+        where: {
+          deleted_at: null,
+          OR: [{ id: rootQuotationId }, { quotation_parent_id: rootQuotationId }],
+        },
+        data: { quotation_is_active: false },
+      });
+
+      return tx.quotation.update({
+        where: { id },
+        data: { quotation_is_active: true },
+        include: this.includeRelations,
+      });
+    });
+  }
+
+  async getRevisions(id: number) {
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { id },
+      select: { id: true, quotation_parent_id: true, deleted_at: true },
+    });
+    if (!quotation || quotation.deleted_at) {
+      throw new NotFoundException('報價單不存在');
+    }
+
+    const rootQuotationId = this.getQuotationFamilyRootId(quotation);
+    return this.prisma.quotation.findMany({
+      where: {
+        deleted_at: null,
+        OR: [{ id: rootQuotationId }, { quotation_parent_id: rootQuotationId }],
+      },
+      include: this.includeRelations,
+      orderBy: [{ quotation_revision_number: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  async create(dto: CreateQuotationDto, userId?: number, ipAddress?: string) {
+    const {
+      items,
+      company,
+      client,
+      project,
+      quotation_parent_id,
+      quotation_revision_number,
+      quotation_is_active,
+      date,
+      ...quotationData
+    } = dto as CreateQuotationDto & {
+      company?: unknown;
+      client?: unknown;
+      project?: unknown;
+      quotation_parent_id?: number;
+      quotation_revision_number?: number;
+      quotation_is_active?: boolean;
+      date?: string;
+    };
+
+    if (quotationData.company_id === undefined) {
+      throw new BadRequestException('公司為必填欄位');
+    }
+
+    const quotationDate = quotationData.quotation_date || date || new Date().toISOString();
 
     // Generate quotation number
     const quotation_no = await this.generateQuotationNo(
       quotationData.company_id,
-      quotationData.client_id,
-      quotationData.quotation_date,
+      quotationData.client_id ?? null,
+      quotationDate,
     );
 
     // Calculate total
     let total_amount = 0;
-    const processedItems: any[] = [];
+    const processedItems: (QuotationItemDto & { amount: number; sort_order: number })[] = [];
     if (items && items.length > 0) {
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -170,12 +383,21 @@ export class QuotationsService {
     const saved = await this.prisma.quotation.create({
       data: {
         ...quotationData,
+        company_id: quotationData.company_id,
         quotation_no,
         total_amount,
-        quotation_date: new Date(quotationData.quotation_date),
-        items: processedItems.length > 0 ? {
-          create: processedItems.map(({ id: _id, quotation_id: _qid, ...item }) => item),
-        } : undefined,
+        quotation_date: new Date(quotationDate),
+        quotation_parent_id: null,
+        quotation_revision_number: 0,
+        quotation_is_active: true,
+        items:
+          processedItems.length > 0
+            ? {
+                create: processedItems.map(
+                  ({ id: _id, quotation_id: _qid, ...item }) => item,
+                ),
+              }
+            : undefined,
       },
     });
 
@@ -195,11 +417,39 @@ export class QuotationsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: any, userId?: number, ipAddress?: string) {
+  async update(id: number, dto: UpdateQuotationDto, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.quotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('報價單不存在');
 
-    const { items, company, client, project, created_at, updated_at, id: _id, ...updateData } = dto;
+    const {
+      items,
+      company,
+      client,
+      project,
+      created_at,
+      updated_at,
+      deleted_at,
+      deleted_by,
+      id: _id,
+      quotation_parent_id,
+      quotation_revision_number,
+      quotation_is_active,
+      date,
+      ...updateData
+    } = dto as UpdateQuotationDto & {
+      company?: unknown;
+      client?: unknown;
+      project?: unknown;
+      created_at?: unknown;
+      updated_at?: unknown;
+      deleted_at?: unknown;
+      deleted_by?: unknown;
+      id?: number;
+      quotation_parent_id?: number;
+      quotation_revision_number?: number;
+      quotation_is_active?: boolean;
+      date?: string;
+    };
 
     // Recalculate total
     if (items && items.length > 0) {
@@ -211,18 +461,19 @@ export class QuotationsService {
       updateData.total_amount = total_amount;
     }
 
+    const updatePayload: Prisma.QuotationUncheckedUpdateInput = { ...updateData };
     if (updateData.quotation_date) {
-      updateData.quotation_date = new Date(updateData.quotation_date);
+      updatePayload.quotation_date = new Date(updateData.quotation_date);
     }
 
-    await this.prisma.quotation.update({ where: { id }, data: updateData });
+    await this.prisma.quotation.update({ where: { id }, data: updatePayload });
 
     // Replace items if provided
     if (items !== undefined) {
       await this.prisma.quotationItem.deleteMany({ where: { quotation_id: id } });
       if (items.length > 0) {
         await this.prisma.quotationItem.createMany({
-          data: items.map((item: any, index: number) => ({
+          data: items.map((item: QuotationItemDto, index: number) => ({
             quotation_id: id,
             item_name: item.item_name,
             item_description: item.item_description,
@@ -315,11 +566,7 @@ export class QuotationsService {
   /**
    * Accept a quotation and generate related records
    */
-  async acceptQuotation(id: number, options?: {
-    project_name?: string;
-    effective_date?: string;
-    expiry_date?: string;
-  }) {
+  async acceptQuotation(id: number, options?: AcceptQuotationDto) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
       include: { company: true, client: true, items: true },
@@ -353,7 +600,7 @@ export class QuotationsService {
     if (quotation.items && quotation.items.length > 0) {
       for (const item of quotation.items) {
         const itemName = item.item_name || '';
-        const contractNo = (quotation as any).contract_name || undefined;
+        const contractNo = quotation.contract_name || undefined;
         const effectiveDate = options?.effective_date ? new Date(options.effective_date) : quotation.quotation_date;
         const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
@@ -415,18 +662,19 @@ export class QuotationsService {
   /**
    * Sync quotation items to rate cards (price list)
    */
-  async syncToRateCards(id: number, options?: {
-    effective_date?: string;
-    expiry_date?: string;
-    overwrite?: boolean;
-  }) {
+  async syncToRateCards(id: number, options?: SyncQuotationToRateCardsDto) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
       include: { company: true, client: true, items: true },
     });
     if (!quotation) throw new NotFoundException('報價單不存在');
 
-    const results = { created: 0, overwritten: 0, skipped: 0, conflicts: [] as any[] };
+    const results: {
+      created: number;
+      overwritten: number;
+      skipped: number;
+      conflicts: { item_name: string; existing_id: number }[];
+    } = { created: 0, overwritten: 0, skipped: 0, conflicts: [] };
 
     if (!quotation.items || quotation.items.length === 0) {
       return results;
@@ -435,7 +683,7 @@ export class QuotationsService {
     for (const item of quotation.items) {
       const itemName = item.item_name || '';
       const rateCardType = quotation.quotation_type === 'project' ? 'project' : 'rental';
-      const contractNo = (quotation as any).contract_name || undefined;
+      const contractNo = quotation.contract_name || undefined;
       const effectiveDate = options?.effective_date ? new Date(options.effective_date) : quotation.quotation_date;
       const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
@@ -454,7 +702,7 @@ export class QuotationsService {
         continue;
       }
 
-      const rateCardData: any = {
+      const rateCardData: Prisma.RateCardUncheckedCreateInput = {
         company_id: quotation.company_id,
         client_id: quotation.client_id!,
         contract_no: contractNo,
@@ -484,10 +732,13 @@ export class QuotationsService {
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });
       if (!existingFleet || options?.overwrite) {
-        const fleetData: any = {
+        const fleetData: Prisma.FleetRateCardUncheckedCreateInput = {
           client_id: quotation.client_id,
           contract_no: contractNo,
-          day_rate: 0, night_rate: 0, mid_shift_rate: 0, ot_rate: 0,
+          day_rate: 0,
+          night_rate: 0,
+          mid_shift_rate: 0,
+          ot_rate: 0,
           unit: item.unit,
           remarks: item.remarks || undefined,
           source_quotation_id: quotation.id,
@@ -505,10 +756,13 @@ export class QuotationsService {
         where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
       });
       if (!existingSubcon || options?.overwrite) {
-        const subconData: any = {
+        const subconData: Prisma.SubconRateCardUncheckedCreateInput = {
           client_id: quotation.client_id,
           contract_no: contractNo,
-          unit_price: 0,
+          day_rate: 0,
+          night_rate: 0,
+          mid_shift_rate: 0,
+          ot_rate: 0,
           unit: item.unit,
           remarks: item.remarks || undefined,
           source_quotation_id: quotation.id,
@@ -530,7 +784,11 @@ export class QuotationsService {
    */
   async findByProject(projectId: number) {
     return this.prisma.quotation.findMany({
-      where: { project_id: projectId },
+      where: {
+        project_id: projectId,
+        deleted_at: null,
+        quotation_is_active: true,
+      },
       include: { company: true, client: true },
       orderBy: { created_at: 'desc' },
     });

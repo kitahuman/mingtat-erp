@@ -419,6 +419,7 @@ export class DailyReportStatsService {
       where: {
         project_id: projectId,
         deleted_at: null,
+        quotation_is_active: true,
         status: { in: ['accepted', 'sent'] },
       },
       include: {

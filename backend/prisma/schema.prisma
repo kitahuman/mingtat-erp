@@ -842,8 +842,11 @@ model ProjectSequence {
 
 model Quotation {
   id              Int       @id @default(autoincrement())
-  quotation_no    String    @unique
-  quotation_type  String    @default("project")
+  quotation_no              String    @unique
+  quotation_parent_id       Int?
+  quotation_revision_number Int       @default(0)
+  quotation_is_active       Boolean   @default(true)
+  quotation_type            String    @default("project")
   company_id      Int
   client_id       Int?
   quotation_date  DateTime  @db.Date
@@ -863,6 +866,9 @@ model Quotation {
   deleted_by      Int?
   deletedBy       User?     @relation("QuotationDeletedBy", fields: [deleted_by], references: [id])
 
+  parent_quotation Quotation?  @relation("QuotationRevisions", fields: [quotation_parent_id], references: [id], onDelete: SetNull)
+  revisions        Quotation[] @relation("QuotationRevisions")
+
   company           Company          @relation(fields: [company_id], references: [id])
   client            Partner?         @relation("quotation_client", fields: [client_id], references: [id])
   project           Project?         @relation(fields: [project_id], references: [id])
@@ -881,6 +887,9 @@ model Quotation {
   @@index([project_id])
   @@index([status])
   @@index([quotation_type])
+  @@index([quotation_parent_id])
+  @@index([quotation_is_active])
+  @@index([quotation_revision_number])
   @@index([deleted_at])
   @@map("quotations")
 }

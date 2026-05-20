@@ -5,13 +5,28 @@ import { quotationsApi, companiesApi, partnersApi, invoicesApi } from '@/lib/api
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
-import { fmtDate } from '@/lib/dateUtils';
+import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
 const typeLabels: Record<string, string> = { project: '工程報價', rental: '租賃/運輸報價' };
+
+type QuotationRevisionSummary = {
+  id: number;
+  quotation_no: string;
+  quotation_date: string;
+  total_amount?: number | string | null;
+  quotation_parent_id?: number | null;
+  quotation_revision_number: number;
+  quotation_is_active: boolean;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+const revisionLabel = (revisionNumber: number) =>
+  revisionNumber === 0 ? '原始版' : `R${revisionNumber}`;
 const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
 const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
 const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
@@ -74,14 +89,21 @@ function ClientSearchSelect({ value, onChange, partners }: { value: any; onChang
 
 export default function QuotationDetailPage() {
   const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly('quotations');
   const params = useParams();
   const router = useRouter();
   const [quotation, setQuotation] = useState<any>(null);
+  const quotationId = Number(params.id);
+  const currentQuotationId = Number(quotation?.id || quotationId);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [revisions, setRevisions] = useState<QuotationRevisionSummary[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [creatingRevision, setCreatingRevision] = useState(false);
+  const [settingActiveId, setSettingActiveId] = useState<number | null>(null);
 
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -100,30 +122,94 @@ export default function QuotationDetailPage() {
   });
   const [creatingInvoice, setCreatingInvoice] = useState(false);
 
-  const loadData = () => {
-    quotationsApi.get(Number(params.id)).then(res => {
-      setQuotation(res.data);
-      setForm({ ...res.data, items: res.data.items || [] });
+  const loadRevisions = async (targetQuotationId: number = quotationId) => {
+    setRevisionsLoading(true);
+    try {
+      const res = await quotationsApi.getRevisions(targetQuotationId);
+      setRevisions(res.data || []);
+    } catch {
+      setRevisions([]);
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
+  const loadData = async () => {
+    try {
+      const res = await quotationsApi.get(quotationId);
+      const data = res.data;
+      setQuotation(data);
+      setForm({
+        ...data,
+        quotation_date: toInputDate(data.quotation_date),
+        items: data.items || [],
+      });
+      await loadRevisions(Number(data.id));
       setLoading(false);
-    }).catch(() => router.push('/quotations'));
+    } catch {
+      router.push('/quotations');
+    }
   };
 
   useEffect(() => {
     loadData();
     companiesApi.simple().then(res => setCompanies(res.data));
     partnersApi.simple().then(res => setPartners(res.data));
-  }, [params.id]);
+  }, [quotationId]);
+
+  const handleSwitchRevision = (revisionId: number) => {
+    if (revisionId === currentQuotationId) return;
+    if (editing && !confirm('切換版本會放棄尚未儲存的修改，是否繼續？')) return;
+    router.push(`/quotations/${revisionId}`);
+  };
+
+  const handleCreateRevision = async () => {
+    if (readOnly) return;
+    if (!confirm('確定要以目前版本內容建立新的修訂版嗎？')) return;
+    setCreatingRevision(true);
+    try {
+      const res = await quotationsApi.createRevision(currentQuotationId);
+      const newRevisionId = Number(res.data?.id);
+      await loadRevisions(currentQuotationId);
+      if (newRevisionId) {
+        router.push(`/quotations/${newRevisionId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '建立修訂版失敗');
+    } finally {
+      setCreatingRevision(false);
+    }
+  };
+
+  const handleSetActiveRevision = async (revisionId: number) => {
+    if (readOnly) return;
+    if (!confirm('確定要將此版本設為正式版嗎？同組其他版本會改為非正式。')) return;
+    setSettingActiveId(revisionId);
+    try {
+      await quotationsApi.setActiveRevision(revisionId);
+      await loadRevisions(revisionId);
+      if (revisionId === currentQuotationId) {
+        await loadData();
+      } else {
+        router.push(`/quotations/${revisionId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '設為正式版失敗');
+    } finally {
+      setSettingActiveId(null);
+    }
+  };
 
   const handleSave = async () => {
     try {
-      const { company, client, project, created_at, updated_at, ...updateData } = form;
+      const { company, client, project, invoices, quotation_parent_id, quotation_revision_number, quotation_is_active, created_at, updated_at, ...updateData } = form;
       updateData.items = updateData.items.map((item: any, idx: number) => ({
         ...item,
         quantity: Number(item.quantity) || 0,
         unit_price: Number(item.unit_price) || 0,
         sort_order: idx + 1,
       }));
-      const res = await quotationsApi.update(quotation.id, updateData);
+      const res = await quotationsApi.update(currentQuotationId, updateData);
       setQuotation(res.data);
       setForm({ ...res.data, items: res.data.items || [] });
       setEditing(false);
@@ -132,7 +218,7 @@ export default function QuotationDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     try {
-      const res = await quotationsApi.updateStatus(quotation.id, newStatus);
+      const res = await quotationsApi.updateStatus(currentQuotationId, newStatus);
       setQuotation(res.data);
       setForm({ ...res.data, items: res.data.items || [] });
     } catch (err: any) { alert(err.response?.data?.message || '狀態更新失敗'); }
@@ -141,7 +227,7 @@ export default function QuotationDetailPage() {
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      const res = await quotationsApi.accept(quotation.id, {
+      const res = await quotationsApi.accept(currentQuotationId, {
         project_name: acceptForm.project_name || quotation.project_name,
         effective_date: acceptForm.effective_date,
         expiry_date: acceptForm.expiry_date || undefined,
@@ -159,7 +245,7 @@ export default function QuotationDetailPage() {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const res = await quotationsApi.syncToRateCards(quotation.id, {
+      const res = await quotationsApi.syncToRateCards(currentQuotationId, {
         effective_date: syncForm.effective_date,
         expiry_date: syncForm.expiry_date || undefined,
         overwrite: syncForm.overwrite,
@@ -173,7 +259,7 @@ export default function QuotationDetailPage() {
   const handleCreateInvoice = async () => {
     setCreatingInvoice(true);
     try {
-      const res = await invoicesApi.createFromQuotation(quotation.id, {
+      const res = await invoicesApi.createFromQuotation(currentQuotationId, {
         date: invoiceForm.date,
         due_date: invoiceForm.due_date || undefined,
         tax_rate: Number(invoiceForm.tax_rate) || 0,
@@ -235,7 +321,7 @@ export default function QuotationDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
-          <Link href={`/quotations/${quotation.id}/pdf-preview`} className="btn-secondary">
+          <Link href={`/quotations/${currentQuotationId}/pdf-preview`} className="btn-secondary">
             <span className="mr-1">📄</span> 匯出 PDF
           </Link>
           <button onClick={() => { setSyncResult(null); setSyncForm({ effective_date: quotation.quotation_date || new Date().toISOString().slice(0, 10), expiry_date: '', overwrite: false }); setShowSyncModal(true); }} className="btn-secondary">同步至價目表</button>
@@ -265,12 +351,94 @@ export default function QuotationDetailPage() {
         </div>
       </div>
 
+      {/* Revision History */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">版本歷史</h2>
+            <p className="text-sm text-gray-500 mt-1">每個修訂版本可獨立編輯、設為正式版與匯出 PDF。</p>
+          </div>
+          <button
+            onClick={handleCreateRevision}
+            disabled={readOnly || creatingRevision}
+            className="btn-primary disabled:opacity-50"
+          >
+            {creatingRevision ? '建立中...' : '新增修訂版'}
+          </button>
+        </div>
+        {revisionsLoading ? (
+          <p className="text-sm text-gray-500">載入版本歷史中...</p>
+        ) : revisions.length === 0 ? (
+          <p className="text-sm text-gray-500">暫無版本資料</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-3 py-2 text-left">版本</th>
+                  <th className="px-3 py-2 text-left">報價單號</th>
+                  <th className="px-3 py-2 text-left">日期</th>
+                  <th className="px-3 py-2 text-right">金額</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                  <th className="px-3 py-2 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {revisions.map((revision) => {
+                  const isCurrent = revision.id === currentQuotationId;
+                  return (
+                    <tr key={revision.id} className={isCurrent ? 'border-b bg-primary-50' : 'border-b'}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium">{revisionLabel(revision.quotation_revision_number)}</span>
+                        {isCurrent && <span className="ml-2 text-xs text-primary-600">目前查看</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono">{revision.quotation_no}</td>
+                      <td className="px-3 py-2">{fmtDate(revision.quotation_date)}</td>
+                      <td className="px-3 py-2 text-right font-mono">HKD ${Number(revision.total_amount || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2">
+                        {revision.quotation_is_active ? (
+                          <span className="badge-green">正式版</span>
+                        ) : (
+                          <span className="badge-gray">非正式</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2 flex-wrap">
+                          {!isCurrent && (
+                            <button onClick={() => handleSwitchRevision(revision.id)} className="text-primary-600 hover:underline">查看</button>
+                          )}
+                          <Link href={`/quotations/${revision.id}/pdf-preview`} className="text-gray-600 hover:underline">PDF</Link>
+                          {revision.quotation_is_active ? (
+                            <span className="text-green-600 font-medium">已正式</span>
+                          ) : (
+                            <button
+                              onClick={() => handleSetActiveRevision(revision.id)}
+                              disabled={readOnly || settingActiveId === revision.id}
+                              className="text-green-600 hover:underline disabled:opacity-50"
+                            >
+                              {settingActiveId === revision.id ? '設定中...' : '設為正式版'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Header Info */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">報價單資料</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {editing ? (
             <>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">報價單號</label>
+                <input value={form.quotation_no || ''} onChange={e => setForm({...form, quotation_no: e.target.value})} className="input-field font-mono" />
+              </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">報價類型</label>
                 <select value={form.quotation_type} onChange={e => setForm({...form, quotation_type: e.target.value})} className="input-field">
                   <option value="project">工程報價</option>

@@ -1738,6 +1738,8 @@ export class AiChatService {
     if (searchTables.includes('quotations')) {
       const quotations = await this.prisma.quotation.findMany({
         where: {
+          deleted_at: null,
+          quotation_is_active: true,
           OR: [
             { quotation_no: { contains: q, mode: 'insensitive' } },
             { contract_name: { contains: q, mode: 'insensitive' } },
