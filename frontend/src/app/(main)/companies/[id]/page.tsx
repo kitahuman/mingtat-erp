@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companiesApi } from '@/lib/api';
 import Link from 'next/link';
@@ -12,11 +12,13 @@ export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly('companies');
   const [company, setCompany] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const getLogoSrc = (path?: string) => {
     if (!path) return '';
@@ -42,6 +44,7 @@ export default function CompanyDetailPage() {
       alert(err.response?.data?.message || 'Logo 上載失敗');
     } finally {
       setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
     }
   };
 
@@ -135,17 +138,30 @@ export default function CompanyDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div>
             <p className="text-sm font-medium text-gray-500 mb-2">公司 Logo</p>
-            <div className="border rounded-lg p-4 bg-gray-50 min-h-[120px] flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => !readOnly && logoInputRef.current?.click()}
+              disabled={readOnly || uploadingLogo}
+              className="group w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 min-h-[120px] flex flex-col items-center justify-center transition hover:border-primary-400 hover:bg-primary-50 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-gray-50"
+            >
               {company?.company_logo_url ? (
                 <img src={getLogoSrc(company.company_logo_url)} alt="Company logo" className="max-h-24 max-w-full object-contain" />
               ) : (
                 <span className="text-sm text-gray-400">未上載 Logo</span>
               )}
-            </div>
-            {editing && !isReadOnly && (
+              {!readOnly && (
+                <span className="mt-2 text-xs font-medium text-primary-600 opacity-0 transition group-hover:opacity-100">
+                  {uploadingLogo ? '上載中...' : '點擊上載 / 更換 Logo'}
+                </span>
+              )}
+            </button>
+            {!readOnly && (
               <div className="mt-3">
-                <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={e => handleLogoUpload(e.target.files?.[0])} className="block w-full text-sm text-gray-600" disabled={uploadingLogo} />
-                <p className="text-xs text-gray-500 mt-1">{uploadingLogo ? '上載中...' : '支援 PNG、JPG、WebP，將用於 PDF 發票頁首。'}</p>
+                <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" onChange={e => handleLogoUpload(e.target.files?.[0])} className="sr-only" disabled={uploadingLogo} />
+                <button type="button" onClick={() => logoInputRef.current?.click()} className="btn-secondary w-full text-sm" disabled={uploadingLogo}>
+                  {uploadingLogo ? 'Logo 上載中...' : company?.company_logo_url ? '更換 Logo' : '上載 Logo'}
+                </button>
+                <p className="text-xs text-gray-500 mt-1">支援 PNG、JPG、WebP、GIF；上載後會儲存到 uploads 並用於 PDF 右上角。</p>
               </div>
             )}
           </div>

@@ -10,28 +10,29 @@ type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
 
 const buildPagedPreviewHtml = (source: string, currentPage: number) => {
   if (!source) return source;
-  const pageOffset = Math.max(0, currentPage - 1) * 100;
+  const pageOffset = Math.max(0, currentPage - 1);
   const previewStyle = `
 <style id="a4-preview-page-style">
   @media screen {
     html, body {
-      width: 100% !important;
-      min-height: 100% !important;
+      width: 100vw !important;
+      min-height: 141.4286vw !important;
       margin: 0 !important;
       padding: 0 !important;
       overflow: hidden !important;
       background: #ffffff !important;
     }
     body {
-      transform: translateY(-${pageOffset}vh) !important;
+      transform: translateY(-${(pageOffset * 141.4286).toFixed(4)}vw) !important;
       transform-origin: top left !important;
     }
     .invoice-page {
-      width: 100% !important;
-      min-height: 100vh !important;
+      width: 100vw !important;
+      min-height: 141.4286vw !important;
       margin: 0 !important;
-      padding: calc(11 / 210 * 100vw) calc(11 / 210 * 100vw) calc(13 / 297 * 100vh) calc(11 / 210 * 100vw) !important;
+      padding: 4.2857vw 4.7619vw !important;
       box-shadow: none !important;
+      overflow: hidden !important;
     }
   }
 </style>`;
@@ -83,6 +84,7 @@ export default function InvoicePdfPreviewPage() {
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [previewSize, setPreviewSize] = useState({ width: 595, height: 842 });
 
   const previewHtml = useMemo(
     () => buildPagedPreviewHtml(html, currentPage),
@@ -170,6 +172,23 @@ export default function InvoicePdfPreviewPage() {
     setCurrentPage(1);
   }, [html]);
 
+  useEffect(() => {
+    const updatePreviewSize = () => {
+      const availableWidth = Math.max(320, window.innerWidth - 32);
+      const availableHeight = Math.max(420, window.innerHeight - 170);
+      const widthFromHeight = availableHeight * 210 / 297;
+      const nextWidth = Math.floor(Math.min(availableWidth, widthFromHeight, 794));
+      setPreviewSize({
+        width: nextWidth,
+        height: Math.floor(nextWidth * 297 / 210),
+      });
+    };
+
+    updatePreviewSize();
+    window.addEventListener('resize', updatePreviewSize);
+    return () => window.removeEventListener('resize', updatePreviewSize);
+  }, []);
+
   const handleDownloadPdf = async () => {
     setDownloading(true);
     try {
@@ -215,7 +234,8 @@ export default function InvoicePdfPreviewPage() {
     if (!iframe || !doc || !win) return;
 
     const pageElement = doc.querySelector('.invoice-page') as HTMLElement | null;
-    const pageHeight = Math.max(1, win.innerHeight || iframe.clientHeight || 1);
+    const pageWidth = Math.max(1, win.innerWidth || iframe.clientWidth || 1);
+    const pageHeight = Math.max(1, pageWidth * 297 / 210);
     const contentHeight = Math.max(
       pageElement?.scrollHeight || 0,
       doc.body?.scrollHeight || 0,
@@ -398,7 +418,7 @@ export default function InvoicePdfPreviewPage() {
         </div>
       )}
 
-      <section className="flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm">
+      <section className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
           <div className="font-medium">A4 預覽</div>
           <div className="flex items-center gap-2">
@@ -423,13 +443,14 @@ export default function InvoicePdfPreviewPage() {
             </button>
           </div>
         </div>
-        <div className="flex flex-1 items-start justify-center overflow-hidden bg-gray-300 p-0">
+        <div className="flex flex-1 min-h-0 items-start justify-center overflow-auto bg-gray-300 p-2">
           <div
             className="overflow-hidden bg-white shadow-lg"
             style={{
-              aspectRatio: '210 / 297',
-              maxHeight: 'calc(100vh - 230px)',
-              width: 'min(100%, calc((100vh - 230px) * 210 / 297))',
+              width: `${previewSize.width}px`,
+              height: `${previewSize.height}px`,
+              maxWidth: 'calc(100vw - 2rem)',
+              maxHeight: 'calc(100vh - 170px)',
             }}
           >
             {loadingPreview ? (

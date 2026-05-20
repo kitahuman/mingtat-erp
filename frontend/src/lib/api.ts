@@ -113,7 +113,7 @@ export const companiesApi = {
   update: (id: number, data: any) => api.put(`/companies/${id}`, data),
   uploadLogo: (id: number, file: File) => {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('logo', file);
     return api.post(`/companies/${id}/logo`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
