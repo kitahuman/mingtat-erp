@@ -62,10 +62,11 @@ export class InvoicePdfService {
 
     try {
       const page = await browser.newPage();
+      await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
       await page.setContent(html, { waitUntil: 'load' });
       await page.evaluateHandle('document.fonts.ready');
       const companyName = this.escapeHtml(
-        invoice.company?.invoice_company_name_en || invoice.company?.name_en || invoice.company?.name || 'Invoice',
+        this.invoiceCompanyNameEn(invoice.company) || invoice.company?.name || 'Invoice',
       );
       const pdf = await page.pdf({
         format: 'A4',
@@ -153,7 +154,7 @@ export class InvoicePdfService {
     const client = invoice.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const logoDataUri = this.logoDataUri(company.company_logo_url);
-    const invoiceCompanyNameEn = company.invoice_company_name_en || company.name_en || '';
+    const invoiceCompanyNameEn = this.invoiceCompanyNameEn(company);
     const invoiceAddress = company.invoice_address || company.address || '';
     const invoicePhone = company.invoice_phone || company.phone || '';
     const displayClientAddress = options.overrideClientAddress || client.address || '';
@@ -327,7 +328,7 @@ export class InvoicePdfService {
     .details-table td:first-child { color: #52606d; width: 42%; font-weight: 700; }
     .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
     .invoice-subject { margin: 0 0 13px 0; padding: 9px 12px; border-left: 4px solid ${theme}; background: #f4f7fb; color: #243b53; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
-    table.items { width: 100%; border-collapse: collapse; margin-top: 7px; font-size: 10.6px; page-break-inside: auto; }
+    table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 7px; font-size: 10.6px; page-break-inside: auto; }
     .items thead { display: table-header-group; }
     .items tfoot { display: table-row-group; }
     .items tr { page-break-inside: avoid; page-break-after: auto; }
@@ -340,7 +341,8 @@ export class InvoicePdfService {
     .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
     .sub-lines { color: #52606d; font-size: 9.6px; line-height: 1.45; margin-top: 2px; overflow-wrap: anywhere; }
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
-    .totals-label { text-align: right; font-weight: 800; color: #243b53; }
+    .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
+    .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .grand-total td { background: #f4f7fb !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
     .after-table { margin-top: 15px; page-break-inside: avoid; }
     .terms-section { width: 43%; padding-right: 14px; }
@@ -395,11 +397,11 @@ export class InvoicePdfService {
       <thead>
         <tr>
           <th style="width: 7%;">${labels.no}</th>
-          <th style="width: 49%;">${labels.item}</th>
-          <th style="width: 11%; text-align: right;">${labels.quantity}</th>
-          <th style="width: 12%; text-align: center;">${labels.unit}</th>
-          <th style="width: 10%; text-align: right;">${labels.unitPrice}</th>
-          <th style="width: 11%; text-align: right;">${labels.amount}</th>
+          <th style="width: 46%;">${labels.item}</th>
+          <th style="width: 10%; text-align: right;">${labels.quantity}</th>
+          <th style="width: 11%; text-align: center;">${labels.unit}</th>
+          <th style="width: 13%; text-align: right;">${labels.unitPrice}</th>
+          <th style="width: 13%; text-align: right;">${labels.amount}</th>
         </tr>
       </thead>
       <tbody>
@@ -454,9 +456,9 @@ export class InvoicePdfService {
   private totalRow(label: string, value: string, grand: boolean) {
     return `
       <tr class="${grand ? 'grand-total' : 'totals-row'}">
-        <td colspan="4"></td>
-        <td class="totals-label">${this.escapeHtml(label)}</td>
-        <td class="right"><strong>${this.escapeHtml(value)}</strong></td>
+        <td colspan="3"></td>
+        <td colspan="2" class="totals-label">${this.escapeHtml(label)}</td>
+        <td class="right totals-value"><strong>${this.escapeHtml(value)}</strong></td>
       </tr>
     `;
   }
@@ -573,6 +575,10 @@ export class InvoicePdfService {
             ? 'image/gif'
             : 'image/jpeg';
     return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`;
+  }
+
+  private invoiceCompanyNameEn(company?: { invoice_company_name_en?: string | null }) {
+    return (company?.invoice_company_name_en || '').trim();
   }
 
   private sanitizeColor(color: string) {
