@@ -420,6 +420,7 @@ export default function QuotationPdfPreviewPage() {
             onChange={(val) => updateOption('override_payment_terms', val)}
             onSaveAsTemplate={handleSaveAsTemplate}
             onSaveToDocument={handleSaveToDocument}
+            documentLabel="報價單"
           />
         </div>
       </section>

@@ -9,18 +9,21 @@ import {
 export class PaymentTermTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: { company_id?: number; client_id?: number } = {}) {
+  async findAll(query: { company_id?: number; client_id?: number; all?: boolean } = {}) {
     const companyId = this.toOptionalNumber(query.company_id);
     const clientId = this.toOptionalNumber(query.client_id);
+    const where = query.all
+      ? undefined
+      : {
+          OR: [
+            { source_type: 'global' },
+            ...(companyId ? [{ source_type: 'company', company_id: companyId }] : []),
+            ...(clientId ? [{ source_type: 'client', client_id: clientId }] : []),
+          ],
+        };
 
     return this.prisma.paymentTermTemplate.findMany({
-      where: {
-        OR: [
-          { source_type: 'global' },
-          ...(companyId ? [{ source_type: 'company', company_id: companyId }] : []),
-          ...(clientId ? [{ source_type: 'client', client_id: clientId }] : []),
-        ],
-      },
+      where,
       include: {
         company: { select: { id: true, name: true, name_en: true } },
         client: { select: { id: true, name: true, name_en: true } },

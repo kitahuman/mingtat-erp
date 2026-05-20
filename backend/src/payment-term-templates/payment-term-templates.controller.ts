@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -25,10 +26,12 @@ export class PaymentTermTemplatesController {
   findAll(
     @Query('company_id') companyId?: string,
     @Query('client_id') clientId?: string,
+    @Query('all') all?: string,
   ) {
     return this.service.findAll({
       company_id: companyId ? Number(companyId) : undefined,
       client_id: clientId ? Number(clientId) : undefined,
+      all: all === 'true' || all === '1',
     });
   }
 
@@ -44,6 +47,11 @@ export class PaymentTermTemplatesController {
 
   @Put(':id')
   update(@Param('id') id: string, @Body() body: UpdatePaymentTermTemplateDto) {
+    return this.service.update(+id, body);
+  }
+
+  @Patch(':id')
+  patch(@Param('id') id: string, @Body() body: UpdatePaymentTermTemplateDto) {
     return this.service.update(+id, body);
   }
 

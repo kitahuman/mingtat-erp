@@ -432,6 +432,7 @@ export default function InvoicePdfPreviewPage() {
             onChange={(val) => updateOption('override_payment_terms', val)}
             onSaveAsTemplate={handleSaveAsTemplate}
             onSaveToDocument={handleSaveToDocument}
+            documentLabel="發票"
           />
         </div>
       </section>

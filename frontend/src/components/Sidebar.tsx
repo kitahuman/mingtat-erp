@@ -124,6 +124,7 @@ const navEntries: NavEntry[] = [
       { href: '/settings/users', label: '用戶管理', icon: '👥', pageKey: 'settings-users' },
       { href: '/settings/custom-fields', label: '自定義欄位', icon: '🔧', pageKey: 'settings-custom-fields' },
       { href: '/settings/field-options', label: '選項管理', icon: '📋', pageKey: 'settings-field-options' },
+      { href: '/options/payment-terms', label: '付款條款', icon: '🧾', pageKey: 'settings-field-options' },
       { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', pageKey: 'settings-expense-categories' },
       { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏐', pageKey: 'settings-bank-accounts' },
       { href: '/settings/statutory-holidays', label: '法定假期', icon: '🏆', pageKey: 'settings-statutory-holidays' },
