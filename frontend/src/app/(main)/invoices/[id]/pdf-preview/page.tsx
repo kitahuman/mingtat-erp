@@ -12,9 +12,12 @@ type PdfPreviewOptions = {
   show_bank: boolean;
   show_client_address: boolean;
   show_client_phone: boolean;
-  show_client_info: boolean;
+  show_client_contact: boolean;
   show_signature: boolean;
   override_payment_terms: string;
+  client_address: string;
+  client_contact: string;
+  client_phone: string;
 };
 
 const DEFAULT_OPTIONS: PdfPreviewOptions = {
@@ -22,9 +25,12 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   show_bank: true,
   show_client_address: true,
   show_client_phone: true,
-  show_client_info: true,
+  show_client_contact: true,
   show_signature: true,
   override_payment_terms: '',
+  client_address: '',
+  client_contact: '',
+  client_phone: '',
 };
 
 export default function InvoicePdfPreviewPage() {
@@ -46,18 +52,25 @@ export default function InvoicePdfPreviewPage() {
       show_bank: options.show_bank,
       show_client_address: options.show_client_address,
       show_client_phone: options.show_client_phone,
-      show_client_info: options.show_client_info,
+      show_client_contact: options.show_client_contact,
+      show_client_info: true,
       show_signature: options.show_signature,
       override_payment_terms: options.override_payment_terms,
+      client_address: options.client_address,
+      client_contact: options.client_contact,
+      client_phone: options.client_phone,
     }),
     [
       options.language,
       options.show_bank,
       options.show_client_address,
       options.show_client_phone,
-      options.show_client_info,
+      options.show_client_contact,
       options.show_signature,
       options.override_payment_terms,
+      options.client_address,
+      options.client_contact,
+      options.client_phone,
     ],
   );
 
@@ -70,7 +83,10 @@ export default function InvoicePdfPreviewPage() {
         setInvoice(res.data);
         setOptions(prev => ({ 
           ...prev, 
-          override_payment_terms: res.data.invoice_custom_payment_terms || res.data.payment_terms || '' 
+          override_payment_terms: res.data.invoice_custom_payment_terms || res.data.payment_terms || '',
+          client_address: prev.client_address || res.data.client?.address || '',
+          client_contact: prev.client_contact || res.data.client?.contact_person || '',
+          client_phone: prev.client_phone || res.data.client?.phone || '',
         }));
       })
       .catch(() => router.push('/invoices'));
@@ -221,20 +237,67 @@ export default function InvoicePdfPreviewPage() {
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
-                checked={options.show_client_info}
-                onChange={(e) => updateOption('show_client_info', e.target.checked)}
-              />
-              顯示客人資訊
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
                 checked={options.show_signature}
                 onChange={(e) => updateOption('show_signature', e.target.checked)}
               />
               簽名欄
             </label>
           </div>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+          <div className="mb-2 font-medium text-gray-800">客人資料顯示設定</div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_address}
+                  onChange={(e) => updateOption('show_client_address', e.target.checked)}
+                />
+                地址
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_address}
+                onChange={(e) => updateOption('client_address', e.target.value)}
+                placeholder="客人地址"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_contact}
+                  onChange={(e) => updateOption('show_client_contact', e.target.checked)}
+                />
+                聯絡人
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_contact}
+                onChange={(e) => updateOption('client_contact', e.target.value)}
+                placeholder="聯絡人"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_phone}
+                  onChange={(e) => updateOption('show_client_phone', e.target.checked)}
+                />
+                電話
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_phone}
+                onChange={(e) => updateOption('client_phone', e.target.value)}
+                placeholder="客人電話"
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">預設值來自合作單位的客人資料；你也可以在此頁即時填改後預覽、列印或下載。</p>
         </div>
 
         <div className="mt-3">

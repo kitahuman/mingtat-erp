@@ -44,20 +44,22 @@ export class QuotationPdfService {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
+      await page.evaluateHandle('document.fonts.ready');
       const companyName = this.escapeHtml(
-        quotation.company?.name_en || quotation.company?.name || 'Quotation',
+        quotation.company?.invoice_company_name_en || quotation.company?.name_en || quotation.company?.name || 'Quotation',
       );
       const pdf = await page.pdf({
         format: 'A4',
+        preferCSSPageSize: true,
         printBackground: true,
         displayHeaderFooter: true,
         headerTemplate: '<div></div>',
         footerTemplate: `
-          <div style="width:100%; font-family:Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
+          <div style="width:100%; font-family:&quot;Noto Sans CJK TC&quot;, &quot;Noto Sans CJK SC&quot;, Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
             ${companyName} · Quotation · Page <span class="pageNumber"></span> of <span class="totalPages"></span>
           </div>
         `,
-        margin: { top: '11mm', right: '11mm', bottom: '13mm', left: '11mm' },
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
       });
       return Buffer.from(pdf);
     } finally {
@@ -101,6 +103,14 @@ export class QuotationPdfService {
     const client = quotation.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const logoDataUri = this.logoDataUri(company.company_logo_url);
+    const quotationCompanyNameEn = company.invoice_company_name_en || company.name_en || '';
+    const quotationAddress = company.invoice_address || company.address || '';
+    const quotationPhone = company.invoice_phone || company.phone || '';
+    const quotationFax = company.invoice_fax || '';
+    const companyMetaLines = [
+      quotationAddress ? this.escapeHtml(quotationAddress) : '',
+      [quotationPhone ? `Tel: ${this.escapeHtml(quotationPhone)}` : '', quotationFax ? `Fax: ${this.escapeHtml(quotationFax)}` : ''].filter(Boolean).join(' &nbsp; '),
+    ].filter(Boolean).join('<br />');
     
     const paymentTerms = options.overridePaymentTerms !== undefined 
       ? options.overridePaymentTerms 
@@ -142,10 +152,10 @@ export class QuotationPdfService {
       font-family: "Noto Sans CJK TC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang TC", "Heiti TC", Arial, sans-serif;
       font-size: 11.5px; line-height: 1.45;
     }
-    .invoice-page { width: 188mm; margin: 0 auto; background: #ffffff; }
+    .invoice-page { width: 100%; min-height: 277mm; margin: 0; background: #ffffff; }
     .top-rule { height: 5px; background: ${theme}; margin-bottom: 17px; border-radius: 2px; }
     .header, .info-row, .after-table, .footer-row { display: table; width: 100%; table-layout: fixed; }
-    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .note-area, .signature-area { display: table-cell; vertical-align: top; }
+    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .signature-area { display: table-cell; vertical-align: top; }
     .company-block { width: 64%; padding-right: 18px; }
     .brand-block { width: 36%; text-align: right; }
     .company-name-cn { font-size: 25px; font-weight: 800; color: ${theme}; letter-spacing: 0.6px; margin: 0 0 2px 0; line-height: 1.15; }
@@ -187,12 +197,14 @@ export class QuotationPdfService {
     .terms-section { width: 100%; }
     .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 10px 12px; min-height: 60px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
-    .note-area { width: 100%; color: #52606d; font-size: 10px; line-height: 1.45; margin-bottom: 20px; }
-    .signature-container { display: table; width: 100%; table-layout: fixed; margin-top: 30px; }
-    .signature-block { display: table-cell; vertical-align: bottom; width: 50%; }
-    .signature-space { height: 60px; }
-    .signature-line-box { border-top: 1.2px solid #243b53; width: 85%; padding-top: 7px; font-size: 10.5px; color: #52606d; text-align: center; }
-    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 5px; font-size: 11px; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 30px; page-break-inside: avoid; border: none; }
+    .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
+    .signature-table td:first-child { padding-right: 18mm; }
+    .signature-table td:last-child { padding-left: 18mm; }
+    .signature-block { width: 100%; min-height: 118px; writing-mode: horizontal-tb; text-orientation: mixed; }
+    .signature-space { height: 82px; }
+    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; writing-mode: horizontal-tb; }
+    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; writing-mode: horizontal-tb; }
   </style>
 </head>
 <body>
@@ -201,14 +213,11 @@ export class QuotationPdfService {
     <div class="header">
       <div class="company-block">
         <div class="company-name-cn">${this.escapeHtml(company.name || '')}</div>
-        ${company.name_en ? `<div class="company-name-en">${this.escapeHtml(company.name_en)}</div>` : ''}
-        <div class="company-meta">
-          ${company.address ? `${this.escapeHtml(company.address)}<br />` : ''}
-          ${company.phone ? `Tel: ${this.escapeHtml(company.phone)}` : ''}
-        </div>
+        ${quotationCompanyNameEn ? `<div class="company-name-en">${this.escapeHtml(quotationCompanyNameEn)}</div>` : ''}
+        <div class="company-meta">${companyMetaLines}</div>
       </div>
       <div class="brand-block">
-        ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(company.name_en || company.name || 'COMPANY')}</span></div>`}
+        ${logoDataUri ? `<img class="logo-img" src="${logoDataUri}" />` : `<div class="logo-placeholder"><span>${this.escapeHtml(quotationCompanyNameEn || company.name || 'COMPANY')}</span></div>`}
         <div class="invoice-title">${labels.quotationTitle}</div>
       </div>
     </div>
@@ -258,25 +267,25 @@ export class QuotationPdfService {
     </div>
 
     <div class="footer-row">
-      <div class="note-area">
-        ${quotation.validity_period ? `<div><strong>${labels.validityPeriod}:</strong> ${this.escapeHtml(quotation.validity_period)}</div>` : ''}
-        ${quotation.exclusions ? `<div><strong>${labels.exclusions}:</strong> ${this.escapeMultiline(quotation.exclusions)}</div>` : ''}
-        ${quotation.external_remark ? `<div style="margin-top:5px;">${this.escapeMultiline(quotation.external_remark)}</div>` : ''}
-      </div>
-
       ${options.showSignature ? `
-      <div class="signature-container">
-        <div class="signature-block">
-          <div class="signature-label">${this.escapeHtml(company.name || '')}</div>
-          <div class="signature-space"></div>
-          <div class="signature-line-box">${labels.authorizedSignature}</div>
-        </div>
-        <div class="signature-block">
-          <div class="signature-label">${labels.clientConfirmation}</div>
-          <div class="signature-space"></div>
-          <div class="signature-line-box">${labels.clientSignatureDate}</div>
-        </div>
-      </div>
+      <table class="signature-table">
+        <tr>
+          <td>
+            <div class="signature-block">
+              <div class="signature-label">${labels.clientConfirmation}</div>
+              <div class="signature-space"></div>
+              <div class="signature-line-box">${labels.clientSignatureDate}</div>
+            </div>
+          </td>
+          <td>
+            <div class="signature-block">
+              <div class="signature-label">${this.escapeHtml(company.name || '')}</div>
+              <div class="signature-space"></div>
+              <div class="signature-line-box">${labels.authorizedSignature}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
       ` : ''}
     </div>
   </div>

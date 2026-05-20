@@ -48,7 +48,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY package.json package-lock.json ./
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y chromium poppler-utils --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y chromium poppler-utils fonts-noto-cjk fontconfig --no-install-recommends && fc-cache -f -v && rm -rf /var/lib/apt/lists/*
 
 # Install production dependencies only
 RUN npm ci --omit=dev

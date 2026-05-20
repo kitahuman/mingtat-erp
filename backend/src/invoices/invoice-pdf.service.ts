@@ -11,9 +11,13 @@ export interface InvoicePdfOptions {
   showBank?: boolean;
   showClientAddress?: boolean;
   showClientPhone?: boolean;
+  showClientContact?: boolean;
   showClientInfo?: boolean;
   showSignature?: boolean;
   overridePaymentTerms?: string;
+  overrideClientAddress?: string;
+  overrideClientContact?: string;
+  overrideClientPhone?: string;
 }
 
 interface BankInfo {
@@ -57,20 +61,22 @@ export class InvoicePdfService {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
+      await page.evaluateHandle('document.fonts.ready');
       const companyName = this.escapeHtml(
         invoice.company?.invoice_company_name_en || invoice.company?.name_en || invoice.company?.name || 'Invoice',
       );
       const pdf = await page.pdf({
         format: 'A4',
+        preferCSSPageSize: true,
         printBackground: true,
         displayHeaderFooter: true,
         headerTemplate: '<div></div>',
         footerTemplate: `
-          <div style="width:100%; font-family:Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
+          <div style="width:100%; font-family:&quot;Noto Sans CJK TC&quot;, &quot;Noto Sans CJK SC&quot;, Arial, sans-serif; font-size:8px; color:#9aa5b1; padding:0 11mm; text-align:center;">
             ${companyName} · Invoice · Page <span class="pageNumber"></span> of <span class="totalPages"></span>
           </div>
         `,
-        margin: { top: '11mm', right: '11mm', bottom: '13mm', left: '11mm' },
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
       });
       return Buffer.from(pdf);
     } finally {
@@ -113,6 +119,7 @@ export class InvoicePdfService {
       options.showClientAddress ?? invoice.invoice_show_client_address;
     const showClientPhone =
       options.showClientPhone ?? invoice.invoice_show_client_phone;
+    const showClientContact = options.showClientContact ?? true;
     const showClientInfo = options.showClientInfo ?? true;
     const showSignature = options.showSignature ?? true;
 
@@ -123,9 +130,13 @@ export class InvoicePdfService {
         showBank,
         showClientAddress,
         showClientPhone,
+        showClientContact,
         showClientInfo,
         showSignature,
         overridePaymentTerms: options.overridePaymentTerms || '',
+        overrideClientAddress: options.overrideClientAddress || '',
+        overrideClientContact: options.overrideClientContact || '',
+        overrideClientPhone: options.overrideClientPhone || '',
       }),
     };
   }
@@ -139,6 +150,9 @@ export class InvoicePdfService {
     const invoiceCompanyNameEn = company.invoice_company_name_en || company.name_en || '';
     const invoiceAddress = company.invoice_address || company.address || '';
     const invoicePhone = company.invoice_phone || company.phone || '';
+    const displayClientAddress = options.overrideClientAddress || client.address || '';
+    const displayClientContact = options.overrideClientContact || client.contact_person || '';
+    const displayClientPhone = options.overrideClientPhone || client.phone || '';
     const invoiceFax = company.invoice_fax || '';
     const companyMetaLines = [
       invoiceAddress ? this.escapeHtml(invoiceAddress) : '',
@@ -179,11 +193,14 @@ export class InvoicePdfService {
     const retentionAmount = Number(invoice.retention_amount || 0);
 
     const clientLines = [
-      options.showClientAddress && client.address
-        ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(client.address)}</span></div>`
+      options.showClientAddress && displayClientAddress
+        ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(displayClientAddress)}</span></div>`
         : '',
-      options.showClientPhone && client.phone
-        ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>`
+      options.showClientContact && displayClientContact
+        ? `<div><strong>${labels.contact}：</strong><span class="muted">${this.escapeHtml(displayClientContact)}</span></div>`
+        : '',
+      options.showClientPhone && displayClientPhone
+        ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(displayClientPhone)}</span></div>`
         : '',
     ].join('');
     const clientSectionHtml = options.showClientInfo
@@ -276,10 +293,10 @@ export class InvoicePdfService {
       font-family: "Noto Sans CJK TC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang TC", "Heiti TC", Arial, sans-serif;
       font-size: 11.5px; line-height: 1.45;
     }
-    .invoice-page { width: 188mm; margin: 0 auto; background: #ffffff; }
+    .invoice-page { width: 100%; min-height: 277mm; margin: 0; background: #ffffff; }
     .top-rule { height: 5px; background: ${theme}; margin-bottom: 17px; border-radius: 2px; }
     .header, .info-row, .after-table, .footer-row { display: table; width: 100%; table-layout: fixed; }
-    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .payment-section, .note-area, .signature-area { display: table-cell; vertical-align: top; }
+    .company-block, .brand-block, .client-section, .invoice-details, .terms-section, .payment-section, .signature-area { display: table-cell; vertical-align: top; }
     .company-block { width: 64%; padding-right: 18px; }
     .brand-block { width: 36%; text-align: right; }
     .company-name-cn { font-size: 25px; font-weight: 800; color: ${theme}; letter-spacing: 0.6px; margin: 0 0 2px 0; line-height: 1.15; }
@@ -330,16 +347,17 @@ export class InvoicePdfService {
     .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
     .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
-    .note-area { width: 100%; color: #52606d; font-size: 10px; line-height: 1.45; margin-bottom: 20px; }
-    .signature-container { display: flex; width: 100%; justify-content: space-between; align-items: flex-end; gap: 38mm; margin-top: 30px; page-break-inside: avoid; }
-    .signature-block { width: 42%; min-height: 135px; display: flex; flex-direction: column; justify-content: flex-end; }
-    .signature-block.company-stamp { align-items: flex-end; text-align: center; }
-    .signature-space { flex: 1; min-height: 100px; }
-    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; }
-    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; }
-    .company-stamp-box { min-height: 105px; min-width: 145px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 12px; margin-left: auto; }
-    .company-stamp-name { writing-mode: vertical-rl; text-orientation: mixed; font-size: 15px; font-weight: 900; letter-spacing: 1.2px; color: #243b53; min-height: 88px; }
-    .company-stamp-caption { margin-top: 8px; font-size: 10.5px; font-weight: 800; color: #52606d; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 30px; page-break-inside: avoid; border: none; }
+    .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
+    .signature-table td:first-child { padding-right: 18mm; }
+    .signature-table td:last-child { padding-left: 18mm; text-align: center; }
+    .signature-block { width: 100%; min-height: 118px; writing-mode: horizontal-tb; text-orientation: mixed; }
+    .signature-space { height: 82px; }
+    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; writing-mode: horizontal-tb; }
+    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; writing-mode: horizontal-tb; }
+    .company-stamp-box { min-height: 105px; width: 100%; padding: 10px 12px; text-align: center; writing-mode: horizontal-tb; }
+    .company-stamp-name { writing-mode: horizontal-tb; text-orientation: mixed; font-size: 15px; font-weight: 900; letter-spacing: 1.2px; color: #243b53; min-height: 0; white-space: normal; }
+    .company-stamp-caption { margin-top: 8px; font-size: 10.5px; font-weight: 800; color: #52606d; writing-mode: horizontal-tb; }
   </style>
 </head>
 <body>
@@ -405,22 +423,26 @@ export class InvoicePdfService {
       </div>
     </div>
     <div class="footer-row">
-      <div class="note-area">${invoice.remarks ? this.escapeMultiline(invoice.remarks) : ''}</div>
-      
       ${options.showSignature ? `
-      <div class="signature-container">
-        <div class="signature-block client-signature">
-          <div class="signature-label">${labels.clientSignatureStamp}</div>
-          <div class="signature-space"></div>
-          <div class="signature-line-box">${labels.clientSignatureLine}</div>
-        </div>
-        <div class="signature-block company-stamp">
-          <div class="company-stamp-box">
-            <div class="company-stamp-name">${this.escapeHtml(company.name || '')}</div>
-            <div class="company-stamp-caption">${labels.companyStamp}</div>
-          </div>
-        </div>
-      </div>
+      <table class="signature-table">
+        <tr>
+          <td>
+            <div class="signature-block client-signature">
+              <div class="signature-label">${labels.clientSignatureStamp}</div>
+              <div class="signature-space"></div>
+              <div class="signature-line-box">${labels.clientSignatureLine}</div>
+            </div>
+          </td>
+          <td>
+            <div class="signature-block company-stamp">
+              <div class="company-stamp-box">
+                <div class="company-stamp-name">${this.escapeHtml(company.name || '')}</div>
+                <div class="company-stamp-caption">${labels.companyStamp}</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
       ` : ''}
     </div>
   </div>
@@ -447,6 +469,7 @@ export class InvoicePdfService {
       invoiceDate: 'Invoice Date',
       dueDate: 'Due Date',
       address: '地址 Address',
+      contact: '聯絡人 Contact',
       phone: '電話 Phone',
       no: '編號',
       item: '項目',
@@ -479,6 +502,7 @@ export class InvoicePdfService {
         billTo: 'Bill To',
         invoiceDetails: 'Invoice Details',
         address: 'Address',
+        contact: 'Contact',
         phone: 'Phone',
         no: 'No.',
         item: 'Item',
@@ -510,6 +534,7 @@ export class InvoicePdfService {
         invoiceDate: '發票日期',
         dueDate: '到期日',
         address: '地址',
+        contact: '聯絡人',
         phone: '電話',
         subtotal: '小計 (HKD)',
         surcharge: '附加費',

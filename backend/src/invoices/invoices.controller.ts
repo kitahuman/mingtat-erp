@@ -55,9 +55,13 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_client_contact') showClientContact: string,
     @Query('show_client_info') showClientInfo: string,
     @Query('show_signature') showSignature: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
+    @Query('client_address') clientAddress: string,
+    @Query('client_contact') clientContact: string,
+    @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const pdf = await this.invoicePdfService.generateInvoicePdf(Number(id), {
@@ -65,9 +69,13 @@ export class InvoicesController {
       showBank: this.parseBool(showBank),
       showClientAddress: this.parseBool(showClientAddress),
       showClientPhone: this.parseBool(showClientPhone),
+      showClientContact: this.parseBool(showClientContact),
       showClientInfo: this.parseBool(showClientInfo),
       showSignature: this.parseBool(showSignature),
       overridePaymentTerms,
+      overrideClientAddress: clientAddress,
+      overrideClientContact: clientContact,
+      overrideClientPhone: clientPhone,
     });
 
     res.set({
@@ -85,9 +93,13 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_client_contact') showClientContact: string,
     @Query('show_client_info') showClientInfo: string,
     @Query('show_signature') showSignature: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
+    @Query('client_address') clientAddress: string,
+    @Query('client_contact') clientContact: string,
+    @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.invoicePdfService.generateInvoiceHtml(Number(id), {
@@ -95,9 +107,13 @@ export class InvoicesController {
       showBank: this.parseBool(showBank),
       showClientAddress: this.parseBool(showClientAddress),
       showClientPhone: this.parseBool(showClientPhone),
+      showClientContact: this.parseBool(showClientContact),
       showClientInfo: this.parseBool(showClientInfo),
       showSignature: this.parseBool(showSignature),
       overridePaymentTerms,
+      overrideClientAddress: clientAddress,
+      overrideClientContact: clientContact,
+      overrideClientPhone: clientPhone,
     });
 
     res.set({
@@ -114,9 +130,13 @@ export class InvoicesController {
     @Query('show_bank') showBank: string,
     @Query('show_client_address') showClientAddress: string,
     @Query('show_client_phone') showClientPhone: string,
+    @Query('show_client_contact') showClientContact: string,
     @Query('show_client_info') showClientInfo: string,
     @Query('show_signature') showSignature: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
+    @Query('client_address') clientAddress: string,
+    @Query('client_contact') clientContact: string,
+    @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.previewPdfHtml(
@@ -125,9 +145,13 @@ export class InvoicesController {
       showBank,
       showClientAddress,
       showClientPhone,
+      showClientContact,
       showClientInfo,
       showSignature,
       overridePaymentTerms,
+      clientAddress,
+      clientContact,
+      clientPhone,
       res,
     );
   }
