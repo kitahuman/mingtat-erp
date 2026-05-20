@@ -9,6 +9,8 @@ export type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
 export interface QuotationPdfOptions {
   language?: QuotationPdfLanguage;
   showSignature?: boolean;
+  showClientSignature?: boolean;
+  showCompanySignature?: boolean;
   overridePaymentTerms?: string;
 }
 
@@ -85,13 +87,17 @@ export class QuotationPdfService {
       throw new NotFoundException('報價單不存在');
 
     const language = this.normalizeLanguage(options.language || 'zh');
-    const showSignature = options.showSignature ?? true;
+    const legacyShowSignature = options.showSignature ?? true;
+    const showClientSignature = options.showClientSignature ?? legacyShowSignature;
+    const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
 
     return {
       quotation,
       html: this.buildHtml(quotation as any, {
         language,
-        showSignature,
+        showSignature: showClientSignature || showCompanySignature,
+        showClientSignature,
+        showCompanySignature,
         overridePaymentTerms: options.overridePaymentTerms ?? '',
       }),
     };
@@ -197,14 +203,13 @@ export class QuotationPdfService {
     .terms-section { width: 100%; }
     .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 10px 12px; min-height: 60px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
-    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 30px; page-break-inside: avoid; border: none; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 34px; page-break-inside: avoid; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
-    .signature-block { width: 100%; min-height: 118px; writing-mode: horizontal-tb; text-orientation: mixed; }
-    .signature-space { height: 82px; }
-    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; writing-mode: horizontal-tb; }
-    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; writing-mode: horizontal-tb; }
+    .signature-block { width: 100%; padding-top: 42px; writing-mode: horizontal-tb; text-orientation: mixed; }
+    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
+    .signature-company-name { margin-top: 8px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
 <body>
@@ -267,22 +272,22 @@ export class QuotationPdfService {
     </div>
 
     <div class="footer-row">
-      ${options.showSignature ? `
+      ${options.showClientSignature || options.showCompanySignature ? `
       <table class="signature-table">
         <tr>
           <td>
+            ${options.showClientSignature ? `
             <div class="signature-block">
-              <div class="signature-label">${labels.clientConfirmation}</div>
-              <div class="signature-space"></div>
-              <div class="signature-line-box">${labels.clientSignatureDate}</div>
-            </div>
+              <div class="signature-line"></div>
+              <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
+            </div>` : ''}
           </td>
           <td>
+            ${options.showCompanySignature ? `
             <div class="signature-block">
-              <div class="signature-label">${this.escapeHtml(company.name || '')}</div>
-              <div class="signature-space"></div>
-              <div class="signature-line-box">${labels.authorizedSignature}</div>
-            </div>
+              <div class="signature-line"></div>
+              <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
+            </div>` : ''}
           </td>
         </tr>
       </table>

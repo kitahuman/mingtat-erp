@@ -25,12 +25,16 @@ export class QuotationsController {
     @Param('id') id: number,
     @Query('language') language: QuotationPdfLanguage,
     @Query('show_signature') showSignature: string,
+    @Query('show_client_signature') showClientSignature: string,
+    @Query('show_company_signature') showCompanySignature: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const pdf = await this.quotationPdfService.generateQuotationPdf(Number(id), {
       language,
       showSignature: this.parseBool(showSignature),
+      showClientSignature: this.parseBool(showClientSignature),
+      showCompanySignature: this.parseBool(showCompanySignature),
       overridePaymentTerms,
     });
 
@@ -47,12 +51,16 @@ export class QuotationsController {
     @Param('id') id: number,
     @Query('language') language: QuotationPdfLanguage,
     @Query('show_signature') showSignature: string,
+    @Query('show_client_signature') showClientSignature: string,
+    @Query('show_company_signature') showCompanySignature: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.quotationPdfService.generateQuotationHtml(Number(id), {
       language,
       showSignature: this.parseBool(showSignature),
+      showClientSignature: this.parseBool(showClientSignature),
+      showCompanySignature: this.parseBool(showCompanySignature),
       overridePaymentTerms,
     });
 

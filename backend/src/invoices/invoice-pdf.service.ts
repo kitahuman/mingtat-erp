@@ -14,6 +14,8 @@ export interface InvoicePdfOptions {
   showClientContact?: boolean;
   showClientInfo?: boolean;
   showSignature?: boolean;
+  showClientSignature?: boolean;
+  showCompanySignature?: boolean;
   overridePaymentTerms?: string;
   overrideClientAddress?: string;
   overrideClientContact?: string;
@@ -121,7 +123,9 @@ export class InvoicePdfService {
       options.showClientPhone ?? invoice.invoice_show_client_phone;
     const showClientContact = options.showClientContact ?? true;
     const showClientInfo = options.showClientInfo ?? true;
-    const showSignature = options.showSignature ?? true;
+    const legacyShowSignature = options.showSignature ?? true;
+    const showClientSignature = options.showClientSignature ?? legacyShowSignature;
+    const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
 
     return {
       invoice,
@@ -132,7 +136,9 @@ export class InvoicePdfService {
         showClientPhone,
         showClientContact,
         showClientInfo,
-        showSignature,
+        showSignature: showClientSignature || showCompanySignature,
+        showClientSignature,
+        showCompanySignature,
         overridePaymentTerms: options.overridePaymentTerms || '',
         overrideClientAddress: options.overrideClientAddress || '',
         overrideClientContact: options.overrideClientContact || '',
@@ -347,17 +353,13 @@ export class InvoicePdfService {
     .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
     .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; page-break-inside: avoid; }
-    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 30px; page-break-inside: avoid; border: none; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 34px; page-break-inside: avoid; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
-    .signature-table td:last-child { padding-left: 18mm; text-align: center; }
-    .signature-block { width: 100%; min-height: 118px; writing-mode: horizontal-tb; text-orientation: mixed; }
-    .signature-space { height: 82px; }
-    .signature-line-box { border-top: 1.2px solid #243b53; width: 100%; padding-top: 8px; font-size: 10.5px; color: #52606d; text-align: center; writing-mode: horizontal-tb; }
-    .signature-label { font-weight: 800; color: #243b53; margin-bottom: 8px; font-size: 11px; writing-mode: horizontal-tb; }
-    .company-stamp-box { min-height: 105px; width: 100%; padding: 10px 12px; text-align: center; writing-mode: horizontal-tb; }
-    .company-stamp-name { writing-mode: horizontal-tb; text-orientation: mixed; font-size: 15px; font-weight: 900; letter-spacing: 1.2px; color: #243b53; min-height: 0; white-space: normal; }
-    .company-stamp-caption { margin-top: 8px; font-size: 10.5px; font-weight: 800; color: #52606d; writing-mode: horizontal-tb; }
+    .signature-table td:last-child { padding-left: 18mm; }
+    .signature-block { width: 100%; padding-top: 42px; writing-mode: horizontal-tb; text-orientation: mixed; }
+    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
+    .signature-company-name { margin-top: 8px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
 <body>
@@ -423,23 +425,22 @@ export class InvoicePdfService {
       </div>
     </div>
     <div class="footer-row">
-      ${options.showSignature ? `
+      ${options.showClientSignature || options.showCompanySignature ? `
       <table class="signature-table">
         <tr>
           <td>
-            <div class="signature-block client-signature">
-              <div class="signature-label">${labels.clientSignatureStamp}</div>
-              <div class="signature-space"></div>
-              <div class="signature-line-box">${labels.clientSignatureLine}</div>
-            </div>
+            ${options.showClientSignature ? `
+            <div class="signature-block">
+              <div class="signature-line"></div>
+              <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
+            </div>` : ''}
           </td>
           <td>
-            <div class="signature-block company-stamp">
-              <div class="company-stamp-box">
-                <div class="company-stamp-name">${this.escapeHtml(company.name || '')}</div>
-                <div class="company-stamp-caption">${labels.companyStamp}</div>
-              </div>
-            </div>
+            ${options.showCompanySignature ? `
+            <div class="signature-block">
+              <div class="signature-line"></div>
+              <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
+            </div>` : ''}
           </td>
         </tr>
       </table>
@@ -487,12 +488,6 @@ export class InvoicePdfService {
       bank: 'Bank',
       accountName: 'Account Name',
       accountNo: 'Account No.',
-      authorizedSignature: 'Authorized Signature / 公司簽署',
-      clientConfirmation: 'Client Confirmation / 客戶確認',
-      clientSignatureDate: 'Authorized Signature & Date / 簽署及日期',
-      clientSignatureStamp: '客戶簽署/蓋印 Client Signature/Stamp',
-      clientSignatureLine: '客戶簽署/蓋印：____________________',
-      companyStamp: '簽發蓋章',
       noItems: '沒有項目 No items',
     };
     if (language === 'en') {
@@ -546,12 +541,6 @@ export class InvoicePdfService {
         bank: '銀行',
         accountName: '戶口名稱',
         accountNo: '戶口號碼',
-        authorizedSignature: '公司簽署',
-        clientConfirmation: '客戶確認',
-        clientSignatureDate: '簽署及日期',
-        clientSignatureStamp: '客戶簽署/蓋印',
-        clientSignatureLine: '客戶簽署/蓋印：____________________',
-        companyStamp: '簽發蓋章',
         noItems: '沒有項目',
       };
     }
