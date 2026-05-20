@@ -72,20 +72,34 @@ export class QuotationsController {
   async exportPdf(
     @Param('id') id: number,
     @Query('language') language: QuotationPdfLanguage,
+    @Query('show_client_address') showClientAddress: string,
+    @Query('show_client_phone') showClientPhone: string,
+    @Query('show_client_contact') showClientContact: string,
+    @Query('show_client_info') showClientInfo: string,
     @Query('show_signature') showSignature: string,
     @Query('show_client_signature') showClientSignature: string,
     @Query('show_company_signature') showCompanySignature: string,
     @Query('show_company_stamp') showCompanyStamp: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
+    @Query('client_address') clientAddress: string,
+    @Query('client_contact') clientContact: string,
+    @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const pdf = await this.quotationPdfService.generateQuotationPdf(Number(id), {
       language,
+      showClientAddress: this.parseBool(showClientAddress),
+      showClientPhone: this.parseBool(showClientPhone),
+      showClientContact: this.parseBool(showClientContact),
+      showClientInfo: this.parseBool(showClientInfo),
       showSignature: this.parseBool(showSignature),
       showClientSignature: this.parseBool(showClientSignature),
       showCompanySignature: this.parseBool(showCompanySignature),
       showCompanyStamp: this.parseBool(showCompanyStamp),
       overridePaymentTerms,
+      overrideClientAddress: clientAddress,
+      overrideClientContact: clientContact,
+      overrideClientPhone: clientPhone,
     });
 
     res.set({
@@ -100,20 +114,34 @@ export class QuotationsController {
   async previewPdfHtml(
     @Param('id') id: number,
     @Query('language') language: QuotationPdfLanguage,
+    @Query('show_client_address') showClientAddress: string,
+    @Query('show_client_phone') showClientPhone: string,
+    @Query('show_client_contact') showClientContact: string,
+    @Query('show_client_info') showClientInfo: string,
     @Query('show_signature') showSignature: string,
     @Query('show_client_signature') showClientSignature: string,
     @Query('show_company_signature') showCompanySignature: string,
     @Query('show_company_stamp') showCompanyStamp: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
+    @Query('client_address') clientAddress: string,
+    @Query('client_contact') clientContact: string,
+    @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.quotationPdfService.generateQuotationHtml(Number(id), {
       language,
+      showClientAddress: this.parseBool(showClientAddress),
+      showClientPhone: this.parseBool(showClientPhone),
+      showClientContact: this.parseBool(showClientContact),
+      showClientInfo: this.parseBool(showClientInfo),
       showSignature: this.parseBool(showSignature),
       showClientSignature: this.parseBool(showClientSignature),
       showCompanySignature: this.parseBool(showCompanySignature),
       showCompanyStamp: this.parseBool(showCompanyStamp),
       overridePaymentTerms,
+      overrideClientAddress: clientAddress,
+      overrideClientContact: clientContact,
+      overrideClientPhone: clientPhone,
     });
 
     res.set({

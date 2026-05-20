@@ -83,6 +83,7 @@ export default function InvoicePdfPreviewPage() {
   const [html, setHtml] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -213,15 +214,26 @@ export default function InvoicePdfPreviewPage() {
     }
   };
 
-  const handlePrint = () => {
-    const iframeWindow = iframeRef.current?.contentWindow;
-    if (!iframeWindow || !html) {
-      alert('預覽尚未載入完成');
-      return;
-    }
+  const handlePrint = async () => {
+    setPrinting(true);
+    try {
+      const res = await invoicesApi.exportPdf(invoiceId, requestParams);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const pdfWindow = window.open(url, '_blank', 'noopener,noreferrer');
 
-    iframeWindow.focus();
-    iframeWindow.print();
+      if (!pdfWindow) {
+        window.URL.revokeObjectURL(url);
+        alert('瀏覽器已阻擋彈出視窗，請允許彈出視窗後再列印');
+        return;
+      }
+
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '開啟 PDF 列印視窗失敗');
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const updateOption = <K extends keyof PdfPreviewOptions>(
@@ -294,9 +306,9 @@ export default function InvoicePdfPreviewPage() {
           <button
             onClick={handlePrint}
             className="btn-secondary px-3 py-1.5 text-sm"
-            disabled={loadingPreview || !html}
+            disabled={printing || loadingPreview || !html}
           >
-            列印
+            {printing ? '開啟中...' : '列印'}
           </button>
           <button
             onClick={() => router.push(`/invoices/${invoiceId}`)}

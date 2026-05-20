@@ -359,9 +359,10 @@ export class InvoicePdfService {
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
-    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; }
-    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
-    .stamp-img { max-width: 100%; max-height: 48px; object-fit: contain; margin-bottom: 8px; }
+    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; position: relative; }
+    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; position: relative; z-index: 1; }
+    .stamp-wrapper { height: 0; position: relative; z-index: 2; }
+    .stamp-img { width: auto; max-width: 150px; max-height: 150px; object-fit: contain; transform: translateY(-132px); }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
@@ -388,7 +389,7 @@ export class InvoicePdfService {
           <table class="details-table">
             <tr><td>${labels.invoiceNo}</td><td>${this.escapeHtml(invoice.invoice_no || '')}</td></tr>
             <tr><td>${labels.invoiceDate}</td><td>${this.formatDate(invoice.date, options.language)}</td></tr>
-            <tr><td>${labels.dueDate}</td><td>${invoice.due_date ? this.formatDate(invoice.due_date, options.language) : '-'}</td></tr>
+            ${invoice.due_date ? `<tr><td>${labels.dueDate}</td><td>${this.formatDate(invoice.due_date, options.language)}</td></tr>` : ''}
           </table>
         </div>
       </div>
@@ -441,7 +442,8 @@ export class InvoicePdfService {
           <td>
             ${options.showCompanySignature ? `
             <div class="signature-block">
-              ${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : '<div class="signature-line"></div>'}
+              ${stampDataUri ? `<div class="stamp-wrapper"><img class="stamp-img" src="${stampDataUri}" /></div>` : ''}
+              <div class="signature-line"></div>
               <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
             </div>` : ''}
           </td>

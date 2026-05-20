@@ -44,18 +44,30 @@ const buildPagedPreviewHtml = (source: string, currentPage: number) => {
 
 type PdfPreviewOptions = {
   language: QuotationPdfLanguage;
+  show_client_address: boolean;
+  show_client_phone: boolean;
+  show_client_contact: boolean;
   show_client_signature: boolean;
   show_company_signature: boolean;
   show_company_stamp: boolean;
   override_payment_terms: string;
+  client_address: string;
+  client_contact: string;
+  client_phone: string;
 };
 
 const DEFAULT_OPTIONS: PdfPreviewOptions = {
   language: 'zh',
+  show_client_address: true,
+  show_client_phone: true,
+  show_client_contact: true,
   show_client_signature: true,
   show_company_signature: true,
   show_company_stamp: false,
   override_payment_terms: '',
+  client_address: '',
+  client_contact: '',
+  client_phone: '',
 };
 
 export default function QuotationPdfPreviewPage() {
@@ -69,6 +81,7 @@ export default function QuotationPdfPreviewPage() {
   const [html, setHtml] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -82,17 +95,30 @@ export default function QuotationPdfPreviewPage() {
   const requestParams = useMemo(
     () => ({
       language: options.language,
+      show_client_address: options.show_client_address,
+      show_client_phone: options.show_client_phone,
+      show_client_contact: options.show_client_contact,
+      show_client_info: true,
       show_client_signature: options.show_client_signature,
       show_company_signature: options.show_company_signature,
       show_company_stamp: options.show_company_stamp,
       override_payment_terms: options.override_payment_terms,
+      client_address: options.client_address,
+      client_contact: options.client_contact,
+      client_phone: options.client_phone,
     }),
     [
       options.language,
+      options.show_client_address,
+      options.show_client_phone,
+      options.show_client_contact,
       options.show_client_signature,
       options.show_company_signature,
       options.show_company_stamp,
       options.override_payment_terms,
+      options.client_address,
+      options.client_contact,
+      options.client_phone,
     ],
   );
 
@@ -103,7 +129,13 @@ export default function QuotationPdfPreviewPage() {
       .get(quotationId)
       .then((res) => {
         setQuotation(res.data);
-        setOptions(prev => ({ ...prev, override_payment_terms: res.data.payment_terms || '' }));
+        setOptions(prev => ({
+          ...prev,
+          override_payment_terms: res.data.payment_terms || '',
+          client_address: prev.client_address || res.data.client?.address || '',
+          client_contact: prev.client_contact || res.data.client?.contact_person || '',
+          client_phone: prev.client_phone || res.data.client?.phone || '',
+        }));
       })
       .catch(() => router.push('/quotations'));
   }, [quotationId, router]);
@@ -178,15 +210,26 @@ export default function QuotationPdfPreviewPage() {
     }
   };
 
-  const handlePrint = () => {
-    const iframeWindow = iframeRef.current?.contentWindow;
-    if (!iframeWindow || !html) {
-      alert('預覽尚未載入完成');
-      return;
-    }
+  const handlePrint = async () => {
+    setPrinting(true);
+    try {
+      const res = await quotationsApi.exportPdf(quotationId, requestParams);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const pdfWindow = window.open(url, '_blank', 'noopener,noreferrer');
 
-    iframeWindow.focus();
-    iframeWindow.print();
+      if (!pdfWindow) {
+        window.URL.revokeObjectURL(url);
+        alert('瀏覽器已阻擋彈出視窗，請允許彈出視窗後再列印');
+        return;
+      }
+
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '開啟 PDF 列印視窗失敗');
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const updateOption = <K extends keyof PdfPreviewOptions>(
@@ -259,9 +302,9 @@ export default function QuotationPdfPreviewPage() {
           <button
             onClick={handlePrint}
             className="btn-secondary px-3 py-1.5 text-sm"
-            disabled={loadingPreview || !html}
+            disabled={printing || loadingPreview || !html}
           >
-            列印
+            {printing ? '開啟中...' : '列印'}
           </button>
           <button
             onClick={() => router.push(`/quotations/${quotationId}`)}
@@ -286,30 +329,87 @@ export default function QuotationPdfPreviewPage() {
               <option value="bilingual">雙語</option>
             </select>
           </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={options.show_client_signature}
-              onChange={(e) => updateOption('show_client_signature', e.target.checked)}
-            />
-            客戶簽名欄
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={options.show_company_signature}
-              onChange={(e) => updateOption('show_company_signature', e.target.checked)}
-            />
-            公司簽名欄
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={options.show_company_stamp}
-              onChange={(e) => updateOption('show_company_stamp', e.target.checked)}
-            />
-            蓋上公司印
-          </label>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={options.show_client_signature}
+                onChange={(e) => updateOption('show_client_signature', e.target.checked)}
+              />
+              客戶簽名欄
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={options.show_company_signature}
+                onChange={(e) => updateOption('show_company_signature', e.target.checked)}
+              />
+              公司簽名欄
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={options.show_company_stamp}
+                onChange={(e) => updateOption('show_company_stamp', e.target.checked)}
+              />
+              蓋上公司印
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+          <div className="mb-2 font-medium text-gray-800">客人資料顯示設定</div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_address}
+                  onChange={(e) => updateOption('show_client_address', e.target.checked)}
+                />
+                地址
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_address}
+                onChange={(e) => updateOption('client_address', e.target.value)}
+                placeholder="客人地址"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_contact}
+                  onChange={(e) => updateOption('show_client_contact', e.target.checked)}
+                />
+                聯絡人
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_contact}
+                onChange={(e) => updateOption('client_contact', e.target.value)}
+                placeholder="聯絡人"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
+                <input
+                  type="checkbox"
+                  checked={options.show_client_phone}
+                  onChange={(e) => updateOption('show_client_phone', e.target.checked)}
+                />
+                電話
+              </span>
+              <input
+                className="input-field h-9 text-sm"
+                value={options.client_phone}
+                onChange={(e) => updateOption('client_phone', e.target.value)}
+                placeholder="客人電話"
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">預設值來自合作單位的客人資料；你也可以在此頁即時填改後預覽、列印或下載。</p>
         </div>
 
         <div className="mt-3">

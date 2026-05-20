@@ -8,11 +8,18 @@ export type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
 
 export interface QuotationPdfOptions {
   language?: QuotationPdfLanguage;
+  showClientAddress?: boolean;
+  showClientPhone?: boolean;
+  showClientContact?: boolean;
+  showClientInfo?: boolean;
   showSignature?: boolean;
   showClientSignature?: boolean;
   showCompanySignature?: boolean;
   showCompanyStamp?: boolean;
   overridePaymentTerms?: string;
+  overrideClientAddress?: string;
+  overrideClientContact?: string;
+  overrideClientPhone?: string;
 }
 
 @Injectable()
@@ -87,16 +94,27 @@ export class QuotationPdfService {
     const showClientSignature = options.showClientSignature ?? legacyShowSignature;
     const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
     const showCompanyStamp = options.showCompanyStamp ?? false;
+    const showClientAddress = options.showClientAddress ?? true;
+    const showClientPhone = options.showClientPhone ?? true;
+    const showClientContact = options.showClientContact ?? true;
+    const showClientInfo = options.showClientInfo ?? true;
 
     return {
       quotation,
       html: this.buildHtml(quotation as any, {
         language,
+        showClientAddress,
+        showClientPhone,
+        showClientContact,
+        showClientInfo,
         showSignature: showClientSignature || showCompanySignature,
         showClientSignature,
         showCompanySignature,
         showCompanyStamp,
         overridePaymentTerms: options.overridePaymentTerms ?? '',
+        overrideClientAddress: options.overrideClientAddress ?? '',
+        overrideClientContact: options.overrideClientContact ?? '',
+        overrideClientPhone: options.overrideClientPhone ?? '',
       }),
     };
   }
@@ -114,6 +132,9 @@ export class QuotationPdfService {
     const quotationAddress = company.invoice_address || company.address || '';
     const quotationPhone = company.invoice_phone || company.phone || '';
     const quotationFax = company.invoice_fax || '';
+    const displayClientAddress = options.overrideClientAddress || client.address || '';
+    const displayClientContact = options.overrideClientContact || client.contact_person || '';
+    const displayClientPhone = options.overrideClientPhone || client.phone || '';
     const companyMetaLines = [
       quotationAddress ? this.escapeHtml(quotationAddress) : '',
       [quotationPhone ? `Tel: ${this.escapeHtml(quotationPhone)}` : '', quotationFax ? `Fax: ${this.escapeHtml(quotationFax)}` : ''].filter(Boolean).join(' &nbsp; '),
@@ -122,6 +143,28 @@ export class QuotationPdfService {
     const paymentTerms = options.overridePaymentTerms !== undefined 
       ? options.overridePaymentTerms 
       : (quotation.payment_terms || '');
+
+    const clientLines = [
+      options.showClientAddress && displayClientAddress
+        ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(displayClientAddress)}</span></div>`
+        : '',
+      options.showClientContact && displayClientContact
+        ? `<div><strong>${labels.contact}：</strong><span class="muted">${this.escapeHtml(displayClientContact)}</span></div>`
+        : '',
+      options.showClientPhone && displayClientPhone
+        ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(displayClientPhone)}</span></div>`
+        : '',
+    ].join('');
+    const clientSectionHtml = options.showClientInfo
+      ? `
+      <div class="client-section">
+        <div class="section-label">${labels.to}</div>
+        <div class="client-box">
+          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+          ${clientLines}
+        </div>
+      </div>`
+      : '';
 
     const itemRows = (quotation.items || [])
       .map((item: any, idx: number) => {
@@ -176,6 +219,7 @@ export class QuotationPdfService {
     .info-row { margin-bottom: 12px; }
     .client-section { width: 58%; padding-right: 16px; }
     .invoice-details { width: 42%; }
+    .invoice-details.full { width: 100%; }
     .section-label { color: ${theme}; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; margin-bottom: 6px; text-transform: uppercase; }
     .client-box, .details-box { border: 1px solid ${themeLightBorder}; border-left: 4px solid ${theme}; padding: 8px 10px; min-height: 72px; background: ${themeLightBg}; }
     .client-name { font-size: 13px; font-weight: 800; color: #243b53; margin-bottom: 5px; }
@@ -209,9 +253,10 @@ export class QuotationPdfService {
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
-    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; }
-    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
-    .stamp-img { max-width: 100%; max-height: 48px; object-fit: contain; margin-bottom: 8px; }
+    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; position: relative; }
+    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; position: relative; z-index: 1; }
+    .stamp-wrapper { height: 0; position: relative; z-index: 2; }
+    .stamp-img { width: auto; max-width: 150px; max-height: 150px; object-fit: contain; transform: translateY(-132px); }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
@@ -231,20 +276,14 @@ export class QuotationPdfService {
     </div>
     <div class="subtle-line"></div>
     <div class="info-row">
-      <div class="client-section">
-        <div class="section-label">${labels.to}</div>
-        <div class="client-box">
-          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
-          ${client.address ? `<div><strong>${labels.address}：</strong><span class="muted">${this.escapeHtml(client.address)}</span></div>` : ''}
-          ${client.phone ? `<div><strong>${labels.phone}：</strong><span class="muted">${this.escapeHtml(client.phone)}</span></div>` : ''}
-        </div>
-      </div>
-      <div class="invoice-details">
+      ${clientSectionHtml}
+      <div class="invoice-details${options.showClientInfo ? '' : ' full'}">
         <div class="section-label">${labels.quotationDetails}</div>
         <div class="details-box">
           <table class="details-table">
             <tr><td>${labels.quotationNo}</td><td>${this.escapeHtml(quotation.quotation_no || '')}</td></tr>
             <tr><td>${labels.quotationDate}</td><td>${this.formatDate(quotation.quotation_date, options.language)}</td></tr>
+            ${quotation.valid_until ? `<tr><td>${labels.validityPeriod}</td><td>${this.formatDate(quotation.valid_until, options.language)}</td></tr>` : ''}
           </table>
         </div>
       </div>
@@ -288,7 +327,8 @@ export class QuotationPdfService {
           <td>
             ${options.showCompanySignature ? `
             <div class="signature-block">
-              ${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : '<div class="signature-line"></div>'}
+              ${stampDataUri ? `<div class="stamp-wrapper"><img class="stamp-img" src="${stampDataUri}" /></div>` : ''}
+              <div class="signature-line"></div>
               <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
             </div>` : ''}
           </td>
@@ -320,6 +360,7 @@ export class QuotationPdfService {
       quotationDate: 'Quotation Date',
       address: '地址 Address',
       phone: '電話 Phone',
+      contact: '聯絡人 Contact',
       no: '編號',
       item: '項目',
       quantity: '數量',
@@ -343,6 +384,7 @@ export class QuotationPdfService {
         quotationDetails: 'Quotation Details',
         address: 'Address',
         phone: 'Phone',
+        contact: 'Contact',
         no: 'No.',
         item: 'Item',
         quantity: 'Qty',
@@ -368,6 +410,7 @@ export class QuotationPdfService {
         quotationDate: '報價單日期',
         address: '地址',
         phone: '電話',
+        contact: '聯絡人',
         total: '總數 (HKD)',
         paymentTerms: '付款條款',
         authorizedSignature: '公司簽署',
