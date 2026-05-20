@@ -73,6 +73,7 @@ export class ExpensesService {
       where.OR = [
         { item: { contains: query.search, mode: 'insensitive' } },
         { supplier_name: { contains: query.search, mode: 'insensitive' } },
+        { expense_receipt_number: { contains: query.search, mode: 'insensitive' } },
         { payment_ref: { contains: query.search, mode: 'insensitive' } },
         { remarks: { contains: query.search, mode: 'insensitive' } },
         { machine_code: { contains: query.search, mode: 'insensitive' } },
@@ -80,7 +81,7 @@ export class ExpensesService {
     }
 
     const allowedSortFields = [
-      'id', 'date', 'company_id', 'supplier_name', 'category_id',
+      'id', 'date', 'company_id', 'supplier_name', 'expense_receipt_number', 'category_id',
       'employee_id', 'item', 'total_amount', 'is_paid',
       'payment_date', 'payment_ref', 'machine_code', 'created_at', 'created_by', 'source',
       'expense_payment_method',
@@ -139,6 +140,22 @@ export class ExpensesService {
     if ('total_amount' in data) data.total_amount = Number(data.total_amount) || 0;
     if ('is_paid' in data) data.is_paid = Boolean(data.is_paid);
 
+    if ('receipt_no' in data && !data.expense_receipt_number) {
+      data.expense_receipt_number = data.receipt_no;
+    }
+    delete data.receipt_no;
+
+    if ('supplier_name' in data) {
+      data.supplier_name = typeof data.supplier_name === 'string' && data.supplier_name.trim()
+        ? data.supplier_name.trim()
+        : null;
+    }
+    if ('expense_receipt_number' in data) {
+      data.expense_receipt_number = typeof data.expense_receipt_number === 'string' && data.expense_receipt_number.trim()
+        ? data.expense_receipt_number.trim()
+        : null;
+    }
+
     // Normalize source
     if ('source' in data) {
       if (!data.source || !EXPENSE_SOURCES.includes(data.source)) {
@@ -149,9 +166,57 @@ export class ExpensesService {
     return data;
   }
 
+  private async ensureSupplierPartner(data: any) {
+    if (!('supplier_name' in data) && !('supplier_partner_id' in data)) return;
+
+    const supplierName = typeof data.supplier_name === 'string' ? data.supplier_name.trim() : '';
+
+    if (data.supplier_partner_id) {
+      const supplier = await this.prisma.partner.findFirst({
+        where: { id: Number(data.supplier_partner_id), deleted_at: null },
+        select: { id: true, name: true },
+      });
+      if (supplier) {
+        data.supplier_partner_id = supplier.id;
+        data.supplier_name = supplier.name;
+      }
+      return;
+    }
+
+    if (!supplierName) {
+      data.supplier_name = null;
+      data.supplier_partner_id = null;
+      return;
+    }
+
+    let supplier = await this.prisma.partner.findFirst({
+      where: {
+        name: { equals: supplierName, mode: 'insensitive' },
+        partner_type: 'supplier',
+        deleted_at: null,
+      },
+      select: { id: true, name: true },
+    });
+
+    if (!supplier) {
+      supplier = await this.prisma.partner.create({
+        data: {
+          name: supplierName,
+          partner_type: 'supplier',
+          status: 'active',
+        },
+        select: { id: true, name: true },
+      });
+    }
+
+    data.supplier_partner_id = supplier.id;
+    data.supplier_name = supplier.name;
+  }
+
   async create(dto: any, userId?: number, ipAddress?: string) {
     const data = this.normalizeDto(dto);
     await this.assertVehicleIsNotScrappedByExpenseData(data);
+    await this.ensureSupplierPartner(data);
     // Set default source if not provided
     if (!data.source) data.source = 'MANUAL';
     if (userId) data.created_by = userId;
@@ -178,6 +243,7 @@ export class ExpensesService {
     const { id: _id, created_at, updated_at, created_by, creator, ...rest } = dto;
     const data = this.normalizeDto(rest);
     await this.assertVehicleIsNotScrappedByExpenseData(data);
+    await this.ensureSupplierPartner(data);
     const updated = await this.prisma.expense.update({ where: { id }, data });
     if (userId) {
       try {
@@ -220,6 +286,7 @@ export class ExpensesService {
     for (const dto of expenses) {
       const data = this.normalizeDto(dto);
       await this.assertVehicleIsNotScrappedByExpenseData(data);
+      await this.ensureSupplierPartner(data);
       if (!data.source) data.source = 'MANUAL';
       const saved = await this.prisma.expense.create({ data });
       createdIds.push(saved.id);

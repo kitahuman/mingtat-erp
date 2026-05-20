@@ -134,6 +134,7 @@ export default function ExpensesPage() {
     company_id: '',
     supplier_name: '',
     supplier_partner_id: '',
+    expense_receipt_number: '',
     category_id: '',
     _parent_category_id: '',
     employee_id: '',
@@ -246,6 +247,13 @@ export default function ExpensesPage() {
   );
   const partnerOptions = useMemo(
     () => partners.map((p: any) => ({ value: p.id, label: p.name })),
+    [partners],
+  );
+  const supplierNameOptions = useMemo(
+    () =>
+      partners
+        .filter((p: any) => p.partner_type === 'supplier')
+        .map((p: any) => ({ value: p.name, label: p.name })),
     [partners],
   );
   const employeeOptions = useMemo(
@@ -361,6 +369,7 @@ export default function ExpensesPage() {
       setForm({ ...defaultForm });
       setSupplierInput('');
       load();
+      loadReferenceData();
     } catch (err: any) {
       alert(err.response?.data?.message || '新增失敗');
     }
@@ -407,6 +416,7 @@ export default function ExpensesPage() {
     // payment_status is already a string, no conversion needed
     await expensesApi.update(id, payload);
     load();
+    loadReferenceData();
   };
 
   const handleInlineDelete = async (id: number) => {
@@ -462,12 +472,28 @@ export default function ExpensesPage() {
       label: '供應商',
       sortable: true,
       editable: true,
-      editType: 'text',
+      editRender: (value: any, onChange: (v: any) => void) => (
+        <InlineCombobox
+          value={value}
+          onChange={onChange}
+          options={supplierNameOptions}
+          placeholder="搜尋或輸入供應商"
+        />
+      ),
       minWidth: 190,
       render: (_: any, row: any) =>
         renderTruncatedText(row.supplier?.name || row.supplier_name),
       filterRender: (_: any, row: any) =>
         row.supplier?.name || row.supplier_name || '-',
+    },
+    {
+      key: 'expense_receipt_number',
+      label: '單號',
+      sortable: true,
+      editable: true,
+      editType: 'text',
+      minWidth: 140,
+      render: (v: any) => renderTruncatedText(v),
     },
     {
       key: 'category_id',
@@ -845,7 +871,7 @@ export default function ExpensesPage() {
             setSearch(v);
             setPage(1);
           }}
-          searchPlaceholder="搜尋項目、供應商、付款內容..."
+          searchPlaceholder="搜尋項目、供應商、單號、付款內容..."
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
@@ -1051,6 +1077,21 @@ export default function ExpensesPage() {
                   ))}
                 </div>
               )}
+            </div>
+            {/* Receipt number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                單號
+              </label>
+              <input
+                type="text"
+                value={form.expense_receipt_number}
+                onChange={(e) =>
+                  setForm({ ...form, expense_receipt_number: e.target.value })
+                }
+                className="input-field"
+                placeholder="輸入單號"
+              />
             </div>
             {/* Category cascading */}
             <div>

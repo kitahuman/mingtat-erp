@@ -158,8 +158,9 @@ export default function ExpenseDetailPage() {
     return {
       date: e.date ? e.date.slice(0, 10) : '',
       company_id: e.company_id || '',
-      supplier_name: e.supplier_name || '',
+      supplier_name: e.supplier?.name || e.supplier_name || '',
       supplier_partner_id: e.supplier_partner_id || '',
+      expense_receipt_number: e.expense_receipt_number || '',
       category_id: e.category_id || '',
       _parent_category_id:
         e.category?.parent_id || e.category?.parent?.id || '',
@@ -209,6 +210,7 @@ export default function ExpenseDetailPage() {
         payload.payment_date = null;
       await expensesApi.update(expenseId, payload);
       await loadExpense();
+      loadReferenceData();
       setEditMode(false);
     } catch (err: any) {
       alert(err.response?.data?.message || '儲存失敗');
@@ -504,20 +506,42 @@ export default function ExpenseDetailPage() {
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 供應商
               </label>
-              <SearchableSelect
-                value={form.supplier_partner_id || null}
-                onChange={(v) => {
+              <input
+                list="expense-detail-supplier-options"
+                type="text"
+                value={form.supplier_name || ''}
+                onChange={(e) => {
+                  const rawValue = e.target.value;
                   const supplier = supplierOptions.find(
-                    (p: any) => String(p.value) === String(v ?? ''),
+                    (p: any) => p.label === rawValue,
                   );
                   setForm({
                     ...form,
-                    supplier_partner_id: v || '',
-                    supplier_name: supplier?.label || '',
+                    supplier_name: rawValue,
+                    supplier_partner_id: supplier?.value || '',
                   });
                 }}
-                options={supplierOptions}
-                placeholder="搜尋供應商..."
+                className="input-field text-sm"
+                placeholder="搜尋或輸入供應商..."
+              />
+              <datalist id="expense-detail-supplier-options">
+                {supplierOptions.map((p: any) => (
+                  <option key={p.value} value={p.label} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                單號
+              </label>
+              <input
+                type="text"
+                value={form.expense_receipt_number || ''}
+                onChange={(e) =>
+                  setForm({ ...form, expense_receipt_number: e.target.value })
+                }
+                className="input-field text-sm"
+                placeholder="輸入單號"
               />
             </div>
             <div>
@@ -743,6 +767,7 @@ export default function ExpenseDetailPage() {
             <Field label="供應商">
               {expense.supplier?.name || expense.supplier_name}
             </Field>
+            <Field label="單號">{expense.expense_receipt_number}</Field>
             <Field label="類別">{categoryLabel}</Field>
             <Field label="報銷者">{expense.employee?.name_zh}</Field>
             <Field label="發佈人">

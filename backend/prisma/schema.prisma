@@ -1640,6 +1640,7 @@ model Expense {
   company_id             Int?
   supplier_name          String?
   supplier_partner_id    Int?
+  expense_receipt_number String?
   category_id            Int?
   employee_id            Int?
   item                   String?

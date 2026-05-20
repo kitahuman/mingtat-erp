@@ -12,6 +12,7 @@ export class CreateExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() supplier_name?: string;
   @IsOptional() @Type(() => Number) @IsNumber() supplier_partner_id?: number;
+  @IsOptional() @IsString() expense_receipt_number?: string;
   @IsOptional() @Type(() => Number) @IsNumber() category_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() employee_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() machinery_id?: number;
