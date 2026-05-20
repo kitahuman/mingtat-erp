@@ -54,7 +54,7 @@ export class CompaniesController {
               : file.mimetype === 'image/gif'
                 ? '.gif'
                 : '.jpg';
-          cb(null, `stamp${originalExt || mimeExt}`);
+          cb(null, `stamp-${Date.now()}${originalExt || mimeExt}`);
         },
       }),
       fileFilter: (_req, file, cb) => {

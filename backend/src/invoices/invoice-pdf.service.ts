@@ -295,7 +295,6 @@ export class InvoicePdfService {
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
-    @page { margin: 0; size: A4; }
     html, body {
       margin: 0; padding: 0; background: #ffffff; color: #1f2933;
       font-family: "Noto Sans CJK TC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang TC", "Heiti TC", Arial, sans-serif;

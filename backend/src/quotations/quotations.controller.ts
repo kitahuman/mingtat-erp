@@ -75,6 +75,7 @@ export class QuotationsController {
     @Query('show_signature') showSignature: string,
     @Query('show_client_signature') showClientSignature: string,
     @Query('show_company_signature') showCompanySignature: string,
+    @Query('show_company_stamp') showCompanyStamp: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -83,6 +84,7 @@ export class QuotationsController {
       showSignature: this.parseBool(showSignature),
       showClientSignature: this.parseBool(showClientSignature),
       showCompanySignature: this.parseBool(showCompanySignature),
+      showCompanyStamp: this.parseBool(showCompanyStamp),
       overridePaymentTerms,
     });
 
@@ -101,6 +103,7 @@ export class QuotationsController {
     @Query('show_signature') showSignature: string,
     @Query('show_client_signature') showClientSignature: string,
     @Query('show_company_signature') showCompanySignature: string,
+    @Query('show_company_stamp') showCompanyStamp: string,
     @Query('override_payment_terms') overridePaymentTerms: string,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -109,6 +112,7 @@ export class QuotationsController {
       showSignature: this.parseBool(showSignature),
       showClientSignature: this.parseBool(showClientSignature),
       showCompanySignature: this.parseBool(showCompanySignature),
+      showCompanyStamp: this.parseBool(showCompanyStamp),
       overridePaymentTerms,
     });
 
