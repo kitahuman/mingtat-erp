@@ -1138,7 +1138,7 @@ export class AiChatService {
   }
 
   private async getInvoices(status?: string, search?: string, limit?: number) {
-    const where: any = {};
+    const where: any = { invoice_is_active: true };
     if (status && status !== 'all') where.status = status;
     if (search) {
       where.OR = [
@@ -1725,7 +1725,10 @@ export class AiChatService {
 
     if (searchTables.includes('invoices')) {
       const invoices = await this.prisma.invoice.findMany({
-        where: { invoice_no: { contains: q, mode: 'insensitive' } },
+        where: {
+          invoice_is_active: true,
+          invoice_no: { contains: q, mode: 'insensitive' },
+        },
         select: { invoice_no: true, date: true, total_amount: true, status: true },
         take: 5,
       });

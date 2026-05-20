@@ -499,7 +499,10 @@ export class DashboardService {
     const monthProfit = monthRevenue - monthExpense;
 
     const invoiceArAgg = await this.prisma.invoice.aggregate({
-      where: { status: { notIn: ['void', 'draft', 'paid'] } },
+      where: {
+        status: { notIn: ['void', 'draft', 'paid'] },
+        invoice_is_active: true,
+      },
       _sum: { outstanding: true },
     });
     const invoiceAr = this.toNum(invoiceArAgg._sum.outstanding);
@@ -563,7 +566,11 @@ export class DashboardService {
         }
       }
       const invoiceAgg = await this.prisma.invoice.aggregate({
-        where: { project_id: project.id, status: { notIn: ['void', 'draft'] } },
+        where: {
+          project_id: project.id,
+          status: { notIn: ['void', 'draft'] },
+          invoice_is_active: true,
+        },
         _sum: { total_amount: true },
       });
       revenue += this.toNum(invoiceAgg._sum.total_amount);
@@ -608,7 +615,11 @@ export class DashboardService {
     const thirtyDaysLater = new Date();
     thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
     const upcomingInvoices = await this.prisma.invoice.findMany({
-      where: { status: { in: ['issued', 'partially_paid'] }, due_date: { lte: thirtyDaysLater } },
+      where: {
+        status: { in: ['issued', 'partially_paid'] },
+        due_date: { lte: thirtyDaysLater },
+        invoice_is_active: true,
+      },
       include: { client: { select: { name: true } } },
       orderBy: { due_date: 'asc' },
       take: 10,
@@ -770,7 +781,7 @@ export class DashboardService {
     const monthExpense = this.toNum(monthExpenseAgg._sum.total_amount);
     const monthProfit = monthRevenue - monthExpense;
 
-    const invoiceArAgg = await this.prisma.invoice.aggregate({ where: { status: { notIn: ['void', 'draft', 'paid'] } }, _sum: { outstanding: true } });
+    const invoiceArAgg = await this.prisma.invoice.aggregate({ where: { status: { notIn: ['void', 'draft', 'paid'] }, invoice_is_active: true }, _sum: { outstanding: true } });
     const invoiceAr = this.toNum(invoiceArAgg._sum.outstanding);
     const openIpas = await this.prisma.paymentApplication.findMany({ where: { status: { notIn: ['void', 'draft'] } }, select: { certified_amount: true, client_certified_amount: true, paid_amount: true } });
     let ipaAr = 0;
@@ -807,7 +818,7 @@ export class DashboardService {
         const latestIpa = await this.prisma.paymentApplication.findFirst({ where: { contract_id: project.contract_id, status: { notIn: ['void', 'draft'] } }, orderBy: { pa_no: 'desc' } });
         if (latestIpa) revenue = this.toNum(latestIpa.client_certified_amount) || this.toNum(latestIpa.certified_amount);
       }
-      const invoiceAgg = await this.prisma.invoice.aggregate({ where: { project_id: project.id, status: { notIn: ['void', 'draft'] } }, _sum: { total_amount: true } });
+      const invoiceAgg = await this.prisma.invoice.aggregate({ where: { project_id: project.id, status: { notIn: ['void', 'draft'] }, invoice_is_active: true }, _sum: { total_amount: true } });
       revenue += this.toNum(invoiceAgg._sum.total_amount);
       const expenseAgg = await this.prisma.expense.aggregate({ where: { project_id: project.id }, _sum: { total_amount: true } });
       const cost = this.toNum(expenseAgg._sum.total_amount);
@@ -825,7 +836,7 @@ export class DashboardService {
     const unmatchedBankTx = await this.prisma.bankTransaction.count({ where: { match_status: 'unmatched' } });
     const thirtyDaysLater = new Date();
     thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
-    const upcomingInvoices = await this.prisma.invoice.findMany({ where: { status: { in: ['issued', 'partially_paid'] }, due_date: { lte: thirtyDaysLater } }, include: { client: { select: { name: true } } }, orderBy: { due_date: 'asc' }, take: 10 });
+    const upcomingInvoices = await this.prisma.invoice.findMany({ where: { status: { in: ['issued', 'partially_paid'] }, due_date: { lte: thirtyDaysLater }, invoice_is_active: true }, include: { client: { select: { name: true } } }, orderBy: { due_date: 'asc' }, take: 10 });
     const unconfirmedIpas = await this.prisma.paymentApplication.count({ where: { status: 'draft' } });
     const pendingLeaves = await this.prisma.employeeLeave.count({ where: { status: 'pending' } });
 

@@ -2061,6 +2061,9 @@ model Invoice {
   invoice_show_client_address  Boolean   @default(true)
   invoice_show_client_phone    Boolean   @default(true)
   remarks                      String?   @db.Text
+  invoice_parent_id            Int?
+  invoice_revision_number      Int       @default(0)
+  invoice_is_active            Boolean   @default(true)
   created_at         DateTime  @default(now())
   updated_at         DateTime  @default(now()) @updatedAt
   deleted_at         DateTime? // 軯刪除時間時戳
@@ -2071,6 +2074,8 @@ model Invoice {
   project                Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
   quotation              Quotation?            @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
   company                Company               @relation(fields: [company_id], references: [id])
+  parent_invoice         Invoice?              @relation("InvoiceRevisionParent", fields: [invoice_parent_id], references: [id], onDelete: SetNull)
+  revisions              Invoice[]             @relation("InvoiceRevisionParent")
   items                  InvoiceItem[]
   payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
   invoice_work_logs      InvoiceWorkLog[]
@@ -2083,6 +2088,8 @@ model Invoice {
   @@index([company_id])
   @@index([status])
   @@index([date])
+  @@index([invoice_parent_id])
+  @@index([invoice_is_active])
   @@index([deleted_at])
   @@map("invoices")
 }

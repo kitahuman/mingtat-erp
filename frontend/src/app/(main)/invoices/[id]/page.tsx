@@ -35,6 +35,21 @@ const STATUS_COLORS: Record<string, string> = {
   void: 'bg-red-100 text-red-700',
 };
 
+type InvoiceRevisionSummary = {
+  id: number;
+  invoice_no: string;
+  date: string;
+  total_amount?: number | string | null;
+  invoice_parent_id?: number | null;
+  invoice_revision_number: number;
+  invoice_is_active: boolean;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+const revisionLabel = (revisionNumber: number) =>
+  revisionNumber === 0 ? '原始版' : `R${revisionNumber}`;
+
 function Field({
   label,
   children,
@@ -61,10 +76,15 @@ export default function InvoiceDetailPage() {
 
   const { isReadOnly } = useAuth();
   const [invoice, setInvoice] = useState<any>(null);
+  const currentInvoiceId = Number(invoice?.id || invoiceId);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [revisions, setRevisions] = useState<InvoiceRevisionSummary[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [creatingRevision, setCreatingRevision] = useState(false);
+  const [settingActiveId, setSettingActiveId] = useState<number | null>(null);
 
   // Reference data
   const [partners, setPartners] = useState<any[]>([]);
@@ -89,6 +109,18 @@ export default function InvoiceDetailPage() {
   const [linkedWorkLogs, setLinkedWorkLogs] = useState<any[]>([]);
   const [linkedWorkLogsLoading, setLinkedWorkLogsLoading] = useState(false);
 
+  const loadRevisions = async (targetInvoiceId: number = invoiceId) => {
+    setRevisionsLoading(true);
+    try {
+      const res = await invoicesApi.getRevisions(targetInvoiceId);
+      setRevisions(res.data || []);
+    } catch {
+      setRevisions([]);
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
   const loadInvoice = async () => {
     try {
       const res = await invoicesApi.get(invoiceId);
@@ -102,6 +134,7 @@ export default function InvoiceDetailPage() {
         other_charges: data.other_charges || [],
         retention_rate: Number(data.retention_rate) || 0,
       });
+      await loadRevisions(Number(data.id));
     } catch {
       router.push('/invoices');
     } finally {
@@ -215,11 +248,55 @@ export default function InvoiceDetailPage() {
   );
   const formTotal = formSubtotal - formRetention + formOtherChargesTotal;
 
+  const handleSwitchRevision = (revisionId: number) => {
+    if (revisionId === currentInvoiceId) return;
+    if (editing && !confirm('切換版本會放棄尚未儲存的修改，是否繼續？')) return;
+    router.push(`/invoices/${revisionId}`);
+  };
+
+  const handleCreateRevision = async () => {
+    if (isReadOnly) return;
+    if (!confirm('確定要以目前版本內容建立新的修訂版嗎？')) return;
+    setCreatingRevision(true);
+    try {
+      const res = await invoicesApi.createRevision(currentInvoiceId);
+      const newRevisionId = Number(res.data?.id);
+      await loadRevisions(currentInvoiceId);
+      if (newRevisionId) {
+        router.push(`/invoices/${newRevisionId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '建立修訂版失敗');
+    } finally {
+      setCreatingRevision(false);
+    }
+  };
+
+  const handleSetActiveRevision = async (revisionId: number) => {
+    if (isReadOnly) return;
+    if (!confirm('確定要將此版本設為正式版嗎？同組其他版本會改為非正式。'))
+      return;
+    setSettingActiveId(revisionId);
+    try {
+      await invoicesApi.setActiveRevision(revisionId);
+      await loadRevisions(revisionId);
+      if (revisionId === currentInvoiceId) {
+        await loadInvoice();
+      } else {
+        router.push(`/invoices/${revisionId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '設為正式版失敗');
+    } finally {
+      setSettingActiveId(null);
+    }
+  };
+
   const handleUnlinkWorkLog = async (workLogId: number) => {
     if (isReadOnly) return;
     if (!confirm('確定要解除此工作紀錄與發票的關聯嗎？')) return;
     try {
-      await invoicesApi.unlinkWorkLogs(invoiceId, [workLogId]);
+      await invoicesApi.unlinkWorkLogs(currentInvoiceId, [workLogId]);
       await loadLinkedWorkLogs();
     } catch (err: any) {
       alert(err.response?.data?.message || '解除關聯失敗');
@@ -230,6 +307,7 @@ export default function InvoiceDetailPage() {
     setSaving(true);
     try {
       const payload: any = {
+        invoice_no: form.invoice_no || null,
         date: form.date,
         due_date: form.due_date || null,
         company_id: form.company_id ? Number(form.company_id) : null,
@@ -252,7 +330,7 @@ export default function InvoiceDetailPage() {
           sort_order: idx + 1,
         })),
       };
-      await invoicesApi.update(invoiceId, payload);
+      await invoicesApi.update(currentInvoiceId, payload);
       await loadInvoice();
       setEditing(false);
     } catch (err: any) {
@@ -265,7 +343,7 @@ export default function InvoiceDetailPage() {
   const handleStatusChange = async (status: string) => {
     if (!confirm(`確定要將狀態更改為「${STATUS_LABELS[status]}」嗎？`)) return;
     try {
-      await invoicesApi.updateStatus(invoiceId, status);
+      await invoicesApi.updateStatus(currentInvoiceId, status);
       await loadInvoice();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
@@ -283,7 +361,7 @@ export default function InvoiceDetailPage() {
         date: paymentForm.date,
         amount: Number(paymentForm.amount),
         source_type: 'INVOICE',
-        source_ref_id: invoiceId,
+        source_ref_id: currentInvoiceId,
         project_id: invoice.project_id || undefined,
         bank_account_id: paymentForm.bank_account_id
           ? Number(paymentForm.bank_account_id)
@@ -337,7 +415,7 @@ export default function InvoiceDetailPage() {
   const handleDelete = async () => {
     if (!confirm('確定要刪除此發票嗎？此操作無法復原。')) return;
     try {
-      await invoicesApi.delete(invoiceId);
+      await invoicesApi.delete(currentInvoiceId);
       router.push('/invoices');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
@@ -392,11 +470,23 @@ export default function InvoiceDetailPage() {
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <button
-            onClick={() => router.push(`/invoices/${invoiceId}/pdf-preview`)}
+            onClick={() =>
+              router.push(`/invoices/${currentInvoiceId}/pdf-preview`)
+            }
             className="btn-primary"
           >
             匯出 PDF
           </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={handleCreateRevision}
+              disabled={creatingRevision}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {creatingRevision ? '建立中...' : '新增修訂版'}
+            </button>
+          )}
           {invoice.status === 'draft' && (
             <button
               onClick={() => handleStatusChange('issued')}
@@ -472,11 +562,158 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
+      {/* Revision History */}
+      <div className="card mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">版本歷史</h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              同一張發票可保留多個修訂版本，列表與主顯示只會使用標記為正式的版本。
+            </p>
+          </div>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={handleCreateRevision}
+              disabled={creatingRevision}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {creatingRevision ? '建立中...' : '新增修訂版'}
+            </button>
+          )}
+        </div>
+        {revisionsLoading ? (
+          <div className="py-6 text-center text-sm text-gray-400">
+            載入版本中...
+          </div>
+        ) : revisions.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    版本
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    發票編號
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    日期
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    金額
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    正式
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {revisions.map((revision) => {
+                  const isCurrent = revision.id === currentInvoiceId;
+                  return (
+                    <tr
+                      key={revision.id}
+                      className={isCurrent ? 'bg-indigo-50' : undefined}
+                    >
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {revisionLabel(revision.invoice_revision_number)}
+                        {isCurrent && (
+                          <span className="ml-2 text-xs text-indigo-600">
+                            目前查看
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-700">
+                        {revision.invoice_no}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {fmtDate(revision.date)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-mono text-gray-700">
+                        {fmt$(revision.total_amount || 0)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {revision.invoice_is_active ? (
+                          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                            正式版
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                            記錄版
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchRevision(revision.id)}
+                            disabled={isCurrent}
+                            className="text-xs text-primary-600 hover:text-primary-700 disabled:text-gray-400"
+                          >
+                            {isCurrent ? '查看中' : '查看'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              router.push(
+                                `/invoices/${revision.id}/pdf-preview`,
+                              )
+                            }
+                            className="text-xs text-gray-600 hover:text-gray-800"
+                          >
+                            PDF
+                          </button>
+                          {!isReadOnly && !revision.invoice_is_active && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSetActiveRevision(revision.id)
+                              }
+                              disabled={settingActiveId === revision.id}
+                              className="text-xs text-green-700 hover:text-green-800 disabled:text-gray-400"
+                            >
+                              {settingActiveId === revision.id
+                                ? '設定中...'
+                                : '設為正式版'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="py-4 text-sm text-gray-400">尚無修訂版本資料</p>
+        )}
+      </div>
+
       {/* Basic Info */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">發票資料</h2>
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                發票編號
+              </label>
+              <input
+                type="text"
+                value={form.invoice_no || ''}
+                onChange={(e) =>
+                  setForm({ ...form, invoice_no: e.target.value })
+                }
+                className="input-field font-mono"
+                placeholder="例如：INV-001-R1"
+              />
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 發票名稱/標題
@@ -999,7 +1236,9 @@ export default function InvoiceDetailPage() {
             </span>
             <button
               type="button"
-              onClick={() => router.push(`/invoices/${invoiceId}/prepare`)}
+              onClick={() =>
+                router.push(`/invoices/${currentInvoiceId}/prepare`)
+              }
               disabled={linkedWorkLogs.length === 0}
               className="rounded bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
               title={

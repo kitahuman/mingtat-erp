@@ -1121,6 +1121,10 @@ export const paymentInAllocationApi = {
 export const invoicesApi = {
   list: (params?: any) => api.get('/invoices', { params }),
   get: (id: number) => api.get(`/invoices/${id}`),
+  getRevisions: (id: number) => api.get(`/invoices/${id}/revisions`),
+  createRevision: (id: number) => api.post(`/invoices/${id}/revision`, {}),
+  setActiveRevision: (id: number) =>
+    api.patch(`/invoices/${id}/set-active`, {}),
   exportPdf: (id: number, params?: any) =>
     api.get(`/invoices/${id}/pdf`, { params, responseType: 'blob' }),
   getPdfHtml: (id: number, params?: any) =>

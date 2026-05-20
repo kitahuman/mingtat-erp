@@ -14,7 +14,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import type { Response } from 'express';
+import type { Request as ExpressRequest, Response } from 'express';
 import { InvoicesService } from './invoices.service';
 import { InvoicePdfService } from './invoice-pdf.service';
 import type { InvoicePdfLanguage } from './invoice-pdf.service';
@@ -27,7 +27,26 @@ import {
   MatchInvoiceRatesDto,
   UpdateInvoiceItemsDto,
   SaveInvoicePricingDraftDto,
+  CreateInvoiceRevisionDto,
+  SetActiveInvoiceRevisionDto,
 } from './dto/create-invoice.dto';
+
+type AuthenticatedInvoiceRequest = ExpressRequest & {
+  user?: { id?: number; userId?: number };
+};
+
+type InvoiceListQuery = {
+  page?: number;
+  limit?: number;
+  status?: string;
+  client_id?: number;
+  project_id?: number;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: string;
+};
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'))
@@ -43,8 +62,20 @@ export class InvoicesController {
       : !['false', '0', 'no'].includes(String(value).toLowerCase());
   }
 
+  private getUserId(req: AuthenticatedInvoiceRequest): number {
+    return req.user?.id || req.user?.userId || 0;
+  }
+
+  private getIpAddress(req: AuthenticatedInvoiceRequest): string | undefined {
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const forwardedValue = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : forwardedFor;
+    return forwardedValue?.split(',')[0]?.trim() || req.ip || undefined;
+  }
+
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: InvoiceListQuery) {
     return this.service.findAll(query);
   }
 
@@ -168,19 +199,42 @@ export class InvoicesController {
     );
   }
 
+  @Get(':id/revisions')
+  getRevisions(@Param('id') id: number) {
+    return this.service.getRevisions(Number(id));
+  }
+
+  @Post(':id/revision')
+  createRevision(
+    @Param('id') id: number,
+    @Body() dto: CreateInvoiceRevisionDto,
+  ) {
+    return this.service.createRevision(Number(id), dto);
+  }
+
+  @Patch(':id/set-active')
+  setActiveRevision(
+    @Param('id') id: number,
+    @Body() dto: SetActiveInvoiceRevisionDto,
+  ) {
+    void dto;
+    return this.service.setActive(Number(id));
+  }
+
   @Get(':id')
   findOne(@Param('id') id: number) {
     return this.service.findOne(Number(id));
   }
 
   @Post()
-  create(@Body() dto: CreateInvoiceDto, @Request() req: any) {
+  create(
+    @Body() dto: CreateInvoiceDto,
+    @Request() req: AuthenticatedInvoiceRequest,
+  ) {
     return this.service.create(
       dto,
-      req.user?.id || req.user?.userId || 0,
-      req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
-        req.ip ||
-        undefined,
+      this.getUserId(req),
+      this.getIpAddress(req),
     );
   }
 
@@ -188,12 +242,12 @@ export class InvoicesController {
   createFromQuotation(
     @Param('quotationId') quotationId: number,
     @Body() dto: CreateInvoiceDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedInvoiceRequest,
   ) {
     return this.service.createFromQuotation(
       Number(quotationId),
       dto,
-      req.user?.id || req.user?.userId || 0,
+      this.getUserId(req),
     );
   }
 
@@ -201,13 +255,9 @@ export class InvoicesController {
   update(
     @Param('id') id: number,
     @Body() dto: UpdateInvoiceDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedInvoiceRequest,
   ) {
-    return this.service.update(
-      Number(id),
-      dto,
-      req.user?.id || req.user?.userId || 0,
-    );
+    return this.service.update(Number(id), dto, this.getUserId(req));
   }
 
   @Patch(':id/status')
@@ -292,13 +342,11 @@ export class InvoicesController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: number, @Request() req: any) {
+  remove(@Param('id') id: number, @Request() req: AuthenticatedInvoiceRequest) {
     return this.service.delete(
       Number(id),
-      req.user?.id || req.user?.userId || 0,
-      req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
-        req.ip ||
-        undefined,
+      this.getUserId(req),
+      this.getIpAddress(req),
     );
   }
 }

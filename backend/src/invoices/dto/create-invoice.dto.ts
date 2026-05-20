@@ -9,6 +9,21 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export class InvoiceOtherChargeDto {
+  @IsString() name: string;
+  @Type(() => Number) @IsNumber() amount: number;
+}
+
+export class InvoiceItemInputDto {
+  @IsOptional() @IsString() item_name?: string;
+  @IsOptional() @IsString() description?: string;
+  @Type(() => Number) @IsNumber() quantity: number;
+  @IsOptional() @IsString() unit?: string;
+  @Type(() => Number) @IsNumber() unit_price: number;
+  @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() sort_order?: number;
+}
+
 export class CreateInvoiceDto {
   @IsOptional() @IsString() invoice_no?: string;
   @IsString() date: string;
@@ -26,7 +41,10 @@ export class CreateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() tax_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() retention_rate?: number;
   @IsOptional() @Type(() => Number) @IsNumber() retention_amount?: number;
-  @IsOptional() other_charges?: any;
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceOtherChargeDto)
+  other_charges?: InvoiceOtherChargeDto[];
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() paid_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() outstanding?: number;
@@ -37,7 +55,11 @@ export class CreateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsArray() items?: any[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceItemInputDto)
+  items?: InvoiceItemInputDto[];
 }
 
 export class UpdateInvoiceDto {
@@ -56,7 +78,10 @@ export class UpdateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() tax_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() retention_rate?: number;
   @IsOptional() @Type(() => Number) @IsNumber() retention_amount?: number;
-  @IsOptional() other_charges?: any;
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceOtherChargeDto)
+  other_charges?: InvoiceOtherChargeDto[];
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() paid_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() outstanding?: number;
@@ -67,7 +92,21 @@ export class UpdateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsArray() items?: any[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceItemInputDto)
+  items?: InvoiceItemInputDto[];
+}
+
+export class CreateInvoiceRevisionDto {
+  @IsOptional() @IsString() invoice_no?: string;
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() due_date?: string;
+}
+
+export class SetActiveInvoiceRevisionDto {
+  @IsOptional() @IsBoolean() invoice_is_active?: boolean;
 }
 
 export class RecordPaymentDto {

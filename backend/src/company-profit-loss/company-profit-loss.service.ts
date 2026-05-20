@@ -208,6 +208,7 @@ export class CompanyProfitLossService {
     const invoiceWhere: any = {
       status: { notIn: ['void', 'draft'] },
       deleted_at: null,
+      invoice_is_active: true,
     };
     if (companyId) invoiceWhere.company_id = companyId;
     if (dateFrom || dateTo) {
