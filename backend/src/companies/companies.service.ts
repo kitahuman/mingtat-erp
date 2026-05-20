@@ -89,6 +89,32 @@ export class CompaniesService {
     return this.findOne(id);
   }
 
+  async uploadStamp(id: number, stampUrl: string, userId?: number, ipAddress?: string) {
+    const existing = await this.prisma.company.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('公司不存在');
+
+    const updated = await this.prisma.company.update({
+      where: { id },
+      data: { company_stamp_url: stampUrl },
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'update',
+          targetTable: 'companies',
+          targetId: id,
+          changesBefore: { company_stamp_url: existing.company_stamp_url },
+          changesAfter: { company_stamp_url: updated.company_stamp_url },
+          ipAddress,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+
+    return updated;
+  }
+
   async uploadLogo(id: number, logoUrl: string, userId?: number, ipAddress?: string) {
     const existing = await this.prisma.company.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('公司不存在');

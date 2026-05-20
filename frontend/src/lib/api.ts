@@ -118,6 +118,13 @@ export const companiesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  uploadStamp: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append('stamp', file);
+    return api.post(`/companies/${id}/stamp`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Company Profiles

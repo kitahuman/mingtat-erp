@@ -46,6 +46,7 @@ type PdfPreviewOptions = {
   language: QuotationPdfLanguage;
   show_client_signature: boolean;
   show_company_signature: boolean;
+  show_company_stamp: boolean;
   override_payment_terms: string;
 };
 
@@ -53,6 +54,7 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   language: 'zh',
   show_client_signature: true,
   show_company_signature: true,
+  show_company_stamp: false,
   override_payment_terms: '',
 };
 
@@ -82,12 +84,14 @@ export default function QuotationPdfPreviewPage() {
       language: options.language,
       show_client_signature: options.show_client_signature,
       show_company_signature: options.show_company_signature,
+      show_company_stamp: options.show_company_stamp,
       override_payment_terms: options.override_payment_terms,
     }),
     [
       options.language,
       options.show_client_signature,
       options.show_company_signature,
+      options.show_company_stamp,
       options.override_payment_terms,
     ],
   );
@@ -297,6 +301,14 @@ export default function QuotationPdfPreviewPage() {
               onChange={(e) => updateOption('show_company_signature', e.target.checked)}
             />
             公司簽名欄
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={options.show_company_stamp}
+              onChange={(e) => updateOption('show_company_stamp', e.target.checked)}
+            />
+            蓋上公司印
           </label>
         </div>
 

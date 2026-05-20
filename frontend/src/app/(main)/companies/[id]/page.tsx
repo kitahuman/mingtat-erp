@@ -18,7 +18,9 @@ export default function CompanyDetailPage() {
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingStamp, setUploadingStamp] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const stampInputRef = useRef<HTMLInputElement>(null);
 
   const getLogoSrc = (path?: string) => {
     if (!path) return '';
@@ -45,6 +47,21 @@ export default function CompanyDetailPage() {
     } finally {
       setUploadingLogo(false);
       if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  const handleStampUpload = async (file?: File | null) => {
+    if (!file || !company?.id) return;
+    setUploadingStamp(true);
+    try {
+      const res = await companiesApi.uploadStamp(company.id, file);
+      setCompany(res.data);
+      setForm(res.data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '公司印上載失敗');
+    } finally {
+      setUploadingStamp(false);
+      if (stampInputRef.current) stampInputRef.current.value = '';
     }
   };
 
@@ -162,6 +179,36 @@ export default function CompanyDetailPage() {
                   {uploadingLogo ? 'Logo 上載中...' : company?.company_logo_url ? '更換 Logo' : '上載 Logo'}
                 </button>
                 <p className="text-xs text-gray-500 mt-1">支援 PNG、JPG、WebP、GIF；上載後會儲存到 uploads 並用於 PDF 右上角。</p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-gray-500 mb-2">公司印</p>
+            <button
+              type="button"
+              onClick={() => !readOnly && stampInputRef.current?.click()}
+              disabled={readOnly || uploadingStamp}
+              className="group w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 min-h-[120px] flex flex-col items-center justify-center transition hover:border-primary-400 hover:bg-primary-50 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-gray-50"
+            >
+              {company?.company_stamp_url ? (
+                <img src={getLogoSrc(company.company_stamp_url)} alt="Company stamp" className="max-h-24 max-w-full object-contain" />
+              ) : (
+                <span className="text-sm text-gray-400">未上載公司印</span>
+              )}
+              {!readOnly && (
+                <span className="mt-2 text-xs font-medium text-primary-600 opacity-0 transition group-hover:opacity-100">
+                  {uploadingStamp ? '上載中...' : '點擊上載 / 更換公司印'}
+                </span>
+              )}
+            </button>
+            {!readOnly && (
+              <div className="mt-3">
+                <input ref={stampInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" onChange={e => handleStampUpload(e.target.files?.[0])} className="sr-only" disabled={uploadingStamp} />
+                <button type="button" onClick={() => stampInputRef.current?.click()} className="btn-secondary w-full text-sm" disabled={uploadingStamp}>
+                  {uploadingStamp ? '公司印上載中...' : company?.company_stamp_url ? '更換公司印' : '上載公司印'}
+                </button>
+                <p className="text-xs text-gray-500 mt-1">支援 PNG、JPG、WebP、GIF；上載後會儲存到 uploads 並用於 PDF 簽名欄。</p>
               </div>
             )}
           </div>

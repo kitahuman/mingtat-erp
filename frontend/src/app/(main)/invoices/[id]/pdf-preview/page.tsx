@@ -50,6 +50,7 @@ type PdfPreviewOptions = {
   show_client_contact: boolean;
   show_client_signature: boolean;
   show_company_signature: boolean;
+  show_company_stamp: boolean;
   override_payment_terms: string;
   client_address: string;
   client_contact: string;
@@ -64,6 +65,7 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   show_client_contact: true,
   show_client_signature: true,
   show_company_signature: true,
+  show_company_stamp: false,
   override_payment_terms: '',
   client_address: '',
   client_contact: '',
@@ -101,6 +103,7 @@ export default function InvoicePdfPreviewPage() {
       show_client_info: true,
       show_client_signature: options.show_client_signature,
       show_company_signature: options.show_company_signature,
+      show_company_stamp: options.show_company_stamp,
       override_payment_terms: options.override_payment_terms,
       client_address: options.client_address,
       client_contact: options.client_contact,
@@ -114,6 +117,7 @@ export default function InvoicePdfPreviewPage() {
       options.show_client_contact,
       options.show_client_signature,
       options.show_company_signature,
+      options.show_company_stamp,
       options.override_payment_terms,
       options.client_address,
       options.client_contact,
@@ -341,6 +345,14 @@ export default function InvoicePdfPreviewPage() {
                 onChange={(e) => updateOption('show_company_signature', e.target.checked)}
               />
               公司簽名欄
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={options.show_company_stamp}
+                onChange={(e) => updateOption('show_company_stamp', e.target.checked)}
+              />
+              蓋上公司印
             </label>
           </div>
         </div>

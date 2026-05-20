@@ -16,6 +16,7 @@ export interface InvoicePdfOptions {
   showSignature?: boolean;
   showClientSignature?: boolean;
   showCompanySignature?: boolean;
+  showCompanyStamp?: boolean;
   overridePaymentTerms?: string;
   overrideClientAddress?: string;
   overrideClientContact?: string;
@@ -121,6 +122,7 @@ export class InvoicePdfService {
     const legacyShowSignature = options.showSignature ?? true;
     const showClientSignature = options.showClientSignature ?? legacyShowSignature;
     const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
+    const showCompanyStamp = options.showCompanyStamp ?? false;
 
     return {
       invoice,
@@ -134,6 +136,7 @@ export class InvoicePdfService {
         showSignature: showClientSignature || showCompanySignature,
         showClientSignature,
         showCompanySignature,
+        showCompanyStamp,
         overridePaymentTerms: options.overridePaymentTerms || '',
         overrideClientAddress: options.overrideClientAddress || '',
         overrideClientContact: options.overrideClientContact || '',
@@ -147,7 +150,10 @@ export class InvoicePdfService {
     const company = invoice.company || {};
     const client = invoice.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
+    const themeLightBg = this.hexToRgba(theme, 0.08);
+    const themeLightBorder = this.hexToRgba(theme, 0.15);
     const logoDataUri = this.logoDataUri(company.company_logo_url);
+    const stampDataUri = options.showCompanyStamp ? this.logoDataUri(company.company_stamp_url) : '';
     const invoiceCompanyNameEn = this.invoiceCompanyNameEn(company);
     const invoiceAddress = company.invoice_address || company.address || '';
     const invoicePhone = company.invoice_phone || company.phone || '';
@@ -289,6 +295,7 @@ export class InvoicePdfService {
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
+    @page { margin: 0; size: A4; }
     html, body {
       margin: 0; padding: 0; background: #ffffff; color: #1f2933;
       font-family: "Noto Sans CJK TC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang TC", "Heiti TC", Arial, sans-serif;
@@ -304,16 +311,16 @@ export class InvoicePdfService {
     .company-name-en { font-size: 13px; font-weight: 700; color: #334e68; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
     .company-meta { color: #52606d; font-size: 10.6px; line-height: 1.5; }
     .logo-img { max-width: 175px; max-height: 58px; object-fit: contain; }
-    .logo-placeholder { width: 175px; height: 48px; margin-left: auto; border: 1.4px solid ${theme}; color: ${theme}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; display: table; text-align: center; background: #f4f7fb; }
+    .logo-placeholder { width: 175px; height: 48px; margin-left: auto; border: 1.4px solid ${theme}; color: ${theme}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; display: table; text-align: center; background: ${themeLightBg}; }
     .logo-placeholder span { display: table-cell; vertical-align: middle; padding: 7px; line-height: 1.25; }
     .invoice-title { margin-top: 10px; color: ${theme}; font-size: 25px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
-    .subtle-line { border-top: 1px solid #d9e2ec; margin: 8px 0 12px 0; }
+    .subtle-line { border-top: 1px solid ${themeLightBorder}; margin: 8px 0 12px 0; }
     .info-row { margin-bottom: 12px; }
     .client-section { width: 58%; padding-right: 16px; }
     .invoice-details { width: 42%; }
     .invoice-details.full { width: 100%; }
     .section-label { color: ${theme}; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; margin-bottom: 6px; text-transform: uppercase; }
-    .client-box, .details-box { border: 1px solid #d9e2ec; border-left: 4px solid ${theme}; padding: 8px 10px; min-height: 72px; background: #fbfdff; }
+    .client-box, .details-box { border: 1px solid ${themeLightBorder}; border-left: 4px solid ${theme}; padding: 8px 10px; min-height: 72px; background: ${themeLightBg}; }
     .client-name { font-size: 13px; font-weight: 800; color: #243b53; margin-bottom: 5px; }
     .muted { color: #52606d; }
     .details-table, .payment-table { width: 100%; border-collapse: collapse; }
@@ -321,15 +328,15 @@ export class InvoicePdfService {
     .details-table td { padding: 3px 0; vertical-align: top; }
     .details-table td:first-child { color: #52606d; width: 42%; font-weight: 700; }
     .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
-    .invoice-subject { margin: 0 0 10px 0; padding: 8px 10px; border-left: 4px solid ${theme}; background: #f4f7fb; color: #243b53; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
+    .invoice-subject { margin: 0 0 10px 0; padding: 8px 10px; border-left: 4px solid ${theme}; background: ${themeLightBg}; color: #243b53; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
     table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; font-size: 10.3px; page-break-inside: auto; }
     .items thead { display: table-header-group; }
     .items tfoot { display: table-row-group; }
     .items tr { page-break-inside: avoid; page-break-after: auto; }
     .items thead th { background: ${theme}; color: #ffffff; padding: 5px 6px 4px; font-weight: 800; text-align: left; border-right: 1px solid rgba(255,255,255,0.18); white-space: nowrap; line-height: 1.12; }
     .items thead th:last-child { border-right: none; }
-    .items tbody td { padding: 6px 6px; border-bottom: 1px solid #d9e2ec; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
-    .items tbody tr:nth-child(even) td { background: #fbfdff; }
+    .items tbody td { padding: 6px 6px; border-bottom: 1px solid ${themeLightBorder}; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
+    .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
     .items .center { text-align: center; }
     .items .right { text-align: right; white-space: nowrap; }
     .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
@@ -337,24 +344,25 @@ export class InvoicePdfService {
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
-    .grand-total td { background: #f4f7fb !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
-    .after-table { margin-top: 9px; page-break-inside: avoid; }
-    .terms-section { width: 43%; padding-right: 14px; }
-    .payment-section { width: 57%; }
-    .terms-box { border: 1px solid #d9e2ec; background: #fbfdff; padding: 8px 10px; min-height: 72px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
+    .after-table { margin-top: 9px; page-break-inside: avoid; display: flex; flex-direction: column; }
+    .terms-section { width: 100%; padding-right: 0; margin-bottom: 10px; }
+    .payment-section { width: 100%; }
+    .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 72px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .payment-box { border: 1.2px solid ${theme}; padding: 8px 10px; background: #ffffff; min-height: 88px; }
-    .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid #d9e2ec; padding-bottom: 5px; }
+    .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid ${themeLightBorder}; padding-bottom: 5px; }
     .payment-table { font-size: 10.8px; }
     .payment-table td { padding: 3px 0; vertical-align: top; }
     .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
     .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
-    .footer-row { margin-top: 10px; page-break-inside: avoid; }
-    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 16px; page-break-inside: avoid; border: none; }
+    .footer-row { margin-top: 20px; page-break-inside: avoid; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
-    .signature-block { width: 100%; padding-top: 26px; writing-mode: horizontal-tb; text-orientation: mixed; }
+    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; }
     .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
+    .stamp-img { max-width: 100%; max-height: 48px; object-fit: contain; margin-bottom: 8px; }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
@@ -434,7 +442,7 @@ export class InvoicePdfService {
           <td>
             ${options.showCompanySignature ? `
             <div class="signature-block">
-              <div class="signature-line"></div>
+              ${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : '<div class="signature-line"></div>'}
               <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
             </div>` : ''}
           </td>
@@ -579,6 +587,14 @@ export class InvoicePdfService {
     return /^#[0-9a-fA-F]{6}$/.test(color) || /^#[0-9a-fA-F]{3}$/.test(color)
       ? color
       : '#1a365d';
+  }
+
+  private hexToRgba(hex: string, alpha: number): string {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   private formatDate(value: Date | string, language: InvoicePdfLanguage) {

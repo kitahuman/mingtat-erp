@@ -13,6 +13,7 @@ export class CreateCompanyDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsBoolean() is_active?: boolean;
   @IsOptional() @IsString() company_logo_url?: string;
+  @IsOptional() @IsString() company_stamp_url?: string;
   @IsOptional() @IsHexColor() invoice_color_theme?: string;
   @IsOptional() @IsObject() invoice_bank_info?: Record<string, unknown>;
   @IsOptional() @IsString() invoice_default_payment_terms?: string;

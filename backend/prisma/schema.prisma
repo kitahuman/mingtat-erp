@@ -83,6 +83,7 @@ model Company {
   invoice_phone                  String?
   invoice_fax                    String?
   invoice_company_name_en        String?
+  company_stamp_url              String?   @db.Text
   status                         String    @default("active")
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
