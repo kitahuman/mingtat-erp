@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { partnersApi, subconFleetDriversApi } from '@/lib/api';
+import { partnersApi, subconFleetDriversApi, paymentTermTemplatesApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
@@ -24,6 +24,33 @@ const typeLabels: Record<string, string> = {
 
 const SUBSIDIARY_OPTIONS = ['DCL', 'DTC', 'DDL', 'DTL', 'MCL', '卓嵐'];
 
+type PaymentTermTemplate = {
+  id: number;
+  name: string;
+  content: string;
+  source_type: 'global' | 'company' | 'client';
+  company_id?: number | null;
+  client_id?: number | null;
+  is_default?: boolean;
+};
+
+type PaymentTermForm = {
+  name: string;
+  content: string;
+};
+
+const emptyPaymentTermForm: PaymentTermForm = { name: '', content: '' };
+
+function normalizeList<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.data)) return record.data as T[];
+    if (Array.isArray(record.items)) return record.items as T[];
+  }
+  return [];
+}
+
 function SubsidiaryTags({ values }: { values: string[] | string | null }) {
   if (!values) return <span className="text-gray-400">-</span>;
   const arr = Array.isArray(values) ? values : (typeof values === 'string' ? values.split(',').filter(Boolean) : []);
@@ -41,10 +68,19 @@ export default function PartnerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly('partners');
   const [partner, setPartner] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [paymentTerms, setPaymentTerms] = useState<PaymentTermTemplate[]>([]);
+  const [paymentTermsLoading, setPaymentTermsLoading] = useState(false);
+  const [paymentTermsError, setPaymentTermsError] = useState('');
+  const [showPaymentTermModal, setShowPaymentTermModal] = useState(false);
+  const [editingPaymentTerm, setEditingPaymentTerm] = useState<PaymentTermTemplate | null>(null);
+  const [paymentTermForm, setPaymentTermForm] = useState<PaymentTermForm>(emptyPaymentTermForm);
+  const [savingPaymentTerm, setSavingPaymentTerm] = useState(false);
+  const [deletingPaymentTermId, setDeletingPaymentTermId] = useState<number | null>(null);
 
   // Fleet drivers state for subcontractor partners
   interface FleetDriverItem {
@@ -64,8 +100,26 @@ export default function PartnerDetailPage() {
   const [fleetDrivers, setFleetDrivers] = useState<FleetDriverItem[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
 
+  const loadPaymentTerms = async (clientId: number) => {
+    setPaymentTermsLoading(true);
+    setPaymentTermsError('');
+    try {
+      const res = await paymentTermTemplatesApi.list({ client_id: clientId });
+      const items = normalizeList<PaymentTermTemplate>(res.data).filter(
+        item => item.source_type === 'client' && item.client_id === clientId,
+      );
+      setPaymentTerms(items);
+    } catch (err) {
+      console.error('Failed to load client payment terms', err);
+      setPaymentTermsError('載入客戶付款條款失敗，請稍後再試。');
+    } finally {
+      setPaymentTermsLoading(false);
+    }
+  };
+
   const loadData = () => {
-    partnersApi.get(Number(params.id)).then(res => {
+    const clientId = Number(params.id);
+    partnersApi.get(clientId).then(res => {
       const data = res.data;
       // Ensure subsidiaries is always an array
       if (data.subsidiaries && typeof data.subsidiaries === 'string') {
@@ -75,6 +129,7 @@ export default function PartnerDetailPage() {
       setPartner(data);
       setForm(data);
       setLoading(false);
+      loadPaymentTerms(clientId);
     }).catch(() => router.push('/partners'));
   };
 
@@ -104,6 +159,63 @@ export default function PartnerDetailPage() {
       setForm(data);
       setEditing(false);
     } catch (err: any) { alert(err.response?.data?.message || '更新失敗'); }
+  };
+
+  const openCreatePaymentTerm = () => {
+    setEditingPaymentTerm(null);
+    setPaymentTermForm(emptyPaymentTermForm);
+    setShowPaymentTermModal(true);
+  };
+
+  const openEditPaymentTerm = (template: PaymentTermTemplate) => {
+    setEditingPaymentTerm(template);
+    setPaymentTermForm({ name: template.name || '', content: template.content || '' });
+    setShowPaymentTermModal(true);
+  };
+
+  const canSavePaymentTerm = Boolean(paymentTermForm.name.trim() && paymentTermForm.content.trim());
+
+  const handleSavePaymentTerm = async () => {
+    if (!canSavePaymentTerm || !partner?.id) return;
+    setSavingPaymentTerm(true);
+    setPaymentTermsError('');
+    try {
+      const payload = {
+        name: paymentTermForm.name.trim(),
+        content: paymentTermForm.content.trim(),
+      };
+      if (editingPaymentTerm) {
+        await paymentTermTemplatesApi.update(editingPaymentTerm.id, payload);
+      } else {
+        await paymentTermTemplatesApi.create({
+          ...payload,
+          source_type: 'client',
+          client_id: partner.id,
+        });
+      }
+      setShowPaymentTermModal(false);
+      await loadPaymentTerms(partner.id);
+    } catch (err) {
+      console.error('Failed to save client payment term', err);
+      setPaymentTermsError('儲存客戶付款條款失敗，請檢查內容後再試。');
+    } finally {
+      setSavingPaymentTerm(false);
+    }
+  };
+
+  const handleDeletePaymentTerm = async (template: PaymentTermTemplate) => {
+    if (!window.confirm(`確定要刪除付款條款「${template.name}」嗎？`)) return;
+    setDeletingPaymentTermId(template.id);
+    setPaymentTermsError('');
+    try {
+      await paymentTermTemplatesApi.delete(template.id);
+      await loadPaymentTerms(partner.id);
+    } catch (err) {
+      console.error('Failed to delete client payment term', err);
+      setPaymentTermsError('刪除客戶付款條款失敗，請稍後再試。');
+    } finally {
+      setDeletingPaymentTermId(null);
+    }
   };
 
   const toggleSubsidiary = (val: string) => {
@@ -142,9 +254,9 @@ export default function PartnerDetailPage() {
         <div className="flex gap-2">
           {editing ? (
             <><button onClick={() => { setForm(partner); setEditing(false); }} className="btn-secondary">取消</button><button onClick={handleSave} className="btn-primary">儲存</button></>
-          ) : (
+          ) : !readOnly ? (
             <button onClick={() => setEditing(true)} className="btn-primary">編輯</button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -255,6 +367,130 @@ export default function PartnerDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Client Payment Terms */}
+      <div className="card mb-6">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">付款條款</h2>
+            <p className="mt-1 text-sm text-gray-500">只管理此客戶的付款條款模板；來源會自動設定為客戶。</p>
+          </div>
+          {!readOnly && (
+            <button type="button" onClick={openCreatePaymentTerm} className="btn-primary whitespace-nowrap">
+              新增付款條款
+            </button>
+          )}
+        </div>
+
+        {paymentTermsError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {paymentTermsError}
+          </div>
+        )}
+
+        {paymentTermsLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600" />
+          </div>
+        ) : paymentTerms.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+            暫無客戶級付款條款，請點擊「新增付款條款」建立。
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50 text-left text-gray-600">
+                  <th className="px-4 py-3 font-medium">名稱</th>
+                  <th className="px-4 py-3 font-medium">條款內容</th>
+                  <th className="px-4 py-3 text-center font-medium">預設</th>
+                  {!readOnly && <th className="px-4 py-3 text-right font-medium">操作</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paymentTerms.map(template => (
+                  <tr key={template.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 align-top">
+                      <div className="font-medium text-gray-900">{template.name}</div>
+                      <div className="text-xs text-gray-400">ID: {template.id}</div>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="line-clamp-3 max-w-2xl whitespace-pre-line text-gray-700">{template.content}</div>
+                    </td>
+                    <td className="px-4 py-3 text-center align-top">
+                      {template.is_default ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">是</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    {!readOnly && (
+                      <td className="px-4 py-3 text-right align-top">
+                        <div className="flex justify-end gap-2">
+                          <button type="button" onClick={() => openEditPaymentTerm(template)} className="text-primary-600 hover:text-primary-700">
+                            編輯
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePaymentTerm(template)}
+                            disabled={deletingPaymentTermId === template.id}
+                            className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                          >
+                            {deletingPaymentTermId === template.id ? '刪除中…' : '刪除'}
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showPaymentTermModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingPaymentTerm ? '編輯付款條款' : '新增付款條款'}
+              </h3>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">名稱 *</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={paymentTermForm.name}
+                  onChange={event => setPaymentTermForm(prev => ({ ...prev, name: event.target.value }))}
+                  className="input-field"
+                  placeholder="例如：30天付款"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">付款條款內容 *</label>
+                <textarea
+                  value={paymentTermForm.content}
+                  onChange={event => setPaymentTermForm(prev => ({ ...prev, content: event.target.value }))}
+                  className="input-field min-h-[160px] py-2 font-mono text-sm"
+                  placeholder="輸入付款條款內容..."
+                />
+              </div>
+              <p className="text-xs text-gray-500">來源會自動設定為此客戶，不需要另外選擇。</p>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button type="button" onClick={() => setShowPaymentTermModal(false)} className="btn-secondary" disabled={savingPaymentTerm}>
+                取消
+              </button>
+              <button type="button" onClick={handleSavePaymentTerm} disabled={savingPaymentTerm || !canSavePaymentTerm} className="btn-primary disabled:opacity-50">
+                {savingPaymentTerm ? '儲存中...' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Remarks */}
       <div className="card mb-6">

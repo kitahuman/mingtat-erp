@@ -12,6 +12,10 @@ export class PaymentTermTemplatesService {
   async findAll(query: { company_id?: number; client_id?: number; all?: boolean } = {}) {
     const companyId = this.toOptionalNumber(query.company_id);
     const clientId = this.toOptionalNumber(query.client_id);
+    if (query.all) {
+      await this.migrateLegacyDefaultPaymentTerms();
+    }
+
     const where = query.all
       ? undefined
       : {
@@ -96,6 +100,45 @@ export class PaymentTermTemplatesService {
   async remove(id: number) {
     await this.findOne(id);
     return this.prisma.paymentTermTemplate.delete({ where: { id } });
+  }
+
+  private async migrateLegacyDefaultPaymentTerms() {
+    const companies = await this.prisma.company.findMany({
+      where: {
+        invoice_default_payment_terms: { not: null },
+      },
+      select: {
+        id: true,
+        invoice_default_payment_terms: true,
+      },
+    });
+
+    for (const company of companies) {
+      const content = company.invoice_default_payment_terms?.trim();
+      if (!content) continue;
+
+      const existing = await this.prisma.paymentTermTemplate.findFirst({
+        where: {
+          source_type: 'company',
+          company_id: company.id,
+          name: '預設付款條款',
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        await this.prisma.paymentTermTemplate.create({
+          data: {
+            name: '預設付款條款',
+            content,
+            source_type: 'company',
+            company_id: company.id,
+            client_id: null,
+            is_default: true,
+          },
+        });
+      }
+    }
   }
 
   private toOptionalNumber(value: unknown): number | undefined {
