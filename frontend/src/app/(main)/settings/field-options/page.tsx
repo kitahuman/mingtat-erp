@@ -1,6 +1,11 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { fieldOptionsApi } from '@/lib/api';
+import {
+  fieldOptionsApi,
+  type DuplicateLocationGroup,
+  type LocationOptionSortBy,
+  type SortDirection,
+} from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
 
@@ -33,6 +38,9 @@ interface FieldOption {
   sort_order: number;
   is_active: boolean;
   aliases?: string[];
+  worklog_usage_count?: number;
+  start_usage_count?: number;
+  end_usage_count?: number;
 }
 
 interface ImportResult {
@@ -58,6 +66,9 @@ function DraggableRow({
   showAliases?: boolean;
 }) {
   const aliases = option.aliases || [];
+  const usageCount = option.worklog_usage_count;
+  const startUsageCount = option.start_usage_count ?? 0;
+  const endUsageCount = option.end_usage_count ?? 0;
   return (
     <tr
       draggable={!mergeMode}
@@ -78,7 +89,17 @@ function DraggableRow({
         <td className="px-3 py-2 text-gray-400 w-8 text-center select-none">⠿</td>
       )}
       <td className="px-3 py-2">
-        <div className="text-sm font-medium">{option.label}</div>
+        <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+          <span>{option.label}</span>
+          {typeof usageCount === 'number' && (
+            <span
+              className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-100 px-1.5 py-0.5 rounded-full"
+              title={`Worklog 使用次數：${usageCount}（起點 ${startUsageCount}，終點 ${endUsageCount}）`}
+            >
+              ({usageCount})
+            </span>
+          )}
+        </div>
         {showAliases && aliases.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {aliases.map((alias, i) => (
@@ -130,6 +151,12 @@ export default function FieldOptionsPage() {
   const [primaryId, setPrimaryId] = useState<number | null>(null);
   const [merging, setMerging] = useState(false);
 
+  // Location usage/sort and duplicate detection state
+  const [locationSortBy, setLocationSortBy] = useState<LocationOptionSortBy>('name');
+  const [locationSortOrder, setLocationSortOrder] = useState<SortDirection>('asc');
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateLocationGroup[] | null>(null);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+
   // CSV Import state
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<string[]>([]);
@@ -142,19 +169,24 @@ export default function FieldOptionsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fieldOptionsApi.getAll();
-      setAllOptions(res.data || {});
+      const [allRes, locationRes] = await Promise.all([
+        fieldOptionsApi.getAll(),
+        fieldOptionsApi.getLocationsWithUsage({ sortBy: locationSortBy, sortOrder: locationSortOrder }),
+      ]);
+      const data = allRes.data || {};
+      setAllOptions({ ...data, location: locationRes.data || data.location || [] });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [locationSortBy, locationSortOrder]);
   useEffect(() => {
     setMergeMode(false);
     setSelectedIds(new Set());
     setPrimaryId(null);
     setSearchQuery(''); // Clear search when switching tabs
+    setDuplicateGroups(null);
   }, [activeTab]);
 
   const isLocationTab = activeTab === 'location';
@@ -162,9 +194,10 @@ export default function FieldOptionsPage() {
   const isMergeableTab = MERGE_CATEGORIES.has(activeTab);
   const isCsvTab = CSV_IMPORT_CATEGORIES.has(activeTab);
 
-  // For CSV-import tabs, display alphabetically; otherwise use sort_order
+  // Location tab is sorted by backend usage/name query; other CSV tabs remain alphabetical.
   const sortedOptions = (() => {
     const opts = allOptions[activeTab] || [];
+    if (isLocationTab) return opts;
     if (isCsvTab) {
       return [...opts].sort((a, b) => a.label.localeCompare(b.label, 'zh-HK'));
     }
@@ -300,6 +333,7 @@ export default function FieldOptionsPage() {
       setMergeMode(false);
       setSelectedIds(new Set());
       setPrimaryId(null);
+      setDuplicateGroups(null);
       await load();
       alert(res.data?.message || '合併成功');
     } catch (err: unknown) {
@@ -308,6 +342,27 @@ export default function FieldOptionsPage() {
     } finally {
       setMerging(false);
     }
+  };
+
+  const handleFindDuplicateLocations = async () => {
+    setDuplicatesLoading(true);
+    try {
+      const res = await fieldOptionsApi.findDuplicateLocations();
+      setDuplicateGroups(res.data || []);
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '找出重複名字失敗';
+      alert(errorMessage);
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  };
+
+  const selectDuplicateGroupForMerge = (group: DuplicateLocationGroup) => {
+    const ids = group.locations.map(location => location.id);
+    setMergeMode(true);
+    setSelectedIds(new Set(ids));
+    setPrimaryId(group.locations[0]?.id ?? null);
+    setSearchQuery('');
   };
 
   // ── CSV Import ──────────────────────────────────────────────────────────────
@@ -409,9 +464,11 @@ export default function FieldOptionsPage() {
                 <h2 className="text-base font-semibold text-gray-900">{CATEGORY_LABELS[activeTab]}</h2>
                 {!mergeMode && (
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {isCsvTab
-                      ? '按名稱排序顯示；可匯入 CSV 批量新增'
-                      : '拖拽行可調整排序；點擊「編輯」可修改名稱'}
+                    {isLocationTab
+                      ? '可按使用次數或名稱排序；可匯入 CSV 批量新增'
+                      : isCsvTab
+                        ? '按名稱排序顯示；可匯入 CSV 批量新增'
+                        : '拖拽行可調整排序；點擊「編輯」可修改名稱'}
                     {isMergeableTab && (
                       <span className="ml-1 text-amber-600">· {aliasHintText}</span>
                     )}
@@ -494,6 +551,89 @@ export default function FieldOptionsPage() {
               )}
             </div>
 
+            {isLocationTab && !mergeMode && (
+              <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                    <span className="text-sm font-medium text-blue-900">地點排序</span>
+                    <select
+                      value={locationSortBy}
+                      onChange={e => setLocationSortBy(e.target.value as LocationOptionSortBy)}
+                      className="text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    >
+                      <option value="usage">使用次數</option>
+                      <option value="name">名稱</option>
+                    </select>
+                    <select
+                      value={locationSortOrder}
+                      onChange={e => setLocationSortOrder(e.target.value as SortDirection)}
+                      className="text-sm border border-blue-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    >
+                      {locationSortBy === 'usage' ? (
+                        <>
+                          <option value="desc">最多使用</option>
+                          <option value="asc">最少使用</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="asc">A-Z</option>
+                          <option value="desc">Z-A</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleFindDuplicateLocations}
+                    disabled={duplicatesLoading}
+                    className="text-sm py-1.5 px-3 rounded-lg border bg-white text-blue-700 border-blue-300 hover:bg-blue-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {duplicatesLoading ? '正在分析…' : '找出重複名字'}
+                  </button>
+                </div>
+
+                {duplicateGroups !== null && (
+                  <div className="mt-3 border-t border-blue-100 pt-3">
+                    {duplicateGroups.length === 0 ? (
+                      <p className="text-sm text-gray-500">未找到疑似重複地點名稱。</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-blue-800">
+                          找到 {duplicateGroups.length} 組疑似重複名字。每組會按使用次數由高至低排列，第一個將預設為合併主地點，可在確認前更改。
+                        </p>
+                        {duplicateGroups.map(group => (
+                          <div key={group.groupKey} className="rounded-lg border border-blue-100 bg-white p-3">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <div className="flex flex-wrap gap-2 items-center mb-1">
+                                  <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                    {group.reason === 'exact_normalized_match' ? '標準化後相同' : `相似度 ${Math.round(group.similarity * 100)}%`}
+                                  </span>
+                                  <span className="text-xs text-gray-500">{group.locations.length} 個地點</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {group.locations.map(location => (
+                                    <span key={location.id} className="text-sm border border-gray-200 rounded-full px-2 py-1 bg-gray-50">
+                                      {location.label} <span className="text-gray-500">({location.worklog_usage_count})</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => selectDuplicateGroupForMerge(group)}
+                                className="text-sm py-1.5 px-3 rounded-lg bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 whitespace-nowrap"
+                              >
+                                選取此組合併
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -507,7 +647,11 @@ export default function FieldOptionsPage() {
                       <th className="px-3 py-2 text-left whitespace-nowrap">
                         選項名稱
                         {isMergeableTab && !mergeMode && <span className="ml-1 text-xs font-normal text-gray-400">（含別名）</span>}
-                        {isCsvTab && <span className="ml-1 text-xs font-normal text-gray-400">（按名稱排序）</span>}
+                        {isLocationTab ? (
+                          <span className="ml-1 text-xs font-normal text-gray-400">（顯示 Worklog 使用次數）</span>
+                        ) : isCsvTab && (
+                          <span className="ml-1 text-xs font-normal text-gray-400">（按名稱排序）</span>
+                        )}
                       </th>
                       <th className="px-3 py-2 text-center w-20 whitespace-nowrap">狀態</th>
                       {!mergeMode && <th className="px-3 py-2 w-28"></th>}

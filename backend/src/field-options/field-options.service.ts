@@ -1,5 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { FieldOption, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DuplicateLocationCandidateDto,
+  DuplicateLocationGroupDto,
+  DuplicateLocationReason,
+  FindDuplicateLocationsQueryDto,
+  LocationOptionsQueryDto,
+  LocationOptionSortBy,
+  LocationUsageOptionDto,
+  SortDirection,
+} from './dto/field-options.dto';
 
 const DEFAULT_OPTIONS: Record<string, string[]> = {
   employee_role: ['管理', '司機', '機手', '雜工', '鴻輝代工', '散工機手', '管工', '安全督導員', '董事', 'T1'],
@@ -21,6 +32,19 @@ const DEFAULT_OPTIONS: Record<string, string[]> = {
   ],
 };
 
+interface LocationUsageCount {
+  total: number;
+  start: number;
+  end: number;
+}
+
+interface LocationUsageCountRow {
+  location: string;
+  start_count: number | bigint;
+  end_count: number | bigint;
+  usage_count: number | bigint;
+}
+
 @Injectable()
 export class FieldOptionsService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
@@ -33,7 +57,7 @@ export class FieldOptionsService implements OnModuleInit {
     const count = await this.prisma.fieldOption.count();
     if (count === 0) {
       // First time: seed all categories
-      const data: any[] = [];
+      const data: Prisma.FieldOptionCreateManyInput[] = [];
       for (const [category, labels] of Object.entries(DEFAULT_OPTIONS)) {
         labels.forEach((label, idx) => {
           data.push({ category, label, sort_order: idx + 1, is_active: true });
@@ -68,7 +92,7 @@ export class FieldOptionsService implements OnModuleInit {
     const all = await this.prisma.fieldOption.findMany({
       orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
     });
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, FieldOption[]> = {};
     for (const opt of all) {
       if (!grouped[opt.category]) grouped[opt.category] = [];
       grouped[opt.category].push(opt);
@@ -93,7 +117,7 @@ export class FieldOptionsService implements OnModuleInit {
       });
       dto.sort_order = (max._max.sort_order || 0) + 1;
     }
-    return this.prisma.fieldOption.create({ data: dto as any });
+    return this.prisma.fieldOption.create({ data: dto });
   }
 
   async update(id: number, dto: { label?: string; sort_order?: number; is_active?: boolean }) {
@@ -307,6 +331,257 @@ export class FieldOptionsService implements OnModuleInit {
       aliases: newAliases,
       message: `已將 ${targetLabels.join('、')} 合併至「${primaryLabel}」，並更新所有相關記錄。舊名稱已保留為別名。`,
     };
+  }
+
+  /**
+   * 取得所有地點選項，並附上 work_logs 起點/終點欄位的使用次數。
+   * 使用次數以未刪除 worklog 中 start_location 與 end_location 的出現次數加總計算。
+   */
+  async getLocationsWithUsage(query: LocationOptionsQueryDto): Promise<LocationUsageOptionDto[]> {
+    const [locations, usageMap] = await Promise.all([
+      this.prisma.fieldOption.findMany({ where: { category: 'location' } }),
+      this.getLocationUsageCountsMap(),
+    ]);
+
+    const options = locations.map(location => {
+      const usage = usageMap.get(this.normalizeExactLocation(location.label)) ?? { total: 0, start: 0, end: 0 };
+      return this.toLocationUsageOptionDto(location, usage);
+    });
+
+    return this.sortLocationUsageOptions(options, query.sortBy, query.sortOrder);
+  }
+
+  /**
+   * 找出疑似重複地點名稱，供前端快速勾選合併。
+   */
+  async findDuplicateLocations(query: FindDuplicateLocationsQueryDto): Promise<DuplicateLocationGroupDto[]> {
+    const minSimilarity = query.minSimilarity ?? 0.82;
+    const locations = await this.getLocationsWithUsage({
+      sortBy: LocationOptionSortBy.Name,
+      sortOrder: SortDirection.Asc,
+    });
+
+    const candidates = locations
+      .map(location => ({
+        ...location,
+        normalized_label: this.normalizeLocationForDuplicateDetection(location.label),
+      }))
+      .filter(location => location.normalized_label.length > 0);
+
+    if (candidates.length < 2) return [];
+
+    const parent = candidates.map((_, index) => index);
+    const find = (index: number): number => {
+      if (parent[index] !== index) parent[index] = find(parent[index]);
+      return parent[index];
+    };
+    const union = (left: number, right: number) => {
+      const leftRoot = find(left);
+      const rightRoot = find(right);
+      if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+    };
+
+    for (let i = 0; i < candidates.length; i++) {
+      for (let j = i + 1; j < candidates.length; j++) {
+        const similarity = this.getLocationNameSimilarity(
+          candidates[i].normalized_label,
+          candidates[j].normalized_label,
+        );
+        if (similarity >= minSimilarity) union(i, j);
+      }
+    }
+
+    const grouped = new Map<number, DuplicateLocationCandidateDto[]>();
+    candidates.forEach((candidate, index) => {
+      const root = find(index);
+      const existing = grouped.get(root) ?? [];
+      existing.push(candidate);
+      grouped.set(root, existing);
+    });
+
+    const duplicateGroups: DuplicateLocationGroupDto[] = [];
+    for (const locationsInGroup of grouped.values()) {
+      if (locationsInGroup.length < 2) continue;
+
+      const allSameNormalizedLabel = locationsInGroup.every(
+        location => location.normalized_label === locationsInGroup[0].normalized_label,
+      );
+      const maxSimilarity = this.getMaxLocationGroupSimilarity(locationsInGroup);
+      const sortedLocations = [...locationsInGroup].sort((a, b) => {
+        const usageDiff = b.worklog_usage_count - a.worklog_usage_count;
+        if (usageDiff !== 0) return usageDiff;
+        return a.label.localeCompare(b.label, 'zh-HK');
+      });
+
+      duplicateGroups.push({
+        groupKey: sortedLocations.map(location => location.id).join('-'),
+        reason: allSameNormalizedLabel
+          ? DuplicateLocationReason.ExactNormalizedMatch
+          : DuplicateLocationReason.SimilarName,
+        similarity: maxSimilarity,
+        locations: sortedLocations,
+      });
+    }
+
+    return duplicateGroups.sort((a, b) => {
+      const usageA = a.locations.reduce((sum, location) => sum + location.worklog_usage_count, 0);
+      const usageB = b.locations.reduce((sum, location) => sum + location.worklog_usage_count, 0);
+      if (usageA !== usageB) return usageB - usageA;
+      if (a.similarity !== b.similarity) return b.similarity - a.similarity;
+      return a.locations[0].label.localeCompare(b.locations[0].label, 'zh-HK');
+    });
+  }
+
+  private async getLocationUsageCountsMap(): Promise<Map<string, LocationUsageCount>> {
+    const rows = await this.prisma.$queryRaw<LocationUsageCountRow[]>(Prisma.sql`
+      SELECT
+        location,
+        SUM(start_count)::int AS start_count,
+        SUM(end_count)::int AS end_count,
+        SUM(start_count + end_count)::int AS usage_count
+      FROM (
+        SELECT
+          BTRIM(start_location) AS location,
+          COUNT(*)::int AS start_count,
+          0::int AS end_count
+        FROM work_logs
+        WHERE deleted_at IS NULL
+          AND start_location IS NOT NULL
+          AND BTRIM(start_location) <> ''
+        GROUP BY BTRIM(start_location)
+
+        UNION ALL
+
+        SELECT
+          BTRIM(end_location) AS location,
+          0::int AS start_count,
+          COUNT(*)::int AS end_count
+        FROM work_logs
+        WHERE deleted_at IS NULL
+          AND end_location IS NOT NULL
+          AND BTRIM(end_location) <> ''
+        GROUP BY BTRIM(end_location)
+      ) usage
+      GROUP BY location
+    `);
+
+    const usageMap = new Map<string, LocationUsageCount>();
+    for (const row of rows) {
+      usageMap.set(this.normalizeExactLocation(row.location), {
+        total: Number(row.usage_count),
+        start: Number(row.start_count),
+        end: Number(row.end_count),
+      });
+    }
+    return usageMap;
+  }
+
+  private toLocationUsageOptionDto(option: FieldOption, usage: LocationUsageCount): LocationUsageOptionDto {
+    return {
+      id: option.id,
+      category: option.category,
+      label: option.label,
+      sort_order: option.sort_order,
+      is_active: option.is_active,
+      aliases: this.parseAliases(option.aliases),
+      field_option_latitude: option.field_option_latitude,
+      field_option_longitude: option.field_option_longitude,
+      created_at: option.created_at,
+      updated_at: option.updated_at,
+      worklog_usage_count: usage.total,
+      start_usage_count: usage.start,
+      end_usage_count: usage.end,
+    };
+  }
+
+  private sortLocationUsageOptions(
+    options: LocationUsageOptionDto[],
+    sortBy: LocationOptionSortBy = LocationOptionSortBy.Name,
+    sortOrder: SortDirection = SortDirection.Asc,
+  ): LocationUsageOptionDto[] {
+    const direction = sortOrder === SortDirection.Desc ? -1 : 1;
+    return [...options].sort((a, b) => {
+      if (sortBy === LocationOptionSortBy.Usage) {
+        const usageDiff = a.worklog_usage_count - b.worklog_usage_count;
+        if (usageDiff !== 0) return usageDiff * direction;
+      }
+
+      const nameDiff = a.label.localeCompare(b.label, 'zh-HK');
+      if (nameDiff !== 0) return nameDiff * direction;
+      return (a.id - b.id) * direction;
+    });
+  }
+
+  private parseAliases(aliases: Prisma.JsonValue): string[] {
+    if (!Array.isArray(aliases)) return [];
+    return aliases.filter((alias): alias is string => typeof alias === 'string');
+  }
+
+  private normalizeExactLocation(label: string): string {
+    return label.trim();
+  }
+
+  private normalizeLocationForDuplicateDetection(label: string): string {
+    return label
+      .trim()
+      .toLowerCase()
+      .replace(/[\s\-_/\\.,，。()（）\[\]【】]+/g, '');
+  }
+
+  private getLocationNameSimilarity(left: string, right: string): number {
+    if (left === right) return 1;
+    if (left.length === 0 || right.length === 0) return 0;
+
+    const sortedLeft = this.sortCharacters(left);
+    const sortedRight = this.sortCharacters(right);
+    if (left.length >= 3 && right.length >= 3 && sortedLeft === sortedRight) return 0.98;
+
+    const maxLength = Math.max(left.length, right.length);
+    const shorter = left.length < right.length ? left : right;
+    const longer = left.length < right.length ? right : left;
+    const editSimilarity = 1 - this.getLevenshteinDistance(left, right) / maxLength;
+
+    if (shorter.length >= 3 && longer.includes(shorter)) {
+      return Math.max(editSimilarity, shorter.length / longer.length);
+    }
+
+    return editSimilarity;
+  }
+
+  private getMaxLocationGroupSimilarity(locations: DuplicateLocationCandidateDto[]): number {
+    let maxSimilarity = 0;
+    for (let i = 0; i < locations.length; i++) {
+      for (let j = i + 1; j < locations.length; j++) {
+        maxSimilarity = Math.max(
+          maxSimilarity,
+          this.getLocationNameSimilarity(locations[i].normalized_label, locations[j].normalized_label),
+        );
+      }
+    }
+    return Number(maxSimilarity.toFixed(2));
+  }
+
+  private sortCharacters(value: string): string {
+    return Array.from(value).sort().join('');
+  }
+
+  private getLevenshteinDistance(left: string, right: string): number {
+    const leftChars = Array.from(left);
+    const rightChars = Array.from(right);
+    const previous = Array.from({ length: rightChars.length + 1 }, (_, index) => index);
+
+    for (let i = 0; i < leftChars.length; i++) {
+      const current = [i + 1];
+      for (let j = 0; j < rightChars.length; j++) {
+        const insertion = current[j] + 1;
+        const deletion = previous[j + 1] + 1;
+        const substitution = previous[j] + (leftChars[i] === rightChars[j] ? 0 : 1);
+        current.push(Math.min(insertion, deletion, substitution));
+      }
+      previous.splice(0, previous.length, ...current);
+    }
+
+    return previous[rightChars.length];
   }
 
   /**

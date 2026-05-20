@@ -346,6 +346,52 @@ export const quotationsApi = {
 };
 
 // Field Options (選項管理)
+export type LocationOptionSortBy = 'usage' | 'name';
+export type SortDirection = 'asc' | 'desc';
+export type DuplicateLocationReason = 'exact_normalized_match' | 'similar_name';
+
+export interface FieldOptionItem {
+  id: number;
+  category: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  aliases?: string[];
+  field_option_latitude?: number | null;
+  field_option_longitude?: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LocationUsageOption extends FieldOptionItem {
+  aliases: string[];
+  field_option_latitude: number | null;
+  field_option_longitude: number | null;
+  worklog_usage_count: number;
+  start_usage_count: number;
+  end_usage_count: number;
+}
+
+export interface DuplicateLocationCandidate extends LocationUsageOption {
+  normalized_label: string;
+}
+
+export interface DuplicateLocationGroup {
+  groupKey: string;
+  reason: DuplicateLocationReason;
+  similarity: number;
+  locations: DuplicateLocationCandidate[];
+}
+
+export interface LocationOptionsQueryParams {
+  sortBy?: LocationOptionSortBy;
+  sortOrder?: SortDirection;
+}
+
+export interface FindDuplicateLocationsQueryParams {
+  minSimilarity?: number;
+}
+
 export const fieldOptionsApi = {
   getAll: () => api.get('/field-options'),
   getByCategory: (category: string) =>
@@ -359,6 +405,10 @@ export const fieldOptionsApi = {
   remove: (id: number) => api.delete(`/field-options/${id}`),
   reorder: (category: string, orderedIds: number[]) =>
     api.post('/field-options/reorder', { category, orderedIds }),
+  getLocationsWithUsage: (params?: LocationOptionsQueryParams) =>
+    api.get<LocationUsageOption[]>('/field-options/locations/with-usage', { params }),
+  findDuplicateLocations: (params?: FindDuplicateLocationsQueryParams) =>
+    api.get<DuplicateLocationGroup[]>('/field-options/locations/duplicates', { params }),
   mergeLocations: (primaryId: number, mergeIds: number[]) =>
     api.post('/field-options/merge-locations', { primaryId, mergeIds }),
   mergeContractOptions: (primaryId: number, mergeIds: number[]) =>
