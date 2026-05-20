@@ -359,10 +359,11 @@ export class InvoicePdfService {
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
-    .signature-block { width: 100%; padding-top: 32px; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; position: relative; }
-    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; position: relative; z-index: 1; }
-    .stamp-wrapper { height: 0; position: relative; z-index: 2; }
-    .stamp-img { width: auto; max-width: 150px; max-height: 150px; object-fit: contain; transform: translateY(-132px); }
+    .signature-block { width: 100%; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; }
+    .signature-stamp-space { height: 130px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
+    .signature-stamp-space.empty { height: 130px; }
+    .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
+    .stamp-img { width: auto; max-width: 120px; max-height: 120px; object-fit: contain; display: block; }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
@@ -435,6 +436,7 @@ export class InvoicePdfService {
           <td>
             ${options.showClientSignature ? `
             <div class="signature-block">
+              <div class="signature-stamp-space empty"></div>
               <div class="signature-line"></div>
               <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
             </div>` : ''}
@@ -442,7 +444,7 @@ export class InvoicePdfService {
           <td>
             ${options.showCompanySignature ? `
             <div class="signature-block">
-              ${stampDataUri ? `<div class="stamp-wrapper"><img class="stamp-img" src="${stampDataUri}" /></div>` : ''}
+              <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
               <div class="signature-line"></div>
               <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
             </div>` : ''}
