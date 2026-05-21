@@ -303,6 +303,7 @@ export const customFieldsApi = {
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
   workStatus: () => api.get('/dashboard/work-status'),
+  monthlyWorkStats: (month?: string) => api.get('/dashboard/monthly-work-stats', { params: { month } }),
   alerts: () => api.get('/dashboard/alerts'),
   financial: () => api.get('/dashboard/financial'),
   whatsappFeed: () => api.get('/dashboard/whatsapp-feed'),

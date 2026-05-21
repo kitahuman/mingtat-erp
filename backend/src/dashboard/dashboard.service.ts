@@ -28,8 +28,10 @@ export class DashboardService {
   async getWorkStatus() {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+    const yesterdayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
 
     // ── 每日 WhatsApp Order 摘要（今天）──────────────────────
     const todaySummary = await this.whatsappService.getDailySummary(todayStr);
@@ -49,11 +51,11 @@ export class DashboardService {
       transportCount = activeItems.filter((i) => i.order_type === 'transport').length;
     }
 
-    // ── 每日車輛工作數（今天打卡記錄中的車輛）──────────────
-    // 從 work_logs 統計今天有 scheduled_date 的車輛（去重 equipment_number）
-    const todayWorkLogs = await this.prisma.workLog.findMany({
+    // ── 昨日車輛工作數（昨天打卡記錄中的車輛）──────────────
+    // 從 work_logs 統計昨天有 scheduled_date 的車輛（去重 equipment_number）
+    const yesterdayWorkLogs = await this.prisma.workLog.findMany({
       where: {
-        scheduled_date: { gte: todayStart, lte: todayEnd },
+        scheduled_date: { gte: yesterdayStart, lte: yesterdayEnd },
       },
       select: {
         equipment_number: true,
@@ -63,7 +65,7 @@ export class DashboardService {
 
     // 統計有車牌/機械編號的記錄（去重）
     const uniqueVehicles = new Set<string>();
-    for (const log of todayWorkLogs) {
+    for (const log of yesterdayWorkLogs) {
       if (log.equipment_number) {
         uniqueVehicles.add(log.equipment_number);
       }
@@ -210,6 +212,7 @@ export class DashboardService {
 
     return {
       daily_vehicle_count: dailyVehicleCount,
+      daily_vehicle_date: yesterdayStr,
       active_projects_count: activeProjectsCount,
       active_projects_count_by_reports: activeProjectsByReports,
       active_projects: activeProjectsList,
@@ -231,6 +234,301 @@ export class DashboardService {
       })),
       bot_status: botStatus,
       daily_vehicle_trend: dailyVehicleTrend,
+    };
+  }
+
+
+  private parseDashboardMonth(month?: string): { month: string; start: Date; end: Date } {
+    const now = new Date();
+    let year = now.getFullYear();
+    let monthIndex = now.getMonth();
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split('-').map((v) => Number(v));
+      if (y >= 2000 && m >= 1 && m <= 12) {
+        year = y;
+        monthIndex = m - 1;
+      }
+    }
+
+    const start = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+    const end = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+    const normalizedMonth = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    return { month: normalizedMonth, start, end };
+  }
+
+  private parseStoredList(raw: any): string[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map((v) => String(v).trim()).filter(Boolean);
+    const str = String(raw).trim();
+    if (!str) return [];
+
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v).trim()).filter(Boolean);
+      if (parsed != null) return [String(parsed).trim()].filter(Boolean);
+    } catch (_) {
+      // Some legacy rows store comma/semicolon/space separated values instead of JSON.
+    }
+
+    return str.split(/[,;\n]+/).map((v) => v.trim()).filter(Boolean);
+  }
+
+  private normalizeManualValue(value: string): string {
+    return value.replace(/^manual:/i, '').trim();
+  }
+
+  private getReportShiftBucket(shiftType?: string | null): 'day' | 'night' {
+    const raw = (shiftType || '').toLowerCase();
+    return raw.includes('night') || raw.includes('夜') ? 'night' : 'day';
+  }
+
+  private getDateKey(date: Date): string {
+    return date.toISOString().split('T')[0];
+  }
+
+  private createResourceSummary(label: string, content?: string | null, type?: string | null) {
+    return {
+      label,
+      content: content || '-',
+      type: type || '-',
+      total_quantity: 0,
+      total_shift_quantity: 0,
+      total_ot_hours: 0,
+      work_days: new Set<string>(),
+      day_quantity: 0,
+      night_quantity: 0,
+      report_count: 0,
+    };
+  }
+
+  async getMonthlyWorkStats(month?: string) {
+    const { month: normalizedMonth, start, end } = this.parseDashboardMonth(month);
+
+    const reports = await this.prisma.dailyReport.findMany({
+      where: {
+        daily_report_date: { gte: start, lte: end },
+        daily_report_deleted_at: null,
+        daily_report_status: 'submitted',
+      },
+      select: {
+        id: true,
+        daily_report_date: true,
+        daily_report_shift_type: true,
+        items: {
+          select: {
+            daily_report_item_category: true,
+            daily_report_item_content: true,
+            daily_report_item_quantity: true,
+            daily_report_item_shift_quantity: true,
+            daily_report_item_ot_hours: true,
+            daily_report_item_name_or_plate: true,
+            daily_report_item_worker_type: true,
+            daily_report_item_machine_type: true,
+            daily_report_item_employee_ids: true,
+            daily_report_item_vehicle_ids: true,
+          },
+        },
+      },
+      orderBy: { daily_report_date: 'asc' },
+    });
+
+    const employeeIds = new Set<number>();
+    const vehicleIds = new Set<number>();
+    const machineryIds = new Set<number>();
+
+    for (const report of reports) {
+      for (const item of report.items || []) {
+        const category = item.daily_report_item_category;
+        if (category === 'worker' || category === 'manpower') {
+          for (const token of this.parseStoredList(item.daily_report_item_employee_ids)) {
+            if (/^\d+$/.test(token)) employeeIds.add(Number(token));
+          }
+        } else if (category === 'vehicle') {
+          for (const token of this.parseStoredList(item.daily_report_item_vehicle_ids)) {
+            if (/^\d+$/.test(token)) vehicleIds.add(Number(token));
+          }
+        } else if (category === 'machinery') {
+          for (const token of this.parseStoredList(item.daily_report_item_vehicle_ids)) {
+            if (/^\d+$/.test(token)) machineryIds.add(Number(token));
+          }
+        }
+      }
+    }
+
+    const [employees, vehicles, machinery] = await Promise.all([
+      employeeIds.size > 0
+        ? this.prisma.employee.findMany({
+            where: { id: { in: Array.from(employeeIds) } },
+            select: { id: true, name_zh: true, name_en: true, nickname: true },
+          })
+        : Promise.resolve([]),
+      vehicleIds.size > 0
+        ? this.prisma.vehicle.findMany({
+            where: { id: { in: Array.from(vehicleIds) } },
+            select: { id: true, plate_number: true, machine_type: true },
+          })
+        : Promise.resolve([]),
+      machineryIds.size > 0
+        ? this.prisma.machinery.findMany({
+            where: { id: { in: Array.from(machineryIds) } },
+            select: { id: true, machine_code: true, machine_type: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const employeeNameMap = new Map<number, string>(
+      employees.map((e) => [e.id, e.nickname || e.name_zh || e.name_en || `員工 #${e.id}`] as const),
+    );
+    const vehicleNameMap = new Map<number, { label: string; type: string }>(
+      vehicles.map((v) => [v.id, { label: v.plate_number || `車輛 #${v.id}`, type: v.machine_type || '-' }] as const),
+    );
+    const machineryNameMap = new Map<number, { label: string; type: string }>(
+      machinery.map((m) => [m.id, { label: m.machine_code || `機械 #${m.id}`, type: m.machine_type || '-' }] as const),
+    );
+
+    const vehicleMap = new Map<string, any>();
+    const machineryMap = new Map<string, any>();
+    const employeeMap = new Map<string, any>();
+
+    const resolveKeys = (
+      rawIds: any,
+      fallback: string | null,
+      idMap: Map<number, { label: string; type: string }> | Map<number, string>,
+      defaultPrefix: string,
+    ) => {
+      const tokens = this.parseStoredList(rawIds);
+      if (tokens.length === 0 && fallback) tokens.push(fallback);
+      if (tokens.length === 0) tokens.push(`未指定${defaultPrefix}`);
+
+      return tokens.map((token) => {
+        const clean = this.normalizeManualValue(token);
+        if (/^\d+$/.test(clean)) {
+          const id = Number(clean);
+          const found = idMap.get(id) as any;
+          if (found) {
+            if (typeof found === 'string') return { key: `id:${id}`, label: found, type: '-' };
+            return { key: `id:${id}`, label: found.label, type: found.type || '-' };
+          }
+          return { key: `id:${id}`, label: `${defaultPrefix} #${id}`, type: '-' };
+        }
+        return { key: `manual:${clean}`, label: clean, type: '-' };
+      });
+    };
+
+    for (const report of reports) {
+      const reportDate = this.getDateKey(report.daily_report_date);
+      const shiftBucket = this.getReportShiftBucket(report.daily_report_shift_type);
+
+      for (const item of report.items || []) {
+        const category = item.daily_report_item_category;
+        const quantity = this.toNum(item.daily_report_item_quantity);
+        const shiftQuantity = this.toNum(item.daily_report_item_shift_quantity);
+        const otHours = this.toNum(item.daily_report_item_ot_hours);
+        const content = item.daily_report_item_content || '-';
+
+        if (category === 'vehicle') {
+          const resources = resolveKeys(
+            item.daily_report_item_vehicle_ids,
+            item.daily_report_item_name_or_plate,
+            vehicleNameMap,
+            '車輛',
+          );
+          const divisor = Math.max(resources.length, 1);
+          for (const r of resources) {
+            const key = r.key;
+            if (!vehicleMap.has(key)) vehicleMap.set(key, this.createResourceSummary(r.label, content, r.type));
+            const agg = vehicleMap.get(key)!;
+            agg.total_quantity += quantity / divisor;
+            agg.total_shift_quantity += shiftQuantity / divisor;
+            agg.total_ot_hours += otHours / divisor;
+            agg.work_days.add(reportDate);
+            agg.report_count += 1;
+          }
+        } else if (category === 'machinery') {
+          const resources = resolveKeys(
+            item.daily_report_item_vehicle_ids,
+            item.daily_report_item_name_or_plate,
+            machineryNameMap,
+            '機械',
+          );
+          const divisor = Math.max(resources.length, 1);
+          for (const r of resources) {
+            const key = r.key;
+            if (!machineryMap.has(key)) machineryMap.set(key, this.createResourceSummary(r.label, content, r.type || item.daily_report_item_machine_type));
+            const agg = machineryMap.get(key)!;
+            agg.total_quantity += quantity / divisor;
+            agg.total_shift_quantity += shiftQuantity / divisor;
+            agg.total_ot_hours += otHours / divisor;
+            agg.work_days.add(reportDate);
+            agg.report_count += 1;
+          }
+        } else if (category === 'worker' || category === 'manpower') {
+          const resources = resolveKeys(
+            item.daily_report_item_employee_ids,
+            item.daily_report_item_name_or_plate,
+            employeeNameMap,
+            '員工',
+          );
+          const divisor = Math.max(resources.length, 1);
+          for (const r of resources) {
+            const key = r.key;
+            if (!employeeMap.has(key)) employeeMap.set(key, this.createResourceSummary(r.label, item.daily_report_item_worker_type || content, '-'));
+            const agg = employeeMap.get(key)!;
+            const allocatedQuantity = quantity / divisor;
+            agg.total_quantity += allocatedQuantity;
+            agg.total_shift_quantity += shiftQuantity / divisor;
+            agg.total_ot_hours += otHours / divisor;
+            agg.work_days.add(reportDate);
+            agg.report_count += 1;
+            if (shiftBucket === 'night') agg.night_quantity += allocatedQuantity;
+            else agg.day_quantity += allocatedQuantity;
+          }
+        }
+      }
+    }
+
+    const toRows = (map: Map<string, any>) => Array.from(map.values())
+      .map((row) => ({
+        label: row.label,
+        content: row.content,
+        type: row.type,
+        work_days: row.work_days.size,
+        total_quantity: this.round2(row.total_quantity),
+        total_shift_quantity: this.round2(row.total_shift_quantity),
+        total_ot_hours: this.round2(row.total_ot_hours),
+        day_quantity: this.round2(row.day_quantity),
+        night_quantity: this.round2(row.night_quantity),
+        report_count: row.report_count,
+      }))
+      .filter((row) => row.total_quantity > 0 || row.total_shift_quantity > 0 || row.total_ot_hours > 0 || row.work_days > 0)
+      .sort((a, b) => b.total_quantity - a.total_quantity || a.label.localeCompare(b.label, 'zh-HK'));
+
+    const vehiclesRows = toRows(vehicleMap);
+    const machineryRows = toRows(machineryMap);
+    const employeeRows = toRows(employeeMap);
+
+    const sumRows = (rows: Array<{ total_quantity: number; total_shift_quantity: number; total_ot_hours: number; work_days: number }>) => rows.reduce((acc, row) => {
+      acc.total_quantity += row.total_quantity;
+      acc.total_shift_quantity += row.total_shift_quantity;
+      acc.total_ot_hours += row.total_ot_hours;
+      acc.work_days += row.work_days;
+      return acc;
+    }, { total_quantity: 0, total_shift_quantity: 0, total_ot_hours: 0, work_days: 0 });
+
+    return {
+      month: normalizedMonth,
+      date_from: this.getDateKey(start),
+      date_to: this.getDateKey(end),
+      report_count: reports.length,
+      vehicles: vehiclesRows,
+      machinery: machineryRows,
+      employees: employeeRows,
+      totals: {
+        vehicles: sumRows(vehiclesRows),
+        machinery: sumRows(machineryRows),
+        employees: sumRows(employeeRows),
+      },
     };
   }
 

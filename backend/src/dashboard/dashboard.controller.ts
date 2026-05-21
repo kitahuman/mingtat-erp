@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { DashboardService } from './dashboard.service';
 
@@ -20,6 +20,12 @@ export class DashboardController {
   }
 
   // Tab 2: 警告及提醒（含 MPF 提醒）
+
+  @Get('monthly-work-stats')
+  getMonthlyWorkStats(@Query('month') month?: string) {
+    return this.service.getMonthlyWorkStats(month);
+  }
+
   @Get('alerts')
   getAlerts() {
     return this.service.getAlerts();

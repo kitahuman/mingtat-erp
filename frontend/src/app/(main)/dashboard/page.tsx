@@ -15,6 +15,17 @@ const moduleLinks: Record<string, string> = {
   partner: '/partners', vehicle: '/vehicles', machinery: '/machinery', employee: '/employees',
 };
 
+
+function getCurrentMonthValue(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatNumber(n: any): string {
+  const value = Number(n) || 0;
+  return value.toLocaleString('zh-HK', { maximumFractionDigits: 2 });
+}
+
 function formatMoney(n: number): string {
   if (!n && n !== 0) return '$0.00';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -121,6 +132,164 @@ function AlertPanel({ title, icon, alerts, linkBase, linkLabel }: {
   );
 }
 
+
+function MonthlyWorkStatsSection() {
+  const [month, setMonth] = useState(getCurrentMonthValue());
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ vehicles: true, machinery: true, employees: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    dashboardApi.monthlyWorkStats(month)
+      .then((res) => {
+        if (!cancelled) setStats(res.data || {});
+      })
+      .catch(() => {
+        if (!cancelled) setStats({ vehicles: [], machinery: [], employees: [], report_count: 0 });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [month]);
+
+  const sections: any[] = [
+    {
+      key: 'vehicles',
+      title: '車輛（車牌）',
+      subtitle: '每架車累計車/天',
+      rows: stats?.vehicles || [],
+      headers: ['車牌', '類型', '工作內容', '車/天', '工作日數', '中直', 'OT', '日報筆數'],
+      renderRow: (row: any, idx: number) => (
+        <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
+          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
+          <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{row.type || '-'}</td>
+          <td className="px-3 py-2 text-gray-600">{row.content || '-'}</td>
+          <td className="px-3 py-2 text-right font-semibold text-blue-700">{formatNumber(row.total_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.work_days)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_shift_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_ot_hours)}</td>
+          <td className="px-3 py-2 text-right text-gray-500">{formatNumber(row.report_count)}</td>
+        </tr>
+      ),
+    },
+    {
+      key: 'machinery',
+      title: '機械（機號）',
+      subtitle: '每部機累計工天',
+      rows: stats?.machinery || [],
+      headers: ['機號', '類型', '工作內容', '工天', '工作日數', '中直', 'OT', '日報筆數'],
+      renderRow: (row: any, idx: number) => (
+        <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
+          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
+          <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{row.type || '-'}</td>
+          <td className="px-3 py-2 text-gray-600">{row.content || '-'}</td>
+          <td className="px-3 py-2 text-right font-semibold text-purple-700">{formatNumber(row.total_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.work_days)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_shift_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_ot_hours)}</td>
+          <td className="px-3 py-2 text-right text-gray-500">{formatNumber(row.report_count)}</td>
+        </tr>
+      ),
+    },
+    {
+      key: 'employees',
+      title: '員工',
+      subtitle: '只顯示有工作記錄的員工（日/夜、數量、OT）',
+      rows: stats?.employees || [],
+      headers: ['員工', '工種/內容', '日', '夜', '數量', '工作日數', '中直', 'OT', '日報筆數'],
+      renderRow: (row: any, idx: number) => (
+        <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
+          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
+          <td className="px-3 py-2 text-gray-600">{row.content || '-'}</td>
+          <td className="px-3 py-2 text-right text-green-700 font-medium">{formatNumber(row.day_quantity)}</td>
+          <td className="px-3 py-2 text-right text-indigo-700 font-medium">{formatNumber(row.night_quantity)}</td>
+          <td className="px-3 py-2 text-right font-semibold text-gray-900">{formatNumber(row.total_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.work_days)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_shift_quantity)}</td>
+          <td className="px-3 py-2 text-right text-gray-700">{formatNumber(row.total_ot_hours)}</td>
+          <td className="px-3 py-2 text-right text-gray-500">{formatNumber(row.report_count)}</td>
+        </tr>
+      ),
+    },
+  ];
+
+  const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  return (
+    <div className="card">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">工作狀況統計表（以月計）</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            預設顯示當月累計；資料來自已提交日報。{stats?.report_count != null ? `本月日報 ${stats.report_count} 份。` : ''}
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          月份
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value || getCurrentMonthValue())}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary-600"></div></div>
+      ) : (
+        <div className="space-y-3">
+          {sections.map((section) => {
+            const isOpen = expanded[section.key];
+            return (
+              <div key={section.key} className="border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggle(section.key)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-900">{section.title}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white border text-gray-600">{section.rows.length} 項</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{section.subtitle}</p>
+                  </div>
+                  <span className="text-sm text-primary-600 font-medium whitespace-nowrap">{isOpen ? '收合' : '展開'}</span>
+                </button>
+
+                {isOpen && (
+                  section.rows.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-white border-y border-gray-100">
+                          <tr className="text-left text-gray-600">
+                            {section.headers.map((header, idx) => (
+                              <th key={header} className={`px-3 py-2 font-medium ${idx >= 3 ? 'text-right whitespace-nowrap' : ''}`}>{header}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {section.rows.map(section.renderRow)}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="px-4 py-6 text-sm text-center text-gray-400 bg-white">此月份暫無{section.title}工作記錄</p>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 // Tab 1: 工作狀況
 // ══════════════════════════════════════════════════════════════
@@ -153,8 +322,9 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
         <div className="card hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">今日車輛工作數</p>
+              <p className="text-sm text-gray-500">昨日車輛工作數</p>
               <p className="text-2xl font-bold text-blue-600 mt-1">{data?.daily_vehicle_count ?? 0}</p>
+              {data?.daily_vehicle_date && <p className="text-[11px] text-gray-400 mt-0.5">{formatDate(data.daily_vehicle_date)}</p>}
             </div>
             <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-white">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
@@ -209,39 +379,33 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
               </span>
             )}
           </div>
-          {orderSummary.total > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚙️</span>
-                  <span className="text-sm font-medium text-gray-700">機械 Order</span>
+          <div className="space-y-3">
+            {[
+              { key: 'machinery', label: '機械 Order', value: Number(orderSummary.machinery) || 0, normalBg: 'bg-blue-50', normalText: 'text-blue-600' },
+              { key: 'manpower', label: '人力 Order', value: Number(orderSummary.manpower) || 0, normalBg: 'bg-green-50', normalText: 'text-green-600' },
+              { key: 'transport', label: '運輸 Order', value: Number(orderSummary.transport) || 0, normalBg: 'bg-orange-50', normalText: 'text-orange-600' },
+            ].map((item) => {
+              const isWarning = item.value <= 5;
+              return (
+                <div
+                  key={item.key}
+                  className={`flex items-center justify-between p-3 rounded-lg border-l-4 ${isWarning ? 'bg-red-50 border-red-500' : `${item.normalBg} border-transparent`}`}
+                >
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                    {isWarning && <p className="text-xs text-red-600 mt-0.5">數量少於 5，請留意安排</p>}
+                  </div>
+                  <span className={`text-xl font-bold ${isWarning ? 'text-red-700' : item.normalText}`}>{item.value}</span>
                 </div>
-                <span className="text-xl font-bold text-blue-600">{orderSummary.machinery}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">👷</span>
-                  <span className="text-sm font-medium text-gray-700">人力 Order</span>
-                </div>
-                <span className="text-xl font-bold text-green-600">{orderSummary.manpower}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🚛</span>
-                  <span className="text-sm font-medium text-gray-700">運輸 Order</span>
-                </div>
-                <span className="text-xl font-bold text-orange-600">{orderSummary.transport}</span>
-              </div>
-              <div className="pt-2 border-t border-gray-100">
-                <Link href="/verification" className="text-sm text-primary-600 hover:underline">查看詳細 Order →</Link>
-              </div>
+              );
+            })}
+            {(Number(orderSummary.total) || 0) === 0 && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">今日暫無 WhatsApp Order，所有分類均已標示為警示。</p>
+            )}
+            <div className="pt-2 border-t border-gray-100">
+              <Link href="/verification" className="text-sm text-primary-600 hover:underline">查看詳細 Order →</Link>
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <p className="text-4xl mb-2">📋</p>
-              <p>今日暫無 WhatsApp Order</p>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* 近 7 天車輛工作趨勢 */}
@@ -268,6 +432,8 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
           )}
         </div>
       </div>
+
+      <MonthlyWorkStatsSection />
 
       {/* 工程統計（活躍工程）*/}
       <div className="card">
