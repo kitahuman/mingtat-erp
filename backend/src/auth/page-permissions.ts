@@ -72,6 +72,7 @@ export const ALL_PAGES: PageDef[] = [
   // 報表
   { key: 'profit-loss', label: '工程損益總覽', group: '報表', path: '/profit-loss' },
   { key: 'company-profit-loss', label: '公司損益表', group: '報表', path: '/company-profit-loss' },
+  { key: 'fixed-expense-report', label: '固定支出統計', group: '報表', path: '/reports/fixed-expenses' },
 
   // 系統設定
   { key: 'settings-users', label: '用戶管理', group: '系統設定', path: '/settings/users' },

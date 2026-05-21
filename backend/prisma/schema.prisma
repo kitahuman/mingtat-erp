@@ -1629,6 +1629,7 @@ model ExpenseCategory {
   parent_id  Int?
   type       String?  @db.VarChar(20) // DIRECT | OVERHEAD
   sort_order Int      @default(0)
+  expense_category_is_fixed Boolean @default(false)
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt

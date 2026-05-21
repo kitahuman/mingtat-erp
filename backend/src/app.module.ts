@@ -69,6 +69,7 @@ import { ErrorLogsModule } from './error-logs/error-logs.module';
 import { IssueReportsModule } from './issue-reports/issue-reports.module';
 import { PettyCashModule } from './petty-cash/petty-cash.module';
 import { PaymentTermTemplatesModule } from './payment-term-templates/payment-term-templates.module';
+import { FixedExpenseReportModule } from './fixed-expense-report/fixed-expense-report.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
 @Module({
@@ -164,6 +165,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     IssueReportsModule,
     PettyCashModule,
     PaymentTermTemplatesModule,
+    FixedExpenseReportModule,
   ],
   providers: [
     {

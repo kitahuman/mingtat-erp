@@ -14,6 +14,13 @@ const DEFAULT_CATEGORIES: Record<string, { type: string; children: string[] }> =
 export class ExpenseCategoriesService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeFixedExpenseFlag(value: unknown): boolean | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  }
+
   /** Seed default categories if none exist */
   async seedDefaults() {
     const count = await this.prisma.expenseCategory.count();
@@ -65,8 +72,10 @@ export class ExpenseCategoriesService {
     return cat;
   }
 
-  async create(dto: { name: string; parent_id?: number; type?: string }) {
+  async create(dto: { name: string; parent_id?: number; type?: string; expense_category_is_fixed?: boolean; is_fixed_expense?: boolean }) {
     const data: any = { name: dto.name, is_active: true };
+    const fixedFlag = this.normalizeFixedExpenseFlag(dto.expense_category_is_fixed ?? dto.is_fixed_expense);
+    if (fixedFlag !== undefined) data.expense_category_is_fixed = fixedFlag;
     if (dto.parent_id) data.parent_id = Number(dto.parent_id);
     if (dto.type) data.type = dto.type;
 
@@ -86,7 +95,7 @@ export class ExpenseCategoriesService {
     return this.prisma.expenseCategory.create({ data });
   }
 
-  async update(id: number, dto: { name?: string; is_active?: boolean; sort_order?: number; type?: string }) {
+  async update(id: number, dto: { name?: string; is_active?: boolean; sort_order?: number; type?: string; expense_category_is_fixed?: boolean; is_fixed_expense?: boolean }) {
     const existing = await this.prisma.expenseCategory.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('類別不存在');
 
@@ -95,6 +104,8 @@ export class ExpenseCategoriesService {
     if (dto.is_active !== undefined) updateData.is_active = dto.is_active;
     if (dto.sort_order !== undefined) updateData.sort_order = dto.sort_order;
     if (dto.type !== undefined) updateData.type = dto.type;
+    const fixedFlag = this.normalizeFixedExpenseFlag(dto.expense_category_is_fixed ?? dto.is_fixed_expense);
+    if (fixedFlag !== undefined) updateData.expense_category_is_fixed = fixedFlag;
 
     const updated = await this.prisma.expenseCategory.update({ where: { id }, data: updateData });
 

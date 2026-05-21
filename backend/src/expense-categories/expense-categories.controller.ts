@@ -23,12 +23,12 @@ export class ExpenseCategoriesController {
   }
 
   @Post()
-  create(@Body() dto: { name: string; parent_id?: number; type?: string }) {
+  create(@Body() dto: { name: string; parent_id?: number; type?: string; expense_category_is_fixed?: boolean; is_fixed_expense?: boolean }) {
     return this.service.create(dto);
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: { name?: string; is_active?: boolean; sort_order?: number; type?: string }) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: { name?: string; is_active?: boolean; sort_order?: number; type?: string; expense_category_is_fixed?: boolean; is_fixed_expense?: boolean }) {
     return this.service.update(id, dto);
   }
 

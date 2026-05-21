@@ -771,12 +771,18 @@ export const expensesApi = {
     api.delete(`/expenses/${id}/attachments/${attachmentId}`),
 };
 
+// Fixed Expense Report (固定支出統計)
+export const fixedExpenseReportApi = {
+  getMonthlyStats: (params: { year: number; companyId?: number }) =>
+    api.get('/reports/fixed-expenses', { params }),
+};
+
 // Expense Categories (支出類別)
 export const expenseCategoriesApi = {
   getAll: () => api.get('/expense-categories'),
   getTree: () => api.get('/expense-categories/tree'),
   get: (id: number) => api.get(`/expense-categories/${id}`),
-  create: (data: { name: string; parent_id?: number; type?: string }) =>
+  create: (data: { name: string; parent_id?: number; type?: string; expense_category_is_fixed?: boolean }) =>
     api.post('/expense-categories', data),
   update: (
     id: number,
@@ -785,6 +791,7 @@ export const expenseCategoriesApi = {
       is_active?: boolean;
       sort_order?: number;
       type?: string;
+      expense_category_is_fixed?: boolean;
     },
   ) => api.put(`/expense-categories/${id}`, data),
   remove: (id: number) => api.delete(`/expense-categories/${id}`),

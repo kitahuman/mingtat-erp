@@ -10,6 +10,7 @@ interface Category {
   parent_id: number | null;
   type?: string | null;
   sort_order: number;
+  expense_category_is_fixed?: boolean;
   is_active: boolean;
   children?: Category[];
 }
@@ -58,6 +59,15 @@ function DraggableRow({
           <span className="text-gray-400 text-xs">-</span>
         )}
       </td>
+      <td className="px-3 py-2 text-center w-24">
+        {item.expense_category_is_fixed ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+            固定支出
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs">-</span>
+        )}
+      </td>
       <td className="px-3 py-2 text-center w-20">
         <span className={item.is_active ? 'badge-green' : 'badge-gray'}>
           {item.is_active ? '啟用' : '停用'}
@@ -94,6 +104,7 @@ export default function ExpenseCategoriesPage() {
   const [formName, setFormName] = useState('');
   const [formParentId, setFormParentId] = useState<string>('');
   const [formType, setFormType] = useState<string>('');
+  const [formFixedExpense, setFormFixedExpense] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Drag state
@@ -118,6 +129,7 @@ export default function ExpenseCategoriesPage() {
     setFormName('');
     setFormParentId('');
     setFormType('');
+    setFormFixedExpense(false);
     setShowModal(true);
   };
 
@@ -128,6 +140,7 @@ export default function ExpenseCategoriesPage() {
     // Inherit type from parent
     const parent = tree.find(p => p.id === parentId);
     setFormType(parent?.type || '');
+    setFormFixedExpense(false);
     setShowModal(true);
   };
 
@@ -136,6 +149,7 @@ export default function ExpenseCategoriesPage() {
     setFormName(c.name);
     setFormParentId(c.parent_id ? String(c.parent_id) : '');
     setFormType(c.type || '');
+    setFormFixedExpense(Boolean(c.expense_category_is_fixed));
     setShowModal(true);
   };
 
@@ -144,13 +158,17 @@ export default function ExpenseCategoriesPage() {
     setSaving(true);
     try {
       if (editingItem) {
-        const updateData: any = { name: formName.trim() };
+        const updateData: any = {
+          name: formName.trim(),
+          expense_category_is_fixed: formFixedExpense,
+        };
         if (formType) updateData.type = formType;
         await expenseCategoriesApi.update(editingItem.id, updateData);
       } else {
         const createData: any = {
           name: formName.trim(),
           parent_id: formParentId ? Number(formParentId) : undefined,
+          expense_category_is_fixed: formFixedExpense,
         };
         if (formType) createData.type = formType;
         await expenseCategoriesApi.create(createData);
@@ -263,6 +281,11 @@ export default function ExpenseCategoriesPage() {
                     <h2 className="text-base font-semibold text-gray-900">
                       {parent.name}
                     </h2>
+                    {parent.expense_category_is_fixed && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                        固定支出
+                      </span>
+                    )}
                     {parent.type && TYPE_LABELS[parent.type] && (
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_LABELS[parent.type].color}`}>
                         {TYPE_LABELS[parent.type].label}
@@ -291,7 +314,7 @@ export default function ExpenseCategoriesPage() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm" style={{ minWidth: '420px' }}>
+                  <table className="w-full text-sm" style={{ minWidth: '520px' }}>
                     <thead>
                       <tr className="bg-gray-50 border-b">
                         <th className="px-3 py-2 w-8"></th>
@@ -300,6 +323,9 @@ export default function ExpenseCategoriesPage() {
                         </th>
                         <th className="px-3 py-2 text-center w-24 whitespace-nowrap">
                           類型
+                        </th>
+                        <th className="px-3 py-2 text-center w-24 whitespace-nowrap">
+                          固定支出
                         </th>
                         <th className="px-3 py-2 text-center w-20 whitespace-nowrap">
                           狀態
@@ -310,7 +336,7 @@ export default function ExpenseCategoriesPage() {
                     <tbody>
                       {(!parent.children || parent.children.length === 0) ? (
                         <tr>
-                          <td colSpan={5} className="px-3 py-6 text-center text-gray-400">
+                          <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
                             暫無子類別
                           </td>
                         </tr>
@@ -397,6 +423,21 @@ export default function ExpenseCategoriesPage() {
                     placeholder="輸入類別名稱"
                   />
                 </div>
+                <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={formFixedExpense}
+                    onChange={(e) => setFormFixedExpense(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-700">固定支出</span>
+                    <span className="block text-xs text-gray-400 mt-1">
+                      勾選後，此類別會納入「固定支出統計」報表。
+                    </span>
+                  </span>
+                </label>
+
                 {/* Type selector - shown for parent categories */}
                 {isParentLevel && (
                   <div>
