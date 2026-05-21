@@ -74,6 +74,13 @@ api.interceptors.response.use(
 
 export default api;
 
+const withAuthToken = (url: string) => {
+  const token = Cookies.get('token');
+  if (!token) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
+};
+
 // Auth
 export const authApi = {
   login: (data: { username: string; password: string }) =>
@@ -259,8 +266,8 @@ export const machineryApi = {
   delete: (id: number) => api.delete(`/machinery/${id}`),
 };
 
-// Attachments (polymorphic documents for quotations, invoices, expenses, contracts, projects)
-export type AttachmentEntityType = 'quotation' | 'invoice' | 'expense' | 'contract' | 'project';
+// Attachments (polymorphic documents for companies, quotations, invoices, expenses, contracts, projects)
+export type AttachmentEntityType = 'company' | 'quotation' | 'invoice' | 'expense' | 'contract' | 'project';
 
 export const attachmentsApi = {
   list: (entityType: AttachmentEntityType, entityId: number) =>
@@ -290,6 +297,69 @@ export const documentsApi = {
   download: (id: number) => `${API_BASE_URL}/documents/${id}/download`,
   update: (id: number, data: any) => api.put(`/documents/${id}`, data),
   remove: (id: number) => api.delete(`/documents/${id}`),
+};
+
+export type UnifiedDocumentSource =
+  | 'attachment'
+  | 'document'
+  | 'expense-attachment'
+  | 'daily-report-attachment'
+  | 'acceptance-report-attachment'
+  | 'company-file';
+
+export type UnifiedDocumentModule =
+  | 'company'
+  | 'employee'
+  | 'vehicle'
+  | 'machinery'
+  | 'partner'
+  | 'company-profile'
+  | 'quotation'
+  | 'invoice'
+  | 'expense'
+  | 'contract'
+  | 'project'
+  | 'daily-report'
+  | 'acceptance-report'
+  | 'subcon-fleet-driver'
+  | 'other';
+
+export interface UnifiedDocumentItem {
+  id: string;
+  source: UnifiedDocumentSource;
+  source_id: string;
+  module: UnifiedDocumentModule;
+  module_label: string;
+  entity_type: string;
+  entity_id: number | null;
+  entity_label: string;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  uploaded_at: string | null;
+  uploaded_by: string | null;
+  description: string | null;
+  file_url: string | null;
+  preview_url: string;
+  download_url: string;
+}
+
+export interface UnifiedDocumentListResponse {
+  data: UnifiedDocumentItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  modules: { value: string; label: string }[];
+  sources: { value: string; label: string }[];
+}
+
+export const documentManagementApi = {
+  list: (params?: any) => api.get<UnifiedDocumentListResponse>('/document-management', { params }),
+  preview: (source: string, id: string) =>
+    withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/preview`),
+  download: (source: string, id: string) =>
+    withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/download`),
 };
 
 // Partners

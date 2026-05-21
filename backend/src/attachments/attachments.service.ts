@@ -89,6 +89,9 @@ export class AttachmentsService {
     let exists = false;
 
     switch (entityType) {
+      case 'company':
+        exists = !!(await this.prisma.company.findFirst({ where: { id: entityId, deleted_at: null }, select: { id: true } }));
+        break;
       case 'quotation':
         exists = !!(await this.prisma.quotation.findFirst({ where: { id: entityId, deleted_at: null }, select: { id: true } }));
         break;

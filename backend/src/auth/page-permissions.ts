@@ -22,6 +22,9 @@ export const ALL_PAGES: PageDef[] = [
   { key: 'chat', label: 'AI 助手', group: '總覽', path: '/chat' },
   { key: 'work-logs', label: '工作記錄', group: '總覽', path: '/work-logs' },
 
+  // 文件
+  { key: 'document-management', label: '文件管理', group: '文件管理', path: '/document-management' },
+
   // 工作紀錄核對
   { key: 'verification', label: '核對工作台', group: '工作紀錄核對', path: '/verification' },
   { key: 'verification-matching', label: '六來源比對', group: '工作紀錄核對', path: '/verification/matching' },

@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { companiesApi, paymentTermTemplatesApi } from '@/lib/api';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 const typeLabels: Record<string, string> = { internal: '內部公司', client: '客戶', subcontractor: '外判' };
 
@@ -505,6 +506,15 @@ export default function CompanyDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {company?.id && (
+        <AttachmentUpload
+          entityType="company"
+          entityId={company.id}
+          title="公司文件"
+          readOnly={readOnly}
+        />
       )}
 
       {/* Related Employees */}

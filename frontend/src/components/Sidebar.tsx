@@ -37,6 +37,13 @@ const navEntries: NavEntry[] = [
   { href: '/chat', label: 'AI 助手', icon: '🤖', pageKey: 'chat' },
   { href: '/work-logs', label: '工作記錄', icon: '📝', pageKey: 'work-logs' },
   {
+    label: '文件管理',
+    icon: '📁',
+    items: [
+      { href: '/document-management', label: '文件管理', icon: '📄', pageKey: 'document-management' },
+    ],
+  },
+  {
     label: '工作紀錄核對',
     icon: '🔍',
     items: [
@@ -230,6 +237,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [issueModalOpen, setIssueModalOpen] = useState(false);
   useEffect(() => { installGlobalErrorHandlers(); }, []);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    '文件管理': false,
     '工作紀錄核對': false,
     '公司內部資料': false,
     '工程管理': false,

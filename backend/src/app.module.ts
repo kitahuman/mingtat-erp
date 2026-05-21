@@ -17,6 +17,7 @@ import { MachineryModule } from './machinery/machinery.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { DocumentManagementModule } from './document-management/document-management.module';
 import { PartnersModule } from './partners/partners.module';
 import { CompanyProfilesModule } from './company-profiles/company-profiles.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
@@ -115,6 +116,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     DashboardModule,
     DocumentsModule,
     AttachmentsModule,
+    DocumentManagementModule,
     PartnersModule,
     CompanyProfilesModule,
     CustomFieldsModule,

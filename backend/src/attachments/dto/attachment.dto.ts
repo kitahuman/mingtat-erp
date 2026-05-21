@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export const ATTACHMENT_ENTITY_TYPES = [
+  'company',
   'quotation',
   'invoice',
   'expense',
