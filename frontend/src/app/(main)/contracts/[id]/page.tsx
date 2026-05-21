@@ -9,6 +9,7 @@ import Modal from '@/components/Modal';
 import IpaTabContent from '@/components/payment/IpaTabContent';
 import RetentionTabContent from '@/components/retention/RetentionTabContent';
 import { useAuth } from '@/lib/auth';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -432,6 +433,8 @@ export default function ContractDetailPage() {
             <div className="card text-center"><p className="text-sm text-gray-500">關聯支出</p><p className="text-2xl font-bold text-orange-600">{contract?._count?.expenses || 0}</p></div>
             <div className="card text-center"><p className="text-sm text-gray-500">合約金額</p><p className="text-2xl font-bold text-green-600">{fmt$(contract?.original_amount)}</p></div>
           </div>
+
+          <AttachmentUpload entityType="contract" entityId={contractId} title="合約文件" readOnly={isReadOnly('contracts')} />
         </>
       )}
 

@@ -1190,6 +1190,26 @@ model Document {
   @@map("documents")
 }
 
+model Attachment {
+  id                         Int      @id @default(autoincrement())
+  attachment_entity_type     String   @db.VarChar(50)
+  attachment_entity_id       Int
+  attachment_filename        String   @db.Text
+  attachment_stored_filename String   @db.Text
+  attachment_file_path       String   @db.Text
+  attachment_file_url        String   @db.Text
+  attachment_file_size       Int?
+  attachment_mime_type       String?
+  attachment_uploaded_by     Int?
+  attachment_description     String?  @db.Text
+  attachment_created_at      DateTime @default(now())
+  attachment_updated_at      DateTime @default(now()) @updatedAt
+
+  @@index([attachment_entity_type, attachment_entity_id])
+  @@index([attachment_uploaded_by])
+  @@map("attachments")
+}
+
 // ══════════════════════════════════════════════════════════════
 // Field Options
 // ══════════════════════════════════════════════════════════════

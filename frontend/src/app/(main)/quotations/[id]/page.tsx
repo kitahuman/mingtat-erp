@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
@@ -602,6 +603,10 @@ export default function QuotationDetailPage() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="mb-6">
+        <AttachmentUpload entityType="quotation" entityId={currentQuotationId} title="報價單文件" readOnly={readOnly} />
       </div>
 
       {/* Accept Quotation Modal */}

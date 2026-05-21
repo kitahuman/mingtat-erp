@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -226,6 +227,10 @@ export default function ProjectDetailPage() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="mb-6">
+        <AttachmentUpload entityType="project" entityId={Number(params.id)} title="工程文件" readOnly={isReadOnly('projects')} />
       </div>
 
       {/* Linked Quotations */}

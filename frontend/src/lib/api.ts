@@ -259,6 +259,24 @@ export const machineryApi = {
   delete: (id: number) => api.delete(`/machinery/${id}`),
 };
 
+// Attachments (polymorphic documents for quotations, invoices, expenses, contracts, projects)
+export type AttachmentEntityType = 'quotation' | 'invoice' | 'expense' | 'contract' | 'project';
+
+export const attachmentsApi = {
+  list: (entityType: AttachmentEntityType, entityId: number) =>
+    api.get('/attachments', {
+      params: { entity_type: entityType, entity_id: entityId },
+    }),
+  upload: (entityType: AttachmentEntityType, entityId: number, formData: FormData) =>
+    api.post(`/attachments/${entityType}/${entityId}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  download: (id: number) => `${API_BASE_URL}/attachments/${id}/download`,
+  preview: (id: number) => `${API_BASE_URL}/attachments/${id}/preview`,
+  update: (id: number, data: any) => api.put(`/attachments/${id}`, data),
+  remove: (id: number) => api.delete(`/attachments/${id}`),
+};
+
 // Documents
 export const documentsApi = {
   list: (entityType: string, entityId: number) =>

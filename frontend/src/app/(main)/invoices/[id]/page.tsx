@@ -16,6 +16,7 @@ import ClientContractCombobox from '@/components/ClientContractCombobox';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1467,6 +1468,10 @@ export default function InvoiceDetailPage() {
         ) : (
           <p className="text-sm text-gray-400">尚無收款記錄</p>
         )}
+      </div>
+
+      <div className="mb-6">
+        <AttachmentUpload entityType="invoice" entityId={currentInvoiceId} title="發票文件" readOnly={isReadOnly('invoices')} />
       </div>
 
       {/* Record Payment Modal */}

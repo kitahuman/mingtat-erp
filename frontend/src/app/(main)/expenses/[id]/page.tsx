@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -19,8 +19,7 @@ import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
+import AttachmentUpload from '@/components/AttachmentUpload';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function Field({
@@ -97,10 +96,6 @@ export default function ExpenseDetailPage() {
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemForm, setEditingItemForm] = useState<any>({});
   const [itemSaving, setItemSaving] = useState(false);
-
-  // Attachment state
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
 
   const loadExpense = useCallback(() => {
     setLoading(true);
@@ -342,46 +337,6 @@ export default function ExpenseDetailPage() {
     }
   };
 
-  // ── Attachments ────────────────────────────────────────────────────────────
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        await expensesApi.uploadAttachment(expenseId, file);
-      }
-      await loadExpense();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '上載失敗');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleDeleteAttachment = async (
-    attachmentId: number,
-    fileName: string,
-  ) => {
-    if (!confirm(`確定刪除附件「${fileName}」？`)) return;
-    try {
-      await expensesApi.deleteAttachment(expenseId, attachmentId);
-      await loadExpense();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '刪除附件失敗');
-    }
-  };
-
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  };
-
-  const isImage = (mime?: string) => mime?.startsWith('image/');
-
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading)
     return (
@@ -404,7 +359,6 @@ export default function ExpenseDetailPage() {
     : '—';
 
   const items: any[] = expense.items || [];
-  const attachments: any[] = expense.attachments || [];
   const itemsTotal = items.reduce(
     (sum: number, i: any) => sum + Number(i.amount),
     0,
@@ -1142,102 +1096,7 @@ export default function ExpenseDetailPage() {
         </div>
       </div>
 
-      {/* Attachments Card */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-800">附件文件</h2>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="btn-secondary text-sm flex items-center gap-1.5"
-          >
-            {uploading ? '上載中...' : '+ 上載文件'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </div>
-
-        {attachments.length === 0 ? (
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors"
-          >
-            <p className="text-gray-400 text-sm">點擊或拖放文件到此處上載</p>
-            <p className="text-gray-300 text-xs mt-1">
-              支持圖片、PDF、Word、Excel 等格式，單個文件最大 20MB
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {attachments.map((att: any) => (
-              <div
-                key={att.id}
-                className="border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:border-gray-300 transition-colors"
-              >
-                {/* Preview */}
-                {isImage(att.mime_type) ? (
-                  <a
-                    href={`${API_BASE}${att.file_url}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0"
-                  >
-                    <img
-                      src={`${API_BASE}${att.file_url}`}
-                      alt={att.file_name}
-                      className="w-12 h-12 object-cover rounded border border-gray-200"
-                    />
-                  </a>
-                ) : (
-                  <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
-                    <span className="text-xl">
-                      {att.mime_type?.includes('pdf')
-                        ? '📄'
-                        : att.mime_type?.includes('sheet') ||
-                            att.mime_type?.includes('excel')
-                          ? '📊'
-                          : '📎'}
-                    </span>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <a
-                    href={`${API_BASE}${att.file_url}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-blue-600 hover:text-blue-800 truncate block"
-                    title={att.file_name}
-                  >
-                    {att.file_name}
-                  </a>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatFileSize(att.file_size)} · {fmtDate(att.uploaded_at)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeleteAttachment(att.id, att.file_name)}
-                  className="shrink-0 text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {/* Add more button */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-200 rounded-lg p-3 flex items-center justify-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors min-h-[80px]"
-            >
-              <span className="text-gray-400 text-sm">+ 新增文件</span>
-            </div>
-          </div>
-        )}
-      </div>
+      <AttachmentUpload entityType="expense" entityId={expenseId} title="支出文件" readOnly={isReadOnly('expenses')} />
 
       {/* Payment Records Block */}
       <PaymentOutBlock
