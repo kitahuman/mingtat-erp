@@ -268,6 +268,42 @@ export class DashboardService {
     };
   }
 
+  private readonly vehicleMachineTypes = new Set([
+    '平斗', '勾斗', '夾斗', '拖頭', '車斗', '貨車', '輕型貨車', '私家車', '燈車',
+    '泥頭車', '夾車', '勾斗車', '吊車', '拖架', '領航車',
+  ]);
+
+  private readonly machineryMachineTypes = new Set([
+    '挖掘機', '火轆', '鉸接式自卸卡車', '履帶式裝載機',
+  ]);
+
+  private normalizeWorkLogSource(value?: string | null): string | null {
+    const source = (value || '').trim().toLowerCase();
+    if (!source) return null;
+    if (['vehicle', 'vehicles', 'v', '車', '車輛'].includes(source)) return 'vehicle';
+    if (['machinery', 'machine', 'm', '機', '機械'].includes(source)) return 'machinery';
+    return source;
+  }
+
+  private getWorkLogEquipmentSource(log: { equipment_source?: string | null; machine_type?: string | null; equipment_number?: string | null }): 'vehicle' | 'machinery' | null {
+    const explicitSource = this.normalizeWorkLogSource(log.equipment_source);
+    if (explicitSource === 'vehicle' || explicitSource === 'machinery') return explicitSource;
+
+    const machineType = (log.machine_type || '').trim();
+    if (this.vehicleMachineTypes.has(machineType)) return 'vehicle';
+    if (this.machineryMachineTypes.has(machineType)) return 'machinery';
+
+    const equipmentNumber = (log.equipment_number || '').trim();
+    if (/^v:/i.test(equipmentNumber)) return 'vehicle';
+    if (/^m:/i.test(equipmentNumber)) return 'machinery';
+
+    return null;
+  }
+
+  private cleanWorkLogEquipmentLabel(value?: string | null): string {
+    return (value || '').trim().replace(/^[vm]:/i, '').trim();
+  }
+
   async getMonthlyWorkStats(month?: string) {
     const { month: normalizedMonth, start, end } = this.parseDashboardMonth(month);
 
@@ -279,6 +315,7 @@ export class DashboardService {
           { employee_id: { not: null } },
           { work_log_vehicle_id: { not: null } },
           { work_log_machinery_id: { not: null } },
+          { equipment_number: { not: null } },
         ],
       },
       select: {
@@ -287,6 +324,10 @@ export class DashboardService {
         employee_id: true,
         work_log_vehicle_id: true,
         work_log_machinery_id: true,
+        machine_type: true,
+        equipment_number: true,
+        equipment_source: true,
+        tonnage: true,
         quantity: true,
         ot_quantity: true,
         is_mid_shift: true,
@@ -294,7 +335,7 @@ export class DashboardService {
         service_type: true,
         work_content: true,
         employee: {
-          select: { id: true, name_zh: true, name_en: true, nickname: true, role: true },
+          select: { id: true, name_zh: true, name_en: true, role: true },
         },
         work_log_vehicle: {
           select: { id: true, plate_number: true, machine_type: true, tonnage: true },
@@ -306,8 +347,8 @@ export class DashboardService {
       orderBy: { scheduled_date: 'asc' },
     });
 
-    const vehicleMap = new Map<number, any>();
-    const machineryMap = new Map<number, any>();
+    const vehicleMap = new Map<string, any>();
+    const machineryMap = new Map<string, any>();
     const employeeMap = new Map<number, any>();
 
     const addContent = (agg: any, content?: string | null, fallback?: string | null) => {
@@ -332,38 +373,59 @@ export class DashboardService {
       const otQuantity = this.toNum(log.ot_quantity);
       const midShift = this.isMidShift(log.day_night, log.is_mid_shift);
       const content = log.work_content || log.service_type || null;
+      const equipmentSource = this.getWorkLogEquipmentSource(log);
+      const equipmentLabel = this.cleanWorkLogEquipmentLabel(log.equipment_number);
 
-      // 車輛統計：只使用 work_logs.work_log_vehicle_id 關聯 vehicles 主檔。
-      // 不使用 equipment_number、tonnage、自由文字欄位分組，避免機號/噸數/前綴混入車牌欄。
+      // 車輛統計：優先使用 work_logs.work_log_vehicle_id 關聯 vehicles 主檔；
+      // 如舊資料只保存 equipment_number / machine_type / equipment_source，則以文字欄位分組。
       if (log.work_log_vehicle_id && log.work_log_vehicle) {
         const vehicle = log.work_log_vehicle;
-        if (!vehicleMap.has(vehicle.id)) {
-          const type = vehicle.machine_type || (vehicle.tonnage != null ? `${this.toNum(vehicle.tonnage)}噸` : '-');
-          vehicleMap.set(vehicle.id, this.createWorkLogResourceSummary(vehicle.plate_number || `車輛 #${vehicle.id}`, type));
+        const key = `vehicle:${vehicle.id}`;
+        if (!vehicleMap.has(key)) {
+          const type = vehicle.machine_type || log.machine_type || (vehicle.tonnage != null ? `${this.toNum(vehicle.tonnage)}噸` : log.tonnage) || '-';
+          vehicleMap.set(key, this.createWorkLogResourceSummary(vehicle.plate_number || equipmentLabel || `車輛 #${vehicle.id}`, type));
         }
-        const agg = vehicleMap.get(vehicle.id)!;
-        addContent(agg, content, vehicle.machine_type);
+        const agg = vehicleMap.get(key)!;
+        addContent(agg, content, log.machine_type || vehicle.machine_type);
+        incrementCommon(agg, dateKey, quantityForResource, otQuantity, midShift);
+      } else if (equipmentSource === 'vehicle' && equipmentLabel) {
+        const key = `vehicle-text:${equipmentLabel}`;
+        if (!vehicleMap.has(key)) {
+          vehicleMap.set(key, this.createWorkLogResourceSummary(equipmentLabel, log.machine_type || log.tonnage || '-'));
+        }
+        const agg = vehicleMap.get(key)!;
+        addContent(agg, content, log.machine_type);
         incrementCommon(agg, dateKey, quantityForResource, otQuantity, midShift);
       }
 
-      // 機械統計：只使用 work_logs.work_log_machinery_id 關聯 machinery 主檔。
+      // 機械統計：優先使用 work_logs.work_log_machinery_id 關聯 machinery 主檔；
+      // 如舊資料只保存 equipment_number / machine_type / equipment_source，則以文字欄位分組。
       if (log.work_log_machinery_id && log.work_log_machinery) {
         const machinery = log.work_log_machinery;
-        if (!machineryMap.has(machinery.id)) {
-          const type = machinery.machine_type || (machinery.tonnage != null ? `${this.toNum(machinery.tonnage)}噸` : '-');
-          machineryMap.set(machinery.id, this.createWorkLogResourceSummary(machinery.machine_code || `機械 #${machinery.id}`, type));
+        const key = `machinery:${machinery.id}`;
+        if (!machineryMap.has(key)) {
+          const type = machinery.machine_type || log.machine_type || (machinery.tonnage != null ? `${this.toNum(machinery.tonnage)}噸` : log.tonnage) || '-';
+          machineryMap.set(key, this.createWorkLogResourceSummary(machinery.machine_code || equipmentLabel || `機械 #${machinery.id}`, type));
         }
-        const agg = machineryMap.get(machinery.id)!;
-        addContent(agg, content, machinery.machine_type);
+        const agg = machineryMap.get(key)!;
+        addContent(agg, content, log.machine_type || machinery.machine_type);
+        incrementCommon(agg, dateKey, quantityForResource, otQuantity, midShift);
+      } else if (equipmentSource === 'machinery' && equipmentLabel) {
+        const key = `machinery-text:${equipmentLabel}`;
+        if (!machineryMap.has(key)) {
+          machineryMap.set(key, this.createWorkLogResourceSummary(equipmentLabel, log.machine_type || log.tonnage || '-'));
+        }
+        const agg = machineryMap.get(key)!;
+        addContent(agg, content, log.machine_type);
         incrementCommon(agg, dateKey, quantityForResource, otQuantity, midShift);
       }
 
-      // 員工統計：只使用 work_logs.employee_id 關聯 employees 主檔。
+      // 員工統計：使用 work_logs.employee_id 關聯 employees 主檔，顯示全名 name_zh/name_en，避免 nickname/花名。
       // 只顯示當月有實際 quantity > 0 的員工；未指定員工與無效關聯一律不產生列。
       if (log.employee_id && log.employee && rawQuantity > 0) {
         const employee = log.employee;
         if (!employeeMap.has(employee.id)) {
-          const label = employee.nickname || employee.name_zh || employee.name_en || `員工 #${employee.id}`;
+          const label = employee.name_zh || employee.name_en || `員工 #${employee.id}`;
           employeeMap.set(employee.id, this.createWorkLogResourceSummary(label, '-'));
         }
         const agg = employeeMap.get(employee.id)!;
@@ -374,7 +436,7 @@ export class DashboardService {
       }
     }
 
-    const toRows = (map: Map<number, any>, requirePositiveQuantity = false) => Array.from(map.values())
+    const toRows = (map: Map<string | number, any>, requirePositiveQuantity = false) => Array.from(map.values())
       .map((row) => ({
         label: row.label,
         content: Array.from(row.content_set).slice(0, 3).join('、') || '-',
