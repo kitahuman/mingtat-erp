@@ -161,7 +161,7 @@ function MonthlyWorkStatsSection() {
       title: '車輛（車牌）',
       subtitle: '每架車累計車/天',
       rows: stats?.vehicles || [],
-      headers: ['車牌', '類型', '工作內容', '車/天', '工作日數', '中直', 'OT', '日報筆數'],
+      headers: ['車牌', '類型', '工作內容', '車/天', '工作日數', '中直', 'OT', '報工筆數'],
       renderRow: (row: any, idx: number) => (
         <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
           <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
@@ -180,7 +180,7 @@ function MonthlyWorkStatsSection() {
       title: '機械（機號）',
       subtitle: '每部機累計工天',
       rows: stats?.machinery || [],
-      headers: ['機號', '類型', '工作內容', '工天', '工作日數', '中直', 'OT', '日報筆數'],
+      headers: ['機號', '類型', '工作內容', '工天', '工作日數', '中直', 'OT', '報工筆數'],
       renderRow: (row: any, idx: number) => (
         <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
           <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
@@ -199,7 +199,7 @@ function MonthlyWorkStatsSection() {
       title: '員工',
       subtitle: '只顯示有工作記錄的員工（日/夜、數量、OT）',
       rows: stats?.employees || [],
-      headers: ['員工', '工種/內容', '日', '夜', '數量', '工作日數', '中直', 'OT', '日報筆數'],
+      headers: ['員工', '工種/內容', '日', '夜', '數量', '工作日數', '中直', 'OT', '報工筆數'],
       renderRow: (row: any, idx: number) => (
         <tr key={`${row.label}-${idx}`} className="hover:bg-gray-50">
           <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
@@ -224,7 +224,7 @@ function MonthlyWorkStatsSection() {
         <div>
           <h2 className="text-lg font-bold text-gray-900">工作狀況統計表（以月計）</h2>
           <p className="text-xs text-gray-500 mt-1">
-            預設顯示當月累計；資料來自已提交日報。{stats?.report_count != null ? `本月日報 ${stats.report_count} 份。` : ''}
+            預設顯示當月累計；資料來自 work_logs 報工記錄。{stats?.report_count != null ? `本月報工 ${stats.report_count} 筆。` : ''}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -298,8 +298,6 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
   const botStatus = data?.bot_status;
   const orderSummary = data?.daily_order_summary || {};
   const recentEmployees = data?.recent_employees || [];
-  const dailyVehicleTrend = data?.daily_vehicle_trend || [];
-  const maxTrendCount = Math.max(...dailyVehicleTrend.map((d: any) => d.count), 1);
   const activeProjectsList: any[] = data?.active_projects || [];
   const activeByReports = data?.active_projects_count_by_reports ?? activeProjectsList.length;
   const projectCountByStatus = data?.active_projects_count ?? 0;
@@ -367,10 +365,8 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
         </div>
       </div>
 
-      {/* 每日 Order 摘要 + 車輛趨勢 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 每日 Order 摘要 */}
-        <div className="card">
+      {/* 每日 Order 摘要 */}
+      <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900">今日 Order 摘要</h2>
             {orderSummary.order_status && (
@@ -406,31 +402,6 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
               <Link href="/verification" className="text-sm text-primary-600 hover:underline">查看詳細 Order →</Link>
             </div>
           </div>
-        </div>
-
-        {/* 近 7 天車輛工作趨勢 */}
-        <div className="card">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">近 7 天車輛工作數趨勢</h2>
-          {dailyVehicleTrend.length > 0 ? (
-            <div className="flex items-end gap-2 h-40 border-b border-l border-gray-200 pl-1 pb-1">
-              {dailyVehicleTrend.map((item: any, i: number) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end group relative">
-                  <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-2 whitespace-nowrap z-10">
-                    <div className="font-semibold">{item.date}</div>
-                    <div>車輛數: {item.count}</div>
-                  </div>
-                  <div
-                    className="bg-blue-500 rounded-t w-full min-w-[6px]"
-                    style={{ height: `${maxTrendCount > 0 ? (item.count / maxTrendCount) * 100 : 0}%`, minHeight: item.count > 0 ? '4px' : '0' }}
-                  />
-                  <span className="text-[9px] text-gray-400 mt-1">{item.date}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center py-8 text-gray-400">暫無數據</p>
-          )}
-        </div>
       </div>
 
       <MonthlyWorkStatsSection />
