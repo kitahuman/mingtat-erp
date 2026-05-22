@@ -13,6 +13,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import AttachmentUpload from '@/components/AttachmentUpload';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
 const fmt$ = (v: unknown) =>
@@ -616,6 +617,15 @@ export default function PaymentInDetailPage() {
             {record.remarks || <span className="text-gray-400">無備註</span>}
           </p>
         )}
+      </div>
+
+      <div className="mb-6">
+        <AttachmentUpload
+          entityType="payment_in"
+          entityId={record.id}
+          title="收款文件"
+          readOnly={isReadOnly()}
+        />
       </div>
 
       {/* Allocations (多對多關聯單據) */}

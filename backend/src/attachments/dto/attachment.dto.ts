@@ -8,6 +8,8 @@ export const ATTACHMENT_ENTITY_TYPES = [
   'expense',
   'contract',
   'project',
+  'payment_in',
+  'payment_out',
 ] as const;
 
 export type AttachmentEntityType = typeof ATTACHMENT_ENTITY_TYPES[number];

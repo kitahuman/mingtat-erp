@@ -266,8 +266,16 @@ export const machineryApi = {
   delete: (id: number) => api.delete(`/machinery/${id}`),
 };
 
-// Attachments (polymorphic documents for companies, quotations, invoices, expenses, contracts, projects)
-export type AttachmentEntityType = 'company' | 'quotation' | 'invoice' | 'expense' | 'contract' | 'project';
+// Attachments (polymorphic documents for companies, quotations, invoices, expenses, contracts, projects, payment in/out)
+export type AttachmentEntityType =
+  | 'company'
+  | 'quotation'
+  | 'invoice'
+  | 'expense'
+  | 'contract'
+  | 'project'
+  | 'payment_in'
+  | 'payment_out';
 
 export const attachmentsApi = {
   list: (entityType: AttachmentEntityType, entityId: number) =>

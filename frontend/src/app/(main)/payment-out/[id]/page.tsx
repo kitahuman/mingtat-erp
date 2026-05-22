@@ -8,16 +8,133 @@ import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import AttachmentUpload from '@/components/AttachmentUpload';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
-const fmt$ = (v: any) =>
-  `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt$ = (v: unknown) =>
+  `$${Number(v ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   unpaid: { label: '未付款', color: 'bg-yellow-100 text-yellow-700' },
   paid: { label: '已付款', color: 'bg-green-100 text-green-700' },
   cancelled: { label: '已取消', color: 'bg-red-100 text-red-700' },
 };
+
+interface SelectOption {
+  value: number;
+  label: string;
+}
+
+interface BankAccount {
+  id: number;
+  bank_name: string | null;
+  account_name: string | null;
+  account_no: string | null;
+}
+
+interface ExpenseMini {
+  id: number;
+  item: string | null;
+  supplier_name: string | null;
+  total_amount: number | string | null;
+  category?: { name: string | null } | null;
+}
+
+interface CompanyMini {
+  id: number;
+  name: string | null;
+}
+
+interface PayrollMini {
+  id: number;
+  period: string | null;
+  employee?: { name_zh: string | null; name_en: string | null } | null;
+}
+
+interface PaymentOutAllocation {
+  id: number;
+  payment_out_allocation_amount: number | string;
+  payment_out_allocation_remarks: string | null;
+  payment_out_allocation_expense_id: number | null;
+  payment_out_allocation_payroll_id: number | null;
+  payment_out_allocation_subcon_payroll_id: number | null;
+  expense?: {
+    id: number;
+    item: string | null;
+    total_amount: number | string;
+    supplier_name: string | null;
+  } | null;
+  payroll?: {
+    id: number;
+    period: string;
+    net_amount: number | string;
+    employee?: { name_zh?: string | null; name_en?: string | null } | null;
+  } | null;
+  subcon_payroll?: {
+    id: number;
+    subcon_payroll_total_amount: number | string;
+    subcon_payroll_month: string | null;
+    subcontractor?: { name?: string | null } | null;
+  } | null;
+}
+
+interface MatchedBankTransaction {
+  id: number;
+  date: string;
+  description: string | null;
+  amount: number | string;
+  reference_no: string | null;
+  bank_account?: BankAccount | null;
+}
+
+interface PayrollPayment {
+  id: number;
+  payroll_payment_date: string;
+  payroll_payment_amount: number | string;
+  payroll_payment_reference_no: string | null;
+  payroll_payment_bank_account: string | null;
+  payroll_payment_remarks: string | null;
+  payroll?: PayrollMini | null;
+}
+
+interface PaymentOutRecord {
+  id: number;
+  date: string;
+  amount: number | string;
+  expense_id: number | null;
+  payroll_id: number | null;
+  company_id: number | null;
+  payment_out_description: string | null;
+  payment_out_status: string;
+  bank_account_id: number | null;
+  reference_no: string | null;
+  remarks: string | null;
+  created_at: string;
+  updated_at: string;
+  expense?: ExpenseMini | null;
+  payroll?: PayrollMini | null;
+  company?: CompanyMini | null;
+  bank_account?: BankAccount | null;
+  allocations?: PaymentOutAllocation[];
+  matched_bank_transactions?: MatchedBankTransaction[];
+  payroll_payments?: PayrollPayment[];
+}
+
+interface PaymentOutForm {
+  date: string;
+  amount: number | '';
+  expense_id: number | '';
+  payment_out_description: string;
+  payment_out_status: string;
+  bank_account_id: number | '';
+  reference_no: string;
+  remarks: string;
+  payroll_id: number | null;
+  company_id: number | null;
+}
 
 function Field({
   label,
@@ -44,24 +161,36 @@ export default function PaymentOutDetailPage() {
   const recordId = Number(id);
 
   const { isReadOnly } = useAuth();
-  const [record, setRecord] = useState<any>(null);
+  const [record, setRecord] = useState<PaymentOutRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<any>({});
+  const [form, setForm] = useState<PaymentOutForm>({
+    date: '',
+    amount: '',
+    expense_id: '',
+    payment_out_description: '',
+    payment_out_status: 'unpaid',
+    bank_account_id: '',
+    reference_no: '',
+    remarks: '',
+    payroll_id: null,
+    company_id: null,
+  });
 
   // Reference data
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseMini[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   const loadRecord = useCallback(() => {
     setLoading(true);
     paymentOutApi
       .get(recordId)
       .then((r) => {
-        setRecord(r.data);
-        setForm(toForm(r.data));
+        const data = r.data as PaymentOutRecord;
+        setRecord(data);
+        setForm(toForm(data));
       })
       .catch(() => setError('無法載入付款記錄'))
       .finally(() => setLoading(false));
@@ -74,26 +203,26 @@ export default function PaymentOutDetailPage() {
   useEffect(() => {
     expensesApi
       .list({ limit: 500 })
-      .then((r) => setExpenses(r.data?.data || []))
+      .then((r) => setExpenses((r.data?.data || []) as ExpenseMini[]))
       .catch(() => {});
     bankAccountsApi
       .simple()
-      .then((r) => setBankAccounts(r.data || []))
+      .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
       .catch(() => {});
   }, []);
 
   useRefetchOnFocus(() => {
     expensesApi
       .list({ limit: 500 })
-      .then((r) => setExpenses(r.data?.data || []))
+      .then((r) => setExpenses((r.data?.data || []) as ExpenseMini[]))
       .catch(() => {});
     bankAccountsApi
       .simple()
-      .then((r) => setBankAccounts(r.data || []))
+      .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
       .catch(() => {});
   });
 
-  const expenseOptions = useMemo(
+  const expenseOptions: SelectOption[] = useMemo(
     () =>
       expenses.map((e) => ({
         value: e.id,
@@ -102,7 +231,7 @@ export default function PaymentOutDetailPage() {
     [expenses],
   );
 
-  const bankAccountOptions = useMemo(
+  const bankAccountOptions: SelectOption[] = useMemo(
     () =>
       bankAccounts.map((ba) => ({
         value: ba.id,
@@ -111,19 +240,19 @@ export default function PaymentOutDetailPage() {
     [bankAccounts],
   );
 
-  function toForm(r: any) {
+  function toForm(r: PaymentOutRecord): PaymentOutForm {
     return {
       date: r.date ? r.date.slice(0, 10) : '',
       amount: r.amount != null ? Number(r.amount) : '',
-      expense_id: r.expense_id || '',
+      expense_id: r.expense_id ?? '',
       payment_out_description: r.payment_out_description || '',
       payment_out_status: r.payment_out_status || 'unpaid',
-      bank_account_id: r.bank_account_id || '',
+      bank_account_id: r.bank_account_id ?? '',
       reference_no: r.reference_no || '',
       remarks: r.remarks || '',
       // read-only fields preserved
-      payroll_id: r.payroll_id || null,
-      company_id: r.company_id || null,
+      payroll_id: r.payroll_id ?? null,
+      company_id: r.company_id ?? null,
     };
   }
 
@@ -131,9 +260,12 @@ export default function PaymentOutDetailPage() {
     if (!form.date || !form.amount) return alert('請填寫日期和金額');
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         date: form.date,
-        amount: parseFloat(form.amount),
+        amount:
+          typeof form.amount === 'number'
+            ? form.amount
+            : parseFloat(String(form.amount)),
         expense_id: form.expense_id ? Number(form.expense_id) : null,
         payment_out_description: form.payment_out_description || null,
         payment_out_status: form.payment_out_status || 'unpaid',
@@ -143,14 +275,17 @@ export default function PaymentOutDetailPage() {
         reference_no: form.reference_no || null,
         remarks: form.remarks || null,
         // preserve payroll_id and company_id on update
-        payroll_id: form.payroll_id || null,
-        company_id: form.company_id || null,
+        payroll_id: form.payroll_id ?? null,
+        company_id: form.company_id ?? null,
       };
       await paymentOutApi.update(recordId, payload);
       setEditMode(false);
       loadRecord();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '儲存失敗');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || '儲存失敗';
+      alert(msg);
     } finally {
       setSaving(false);
     }
@@ -161,8 +296,11 @@ export default function PaymentOutDetailPage() {
     try {
       await paymentOutApi.delete(recordId);
       router.push('/payment-out');
-    } catch (err: any) {
-      alert(err.response?.data?.message || '刪除失敗');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || '刪除失敗';
+      alert(msg);
     }
   };
 
@@ -290,7 +428,12 @@ export default function PaymentOutDetailPage() {
                   type="number"
                   step="0.01"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      amount: e.target.value === '' ? '' : Number(e.target.value),
+                    })
+                  }
                   className="input-field"
                   placeholder="0.00"
                 />
@@ -338,8 +481,11 @@ export default function PaymentOutDetailPage() {
                 </label>
                 <SearchableSelect
                   value={form.expense_id ? Number(form.expense_id) : null}
-                  onChange={(v: any) =>
-                    setForm({ ...form, expense_id: v || '' })
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      expense_id: v == null ? '' : Number(v),
+                    })
                   }
                   options={expenseOptions}
                   placeholder="選擇支出"
@@ -425,8 +571,11 @@ export default function PaymentOutDetailPage() {
                 value={
                   form.bank_account_id ? Number(form.bank_account_id) : null
                 }
-                onChange={(v: any) =>
-                  setForm({ ...form, bank_account_id: v || '' })
+                onChange={(v) =>
+                  setForm({
+                    ...form,
+                    bank_account_id: v == null ? '' : Number(v),
+                  })
                 }
                 options={bankAccountOptions}
                 placeholder="選擇銀行帳戶"
@@ -487,6 +636,15 @@ export default function PaymentOutDetailPage() {
         )}
       </div>
 
+      <div className="mb-6">
+        <AttachmentUpload
+          entityType="payment_out"
+          entityId={record.id}
+          title="付款文件"
+          readOnly={isReadOnly()}
+        />
+      </div>
+
       {/* Allocations (多對多關聯單據) */}
       <AllocationsCard
         paymentOutId={record.id}
@@ -526,7 +684,7 @@ export default function PaymentOutDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {record.matched_bank_transactions.map((tx: any) => (
+                {record.matched_bank_transactions.map((tx) => (
                   <tr
                     key={tx.id}
                     className="border-b border-gray-100 hover:bg-gray-50"
@@ -606,7 +764,7 @@ export default function PaymentOutDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {record.payroll_payments.map((pp: any) => (
+                {record.payroll_payments.map((pp) => (
                   <tr
                     key={pp.id}
                     className="border-b border-gray-100 hover:bg-gray-50"
