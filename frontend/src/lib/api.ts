@@ -339,6 +339,7 @@ export interface UnifiedDocumentItem {
   uploaded_at: string | null;
   uploaded_by: string | null;
   description: string | null;
+  doc_type: string | null;
   file_url: string | null;
   preview_url: string;
   download_url: string;
@@ -354,8 +355,17 @@ export interface UnifiedDocumentListResponse {
   sources: { value: string; label: string }[];
 }
 
+export interface DocumentTreeNode {
+  label: string;
+  value: string;
+  type: 'module' | 'entity' | 'doc_type';
+  count: number;
+  children?: DocumentTreeNode[];
+}
+
 export const documentManagementApi = {
   list: (params?: any) => api.get<UnifiedDocumentListResponse>('/document-management', { params }),
+  tree: (params?: any) => api.get<DocumentTreeNode[]>('/document-management/tree', { params }),
   preview: (source: string, id: string) =>
     withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/preview`),
   download: (source: string, id: string) =>

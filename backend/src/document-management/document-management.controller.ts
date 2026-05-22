@@ -9,6 +9,7 @@ import {
   BatchDownloadDocumentsDto,
   DocumentFileParamsDto,
   ListDocumentManagementQueryDto,
+  DocumentTreeQueryDto,
 } from './dto/document-management.dto';
 
 @Controller('document-management')
@@ -21,9 +22,14 @@ export class DocumentManagementController {
     return this.service.list(query);
   }
 
-  @Post('batch-download')
-  async batchDownload(@Body() dto: BatchDownloadDocumentsDto, @Res() res: Response) {
-    const files = dto.files || [];
+  @Get("tree")
+  async getDocumentTree(@Query() query: DocumentTreeQueryDto) {
+    return this.service.getDocumentTree(query);
+  }
+
+  @Post("batch-download")
+  async batchDownload(@Body() body: BatchDownloadDocumentsDto, @Res() res: Response) {
+    const files = body.files || [];
     if (!files.length) throw new BadRequestException('請選擇至少一個文件');
     if (files.length > 200) throw new BadRequestException('一次最多只能下載 200 個文件');
 

@@ -6,6 +6,8 @@ import {
   DocumentManagementModule,
   DocumentManagementSource,
   ListDocumentManagementQueryDto,
+  DocumentTreeQueryDto,
+  DocumentTreeNode,
 } from './dto/document-management.dto';
 
 export interface UnifiedDocumentRecord {
@@ -504,6 +506,89 @@ export class DocumentManagementService {
 
   private normalizeText(value: string) {
     return value.toLowerCase().trim();
+  }
+
+  async getDocumentTree(query: DocumentTreeQueryDto): Promise<DocumentTreeNode[]> {
+    const allRows = await this.collectRows();
+
+    // Apply initial filters if any
+    const filteredRows = allRows.filter(row => {
+      if (query.module && row.module !== query.module) return false;
+      // For entity_id and doc_type, we'll filter at the respective levels
+      return true;
+    });
+
+    const tree: DocumentTreeNode[] = [];
+    const moduleMap = new Map<string, DocumentTreeNode>();
+
+    for (const row of filteredRows) {
+      // Level 1: Module
+      if (!moduleMap.has(row.module)) {
+        moduleMap.set(row.module, {
+          label: row.module_label,
+          value: row.module,
+          type: 'module',
+          count: 0,
+          children: [],
+        });
+        tree.push(moduleMap.get(row.module)!);
+      }
+      const moduleNode = moduleMap.get(row.module)!;
+      moduleNode.count++;
+
+      // Level 2: Entity (Record)
+      const entityKey = `${row.module}:${row.entity_id}`;
+      let entityNode = moduleNode.children?.find(child => child.value === entityKey);
+      if (!entityNode) {
+        entityNode = {
+          label: row.entity_label,
+          value: entityKey,
+          type: 'entity',
+          count: 0,
+          children: [],
+        };
+        moduleNode.children?.push(entityNode);
+      }
+      entityNode.count++;
+
+      // Level 3: Document Type (if available)
+      if (row.doc_type) {
+        const docTypeKey = `${entityKey}:${row.doc_type}`;
+        let docTypeNode = entityNode.children?.find(child => child.value === docTypeKey);
+        if (!docTypeNode) {
+          docTypeNode = {
+            label: row.doc_type,
+            value: docTypeKey,
+            type: 'doc_type',
+            count: 0,
+          };
+          entityNode.children?.push(docTypeNode);
+        }
+        docTypeNode.count++;
+      }
+    }
+
+    // Sort nodes for consistent display
+    tree.sort((a, b) => a.label.localeCompare(b.label));
+    tree.forEach(moduleNode => {
+      moduleNode.children?.sort((a, b) => a.label.localeCompare(b.label));
+      moduleNode.children?.forEach(entityNode => {
+        entityNode.children?.sort((a, b) => a.label.localeCompare(b.label));
+      });
+    });
+
+    // Append counts to labels after all counts are finalized
+    const appendCounts = (nodes: DocumentTreeNode[]) => {
+      nodes.forEach(node => {
+        node.label = `${node.label} (${node.count})`;
+        if (node.children) {
+          appendCounts(node.children);
+        }
+      });
+    };
+    appendCounts(tree);
+
+    return tree;
   }
 
   private timeValue(value: Date | null) {

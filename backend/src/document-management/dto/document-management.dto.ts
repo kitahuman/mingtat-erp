@@ -85,6 +85,28 @@ export class BatchDownloadDocumentItemDto {
   id!: string;
 }
 
+export class DocumentTreeQueryDto {
+  @IsOptional()
+  @IsIn(DOCUMENT_MANAGEMENT_MODULES)
+  module?: DocumentManagementModule;
+
+  @IsOptional()
+  @IsString()
+  entity_id?: string;
+
+  @IsOptional()
+  @IsString()
+  doc_type?: string;
+}
+
+export class DocumentTreeNode {
+  label: string;
+  value: string;
+  type: 'module' | 'entity' | 'doc_type';
+  count: number;
+  children?: DocumentTreeNode[];
+}
+
 export class BatchDownloadDocumentsDto {
   @IsArray()
   @ValidateNested({ each: true })
