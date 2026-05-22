@@ -27,7 +27,7 @@ export interface UnifiedDocumentRecord {
   preview_url: string;
 }
 
-interface ResolvedFile {
+export interface ResolvedFile {
   filePath: string;
   fileName: string;
   mimeType?: string | null;

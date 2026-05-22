@@ -360,6 +360,8 @@ export const documentManagementApi = {
     withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/preview`),
   download: (source: string, id: string) =>
     withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/download`),
+  batchDownload: (files: { source: UnifiedDocumentSource; id: string }[]) =>
+    api.post('/document-management/batch-download', { files }, { responseType: 'blob' }),
 };
 
 // Partners

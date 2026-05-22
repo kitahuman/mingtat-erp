@@ -32,6 +32,8 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.21",
     "@prisma/client": "^6.19.2",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^8.0.0",
     "axios": "^1.15.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",

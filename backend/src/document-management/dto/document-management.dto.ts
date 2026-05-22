@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export const DOCUMENT_MANAGEMENT_MODULES = [
   'company',
@@ -75,4 +75,19 @@ export class DocumentFileParamsDto {
 
   @IsString()
   id!: string;
+}
+
+export class BatchDownloadDocumentItemDto {
+  @IsIn(DOCUMENT_MANAGEMENT_SOURCES)
+  source!: DocumentManagementSource;
+
+  @IsString()
+  id!: string;
+}
+
+export class BatchDownloadDocumentsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BatchDownloadDocumentItemDto)
+  files!: BatchDownloadDocumentItemDto[];
 }

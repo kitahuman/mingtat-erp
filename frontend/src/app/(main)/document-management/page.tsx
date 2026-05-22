@@ -16,6 +16,12 @@ interface Filters {
   date_to: string;
 }
 
+interface SelectedDocument {
+  source: UnifiedDocumentItem['source'];
+  id: string;
+  file_name: string;
+}
+
 const defaultFilters: Filters = {
   q: '',
   file_name: '',
@@ -62,6 +68,10 @@ function isPreviewable(document: UnifiedDocumentItem) {
   );
 }
 
+function getDocumentKey(document: Pick<UnifiedDocumentItem, 'source' | 'id'>) {
+  return `${document.source}:${document.id}`;
+}
+
 export default function DocumentManagementPage() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
@@ -69,8 +79,10 @@ export default function DocumentManagementPage() {
   const [limit, setLimit] = useState(50);
   const [data, setData] = useState<UnifiedDocumentListResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
   const [error, setError] = useState('');
   const [previewDocument, setPreviewDocument] = useState<UnifiedDocumentItem | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<Record<string, SelectedDocument>>({});
 
   const params = useMemo(() => {
     const query: Record<string, string | number> = { page, limit };
@@ -99,6 +111,9 @@ export default function DocumentManagementPage() {
 
   const totalPages = data?.total_pages || 1;
   const documents = data?.data || [];
+  const selectedList = Object.values(selectedDocuments);
+  const selectedCount = selectedList.length;
+  const allCurrentPageSelected = documents.length > 0 && documents.every(document => selectedDocuments[getDocumentKey(document)]);
 
   const applyFilters = () => {
     setPage(1);
@@ -109,6 +124,58 @@ export default function DocumentManagementPage() {
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setPage(1);
+  };
+
+  const toggleDocumentSelection = (document: UnifiedDocumentItem, checked: boolean) => {
+    const key = getDocumentKey(document);
+    setSelectedDocuments(prev => {
+      const next = { ...prev };
+      if (checked) {
+        next[key] = { source: document.source, id: document.id, file_name: document.file_name };
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const toggleCurrentPageSelection = (checked: boolean) => {
+    setSelectedDocuments(prev => {
+      const next = { ...prev };
+      documents.forEach(document => {
+        const key = getDocumentKey(document);
+        if (checked) {
+          next[key] = { source: document.source, id: document.id, file_name: document.file_name };
+        } else {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  };
+
+  const batchDownloadSelected = async () => {
+    if (selectedCount === 0) return;
+    setDownloadingZip(true);
+    setError('');
+    try {
+      const response = await documentManagementApi.batchDownload(
+        selectedList.map(document => ({ source: document.source, id: document.id })),
+      );
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = `文件管理批量下載-${new Date().toISOString().slice(0, 10)}.zip`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || '批量下載失敗');
+    } finally {
+      setDownloadingZip(false);
+    }
   };
 
   const previewUrl = previewDocument
@@ -266,10 +333,46 @@ export default function DocumentManagementPage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-gray-600">
+            已選擇 <span className="font-semibold text-gray-900">{selectedCount}</span> 個文件
+            {selectedCount > 0 && (
+              <span className="ml-2 text-xs text-gray-500">可跨頁選取，ZIP 內檔名會使用頁面顯示的文件名。</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedDocuments({})}
+              disabled={selectedCount === 0 || downloadingZip}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              清除選取
+            </button>
+            <button
+              type="button"
+              onClick={batchDownloadSelected}
+              disabled={selectedCount === 0 || downloadingZip}
+              className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {downloadingZip ? '正在打包 ZIP...' : '批量下載 ZIP'}
+            </button>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="w-12 px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={allCurrentPageSelected}
+                    onChange={event => toggleCurrentPageSelection(event.target.checked)}
+                    disabled={loading || documents.length === 0}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="選取目前頁所有文件"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">文件</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">模組</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">關聯記錄</th>
@@ -281,20 +384,29 @@ export default function DocumentManagementPage() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">
                     載入文件中...
                   </td>
                 </tr>
               )}
               {!loading && documents.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">
                     未找到符合條件的文件。
                   </td>
                 </tr>
               )}
               {!loading && documents.map(document => (
                 <tr key={`${document.source}-${document.id}`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 align-top">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedDocuments[getDocumentKey(document)])}
+                      onChange={event => toggleDocumentSelection(document, event.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      aria-label={`選取文件 ${document.file_name}`}
+                    />
+                  </td>
                   <td className="max-w-sm px-4 py-3 align-top">
                     <div className="font-medium text-gray-900 break-words">{document.file_name}</div>
                     <div className="mt-1 text-xs text-gray-500">
