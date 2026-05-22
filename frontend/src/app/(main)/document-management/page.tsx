@@ -115,12 +115,11 @@ export default function DocumentManagementPage() {
         params.module = module;
         params.entity_id = entity_id;
       } else if (selectedNode.type === 'doc_type') {
-        const [module, entity_id, doc_type] = selectedNode.value.split(':');
+        const [module, entity_id, ...docTypeParts] = selectedNode.value.split(':');
         params.module = module;
         params.entity_id = entity_id;
-        params.doc_type = doc_type;
+        params.doc_type = docTypeParts.join(':');
       }
-      // Apply general filters to the document list
       Object.entries(appliedFilters).forEach(([key, value]) => {
         if (value) params[key] = value;
       });
@@ -148,19 +147,21 @@ export default function DocumentManagementPage() {
   const selectedCount = selectedList.length;
   const allCurrentPageSelected = documents.length > 0 && documents.every(document => selectedDocuments[getDocumentKey(document)]);
 
+  const selectTreeNode = (node: DocumentTreeNode) => {
+    setSelectedNode(node);
+    setPage(1);
+    setSelectedDocuments({});
+  };
+
   const applyFilters = () => {
     setPage(1);
     setAppliedFilters(filters);
-    // When filters are applied, we should reload the document list for the current selected node
-    loadDocumentList();
   };
 
   const resetFilters = () => {
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setPage(1);
-    // When filters are reset, reload the document list for the current selected node
-    loadDocumentList();
   };
 
   const toggleDocumentSelection = (document: UnifiedDocumentItem, checked: boolean) => {
@@ -328,7 +329,7 @@ export default function DocumentManagementPage() {
                   <div
                     className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === moduleNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
                     onClick={() => {
-                      setSelectedNode(moduleNode);
+                      selectTreeNode(moduleNode);
                       setExpandedNodes(prev => ({ ...prev, [moduleNode.value]: !prev[moduleNode.value] }));
                     }}
                   >
@@ -355,7 +356,7 @@ export default function DocumentManagementPage() {
                           <div
                             className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === entityNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
                             onClick={() => {
-                              setSelectedNode(entityNode);
+                              selectTreeNode(entityNode);
                               setExpandedNodes(prev => ({ ...prev, [entityNode.value]: !prev[entityNode.value] }));
                             }}
                           >
@@ -381,7 +382,7 @@ export default function DocumentManagementPage() {
                                 <div key={docTypeNode.value}>
                                   <div
                                     className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === docTypeNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
-                                    onClick={() => setSelectedNode(docTypeNode)}
+                                    onClick={() => selectTreeNode(docTypeNode)}
                                   >
                                     <span className="font-medium">{docTypeNode.label}</span>
                                   </div>

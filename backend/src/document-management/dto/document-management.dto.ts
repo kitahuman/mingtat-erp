@@ -48,6 +48,15 @@ export class ListDocumentManagementQueryDto {
   source?: DocumentManagementSource;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  entity_id?: number;
+
+  @IsOptional()
+  @IsString()
+  doc_type?: string;
+
+  @IsOptional()
   @IsString()
   date_from?: string;
 

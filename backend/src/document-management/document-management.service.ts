@@ -356,6 +356,8 @@ export class DocumentManagementService {
     return rows.filter((row) => {
       if (query.module && row.module !== query.module) return false;
       if (query.source && row.source !== query.source) return false;
+      if (query.entity_id !== undefined && Number(row.entity_id) !== Number(query.entity_id)) return false;
+      if (query.doc_type && row.doc_type !== query.doc_type) return false;
       if (fileName && !this.normalizeText(row.file_name).includes(fileName)) return false;
       if (from && row.uploaded_at && row.uploaded_at < from) return false;
       if (to && row.uploaded_at && row.uploaded_at > to) return false;
