@@ -21,6 +21,21 @@ interface AttachmentRecord {
   attachment_created_at?: string | null;
 }
 
+interface ApiErrorResponse {
+  response?: {
+    data?: {
+      message?: string | string[];
+    };
+  };
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const apiError = error as ApiErrorResponse;
+  const message = apiError.response?.data?.message;
+  if (Array.isArray(message)) return message.join('、');
+  return message || fallback;
+};
+
 export default function AttachmentUpload({
   entityType,
   entityId,
@@ -95,8 +110,8 @@ export default function AttachmentUpload({
       setDescription('');
       if (fileRef.current) fileRef.current.value = '';
       await loadAttachments();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '上傳失敗');
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, '上傳失敗'));
     } finally {
       setUploading(false);
     }
@@ -108,8 +123,8 @@ export default function AttachmentUpload({
     try {
       await attachmentsApi.remove(attachment.id);
       await loadAttachments();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '刪除失敗');
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, '刪除失敗'));
     }
   };
 

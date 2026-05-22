@@ -17,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -26,17 +26,39 @@ import { AttachmentsService } from './attachments.service';
 import {
   ATTACHMENT_ENTITY_TYPES,
   AttachmentEntityParamsDto,
+  AttachmentEntityType,
   CreateAttachmentDto,
   ListAttachmentsQueryDto,
   UpdateAttachmentDto,
 } from './dto/attachment.dto';
 
-function getAttachmentUploadDir(entityType: string) {
+function isAttachmentEntityType(entityType: string): entityType is AttachmentEntityType {
+  return (ATTACHMENT_ENTITY_TYPES as readonly string[]).includes(entityType);
+}
+
+function getAttachmentUploadDir(entityType: AttachmentEntityType) {
   const dir = join(process.cwd(), 'uploads', 'attachments', entityType);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
   return dir;
+}
+
+interface JwtUser {
+  id?: number;
+  userId?: number;
+  sub?: number | string;
+}
+
+interface AuthenticatedRequest extends Request {
+  user?: JwtUser;
+}
+
+function normalizeOptionalUserId(value: number | string | undefined): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
 }
 
 @Controller('attachments')
@@ -55,7 +77,7 @@ export class AttachmentsController {
       storage: diskStorage({
         destination: (req, _file, cb) => {
           const entityType = String(req.params.entityType);
-          if (!ATTACHMENT_ENTITY_TYPES.includes(entityType as any)) {
+          if (!isAttachmentEntityType(entityType)) {
             return cb(new BadRequestException('不支援的附件關聯類型'), '');
           }
           cb(null, getAttachmentUploadDir(entityType));
@@ -73,10 +95,10 @@ export class AttachmentsController {
     @Param() params: AttachmentEntityParamsDto,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: CreateAttachmentDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     if (!file) throw new BadRequestException('請選擇文件');
-    const userId = req.user?.id || req.user?.userId || req.user?.sub || undefined;
+    const userId = normalizeOptionalUserId(req.user?.id ?? req.user?.userId ?? req.user?.sub);
     return this.service.create(
       params.entityType,
       Number(params.entityId),

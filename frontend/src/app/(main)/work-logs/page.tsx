@@ -37,12 +37,19 @@ import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
 import { fmtDate } from '@/lib/dateUtils';
 import DateInput from '@/components/DateInput';
+import AttachmentUpload from '@/components/AttachmentUpload';
+import Modal from '@/components/Modal';
 
 interface Option {
   value: string | number;
   label: string;
   _raw?: any;
   shortLabel?: string;
+}
+
+interface WorkLogAttachmentTarget {
+  id: number;
+  title: string;
 }
 
 const LIMIT_OPTIONS = [25, 50, 100];
@@ -271,12 +278,8 @@ export default function WorkLogsPage() {
   >(null);
   const [invoiceLinkLoading, setInvoiceLinkLoading] = useState(false);
 
-  // ── Attachment Viewer ──────────────────────────────────────────
-  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false);
-  const [viewingAttachments, setViewingAttachments] = useState<{
-    photos: string[];
-    signature: string | null;
-  } | null>(null);
+  // ── Attachment Manager ──────────────────────────────────────────
+  const [attachmentModalTarget, setAttachmentModalTarget] = useState<WorkLogAttachmentTarget | null>(null);
 
   // ── Toast 通知 ──────────────────────────────────────────
   const [toasts, setToasts] = useState<
@@ -2010,26 +2013,21 @@ export default function WorkLogsPage() {
           />
         );
       case 'attachments': {
-        const photos = Array.isArray(row.work_log_photo_urls)
-          ? row.work_log_photo_urls
-          : [];
-        const hasSig = !!row.work_log_signature_url;
-        const total = photos.length + (hasSig ? 1 : 0);
-        if (total === 0)
-          return <span className="text-gray-300 text-xs">—</span>;
+        const rowId = Number(row.id);
+        const scheduledDate = row.scheduled_date ? fmtDate(row.scheduled_date) : '';
+        const workOrderNo = row.work_order_no ? String(row.work_order_no) : '';
+        const titleParts = [`#${rowId}`, scheduledDate, workOrderNo].filter(Boolean);
+        const title = `Work Log ${titleParts.join('｜')}`;
+
         return (
           <button
-            onClick={() => {
-              setViewingAttachments({
-                photos,
-                signature: row.work_log_signature_url || null,
-              });
-              setAttachmentViewerOpen(true);
-            }}
-            className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium whitespace-nowrap"
-            title="點擊查看附件"
+            type="button"
+            disabled={!Number.isFinite(rowId)}
+            onClick={() => setAttachmentModalTarget({ id: rowId, title })}
+            className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            title="管理此 Work Log 的附件"
           >
-            📎 {total}
+            附件
           </button>
         );
       }
@@ -3082,27 +3080,32 @@ export default function WorkLogsPage() {
                             className={`sticky right-0 z-10 ${rowBg} px-1 py-0 border-l border-gray-200 w-28`}
                           >
                             <div className="flex gap-0.5">
-                              {(row.work_log_photo_urls ||
-                                row.work_log_signature_url) && (
-                                <button
-                                  onClick={() => {
-                                    setViewingAttachments({
-                                      photos: Array.isArray(
-                                        row.work_log_photo_urls,
-                                      )
-                                        ? row.work_log_photo_urls
-                                        : [],
-                                      signature:
-                                        row.work_log_signature_url || null,
-                                    });
-                                    setAttachmentViewerOpen(true);
-                                  }}
-                                  className="px-1 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-                                  title="查看附件"
-                                >
-                                  📄
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                disabled={!Number.isFinite(Number(row.id))}
+                                onClick={() => {
+                                  const rowId = Number(row.id);
+                                  const scheduledDate = row.scheduled_date
+                                    ? fmtDate(row.scheduled_date)
+                                    : '';
+                                  const workOrderNo = row.work_order_no
+                                    ? String(row.work_order_no)
+                                    : '';
+                                  const titleParts = [
+                                    `#${rowId}`,
+                                    scheduledDate,
+                                    workOrderNo,
+                                  ].filter(Boolean);
+                                  setAttachmentModalTarget({
+                                    id: rowId,
+                                    title: `Work Log ${titleParts.join('｜')}`,
+                                  });
+                                }}
+                                className="px-1 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="管理附件"
+                              >
+                                附件
+                              </button>
                               <button
                                 onClick={() => handleDuplicate(row.id)}
                                 className="px-1 py-0.5 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
@@ -4683,55 +4686,22 @@ export default function WorkLogsPage() {
               </div>
             </div>
           )}
-          {/* ── Attachment Viewer Modal ──────────────────────────────────────── */}
-          {attachmentViewerOpen && viewingAttachments && (
-            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-gray-900">查看附件</h2>
-                  <button
-                    onClick={() => setAttachmentViewerOpen(false)}
-                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="p-6 space-y-6">
-                  {viewingAttachments.photos.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold text-gray-800 mb-3">相片</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        {viewingAttachments.photos.map((url, idx) => (
-                          <div
-                            key={idx}
-                            className="border border-gray-200 rounded-lg overflow-hidden"
-                          >
-                            <img
-                              src={url}
-                              alt={`Photo ${idx + 1}`}
-                              className="w-full h-auto object-contain"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {viewingAttachments.signature && (
-                    <div>
-                      <h3 className="font-semibold text-gray-800 mb-3">簽名</h3>
-                      <div className="border border-gray-200 rounded-lg overflow-hidden inline-block">
-                        <img
-                          src={viewingAttachments.signature}
-                          alt="Signature"
-                          className="h-32 object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* ── Work Log Attachment Manager Modal ───────────────────────────── */}
+          <Modal
+            isOpen={attachmentModalTarget !== null}
+            onClose={() => setAttachmentModalTarget(null)}
+            title={attachmentModalTarget ? `Work Log 附件｜${attachmentModalTarget.title}` : 'Work Log 附件'}
+            size="xl"
+          >
+            {attachmentModalTarget && (
+              <AttachmentUpload
+                entityType="work_log"
+                entityId={attachmentModalTarget.id}
+                title="附件列表"
+                readOnly={isReadOnly('work-logs')}
+              />
+            )}
+          </Modal>
           {/* ── Toast 通知 ──────────────────────────────────────── */}
           {toasts.length > 0 && (
             <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">

@@ -113,6 +113,9 @@ export class AttachmentsService {
       case 'payment_out':
         exists = !!(await this.prisma.paymentOut.findFirst({ where: { id: entityId }, select: { id: true } }));
         break;
+      case 'work_log':
+        exists = !!(await this.prisma.workLog.findFirst({ where: { id: entityId, deleted_at: null }, select: { id: true } }));
+        break;
       default:
         exists = false;
     }
