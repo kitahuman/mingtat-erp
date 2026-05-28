@@ -22,6 +22,29 @@ interface UploadOptions {
   forceReimport?: boolean;
 }
 
+export interface ReceiptImportRow {
+  _rowNumber: number;
+  facility: string;
+  work_date: string | null;
+  vehicle_no: string;
+  account_no: string;
+  chit_no: string;
+  time_in: string;
+  time_out: string;
+  waste_depth: number | null;
+  weight_in: number | null;
+  weight_out: number | null;
+  net_weight: number | null;
+  _is_company_plate?: boolean;
+}
+
+export interface ReceiptParseResult {
+  totalRows: number;
+  matchedPlateRows: number;
+  skippedCount: number;
+  previewData: ReceiptImportRow[];
+}
+
 interface WorkbenchQuery {
   page: number;
   pageSize: number;
@@ -128,10 +151,11 @@ export class VerificationService {
     const batchCode = `BATCH-${today}-${options.sourceType}-${String(existingCount + 1).padStart(3, '0')}`;
 
     // 根據來源類型解析檔案
-    let parseResult: { totalRows: number; matchedPlateRows: number; previewData: any[] };
+    let parseResult: ReceiptParseResult;
 
     if (options.sourceType === 'receipt') {
       parseResult = await this.parseReceiptExcel(file.path);
+      parseResult = await this.filterDuplicateReceiptRows(parseResult);
     } else {
       throw new BadRequestException(`暫不支援 ${options.sourceType} 類型的檔案解析`);
     }
@@ -166,11 +190,12 @@ export class VerificationService {
           record_location_from: null,
           record_location_to: row.facility || null,
           record_contract_no: row.account_no || null,
+          record_slip_no: row.chit_no || null,
           record_time_in: row.time_in ? this.parseTimeToDate(row.time_in) : null,
           record_time_out: row.time_out ? this.parseTimeToDate(row.time_out) : null,
           record_weight_net: row.net_weight != null ? row.net_weight : null,
           record_quantity: row.net_weight != null ? String(row.net_weight) : null,
-          record_raw_data: row,
+          record_raw_data: row as unknown as Prisma.InputJsonValue,
         })),
       });
 
@@ -202,6 +227,7 @@ export class VerificationService {
       batch_code: batch.batch_code,
       total_rows: parseResult.totalRows,
       imported_rows: parseResult.previewData.length,
+      skipped_count: parseResult.skippedCount,
       matched_plate_rows: parseResult.matchedPlateRows,
       preview_data: parseResult.previewData.slice(0, 50), // 只返回前 50 筆預覽
     };
@@ -210,7 +236,7 @@ export class VerificationService {
   // ══════════════════════════════════════════════════════════════
   // 解析入帳票 Excel
   // ══════════════════════════════════════════════════════════════
-  private async parseReceiptExcel(filePath: string) {
+  private async parseReceiptExcel(filePath: string): Promise<ReceiptParseResult> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
 
@@ -229,7 +255,7 @@ export class VerificationService {
     );
 
     // 解析 Excel 資料
-    const allRows: any[] = [];
+    const allRows: ReceiptImportRow[] = [];
     const headerRow = worksheet.getRow(1);
     const headers: string[] = [];
     headerRow.eachCell((cell, colNumber) => {
@@ -306,8 +332,83 @@ export class VerificationService {
     return {
       totalRows: allRows.length,
       matchedPlateRows: matchedPlateCount,
-      previewData: allRows, // 匯入全部記錄
+      skippedCount: 0,
+      previewData: allRows, // 匯入全部記錄，後續再做跨批次行級去重
     };
+  }
+
+  private async filterDuplicateReceiptRows(parseResult: ReceiptParseResult): Promise<ReceiptParseResult> {
+    const importRows: ReceiptImportRow[] = [];
+    const seenKeys = new Set<string>();
+    let skippedCount = 0;
+    let matchedPlateRows = 0;
+
+    for (const row of parseResult.previewData) {
+      const duplicateKey = this.getReceiptDuplicateKey(row);
+
+      if (duplicateKey) {
+        if (seenKeys.has(duplicateKey)) {
+          skippedCount++;
+          continue;
+        }
+
+        const existsInDatabase = await this.receiptRecordExists(row);
+        if (existsInDatabase) {
+          skippedCount++;
+          continue;
+        }
+
+        seenKeys.add(duplicateKey);
+      }
+
+      importRows.push(row);
+      if (row._is_company_plate) {
+        matchedPlateRows++;
+      }
+    }
+
+    return {
+      ...parseResult,
+      matchedPlateRows,
+      skippedCount,
+      previewData: importRows,
+    };
+  }
+
+  private getReceiptDuplicateKey(row: ReceiptImportRow): string | null {
+    const workDate = row.work_date;
+    const accountNo = row.account_no.trim();
+    const chitNo = row.chit_no.trim();
+
+    if (!workDate || !accountNo || !chitNo) {
+      return null;
+    }
+
+    return `${workDate}|${accountNo}|${chitNo}`;
+  }
+
+  private async receiptRecordExists(row: ReceiptImportRow): Promise<boolean> {
+    const workDate = row.work_date;
+    const accountNo = row.account_no.trim();
+    const chitNo = row.chit_no.trim();
+
+    if (!workDate || !accountNo || !chitNo) {
+      return false;
+    }
+
+    const existingRecord = await this.prisma.verificationRecord.findFirst({
+      where: {
+        record_work_date: new Date(workDate),
+        record_contract_no: accountNo,
+        OR: [
+          { record_slip_no: chitNo },
+          { chits: { some: { chit_no: chitNo } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    return existingRecord !== null;
   }
 
   // ══════════════════════════════════════════════════════════════

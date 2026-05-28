@@ -72,6 +72,7 @@ export default function VerificationUploadPage() {
     batch_code: string;
     total_rows: number;
     imported_rows: number;
+    skipped_count: number;
     matched_plate_rows: number;
     preview_data: PreviewRow[];
   } | null>(null);
@@ -1148,6 +1149,10 @@ function ExcelUploadSection({
                 <div className="font-medium text-primary-600">{uploadResult.imported_rows}</div>
               </div>
               <div>
+                <div className="text-gray-500">略過重複行數</div>
+                <div className="font-medium text-amber-600">{uploadResult.skipped_count}</div>
+              </div>
+              <div>
                 <div className="text-gray-500">公司車牌匹配</div>
                 <div className="font-medium text-blue-600">{uploadResult.matched_plate_rows}</div>
               </div>
@@ -1159,7 +1164,7 @@ function ExcelUploadSection({
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600 flex items-center justify-between">
                 <span>預覽資料（前 {Math.min(50, uploadResult.preview_data.length)} 筆）</span>
-                <span className="text-xs text-gray-400">共 {uploadResult.imported_rows} 筆匯入（{uploadResult.matched_plate_rows} 筆匹配公司車牌）</span>
+                <span className="text-xs text-gray-400">共 {uploadResult.imported_rows} 筆匯入，略過 {uploadResult.skipped_count} 筆重複（{uploadResult.matched_plate_rows} 筆匹配公司車牌）</span>
               </div>
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                 <table className="w-full text-xs">
@@ -1201,7 +1206,7 @@ function ExcelUploadSection({
               <span className="font-medium text-green-800">匯入成功</span>
             </div>
             <div className="text-sm text-gray-600 mb-3">
-              已匯入 {uploadResult.imported_rows} 筆記錄到系統。可在「匯入紀錄」頁面查看或開始配對。
+              已匯入 {uploadResult.imported_rows} 筆記錄到系統{uploadResult.skipped_count > 0 ? `，並略過 ${uploadResult.skipped_count} 筆重複資料` : ''}。可在「匯入紀錄」頁面查看或開始配對。
             </div>
             <div className="flex gap-3">
               <Link
