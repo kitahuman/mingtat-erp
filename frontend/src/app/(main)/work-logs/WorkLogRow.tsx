@@ -152,10 +152,11 @@ export default function WorkLogRow({
     const statusColor = STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600';
     // 只有在沒有確認客戶（client_id）且有未確認名稱時，才顯示琥色背景
     const hasUnverifiedClient = !row.client_id && !!row.unverified_client_name;
+    const hasUnmatchedContract = !row.contract_id && !!row.client_contract_no;
     return (
       <tr
         className={`cursor-pointer border-b border-gray-100 text-xs ${
-          hasUnverifiedClient ? 'bg-amber-50 hover:bg-amber-200' : 'hover:bg-blue-100'
+          hasUnverifiedClient || hasUnmatchedContract ? 'bg-amber-50 hover:bg-amber-200' : 'hover:bg-blue-100'
         }`}
         onClick={onEdit}
       >
@@ -201,7 +202,17 @@ export default function WorkLogRow({
         {/* 報價單 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.quotation?.quotation_no || '—'}</td>
         {/* 客戶合約 */}
-        <td className="px-2 py-1.5 whitespace-nowrap w-32">{row.client_contract_no || '—'}</td>
+        <td className="px-2 py-1.5 whitespace-nowrap w-32 max-w-[128px] truncate">
+          {hasUnmatchedContract ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800 whitespace-nowrap" title="未匹配合約（不在合約主檔）">
+                {row.client_contract_no}
+              </span>
+            </span>
+          ) : (
+            row.client_contract_no || '—'
+          )}
+        </td>
         {/* 員工 */}
         <td className="px-2 py-1.5 whitespace-nowrap w-24">
           {row.work_log_fleet_driver_id && row.fleet_driver

@@ -277,12 +277,16 @@ export class WhatsappClockinService {
               ai_parsed_data: {
                 ...entry,
                 raw_name: entry.name,
+                raw_contract_no: entry.contract_no,
                 raw_text: text,
                 department: groupInfo.department,
                 service_type: groupInfo.service_type,
                 group_id: chatId,
                 sender,
                 employee_matched: !!matchedEmployee,
+                client_matched: !!matchedClient,
+                contract_matched: !entry.contract_no || !!matchedContract,
+                unmatched_contract_no: entry.contract_no && !matchedContract ? entry.contract_no : null,
               } as object,
             },
           });
@@ -948,7 +952,7 @@ ${refs.contractRef}
 
     for (const c of contracts) {
       const cno = (c.contract_no || '').toLowerCase().replace(/\s+/g, '');
-      if (cno && (cno === cn || cno.includes(cn) || cn.includes(cno))) {
+      if (cno && cno === cn) {
         return { id: c.id };
       }
     }

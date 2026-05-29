@@ -893,7 +893,7 @@ export default function WorkLogsPage() {
       }
       for (const [col, vals] of Object.entries(columnFilters)) {
         if (vals && vals.size > 0) {
-          params[`filter_${col}`] = Array.from(vals).join(',');
+          params[`filter_${col}`] = JSON.stringify(Array.from(vals));
         }
       }
       return params;

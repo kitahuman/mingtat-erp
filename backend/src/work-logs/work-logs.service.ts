@@ -412,7 +412,33 @@ export class WorkLogsService {
   private splitFilterValues(raw: unknown): string[] {
     if (raw === null || raw === undefined) return [];
     if (raw === '') return [''];
-    return String(raw)
+
+    if (Array.isArray(raw)) {
+      return raw
+        .map((value) => String(value).trim())
+        .filter((value) => value.length > 0);
+    }
+
+    const rawString = String(raw);
+    const trimmed = rawString.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter(
+              (value): value is string | number | boolean =>
+                ['string', 'number', 'boolean'].includes(typeof value),
+            )
+            .map((value) => String(value).trim())
+            .filter((value) => value.length > 0);
+        }
+      } catch {
+        // Fall back to legacy comma-separated parsing below.
+      }
+    }
+
+    return rawString
       .split(',')
       .map((v) => v.trim())
       .filter((v) => v.length > 0);
