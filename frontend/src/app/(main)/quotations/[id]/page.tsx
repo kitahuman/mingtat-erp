@@ -9,6 +9,9 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import AttachmentUpload from '@/components/AttachmentUpload';
+import SearchableSelect from '@/components/SearchableSelect';
+import Combobox from '@/components/Combobox';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
 const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
@@ -122,6 +125,17 @@ export default function QuotationDetailPage() {
     date: new Date().toISOString().slice(0, 10), due_date: '', tax_rate: 0, payment_terms: '', remarks: '',
   });
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  
+  const [detailModal, setDetailModal] = useState<{ isOpen: boolean; index: number | null }>({
+    isOpen: false,
+    index: null,
+  });
+  const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'location'];
+  const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
+  const tonnageOptions = optionsMap['tonnage'] || [];
+  const vehicleTypeOptions = optionsMap['machine_type'] || [];
+  const serviceTypeOptions = optionsMap['service_type'] || [];
+  const locationOptions = optionsMap['location'] || [];
 
   const loadRevisions = async (targetQuotationId: number = quotationId) => {
     setRevisionsLoading(true);
@@ -515,6 +529,29 @@ export default function QuotationDetailPage() {
                         <td className="px-3 py-1">
                           <input value={item.item_name || ''} onChange={e => updateItem(idx, 'item_name', e.target.value)} className="input-field text-sm mb-1" placeholder="項目名稱（短）" />
                           <textarea value={item.item_description || ''} onChange={e => updateItem(idx, 'item_description', e.target.value)} className="input-field text-sm text-xs" rows={2} placeholder="項目描述（可多行）" />
+                          <div className="flex items-center gap-4 mt-2">
+                            <button 
+                              type="button" 
+                              onClick={() => setDetailModal({ isOpen: true, index: idx })}
+                              className={`text-xs px-2 py-1 rounded border ${
+                                (item.qi_service_type || item.qi_day_night || item.qi_tonnage || item.qi_machine_type || item.qi_origin || item.qi_destination || item.qi_ot_rate || item.qi_mid_shift_rate)
+                                ? 'bg-primary-50 border-primary-200 text-primary-700'
+                                : 'bg-gray-50 border-gray-200 text-gray-600'
+                              }`}
+                            >
+                              {(item.qi_service_type || item.qi_day_night || item.qi_tonnage || item.qi_machine_type || item.qi_origin || item.qi_destination || item.qi_ot_rate || item.qi_mid_shift_rate)
+                                ? '編輯詳細' : '加入詳細'}
+                            </button>
+                            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={!!item.qi_sync_to_rate_card} 
+                                onChange={e => updateItem(idx, 'qi_sync_to_rate_card', e.target.checked)}
+                                className="w-3.5 h-3.5"
+                              />
+                              同步到價目表
+                            </label>
+                          </div>
                         </td>
                         <td className="px-3 py-1 align-top pt-2"><input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="input-field text-sm text-right" /></td>
                         <td className="px-3 py-1 align-top pt-2">
@@ -536,6 +573,24 @@ export default function QuotationDetailPage() {
                           {item.item_name && <p className="font-medium">{item.item_name}</p>}
                           {item.item_description && <p className="text-gray-500 text-xs mt-0.5 whitespace-pre-wrap">{item.item_description}</p>}
                           {!item.item_name && !item.item_description && (item.description || '-')}
+                          {(item.qi_service_type || item.qi_day_night || item.qi_tonnage || item.qi_machine_type || item.qi_origin || item.qi_destination) && (
+                            <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1.5">
+                              {item.qi_service_type && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">{item.qi_service_type}</span>}
+                              {item.qi_day_night && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">{item.qi_day_night}</span>}
+                              {item.qi_tonnage && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">{item.qi_tonnage}</span>}
+                              {item.qi_machine_type && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">{item.qi_machine_type}</span>}
+                              {(item.qi_origin || item.qi_destination) && (
+                                <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">
+                                  {item.qi_origin || '?'} → {item.qi_destination || '?'}
+                                </span>
+                              )}
+                              {item.qi_ot_rate > 0 && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] border border-blue-100">OT: ${Number(item.qi_ot_rate).toLocaleString()}</span>}
+                              {item.qi_mid_shift_rate > 0 && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] border border-blue-100">中直: ${Number(item.qi_mid_shift_rate).toLocaleString()}</span>}
+                            </div>
+                          )}
+                          {item.qi_sync_to_rate_card && (
+                            <p className="text-[10px] text-primary-600 font-medium mt-1">✓ 已標記同步到價目表</p>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right font-mono">
                           {rateOnly ? <span className="text-orange-500 text-xs">—</span> : Number(item.quantity).toLocaleString()}
@@ -750,6 +805,105 @@ export default function QuotationDetailPage() {
           </div>
         </Modal>
       )}
+
+      {/* Item Detail Modal */}
+      <Modal 
+        isOpen={detailModal.isOpen} 
+        onClose={() => setDetailModal({ isOpen: false, index: null })} 
+        title="費率明細詳細資料" 
+        size="lg"
+      >
+        {detailModal.index !== null && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">服務類型</label>
+                <Combobox
+                  value={form.items[detailModal.index]?.qi_service_type || ''}
+                  onChange={(v) => updateItem(detailModal.index!, 'qi_service_type', v)}
+                  options={serviceTypeOptions}
+                  placeholder="選擇或輸入服務類型"
+                />
+              </div>
+              <div>
+                <label className="label">日夜</label>
+                <select 
+                  className="input-field"
+                  value={form.items[detailModal.index]?.qi_day_night || ''}
+                  onChange={(e) => updateItem(detailModal.index!, 'qi_day_night', e.target.value)}
+                >
+                  <option value="">-</option>
+                  <option value="日">日</option>
+                  <option value="夜">夜</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">噸數</label>
+                <Combobox
+                  value={form.items[detailModal.index]?.qi_tonnage || ''}
+                  onChange={(v) => updateItem(detailModal.index!, 'qi_tonnage', v)}
+                  options={tonnageOptions}
+                  placeholder="選擇或輸入噸數"
+                />
+              </div>
+              <div>
+                <label className="label">機種</label>
+                <Combobox
+                  value={form.items[detailModal.index]?.qi_machine_type || ''}
+                  onChange={(v) => updateItem(detailModal.index!, 'qi_machine_type', v)}
+                  options={vehicleTypeOptions}
+                  placeholder="選擇或輸入機種"
+                />
+              </div>
+              <div>
+                <label className="label">起點</label>
+                <Combobox
+                  value={form.items[detailModal.index]?.qi_origin || ''}
+                  onChange={(v) => updateItem(detailModal.index!, 'qi_origin', v)}
+                  options={locationOptions}
+                  placeholder="選擇或輸入起點"
+                />
+              </div>
+              <div>
+                <label className="label">終點</label>
+                <Combobox
+                  value={form.items[detailModal.index]?.qi_destination || ''}
+                  onChange={(v) => updateItem(detailModal.index!, 'qi_destination', v)}
+                  options={locationOptions}
+                  placeholder="選擇或輸入終點"
+                />
+              </div>
+              <div>
+                <label className="label">OT 費率 (每小時)</label>
+                <input 
+                  type="number" 
+                  className="input-field"
+                  value={form.items[detailModal.index]?.qi_ot_rate || ''}
+                  onChange={(e) => updateItem(detailModal.index!, 'qi_ot_rate', e.target.value ? Number(e.target.value) : null)}
+                />
+              </div>
+              <div>
+                <label className="label">中直費率 (每小時)</label>
+                <input 
+                  type="number" 
+                  className="input-field"
+                  value={form.items[detailModal.index]?.qi_mid_shift_rate || ''}
+                  onChange={(e) => updateItem(detailModal.index!, 'qi_mid_shift_rate', e.target.value ? Number(e.target.value) : null)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button 
+                type="button" 
+                onClick={() => setDetailModal({ isOpen: false, index: null })} 
+                className="btn-primary"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

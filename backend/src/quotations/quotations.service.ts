@@ -605,54 +605,114 @@ export class QuotationsService {
         const expiryDate = options?.expiry_date ? new Date(options.expiry_date) : undefined;
 
         // 1. 客戶價目表
-        await this.prisma.rateCard.create({
-          data: {
-            company_id: quotation.company_id,
-            client_id: quotation.client_id!,
-            contract_no: contractNo,
-            name: itemName,
-            description: item.item_description || undefined,
-            service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
-            rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
-            day_rate: Number(item.unit_price) || 0,
-            day_unit: item.unit,
-            effective_date: effectiveDate,
-            expiry_date: expiryDate,
-            source_quotation_id: quotation.id,
-            project_id: projectId || undefined,
-            remarks: item.remarks || undefined,
-            status: 'active',
-          },
-        });
+        if (item.qi_sync_to_rate_card) {
+          const rc = await this.prisma.rateCard.create({
+            data: {
+              company_id: quotation.company_id,
+              client_id: quotation.client_id!,
+              contract_no: contractNo,
+              name: itemName,
+              description: item.item_description || undefined,
+              service_type: item.qi_service_type || (quotation.quotation_type === 'project' ? '工程' : '租賃/運輸'),
+              rate_card_type: quotation.quotation_type === 'project' ? 'project' : 'rental',
+              day_night: item.qi_day_night,
+              tonnage: item.qi_tonnage,
+              machine_type: item.qi_machine_type,
+              origin: item.qi_origin,
+              destination: item.qi_destination,
+              rate: Number(item.unit_price) || 0,
+              unit: item.unit,
+              day_rate: Number(item.unit_price) || 0,
+              day_unit: item.unit,
+              ot_rate: Number(item.qi_ot_rate) || 0,
+              ot_unit: item.qi_ot_rate ? '小時' : null,
+              mid_shift_rate: Number(item.qi_mid_shift_rate) || 0,
+              mid_shift_unit: item.qi_mid_shift_rate ? '小時' : null,
+              effective_date: effectiveDate,
+              expiry_date: expiryDate,
+              source_quotation_id: quotation.id,
+              project_id: projectId || undefined,
+              remarks: item.remarks || undefined,
+              status: 'active',
+            },
+          });
+          
+          try {
+            await this.auditLogsService.log({
+              userId: quotation.deleted_by || 0, // Fallback to system if unknown
+              action: 'create',
+              targetTable: 'rate_cards',
+              targetId: rc.id,
+              changesAfter: rc,
+              remarks: `報價單同步 ${quotation.quotation_no}`,
+            });
+          } catch (e) { console.error('Audit log error:', e); }
+        }
 
         // 2. 租賃價目表
-        await this.prisma.fleetRateCard.create({
-          data: {
-            client_id: quotation.client_id,
-            contract_no: contractNo,
-            day_rate: 0,
-            night_rate: 0,
-            mid_shift_rate: 0,
-            ot_rate: 0,
-            unit: item.unit,
-            remarks: item.remarks || undefined,
-            source_quotation_id: quotation.id,
-            status: 'active',
-          },
-        });
+        if (item.qi_sync_to_rate_card) {
+          const frc = await this.prisma.fleetRateCard.create({
+            data: {
+              client_id: quotation.client_id,
+              contract_no: contractNo,
+              service_type: item.qi_service_type,
+              day_night: item.qi_day_night,
+              tonnage: item.qi_tonnage,
+              machine_type: item.qi_machine_type,
+              origin: item.qi_origin,
+              destination: item.qi_destination,
+              day_rate: 0,
+              night_rate: 0,
+              mid_shift_rate: Number(item.qi_mid_shift_rate) || 0,
+              ot_rate: Number(item.qi_ot_rate) || 0,
+              unit: item.unit,
+              remarks: item.remarks || undefined,
+              source_quotation_id: quotation.id,
+              status: 'active',
+            },
+          });
+          try {
+            await this.auditLogsService.log({
+              userId: quotation.deleted_by || 0,
+              action: 'create',
+              targetTable: 'fleet_rate_cards',
+              targetId: frc.id,
+              changesAfter: frc,
+              remarks: `報價單同步 ${quotation.quotation_no}`,
+            });
+          } catch (e) { console.error('Audit log error:', e); }
+        }
 
         // 3. 供應商價目表
-        await this.prisma.subconRateCard.create({
-          data: {
-            client_id: quotation.client_id,
-            contract_no: contractNo,
-            day_rate: 0,
-            unit: item.unit,
-            remarks: item.remarks || undefined,
-            source_quotation_id: quotation.id,
-            status: 'active',
-          },
-        });
+        if (item.qi_sync_to_rate_card) {
+          const src = await this.prisma.subconRateCard.create({
+            data: {
+              client_id: quotation.client_id,
+              contract_no: contractNo,
+              service_type: item.qi_service_type,
+              day_night: item.qi_day_night,
+              tonnage: item.qi_tonnage,
+              machine_type: item.qi_machine_type,
+              origin: item.qi_origin,
+              destination: item.qi_destination,
+              day_rate: 0,
+              unit: item.unit,
+              remarks: item.remarks || undefined,
+              source_quotation_id: quotation.id,
+              status: 'active',
+            },
+          });
+          try {
+            await this.auditLogsService.log({
+              userId: quotation.deleted_by || 0,
+              action: 'create',
+              targetTable: 'subcon_rate_cards',
+              targetId: src.id,
+              changesAfter: src,
+              remarks: `報價單同步 ${quotation.quotation_no}`,
+            });
+          } catch (e) { console.error('Audit log error:', e); }
+        }
       }
     }
 
@@ -681,6 +741,10 @@ export class QuotationsService {
     }
 
     for (const item of quotation.items) {
+      if (!item.qi_sync_to_rate_card) {
+        results.skipped++;
+        continue;
+      }
       const itemName = item.item_name || '';
       const rateCardType = quotation.quotation_type === 'project' ? 'project' : 'rental';
       const contractNo = quotation.contract_name || undefined;
@@ -693,6 +757,13 @@ export class QuotationsService {
           client_id: quotation.client_id!,
           name: itemName,
           rate_card_type: rateCardType,
+          // 加入詳細配對欄位作為重複檢查條件
+          service_type: item.qi_service_type || undefined,
+          day_night: item.qi_day_night || undefined,
+          tonnage: item.qi_tonnage || undefined,
+          machine_type: item.qi_machine_type || undefined,
+          origin: item.qi_origin || undefined,
+          destination: item.qi_destination || undefined,
         },
       });
 
@@ -708,10 +779,21 @@ export class QuotationsService {
         contract_no: contractNo,
         name: itemName,
         description: item.item_description || undefined,
-        service_type: quotation.quotation_type === 'project' ? '工程' : '租賃/運輸',
+        service_type: item.qi_service_type || (quotation.quotation_type === 'project' ? '工程' : '租賃/運輸'),
         rate_card_type: rateCardType,
+        day_night: item.qi_day_night,
+        tonnage: item.qi_tonnage,
+        machine_type: item.qi_machine_type,
+        origin: item.qi_origin,
+        destination: item.qi_destination,
+        rate: Number(item.unit_price) || 0,
+        unit: item.unit,
         day_rate: Number(item.unit_price) || 0,
         day_unit: item.unit,
+        ot_rate: Number(item.qi_ot_rate) || 0,
+        ot_unit: item.qi_ot_rate ? '小時' : null,
+        mid_shift_rate: Number(item.qi_mid_shift_rate) || 0,
+        mid_shift_unit: item.qi_mid_shift_rate ? '小時' : null,
         effective_date: effectiveDate,
         expiry_date: expiryDate,
         source_quotation_id: quotation.id,
@@ -720,34 +802,89 @@ export class QuotationsService {
       };
 
       if (existing && options?.overwrite) {
-        await this.prisma.rateCard.update({ where: { id: existing.id }, data: rateCardData });
+        const updated = await this.prisma.rateCard.update({ where: { id: existing.id }, data: rateCardData });
         results.overwritten++;
+        try {
+          await this.auditLogsService.log({
+            userId: 0,
+            action: 'update',
+            targetTable: 'rate_cards',
+            targetId: updated.id,
+            changesBefore: existing,
+            changesAfter: updated,
+            remarks: `報價單同步 ${quotation.quotation_no}`,
+          });
+        } catch (e) { console.error('Audit log error:', e); }
       } else {
-        await this.prisma.rateCard.create({ data: rateCardData });
+        const created = await this.prisma.rateCard.create({ data: rateCardData });
         results.created++;
+        try {
+          await this.auditLogsService.log({
+            userId: 0,
+            action: 'create',
+            targetTable: 'rate_cards',
+            targetId: created.id,
+            changesAfter: created,
+            remarks: `報價單同步 ${quotation.quotation_no}`,
+          });
+        } catch (e) { console.error('Audit log error:', e); }
       }
 
       // 2. 租賃價目表
       const existingFleet = await this.prisma.fleetRateCard.findFirst({
-        where: { client_id: quotation.client_id, source_quotation_id: quotation.id },
+        where: { 
+          client_id: quotation.client_id, 
+          source_quotation_id: quotation.id,
+          service_type: item.qi_service_type || undefined,
+          day_night: item.qi_day_night || undefined,
+          tonnage: item.qi_tonnage || undefined,
+          machine_type: item.qi_machine_type || undefined,
+        },
       });
       if (!existingFleet || options?.overwrite) {
         const fleetData: Prisma.FleetRateCardUncheckedCreateInput = {
           client_id: quotation.client_id,
           contract_no: contractNo,
+          service_type: item.qi_service_type,
+          day_night: item.qi_day_night,
+          tonnage: item.qi_tonnage,
+          machine_type: item.qi_machine_type,
+          origin: item.qi_origin,
+          destination: item.qi_destination,
           day_rate: 0,
           night_rate: 0,
-          mid_shift_rate: 0,
-          ot_rate: 0,
+          mid_shift_rate: Number(item.qi_mid_shift_rate) || 0,
+          ot_rate: Number(item.qi_ot_rate) || 0,
           unit: item.unit,
           remarks: item.remarks || undefined,
           source_quotation_id: quotation.id,
           status: 'active',
         };
         if (existingFleet && options?.overwrite) {
-          await this.prisma.fleetRateCard.update({ where: { id: existingFleet.id }, data: fleetData });
+          const updated = await this.prisma.fleetRateCard.update({ where: { id: existingFleet.id }, data: fleetData });
+          try {
+            await this.auditLogsService.log({
+              userId: 0,
+              action: 'update',
+              targetTable: 'fleet_rate_cards',
+              targetId: updated.id,
+              changesBefore: existingFleet,
+              changesAfter: updated,
+              remarks: `報價單同步 ${quotation.quotation_no}`,
+            });
+          } catch (e) { console.error('Audit log error:', e); }
         } else {
-          await this.prisma.fleetRateCard.create({ data: fleetData });
+          const created = await this.prisma.fleetRateCard.create({ data: fleetData });
+          try {
+            await this.auditLogsService.log({
+              userId: 0,
+              action: 'create',
+              targetTable: 'fleet_rate_cards',
+              targetId: created.id,
+              changesAfter: created,
+              remarks: `報價單同步 ${quotation.quotation_no}`,
+            });
+          } catch (e) { console.error('Audit log error:', e); }
         }
       }
 

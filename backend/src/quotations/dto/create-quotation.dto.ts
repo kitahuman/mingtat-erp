@@ -12,6 +12,17 @@ export class QuotationItemDto {
   @IsOptional() @Type(() => Number) @IsNumber() unit_price?: number;
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
   @IsOptional() @IsString() remarks?: string;
+
+  // 詳細配對欄位
+  @IsOptional() @IsString() qi_service_type?: string;
+  @IsOptional() @IsString() qi_day_night?: string;
+  @IsOptional() @IsString() qi_tonnage?: string;
+  @IsOptional() @IsString() qi_machine_type?: string;
+  @IsOptional() @IsString() qi_origin?: string;
+  @IsOptional() @IsString() qi_destination?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() qi_ot_rate?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() qi_mid_shift_rate?: number;
+  @IsOptional() qi_sync_to_rate_card?: boolean;
 }
 
 export class CreateQuotationDto {

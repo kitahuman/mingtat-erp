@@ -15,6 +15,7 @@ export class AuditLogsService {
     targetId: number;
     changesBefore?: any;
     changesAfter?: any;
+    remarks?: string;
     ipAddress?: string;
     userAgent?: string;
   }) {
@@ -26,6 +27,7 @@ export class AuditLogsService {
         audit_target_id: data.targetId,
         audit_changes_before: data.changesBefore || null,
         audit_changes_after: data.changesAfter || null,
+        audit_remarks: data.remarks || null,
         audit_ip_address: data.ipAddress || null,
         audit_user_agent: data.userAgent || null,
       },
@@ -116,6 +118,7 @@ export class AuditLogsService {
         target_id: log.audit_target_id,
         changes_before: log.audit_changes_before,
         changes_after: log.audit_changes_after,
+        remarks: log.audit_remarks,
         ip_address: log.audit_ip_address,
         timestamp: log.audit_timestamp,
         user_agent: log.audit_user_agent,

@@ -379,6 +379,13 @@ export default function RentalRateCardsPage() {
           '-'
         ),
     },
+    {
+      key: 'updated_at',
+      label: '更新日期',
+      sortable: true,
+      editable: false,
+      render: (v: any) => fmtDate(v) || '-',
+    },
   ];
 
   const {

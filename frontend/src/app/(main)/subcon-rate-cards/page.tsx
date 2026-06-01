@@ -19,6 +19,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { fmtDate } from '@/lib/dateUtils';
 
 const FIELD_OPTION_CATEGORIES = [
   'tonnage',
@@ -472,6 +473,13 @@ export default function SubconRateCardsPage() {
           <span className="badge-green">包油</span>
         ),
       filterRender: (v: any) => (v ? '不包油' : '包油'),
+    },
+    {
+      key: 'updated_at',
+      label: '更新日期',
+      sortable: true,
+      editable: false,
+      render: (v: any) => fmtDate(v) || '-',
     },
   ];
 

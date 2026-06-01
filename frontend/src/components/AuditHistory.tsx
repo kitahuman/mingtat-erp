@@ -52,9 +52,15 @@ export default function AuditHistory({ targetTable, targetId }: AuditHistoryProp
         <div key={log.id} className="border rounded-lg p-3 text-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${ACTION_COLORS[log.action] || 'bg-gray-100 text-gray-600'}`}>
-                {ACTION_LABELS[log.action] || log.action}
-              </span>
+              {log.audit_remarks?.includes('報價單同步') ? (
+                <span className="bg-primary-50 text-primary-700 border border-primary-200 text-xs px-2 py-0.5 rounded font-medium">
+                  {log.audit_remarks}
+                </span>
+              ) : (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${ACTION_COLORS[log.action] || 'bg-gray-100 text-gray-600'}`}>
+                  {ACTION_LABELS[log.action] || log.action}
+                </span>
+              )}
               <span className="text-gray-600">{log.user_name || '系統'}</span>
               <span className="text-gray-400">{fmtDateTime(log.timestamp)}</span>
             </div>

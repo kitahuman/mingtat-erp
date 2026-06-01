@@ -18,6 +18,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { fmtDate } from '@/lib/dateUtils';
 
 const FIELD_OPTION_CATEGORIES = [
   'tonnage',
@@ -402,6 +403,13 @@ export default function FleetRateCardsPage() {
         ) : (
           '-'
         ),
+    },
+    {
+      key: 'updated_at',
+      label: '更新日期',
+      sortable: true,
+      editable: false,
+      render: (v: any) => fmtDate(v) || '-',
     },
   ];
 

@@ -271,6 +271,13 @@ export default function ProjectRateCardsPage() {
       ),
       filterRender: (v: any) => (v === 'active' ? '啟用' : '停用'),
     },
+    {
+      key: 'updated_at',
+      label: '更新日期',
+      sortable: true,
+      editable: false,
+      render: (v: any) => fmtDate(v) || '-',
+    },
   ];
 
   const {
