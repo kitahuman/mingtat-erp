@@ -40,6 +40,25 @@ const ANOMALY_TYPE_BADGE: Record<string, string> = {
   location_mismatch: 'bg-orange-100 text-orange-800 border border-orange-200',
 };
 
+const formatTime24 = (timestamp: string) =>
+  new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(timestamp));
+
+const formatDateTime24 = (timestamp: string) =>
+  new Intl.DateTimeFormat('zh-HK', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(timestamp));
+
 const DEFAULT_COLUMNS = [
   { key: 'emp_code', label: '員工編號', sortable: true },
   { key: 'employee_name', label: '員工姓名', sortable: true },
@@ -222,16 +241,7 @@ export default function AttendancesPage() {
 
   const openMapModal = (row: any) => {
     const employeeName = row.employee?.name_zh || row.employee?.name_en || '';
-    const time = row.timestamp
-      ? new Date(row.timestamp).toLocaleString('zh-HK', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        })
-      : '';
+    const time = row.timestamp ? formatDateTime24(row.timestamp) : '';
     setMapModal({
       open: true,
       lat: Number(row.latitude),
@@ -380,21 +390,11 @@ export default function AttendancesPage() {
       filterable: false,
       render: (_: any, row: any) => {
         if (!row.timestamp) return '-';
-        const d = new Date(row.timestamp);
-        return d.toLocaleTimeString('zh-HK', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        });
+        return formatTime24(row.timestamp);
       },
       exportRender: (_: any, row: any) => {
         if (!row.timestamp) return '';
-        const d = new Date(row.timestamp);
-        return d.toLocaleTimeString('zh-HK', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        });
+        return formatTime24(row.timestamp);
       },
     },
     {
@@ -1020,12 +1020,7 @@ export default function AttendancesPage() {
                                 ? '開工'
                                 : '收工'}{' '}
                               {a.attendance.timestamp &&
-                                new Date(
-                                  a.attendance.timestamp,
-                                ).toLocaleTimeString('zh-HK', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
+                                formatTime24(a.attendance.timestamp)}
                             </div>
                           )}
                           {a.work_log && (
