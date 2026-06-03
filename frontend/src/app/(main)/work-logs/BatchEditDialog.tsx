@@ -162,7 +162,7 @@ export default function BatchEditDialog({
           <input
             type="time"
             value={fieldValue || ''}
-            onChange={val => setFieldValue(val || null)}
+            onChange={e => setFieldValue(e.target.value || null)}
             className={`w-full ${inputCls}`}
           />
         );

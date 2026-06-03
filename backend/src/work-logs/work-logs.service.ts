@@ -901,6 +901,8 @@ export class WorkLogsService {
       'day_night',
       'start_location',
       'end_location',
+      'start_time',
+      'end_time',
     ];
     const hasPriceChange = priceRelatedFields.some((f) => f in rest);
     if (hasPriceChange) {
@@ -1222,6 +1224,8 @@ export class WorkLogsService {
         'day_night',
         'start_location',
         'end_location',
+        'start_time',
+        'end_time',
       ];
       if (priceRelatedFields.includes(field)) {
         const updatedLogs = await this.prisma.workLog.findMany({
