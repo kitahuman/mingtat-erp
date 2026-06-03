@@ -1,8 +1,13 @@
-import { IsOptional, IsString, IsNumber, IsArray, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsArray, IsIn, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export const EXPENSE_PAYMENT_METHODS = ['SELF_PAID', 'COMPANY_PAID'] as const;
 export type ExpensePaymentMethod = typeof EXPENSE_PAYMENT_METHODS[number];
+
+export class ExpenseOtherChargeDto {
+  @IsString() name: string;
+  @Type(() => Number) @IsNumber() amount: number;
+}
 
 export class CreateExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
@@ -31,6 +36,10 @@ export class CreateExpenseDto {
   @IsOptional() @Type(() => Number) @IsNumber() subtotal?: number;
   @IsOptional() @Type(() => Number) @IsNumber() tax_amount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ExpenseOtherChargeDto)
+  other_charges?: ExpenseOtherChargeDto[];
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() expense_type?: string;

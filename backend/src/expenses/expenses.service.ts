@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PettyCashService } from '../petty-cash/petty-cash.service';
@@ -28,6 +29,8 @@ const EXPENSE_INCLUDE = {
 export const EXPENSE_SOURCES = ['MANUAL', 'PURCHASE', 'PAYROLL', 'SUBCON', 'CONTRA'] as const;
 export type ExpenseSource = typeof EXPENSE_SOURCES[number];
 
+type ExpenseOtherCharge = { name: string; amount: number };
+
 @Injectable()
 export class ExpensesService {
   constructor(
@@ -35,6 +38,107 @@ export class ExpensesService {
     private readonly auditLogsService: AuditLogsService,
     private readonly pettyCashService: PettyCashService,
   ) {}
+
+  private roundMoney(value: number) {
+    return Math.round(value * 100) / 100;
+  }
+
+  private normalizeOtherCharges(value: unknown): ExpenseOtherCharge[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((charge) => {
+        if (!charge || typeof charge !== 'object') return null;
+        const item = charge as Record<string, unknown>;
+        const name = String(item.name || '').trim();
+        const amount = Number(item.amount) || 0;
+        if (!name) return null;
+        return { name, amount };
+      })
+      .filter((charge): charge is ExpenseOtherCharge => charge !== null);
+  }
+
+  private otherChargesTotal(otherCharges: ExpenseOtherCharge[]) {
+    return otherCharges.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+  }
+
+  private toNullableJson(
+    value: unknown,
+  ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+    if (value === null || value === undefined) return Prisma.JsonNull;
+    return value as Prisma.InputJsonValue;
+  }
+
+  private calculateItemsSubtotal(items: any[]) {
+    return this.roundMoney(
+      items.reduce((sum, item) => {
+        if (item.amount !== undefined && item.amount !== null && item.amount !== '') {
+          return sum + (Number(item.amount) || 0);
+        }
+        return (
+          sum +
+          (Number(item.quantity) || 0) * (Number(item.unit_price) || 0)
+        );
+      }, 0),
+    );
+  }
+
+  private async getPersistedItemsSubtotal(expenseId: number) {
+    const [agg, count] = await Promise.all([
+      this.prisma.expenseItem.aggregate({
+        where: { expense_id: expenseId },
+        _sum: { amount: true },
+      }),
+      this.prisma.expenseItem.count({ where: { expense_id: expenseId } }),
+    ]);
+    return {
+      subtotal: this.roundMoney(Number(agg._sum.amount) || 0),
+      hasItems: count > 0,
+    };
+  }
+
+  private async applyOtherChargesTotal(
+    data: any,
+    expenseId?: number,
+    existing?: { total_amount?: unknown; other_charges?: unknown },
+  ) {
+    const hasOtherChargesInput = Object.prototype.hasOwnProperty.call(
+      data,
+      'other_charges',
+    );
+    const otherCharges = hasOtherChargesInput
+      ? this.normalizeOtherCharges(data.other_charges)
+      : this.normalizeOtherCharges(existing?.other_charges);
+
+    if (hasOtherChargesInput) {
+      data.other_charges = otherCharges.length > 0
+        ? this.toNullableJson(otherCharges)
+        : Prisma.JsonNull;
+    }
+
+    let subtotal: number;
+    if (Array.isArray(data.items)) {
+      subtotal = this.calculateItemsSubtotal(data.items);
+    } else if (expenseId) {
+      const persistedItems = await this.getPersistedItemsSubtotal(expenseId);
+      if (persistedItems.hasItems) {
+        subtotal = persistedItems.subtotal;
+      } else if (Object.prototype.hasOwnProperty.call(data, 'total_amount')) {
+        subtotal = Number(data.total_amount) || 0;
+      } else {
+        const existingTotal = Number(existing?.total_amount) || 0;
+        const existingOtherTotal = this.otherChargesTotal(
+          this.normalizeOtherCharges(existing?.other_charges),
+        );
+        subtotal = existingTotal - existingOtherTotal;
+      }
+    } else {
+      subtotal = Number(data.total_amount) || 0;
+    }
+
+    data.total_amount = this.roundMoney(
+      subtotal + this.otherChargesTotal(otherCharges),
+    );
+  }
 
   async findAll(query: {
     page?: number;
@@ -217,6 +321,9 @@ export class ExpensesService {
     const data = this.normalizeDto(dto);
     await this.assertVehicleIsNotScrappedByExpenseData(data);
     await this.ensureSupplierPartner(data);
+    if (Object.prototype.hasOwnProperty.call(data, 'other_charges')) {
+      await this.applyOtherChargesTotal(data);
+    }
     // Set default source if not provided
     if (!data.source) data.source = 'MANUAL';
     if (userId) data.created_by = userId;
@@ -244,6 +351,9 @@ export class ExpensesService {
     const data = this.normalizeDto(rest);
     await this.assertVehicleIsNotScrappedByExpenseData(data);
     await this.ensureSupplierPartner(data);
+    if (Object.prototype.hasOwnProperty.call(data, 'other_charges')) {
+      await this.applyOtherChargesTotal(data, id, existing);
+    }
     const updated = await this.prisma.expense.update({ where: { id }, data });
     if (userId) {
       try {
@@ -287,6 +397,9 @@ export class ExpensesService {
       const data = this.normalizeDto(dto);
       await this.assertVehicleIsNotScrappedByExpenseData(data);
       await this.ensureSupplierPartner(data);
+      if (Object.prototype.hasOwnProperty.call(data, 'other_charges')) {
+        await this.applyOtherChargesTotal(data);
+      }
       if (!data.source) data.source = 'MANUAL';
       const saved = await this.prisma.expense.create({ data });
       createdIds.push(saved.id);
@@ -380,11 +493,19 @@ export class ExpensesService {
   }
 
   private async recalcTotal(expenseId: number) {
-    const agg = await this.prisma.expenseItem.aggregate({
-      where: { expense_id: expenseId },
-      _sum: { amount: true },
-    });
-    const total = Number(agg._sum.amount) || 0;
+    const [agg, expense] = await Promise.all([
+      this.prisma.expenseItem.aggregate({
+        where: { expense_id: expenseId },
+        _sum: { amount: true },
+      }),
+      this.prisma.expense.findUnique({
+        where: { id: expenseId },
+        select: { other_charges: true },
+      }),
+    ]);
+    const subtotal = Number(agg._sum.amount) || 0;
+    const otherCharges = this.normalizeOtherCharges(expense?.other_charges);
+    const total = this.roundMoney(subtotal + this.otherChargesTotal(otherCharges));
     await this.prisma.expense.update({
       where: { id: expenseId },
       data: { total_amount: total },

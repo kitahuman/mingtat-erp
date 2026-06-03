@@ -1686,6 +1686,7 @@ model Expense {
   category_id            Int?
   employee_id            Int?
   item                   String?
+  other_charges          Json?     @db.JsonB // [{name, amount}] 其他費用
   total_amount           Decimal   @default(0) @db.Decimal(12, 2)
   is_paid                Boolean   @default(false)
   payment_status         String    @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled

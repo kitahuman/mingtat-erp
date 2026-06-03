@@ -59,6 +59,26 @@ function PaymentStatusBadge({ status }: { status: string }) {
   );
 }
 
+type OtherCharge = { name: string; amount: number | string };
+
+function normalizeOtherCharges(value: any): OtherCharge[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((charge) => ({
+      name: String(charge?.name || ''),
+      amount: charge?.amount ?? '',
+    }))
+    .filter((charge) => charge.name.trim() || charge.amount !== '');
+}
+
+function calcOtherChargesTotal(charges: OtherCharge[]) {
+  return charges.reduce((sum, charge) => sum + (Number(charge.amount) || 0), 0);
+}
+
+function formatMoney(value: number) {
+  return Number(value || 0).toLocaleString('en', { minimumFractionDigits: 2 });
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function ExpenseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -150,6 +170,17 @@ export default function ExpenseDetailPage() {
   useRefetchOnFocus(loadReferenceData);
 
   function toForm(e: any) {
+    const otherCharges = normalizeOtherCharges(e.other_charges);
+    const otherChargesAmount = calcOtherChargesTotal(otherCharges);
+    const itemSubtotal = Array.isArray(e.items) && e.items.length > 0
+      ? e.items.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
+      : null;
+    const detailSubtotal = itemSubtotal !== null
+      ? itemSubtotal
+      : e.total_amount != null
+        ? Math.round((Number(e.total_amount) - otherChargesAmount) * 100) / 100
+        : '';
+
     return {
       date: e.date ? e.date.slice(0, 10) : '',
       company_id: e.company_id || '',
@@ -161,7 +192,8 @@ export default function ExpenseDetailPage() {
         e.category?.parent_id || e.category?.parent?.id || '',
       employee_id: e.employee_id || '',
       item: e.item || '',
-      total_amount: e.total_amount != null ? Number(e.total_amount) : '',
+      total_amount: detailSubtotal,
+      other_charges: otherCharges,
       payment_status: e.payment_status || (e.is_paid ? 'paid' : 'unpaid'),
       payment_date: e.payment_date ? e.payment_date.slice(0, 10) : '',
       remarks: e.remarks || '',
@@ -196,8 +228,17 @@ export default function ExpenseDetailPage() {
       for (const f of numericFields) {
         payload[f] = payload[f] ? Number(payload[f]) : null;
       }
-      if (payload.total_amount !== '')
+      payload.other_charges = normalizeOtherCharges(payload.other_charges)
+        .map((charge) => ({
+          name: charge.name.trim(),
+          amount: Number(charge.amount) || 0,
+        }))
+        .filter((charge) => charge.name);
+      if (items.length > 0) {
+        payload.total_amount = itemsTotal;
+      } else if (payload.total_amount !== '') {
         payload.total_amount = Number(payload.total_amount);
+      }
       if (
         payload.payment_status !== 'paid' &&
         payload.payment_status !== 'partially_paid'
@@ -363,6 +404,43 @@ export default function ExpenseDetailPage() {
     (sum: number, i: any) => sum + Number(i.amount),
     0,
   );
+  const persistedOtherCharges = normalizeOtherCharges(expense.other_charges);
+  const formOtherCharges = normalizeOtherCharges(form.other_charges);
+  const activeOtherCharges = editMode ? formOtherCharges : persistedOtherCharges;
+  const activeOtherChargesTotal = calcOtherChargesTotal(activeOtherCharges);
+  const subtotalAmount = items.length > 0
+    ? itemsTotal
+    : editMode
+      ? Number(form.total_amount) || 0
+      : Number(expense.total_amount || 0) - calcOtherChargesTotal(persistedOtherCharges);
+  const calculatedGrandTotal = Math.round((subtotalAmount + activeOtherChargesTotal) * 100) / 100;
+
+  const updateOtherCharge = (
+    index: number,
+    field: 'name' | 'amount',
+    value: string,
+  ) => {
+    setForm({
+      ...form,
+      other_charges: formOtherCharges.map((charge, i) =>
+        i === index ? { ...charge, [field]: value } : charge,
+      ),
+    });
+  };
+
+  const addOtherCharge = () => {
+    setForm({
+      ...form,
+      other_charges: [...formOtherCharges, { name: '', amount: '' }],
+    });
+  };
+
+  const removeOtherCharge = (index: number) => {
+    setForm({
+      ...form,
+      other_charges: formOtherCharges.filter((_, i) => i !== index),
+    });
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -594,17 +672,23 @@ export default function ExpenseDetailPage() {
             )}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                總金額
+                明細小計
               </label>
               <input
                 type="number"
                 step="0.01"
-                value={form.total_amount}
+                value={items.length > 0 ? itemsTotal.toFixed(2) : form.total_amount}
                 onChange={(e) =>
                   setForm({ ...form, total_amount: e.target.value })
                 }
                 className="input-field text-sm"
+                disabled={items.length > 0}
               />
+              {items.length > 0 && (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  已有細項時，小計由細項合計自動計算。
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -731,9 +815,7 @@ export default function ExpenseDetailPage() {
             <Field label="總金額">
               <span className="font-semibold text-base">
                 HK${' '}
-                {(items.length > 0 ? itemsTotal : Number(expense.total_amount)).toLocaleString('en', {
-                  minimumFractionDigits: 2,
-                })}
+                {formatMoney(calculatedGrandTotal)}
               </span>
             </Field>
             <Field label="付款狀態">
@@ -998,6 +1080,88 @@ export default function ExpenseDetailPage() {
               </tfoot>
             )}
           </table>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-gray-600">明細小計</span>
+            <span className="font-semibold text-gray-900">HK$ {formatMoney(subtotalAmount)}</span>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-600">附加項目</span>
+              {editMode && !isReadOnly && (
+                <button
+                  type="button"
+                  onClick={addOtherCharge}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                >
+                  + 新增附加項目
+                </button>
+              )}
+            </div>
+
+            {editMode ? (
+              formOtherCharges.length > 0 ? (
+                <div className="space-y-2">
+                  {formOtherCharges.map((charge, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                      <input
+                        type="text"
+                        value={charge.name}
+                        onChange={(e) => updateOtherCharge(index, 'name', e.target.value)}
+                        className="input-field text-sm col-span-6 md:col-span-7"
+                        placeholder="項目名稱"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={charge.amount}
+                        onChange={(e) => updateOtherCharge(index, 'amount', e.target.value)}
+                        className="input-field text-sm col-span-4 md:col-span-3 text-right"
+                        placeholder="金額"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeOtherCharge(index)}
+                        className="col-span-2 text-xs text-red-500 hover:text-red-700 text-right"
+                      >
+                        刪除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">沒有附加項目。可加入正數加項或負數扣減。</p>
+              )
+            ) : activeOtherCharges.length > 0 ? (
+              <div className="space-y-1">
+                {activeOtherCharges.map((charge, index) => (
+                  <div key={index} className="flex items-center justify-between text-sm text-gray-600">
+                    <span>{charge.name}</span>
+                    <span className={Number(charge.amount) < 0 ? 'text-red-600' : 'text-gray-700'}>
+                      HK$ {formatMoney(Number(charge.amount) || 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">沒有附加項目</p>
+            )}
+
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>附加項目合計</span>
+              <span className={activeOtherChargesTotal < 0 ? 'text-red-600 font-semibold' : 'font-semibold text-gray-800'}>
+                HK$ {formatMoney(activeOtherChargesTotal)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-gray-200 pt-3">
+            <span className="text-sm font-bold text-gray-700">總金額</span>
+            <span className="text-base font-bold text-gray-900">HK$ {formatMoney(calculatedGrandTotal)}</span>
+          </div>
         </div>
 
         {/* Add item form */}
