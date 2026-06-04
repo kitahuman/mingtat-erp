@@ -785,7 +785,7 @@ export default function ExpensesPage() {
           PAYROLL: { label: '薪資', color: 'bg-purple-100 text-purple-700' },
           SUBCON: { label: '分判', color: 'bg-orange-100 text-orange-700' },
           CONTRA: { label: '對沖', color: 'bg-yellow-100 text-yellow-700' },
-          erp: { label: 'ERP', color: 'bg-gray-100 text-gray-600' },
+          ERP: { label: 'ERP', color: 'bg-green-100 text-green-700' },
           employee_portal: {
             label: '員工報銷',
             color: 'bg-blue-100 text-blue-700',
@@ -810,7 +810,7 @@ export default function ExpensesPage() {
           PAYROLL: '薪資',
           SUBCON: '分判',
           CONTRA: '對沖',
-          erp: 'ERP',
+          ERP: 'ERP',
           employee_portal: '員工報銷',
         };
         return m[v] || v || '-';
@@ -822,7 +822,7 @@ export default function ExpensesPage() {
           PAYROLL: '薪資',
           SUBCON: '分判',
           CONTRA: '對沖',
-          erp: 'ERP',
+          ERP: 'ERP',
           employee_portal: '員工報銷',
         };
         return m[v] || v || '-';
@@ -946,6 +946,7 @@ export default function ExpensesPage() {
                 <option value="PAYROLL">薪資</option>
                 <option value="SUBCON">分判</option>
                 <option value="CONTRA">對沖</option>
+                <option value="ERP">ERP</option>
                 <option value="employee_portal">員工報銷</option>
               </select>
               <select
