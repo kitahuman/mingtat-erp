@@ -174,6 +174,9 @@ export default function QuotationsPage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('DESC');
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -205,18 +208,32 @@ export default function QuotationsPage() {
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
 
+  const buildColumnFilterParams = (filters = columnFilters) => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, values]) => {
+      params[`filter_${key}`] = JSON.stringify(
+        values.size === 0 ? ['__NO_MATCH__'] : Array.from(values),
+      );
+    });
+    return params;
+  };
+
+  const buildListParams = (overrides: Record<string, any> = {}) => ({
+    page,
+    limit: 20,
+    search,
+    status: statusFilter || undefined,
+    quotation_type: typeFilter || undefined,
+    sortBy,
+    sortOrder,
+    ...buildColumnFilterParams(),
+    ...overrides,
+  });
+
   const load = () => {
     setLoading(true);
     quotationsApi
-      .list({
-        page,
-        limit: 20,
-        search,
-        status: statusFilter || undefined,
-        quotation_type: typeFilter || undefined,
-        sortBy,
-        sortOrder,
-      })
+      .list(buildListParams())
       .then((res) => {
         setData(res.data.data);
         setTotal(res.data.total);
@@ -226,7 +243,28 @@ export default function QuotationsPage() {
 
   useEffect(() => {
     load();
-  }, [page, search, statusFilter, typeFilter, sortBy, sortOrder]);
+  }, [
+    page,
+    search,
+    statusFilter,
+    typeFilter,
+    sortBy,
+    sortOrder,
+    columnFilters,
+  ]);
+
+  const handleColumnFilterChange = (filters: Record<string, Set<string>>) => {
+    setColumnFilters(filters);
+    setPage(1);
+  };
+
+  const handleFetchFilterOptions = async (columnKey: string) => {
+    const res = await quotationsApi.filterOptions(
+      columnKey,
+      buildListParams({ page: 1, limit: 50 }),
+    );
+    return res.data;
+  };
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
     partnersApi.simple().then((res) => setPartners(res.data));
@@ -340,7 +378,8 @@ export default function QuotationsPage() {
       sortable: true,
       render: (_: any, row: any) =>
         row.company?.internal_prefix || row.company?.name || '-',
-      filterRender: (_: any, row: any) => row.company?.internal_prefix || '-',
+      filterRender: (_: any, row: any) =>
+        row.company?.internal_prefix || row.company?.name || '-',
     },
     {
       key: 'client',
@@ -365,6 +404,7 @@ export default function QuotationsPage() {
       label: '日期',
       sortable: true,
       render: (v: any) => fmtDate(v),
+      filterRender: (v: any) => fmtDate(v),
     },
     {
       key: 'project_name',
@@ -384,6 +424,8 @@ export default function QuotationsPage() {
         ) : (
           '-'
         ),
+      filterRender: (_: any, row: any) =>
+        row.project?.project_no || row.project?.project_name || '-',
     },
     {
       key: 'total_amount',
@@ -398,6 +440,8 @@ export default function QuotationsPage() {
         ) : (
           <span className="font-mono">${Number(v).toLocaleString()}</span>
         ),
+      filterRender: (v: any, row: any) =>
+        row.is_rate_only_total ? 'Rate Only' : Number(v).toLocaleString('en'),
     },
     {
       key: 'status',
@@ -452,7 +496,10 @@ export default function QuotationsPage() {
           page={page}
           limit={20}
           onPageChange={setPage}
-          onSearch={setSearch}
+          onSearch={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
           searchPlaceholder="搜尋報價單號、工程名稱、客戶..."
           onRowClick={(row) => router.push(`/quotations/${row.id}`)}
           loading={loading}
@@ -461,7 +508,12 @@ export default function QuotationsPage() {
           onSort={(f, o) => {
             setSortBy(f);
             setSortOrder(o);
+            setPage(1);
           }}
+          serverSideFilter
+          columnFilters={columnFilters}
+          onColumnFilterChange={handleColumnFilterChange}
+          onFetchFilterOptions={handleFetchFilterOptions}
           filters={
             <div className="flex gap-2">
               <select

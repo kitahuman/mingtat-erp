@@ -33,15 +33,16 @@ type AuthenticatedRequest = {
 };
 
 type QuotationListQuery = {
-  page?: number;
-  limit?: number;
+  page?: number | string;
+  limit?: number | string;
   search?: string;
-  company_id?: number;
-  client_id?: number;
+  company_id?: number | string;
+  client_id?: number | string;
   status?: string;
   quotation_type?: string;
   sortBy?: string;
   sortOrder?: string;
+  [key: string]: string | number | undefined;
 };
 
 function getUserId(req: AuthenticatedRequest): number {
@@ -86,21 +87,24 @@ export class QuotationsController {
     @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const pdf = await this.quotationPdfService.generateQuotationPdf(Number(id), {
-      language,
-      showClientAddress: this.parseBool(showClientAddress),
-      showClientPhone: this.parseBool(showClientPhone),
-      showClientContact: this.parseBool(showClientContact),
-      showClientInfo: this.parseBool(showClientInfo),
-      showSignature: this.parseBool(showSignature),
-      showClientSignature: this.parseBool(showClientSignature),
-      showCompanySignature: this.parseBool(showCompanySignature),
-      showCompanyStamp: this.parseBool(showCompanyStamp),
-      overridePaymentTerms,
-      overrideClientAddress: clientAddress,
-      overrideClientContact: clientContact,
-      overrideClientPhone: clientPhone,
-    });
+    const pdf = await this.quotationPdfService.generateQuotationPdf(
+      Number(id),
+      {
+        language,
+        showClientAddress: this.parseBool(showClientAddress),
+        showClientPhone: this.parseBool(showClientPhone),
+        showClientContact: this.parseBool(showClientContact),
+        showClientInfo: this.parseBool(showClientInfo),
+        showSignature: this.parseBool(showSignature),
+        showClientSignature: this.parseBool(showClientSignature),
+        showCompanySignature: this.parseBool(showCompanySignature),
+        showCompanyStamp: this.parseBool(showCompanyStamp),
+        overridePaymentTerms,
+        overrideClientAddress: clientAddress,
+        overrideClientContact: clientContact,
+        overrideClientPhone: clientPhone,
+      },
+    );
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -128,21 +132,24 @@ export class QuotationsController {
     @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const html = await this.quotationPdfService.generateQuotationHtml(Number(id), {
-      language,
-      showClientAddress: this.parseBool(showClientAddress),
-      showClientPhone: this.parseBool(showClientPhone),
-      showClientContact: this.parseBool(showClientContact),
-      showClientInfo: this.parseBool(showClientInfo),
-      showSignature: this.parseBool(showSignature),
-      showClientSignature: this.parseBool(showClientSignature),
-      showCompanySignature: this.parseBool(showCompanySignature),
-      showCompanyStamp: this.parseBool(showCompanyStamp),
-      overridePaymentTerms,
-      overrideClientAddress: clientAddress,
-      overrideClientContact: clientContact,
-      overrideClientPhone: clientPhone,
-    });
+    const html = await this.quotationPdfService.generateQuotationHtml(
+      Number(id),
+      {
+        language,
+        showClientAddress: this.parseBool(showClientAddress),
+        showClientPhone: this.parseBool(showClientPhone),
+        showClientContact: this.parseBool(showClientContact),
+        showClientInfo: this.parseBool(showClientInfo),
+        showSignature: this.parseBool(showSignature),
+        showClientSignature: this.parseBool(showClientSignature),
+        showCompanySignature: this.parseBool(showCompanySignature),
+        showCompanyStamp: this.parseBool(showCompanyStamp),
+        overridePaymentTerms,
+        overrideClientAddress: clientAddress,
+        overrideClientContact: clientContact,
+        overrideClientPhone: clientPhone,
+      },
+    );
 
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
@@ -154,6 +161,14 @@ export class QuotationsController {
   @Get()
   findAll(@Query() query: QuotationListQuery) {
     return this.service.findAll(query);
+  }
+
+  @Get('filter-options/:column')
+  getFilterOptions(
+    @Param('column') column: string,
+    @Query() query: QuotationListQuery,
+  ) {
+    return this.service.getFilterOptions(column, query);
   }
 
   @Get('by-project/:projectId')
@@ -172,7 +187,10 @@ export class QuotationsController {
   }
 
   @Post()
-  create(@Body() dto: CreateQuotationDto, @Request() req: AuthenticatedRequest) {
+  create(
+    @Body() dto: CreateQuotationDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.service.create(dto, getUserId(req), getIpAddress(req));
   }
 
@@ -204,7 +222,10 @@ export class QuotationsController {
   }
 
   @Post(':id/accept')
-  acceptQuotation(@Param('id') id: number, @Body() options: AcceptQuotationDto) {
+  acceptQuotation(
+    @Param('id') id: number,
+    @Body() options: AcceptQuotationDto,
+  ) {
     return this.service.acceptQuotation(Number(id), options);
   }
 

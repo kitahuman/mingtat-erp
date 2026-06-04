@@ -490,6 +490,8 @@ export const projectsApi = {
 // Quotations (報價單)
 export const quotationsApi = {
   list: (params?: any) => api.get('/quotations', { params }),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/quotations/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/quotations/${id}`),
   create: (data: any) => api.post('/quotations', data),
   update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
