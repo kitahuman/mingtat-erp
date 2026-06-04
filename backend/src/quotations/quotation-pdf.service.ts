@@ -166,10 +166,14 @@ export class QuotationPdfService {
       </div>`
       : '';
 
+    const isRateOnlyItem = (item: any) => Boolean(item?.rate_only) || !item?.quantity || Number(item.quantity) === 0;
+    const isRateOnlyTotal = (quotation.items || []).length > 0 && (quotation.items || []).every(isRateOnlyItem);
+
     const itemRows = (quotation.items || [])
       .map((item: any, idx: number) => {
         const name = item.item_name || '';
         const description = item.item_description || '';
+        const rateOnly = isRateOnlyItem(item);
         return `
         <tr>
           <td class="center">${idx + 1}</td>
@@ -177,17 +181,17 @@ export class QuotationPdfService {
             <div class="item-title">${this.escapeHtml(name)}</div>
             ${description ? `<div class="sub-lines">${this.escapeMultiline(description)}</div>` : ''}
           </td>
-          <td class="right">${this.formatQuantity(item.quantity)}</td>
+          <td class="right">${rateOnly ? '—' : this.formatQuantity(item.quantity)}</td>
           <td class="center">${this.escapeHtml(item.unit || '')}</td>
           <td class="right">${this.formatMoney(item.unit_price, false)}</td>
-          <td class="right">${this.formatMoney(item.amount, false)}</td>
+          <td class="right">${rateOnly ? 'Rate Only' : this.formatMoney(item.amount, false)}</td>
         </tr>
       `;
       })
       .join('');
 
     const totalsRows = [
-      this.totalRow(labels.total, this.formatMoney(quotation.total_amount), true),
+      this.totalRow(labels.total, isRateOnlyTotal ? 'Rate Only' : this.formatMoney(quotation.total_amount), true),
     ].join('');
 
     return `<!DOCTYPE html>

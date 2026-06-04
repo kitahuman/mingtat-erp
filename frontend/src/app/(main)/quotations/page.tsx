@@ -10,6 +10,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -390,7 +391,9 @@ export default function QuotationsPage() {
       label: '總金額',
       sortable: true,
       className: 'text-right',
-      render: (v: any) => (
+      render: (v: any, row: any) => row.is_rate_only_total ? (
+        <span className="text-orange-600 text-xs font-semibold">Rate Only</span>
+      ) : (
         <span className="font-mono">${Number(v).toLocaleString()}</span>
       ),
     },
@@ -406,6 +409,15 @@ export default function QuotationsPage() {
       filterRender: (v: any) => statusLabels[v] || v,
     },
   ];
+
+  const {
+    columnConfigs,
+    columnWidths,
+    visibleColumns,
+    handleColumnConfigChange,
+    handleReset,
+    handleColumnResize,
+  } = useColumnConfig('quotations', columns);
 
   return (
     <div>
@@ -427,7 +439,12 @@ export default function QuotationsPage() {
       <div className="card">
         <DataTable
           exportFilename="報價單列表"
-          columns={columns}
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
           data={data}
           total={total}
           page={page}

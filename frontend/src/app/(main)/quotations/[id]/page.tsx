@@ -22,6 +22,8 @@ type QuotationRevisionSummary = {
   quotation_no: string;
   quotation_date: string;
   total_amount?: number | string | null;
+  is_rate_only_total?: boolean;
+  items?: any[];
   quotation_parent_id?: number | null;
   quotation_revision_number: number;
   quotation_is_active: boolean;
@@ -301,10 +303,14 @@ export default function QuotationDetailPage() {
     setForm({ ...form, items });
   };
 
-  // Rate Only: quantity is 0 or empty
-  const isRateOnly = (item: any) => !item.quantity || Number(item.quantity) === 0;
+  // Rate Only: explicit rate_only flag, or current legacy convention where quantity is 0/empty
+  const isRateOnly = (item: any) => Boolean(item?.rate_only) || !item?.quantity || Number(item.quantity) === 0;
+  const isRateOnlyTotal = (items: any[] = []) => items.length > 0 && items.every(isRateOnly);
   const itemAmount = (item: any) => isRateOnly(item) ? 0 : (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
   const totalAmount = (form.items || []).reduce((sum: number, item: any) => sum + itemAmount(item), 0);
+  const allItemsRateOnly = editing
+    ? isRateOnlyTotal(form.items || [])
+    : Boolean(quotation?.is_rate_only_total) || isRateOnlyTotal(quotation?.items || []);
 
   const unitOptions = (form.quotation_type === 'rental' ? RENTAL_UNITS : PROJECT_UNITS);
 
@@ -409,7 +415,11 @@ export default function QuotationDetailPage() {
                       </td>
                       <td className="px-3 py-2 font-mono">{revision.quotation_no}</td>
                       <td className="px-3 py-2">{fmtDate(revision.quotation_date)}</td>
-                      <td className="px-3 py-2 text-right font-mono">HKD ${Number(revision.total_amount || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {revision.is_rate_only_total || isRateOnlyTotal((revision as any).items || [])
+                          ? <span className="text-orange-600 text-xs font-semibold">Rate Only</span>
+                          : `HKD $${Number(revision.total_amount || 0).toLocaleString()}`}
+                      </td>
                       <td className="px-3 py-2">
                         {revision.quotation_is_active ? (
                           <span className="badge-green">正式版</span>
@@ -610,7 +620,7 @@ export default function QuotationDetailPage() {
               <tr className="bg-gray-50 font-bold">
                 <td colSpan={editing ? 5 : 5} className="px-3 py-2 text-right">總金額：</td>
                 <td className="px-3 py-2 text-right font-mono text-primary-600">
-                  HKD ${editing ? totalAmount.toLocaleString() : Number(quotation?.total_amount).toLocaleString()}
+                  {allItemsRateOnly ? 'Rate Only' : `HKD $${editing ? totalAmount.toLocaleString() : Number(quotation?.total_amount).toLocaleString()}`}
                 </td>
                 {editing && <td></td>}
               </tr>

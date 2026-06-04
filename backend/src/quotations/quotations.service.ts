@@ -65,6 +65,21 @@ export class QuotationsService {
     }, 0);
   }
 
+  private isRateOnlyItem(item: any): boolean {
+    return Boolean(item?.rate_only) || !item?.quantity || Number(item.quantity) === 0;
+  }
+
+  private isRateOnlyTotal(items: any[] = []): boolean {
+    return items.length > 0 && items.every((item) => this.isRateOnlyItem(item));
+  }
+
+  private withRateOnlyTotal<T extends { items?: any[] }>(quotation: T) {
+    return {
+      ...quotation,
+      is_rate_only_total: this.isRateOnlyTotal(quotation.items || []),
+    };
+  }
+
   /**
    * Generate quotation number:
    * Format with client code: {CompanyPrefix}Q{ClientCode}{YYMM}{4-digit hex seq}
@@ -183,7 +198,12 @@ export class QuotationsService {
     const [data, total] = await Promise.all([
       this.prisma.quotation.findMany({
         where,
-        include: { company: true, client: true, project: true },
+        include: {
+          company: true,
+          client: true,
+          project: true,
+          items: { select: { quantity: true }, orderBy: { sort_order: 'asc' } },
+        },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
@@ -191,7 +211,13 @@ export class QuotationsService {
       this.prisma.quotation.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data: data.map((quotation) => this.withRateOnlyTotal(quotation)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number) {
@@ -200,7 +226,7 @@ export class QuotationsService {
       include: this.includeRelations,
     });
     if (!quotation || quotation.deleted_at) throw new NotFoundException('報價單不存在');
-    return quotation;
+    return this.withRateOnlyTotal(quotation);
   }
 
   async createRevision(id: number, dto: CreateQuotationRevisionDto = {}) {
@@ -319,7 +345,7 @@ export class QuotationsService {
     }
 
     const rootQuotationId = this.getQuotationFamilyRootId(quotation);
-    return this.prisma.quotation.findMany({
+    const revisions = await this.prisma.quotation.findMany({
       where: {
         deleted_at: null,
         OR: [{ id: rootQuotationId }, { quotation_parent_id: rootQuotationId }],
@@ -327,6 +353,8 @@ export class QuotationsService {
       include: this.includeRelations,
       orderBy: [{ quotation_revision_number: 'asc' }, { id: 'asc' }],
     });
+
+    return revisions.map((revision) => this.withRateOnlyTotal(revision));
   }
 
   async create(dto: CreateQuotationDto, userId?: number, ipAddress?: string) {
