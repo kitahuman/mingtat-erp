@@ -1570,7 +1570,7 @@ export class InvoicesService {
     const candidates = await this.prisma.rateCard.findMany({
       where: {
         status: 'active',
-        rate_card_type: 'client',
+        rate_card_type: { in: ['rental', 'client'] },
         deleted_at: null,
         company_id: companyId,
         client_id: clientId,

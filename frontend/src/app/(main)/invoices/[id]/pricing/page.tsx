@@ -1516,9 +1516,13 @@ export default function InvoicePricingPage() {
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [items, setItems] = useState<InvoiceItemDraft[]>([]);
   const [unitOptions, setUnitOptions] = useState<Option[]>([]);
-  const [rowFields, setRowFields] = useState<PivotDimension[]>(['employee']);
+  const [rowFields, setRowFields] = useState<PivotDimension[]>([
+    'contract',
+    'start_location',
+    'end_location',
+  ]);
   const [colFields, setColFields] = useState<PivotDimension[]>([
-    'scheduled_date',
+    'equipment_number',
   ]);
   const [valueTypes, setValueTypes] = useState<PivotValueType[]>(['quantity_sum']);
   const [dateFrom, setDateFrom] = useState('');
@@ -2337,6 +2341,15 @@ export default function InvoicePricingPage() {
         });
         return next;
       });
+      const matchedCount = results.filter((r: any) => r.matched).length;
+      const unmatchedCountLocal = results.length - matchedCount;
+      if (unmatchedCountLocal === 0) {
+        alert(`配對完成：全部 ${results.length} 行成功配對價目表`);
+      } else {
+        alert(
+          `配對完成：${matchedCount} 行成功，${unmatchedCountLocal} 行未找到對應價目。未配對的行以黃色標示，請手動輸入單價。`,
+        );
+      }
     } catch (err: any) {
       alert(err.response?.data?.message || '配對價目表失敗');
     } finally {
