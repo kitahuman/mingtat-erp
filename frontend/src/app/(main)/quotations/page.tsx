@@ -345,8 +345,8 @@ export default function QuotationsPage() {
       key: 'client',
       label: '客戶',
       sortable: true,
-      render: (_: any, row: any) => row.client?.name || '-',
-      filterRender: (_: any, row: any) => row.client?.name || '-',
+      render: (_: any, row: any) => row.client?.code || row.client?.name || '-',
+      filterRender: (_: any, row: any) => row.client?.code || row.client?.name || '-',
     },
     {
       key: 'contract_name',
