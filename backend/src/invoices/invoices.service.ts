@@ -7,7 +7,6 @@ import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentInService } from '../payment-in/payment-in.service';
-import { WhereClause } from '../common/types';
 import {
   InvoiceWorkLogDraftData,
   SaveInvoicePrepareDto,
@@ -50,6 +49,38 @@ type RateCardLike = {
   origin?: unknown;
   destination?: unknown;
 };
+
+type InvoiceListQuery = {
+  page?: number;
+  limit?: number;
+  status?: string;
+  client_id?: number | string;
+  project_id?: number | string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  [key: string]: unknown;
+};
+
+type ColumnFilters = Record<string, string[]>;
+
+const INVOICE_STATUS_LABEL_TO_VALUE: Record<string, string> = {
+  草稿: 'draft',
+  已開立: 'issued',
+  部分收款: 'partially_paid',
+  已收清: 'paid',
+  已作廢: 'void',
+};
+
+const INVOICE_STATUS_VALUE_TO_LABEL: Record<string, string> =
+  Object.fromEntries(
+    Object.entries(INVOICE_STATUS_LABEL_TO_VALUE).map(([label, value]) => [
+      value,
+      label,
+    ]),
+  );
 
 type MatchRateResult = InvoicePricingGroupDto & {
   matched: boolean;
@@ -241,6 +272,272 @@ export class InvoicesService {
     return this.getInvoiceFamilyRootId(invoice);
   }
 
+  private parseColumnFilters(query: InvoiceListQuery): ColumnFilters {
+    const filters: ColumnFilters = {};
+    for (const key of Object.keys(query)) {
+      if (
+        !key.startsWith('filter_') ||
+        query[key] === undefined ||
+        query[key] === ''
+      )
+        continue;
+      const field = key.replace('filter_', '');
+      const rawValue = String(query[key]);
+      let values: string[];
+      try {
+        const parsed = JSON.parse(rawValue);
+        values = Array.isArray(parsed)
+          ? parsed.map((value) => String(value).trim()).filter(Boolean)
+          : rawValue
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean);
+      } catch {
+        values = rawValue
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+      }
+      if (values.length > 0) filters[field] = values;
+    }
+    return filters;
+  }
+
+  private parseDisplayDate(dateStr: string): { start: Date; end: Date } | null {
+    const displayMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (displayMatch) {
+      const day = Number(displayMatch[1]);
+      const month = Number(displayMatch[2]);
+      const year = Number(displayMatch[3]);
+      if (!day || !month || !year) return null;
+      return {
+        start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)),
+        end: new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0)),
+      };
+    }
+
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]);
+      const day = Number(isoMatch[3]);
+      return {
+        start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)),
+        end: new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0)),
+      };
+    }
+
+    return null;
+  }
+
+  private formatDisplayDate(date: Date | null | undefined): string {
+    if (!date) return '-';
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private formatAmount(value: unknown): string {
+    return `$${Number(value || 0).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  private addFieldConditions(
+    target: Prisma.InvoiceWhereInput[],
+    fieldConditions: Prisma.InvoiceWhereInput[],
+  ) {
+    if (fieldConditions.length === 1) target.push(fieldConditions[0]);
+    if (fieldConditions.length > 1) target.push({ OR: fieldConditions });
+  }
+
+  private buildColumnFilterWhere(
+    filters: ColumnFilters,
+  ): Prisma.InvoiceWhereInput {
+    const conditions: Prisma.InvoiceWhereInput[] = [];
+    const nullableStringFields = [
+      'invoice_no',
+      'invoice_title',
+      'client_contract_no',
+    ];
+    const dateFields = ['date', 'due_date'];
+    const amountFields = ['total_amount', 'paid_amount', 'outstanding'];
+
+    for (const [field, values] of Object.entries(filters)) {
+      if (values.includes('__NO_MATCH__')) {
+        conditions.push({ id: -1 });
+        continue;
+      }
+
+      const hasBlank = values.includes('-');
+      const nonBlankValues = values.filter((value) => value !== '-');
+
+      if (nullableStringFields.includes(field)) {
+        const fieldConditions: Prisma.InvoiceWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({
+            [field]: { in: nonBlankValues },
+          } as Prisma.InvoiceWhereInput);
+        }
+        if (hasBlank) {
+          fieldConditions.push({
+            OR: [{ [field]: null }, { [field]: '' }],
+          } as Prisma.InvoiceWhereInput);
+        }
+        this.addFieldConditions(conditions, fieldConditions);
+      } else if (dateFields.includes(field)) {
+        const dateRanges = nonBlankValues
+          .map((value) => this.parseDisplayDate(value))
+          .filter(
+            (range): range is { start: Date; end: Date } => range !== null,
+          );
+        const fieldConditions: Prisma.InvoiceWhereInput[] = [];
+        if (dateRanges.length > 0) {
+          fieldConditions.push({
+            OR: dateRanges.map(
+              (range) =>
+                ({
+                  [field]: { gte: range.start, lt: range.end },
+                }) as Prisma.InvoiceWhereInput,
+            ),
+          });
+        }
+        if (hasBlank)
+          fieldConditions.push({ [field]: null } as Prisma.InvoiceWhereInput);
+        this.addFieldConditions(conditions, fieldConditions);
+      } else if (amountFields.includes(field)) {
+        const amountValues = nonBlankValues
+          .map((value) => Number(value.replace(/[$,]/g, '')))
+          .filter((value) => Number.isFinite(value));
+        if (amountValues.length > 0) {
+          conditions.push({
+            [field]: { in: amountValues },
+          } as Prisma.InvoiceWhereInput);
+        }
+      } else if (field === 'status') {
+        const rawValues = nonBlankValues.map(
+          (value) => INVOICE_STATUS_LABEL_TO_VALUE[value] || value,
+        );
+        if (rawValues.length > 0)
+          conditions.push({ status: { in: rawValues } });
+      } else if (field === 'client') {
+        const fieldConditions: Prisma.InvoiceWhereInput[] = [];
+        for (const value of nonBlankValues) {
+          const [code, ...nameParts] = value.split(' - ');
+          const name = nameParts.join(' - ').trim();
+          if (name) {
+            fieldConditions.push({
+              client: { is: { code: code.trim(), name } },
+            });
+          } else {
+            fieldConditions.push({
+              client: { is: { OR: [{ name: value }, { code: value }] } },
+            });
+          }
+        }
+        if (hasBlank) fieldConditions.push({ client_id: null });
+        this.addFieldConditions(conditions, fieldConditions);
+      } else if (field === 'quotation') {
+        const fieldConditions: Prisma.InvoiceWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({
+            quotation: { is: { quotation_no: { in: nonBlankValues } } },
+          });
+        }
+        if (hasBlank) fieldConditions.push({ quotation_id: null });
+        this.addFieldConditions(conditions, fieldConditions);
+      }
+    }
+
+    return conditions.length > 0 ? { AND: conditions } : {};
+  }
+
+  private buildBaseWhere(
+    query: InvoiceListQuery,
+    excludeFilterColumn?: string,
+  ): Prisma.InvoiceWhereInput {
+    const where: Prisma.InvoiceWhereInput = {
+      deleted_at: null,
+      invoice_is_active: true,
+    };
+    if (query.status) where.status = String(query.status);
+    if (query.client_id) where.client_id = Number(query.client_id);
+    if (query.project_id) where.project_id = Number(query.project_id);
+    if (query.date_from || query.date_to) {
+      where.date = {};
+      if (query.date_from) where.date.gte = new Date(query.date_from);
+      if (query.date_to) where.date.lte = new Date(query.date_to);
+    }
+    if (query.search) {
+      where.OR = [
+        { invoice_no: { contains: String(query.search), mode: 'insensitive' } },
+        {
+          invoice_title: {
+            contains: String(query.search),
+            mode: 'insensitive',
+          },
+        },
+        {
+          client: {
+            is: {
+              name: { contains: String(query.search), mode: 'insensitive' },
+            },
+          },
+        },
+        {
+          client_contract_no: {
+            contains: String(query.search),
+            mode: 'insensitive',
+          },
+        },
+        { remarks: { contains: String(query.search), mode: 'insensitive' } },
+      ];
+    }
+
+    const columnFilters = this.parseColumnFilters(query);
+    if (excludeFilterColumn) delete columnFilters[excludeFilterColumn];
+    const columnFilterWhere = this.buildColumnFilterWhere(columnFilters);
+    if (
+      Array.isArray(columnFilterWhere.AND) &&
+      columnFilterWhere.AND.length > 0
+    ) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        ...columnFilterWhere.AND,
+      ];
+    }
+
+    return where;
+  }
+
+  private buildOrderBy(
+    sortBy: string | undefined,
+    sortOrder: Prisma.SortOrder,
+  ): Prisma.InvoiceOrderByWithRelationInput {
+    const directSortFields = [
+      'id',
+      'invoice_no',
+      'invoice_title',
+      'date',
+      'due_date',
+      'client_contract_no',
+      'total_amount',
+      'paid_amount',
+      'outstanding',
+      'status',
+      'created_at',
+    ];
+    if (sortBy === 'client') return { client: { name: sortOrder } };
+    if (sortBy === 'quotation')
+      return { quotation: { quotation_no: sortOrder } };
+    if (directSortFields.includes(sortBy || '')) {
+      return { [sortBy!]: sortOrder } as Prisma.InvoiceOrderByWithRelationInput;
+    }
+    return { date: 'desc' };
+  }
+
   private buildRevisionInvoiceNo(
     rootInvoiceNo: string,
     revisionNumber: number,
@@ -273,65 +570,14 @@ export class InvoicesService {
 
   // ── CRUD ─────────────────────────────────────────────────────
 
-  async findAll(query: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    client_id?: number;
-    project_id?: number;
-    date_from?: string;
-    date_to?: string;
-    search?: string;
-    sortBy?: string;
-    sortOrder?: string;
-  }) {
+  async findAll(query: InvoiceListQuery) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
     const skip = (page - 1) * limit;
-
-    const allowedSortFields = [
-      'id',
-      'invoice_no',
-      'date',
-      'due_date',
-      'total_amount',
-      'paid_amount',
-      'status',
-      'created_at',
-    ];
-    const sortBy = allowedSortFields.includes(query.sortBy || '')
-      ? query.sortBy!
-      : 'date';
     const sortOrder: Prisma.SortOrder =
-      query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
-    const relationSortMap: Record<
-      string,
-      Prisma.InvoiceOrderByWithRelationInput
-    > = {
-      client: { client: { name: sortOrder } },
-    };
-    const orderBy: Prisma.InvoiceOrderByWithRelationInput = relationSortMap[
-      sortBy
-    ] || { [sortBy]: sortOrder };
-
-    const where: WhereClause = { deleted_at: null, invoice_is_active: true };
-    if (query.status) where.status = query.status;
-    if (query.client_id) where.client_id = Number(query.client_id);
-    if (query.project_id) where.project_id = Number(query.project_id);
-    if (query.date_from || query.date_to) {
-      where.date = {};
-      if (query.date_from) where.date.gte = new Date(query.date_from);
-      if (query.date_to) where.date.lte = new Date(query.date_to);
-    }
-    if (query.search) {
-      where.OR = [
-        { invoice_no: { contains: query.search, mode: 'insensitive' } },
-        { invoice_title: { contains: query.search, mode: 'insensitive' } },
-        { client: { name: { contains: query.search, mode: 'insensitive' } } },
-        { client_contract_no: { contains: query.search, mode: 'insensitive' } },
-        { remarks: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
+      String(query.sortOrder || '').toUpperCase() === 'ASC' ? 'asc' : 'desc';
+    const orderBy = this.buildOrderBy(query.sortBy, sortOrder);
+    const where = this.buildBaseWhere(query);
 
     const [data, total] = await Promise.all([
       this.prisma.invoice.findMany({
@@ -345,6 +591,95 @@ export class InvoicesService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  async getFilterOptions(
+    column: string,
+    query: InvoiceListQuery,
+  ): Promise<string[]> {
+    const where = this.buildBaseWhere(query, column);
+    const stringColumns = ['invoice_no', 'invoice_title', 'client_contract_no'];
+    const dateColumns = ['date', 'due_date'];
+    const amountColumns = ['total_amount', 'paid_amount', 'outstanding'];
+
+    if (stringColumns.includes(column)) {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { [column]: true } as any,
+        distinct: [column as any],
+        orderBy: { [column]: 'asc' } as any,
+      });
+      const values = records.map((record: any) => record[column] || '-');
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (dateColumns.includes(column)) {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { [column]: true } as any,
+        orderBy: { [column]: 'desc' } as any,
+      });
+      const values = records.map((record: any) =>
+        this.formatDisplayDate(record[column]),
+      );
+      return [...new Set(values)];
+    }
+
+    if (amountColumns.includes(column)) {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { [column]: true } as any,
+        distinct: [column as any],
+        orderBy: { [column]: 'asc' } as any,
+      });
+      const values = records.map((record: any) =>
+        this.formatAmount(record[column]),
+      );
+      return [...new Set(values)];
+    }
+
+    if (column === 'status') {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { status: true },
+        distinct: ['status'],
+        orderBy: { status: 'asc' },
+      });
+      const values = records.map(
+        (record) =>
+          INVOICE_STATUS_VALUE_TO_LABEL[record.status] || record.status || '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'client') {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { client: { select: { code: true, name: true } } },
+        orderBy: { client: { name: 'asc' } },
+      });
+      const values = records.map((record) => {
+        const client = record.client;
+        return client?.code
+          ? `${client.code} - ${client.name}`
+          : client?.name || '-';
+      });
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'quotation') {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { quotation: { select: { quotation_no: true } } },
+        orderBy: { quotation: { quotation_no: 'asc' } },
+      });
+      const values = records.map(
+        (record) => record.quotation?.quotation_no || '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    return [];
   }
 
   async findOne(id: number) {

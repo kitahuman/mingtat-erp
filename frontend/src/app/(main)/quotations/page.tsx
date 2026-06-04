@@ -336,7 +336,7 @@ export default function QuotationsPage() {
     },
     {
       key: 'company',
-      label: '開立公司',
+      label: '公司',
       sortable: true,
       render: (_: any, row: any) =>
         row.company?.internal_prefix || row.company?.name || '-',
@@ -347,7 +347,8 @@ export default function QuotationsPage() {
       label: '客戶',
       sortable: true,
       render: (_: any, row: any) => row.client?.code || row.client?.name || '-',
-      filterRender: (_: any, row: any) => row.client?.code || row.client?.name || '-',
+      filterRender: (_: any, row: any) =>
+        row.client?.code || row.client?.name || '-',
     },
     {
       key: 'contract_name',
@@ -369,9 +370,7 @@ export default function QuotationsPage() {
       key: 'project_name',
       label: '工程/服務名稱',
       sortable: true,
-      render: (v: any) => (
-        <span className="max-w-[200px] truncate block">{v || '-'}</span>
-      ),
+      render: (v: any) => <span className="truncate block">{v || '-'}</span>,
     },
     {
       key: 'project',
@@ -391,11 +390,14 @@ export default function QuotationsPage() {
       label: '總金額',
       sortable: true,
       className: 'text-right',
-      render: (v: any, row: any) => row.is_rate_only_total ? (
-        <span className="text-orange-600 text-xs font-semibold">Rate Only</span>
-      ) : (
-        <span className="font-mono">${Number(v).toLocaleString()}</span>
-      ),
+      render: (v: any, row: any) =>
+        row.is_rate_only_total ? (
+          <span className="text-orange-600 text-xs font-semibold">
+            Rate Only
+          </span>
+        ) : (
+          <span className="font-mono">${Number(v).toLocaleString()}</span>
+        ),
     },
     {
       key: 'status',

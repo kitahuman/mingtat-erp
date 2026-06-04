@@ -39,13 +39,14 @@ type InvoiceListQuery = {
   page?: number;
   limit?: number;
   status?: string;
-  client_id?: number;
-  project_id?: number;
+  client_id?: number | string;
+  project_id?: number | string;
   date_from?: string;
   date_to?: string;
   search?: string;
   sortBy?: string;
   sortOrder?: string;
+  [key: string]: unknown;
 };
 
 @Controller('invoices')
@@ -77,6 +78,14 @@ export class InvoicesController {
   @Get()
   findAll(@Query() query: InvoiceListQuery) {
     return this.service.findAll(query);
+  }
+
+  @Get('filter-options/:column')
+  getFilterOptions(
+    @Param('column') column: string,
+    @Query() query: InvoiceListQuery,
+  ) {
+    return this.service.getFilterOptions(column, query);
   }
 
   @Get(':id/pdf')

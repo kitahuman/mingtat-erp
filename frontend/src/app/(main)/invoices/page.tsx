@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
+import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 import {
   invoicesApi,
@@ -14,7 +15,6 @@ import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
-import ColumnCustomizer from '@/components/ColumnCustomizer';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 
 const fmt$ = (v: any) =>
@@ -70,14 +70,13 @@ const defaultForm = {
   other_charges: [] as { name: string; amount: number }[],
 };
 
-
 type InvoiceListColumn = {
   key: string;
   label: string;
   sortable?: boolean;
-  headerClassName?: string;
-  cellClassName?: string;
-  render: (invoice: any) => any;
+  className?: string;
+  render?: (value: any, invoice: any) => any;
+  filterRender?: (value: any, invoice: any) => string;
 };
 
 const INVOICE_COLUMNS: InvoiceListColumn[] = [
@@ -85,33 +84,43 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'invoice_no',
     label: '發票編號',
     sortable: true,
-    cellClassName: 'font-mono font-medium text-primary-600',
-    render: (inv: any) => inv.invoice_no,
+    className: 'font-mono font-medium text-primary-600',
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
   },
   {
     key: 'invoice_title',
     label: '發票名稱',
-    render: (inv: any) => inv.invoice_title || '-',
+    sortable: true,
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
   },
   {
     key: 'date',
     label: '日期',
     sortable: true,
-    cellClassName: 'text-gray-600',
-    render: (inv: any) => fmtDate(inv.date),
+    className: 'text-gray-600',
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
   },
   {
     key: 'due_date',
     label: '到期日',
     sortable: true,
-    cellClassName: 'text-gray-600',
-    render: (inv: any) => fmtDate(inv.due_date),
+    className: 'text-gray-600',
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
   },
   {
     key: 'client',
     label: '客戶',
-    cellClassName: 'text-gray-900',
-    render: (inv: any) =>
+    sortable: true,
+    className: 'text-gray-900',
+    render: (_: any, inv: any) =>
+      inv.client?.code
+        ? `${inv.client.code} - ${inv.client.name}`
+        : inv.client?.name || '-',
+    filterRender: (_: any, inv: any) =>
       inv.client?.code
         ? `${inv.client.code} - ${inv.client.name}`
         : inv.client?.name || '-',
@@ -119,49 +128,55 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
   {
     key: 'client_contract_no',
     label: '客戶合約',
-    cellClassName: 'font-mono text-indigo-600',
-    render: (inv: any) => inv.client_contract_no || '-',
+    sortable: true,
+    className: 'font-mono text-indigo-600',
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
   },
   {
     key: 'quotation',
     label: '關聯報價單',
-    cellClassName: 'font-mono text-gray-500',
-    render: (inv: any) => inv.quotation?.quotation_no || '-',
+    sortable: true,
+    className: 'font-mono text-gray-500',
+    render: (_: any, inv: any) => inv.quotation?.quotation_no || '-',
+    filterRender: (_: any, inv: any) => inv.quotation?.quotation_no || '-',
   },
   {
     key: 'total_amount',
     label: '總額',
     sortable: true,
-    headerClassName: 'text-right',
-    cellClassName: 'text-right font-medium',
-    render: (inv: any) => fmt$(inv.total_amount),
+    className: 'text-right font-medium',
+    render: (v: any) => fmt$(v),
+    filterRender: (v: any) => fmt$(v),
   },
   {
     key: 'paid_amount',
     label: '已收',
     sortable: true,
-    headerClassName: 'text-right',
-    cellClassName: 'text-right text-green-600',
-    render: (inv: any) => fmt$(inv.paid_amount),
+    className: 'text-right text-green-600',
+    render: (v: any) => fmt$(v),
+    filterRender: (v: any) => fmt$(v),
   },
   {
     key: 'outstanding',
     label: '未收',
-    headerClassName: 'text-right',
-    cellClassName: 'text-right text-red-600',
-    render: (inv: any) => fmt$(inv.outstanding),
+    sortable: true,
+    className: 'text-right text-red-600',
+    render: (v: any) => fmt$(v),
+    filterRender: (v: any) => fmt$(v),
   },
   {
     key: 'status',
     label: '狀態',
     sortable: true,
-    render: (inv: any) => (
+    render: (v: any) => (
       <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[v] || 'bg-gray-100 text-gray-700'}`}
       >
-        {STATUS_LABELS[inv.status] || inv.status}
+        {STATUS_LABELS[v] || v || '-'}
       </span>
     ),
+    filterRender: (v: any) => STATUS_LABELS[v] || v || '-',
   },
 ];
 
@@ -181,6 +196,9 @@ export default function InvoicesPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
 
   // Reference data
   const [partners, setPartners] = useState<any[]>([]);
@@ -194,31 +212,49 @@ export default function InvoicesPage() {
   const [form, setForm] = useState<any>({ ...defaultForm });
   const [workLogIdsFromQuery, setWorkLogIdsFromQuery] = useState<number[]>([]);
 
-  const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setSortBy(field);
-      setSortOrder('DESC');
-    }
-    setPage(1);
-  };
-  const SortIcon = ({ field }: { field: string }) => (
-    <span className="ml-1 text-gray-400">
-      {sortBy === field ? (sortOrder === 'ASC' ? '↑' : '↓') : '↕'}
-    </span>
+  const buildColumnFilterParams = useCallback(
+    (filters: Record<string, Set<string>> = columnFilters) => {
+      const params: Record<string, string> = {};
+      Object.entries(filters).forEach(([key, values]) => {
+        params[`filter_${key}`] =
+          values.size > 0 ? JSON.stringify(Array.from(values)) : '__NO_MATCH__';
+      });
+      return params;
+    },
+    [columnFilters],
+  );
+
+  const buildListParams = useCallback(
+    (overrides: Record<string, any> = {}) => ({
+      page,
+      limit: 50,
+      status: statusFilter || undefined,
+      client_id: clientFilter || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      search: search || undefined,
+      sortBy,
+      sortOrder,
+      ...buildColumnFilterParams(),
+      ...overrides,
+    }),
+    [
+      page,
+      statusFilter,
+      clientFilter,
+      dateFrom,
+      dateTo,
+      search,
+      sortBy,
+      sortOrder,
+      buildColumnFilterParams,
+    ],
   );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page, limit: 50, sortBy, sortOrder };
-      if (statusFilter) params.status = statusFilter;
-      if (clientFilter) params.client_id = clientFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      if (search) params.search = search;
-      const res = await invoicesApi.list(params);
+      const res = await invoicesApi.list(buildListParams());
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
     } catch (err) {
@@ -226,16 +262,26 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    page,
-    statusFilter,
-    clientFilter,
-    dateFrom,
-    dateTo,
-    search,
-    sortBy,
-    sortOrder,
-  ]);
+  }, [buildListParams]);
+
+  const handleColumnFilterChange = useCallback(
+    (filters: Record<string, Set<string>>) => {
+      setColumnFilters(filters);
+      setPage(1);
+    },
+    [],
+  );
+
+  const handleFetchFilterOptions = useCallback(
+    async (columnKey: string) => {
+      const response = await invoicesApi.filterOptions(
+        columnKey,
+        buildListParams({ page: 1, limit: 50 }),
+      );
+      return response.data || [];
+    },
+    [buildListParams],
+  );
 
   useEffect(() => {
     fetchData();
@@ -377,12 +423,12 @@ export default function InvoicesPage() {
 
   const {
     columnConfigs,
+    columnWidths,
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleColumnResize,
   } = useColumnConfig('invoices', INVOICE_COLUMNS);
-
-  const totalPages = Math.ceil(total / 50);
 
   return (
     <div>
@@ -490,94 +536,33 @@ export default function InvoicesPage() {
 
       {/* Table */}
       <div className="card">
-        <div className="flex justify-end mb-4">
-          <ColumnCustomizer
-            columns={columnConfigs}
-            onChange={handleColumnConfigChange}
-            onReset={handleReset}
-          />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {visibleColumns.map((col: any) => (
-                  <th
-                    key={col.key}
-                    className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase select-none ${col.headerClassName || ''} ${col.sortable ? 'cursor-pointer' : ''}`}
-                    onClick={() => col.sortable && handleSort(col.key)}
-                  >
-                    {col.label}
-                    {col.sortable && <SortIcon field={col.key} />}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={visibleColumns.length || 1}
-                    className="px-4 py-8 text-center text-gray-400"
-                  >
-                    載入中...
-                  </td>
-                </tr>
-              ) : data.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={visibleColumns.length || 1}
-                    className="px-4 py-8 text-center text-gray-400"
-                  >
-                    暫無發票記錄
-                  </td>
-                </tr>
-              ) : (
-                data.map((inv: any) => (
-                  <tr
-                    key={inv.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/invoices/${inv.id}`)}
-                  >
-                    {visibleColumns.map((col: any) => (
-                      <td
-                        key={col.key}
-                        className={`px-4 py-3 text-sm ${col.cellClassName || 'text-gray-700'}`}
-                      >
-                        {col.render(inv)}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <div className="text-sm text-gray-500">
-              第 {page} / {totalPages} 頁，共 {total} 筆
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                上一頁
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                下一頁
-              </button>
-            </div>
-          </div>
-        )}
+        <DataTable
+          exportFilename="發票列表"
+          columns={visibleColumns as any}
+          columnConfigs={columnConfigs}
+          onColumnConfigChange={handleColumnConfigChange}
+          onColumnConfigReset={handleReset}
+          columnWidths={columnWidths}
+          onColumnResize={handleColumnResize}
+          data={data}
+          total={total}
+          page={page}
+          limit={50}
+          onPageChange={setPage}
+          onRowClick={(row) => router.push(`/invoices/${row.id}`)}
+          loading={loading}
+          serverSideFilter
+          columnFilters={columnFilters}
+          onColumnFilterChange={handleColumnFilterChange}
+          onFetchFilterOptions={handleFetchFilterOptions}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={(field, order) => {
+            setSortBy(field);
+            setSortOrder(order);
+            setPage(1);
+          }}
+        />
       </div>
 
       {/* Create Modal */}

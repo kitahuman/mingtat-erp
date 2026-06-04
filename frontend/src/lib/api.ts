@@ -284,7 +284,11 @@ export const attachmentsApi = {
     api.get('/attachments', {
       params: { entity_type: entityType, entity_id: entityId },
     }),
-  upload: (entityType: AttachmentEntityType, entityId: number, formData: FormData) =>
+  upload: (
+    entityType: AttachmentEntityType,
+    entityId: number,
+    formData: FormData,
+  ) =>
     api.post(`/attachments/${entityType}/${entityId}/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
@@ -376,14 +380,24 @@ export interface DocumentTreeNode {
 }
 
 export const documentManagementApi = {
-  list: (params?: any) => api.get<UnifiedDocumentListResponse>('/document-management', { params }),
-  tree: (params?: any) => api.get<DocumentTreeNode[]>('/document-management/tree', { params }),
+  list: (params?: any) =>
+    api.get<UnifiedDocumentListResponse>('/document-management', { params }),
+  tree: (params?: any) =>
+    api.get<DocumentTreeNode[]>('/document-management/tree', { params }),
   preview: (source: string, id: string) =>
-    withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/preview`),
+    withAuthToken(
+      `${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/preview`,
+    ),
   download: (source: string, id: string) =>
-    withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/download`),
+    withAuthToken(
+      `${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/download`,
+    ),
   batchDownload: (files: { source: UnifiedDocumentSource; id: string }[]) =>
-    api.post('/document-management/batch-download', { files }, { responseType: 'blob' }),
+    api.post(
+      '/document-management/batch-download',
+      { files },
+      { responseType: 'blob' },
+    ),
 };
 
 export interface DocumentFolderNode {
@@ -405,9 +419,12 @@ export type UpdateDocumentFolderInput = CreateDocumentFolderInput;
 
 export const documentFoldersApi = {
   list: () => api.get<DocumentFolderNode[]>('/document-folders'),
-  create: (data: CreateDocumentFolderInput) => api.post<DocumentFolderNode>('/document-folders', data),
-  update: (id: number, data: UpdateDocumentFolderInput) => api.put<DocumentFolderNode>(`/document-folders/${id}`, data),
-  remove: (id: number) => api.delete<{ message: string }>(`/document-folders/${id}`),
+  create: (data: CreateDocumentFolderInput) =>
+    api.post<DocumentFolderNode>('/document-folders', data),
+  update: (id: number, data: UpdateDocumentFolderInput) =>
+    api.put<DocumentFolderNode>(`/document-folders/${id}`, data),
+  remove: (id: number) =>
+    api.delete<{ message: string }>(`/document-folders/${id}`),
 };
 
 // Partners
@@ -439,7 +456,8 @@ export const customFieldsApi = {
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
   workStatus: () => api.get('/dashboard/work-status'),
-  monthlyWorkStats: (month?: string) => api.get('/dashboard/monthly-work-stats', { params: { month } }),
+  monthlyWorkStats: (month?: string) =>
+    api.get('/dashboard/monthly-work-stats', { params: { month } }),
   alerts: () => api.get('/dashboard/alerts'),
   financial: () => api.get('/dashboard/financial'),
   whatsappFeed: () => api.get('/dashboard/whatsapp-feed'),
@@ -476,8 +494,10 @@ export const quotationsApi = {
   create: (data: any) => api.post('/quotations', data),
   update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
   getRevisions: (id: number) => api.get(`/quotations/${id}/revisions`),
-  createRevision: (id: number, data?: { quotation_no?: string; quotation_date?: string; date?: string }) =>
-    api.post(`/quotations/${id}/revision`, data || {}),
+  createRevision: (
+    id: number,
+    data?: { quotation_no?: string; quotation_date?: string; date?: string },
+  ) => api.post(`/quotations/${id}/revision`, data || {}),
   setActiveRevision: (id: number) => api.patch(`/quotations/${id}/set-active`),
   updateStatus: (id: number, status: string) =>
     api.patch(`/quotations/${id}/status`, { status }),
@@ -554,9 +574,13 @@ export const fieldOptionsApi = {
   reorder: (category: string, orderedIds: number[]) =>
     api.post('/field-options/reorder', { category, orderedIds }),
   getLocationsWithUsage: (params?: LocationOptionsQueryParams) =>
-    api.get<LocationUsageOption[]>('/field-options/locations/with-usage', { params }),
+    api.get<LocationUsageOption[]>('/field-options/locations/with-usage', {
+      params,
+    }),
   findDuplicateLocations: (params?: FindDuplicateLocationsQueryParams) =>
-    api.get<DuplicateLocationGroup[]>('/field-options/locations/duplicates', { params }),
+    api.get<DuplicateLocationGroup[]>('/field-options/locations/duplicates', {
+      params,
+    }),
   mergeLocations: (primaryId: number, mergeIds: number[]) =>
     api.post('/field-options/merge-locations', { primaryId, mergeIds }),
   mergeContractOptions: (primaryId: number, mergeIds: number[]) =>
@@ -920,8 +944,12 @@ export const expenseCategoriesApi = {
   getAll: () => api.get('/expense-categories'),
   getTree: () => api.get('/expense-categories/tree'),
   get: (id: number) => api.get(`/expense-categories/${id}`),
-  create: (data: { name: string; parent_id?: number; type?: string; expense_category_is_fixed?: boolean }) =>
-    api.post('/expense-categories', data),
+  create: (data: {
+    name: string;
+    parent_id?: number;
+    type?: string;
+    expense_category_is_fixed?: boolean;
+  }) => api.post('/expense-categories', data),
   update: (
     id: number,
     data: {
@@ -1277,6 +1305,8 @@ export const paymentInAllocationApi = {
 
 export const invoicesApi = {
   list: (params?: any) => api.get('/invoices', { params }),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/invoices/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/invoices/${id}`),
   getRevisions: (id: number) => api.get(`/invoices/${id}/revisions`),
   createRevision: (id: number) => api.post(`/invoices/${id}/revision`, {}),
