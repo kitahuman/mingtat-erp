@@ -1,46 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { invoicesApi, paymentTermTemplatesApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
 
 type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
-
-
-const buildPagedPreviewHtml = (source: string, currentPage: number) => {
-  if (!source) return source;
-  const pageOffset = Math.max(0, currentPage - 1);
-  const previewStyle = `
-<style id="a4-preview-page-style">
-  @media screen {
-    html, body {
-      width: 100vw !important;
-      min-height: 141.4286vw !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      background: #ffffff !important;
-    }
-    body {
-      transform: translateY(-${(pageOffset * 141.4286).toFixed(4)}vw) !important;
-      transform-origin: top left !important;
-    }
-    .invoice-page {
-      width: 100vw !important;
-      min-height: 141.4286vw !important;
-      margin: 0 !important;
-      padding: 4.2857vw 4.7619vw !important;
-      box-shadow: none !important;
-      overflow: hidden !important;
-    }
-  }
-</style>`;
-
-  return source.includes('</head>')
-    ? source.replace('</head>', `${previewStyle}</head>`)
-    : `${previewStyle}${source}`;
-};
 
 type PdfPreviewOptions = {
   language: InvoicePdfLanguage;
@@ -75,25 +40,15 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
 export default function InvoicePdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const invoiceId = Number(id);
 
   const [invoice, setInvoice] = useState<any>(null);
   const [options, setOptions] = useState<PdfPreviewOptions>(DEFAULT_OPTIONS);
-  const [html, setHtml] = useState('');
+  const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [previewSize, setPreviewSize] = useState({ width: 595, height: 842 });
-
-  const previewHtml = useMemo(
-    () => buildPagedPreviewHtml(html, currentPage),
-    [html, currentPage],
-  );
-
   const requestParams = useMemo(
     () => ({
       language: options.language,
@@ -133,11 +88,15 @@ export default function InvoicePdfPreviewPage() {
       .get(invoiceId)
       .then((res) => {
         setInvoice(res.data);
-        setOptions(prev => ({ 
-          ...prev, 
-          override_payment_terms: res.data.invoice_custom_payment_terms || res.data.payment_terms || '',
+        setOptions((prev) => ({
+          ...prev,
+          override_payment_terms:
+            res.data.invoice_custom_payment_terms ||
+            res.data.payment_terms ||
+            '',
           client_address: prev.client_address || res.data.client?.address || '',
-          client_contact: prev.client_contact || res.data.client?.contact_person || '',
+          client_contact:
+            prev.client_contact || res.data.client?.contact_person || '',
           client_phone: prev.client_phone || res.data.client?.phone || '',
         }));
       })
@@ -148,20 +107,33 @@ export default function InvoicePdfPreviewPage() {
     if (!Number.isFinite(invoiceId)) return;
 
     let active = true;
+    let objectUrl = '';
+
     setLoadingPreview(true);
     setError('');
 
     invoicesApi
-      .getPdfHtml(invoiceId, requestParams)
+      .exportPdf(invoiceId, requestParams)
       .then((res) => {
-        if (!active) return;
-        setHtml(
-          typeof res.data === 'string' ? res.data : String(res.data || ''),
-        );
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        objectUrl = window.URL.createObjectURL(blob);
+
+        if (!active) {
+          window.URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return objectUrl;
+        });
       })
       .catch((err: any) => {
         if (!active) return;
-        setHtml('');
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return '';
+        });
         setError(err.response?.data?.message || '載入 PDF 預覽失敗');
       })
       .finally(() => {
@@ -170,29 +142,9 @@ export default function InvoicePdfPreviewPage() {
 
     return () => {
       active = false;
+      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
   }, [invoiceId, requestParams]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [html]);
-
-  useEffect(() => {
-    const updatePreviewSize = () => {
-      const availableWidth = Math.max(320, window.innerWidth - 32);
-      const availableHeight = Math.max(420, window.innerHeight - 170);
-      const widthFromHeight = availableHeight * 210 / 297;
-      const nextWidth = Math.floor(Math.min(availableWidth, widthFromHeight, 794));
-      setPreviewSize({
-        width: nextWidth,
-        height: Math.floor(nextWidth * 297 / 210),
-      });
-    };
-
-    updatePreviewSize();
-    window.addEventListener('resize', updatePreviewSize);
-    return () => window.removeEventListener('resize', updatePreviewSize);
-  }, []);
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
@@ -202,7 +154,9 @@ export default function InvoicePdfPreviewPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${invoice?.invoice_no || `invoice-${invoiceId}`}.pdf`;
+      const clientCode = invoice?.client?.code || invoice?.client?.name || '';
+      const invoiceTitle = invoice?.invoice_title || '';
+      link.download = `${invoice?.invoice_no || `invoice-${invoiceId}`}_${clientCode}_${invoiceTitle}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -243,30 +197,6 @@ export default function InvoicePdfPreviewPage() {
     setOptions((current) => ({ ...current, [key]: value }));
   };
 
-  const measurePreviewPages = () => {
-    const iframe = iframeRef.current;
-    const doc = iframe?.contentDocument;
-    const win = iframe?.contentWindow;
-    if (!iframe || !doc || !win) return;
-
-    const pageElement = doc.querySelector('.invoice-page') as HTMLElement | null;
-    const pageWidth = Math.max(1, win.innerWidth || iframe.clientWidth || 1);
-    const pageHeight = Math.max(1, pageWidth * 297 / 210);
-    const contentHeight = Math.max(
-      pageElement?.scrollHeight || 0,
-      doc.body?.scrollHeight || 0,
-      doc.documentElement?.scrollHeight || 0,
-    );
-    const nextTotalPages = Math.max(1, Math.ceil(contentHeight / pageHeight));
-    setTotalPages(nextTotalPages);
-    setCurrentPage((page) => Math.min(page, nextTotalPages));
-  };
-
-  const handlePreviewLoad = () => {
-    window.setTimeout(measurePreviewPages, 50);
-  };
-
-
   const handleSaveAsTemplate = async (name: string, sourceType: string) => {
     await paymentTermTemplatesApi.create({
       name,
@@ -306,7 +236,7 @@ export default function InvoicePdfPreviewPage() {
           <button
             onClick={handlePrint}
             className="btn-secondary px-3 py-1.5 text-sm"
-            disabled={printing || loadingPreview || !html}
+            disabled={printing || loadingPreview || !pdfUrl}
           >
             {printing ? '開啟中...' : '列印'}
           </button>
@@ -346,7 +276,9 @@ export default function InvoicePdfPreviewPage() {
               <input
                 type="checkbox"
                 checked={options.show_client_signature}
-                onChange={(e) => updateOption('show_client_signature', e.target.checked)}
+                onChange={(e) =>
+                  updateOption('show_client_signature', e.target.checked)
+                }
               />
               客戶簽名欄
             </label>
@@ -354,7 +286,9 @@ export default function InvoicePdfPreviewPage() {
               <input
                 type="checkbox"
                 checked={options.show_company_signature}
-                onChange={(e) => updateOption('show_company_signature', e.target.checked)}
+                onChange={(e) =>
+                  updateOption('show_company_signature', e.target.checked)
+                }
               />
               公司簽名欄
             </label>
@@ -362,7 +296,9 @@ export default function InvoicePdfPreviewPage() {
               <input
                 type="checkbox"
                 checked={options.show_company_stamp}
-                onChange={(e) => updateOption('show_company_stamp', e.target.checked)}
+                onChange={(e) =>
+                  updateOption('show_company_stamp', e.target.checked)
+                }
               />
               蓋上公司印
             </label>
@@ -377,7 +313,9 @@ export default function InvoicePdfPreviewPage() {
                 <input
                   type="checkbox"
                   checked={options.show_client_address}
-                  onChange={(e) => updateOption('show_client_address', e.target.checked)}
+                  onChange={(e) =>
+                    updateOption('show_client_address', e.target.checked)
+                  }
                 />
                 地址
               </span>
@@ -393,7 +331,9 @@ export default function InvoicePdfPreviewPage() {
                 <input
                   type="checkbox"
                   checked={options.show_client_contact}
-                  onChange={(e) => updateOption('show_client_contact', e.target.checked)}
+                  onChange={(e) =>
+                    updateOption('show_client_contact', e.target.checked)
+                  }
                 />
                 聯絡人
               </span>
@@ -409,7 +349,9 @@ export default function InvoicePdfPreviewPage() {
                 <input
                   type="checkbox"
                   checked={options.show_client_phone}
-                  onChange={(e) => updateOption('show_client_phone', e.target.checked)}
+                  onChange={(e) =>
+                    updateOption('show_client_phone', e.target.checked)
+                  }
                 />
                 電話
               </span>
@@ -421,7 +363,9 @@ export default function InvoicePdfPreviewPage() {
               />
             </label>
           </div>
-          <p className="mt-2 text-xs text-gray-500">預設值來自合作單位的客人資料；你也可以在此頁即時填改後預覽、列印或下載。</p>
+          <p className="mt-2 text-xs text-gray-500">
+            預設值來自合作單位的客人資料；你也可以在此頁即時填改後預覽、列印或下載。
+          </p>
         </div>
 
         <div className="mt-3">
@@ -445,51 +389,22 @@ export default function InvoicePdfPreviewPage() {
 
       <section className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
-          <div className="font-medium">A4 預覽</div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-              disabled={loadingPreview || currentPage <= 1}
-            >
-              上一頁
-            </button>
-            <span className="min-w-[72px] text-center text-xs text-gray-600">
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-              className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-              disabled={loadingPreview || currentPage >= totalPages}
-            >
-              下一頁
-            </button>
+          <div className="font-medium">PDF 預覽</div>
+          <div className="text-xs text-gray-500">
+            預覽內容由後端 PDF 直接生成，與下載檔案一致。
           </div>
         </div>
-        <div className="flex flex-1 min-h-0 items-start justify-center overflow-auto bg-gray-300 p-2">
-          <div
-            className="overflow-hidden bg-white shadow-lg"
-            style={{
-              width: `${previewSize.width}px`,
-              height: `${previewSize.height}px`,
-              maxWidth: 'calc(100vw - 2rem)',
-              maxHeight: 'calc(100vh - 170px)',
-            }}
-          >
+        <div className="flex flex-1 min-h-0 items-stretch justify-center overflow-hidden bg-gray-300 p-2">
+          <div className="h-full w-full overflow-hidden bg-white shadow-lg">
             {loadingPreview ? (
               <div className="flex h-full w-full items-center justify-center bg-white text-sm font-medium text-gray-600">
                 載入預覽中...
               </div>
-            ) : html ? (
+            ) : pdfUrl ? (
               <iframe
-                ref={iframeRef}
-                title="發票 PDF HTML 預覽"
-                srcDoc={previewHtml}
-                onLoad={handlePreviewLoad}
+                title="發票 PDF 預覽"
+                src={pdfUrl}
                 className="h-full w-full border-0 bg-white"
-                scrolling="no"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-white text-sm text-gray-500">

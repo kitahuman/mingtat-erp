@@ -107,7 +107,7 @@ export class InvoicesController {
     @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const pdf = await this.invoicePdfService.generateInvoicePdf(Number(id), {
+    const result = await this.invoicePdfService.generateInvoicePdf(Number(id), {
       language,
       showBank: this.parseBool(showBank),
       showClientAddress: this.parseBool(showClientAddress),
@@ -124,12 +124,19 @@ export class InvoicesController {
       overrideClientPhone: clientPhone,
     });
 
+    const invoiceNo = result.invoice.invoice_no || `invoice-${id}`;
+    const clientCode =
+      result.invoice.client?.code || result.invoice.client?.name || '';
+    const invoiceTitle = result.invoice.invoice_title || '';
+    const rawFilename = `${invoiceNo}_${clientCode}_${invoiceTitle}.pdf`;
+    const encodedFilename = encodeURIComponent(rawFilename);
+
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="invoice-${Number(id)}.pdf"`,
-      'Content-Length': pdf.length,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
+      'Content-Length': result.pdf.length,
     });
-    return new StreamableFile(pdf);
+    return new StreamableFile(result.pdf);
   }
 
   @Get(':id/pdf-html')

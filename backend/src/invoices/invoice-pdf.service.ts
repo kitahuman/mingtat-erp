@@ -76,7 +76,7 @@ export class InvoicePdfService {
         displayHeaderFooter: false,
         margin: { top: '0', right: '0', bottom: '0', left: '0' },
       });
-      return Buffer.from(pdf);
+      return { pdf: Buffer.from(pdf), invoice };
     } finally {
       await browser.close();
     }
@@ -292,6 +292,7 @@ export class InvoicePdfService {
 <html lang="${options.language === 'en' ? 'en' : 'zh-Hant'}">
 <head>
   <meta charset="UTF-8" />
+  <title>${this.escapeHtml(invoice.invoice_no || '')}_${this.escapeHtml(client.code || client.name || '')}_${this.escapeHtml(invoice.invoice_title || '')}</title>
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
