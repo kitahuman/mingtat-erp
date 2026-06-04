@@ -26,7 +26,7 @@ const EXPENSE_INCLUDE = {
 };
 
 // Valid expense source types
-export const EXPENSE_SOURCES = ['MANUAL', 'PURCHASE', 'PAYROLL', 'SUBCON', 'CONTRA'] as const;
+export const EXPENSE_SOURCES = ['MANUAL', 'PURCHASE', 'PAYROLL', 'SUBCON', 'CONTRA', 'ERP'] as const;
 export type ExpenseSource = typeof EXPENSE_SOURCES[number];
 
 type ExpenseOtherCharge = { name: string; amount: number };
