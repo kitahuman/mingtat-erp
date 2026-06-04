@@ -857,6 +857,8 @@ export const subconFleetDriversApi = {
 // Expenses (支出)
 export const expensesApi = {
   list: (params?: any) => api.get('/expenses', { params }),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/expenses/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/expenses/${id}`),
   create: (data: any) => api.post('/expenses', data),
   update: (id: number, data: any) => api.put(`/expenses/${id}`, data),

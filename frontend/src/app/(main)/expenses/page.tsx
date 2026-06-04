@@ -113,6 +113,7 @@ export default function ExpensesPage() {
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   // Reference data
   const [companies, setCompanies] = useState<any[]>([]);
@@ -156,39 +157,78 @@ export default function ExpensesPage() {
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
 
+  const buildColumnFilterParams = useCallback(
+    (filters: Record<string, Set<string>> = columnFilters) => {
+      const params: Record<string, string> = {};
+      Object.entries(filters).forEach(([key, values]) => {
+        params[`filter_${key}`] =
+          values.size > 0 ? JSON.stringify(Array.from(values)) : '__NO_MATCH__';
+      });
+      return params;
+    },
+    [columnFilters],
+  );
+
+  const buildListParams = useCallback(
+    (overrides: Record<string, any> = {}) => ({
+      page,
+      limit: 20,
+      search: search || undefined,
+      company_id: companyFilter || undefined,
+      category_id: categoryFilter || undefined,
+      payment_status: paidFilter !== '' ? paidFilter : undefined,
+      source: sourceFilter || undefined,
+      project_id: projectFilter || undefined,
+      expense_payment_method: paymentMethodTypeFilter || undefined,
+      sortBy,
+      sortOrder,
+      ...buildColumnFilterParams(),
+      ...overrides,
+    }),
+    [
+      page,
+      search,
+      companyFilter,
+      categoryFilter,
+      paidFilter,
+      sourceFilter,
+      projectFilter,
+      paymentMethodTypeFilter,
+      sortBy,
+      sortOrder,
+      buildColumnFilterParams,
+    ],
+  );
+
   const load = useCallback(() => {
     setLoading(true);
     expensesApi
-      .list({
-        page,
-        limit: 20,
-        search: search || undefined,
-        company_id: companyFilter || undefined,
-        category_id: categoryFilter || undefined,
-        payment_status: paidFilter !== '' ? paidFilter : undefined,
-        source: sourceFilter || undefined,
-        project_id: projectFilter || undefined,
-        expense_payment_method: paymentMethodTypeFilter || undefined,
-        sortBy,
-        sortOrder,
-      })
+      .list(buildListParams())
       .then((res) => {
         setData(res.data.data);
         setTotal(res.data.total);
       })
       .finally(() => setLoading(false));
-  }, [
-    page,
-    search,
-    companyFilter,
-    categoryFilter,
-    paidFilter,
-    sourceFilter,
-    projectFilter,
-    paymentMethodTypeFilter,
-    sortBy,
-    sortOrder,
-  ]);
+  }, [buildListParams]);
+
+  const handleColumnFilterChange = useCallback(
+    (filters: Record<string, Set<string>>) => {
+      setColumnFilters(filters);
+      setPage(1);
+    },
+    [],
+  );
+
+  const handleFetchFilterOptions = useCallback(
+    async (columnKey: string) => {
+      const response = await expensesApi.filterOptions(
+        columnKey,
+        buildListParams({ page: 1, limit: 20 }),
+      );
+      return response.data || [];
+    },
+    [buildListParams],
+  );
 
   useEffect(() => {
     load();
@@ -873,6 +913,10 @@ export default function ExpensesPage() {
           }}
           searchPlaceholder="搜尋項目、供應商、單號、付款內容..."
           loading={loading}
+          serverSideFilter
+          columnFilters={columnFilters}
+          onColumnFilterChange={handleColumnFilterChange}
+          onFetchFilterOptions={handleFetchFilterOptions}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => {

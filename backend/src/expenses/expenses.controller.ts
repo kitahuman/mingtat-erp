@@ -26,6 +26,11 @@ export class ExpensesController {
     return this.service.findAll(query);
   }
 
+  @Get('filter-options/:column')
+  getFilterOptions(@Param('column') column: string, @Query() query: any) {
+    return this.service.getFilterOptions(column, query);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
