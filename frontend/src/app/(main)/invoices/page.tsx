@@ -75,16 +75,20 @@ type InvoiceListColumn = {
   label: string;
   sortable?: boolean;
   className?: string;
+  minWidth?: number;
   render?: (value: any, invoice: any) => any;
   filterRender?: (value: any, invoice: any) => string;
 };
+
+const INVOICE_CELL_PADDING = 'px-4';
 
 const INVOICE_COLUMNS: InvoiceListColumn[] = [
   {
     key: 'invoice_no',
     label: '發票編號',
     sortable: true,
-    className: 'font-mono font-medium text-primary-600',
+    className: `${INVOICE_CELL_PADDING} font-mono font-medium text-primary-600`,
+    minWidth: 150,
     render: (v: any) => v || '-',
     filterRender: (v: any) => v || '-',
   },
@@ -92,6 +96,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'invoice_title',
     label: '發票名稱',
     sortable: true,
+    className: INVOICE_CELL_PADDING,
+    minWidth: 200,
     render: (v: any) => v || '-',
     filterRender: (v: any) => v || '-',
   },
@@ -99,7 +105,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'date',
     label: '日期',
     sortable: true,
-    className: 'text-gray-600',
+    className: `${INVOICE_CELL_PADDING} text-gray-600`,
+    minWidth: 120,
     render: (v: any) => fmtDate(v),
     filterRender: (v: any) => fmtDate(v),
   },
@@ -107,7 +114,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'due_date',
     label: '到期日',
     sortable: true,
-    className: 'text-gray-600',
+    className: `${INVOICE_CELL_PADDING} text-gray-600`,
+    minWidth: 120,
     render: (v: any) => fmtDate(v),
     filterRender: (v: any) => fmtDate(v),
   },
@@ -115,7 +123,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'client',
     label: '客戶',
     sortable: true,
-    className: 'text-gray-900',
+    className: `${INVOICE_CELL_PADDING} text-gray-900`,
+    minWidth: 150,
     render: (_: any, inv: any) =>
       inv.client?.code
         ? `${inv.client.code} - ${inv.client.name}`
@@ -129,7 +138,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'client_contract_no',
     label: '客戶合約',
     sortable: true,
-    className: 'font-mono text-indigo-600',
+    className: `${INVOICE_CELL_PADDING} font-mono text-indigo-600`,
+    minWidth: 150,
     render: (v: any) => v || '-',
     filterRender: (v: any) => v || '-',
   },
@@ -137,7 +147,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'quotation',
     label: '關聯報價單',
     sortable: true,
-    className: 'font-mono text-gray-500',
+    className: `${INVOICE_CELL_PADDING} font-mono text-gray-500`,
+    minWidth: 150,
     render: (_: any, inv: any) => inv.quotation?.quotation_no || '-',
     filterRender: (_: any, inv: any) => inv.quotation?.quotation_no || '-',
   },
@@ -145,7 +156,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'total_amount',
     label: '總額',
     sortable: true,
-    className: 'text-right font-medium',
+    className: `${INVOICE_CELL_PADDING} text-right font-medium`,
+    minWidth: 130,
     render: (v: any) => fmt$(v),
     filterRender: (v: any) => fmt$(v),
   },
@@ -153,7 +165,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'paid_amount',
     label: '已收',
     sortable: true,
-    className: 'text-right text-green-600',
+    className: `${INVOICE_CELL_PADDING} text-right text-green-600`,
+    minWidth: 130,
     render: (v: any) => fmt$(v),
     filterRender: (v: any) => fmt$(v),
   },
@@ -161,7 +174,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'outstanding',
     label: '未收',
     sortable: true,
-    className: 'text-right text-red-600',
+    className: `${INVOICE_CELL_PADDING} text-right text-red-600`,
+    minWidth: 130,
     render: (v: any) => fmt$(v),
     filterRender: (v: any) => fmt$(v),
   },
@@ -169,6 +183,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     key: 'status',
     label: '狀態',
     sortable: true,
+    className: INVOICE_CELL_PADDING,
+    minWidth: 110,
     render: (v: any) => (
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[v] || 'bg-gray-100 text-gray-700'}`}
