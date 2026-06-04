@@ -957,7 +957,7 @@ export default function InvoiceDetailPage() {
                 className="border border-gray-200 rounded-lg p-3 space-y-2"
               >
                 <div className="grid grid-cols-12 gap-2 items-start">
-                  <div className="col-span-11 grid grid-cols-2 gap-2">
+                  <div className="col-span-11 space-y-1">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
                         標題
@@ -969,23 +969,18 @@ export default function InvoiceDetailPage() {
                           updateItem(idx, 'item_name', e.target.value)
                         }
                         className="input-field text-sm"
-                        placeholder="項目標題（選填）"
+                        placeholder="項目名稱（短）"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">
-                        描述
-                      </label>
-                      <input
-                        type="text"
-                        value={item.description || ''}
-                        onChange={(e) =>
-                          updateItem(idx, 'description', e.target.value)
-                        }
-                        className="input-field text-sm"
-                        placeholder="詳細描述（選填）"
-                      />
-                    </div>
+                    <textarea
+                      value={item.description || ''}
+                      onChange={(e) =>
+                        updateItem(idx, 'description', e.target.value)
+                      }
+                      className="input-field text-sm resize-y"
+                      rows={2}
+                      placeholder="項目描述（可多行）"
+                    />
                   </div>
                   <div className="col-span-1 flex justify-end pt-5">
                     <button
