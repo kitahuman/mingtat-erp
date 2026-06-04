@@ -20,6 +20,7 @@ import PaymentOutBlock from '@/components/payment/PaymentOutBlock';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import AttachmentUpload from '@/components/AttachmentUpload';
+import Modal from '@/components/Modal';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function Field({
@@ -89,6 +90,8 @@ export default function ExpenseDetailPage() {
   const [expense, setExpense] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<any>({});
   const [error, setError] = useState('');
@@ -378,6 +381,19 @@ export default function ExpenseDetailPage() {
     }
   };
 
+  const handleDeleteExpense = async () => {
+    setDeleting(true);
+    try {
+      await expensesApi.delete(expenseId);
+      router.push('/expenses');
+    } catch (err: any) {
+      alert(err.response?.data?.message || '刪除支出失敗');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading)
     return (
@@ -488,12 +504,23 @@ export default function ExpenseDetailPage() {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => setEditMode(true)}
-              className="btn-primary text-sm"
-            >
-              編輯
-            </button>
+            <>
+              <button
+                onClick={() => setEditMode(true)}
+                className="btn-primary text-sm"
+              >
+                編輯
+              </button>
+              {!isReadOnly('expenses') && (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                >
+                  刪除
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1275,6 +1302,37 @@ export default function ExpenseDetailPage() {
         建立時間：{new Date(expense.created_at).toLocaleString('zh-HK')} ·
         最後更新：{new Date(expense.updated_at).toLocaleString('zh-HK')}
       </div>
+
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => !deleting && setShowDeleteConfirm(false)}
+        title="確認刪除支出"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            確定要刪除此支出記錄嗎？刪除後記錄會移至垃圾筒，可在垃圾筒中還原。
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteExpense}
+              disabled={deleting}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? '刪除中...' : '確認刪除'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -14,6 +14,8 @@ import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import ColumnCustomizer from '@/components/ColumnCustomizer';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -67,6 +69,101 @@ const defaultForm = {
   items: [defaultItem()],
   other_charges: [] as { name: string; amount: number }[],
 };
+
+
+type InvoiceListColumn = {
+  key: string;
+  label: string;
+  sortable?: boolean;
+  headerClassName?: string;
+  cellClassName?: string;
+  render: (invoice: any) => any;
+};
+
+const INVOICE_COLUMNS: InvoiceListColumn[] = [
+  {
+    key: 'invoice_no',
+    label: '發票編號',
+    sortable: true,
+    cellClassName: 'font-mono font-medium text-primary-600',
+    render: (inv: any) => inv.invoice_no,
+  },
+  {
+    key: 'invoice_title',
+    label: '發票名稱',
+    render: (inv: any) => inv.invoice_title || '-',
+  },
+  {
+    key: 'date',
+    label: '日期',
+    sortable: true,
+    cellClassName: 'text-gray-600',
+    render: (inv: any) => fmtDate(inv.date),
+  },
+  {
+    key: 'due_date',
+    label: '到期日',
+    sortable: true,
+    cellClassName: 'text-gray-600',
+    render: (inv: any) => fmtDate(inv.due_date),
+  },
+  {
+    key: 'client',
+    label: '客戶',
+    cellClassName: 'text-gray-900',
+    render: (inv: any) =>
+      inv.client?.code
+        ? `${inv.client.code} - ${inv.client.name}`
+        : inv.client?.name || '-',
+  },
+  {
+    key: 'client_contract_no',
+    label: '客戶合約',
+    cellClassName: 'font-mono text-indigo-600',
+    render: (inv: any) => inv.client_contract_no || '-',
+  },
+  {
+    key: 'quotation',
+    label: '關聯報價單',
+    cellClassName: 'font-mono text-gray-500',
+    render: (inv: any) => inv.quotation?.quotation_no || '-',
+  },
+  {
+    key: 'total_amount',
+    label: '總額',
+    sortable: true,
+    headerClassName: 'text-right',
+    cellClassName: 'text-right font-medium',
+    render: (inv: any) => fmt$(inv.total_amount),
+  },
+  {
+    key: 'paid_amount',
+    label: '已收',
+    sortable: true,
+    headerClassName: 'text-right',
+    cellClassName: 'text-right text-green-600',
+    render: (inv: any) => fmt$(inv.paid_amount),
+  },
+  {
+    key: 'outstanding',
+    label: '未收',
+    headerClassName: 'text-right',
+    cellClassName: 'text-right text-red-600',
+    render: (inv: any) => fmt$(inv.outstanding),
+  },
+  {
+    key: 'status',
+    label: '狀態',
+    sortable: true,
+    render: (inv: any) => (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}
+      >
+        {STATUS_LABELS[inv.status] || inv.status}
+      </span>
+    ),
+  },
+];
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -278,6 +375,13 @@ export default function InvoicesPage() {
   );
   const formTotal = formSubtotal - formRetention + formOtherTotal;
 
+  const {
+    columnConfigs,
+    visibleColumns,
+    handleColumnConfigChange,
+    handleReset,
+  } = useColumnConfig('invoices', INVOICE_COLUMNS);
+
   const totalPages = Math.ceil(total / 50);
 
   return (
@@ -385,139 +489,71 @@ export default function InvoicesPage() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('invoice_no')}
-              >
-                發票編號
-                <SortIcon field="invoice_no" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                發票名稱
-              </th>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('date')}
-              >
-                日期
-                <SortIcon field="date" />
-              </th>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('due_date')}
-              >
-                到期日
-                <SortIcon field="due_date" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                客戶
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                客戶合約
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                關聯報價單
-              </th>
-              <th
-                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('total_amount')}
-              >
-                總額
-                <SortIcon field="total_amount" />
-              </th>
-              <th
-                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('paid_amount')}
-              >
-                已收
-                <SortIcon field="paid_amount" />
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                未收
-              </th>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none"
-                onClick={() => handleSort('status')}
-              >
-                狀態
-                <SortIcon field="status" />
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
+      <div className="card">
+        <div className="flex justify-end mb-4">
+          <ColumnCustomizer
+            columns={columnConfigs}
+            onChange={handleColumnConfigChange}
+            onReset={handleReset}
+          />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td
-                  colSpan={11}
-                  className="px-4 py-8 text-center text-gray-400"
-                >
-                  載入中...
-                </td>
+                {visibleColumns.map((col: any) => (
+                  <th
+                    key={col.key}
+                    className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase select-none ${col.headerClassName || ''} ${col.sortable ? 'cursor-pointer' : ''}`}
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    {col.label}
+                    {col.sortable && <SortIcon field={col.key} />}
+                  </th>
+                ))}
               </tr>
-            ) : data.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={11}
-                  className="px-4 py-8 text-center text-gray-400"
-                >
-                  暫無發票記錄
-                </td>
-              </tr>
-            ) : (
-              data.map((inv: any) => (
-                <tr
-                  key={inv.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => router.push(`/invoices/${inv.id}`)}
-                >
-                  <td className="px-4 py-3 text-sm font-mono font-medium text-primary-600">
-                    {inv.invoice_no}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
-                    {inv.invoice_title || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {fmtDate(inv.date)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {fmtDate(inv.due_date)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {inv.client?.code
-                      ? `${inv.client.code} - ${inv.client.name}`
-                      : inv.client?.name || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono text-indigo-600">
-                    {inv.client_contract_no || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-500">
-                    {inv.quotation?.quotation_no || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">
-                    {fmt$(inv.total_amount)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-green-600">
-                    {fmt$(inv.paid_amount)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-red-600">
-                    {fmt$(inv.outstanding)}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}
-                    >
-                      {STATUS_LABELS[inv.status] || inv.status}
-                    </span>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={visibleColumns.length || 1}
+                    className="px-4 py-8 text-center text-gray-400"
+                  >
+                    載入中...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : data.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={visibleColumns.length || 1}
+                    className="px-4 py-8 text-center text-gray-400"
+                  >
+                    暫無發票記錄
+                  </td>
+                </tr>
+              ) : (
+                data.map((inv: any) => (
+                  <tr
+                    key={inv.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => router.push(`/invoices/${inv.id}`)}
+                  >
+                    {visibleColumns.map((col: any) => (
+                      <td
+                        key={col.key}
+                        className={`px-4 py-3 text-sm ${col.cellClassName || 'text-gray-700'}`}
+                      >
+                        {col.render(inv)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
