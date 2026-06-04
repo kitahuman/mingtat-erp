@@ -116,6 +116,9 @@ export class AttachmentsService {
       case 'work_log':
         exists = !!(await this.prisma.workLog.findFirst({ where: { id: entityId, deleted_at: null }, select: { id: true } }));
         break;
+      case 'document_folder':
+        exists = !!(await this.prisma.documentFolder.findFirst({ where: { id: entityId, deleted_at: null }, select: { id: true } }));
+        break;
       default:
         exists = false;
     }

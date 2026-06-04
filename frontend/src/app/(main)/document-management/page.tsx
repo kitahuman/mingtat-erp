@@ -1,13 +1,16 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   documentManagementApi,
+  documentFoldersApi,
   UnifiedDocumentItem,
   UnifiedDocumentListResponse,
   DocumentTreeNode,
 } from '@/lib/api';
+import AttachmentUpload from '@/components/AttachmentUpload';
+import Modal from '@/components/Modal';
 
 interface Filters {
   q: string;
@@ -22,6 +25,27 @@ interface SelectedDocument {
   id: string;
   file_name: string;
 }
+
+
+type FolderModalMode = 'create-root' | 'create-child' | 'rename';
+
+interface FolderModalState {
+  isOpen: boolean;
+  mode: FolderModalMode;
+  parentId: number | null;
+  folderId: number | null;
+  title: string;
+  initialName: string;
+}
+
+const closedFolderModal: FolderModalState = {
+  isOpen: false,
+  mode: 'create-root',
+  parentId: null,
+  folderId: null,
+  title: '',
+  initialName: '',
+};
 
 const defaultFilters: Filters = {
   q: '',
@@ -72,6 +96,18 @@ function getDocumentKey(document: Pick<UnifiedDocumentItem, 'source' | 'id'>) {
   return `${document.source}:${document.id}`;
 }
 
+
+function parseCountedLabel(label: string) {
+  return label.replace(/\s*\(\d+\)$/, '');
+}
+
+function getFolderIdFromNode(node: DocumentTreeNode | null) {
+  if (!node || node.type !== 'folder') return null;
+  const [, idPart] = node.value.split(':');
+  const folderId = Number(idPart);
+  return Number.isFinite(folderId) && folderId > 0 ? folderId : null;
+}
+
 export default function DocumentManagementPage() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
@@ -86,6 +122,10 @@ export default function DocumentManagementPage() {
   const [error, setError] = useState('');
   const [previewDocument, setPreviewDocument] = useState<UnifiedDocumentItem | null>(null);
   const [selectedDocuments, setSelectedDocuments] = useState<Record<string, SelectedDocument>>({});
+  const [folderModal, setFolderModal] = useState<FolderModalState>(closedFolderModal);
+  const [folderName, setFolderName] = useState('');
+  const [savingFolder, setSavingFolder] = useState(false);
+  const [openFolderMenuId, setOpenFolderMenuId] = useState<number | null>(null);
 
   const loadTree = useCallback(async () => {
     setLoading(true);
@@ -115,7 +155,7 @@ export default function DocumentManagementPage() {
       if (!hasModuleFilter && selectedNode) {
         if (selectedNode.type === 'module') {
           params.module = selectedNode.value;
-        } else if (selectedNode.type === 'entity') {
+        } else if (selectedNode.type === 'entity' || selectedNode.type === 'folder') {
           const [module, entity_id] = selectedNode.value.split(':');
           params.module = module;
           params.entity_id = entity_id;
@@ -127,7 +167,13 @@ export default function DocumentManagementPage() {
         }
       }
       Object.entries(appliedFilters).forEach(([key, value]) => {
-        if (value) params[key] = value;
+        if (!value) return;
+        if (key === 'module' && value.startsWith('folder:')) {
+          params.module = 'document_folder';
+          params.entity_id = value.replace('folder:', '');
+          return;
+        }
+        params[key] = value;
       });
 
       const response = await documentManagementApi.list(params);
@@ -147,15 +193,28 @@ export default function DocumentManagementPage() {
     loadDocumentList();
   }, [loadDocumentList]);
 
-  const moduleOptions = useMemo(
-    () => (documentTree || []).filter(node => node.type === 'module' && node.count > 0),
-    [documentTree],
-  );
+  const moduleOptions = useMemo(() => {
+    const options: Array<{ value: string; label: string }> = [];
+    const walk = (nodes: DocumentTreeNode[] = [], depth = 0) => {
+      nodes.forEach(node => {
+        if (node.type === 'module' && node.count > 0) {
+          options.push({ value: node.value, label: node.label });
+        }
+        if (node.type === 'folder') {
+          options.push({ value: `folder:${node.value.split(':')[1]}`, label: `${'— '.repeat(depth)}${parseCountedLabel(node.label)}` });
+        }
+        if (node.children) walk(node.children, depth + 1);
+      });
+    };
+    walk(documentTree || []);
+    return options;
+  }, [documentTree]);
   const totalPages = documentList?.total_pages || 1;
   const documents = documentList?.data || [];
   const selectedList = Object.values(selectedDocuments);
   const selectedCount = selectedList.length;
   const allCurrentPageSelected = documents.length > 0 && documents.every(document => selectedDocuments[getDocumentKey(document)]);
+  const selectedFolderId = getFolderIdFromNode(selectedNode);
 
   const selectTreeNode = (node: DocumentTreeNode) => {
     setSelectedNode(node);
@@ -172,6 +231,102 @@ export default function DocumentManagementPage() {
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setPage(1);
+  };
+
+
+  const openCreateRootFolder = () => {
+    setOpenFolderMenuId(null);
+    setFolderName('');
+    setFolderModal({
+      isOpen: true,
+      mode: 'create-root',
+      parentId: null,
+      folderId: null,
+      title: '新增分類',
+      initialName: '',
+    });
+  };
+
+  const openCreateChildFolder = (parentId: number, parentName: string, event?: MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation();
+    setOpenFolderMenuId(null);
+    setFolderName('');
+    setFolderModal({
+      isOpen: true,
+      mode: 'create-child',
+      parentId,
+      folderId: null,
+      title: `在「${parentName}」新增文件夾`,
+      initialName: '',
+    });
+  };
+
+  const openRenameFolder = (folderId: number, currentName: string) => {
+    setOpenFolderMenuId(null);
+    setFolderName(currentName);
+    setFolderModal({
+      isOpen: true,
+      mode: 'rename',
+      parentId: null,
+      folderId,
+      title: '重新命名文件夾',
+      initialName: currentName,
+    });
+  };
+
+  const closeFolderModal = () => {
+    if (savingFolder) return;
+    setFolderModal(closedFolderModal);
+    setFolderName('');
+  };
+
+  const handleFolderSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = folderName.trim();
+    if (!name) {
+      setError('請輸入分類或文件夾名稱');
+      return;
+    }
+
+    setSavingFolder(true);
+    setError('');
+    try {
+      if (folderModal.mode === 'rename') {
+        if (!folderModal.folderId) throw new Error('找不到要重新命名的文件夾');
+        await documentFoldersApi.update(folderModal.folderId, { name });
+      } else {
+        await documentFoldersApi.create({ name, parent_id: folderModal.parentId });
+      }
+      setFolderModal(closedFolderModal);
+      setFolderName('');
+      await loadTree();
+      await loadDocumentList();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || '儲存文件夾失敗');
+    } finally {
+      setSavingFolder(false);
+    }
+  };
+
+  const deleteFolder = async (folderId: number, folderNameToDelete: string) => {
+    setOpenFolderMenuId(null);
+    if (!confirm(`確定要刪除「${folderNameToDelete}」？此操作會一併移除所有子文件夾。`)) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      await documentFoldersApi.remove(folderId);
+      if (selectedFolderId === folderId) {
+        setSelectedNode(null);
+        setDocumentList(null);
+      }
+      await loadTree();
+      await loadDocumentList();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || '刪除文件夾失敗');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleDocumentSelection = (document: UnifiedDocumentItem, checked: boolean) => {
@@ -224,6 +379,97 @@ export default function DocumentManagementPage() {
     } finally {
       setDownloadingZip(false);
     }
+  };
+
+
+  const renderTreeNode = (node: DocumentTreeNode, depth = 0) => {
+    const hasChildren = Boolean(node.children && node.children.length > 0);
+    const isExpanded = Boolean(expandedNodes[node.value]);
+    const folderId = getFolderIdFromNode(node);
+    const displayLabel = node.type === 'folder' ? node.label : node.label;
+    const rawFolderName = parseCountedLabel(node.label);
+
+    return (
+      <div key={node.value}>
+        <div
+          className={`group flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === node.value ? 'bg-primary-50 text-primary-700' : ''}`}
+          onClick={() => {
+            selectTreeNode(node);
+            if (hasChildren) setExpandedNodes(prev => ({ ...prev, [node.value]: !prev[node.value] }));
+          }}
+        >
+          <span className="flex min-w-0 items-center gap-2 font-medium">
+            {hasChildren ? (
+              <svg
+                className={`h-4 w-4 flex-none transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            ) : (
+              <span className="h-4 w-4 flex-none" />
+            )}
+            <span className="truncate">{displayLabel}</span>
+          </span>
+
+          {folderId ? (
+            <span className="relative ml-2 flex flex-none items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100">
+              <button
+                type="button"
+                title="新增子文件夾"
+                onClick={(event) => openCreateChildFolder(folderId, rawFolderName, event)}
+                className="rounded px-1.5 py-0.5 text-xs font-semibold text-primary-700 hover:bg-primary-100"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                title="更多操作"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenFolderMenuId(prev => prev === folderId ? null : folderId);
+                }}
+                className="rounded px-1.5 py-0.5 text-xs font-semibold text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              >
+                ⋯
+              </button>
+              {openFolderMenuId === folderId && (
+                <div className="absolute right-0 top-7 z-20 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openRenameFolder(folderId, rawFolderName);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                  >
+                    重新命名
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteFolder(folderId, rawFolderName);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                  >
+                    刪除
+                  </button>
+                </div>
+              )}
+            </span>
+          ) : null}
+        </div>
+        {hasChildren && isExpanded && (
+          <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 pl-2">
+            {node.children!.map(child => renderTreeNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const previewUrl = previewDocument
@@ -348,80 +594,18 @@ export default function DocumentManagementPage() {
           )}
           {documentTree && documentTree.length > 0 && (
             <div className="space-y-2">
-              {documentTree.map(moduleNode => (
-                <div key={moduleNode.value}>
-                  <div
-                    className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === moduleNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
-                    onClick={() => {
-                      selectTreeNode(moduleNode);
-                      setExpandedNodes(prev => ({ ...prev, [moduleNode.value]: !prev[moduleNode.value] }));
-                    }}
-                  >
-                    <span className="font-medium">{moduleNode.label}</span>
-                    <svg
-                      className={`h-5 w-5 transform transition-transform ${expandedNodes[moduleNode.value] ? 'rotate-90' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 5l7 7-7 7"
-                      ></path>
-                    </svg>
-                  </div>
-                  {expandedNodes[moduleNode.value] && moduleNode.children && moduleNode.children.length > 0 && (
-                    <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 pl-2">
-                      {moduleNode.children.map(entityNode => (
-                        <div key={entityNode.value}>
-                          <div
-                            className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === entityNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
-                            onClick={() => {
-                              selectTreeNode(entityNode);
-                              setExpandedNodes(prev => ({ ...prev, [entityNode.value]: !prev[entityNode.value] }));
-                            }}
-                          >
-                            <span className="font-medium">{entityNode.label}</span>
-                            <svg
-                              className={`h-5 w-5 transform transition-transform ${expandedNodes[entityNode.value] ? 'rotate-90' : ''}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M9 5l7 7-7 7"
-                              ></path>
-                            </svg>
-                          </div>
-                          {expandedNodes[entityNode.value] && entityNode.children && entityNode.children.length > 0 && (
-                            <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 pl-2">
-                              {entityNode.children.map(docTypeNode => (
-                                <div key={docTypeNode.value}>
-                                  <div
-                                    className={`flex cursor-pointer items-center justify-between rounded-md p-2 hover:bg-gray-50 ${selectedNode?.value === docTypeNode.value ? 'bg-primary-50 text-primary-700' : ''}`}
-                                    onClick={() => selectTreeNode(docTypeNode)}
-                                  >
-                                    <span className="font-medium">{docTypeNode.label}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {documentTree.map(moduleNode => renderTreeNode(moduleNode))}
             </div>
           )}
+          <div className="mt-4 border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={openCreateRootFolder}
+              className="w-full rounded-lg border border-dashed border-primary-300 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+            >
+              + 新增分類
+            </button>
+          </div>
         </div>
 
         {/* Document List */}
@@ -450,6 +634,29 @@ export default function DocumentManagementPage() {
           {!selectedNode && !loading && !error && (
             <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm mt-6">
               <p className="text-gray-500">請從左側分類選擇要查看的文件</p>
+            </div>
+          )}
+
+          {selectedFolderId && (
+            <div className="mt-6">
+              <AttachmentUpload
+                key={selectedFolderId}
+                entityType="document_folder"
+                entityId={selectedFolderId}
+                title={`自訂分類文件：${parseCountedLabel(selectedNode?.label || '')}`}
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await loadTree();
+                    await loadDocumentList();
+                  }}
+                  className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-white"
+                >
+                  重新整理自訂分類文件列表
+                </button>
+              </div>
             </div>
           )}
 
@@ -598,6 +805,39 @@ export default function DocumentManagementPage() {
           )}
         </div>
       </div>
+
+      <Modal isOpen={folderModal.isOpen} onClose={closeFolderModal} title={folderModal.title} size="md">
+        <form onSubmit={handleFolderSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">名稱</label>
+            <input
+              type="text"
+              value={folderName}
+              onChange={event => setFolderName(event.target.value)}
+              placeholder={folderModal.mode === 'create-root' ? '例如：合約文件、保險文件、政府文件' : '輸入文件夾名稱'}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={closeFolderModal}
+              disabled={savingFolder}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={savingFolder}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {savingFolder ? '儲存中...' : folderModal.mode === 'rename' ? '更新' : '建立'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Preview Modal */}
       {previewDocument && (

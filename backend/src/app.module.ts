@@ -18,6 +18,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DocumentsModule } from './documents/documents.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { DocumentManagementModule } from './document-management/document-management.module';
+import { DocumentFoldersModule } from './document-folders/document-folders.module';
 import { PartnersModule } from './partners/partners.module';
 import { CompanyProfilesModule } from './company-profiles/company-profiles.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
@@ -117,6 +118,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     DocumentsModule,
     AttachmentsModule,
     DocumentManagementModule,
+    DocumentFoldersModule,
     PartnersModule,
     CompanyProfilesModule,
     CustomFieldsModule,

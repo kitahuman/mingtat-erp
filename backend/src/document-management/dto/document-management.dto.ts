@@ -16,6 +16,7 @@ export const DOCUMENT_MANAGEMENT_MODULES = [
   'project',
   'daily-report',
   'acceptance-report',
+  'document_folder',
 ] as const;
 
 export const DOCUMENT_MANAGEMENT_SOURCES = [
@@ -25,6 +26,7 @@ export const DOCUMENT_MANAGEMENT_SOURCES = [
   'daily-report-attachment',
   'acceptance-report-attachment',
   'company-file',
+  'document_folder',
 ] as const;
 
 export type DocumentManagementModule = typeof DOCUMENT_MANAGEMENT_MODULES[number];
@@ -111,7 +113,7 @@ export class DocumentTreeQueryDto {
 export class DocumentTreeNode {
   label: string;
   value: string;
-  type: 'module' | 'entity' | 'doc_type';
+  type: 'module' | 'entity' | 'doc_type' | 'folder';
   count: number;
   children?: DocumentTreeNode[];
 }

@@ -59,6 +59,7 @@ model User {
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
   scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
   web_push_subscriptions     WebPushSubscription[]
+  document_folders_created   DocumentFolder[]             @relation("DocumentFolderCreatedBy")
 
   @@map("users")
 }
@@ -1224,6 +1225,25 @@ model Attachment {
   @@index([attachment_entity_type, attachment_entity_id])
   @@index([attachment_uploaded_by])
   @@map("attachments")
+}
+
+model DocumentFolder {
+  id         Int              @id @default(autoincrement())
+  name       String           @db.VarChar(255)
+  parent_id  Int?
+  created_by Int?
+  created_at DateTime         @default(now())
+  updated_at DateTime         @default(now()) @updatedAt
+  deleted_at DateTime?
+
+  parent   DocumentFolder?  @relation("DocumentFolderChildren", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  children DocumentFolder[] @relation("DocumentFolderChildren")
+  creator  User?            @relation("DocumentFolderCreatedBy", fields: [created_by], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([parent_id])
+  @@index([created_by])
+  @@index([deleted_at])
+  @@map("document_folders")
 }
 
 // ══════════════════════════════════════════════════════════════

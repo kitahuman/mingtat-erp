@@ -276,7 +276,8 @@ export type AttachmentEntityType =
   | 'project'
   | 'payment_in'
   | 'payment_out'
-  | 'work_log';
+  | 'work_log'
+  | 'document_folder';
 
 export const attachmentsApi = {
   list: (entityType: AttachmentEntityType, entityId: number) =>
@@ -314,7 +315,8 @@ export type UnifiedDocumentSource =
   | 'expense-attachment'
   | 'daily-report-attachment'
   | 'acceptance-report-attachment'
-  | 'company-file';
+  | 'company-file'
+  | 'document_folder';
 
 export type UnifiedDocumentModule =
   | 'company'
@@ -331,6 +333,7 @@ export type UnifiedDocumentModule =
   | 'daily-report'
   | 'acceptance-report'
   | 'subcon-fleet-driver'
+  | 'document_folder'
   | 'other';
 
 export interface UnifiedDocumentItem {
@@ -367,7 +370,7 @@ export interface UnifiedDocumentListResponse {
 export interface DocumentTreeNode {
   label: string;
   value: string;
-  type: 'module' | 'entity' | 'doc_type';
+  type: 'module' | 'entity' | 'doc_type' | 'folder';
   count: number;
   children?: DocumentTreeNode[];
 }
@@ -381,6 +384,30 @@ export const documentManagementApi = {
     withAuthToken(`${API_BASE_URL}/document-management/${source}/${encodeURIComponent(id)}/download`),
   batchDownload: (files: { source: UnifiedDocumentSource; id: string }[]) =>
     api.post('/document-management/batch-download', { files }, { responseType: 'blob' }),
+};
+
+export interface DocumentFolderNode {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+  children?: DocumentFolderNode[];
+}
+
+export interface CreateDocumentFolderInput {
+  name: string;
+  parent_id?: number | null;
+}
+
+export type UpdateDocumentFolderInput = CreateDocumentFolderInput;
+
+export const documentFoldersApi = {
+  list: () => api.get<DocumentFolderNode[]>('/document-folders'),
+  create: (data: CreateDocumentFolderInput) => api.post<DocumentFolderNode>('/document-folders', data),
+  update: (id: number, data: UpdateDocumentFolderInput) => api.put<DocumentFolderNode>(`/document-folders/${id}`, data),
+  remove: (id: number) => api.delete<{ message: string }>(`/document-folders/${id}`),
 };
 
 // Partners

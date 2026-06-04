@@ -11,6 +11,7 @@ export const ATTACHMENT_ENTITY_TYPES = [
   'payment_in',
   'payment_out',
   'work_log',
+  'document_folder',
 ] as const;
 
 export type AttachmentEntityType = typeof ATTACHMENT_ENTITY_TYPES[number];

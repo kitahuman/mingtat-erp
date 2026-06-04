@@ -50,6 +50,7 @@ const MODULE_LABELS: Record<DocumentManagementModule, string> = {
   project: '工程項目',
   'daily-report': '工程日報',
   'acceptance-report': '工程收貨',
+  document_folder: '自訂分類',
 };
 
 const SOURCE_LABELS: Record<DocumentManagementSource, string> = {
@@ -59,6 +60,7 @@ const SOURCE_LABELS: Record<DocumentManagementSource, string> = {
   'daily-report-attachment': '工程日報附件',
   'acceptance-report-attachment': '工程收貨附件',
   'company-file': '公司檔案',
+  document_folder: '自訂分類',
 };
 
 @Injectable()
@@ -134,7 +136,18 @@ export class DocumentManagementService {
           mimeType: attachment.acceptance_report_attachment_file_type,
         };
       }
+      case 'document_folder':
       case 'company-file': {
+        if (source === 'document_folder') {
+          const attachment = await this.prisma.attachment.findUnique({ where: { id: Number(id) } });
+          if (!attachment || attachment.attachment_entity_type !== 'document_folder') throw new NotFoundException('文件不存在');
+          return {
+            filePath: join(process.cwd(), 'uploads', attachment.attachment_file_path),
+            fileName: attachment.attachment_filename,
+            mimeType: attachment.attachment_mime_type,
+          };
+        }
+
         const [companyIdPart, kind] = id.split(':');
         const companyId = Number(companyIdPart);
         if (!companyId || !['logo', 'stamp'].includes(kind)) throw new NotFoundException('文件不存在');
@@ -164,6 +177,7 @@ export class DocumentManagementService {
     const rows: UnifiedDocumentRecord[] = [];
     await Promise.all([
       this.collectAttachments(rows),
+      this.collectDocumentFolderAttachments(rows),
       this.collectDocuments(rows),
       this.collectExpenseAttachments(rows),
       this.collectDailyReportAttachments(rows),
@@ -174,7 +188,10 @@ export class DocumentManagementService {
   }
 
   private async collectAttachments(rows: UnifiedDocumentRecord[]) {
-    const attachments = await this.prisma.attachment.findMany({ orderBy: { attachment_created_at: 'desc' } });
+    const attachments = await this.prisma.attachment.findMany({
+      where: { NOT: { attachment_entity_type: 'document_folder' } },
+      orderBy: { attachment_created_at: 'desc' },
+    });
     const labels = await this.buildEntityLabels(attachments.map((a) => ({ type: a.attachment_entity_type, id: a.attachment_entity_id })));
 
     for (const attachment of attachments) {
@@ -197,6 +214,44 @@ export class DocumentManagementService {
         uploaded_at: attachment.attachment_created_at,
         download_url: this.fileUrl('attachment', String(attachment.id), 'download'),
         preview_url: this.fileUrl('attachment', String(attachment.id), 'preview'),
+      });
+    }
+  }
+
+
+  private async collectDocumentFolderAttachments(rows: UnifiedDocumentRecord[]) {
+    const attachments = await this.prisma.attachment.findMany({
+      where: { attachment_entity_type: 'document_folder' },
+      orderBy: { attachment_created_at: 'desc' },
+    });
+    if (attachments.length === 0) return;
+
+    const folders = await this.prisma.documentFolder.findMany({
+      where: { deleted_at: null },
+      select: { id: true, name: true, parent_id: true },
+    });
+    const folderLabelMap = this.buildFolderLabelMap(folders);
+
+    for (const attachment of attachments) {
+      const entityLabel = folderLabelMap.get(attachment.attachment_entity_id);
+      if (!entityLabel) continue;
+      rows.push({
+        id: String(attachment.id),
+        numeric_id: attachment.id,
+        source: 'document_folder',
+        module: 'document_folder',
+        module_label: MODULE_LABELS.document_folder,
+        entity_type: 'document_folder',
+        entity_id: attachment.attachment_entity_id,
+        entity_label: entityLabel,
+        file_name: attachment.attachment_filename,
+        file_size: attachment.attachment_file_size ?? this.tryFileSize(join(process.cwd(), 'uploads', attachment.attachment_file_path)),
+        mime_type: attachment.attachment_mime_type,
+        doc_type: null,
+        description: attachment.attachment_description,
+        uploaded_at: attachment.attachment_created_at,
+        download_url: this.fileUrl('document_folder', String(attachment.id), 'download'),
+        preview_url: this.fileUrl('document_folder', String(attachment.id), 'preview'),
       });
     }
   }
@@ -375,6 +430,29 @@ export class DocumentManagementService {
     });
   }
 
+  private buildFolderLabelMap(folders: Array<{ id: number; name: string; parent_id: number | null }>) {
+    const folderById = new Map(folders.map(folder => [folder.id, folder]));
+    const labelMap = new Map<number, string>();
+
+    const resolveLabel = (folderId: number, visited = new Set<number>()): string => {
+      const cached = labelMap.get(folderId);
+      if (cached) return cached;
+      const folder = folderById.get(folderId);
+      if (!folder) return `#${folderId}`;
+      if (!folder.parent_id || visited.has(folder.parent_id)) {
+        labelMap.set(folderId, folder.name);
+        return folder.name;
+      }
+      visited.add(folderId);
+      const label = `${resolveLabel(folder.parent_id, visited)} / ${folder.name}`;
+      labelMap.set(folderId, label);
+      return label;
+    };
+
+    folders.forEach(folder => resolveLabel(folder.id));
+    return labelMap;
+  }
+
   private async buildEntityLabels(keys: Array<{ type: string; id: number }>) {
     const labels = new Map<string, string>();
     const idsByType = new Map<string, Set<number>>();
@@ -455,6 +533,7 @@ export class DocumentManagementService {
   }
 
   private normalizeModule(entityType: string): DocumentManagementModule | null {
+    if (entityType === 'document_folder') return 'document_folder';
     const normalized = entityType.replace(/_/g, '-');
     if ((Object.keys(MODULE_LABELS) as string[]).includes(normalized)) {
       return normalized as DocumentManagementModule;
@@ -524,6 +603,8 @@ export class DocumentManagementService {
     const moduleMap = new Map<string, DocumentTreeNode>();
 
     for (const row of filteredRows) {
+      if (row.module === 'document_folder') continue;
+
       // Level 1: Module
       if (!moduleMap.has(row.module)) {
         moduleMap.set(row.module, {
@@ -570,6 +651,11 @@ export class DocumentManagementService {
       }
     }
 
+    if (!query.module || query.module === 'document_folder') {
+      const folderNodes = await this.buildDocumentFolderTreeNodes(filteredRows.filter(row => row.module === 'document_folder'));
+      tree.push(...folderNodes);
+    }
+
     // Sort nodes for consistent display
     tree.sort((a, b) => a.label.localeCompare(b.label));
     tree.forEach(moduleNode => {
@@ -591,6 +677,59 @@ export class DocumentManagementService {
     appendCounts(tree);
 
     return tree;
+  }
+
+  private async buildDocumentFolderTreeNodes(rows: UnifiedDocumentRecord[]): Promise<DocumentTreeNode[]> {
+    const directCounts = new Map<number, number>();
+    rows.forEach(row => directCounts.set(row.entity_id, (directCounts.get(row.entity_id) ?? 0) + 1));
+
+    const folders = await this.prisma.documentFolder.findMany({
+      where: { deleted_at: null },
+      select: { id: true, name: true, parent_id: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+
+    const nodeMap = new Map<number, DocumentTreeNode & { parentId: number | null }>();
+    folders.forEach(folder => {
+      nodeMap.set(folder.id, {
+        label: folder.name,
+        value: `document_folder:${folder.id}`,
+        type: 'folder',
+        count: directCounts.get(folder.id) ?? 0,
+        children: [],
+        parentId: folder.parent_id,
+      });
+    });
+
+    const roots: Array<DocumentTreeNode & { parentId: number | null }> = [];
+    nodeMap.forEach(node => {
+      if (node.parentId && nodeMap.has(node.parentId)) {
+        nodeMap.get(node.parentId)!.children?.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    const rollup = (node: DocumentTreeNode & { parentId: number | null }): number => {
+      node.children?.sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+      const childrenCount = node.children?.reduce((sum, child) => sum + rollup(child as DocumentTreeNode & { parentId: number | null }), 0) ?? 0;
+      node.count += childrenCount;
+      return node.count;
+    };
+
+    roots.sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+    roots.forEach(root => rollup(root));
+    return roots.map(root => this.stripFolderTreeInternalFields(root));
+  }
+
+  private stripFolderTreeInternalFields(node: DocumentTreeNode & { parentId?: number | null }): DocumentTreeNode {
+    return {
+      label: node.label,
+      value: node.value,
+      type: node.type,
+      count: node.count,
+      children: node.children?.map(child => this.stripFolderTreeInternalFields(child)),
+    };
   }
 
   private timeValue(value: Date | null) {
