@@ -431,6 +431,10 @@ export default function MissingPriceTab() {
       showToast('請輸入有效的費率（必填）', 'error');
       return;
     }
+    if (!row.company_id) {
+      showToast('此組合缺少公司資訊，請先點擊右側編輯圖標選擇公司後再新增', 'error');
+      return;
+    }
     setSubmitting((p) => ({ ...p, [key]: true }));
     try {
       const payload: Record<string, unknown> = {

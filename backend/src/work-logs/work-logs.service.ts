@@ -1892,7 +1892,7 @@ export class WorkLogsService {
       effective_date: dto.effective_date
         ? new Date(dto.effective_date)
         : new Date(),
-      rate_card_type: 'client',
+      rate_card_type: 'rental',
       status: 'active',
       deleted_at: null,
     };

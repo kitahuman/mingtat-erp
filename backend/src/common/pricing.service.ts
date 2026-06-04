@@ -129,7 +129,7 @@ export class PricingService {
     const where: any = {
       status: 'active',
       client_id: clientId,
-      rate_card_type: 'client',
+      rate_card_type: { in: ['rental', 'client'] },
       deleted_at: null,
     };
     if (companyId) where.company_id = companyId;
