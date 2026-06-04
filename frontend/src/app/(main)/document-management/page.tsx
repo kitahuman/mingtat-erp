@@ -12,6 +12,7 @@ import {
 interface Filters {
   q: string;
   file_name: string;
+  module: string;
   date_from: string;
   date_to: string;
 }
@@ -25,6 +26,7 @@ interface SelectedDocument {
 const defaultFilters: Filters = {
   q: '',
   file_name: '',
+  module: '',
   date_from: '',
   date_to: '',
 };
@@ -99,7 +101,9 @@ export default function DocumentManagementPage() {
   }, []);
 
   const loadDocumentList = useCallback(async () => {
-    if (!selectedNode) {
+    const hasModuleFilter = Boolean(appliedFilters.module);
+
+    if (!selectedNode && !hasModuleFilter) {
       setDocumentList(null);
       return;
     }
@@ -108,17 +112,19 @@ export default function DocumentManagementPage() {
     setError('');
     try {
       const params: any = { page, limit };
-      if (selectedNode.type === 'module') {
-        params.module = selectedNode.value;
-      } else if (selectedNode.type === 'entity') {
-        const [module, entity_id] = selectedNode.value.split(':');
-        params.module = module;
-        params.entity_id = entity_id;
-      } else if (selectedNode.type === 'doc_type') {
-        const [module, entity_id, ...docTypeParts] = selectedNode.value.split(':');
-        params.module = module;
-        params.entity_id = entity_id;
-        params.doc_type = docTypeParts.join(':');
+      if (!hasModuleFilter && selectedNode) {
+        if (selectedNode.type === 'module') {
+          params.module = selectedNode.value;
+        } else if (selectedNode.type === 'entity') {
+          const [module, entity_id] = selectedNode.value.split(':');
+          params.module = module;
+          params.entity_id = entity_id;
+        } else if (selectedNode.type === 'doc_type') {
+          const [module, entity_id, ...docTypeParts] = selectedNode.value.split(':');
+          params.module = module;
+          params.entity_id = entity_id;
+          params.doc_type = docTypeParts.join(':');
+        }
       }
       Object.entries(appliedFilters).forEach(([key, value]) => {
         if (value) params[key] = value;
@@ -141,6 +147,10 @@ export default function DocumentManagementPage() {
     loadDocumentList();
   }, [loadDocumentList]);
 
+  const moduleOptions = useMemo(
+    () => (documentTree || []).filter(node => node.type === 'module' && node.count > 0),
+    [documentTree],
+  );
   const totalPages = documentList?.total_pages || 1;
   const documents = documentList?.data || [];
   const selectedList = Object.values(selectedDocuments);
@@ -241,7 +251,7 @@ export default function DocumentManagementPage() {
           <button
             type="button"
             onClick={loadDocumentList}
-            disabled={loading || !selectedNode}
+            disabled={loading || (!selectedNode && !appliedFilters.module)}
             className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? '更新中...' : '重新整理文件列表'}
@@ -276,7 +286,21 @@ export default function DocumentManagementPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
-        {/* Module and Source filters are now handled by the tree structure, but date filters remain */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">分類</label>
+          <select
+            value={filters.module}
+            onChange={event => setFilters(prev => ({ ...prev, module: event.target.value }))}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
+            <option value="">全部分類</option>
+            {moduleOptions.map(moduleNode => (
+              <option key={moduleNode.value} value={moduleNode.value}>
+                {moduleNode.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">開始日期</label>
           <input
@@ -295,7 +319,7 @@ export default function DocumentManagementPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
-        <div className="flex items-end gap-2 xl:col-span-4">
+        <div className="flex items-end gap-2 xl:col-span-3">
           <button
             type="button"
             onClick={applyFilters}
