@@ -134,7 +134,14 @@ export class AttachmentsController {
     dispositionType: 'attachment' | 'inline',
   ) {
     const attachment = await this.service.findOne(id);
-    const filePath = this.service.getDiskPath(attachment.attachment_file_path);
+    const filePathOrUrl = attachment.attachment_file_path;
+
+    // If the file path is an external URL (e.g. migrated S3 files), redirect to it
+    if (/^https?:\/\//i.test(filePathOrUrl)) {
+      return res.redirect(filePathOrUrl);
+    }
+
+    const filePath = this.service.getDiskPath(filePathOrUrl);
     if (!existsSync(filePath)) {
       return res.status(404).json({ message: '文件不存在' });
     }

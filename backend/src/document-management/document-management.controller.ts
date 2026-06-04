@@ -64,7 +64,12 @@ export class DocumentManagementController {
 
   @Get(':source/:id/preview')
   async preview(@Param() params: DocumentFileParamsDto, @Res() res: Response) {
-    const file = this.service.ensureFileExists(await this.service.resolveFile(params.source, decodeURIComponent(params.id)));
+    const file = await this.service.resolveFile(params.source, decodeURIComponent(params.id));
+    // If the file is an external URL (e.g. migrated S3 files), redirect to it
+    if (/^https?:\/\//i.test(file.filePath)) {
+      return res.redirect(file.filePath);
+    }
+    this.service.ensureFileExists(file);
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
     createReadStream(file.filePath).pipe(res);
@@ -72,7 +77,12 @@ export class DocumentManagementController {
 
   @Get(':source/:id/download')
   async download(@Param() params: DocumentFileParamsDto, @Res() res: Response) {
-    const file = this.service.ensureFileExists(await this.service.resolveFile(params.source, decodeURIComponent(params.id)));
+    const file = await this.service.resolveFile(params.source, decodeURIComponent(params.id));
+    // If the file is an external URL (e.g. migrated S3 files), redirect to it
+    if (/^https?:\/\//i.test(file.filePath)) {
+      return res.redirect(file.filePath);
+    }
+    this.service.ensureFileExists(file);
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
     createReadStream(file.filePath).pipe(res);

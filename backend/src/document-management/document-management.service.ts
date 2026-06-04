@@ -546,20 +546,28 @@ export class DocumentManagementService {
   }
 
   private resolveUploadPathFromUrl(fileUrl: string) {
-    let pathname = fileUrl;
-    try {
-      if (/^https?:\/\//i.test(fileUrl)) {
+    // If it's an external URL without /uploads/ marker, return the URL as-is for redirect
+    if (/^https?:\/\//i.test(fileUrl)) {
+      let pathname: string;
+      try {
         pathname = new URL(fileUrl).pathname;
+      } catch {
+        return fileUrl;
       }
-    } catch {
-      pathname = fileUrl;
+      const marker = '/uploads/';
+      const markerIndex = pathname.indexOf(marker);
+      if (markerIndex >= 0) {
+        return join(process.cwd(), 'uploads', pathname.slice(markerIndex + marker.length));
+      }
+      // External URL without /uploads/ path (e.g. S3) - return full URL for redirect
+      return fileUrl;
     }
     const marker = '/uploads/';
-    const markerIndex = pathname.indexOf(marker);
+    const markerIndex = fileUrl.indexOf(marker);
     if (markerIndex >= 0) {
-      return join(process.cwd(), 'uploads', pathname.slice(markerIndex + marker.length));
+      return join(process.cwd(), 'uploads', fileUrl.slice(markerIndex + marker.length));
     }
-    return join(process.cwd(), 'uploads', pathname.replace(/^\/+/, ''));
+    return join(process.cwd(), 'uploads', fileUrl.replace(/^\/+/, ''));
   }
 
   private tryFileSize(filePath: string): number | null {

@@ -40,4 +40,7 @@ body {
   .badge-gray {
     @apply badge bg-gray-100 text-gray-800;
   }
+  .badge-purple {
+    @apply badge bg-purple-100 text-purple-800;
+  }
 }
