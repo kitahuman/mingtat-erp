@@ -49,10 +49,12 @@ model User {
   deleted_contracts          Contract[]                 @relation("ContractDeletedBy")
   deleted_projects           Project[]                  @relation("ProjectDeletedBy")
   deleted_quotations         Quotation[]                @relation("QuotationDeletedBy")
+  created_quotations         Quotation[]                @relation("QuotationCreatedBy")
   deleted_rate_cards         RateCard[]                 @relation("RateCardDeletedBy")
   deleted_expenses           Expense[]                  @relation("ExpenseDeletedBy")
   created_expenses           Expense[]                  @relation("ExpenseCreatedBy")
   deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
+  created_invoices           Invoice[]                  @relation("InvoiceCreatedBy")
   deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
   scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
@@ -864,7 +866,9 @@ model Quotation {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
   deleted_at      DateTime? // 軯刪除時間時戳
+  created_by      Int?
   deleted_by      Int?
+  creator         User?     @relation("QuotationCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
   deletedBy       User?     @relation("QuotationDeletedBy", fields: [deleted_by], references: [id])
 
   parent_quotation Quotation?  @relation("QuotationRevisions", fields: [quotation_parent_id], references: [id], onDelete: SetNull)
@@ -891,6 +895,7 @@ model Quotation {
   @@index([quotation_parent_id])
   @@index([quotation_is_active])
   @@index([quotation_revision_number])
+  @@index([created_by])
   @@index([deleted_at])
   @@map("quotations")
 }
@@ -2110,7 +2115,9 @@ model Invoice {
   created_at         DateTime  @default(now())
   updated_at         DateTime  @default(now()) @updatedAt
   deleted_at         DateTime? // 軯刪除時間時戳
+  created_by         Int?
   deleted_by         Int?
+  creator            User?     @relation("InvoiceCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
   deletedBy          User?     @relation("InvoiceDeletedBy", fields: [deleted_by], references: [id])
 
   client                 Partner?              @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
@@ -2133,6 +2140,7 @@ model Invoice {
   @@index([date])
   @@index([invoice_parent_id])
   @@index([invoice_is_active])
+  @@index([created_by])
   @@index([deleted_at])
   @@map("invoices")
 }
