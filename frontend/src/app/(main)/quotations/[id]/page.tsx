@@ -33,10 +33,6 @@ type QuotationRevisionSummary = {
 
 const revisionLabel = (revisionNumber: number) =>
   revisionNumber === 0 ? '原始版' : `R${revisionNumber}`;
-const ALL_UNITS = ['JOB','M','M2','M3','車','工','噸','天','晚','次','個','件','小時','月','兩周','公斤'];
-const PROJECT_UNITS = ['JOB','M','M2','M3','工','噸','次','個','件','公斤'];
-const RENTAL_UNITS = ['車','天','晚','噸','小時','月','次','兩周'];
-
 
 // Searchable client dropdown
 function ClientSearchSelect({ value, onChange, partners }: { value: any; onChange: (v: any) => void; partners: any[] }) {
@@ -132,12 +128,13 @@ export default function QuotationDetailPage() {
     isOpen: false,
     index: null,
   });
-  const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'location'];
+  const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'location', 'wage_unit'];
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
   const serviceTypeOptions = optionsMap['service_type'] || [];
   const locationOptions = optionsMap['location'] || [];
+  const wageUnitOptions = optionsMap['wage_unit'] || [];
 
   const loadRevisions = async (targetQuotationId: number = quotationId) => {
     setRevisionsLoading(true);
@@ -291,7 +288,7 @@ export default function QuotationDetailPage() {
   };
 
   const addItem = () => {
-    const defaultUnit = form.quotation_type === 'rental' ? '天' : 'JOB';
+    const defaultUnit = String(wageUnitOptions[0]?.value || (form.quotation_type === 'rental' ? '天' : 'JOB'));
     setForm({ ...form, items: [...form.items, { item_name: '', item_description: '', quantity: 0, unit: defaultUnit, unit_price: 0, remarks: '' }] });
   };
   const removeItem = (idx: number) => {
@@ -312,9 +309,13 @@ export default function QuotationDetailPage() {
     ? isRateOnlyTotal(form.items || [])
     : Boolean(quotation?.is_rate_only_total) || isRateOnlyTotal(quotation?.items || []);
 
-  const unitOptions = (form.quotation_type === 'rental' ? RENTAL_UNITS : PROJECT_UNITS);
-
-
+  const getUnitOptions = (currentUnit?: string | number | null) => {
+    const normalizedCurrentUnit = currentUnit === null || currentUnit === undefined ? '' : String(currentUnit);
+    if (!normalizedCurrentUnit || wageUnitOptions.some(option => String(option.value) === normalizedCurrentUnit)) {
+      return wageUnitOptions;
+    }
+    return [...wageUnitOptions, { value: normalizedCurrentUnit, label: normalizedCurrentUnit }];
+  };
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
@@ -565,9 +566,14 @@ export default function QuotationDetailPage() {
                         </td>
                         <td className="px-3 py-1 align-top pt-2"><input type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="input-field text-sm text-right" /></td>
                         <td className="px-3 py-1 align-top pt-2">
-                          <select value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)} className="input-field text-sm">
-                            {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
+                          <SearchableSelect
+                            value={item.unit || null}
+                            onChange={(value) => updateItem(idx, 'unit', value || '')}
+                            options={getUnitOptions(item.unit)}
+                            placeholder="選擇單位"
+                            clearable={false}
+                            className="min-w-[90px]"
+                          />
                         </td>
                         <td className="px-3 py-1 align-top pt-2"><input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} className="input-field text-sm text-right" /></td>
                         <td className="px-3 py-2 text-right font-mono align-top pt-3">
@@ -881,6 +887,17 @@ export default function QuotationDetailPage() {
                   onChange={(v) => updateItem(detailModal.index!, 'qi_destination', v)}
                   options={locationOptions}
                   placeholder="選擇或輸入終點"
+                />
+              </div>
+              <div>
+                <label className="label">單位</label>
+                <SearchableSelect
+                  value={form.items[detailModal.index]?.unit || null}
+                  onChange={(value) => updateItem(detailModal.index!, 'unit', value || '')}
+                  options={getUnitOptions(form.items[detailModal.index]?.unit)}
+                  placeholder="選擇單位"
+                  clearable={false}
+                  className="w-full"
                 />
               </div>
               <div>
