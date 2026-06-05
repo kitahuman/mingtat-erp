@@ -1046,6 +1046,15 @@ export class QuotationsService {
             amount: item.amount || 0,
             remarks: item.remarks,
             sort_order: item.sort_order || index + 1,
+            qi_service_type: item.qi_service_type || null,
+            qi_day_night: item.qi_day_night || null,
+            qi_tonnage: item.qi_tonnage || null,
+            qi_machine_type: item.qi_machine_type || null,
+            qi_origin: item.qi_origin || null,
+            qi_destination: item.qi_destination || null,
+            qi_ot_rate: item.qi_ot_rate ? Number(item.qi_ot_rate) : null,
+            qi_mid_shift_rate: item.qi_mid_shift_rate ? Number(item.qi_mid_shift_rate) : null,
+            qi_sync_to_rate_card: item.qi_sync_to_rate_card || false,
           })),
         });
       }

@@ -387,15 +387,15 @@ export default function InvoicePdfPreviewPage() {
         </div>
       )}
 
-      <section className="flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm" style={{ minHeight: '85vh' }}>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm" style={{ minHeight: '85vh' }}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
           <div className="font-medium">PDF 預覽</div>
           <div className="text-xs text-gray-500">
             預覽內容由後端 PDF 直接生成，與下載檔案一致。
           </div>
         </div>
-        <div className="flex flex-1 items-stretch justify-center overflow-hidden bg-gray-300 p-2">
-          <div className="h-full w-full overflow-hidden bg-white shadow-lg">
+        <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden bg-gray-300 p-2">
+          <div className="h-full w-full overflow-hidden bg-white shadow-lg" style={{ minHeight: 'calc(85vh - 50px)' }}>
             {loadingPreview ? (
               <div className="flex h-full w-full items-center justify-center bg-white text-sm font-medium text-gray-600">
                 載入預覽中...
