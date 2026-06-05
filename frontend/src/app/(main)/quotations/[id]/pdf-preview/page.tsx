@@ -1,46 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { quotationsApi, paymentTermTemplatesApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
 
 type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
-
-
-const buildPagedPreviewHtml = (source: string, currentPage: number) => {
-  if (!source) return source;
-  const pageOffset = Math.max(0, currentPage - 1);
-  const previewStyle = `
-<style id="a4-preview-page-style">
-  @media screen {
-    html, body {
-      width: 100vw !important;
-      min-height: 141.4286vw !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      background: #ffffff !important;
-    }
-    body {
-      transform: translateY(-${(pageOffset * 141.4286).toFixed(4)}vw) !important;
-      transform-origin: top left !important;
-    }
-    .invoice-page {
-      width: 100vw !important;
-      min-height: 141.4286vw !important;
-      margin: 0 !important;
-      padding: 4.2857vw 4.7619vw !important;
-      box-shadow: none !important;
-      overflow: hidden !important;
-    }
-  }
-</style>`;
-
-  return source.includes('</head>')
-    ? source.replace('</head>', `${previewStyle}</head>`)
-    : `${previewStyle}${source}`;
-};
 
 type PdfPreviewOptions = {
   language: QuotationPdfLanguage;
@@ -73,24 +38,15 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
 export default function QuotationPdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const quotationId = Number(id);
 
   const [quotation, setQuotation] = useState<any>(null);
   const [options, setOptions] = useState<PdfPreviewOptions>(DEFAULT_OPTIONS);
-  const [html, setHtml] = useState('');
+  const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [previewSize, setPreviewSize] = useState({ width: 595, height: 842 });
-
-  const previewHtml = useMemo(
-    () => buildPagedPreviewHtml(html, currentPage),
-    [html, currentPage],
-  );
 
   const requestParams = useMemo(
     () => ({
@@ -129,7 +85,7 @@ export default function QuotationPdfPreviewPage() {
       .get(quotationId)
       .then((res) => {
         setQuotation(res.data);
-        setOptions(prev => ({
+        setOptions((prev) => ({
           ...prev,
           override_payment_terms: res.data.payment_terms || '',
           client_address: prev.client_address || res.data.client?.address || '',
@@ -144,20 +100,33 @@ export default function QuotationPdfPreviewPage() {
     if (!Number.isFinite(quotationId)) return;
 
     let active = true;
+    let objectUrl = '';
+
     setLoadingPreview(true);
     setError('');
 
     quotationsApi
-      .getPdfHtml(quotationId, requestParams)
+      .exportPdf(quotationId, requestParams)
       .then((res) => {
-        if (!active) return;
-        setHtml(
-          typeof res.data === 'string' ? res.data : String(res.data || ''),
-        );
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        objectUrl = window.URL.createObjectURL(blob);
+
+        if (!active) {
+          window.URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return objectUrl;
+        });
       })
       .catch((err: any) => {
         if (!active) return;
-        setHtml('');
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return '';
+        });
         setError(err.response?.data?.message || '載入 PDF 預覽失敗');
       })
       .finally(() => {
@@ -166,29 +135,9 @@ export default function QuotationPdfPreviewPage() {
 
     return () => {
       active = false;
+      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
   }, [quotationId, requestParams]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [html]);
-
-  useEffect(() => {
-    const updatePreviewSize = () => {
-      const availableWidth = Math.max(320, window.innerWidth - 32);
-      const availableHeight = Math.max(420, window.innerHeight - 170);
-      const widthFromHeight = availableHeight * 210 / 297;
-      const nextWidth = Math.floor(Math.min(availableWidth, widthFromHeight, 794));
-      setPreviewSize({
-        width: nextWidth,
-        height: Math.floor(nextWidth * 297 / 210),
-      });
-    };
-
-    updatePreviewSize();
-    window.addEventListener('resize', updatePreviewSize);
-    return () => window.removeEventListener('resize', updatePreviewSize);
-  }, []);
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
@@ -239,30 +188,6 @@ export default function QuotationPdfPreviewPage() {
     setOptions((current) => ({ ...current, [key]: value }));
   };
 
-  const measurePreviewPages = () => {
-    const iframe = iframeRef.current;
-    const doc = iframe?.contentDocument;
-    const win = iframe?.contentWindow;
-    if (!iframe || !doc || !win) return;
-
-    const pageElement = doc.querySelector('.invoice-page') as HTMLElement | null;
-    const pageWidth = Math.max(1, win.innerWidth || iframe.clientWidth || 1);
-    const pageHeight = Math.max(1, pageWidth * 297 / 210);
-    const contentHeight = Math.max(
-      pageElement?.scrollHeight || 0,
-      doc.body?.scrollHeight || 0,
-      doc.documentElement?.scrollHeight || 0,
-    );
-    const nextTotalPages = Math.max(1, Math.ceil(contentHeight / pageHeight));
-    setTotalPages(nextTotalPages);
-    setCurrentPage((page) => Math.min(page, nextTotalPages));
-  };
-
-  const handlePreviewLoad = () => {
-    window.setTimeout(measurePreviewPages, 50);
-  };
-
-
   const handleSaveAsTemplate = async (name: string, sourceType: string) => {
     await paymentTermTemplatesApi.create({
       name,
@@ -302,7 +227,7 @@ export default function QuotationPdfPreviewPage() {
           <button
             onClick={handlePrint}
             className="btn-secondary px-3 py-1.5 text-sm"
-            disabled={printing || loadingPreview || !html}
+            disabled={printing || loadingPreview || !pdfUrl}
           >
             {printing ? '開啟中...' : '列印'}
           </button>
@@ -431,53 +356,24 @@ export default function QuotationPdfPreviewPage() {
         </div>
       )}
 
-      <section className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-gray-200 shadow-sm" style={{ minHeight: '85vh' }}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
-          <div className="font-medium">A4 預覽</div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-              disabled={loadingPreview || currentPage <= 1}
-            >
-              上一頁
-            </button>
-            <span className="min-w-[72px] text-center text-xs text-gray-600">
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-              className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-              disabled={loadingPreview || currentPage >= totalPages}
-            >
-              下一頁
-            </button>
+          <div className="font-medium">PDF 預覽</div>
+          <div className="text-xs text-gray-500">
+            預覽內容由後端 PDF 直接生成，與下載檔案一致。
           </div>
         </div>
-        <div className="flex flex-1 min-h-0 items-start justify-center overflow-auto bg-gray-300 p-2">
-          <div
-            className="overflow-hidden bg-white shadow-lg"
-            style={{
-              width: `${previewSize.width}px`,
-              height: `${previewSize.height}px`,
-              maxWidth: 'calc(100vw - 2rem)',
-              maxHeight: 'calc(100vh - 170px)',
-            }}
-          >
+        <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden bg-gray-300 p-2">
+          <div className="h-full w-full overflow-hidden bg-white shadow-lg" style={{ minHeight: 'calc(85vh - 50px)' }}>
             {loadingPreview ? (
               <div className="flex h-full w-full items-center justify-center bg-white text-sm font-medium text-gray-600">
                 載入預覽中...
               </div>
-            ) : html ? (
+            ) : pdfUrl ? (
               <iframe
-                ref={iframeRef}
-                title="報價單 PDF HTML 預覽"
-                srcDoc={previewHtml}
-                onLoad={handlePreviewLoad}
+                title="報價單 PDF 預覽"
+                src={pdfUrl}
                 className="h-full w-full border-0 bg-white"
-                scrolling="no"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-white text-sm text-gray-500">
