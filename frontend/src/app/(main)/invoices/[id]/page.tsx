@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,8 +11,10 @@ import {
   quotationsApi,
   paymentInApi,
   bankAccountsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
+import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +36,13 @@ const STATUS_COLORS: Record<string, string> = {
   partially_paid: 'bg-yellow-100 text-yellow-700',
   paid: 'bg-green-100 text-green-700',
   void: 'bg-red-100 text-red-700',
+};
+
+const buildDefaultInvoiceTitle = (date?: string, contractNo?: string) => {
+  if (!date || !contractNo) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}年${d.getMonth() + 1}月份 - ${contractNo}`;
 };
 
 type InvoiceRevisionSummary = {
@@ -82,6 +91,7 @@ export default function InvoiceDetailPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<any>({});
+  const autoInvoiceTitleRef = useRef('');
   const [revisions, setRevisions] = useState<InvoiceRevisionSummary[]>([]);
   const [revisionsLoading, setRevisionsLoading] = useState(false);
   const [creatingRevision, setCreatingRevision] = useState(false);
@@ -92,6 +102,7 @@ export default function InvoiceDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
+  const [unitOptions, setUnitOptions] = useState<string[]>([]);
 
   // Bank accounts
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
@@ -126,10 +137,17 @@ export default function InvoiceDetailPage() {
     try {
       const res = await invoicesApi.get(invoiceId);
       const data = res.data;
+      const invoiceDate = toInputDate(data.date);
+      const defaultInvoiceTitle = buildDefaultInvoiceTitle(
+        invoiceDate,
+        data.client_contract_no,
+      );
+      autoInvoiceTitleRef.current =
+        data.invoice_title === defaultInvoiceTitle ? defaultInvoiceTitle : '';
       setInvoice(data);
       setForm({
         ...data,
-        date: toInputDate(data.date),
+        date: invoiceDate,
         due_date: toInputDate(data.due_date) || '',
         items: (data.items || []).map((item: any) => ({ ...item })),
         other_charges: data.other_charges || [],
@@ -183,7 +201,32 @@ export default function InvoiceDetailPage() {
       .simple()
       .then((res) => setBankAccounts(res.data || []))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('wage_unit')
+      .then((res) =>
+        setUnitOptions((res.data || []).map((o: any) => o.label || o.value)),
+      )
+      .catch(() => setUnitOptions([]));
   }, [invoiceId]);
+
+  useEffect(() => {
+    const title = buildDefaultInvoiceTitle(
+      form.date,
+      form.client_contract_no,
+    );
+    if (!title) return;
+
+    setForm((prev: any) => {
+      if (prev.invoice_title && prev.invoice_title !== autoInvoiceTitleRef.current) {
+        return prev;
+      }
+      if (prev.invoice_title === title) {
+        return prev;
+      }
+      autoInvoiceTitleRef.current = title;
+      return { ...prev, invoice_title: title };
+    });
+  }, [form.date, form.client_contract_no]);
 
   const clientPartners = partners.filter(
     (p: any) => p.partner_type === 'client',
@@ -212,6 +255,18 @@ export default function InvoiceDetailPage() {
   const updateItem = (idx: number, field: string, value: any) => {
     const items = [...form.items];
     items[idx] = { ...items[idx], [field]: value };
+    setForm({ ...form, items });
+  };
+  const moveItemUp = (idx: number) => {
+    if (idx === 0) return;
+    const items = [...form.items];
+    [items[idx - 1], items[idx]] = [items[idx], items[idx - 1]];
+    setForm({ ...form, items });
+  };
+  const moveItemDown = (idx: number) => {
+    if (idx >= form.items.length - 1) return;
+    const items = [...form.items];
+    [items[idx], items[idx + 1]] = [items[idx + 1], items[idx]];
     setForm({ ...form, items });
   };
   const itemAmount = (item: any) =>
@@ -774,20 +829,17 @@ export default function InvoiceDetailPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 客戶
               </label>
-              <select
+              <SearchableSelect
                 value={form.client_id || ''}
-                onChange={(e) =>
-                  setForm({ ...form, client_id: e.target.value })
+                onChange={(val) =>
+                  setForm({ ...form, client_id: val ? String(val) : '' })
                 }
-                className="input-field"
-              >
-                <option value="">— 無 —</option>
-                {clientPartners.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code ? `${p.code} - ${p.name}` : p.name}
-                  </option>
-                ))}
-              </select>
+                options={clientPartners.map((p: any) => ({
+                  value: String(p.id),
+                  label: p.code ? `${p.code} - ${p.name}` : p.name,
+                }))}
+                placeholder="搜尋客戶..."
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -982,10 +1034,30 @@ export default function InvoiceDetailPage() {
                       placeholder="項目描述（可多行）"
                     />
                   </div>
-                  <div className="col-span-1 flex justify-end pt-5">
+                  <div className="col-span-1 flex justify-end gap-1 pt-5">
                     <button
+                      type="button"
+                      onClick={() => moveItemUp(idx)}
+                      disabled={idx === 0}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm p-1"
+                      title="上移"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItemDown(idx)}
+                      disabled={idx === form.items.length - 1}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm p-1"
+                      title="下移"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => removeItem(idx)}
                       className="text-red-500 hover:text-red-700 text-sm p-1"
+                      title="刪除"
                     >
                       ✕
                     </button>
@@ -1011,12 +1083,18 @@ export default function InvoiceDetailPage() {
                     <label className="block text-xs text-gray-500 mb-1">
                       單位
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={item.unit || ''}
                       onChange={(e) => updateItem(idx, 'unit', e.target.value)}
                       className="input-field text-sm"
-                    />
+                    >
+                      <option value="">—</option>
+                      {unitOptions.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">

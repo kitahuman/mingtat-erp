@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
@@ -9,8 +9,10 @@ import {
   companiesApi,
   projectsApi,
   quotationsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
+import SearchableSelect from '@/components/SearchableSelect';
 import { fmtDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
@@ -43,6 +45,13 @@ const STATUS_COLORS: Record<string, string> = {
   partially_paid: 'bg-yellow-100 text-yellow-700',
   paid: 'bg-green-100 text-green-700',
   void: 'bg-red-100 text-red-700',
+};
+
+const buildDefaultInvoiceTitle = (date?: string, contractNo?: string) => {
+  if (!date || !contractNo) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}年${d.getMonth() + 1}月份 - ${contractNo}`;
 };
 
 const defaultItem = () => ({
@@ -221,11 +230,13 @@ export default function InvoicesPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
+  const [unitOptions, setUnitOptions] = useState<string[]>([]);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<any>({ ...defaultForm });
+  const autoInvoiceTitleRef = useRef('');
   const [workLogIdsFromQuery, setWorkLogIdsFromQuery] = useState<number[]>([]);
 
   const buildColumnFilterParams = useCallback(
@@ -312,6 +323,12 @@ export default function InvoicesPage() {
     quotationsApi
       .list({ limit: 500 })
       .then((res) => setQuotations(res.data?.data || res.data || []));
+    fieldOptionsApi
+      .getByCategory('wage_unit')
+      .then((res) =>
+        setUnitOptions((res.data || []).map((o: any) => o.label || o.value)),
+      )
+      .catch(() => setUnitOptions([]));
   }, []);
 
   useRefetchOnFocus(() => {
@@ -340,6 +357,25 @@ export default function InvoicesPage() {
       invoice_title: prev.invoice_title || '工作紀錄發票',
     }));
   }, []);
+
+  useEffect(() => {
+    const title = buildDefaultInvoiceTitle(
+      form.date,
+      form.client_contract_no,
+    );
+    if (!title) return;
+
+    setForm((prev: any) => {
+      if (prev.invoice_title && prev.invoice_title !== autoInvoiceTitleRef.current) {
+        return prev;
+      }
+      if (prev.invoice_title === title) {
+        return prev;
+      }
+      autoInvoiceTitleRef.current = title;
+      return { ...prev, invoice_title: title };
+    });
+  }, [form.date, form.client_contract_no]);
 
   const clientPartners = partners.filter(
     (p: any) => p.partner_type === 'client',
@@ -381,6 +417,7 @@ export default function InvoicesPage() {
         await invoicesApi.linkWorkLogs(res.data.id, workLogIdsFromQuery);
       }
       setShowCreate(false);
+      autoInvoiceTitleRef.current = '';
       setForm({ ...defaultForm });
       router.push(`/invoices/${res.data.id}`);
     } catch (err: any) {
@@ -455,6 +492,7 @@ export default function InvoicesPage() {
         </div>
         <button
           onClick={() => {
+            autoInvoiceTitleRef.current = '';
             setForm({ ...defaultForm, company_id: companies[0]?.id || '' });
             setShowCreate(true);
           }}
@@ -621,20 +659,17 @@ export default function InvoicesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   客戶
                 </label>
-                <select
-                  value={form.client_id}
-                  onChange={(e) =>
-                    setForm({ ...form, client_id: e.target.value })
+                <SearchableSelect
+                  value={form.client_id || ''}
+                  onChange={(val) =>
+                    setForm({ ...form, client_id: val ? String(val) : '' })
                   }
-                  className="input-field"
-                >
-                  <option value="">— 無 —</option>
-                  {clientPartners.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code ? `${p.code} - ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </select>
+                  options={clientPartners.map((p: any) => ({
+                    value: String(p.id),
+                    label: p.code ? `${p.code} - ${p.name}` : p.name,
+                  }))}
+                  placeholder="搜尋客戶..."
+                />
               </div>
             </div>
 
@@ -861,14 +896,20 @@ export default function InvoicesPage() {
                         <label className="block text-xs text-gray-500 mb-1">
                           單位
                         </label>
-                        <input
-                          type="text"
-                          value={item.unit}
+                        <select
+                          value={item.unit || ''}
                           onChange={(e) =>
                             updateItem(idx, 'unit', e.target.value)
                           }
                           className="input-field text-sm"
-                        />
+                        >
+                          <option value="">—</option>
+                          {unitOptions.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">
