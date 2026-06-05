@@ -48,6 +48,7 @@ interface ApiResponse {
 }
 
 interface RateInputs {
+  unit: string;
   rate: string;
   ot_rate: string;
   mid_shift_rate: string;
@@ -144,6 +145,7 @@ const COLS: ColDef[] = [
 ];
 
 const RATE_COLS = [
+  { key: 'unit' as const, label: '單位', required: false },
   { key: 'rate' as const, label: '費率', required: true },
   { key: 'ot_rate' as const, label: 'OT費率', required: false },
   { key: 'mid_shift_rate' as const, label: '中直費率', required: false },
@@ -167,7 +169,7 @@ function rowKey(row: UnmatchedRow): string {
 }
 
 function emptyRates(): RateInputs {
-  return { rate: '', ot_rate: '', mid_shift_rate: '' };
+  return { rate: '', ot_rate: '', mid_shift_rate: '', unit: '日' };
 }
 
 // ── EditDraft type ─────────────────────────────────────────────────────────
@@ -449,6 +451,7 @@ export default function MissingPriceTab() {
         start_location: row.start_location,
         end_location: row.end_location,
         rate,
+        unit: inputs.unit || '日',
         ot_rate: inputs.ot_rate ? Number(inputs.ot_rate) : 0,
         mid_shift_rate: inputs.mid_shift_rate
           ? Number(inputs.mid_shift_rate)
@@ -496,6 +499,7 @@ export default function MissingPriceTab() {
       const payload: Record<string, unknown> = {
         ...editDraft,
         rate,
+        unit: editRates.unit || '日',
         ot_rate: editRates.ot_rate ? Number(editRates.ot_rate) : 0,
         mid_shift_rate: editRates.mid_shift_rate
           ? Number(editRates.mid_shift_rate)
@@ -525,6 +529,27 @@ export default function MissingPriceTab() {
     const val = row[key as keyof UnmatchedRow];
     if (val == null) return '-';
     return String(val);
+  }
+
+  function renderWageUnitOptions(currentValue: string): React.ReactNode {
+    const options = fieldOptions['wage_unit'] || [];
+    const selectedValue = currentValue || '日';
+    const hasSelectedValue = options.some(
+      (option) => String(option.value) === selectedValue,
+    );
+
+    return (
+      <>
+        {!hasSelectedValue && (
+          <option value={selectedValue}>{selectedValue}</option>
+        )}
+        {options.map((option) => (
+          <option key={String(option.value)} value={String(option.value)}>
+            {option.label}
+          </option>
+        ))}
+      </>
+    );
   }
 
   // ── Render inline edit cell ───────────────────────────────────────────────
@@ -852,37 +877,65 @@ export default function MissingPriceTab() {
                       if (isEditing) {
                         return (
                           <td key={rc.key} className="px-1 py-1 align-top">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder={rc.required ? '必填' : '選填'}
-                              value={editRates[rc.key]}
-                              onChange={(e) =>
-                                setEditRates((prev) => ({
-                                  ...prev,
-                                  [rc.key]: e.target.value,
-                                }))
-                              }
-                              className="w-20 px-1.5 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
+                            {rc.key === 'unit' ? (
+                              <select
+                                value={editRates.unit || '日'}
+                                onChange={(e) =>
+                                  setEditRates((prev) => ({
+                                    ...prev,
+                                    unit: e.target.value || '日',
+                                  }))
+                                }
+                                className="w-20 px-1.5 py-0.5 text-xs border border-blue-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              >
+                                {renderWageUnitOptions(editRates.unit)}
+                              </select>
+                            ) : (
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder={rc.required ? '必填' : '選填'}
+                                value={editRates[rc.key]}
+                                onChange={(e) =>
+                                  setEditRates((prev) => ({
+                                    ...prev,
+                                    [rc.key]: e.target.value,
+                                  }))
+                                }
+                                className="w-20 px-1.5 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              />
+                            )}
                           </td>
                         );
                       }
                       return (
                         <td key={rc.key} className="px-1 py-1 align-top">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder={rc.required ? '費率 *' : rc.label}
-                            value={inputs[rc.key]}
-                            onChange={(e) =>
-                              setRateField(key, rc.key, e.target.value)
-                            }
-                            disabled={isSuccess || !!submitting[key]}
-                            className="w-20 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
-                          />
+                          {rc.key === 'unit' ? (
+                            <select
+                              value={inputs.unit || '日'}
+                              onChange={(e) =>
+                                setRateField(key, 'unit', e.target.value || '日')
+                              }
+                              disabled={isSuccess || !!submitting[key]}
+                              className="w-20 px-1.5 py-0.5 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                            >
+                              {renderWageUnitOptions(inputs.unit)}
+                            </select>
+                          ) : (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder={rc.required ? '費率 *' : rc.label}
+                              value={inputs[rc.key]}
+                              onChange={(e) =>
+                                setRateField(key, rc.key, e.target.value)
+                              }
+                              disabled={isSuccess || !!submitting[key]}
+                              className="w-20 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                            />
+                          )}
                         </td>
                       );
                     })}

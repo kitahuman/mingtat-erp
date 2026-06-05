@@ -3723,19 +3723,55 @@ export default function InvoicePricingPage() {
                                 className={`border-b border-r border-gray-200 px-2 py-2 ${row.isGroup ? 'bg-gray-50' : priceStatusClass}`}
                               >
                                 {!row.isGroup && (
-                                  <input
-                                    type="number"
-                                    value={rowPrice?.unit_price ?? ''}
-                                    onChange={(event) =>
-                                      updateRowUnitPrice(
-                                        row.key,
-                                        Number(event.target.value),
-                                      )
-                                    }
-                                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm tabular-nums"
-                                    placeholder="0.00"
-                                    disabled={readOnly}
-                                  />
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      value={rowPrice?.unit_price ?? ''}
+                                      onChange={(event) =>
+                                        updateRowUnitPrice(
+                                          row.key,
+                                          Number(event.target.value),
+                                        )
+                                      }
+                                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm tabular-nums"
+                                      placeholder="0.00"
+                                      disabled={readOnly}
+                                    />
+                                    {rowPrice?.matched === false && (
+                                      <div className="text-left text-[11px] font-semibold text-yellow-700">
+                                        未配對
+                                      </div>
+                                    )}
+                                    {rowPrice?.matched === true && (
+                                      <div className="flex items-center justify-end gap-2 text-[11px] font-semibold text-green-700">
+                                        <span>已配對</span>
+                                        {rowPrice.rate_card_id && (
+                                          <Link
+                                            href={`/rental-rate-cards/${rowPrice.rate_card_id}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="rounded border border-green-200 bg-white px-1.5 py-0.5 text-green-700 hover:bg-green-50 hover:text-green-800"
+                                          >
+                                            查看價目
+                                          </Link>
+                                        )}
+                                      </div>
+                                    )}
+                                    {rowPrice?.matched !== true &&
+                                      rowPrice?.matched !== false &&
+                                      rowPrice?.rate_card_id && (
+                                        <div className="flex justify-end text-[11px]">
+                                          <Link
+                                            href={`/rental-rate-cards/${rowPrice.rate_card_id}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                                          >
+                                            查看價目
+                                          </Link>
+                                        </div>
+                                      )}
+                                  </div>
                                 )}
                               </td>
                               <td className="border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-right font-semibold tabular-nums text-gray-900">

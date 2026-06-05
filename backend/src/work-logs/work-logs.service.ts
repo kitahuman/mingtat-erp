@@ -1889,9 +1889,7 @@ export class WorkLogsService {
       ot_rate: dto.ot_rate ?? 0,
       mid_shift_rate: dto.mid_shift_rate ?? 0,
       unit: dto.unit || '日',
-      effective_date: dto.effective_date
-        ? new Date(dto.effective_date)
-        : new Date(),
+      effective_date: dto.effective_date ? new Date(dto.effective_date) : null,
       rate_card_type: 'rental',
       status: 'active',
       deleted_at: null,
