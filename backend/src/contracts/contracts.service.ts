@@ -63,6 +63,16 @@ export class ContractsService {
       where: { id },
       include: {
         client: { select: { id: true, name: true, code: true, english_code: true, partner_type: true } },
+        advance_payment_invoice: {
+          select: {
+            id: true,
+            invoice_no: true,
+            invoice_title: true,
+            date: true,
+            total_amount: true,
+            status: true,
+          },
+        },
         _count: { select: { projects: true, expenses: true } },
       },
     });
@@ -129,6 +139,29 @@ export class ContractsService {
     throw error;
   }
 
+  private calculateAdvancePaymentAmount(
+    originalAmount: number | string | Prisma.Decimal | null | undefined,
+    rate: number | string | Prisma.Decimal | null | undefined,
+  ): number | null {
+    if (rate === undefined || rate === null) return null;
+
+    const numericOriginalAmount = Number(originalAmount ?? 0);
+    const numericRate = Number(rate);
+    if (!Number.isFinite(numericOriginalAmount) || !Number.isFinite(numericRate)) return null;
+
+    return Math.round(numericOriginalAmount * numericRate * 100) / 100;
+  }
+
+  private async ensureAdvancePaymentInvoiceExists(invoiceId?: number | null): Promise<void> {
+    if (invoiceId === undefined || invoiceId === null) return;
+
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: Number(invoiceId) },
+      select: { id: true },
+    });
+    if (!invoice) throw new BadRequestException('按金發票不存在');
+  }
+
   async create(dto: CreateContractDto, userId?: number, ipAddress?: string) {
     // Validate client exists and is a client-type partner
     if (dto.client_id) {
@@ -138,9 +171,24 @@ export class ContractsService {
       if (!partner) throw new BadRequestException('客戶不存在');
     }
 
-    const { client_id, contract_name, description, sign_date, start_date, end_date, original_amount, status, retention_rate, retention_cap_rate } = dto;
+    const {
+      client_id,
+      contract_name,
+      description,
+      sign_date,
+      start_date,
+      end_date,
+      original_amount,
+      status,
+      retention_rate,
+      retention_cap_rate,
+      advance_payment_rate,
+      advance_payment_amount,
+      advance_payment_invoice_id,
+    } = dto;
     const contractNo = await this.generateContractNo();
     await this.ensureContractNoUnique(contractNo);
+    await this.ensureAdvancePaymentInvoiceExists(advance_payment_invoice_id);
 
     const data: Prisma.ContractUncheckedCreateInput = {
       contract_no: contractNo,
@@ -154,6 +202,14 @@ export class ContractsService {
       status: status ?? 'active',
       retention_rate: retention_rate !== undefined ? Number(retention_rate) : undefined,
       retention_cap_rate: retention_cap_rate !== undefined ? Number(retention_cap_rate) : undefined,
+      advance_payment_rate: advance_payment_rate !== undefined && advance_payment_rate !== null ? Number(advance_payment_rate) : advance_payment_rate,
+      advance_payment_amount:
+        advance_payment_amount !== undefined
+          ? advance_payment_amount === null ? null : Number(advance_payment_amount)
+          : advance_payment_rate !== undefined && advance_payment_rate !== null
+            ? this.calculateAdvancePaymentAmount(original_amount, advance_payment_rate)
+            : undefined,
+      advance_payment_invoice_id: advance_payment_invoice_id !== undefined && advance_payment_invoice_id !== null ? Number(advance_payment_invoice_id) : advance_payment_invoice_id,
     };
 
     let saved: Awaited<ReturnType<typeof this.prisma.contract.create>>;
@@ -187,7 +243,24 @@ export class ContractsService {
       await this.ensureContractNoUnique(dto.contract_no, id);
     }
 
-    const { client_id, contract_no, contract_name, description, sign_date, start_date, end_date, original_amount, status, retention_rate, retention_cap_rate } = dto;
+    const {
+      client_id,
+      contract_no,
+      contract_name,
+      description,
+      sign_date,
+      start_date,
+      end_date,
+      original_amount,
+      status,
+      retention_rate,
+      retention_cap_rate,
+      advance_payment_rate,
+      advance_payment_amount,
+      advance_payment_invoice_id,
+    } = dto;
+    await this.ensureAdvancePaymentInvoiceExists(advance_payment_invoice_id);
+
     const updateData: Prisma.ContractUncheckedUpdateInput = {};
 
     if (contract_no !== undefined) updateData.contract_no = contract_no;
@@ -201,6 +274,18 @@ export class ContractsService {
     if (status !== undefined) updateData.status = status;
     if (retention_rate !== undefined) updateData.retention_rate = Number(retention_rate);
     if (retention_cap_rate !== undefined) updateData.retention_cap_rate = Number(retention_cap_rate);
+    if (advance_payment_rate !== undefined) updateData.advance_payment_rate = advance_payment_rate === null ? null : Number(advance_payment_rate);
+    if (advance_payment_amount !== undefined) {
+      updateData.advance_payment_amount = advance_payment_amount === null ? null : Number(advance_payment_amount);
+    } else if (advance_payment_rate !== undefined && advance_payment_rate !== null) {
+      updateData.advance_payment_amount = this.calculateAdvancePaymentAmount(
+        original_amount !== undefined ? original_amount : existing.original_amount,
+        advance_payment_rate,
+      );
+    }
+    if (advance_payment_invoice_id !== undefined) {
+      updateData.advance_payment_invoice_id = advance_payment_invoice_id === null ? null : Number(advance_payment_invoice_id);
+    }
 
     let updated: Awaited<ReturnType<typeof this.prisma.contract.update>>;
     try {

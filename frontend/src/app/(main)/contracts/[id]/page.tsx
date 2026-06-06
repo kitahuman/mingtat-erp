@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { contractsApi, partnersApi, projectsApi, expensesApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi } from '@/lib/api';
+import { contractsApi, partnersApi, projectsApi, expensesApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi, invoicesApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
@@ -36,6 +36,7 @@ export default function ContractDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [clients, setClients] = useState<any[]>([]);
+  const [allInvoices, setAllInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('info');
 
@@ -103,6 +104,12 @@ export default function ContractDetailPage() {
       .catch(() => setAllExpenses([]));
   }, []);
 
+  const loadInvoiceOptions = useCallback(() => {
+    invoicesApi.list({ limit: 9999 })
+      .then(res => setAllInvoices(res.data?.data || res.data || []))
+      .catch(() => setAllInvoices([]));
+  }, []);
+
   const loadBqData = useCallback(() => {
     bqSectionsApi.list(contractId).then(res => setSections(res.data || [])).catch(() => {});
     bqItemsApi.list(contractId).then(res => setBqItems(res.data || [])).catch(() => {});
@@ -119,7 +126,8 @@ export default function ContractDetailPage() {
     partnersApi.simple().then(res => {
       setClients((res.data || []).filter((p: any) => p.partner_type === 'client'));
     });
-  }, [contractId, loadContract, loadLinkedProjects]);
+    loadInvoiceOptions();
+  }, [contractId, loadContract, loadLinkedProjects, loadInvoiceOptions]);
 
   useEffect(() => {
     if (activeTab === 'bq') loadBqData();
@@ -129,9 +137,12 @@ export default function ContractDetailPage() {
   // ── Contract CRUD ──
   const handleSave = async () => {
     try {
-      const { client, _count, created_at, updated_at, bq_sections, bq_items, variation_orders, ...updateData } = form;
+      const { client, advance_payment_invoice, _count, created_at, updated_at, bq_sections, bq_items, variation_orders, ...updateData } = form;
       if (updateData.original_amount !== undefined) updateData.original_amount = Number(updateData.original_amount) || 0;
       if (updateData.client_id) updateData.client_id = Number(updateData.client_id);
+      updateData.advance_payment_rate = updateData.advance_payment_rate === '' || updateData.advance_payment_rate === undefined ? null : Number(updateData.advance_payment_rate);
+      updateData.advance_payment_amount = updateData.advance_payment_amount === '' || updateData.advance_payment_amount === undefined ? null : Number(updateData.advance_payment_amount);
+      updateData.advance_payment_invoice_id = updateData.advance_payment_invoice_id === '' || updateData.advance_payment_invoice_id === undefined ? null : Number(updateData.advance_payment_invoice_id);
       const res = await contractsApi.update(contract.id, updateData);
       setContract(res.data);
       setForm({ ...res.data });
@@ -207,6 +218,30 @@ export default function ContractDetailPage() {
       }),
     [allExpenses, contractId],
   );
+
+  const invoiceOptions = useMemo(
+    () => allInvoices.map((inv: any) => {
+      const invoiceNo = inv.invoice_no || `Invoice #${inv.id}`;
+      const title = inv.invoice_title ? ` - ${inv.invoice_title}` : '';
+      const clientName = inv.client?.name ? ` · ${inv.client.name}` : '';
+      const amount = inv.total_amount != null ? ` · ${fmt$(inv.total_amount)}` : '';
+      return { value: inv.id, label: `${invoiceNo}${title}${clientName}${amount}` };
+    }),
+    [allInvoices],
+  );
+
+  const handleAdvancePaymentRateChange = (value: string) => {
+    const numericRate = value === '' ? null : Number(value);
+    const originalAmount = Number(form.original_amount ?? contract?.original_amount ?? 0);
+    setForm({
+      ...form,
+      advance_payment_rate: value,
+      advance_payment_amount:
+        numericRate !== null && Number.isFinite(numericRate)
+          ? (originalAmount * numericRate).toFixed(2)
+          : '',
+    });
+  };
 
   // ── BQ Section CRUD ──
   const handleSaveSection = async () => {
@@ -512,6 +547,76 @@ export default function ContractDetailPage() {
                 </>
               )}
             </div>
+          </div>
+
+          <div className="card mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
+              <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
+            </div>
+            {editing ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">按金比例 <span className="text-xs text-gray-400">（0.10 = 10%）</span></label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.0001"
+                    value={form.advance_payment_rate ?? ''}
+                    onChange={e => handleAdvancePaymentRateChange(e.target.value)}
+                    className="input-field"
+                    placeholder="例如：0.10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">按金金額</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.advance_payment_amount ?? ''}
+                    onChange={e => setForm({ ...form, advance_payment_amount: e.target.value })}
+                    className="input-field"
+                    placeholder="可手動覆寫"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">關聯按金發票</label>
+                  <SearchableSelect
+                    value={form.advance_payment_invoice_id ?? null}
+                    onChange={val => setForm({ ...form, advance_payment_invoice_id: val })}
+                    options={invoiceOptions}
+                    placeholder="搜尋並選擇發票"
+                    clearable
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">按金比例</p>
+                  <p className="font-mono">
+                    {contract?.advance_payment_rate != null
+                      ? `${contract.advance_payment_rate}（${(Number(contract.advance_payment_rate) * 100).toFixed(2)}%）`
+                      : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">按金金額</p>
+                  <p className="font-mono font-bold text-amber-700">{contract?.advance_payment_amount != null ? fmt$(contract.advance_payment_amount) : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">關聯發票編號</p>
+                  {contract?.advance_payment_invoice ? (
+                    <Link href={`/invoices/${contract.advance_payment_invoice.id}`} className="inline-flex items-center text-primary-600 hover:underline font-mono font-bold">
+                      {contract.advance_payment_invoice.invoice_no || `Invoice #${contract.advance_payment_invoice.id}`}
+                    </Link>
+                  ) : (
+                    <p>-</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

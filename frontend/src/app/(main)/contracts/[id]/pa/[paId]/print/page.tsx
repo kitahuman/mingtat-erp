@@ -14,12 +14,16 @@ export default function IpaPrintPage() {
   const contractId = Number(params.id);
   const paId = Number(params.paId);
   const [ipa, setIpa] = useState<any>(null);
+  const [ipaList, setIpaList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchIpa = useCallback(async () => {
     try {
       const res = await paymentApplicationsApi.get(contractId, paId);
       setIpa(res.data?.data);
+      paymentApplicationsApi.list(contractId)
+        .then(listRes => setIpaList(listRes.data?.data || []))
+        .catch(() => setIpaList([]));
     } catch {
       router.push(`/contracts/${contractId}`);
     } finally {
@@ -30,6 +34,31 @@ export default function IpaPrintPage() {
   useEffect(() => { fetchIpa(); }, [fetchIpa]);
 
   if (loading || !ipa) return <div className="py-8 text-center text-gray-500">載入中...</div>;
+
+  const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
+  const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
+  let cumulativeAdvanceRelease = 0;
+  let currentAdvanceRelease = 0;
+
+  if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
+    const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
+      .filter((row: any) => {
+        const isCurrent = Number(row.id) === Number(ipa.id);
+        const isPriorCertified = Number(row.pa_no || 0) < Number(ipa.pa_no || 0) && ['certified', 'paid'].includes(row.status);
+        return row.status !== 'void' && (isCurrent || isPriorCertified);
+      })
+      .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
+
+    releaseSource.forEach((row: any) => {
+      const periodCertifiedAmount = Math.max(0, Number(row.current_due || 0));
+      const release = Math.min(Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease), periodCertifiedAmount * advancePaymentRate);
+      cumulativeAdvanceRelease += release;
+      if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
+    });
+  }
+
+  const advancePaymentBalance = Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease);
+  const currentDueAfterAdvanceRelease = Math.max(0, Number(ipa.current_due || 0) - currentAdvanceRelease);
 
   const summaryRows = [
     { code: 'A', label: 'BQ 項目完工金額（累計）', value: Number(ipa.bq_work_done) },
@@ -43,6 +72,12 @@ export default function IpaPrintPage() {
     { code: 'I', label: '認證金額 (G - H)', value: Number(ipa.certified_amount), bold: true, highlight: true },
     { code: 'J', label: '上期認證金額', value: Number(ipa.prev_certified_amount), negative: true },
     { code: 'K', label: '當期應付金額 (I - J)', value: Number(ipa.current_due), bold: true, highlight: true },
+    ...(advancePaymentAmount > 0 ? [
+      { code: 'L', label: 'Advance Payment（按金金額）', value: advancePaymentAmount },
+      { code: 'M', label: 'Release of Advance Payment（本期按金扣回）', value: currentAdvanceRelease, negative: true },
+      { code: 'N', label: '按金餘額（按金金額 - 累計已扣回）', value: advancePaymentBalance, bold: true },
+      { code: 'O', label: '調整後當期應付金額 (K - M)', value: currentDueAfterAdvanceRelease, bold: true, highlight: true },
+    ] : []),
   ];
 
   // Group BQ progress by section

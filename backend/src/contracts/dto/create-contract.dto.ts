@@ -12,6 +12,9 @@ export class CreateContractDto {
   @IsOptional() @IsString() status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() retention_rate?: number;
   @IsOptional() @Type(() => Number) @IsNumber() retention_cap_rate?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() advance_payment_rate?: number | null;
+  @IsOptional() @Type(() => Number) @IsNumber() advance_payment_amount?: number | null;
+  @IsOptional() @Type(() => Number) @IsNumber() advance_payment_invoice_id?: number | null;
 }
 
 export class UpdateContractDto extends CreateContractDto {

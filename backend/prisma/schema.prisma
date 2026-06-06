@@ -659,7 +659,13 @@ model Contract {
   retention_rate     Decimal @default(0.10) @db.Decimal(5, 4)
   retention_cap_rate Decimal @default(0.05) @db.Decimal(5, 4)
 
-  client   Partner   @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
+  // Advance payment settings
+  advance_payment_rate       Decimal? @db.Decimal(5, 4)
+  advance_payment_amount     Decimal? @db.Decimal(12, 2)
+  advance_payment_invoice_id Int?
+
+  client                  Partner  @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
+  advance_payment_invoice Invoice? @relation("ContractAdvancePaymentInvoice", fields: [advance_payment_invoice_id], references: [id], onDelete: SetNull)
   projects Project[]
   expenses Expense[]
 
@@ -680,6 +686,7 @@ model Contract {
   work_logs           WorkLog[]
   fleet_rate_cards    FleetRateCard[]
 
+  @@index([advance_payment_invoice_id])
   @@map("contracts")
 }
 
@@ -2147,8 +2154,9 @@ model Invoice {
   parent_invoice         Invoice?              @relation("InvoiceRevisionParent", fields: [invoice_parent_id], references: [id], onDelete: SetNull)
   revisions              Invoice[]             @relation("InvoiceRevisionParent")
   items                  InvoiceItem[]
-  payment_in_allocations PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
-  invoice_work_logs      InvoiceWorkLog[]
+  payment_in_allocations       PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
+  advance_payment_contracts    Contract[]             @relation("ContractAdvancePaymentInvoice")
+  invoice_work_logs            InvoiceWorkLog[]
   work_log_drafts        InvoiceWorkLogDraft[]
   pricing_draft          InvoicePricingDraft?
 

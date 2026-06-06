@@ -32,6 +32,7 @@ export default function IpaDetailPage() {
 
   const { isReadOnly } = useAuth();
   const [ipa, setIpa] = useState<any>(null);
+  const [ipaList, setIpaList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('bq');
@@ -75,6 +76,9 @@ export default function IpaDetailPage() {
       setIpa(data);
       setLocalBqProgress(data?.bq_progress || []);
       setLocalVoProgress(data?.vo_progress || []);
+      paymentApplicationsApi.list(contractId)
+        .then(listRes => setIpaList(listRes.data?.data || []))
+        .catch(() => setIpaList([]));
       setDirty(false);
     } catch (err) {
       console.error(err);
@@ -315,7 +319,33 @@ export default function IpaDetailPage() {
     { key: 'summary', label: '金額匯總' },
   ];
 
-  // ── Summary rows (A~K) ──
+  const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
+  const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
+  let cumulativeAdvanceRelease = 0;
+  let currentAdvanceRelease = 0;
+
+  if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
+    const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
+      .filter((row: any) => {
+        const isCurrent = Number(row.id) === Number(ipa.id);
+        const isPriorCertified = Number(row.pa_no || 0) < Number(ipa.pa_no || 0) && ['certified', 'paid'].includes(row.status);
+        return row.status !== 'void' && (isCurrent || isPriorCertified);
+      })
+      .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
+
+    releaseSource.forEach((row: any) => {
+      const periodCertifiedAmount = Math.max(0, Number(row.current_due || 0));
+      const release = Math.min(Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease), periodCertifiedAmount * advancePaymentRate);
+      cumulativeAdvanceRelease += release;
+      if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
+    });
+  }
+
+  const advancePaymentBalance = Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease);
+  const currentDueBeforeAdvanceRelease = Number(ipa.client_current_due ?? ipa.current_due);
+  const currentDueAfterAdvanceRelease = Math.max(0, currentDueBeforeAdvanceRelease - currentAdvanceRelease);
+
+  // ── Summary rows (A~K + advance payment rows) ──
   const summaryRows = [
     { code: 'A', label: 'BQ 項目完工金額（累計）', value: Number(ipa.bq_work_done), bold: false, negative: false },
     { code: 'B', label: '變更指令完工金額（累計）', value: Number(ipa.vo_work_done), bold: false, negative: false },
@@ -328,6 +358,12 @@ export default function IpaDetailPage() {
     { code: 'I', label: '認證金額 (G - H)', value: Number(ipa.certified_amount), bold: true, negative: false, highlight: true },
     { code: 'J', label: '上期認證金額', value: Number(ipa.prev_certified_amount), bold: false, negative: true },
     { code: 'K', label: '當期應付金額 (I - J)', value: Number(ipa.current_due), bold: true, negative: false, highlight: true },
+    ...(advancePaymentAmount > 0 ? [
+      { code: 'L', label: 'Advance Payment（按金金額）', value: advancePaymentAmount, bold: false, negative: false },
+      { code: 'M', label: 'Release of Advance Payment（本期按金扣回）', value: currentAdvanceRelease, bold: false, negative: true },
+      { code: 'N', label: '按金餘額（按金金額 - 累計已扣回）', value: advancePaymentBalance, bold: true, negative: false },
+      { code: 'O', label: '調整後當期應付金額 (K - M)', value: currentDueAfterAdvanceRelease, bold: true, negative: false, highlight: true },
+    ] : []),
   ];
 
   return (
@@ -674,7 +710,15 @@ export default function IpaDetailPage() {
                     </td>
                     {ipa.client_certified_amount != null && (
                       <td className="px-4 py-2 text-right text-gray-500 font-mono">
-                        {row.code === 'I' ? fmt$(ipa.client_certified_amount) : row.code === 'K' ? fmt$(ipa.client_current_due) : '-'}
+                        {row.code === 'I'
+                          ? fmt$(ipa.client_certified_amount)
+                          : row.code === 'K'
+                          ? fmt$(ipa.client_current_due)
+                          : row.code === 'M'
+                          ? `(${fmt$(currentAdvanceRelease)})`
+                          : row.code === 'O'
+                          ? fmt$(currentDueAfterAdvanceRelease)
+                          : '-'}
                       </td>
                     )}
                   </tr>
@@ -688,7 +732,7 @@ export default function IpaDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-xs text-blue-600 font-medium mb-1">當期應付金額</div>
-                <div className="text-xl font-bold text-blue-900">{fmt$(ipa.client_current_due ?? ipa.current_due)}</div>
+                <div className="text-xl font-bold text-blue-900">{fmt$(currentDueAfterAdvanceRelease)}</div>
               </div>
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="text-xs text-green-600 font-medium mb-1">已收金額</div>
@@ -696,7 +740,7 @@ export default function IpaDetailPage() {
               </div>
               <div className="bg-red-50 rounded-lg p-4">
                 <div className="text-xs text-red-600 font-medium mb-1">未收金額</div>
-                <div className="text-xl font-bold text-red-900">{fmt$(Math.max(0, Number(ipa.client_current_due ?? ipa.current_due) - Number(ipa.paid_amount || 0)))}</div>
+                <div className="text-xl font-bold text-red-900">{fmt$(Math.max(0, currentDueAfterAdvanceRelease - Number(ipa.paid_amount || 0)))}</div>
               </div>
             </div>
             {payments.length > 0 ? (
@@ -783,7 +827,7 @@ export default function IpaDetailPage() {
         <div className="space-y-4">
           <div className="rounded bg-green-50 p-3 text-sm">
             <span className="text-gray-600">當期應付：</span>
-            <span className="font-semibold text-green-800">HKD {fmt$(ipa.client_current_due ?? ipa.current_due)}</span>
+            <span className="font-semibold text-green-800">HKD {fmt$(currentDueAfterAdvanceRelease)}</span>
             {Number(ipa.paid_amount || 0) > 0 && (
               <span className="ml-2 text-gray-500">已收：{fmt$(ipa.paid_amount)}</span>
             )}

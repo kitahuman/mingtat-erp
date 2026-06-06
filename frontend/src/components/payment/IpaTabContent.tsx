@@ -27,6 +27,7 @@ interface Props {
 export default function IpaTabContent({ contractId }: Props) {
   const [ipas, setIpas] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [contract, setContract] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [periodFrom, setPeriodFrom] = useState('');
@@ -50,12 +51,13 @@ export default function IpaTabContent({ contractId }: Props) {
     }
   }, [contractId]);
 
-  // Load current retention settings from contract
+  // Load current contract settings
   const loadRetention = useCallback(async () => {
     try {
       const res = await contractsApi.get(contractId);
       const c = res.data?.data || res.data;
       if (c) {
+        setContract(c);
         setRetentionRate(String(Number(c.retention_rate || 0.1) * 100));
         setRetentionCapRate(String(Number(c.retention_cap_rate || 0.05) * 100));
       }
@@ -117,6 +119,33 @@ export default function IpaTabContent({ contractId }: Props) {
     return Math.max(...chartData.map(d => Math.max(d.cumWorkDone, d.certified)), 1);
   }, [chartData]);
 
+  const advancePaymentSummary = useMemo(() => {
+    const advanceAmount = Number(contract?.advance_payment_amount || 0);
+    const advanceRate = Number(contract?.advance_payment_rate || 0);
+    let cumulativeRelease = 0;
+    let latestRelease = 0;
+
+    if (advanceAmount > 0 && advanceRate > 0) {
+      ipas
+        .filter((i: any) => ['certified', 'paid'].includes(i.status))
+        .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0))
+        .forEach((i: any) => {
+          const periodCertifiedAmount = Math.max(0, Number(i.current_due || 0));
+          const release = Math.min(Math.max(0, advanceAmount - cumulativeRelease), periodCertifiedAmount * advanceRate);
+          cumulativeRelease += release;
+          latestRelease = release;
+        });
+    }
+
+    return {
+      advanceAmount,
+      advanceRate,
+      latestRelease,
+      cumulativeRelease,
+      balance: Math.max(0, advanceAmount - cumulativeRelease),
+    };
+  }, [contract, ipas]);
+
   if (loading) {
     return <div className="py-8 text-center text-gray-500">載入中...</div>;
   }
@@ -145,6 +174,35 @@ export default function IpaTabContent({ contractId }: Props) {
           <div className="card border-l-4 border-l-red-500 text-center">
             <p className="text-xs text-gray-500">累計保留金</p>
             <p className="text-lg font-bold text-red-600 font-mono">{fmt$(summary.cumulative_retention)}</p>
+          </div>
+        </div>
+      )}
+
+      {advancePaymentSummary.advanceAmount > 0 && (
+        <div className="card border-l-4 border-l-amber-500">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700">按金扣回摘要</h4>
+              <p className="text-xs text-gray-500 mt-1">Release of Advance Payment 以每期認證工程進度金額 × 按金比例計算，累計扣回不超過按金總額。</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-right">
+              <div>
+                <p className="text-xs text-gray-500">Advance Payment</p>
+                <p className="font-mono font-bold text-amber-700">{fmt$(advancePaymentSummary.advanceAmount)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">最近扣回</p>
+                <p className="font-mono font-bold text-red-600">({fmt$(advancePaymentSummary.latestRelease)})</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">累計已扣回</p>
+                <p className="font-mono font-bold text-gray-900">{fmt$(advancePaymentSummary.cumulativeRelease)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">按金餘額</p>
+                <p className="font-mono font-bold text-green-700">{fmt$(advancePaymentSummary.balance)}</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
