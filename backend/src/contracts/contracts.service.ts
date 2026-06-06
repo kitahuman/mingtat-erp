@@ -73,6 +73,12 @@ export class ContractsService {
             status: true,
           },
         },
+        projects: {
+          where: { deleted_at: null },
+          select: { id: true, project_no: true, project_name: true },
+          take: 1,
+          orderBy: { id: 'desc' },
+        },
         _count: { select: { projects: true, expenses: true } },
       },
     });

@@ -75,7 +75,7 @@ export class ProjectsService {
         include: {
           company: true,
           client: true,
-          contract: { select: { id: true, contract_no: true, contract_name: true, client: { select: { id: true, name: true } } } },
+          contract: { select: { id: true, contract_no: true, contract_name: true, original_amount: true, status: true, start_date: true, end_date: true, client: { select: { id: true, name: true } } } },
         },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
@@ -93,7 +93,7 @@ export class ProjectsService {
       include: {
         company: true,
         client: true,
-        contract: { select: { id: true, contract_no: true, contract_name: true, client: { select: { id: true, name: true } } } },
+        contract: { select: { id: true, contract_no: true, contract_name: true, original_amount: true, status: true, start_date: true, end_date: true, client: { select: { id: true, name: true } } } },
       },
     });
     if (!project) throw new NotFoundException('工程項目不存在');

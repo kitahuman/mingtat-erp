@@ -30,6 +30,11 @@ const statusColors: Record<string, string> = {
   cancelled: 'badge-red',
 };
 
+const fmt$ = (v: any) =>
+  v === null || v === undefined || v === ''
+    ? '-'
+    : `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function ProjectsPage() {
   const router = useRouter();
   const { isReadOnly } = useAuth();
@@ -210,6 +215,21 @@ export default function ProjectsPage() {
           <span className="text-gray-400">&mdash;</span>
         ),
       filterRender: (_: any, row: any) => row.contract?.contract_no || '',
+    },
+    {
+      key: 'contract_amount',
+      label: '合約金額',
+      sortable: false,
+      render: (_: any, row: any) =>
+        row.contract?.original_amount != null ? (
+          <span className="font-mono text-sm font-medium text-green-700">
+            {fmt$(row.contract.original_amount)}
+          </span>
+        ) : (
+          <span className="text-gray-400">&mdash;</span>
+        ),
+      filterRender: (_: any, row: any) =>
+        row.contract?.original_amount != null ? fmt$(row.contract.original_amount) : '',
     },
     {
       key: 'client_contract_no',

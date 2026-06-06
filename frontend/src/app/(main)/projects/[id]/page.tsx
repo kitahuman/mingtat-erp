@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
+import ContractManagementTabs from '@/components/contracts/ContractManagementTabs';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import ProjectCostAnalysis from '@/components/ProjectCostAnalysis';
 import Link from 'next/link';
@@ -41,6 +42,7 @@ export default function ProjectDetailPage() {
   const [linkedRateCards, setLinkedRateCards] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [acceptanceReports, setAcceptanceReports] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('basic');
 
   const loadData = () => {
     projectsApi.get(projectId).then(res => {
@@ -161,6 +163,22 @@ export default function ProjectDetailPage() {
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
+  const tabs = [
+    { key: 'basic', label: '基本資料' },
+    { key: 'contract-info', label: '合約資料', requiresContract: true },
+    { key: 'bq', label: 'BQ', requiresContract: true },
+    { key: 'vo', label: 'VO', requiresContract: true },
+    { key: 'projects', label: '項目列表', requiresContract: true },
+    { key: 'ipa', label: 'IPA', requiresContract: true },
+    { key: 'retention', label: '扣留金', requiresContract: true },
+    { key: 'deposit', label: '按金', requiresContract: true },
+    { key: 'daily-reports', label: '日報' },
+    { key: 'quotations', label: '報價單' },
+    { key: 'expenses', label: '支出' },
+  ];
+
+  const hasLinkedContract = !!project?.contract_id;
+
   return (
     <div>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
@@ -195,6 +213,38 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+        <nav className="flex gap-4 min-w-max">
+          {tabs.map(tab => {
+            const disabled = tab.requiresContract && !hasLinkedContract;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                disabled={disabled}
+                onClick={() => !disabled && setActiveTab(tab.key)}
+                className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.key
+                    ? 'border-primary-600 text-primary-600'
+                    : disabled
+                      ? 'border-transparent text-gray-300 cursor-not-allowed'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {!hasLinkedContract && activeTab !== 'basic' && activeTab !== 'daily-reports' && activeTab !== 'quotations' && activeTab !== 'expenses' && (
+        <div className="card mb-6 text-gray-500">此工程尚未關聯合約，請先在基本資料中選擇合約。</div>
+      )}
+
+      {activeTab === 'basic' && (
+      <>
 
       {/* Project Info */}
       <div className="card mb-6">
@@ -281,6 +331,20 @@ export default function ProjectDetailPage() {
         <AttachmentUpload entityType="project" entityId={projectId} title="工程文件" readOnly={isReadOnly('projects')} />
       </div>
 
+      </>
+      )}
+
+      {project?.contract_id && ['contract-info', 'bq', 'vo', 'projects', 'ipa', 'retention', 'deposit'].includes(activeTab) && (
+        <ContractManagementTabs
+          contractId={Number(project.contract_id)}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          fallbackHref={`/projects/${projectId}`}
+        />
+      )}
+
+      {activeTab === 'quotations' && (
+      <>
       {/* Linked Quotations */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -378,6 +442,11 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      </>
+      )}
+
+      {activeTab === 'daily-reports' && (
+      <>
       {/* Daily Reports */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">工程日報</h2>
@@ -411,6 +480,11 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      </>
+      )}
+
+      {activeTab === 'expenses' && (
+      <>
       {/* Cost Analysis */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
@@ -449,6 +523,8 @@ export default function ProjectDetailPage() {
           <p className="text-gray-400 text-sm">暫無收貨報告</p>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

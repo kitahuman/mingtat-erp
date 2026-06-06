@@ -72,7 +72,6 @@ const navEntries: NavEntry[] = [
     label: '工程管理',
     icon: '🏗️',
     items: [
-      { href: '/contracts', label: '合約管理', icon: '📜', pageKey: 'contracts' },
       { href: '/projects', label: '工程項目', icon: '🏗️', pageKey: 'projects' },
       { href: '/daily-reports', label: '工程日報', icon: '📝', pageKey: 'daily-reports' },
       { href: '/acceptance-reports', label: '工程收貨', icon: '📋', pageKey: 'acceptance-reports' },
