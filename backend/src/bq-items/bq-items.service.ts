@@ -77,6 +77,7 @@ export class BqItemsService {
         contract_id: contractId,
         section_id: dto.section_id ? Number(dto.section_id) : null,
         item_no: dto.item_no,
+        bq_item_name: dto.bq_item_name || null,
         description: dto.description,
         quantity,
         unit: dto.unit || null,
@@ -118,6 +119,7 @@ export class BqItemsService {
 
     const updateData: any = {};
     if (dto.item_no !== undefined) updateData.item_no = dto.item_no;
+    if (dto.bq_item_name !== undefined) updateData.bq_item_name = dto.bq_item_name || null;
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.unit !== undefined) updateData.unit = dto.unit || null;
     if (dto.remarks !== undefined) updateData.remarks = dto.remarks || null;
@@ -187,6 +189,7 @@ export class BqItemsService {
           contract_id: contractId,
           section_id: dto.section_id ? Number(dto.section_id) : null,
           item_no: dto.item_no,
+          bq_item_name: dto.bq_item_name || null,
           description: dto.description || '',
           quantity,
           unit: dto.unit || null,

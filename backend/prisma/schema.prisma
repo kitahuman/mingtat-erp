@@ -718,8 +718,9 @@ model ContractBqItem {
   id          Int      @id @default(autoincrement())
   contract_id Int
   section_id  Int?
-  item_no     String   @db.VarChar(30)
-  description String   @db.Text
+  item_no      String   @db.VarChar(30)
+  bq_item_name String?  @db.Text
+  description  String   @db.Text
   quantity    Decimal  @default(0) @db.Decimal(14, 4)
   unit        String?  @db.VarChar(20)
   unit_rate   Decimal  @default(0) @db.Decimal(14, 2)

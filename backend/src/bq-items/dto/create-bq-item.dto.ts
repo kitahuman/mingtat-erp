@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class CreateBqItemDto {
   @IsOptional() @IsString() item_no?: string;
+  @IsOptional() @IsString() bq_item_name?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() contract_id?: number;

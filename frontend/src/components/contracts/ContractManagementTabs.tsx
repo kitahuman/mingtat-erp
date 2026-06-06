@@ -418,11 +418,10 @@ export default function ContractManagementTabs({
       const items = quotationItems
         .filter((i: any) => selectedImportItems.has(i.id))
         .map((i: any, idx: number) => {
-          const rawItemNo = i.item_name || `Q${idx + 1}`;
-          const itemNo = rawItemNo.length > 30 ? `Q-${String(idx + 1).padStart(3, '0')}` : rawItemNo;
           return {
-            item_no: itemNo,
-            description: i.item_description || i.item_name || '',
+            item_no: String(idx + 1),
+            bq_item_name: i.item_name || '',
+            description: i.item_description || '',
             quantity: Number(i.quantity) || 0,
             unit: i.unit || '',
             unit_rate: Number(i.unit_price) || 0,
@@ -990,6 +989,10 @@ export default function ContractManagementTabs({
             </div>
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">項目名稱</label>
+            <input value={bqItemModal.data?.bq_item_name || ''} onChange={e => setBqItemModal({ ...bqItemModal, data: { ...bqItemModal.data, bq_item_name: e.target.value } })} className="input-field" />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">描述 <span className="text-red-500">*</span></label>
             <textarea value={bqItemModal.data?.description || ''} onChange={e => setBqItemModal({ ...bqItemModal, data: { ...bqItemModal.data, description: e.target.value } })} className="input-field" rows={2} />
           </div>
@@ -1291,6 +1294,7 @@ export default function ContractManagementTabs({
           <thead>
             <tr className="bg-gray-50 border-b">
               <th className="px-2 py-1.5 text-left w-24">項目編號</th>
+              <th className="px-2 py-1.5 text-left">項目名稱</th>
               <th className="px-2 py-1.5 text-left">描述</th>
               <th className="px-2 py-1.5 text-right w-24">數量</th>
               <th className="px-2 py-1.5 text-center w-16">單位</th>
@@ -1306,6 +1310,9 @@ export default function ContractManagementTabs({
                 <tr key={item.id} className="border-b hover:bg-gray-50">
                   <td className="px-2 py-1">
                     {isEditing ? <input value={editBqForm.item_no || ''} onChange={e => setEditBqForm({ ...editBqForm, item_no: e.target.value })} className="w-full px-1 py-0.5 text-sm border rounded" /> : <span className="font-mono font-bold">{item.item_no}</span>}
+                  </td>
+                  <td className="px-2 py-1">
+                    {isEditing ? <input value={editBqForm.bq_item_name || ''} onChange={e => setEditBqForm({ ...editBqForm, bq_item_name: e.target.value })} className="w-full px-1 py-0.5 text-sm border rounded" /> : item.bq_item_name}
                   </td>
                   <td className="px-2 py-1">
                     {isEditing ? <input value={editBqForm.description || ''} onChange={e => setEditBqForm({ ...editBqForm, description: e.target.value })} className="w-full px-1 py-0.5 text-sm border rounded" /> : item.description}
