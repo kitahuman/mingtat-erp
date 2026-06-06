@@ -10,6 +10,7 @@ import IpaTabContent from '@/components/payment/IpaTabContent';
 import RetentionTabContent from '@/components/retention/RetentionTabContent';
 import { useAuth } from '@/lib/auth';
 import AttachmentUpload from '@/components/AttachmentUpload';
+import SearchableSelect from '@/components/SearchableSelect';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -829,22 +830,19 @@ export default function ContractDetailPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">選擇報價單</label>
-            <select
-              value={selectedQuotation?.id || ''}
-              onChange={e => {
-                const qId = Number(e.target.value);
+            <SearchableSelect
+              value={selectedQuotation?.id || null}
+              onChange={(val) => {
+                const qId = val ? Number(val) : 0;
                 const q = quotations.find((q: any) => q.id === qId);
                 setSelectedQuotation(q || null);
                 if (qId) loadQuotationItems(qId);
                 else { setQuotationItems([]); setSelectedImportItems(new Set()); }
               }}
-              className="input-field"
-            >
-              <option value="">請選擇報價單</option>
-              {quotations.map((q: any) => (
-                <option key={q.id} value={q.id}>{q.quotation_no} - {q.project_name || q.description || '未命名'}</option>
-              ))}
-            </select>
+              options={quotations.map((q: any) => ({ value: q.id, label: `${q.quotation_no} - ${q.project_name || q.description || '未命名'}` }))}
+              placeholder="請選擇報價單"
+              clearable
+            />
           </div>
 
           {quotationItems.length > 0 && (
