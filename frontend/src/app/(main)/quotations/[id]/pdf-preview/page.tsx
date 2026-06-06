@@ -363,24 +363,23 @@ export default function QuotationPdfPreviewPage() {
             預覽內容由後端 PDF 直接生成，與下載檔案一致。
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden bg-gray-300 p-2">
-          <div className="h-full w-full overflow-hidden bg-white shadow-lg" style={{ minHeight: 'calc(85vh - 50px)' }}>
-            {loadingPreview ? (
-              <div className="flex h-full w-full items-center justify-center bg-white text-sm font-medium text-gray-600">
-                載入預覽中...
-              </div>
-            ) : pdfUrl ? (
-              <iframe
-                title="報價單 PDF 預覽"
-                src={`${pdfUrl}#page=1&zoom=page-width`}
-                className="h-full w-full border-0 bg-white"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-white text-sm text-gray-500">
-                尚無預覽內容
-              </div>
-            )}
-          </div>
+        <div className="flex-1 bg-gray-300 p-2" style={{ minHeight: 'calc(85vh - 50px)' }}>
+          {loadingPreview ? (
+            <div className="flex items-center justify-center bg-white text-sm font-medium text-gray-600" style={{ height: 'calc(85vh - 50px)' }}>
+              載入預覽中...
+            </div>
+          ) : pdfUrl ? (
+            <iframe
+              title="報價單 PDF 預覽"
+              src={`${pdfUrl}#page=1&zoom=page-width`}
+              className="w-full border-0 bg-white shadow-lg"
+              style={{ height: 'calc(85vh - 50px)' }}
+            />
+          ) : (
+            <div className="flex items-center justify-center bg-white text-sm text-gray-500" style={{ height: 'calc(85vh - 50px)' }}>
+              尚無預覽內容
+            </div>
+          )}
         </div>
       </section>
     </main>
