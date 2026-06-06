@@ -265,14 +265,18 @@ export default function ContractDetailPage() {
     try {
       const items = quotationItems
         .filter((i: any) => selectedImportItems.has(i.id))
-        .map((i: any, idx: number) => ({
-          item_no: i.item_name || `Q${idx + 1}`,
-          description: i.item_description || i.item_name || '',
-          quantity: Number(i.quantity) || 0,
-          unit: i.unit || '',
-          unit_rate: Number(i.unit_price) || 0,
-          remarks: i.remarks || '',
-        }));
+        .map((i: any, idx: number) => {
+          const rawItemNo = i.item_name || `Q${idx + 1}`;
+          const itemNo = rawItemNo.length > 30 ? `Q-${String(idx + 1).padStart(3, '0')}` : rawItemNo;
+          return {
+            item_no: itemNo,
+            description: i.item_description || i.item_name || '',
+            quantity: Number(i.quantity) || 0,
+            unit: i.unit || '',
+            unit_rate: Number(i.unit_price) || 0,
+            remarks: i.remarks || '',
+          };
+        });
       await bqItemsApi.batchCreate(contractId, items);
       setImportModal(false);
       loadBqData();
