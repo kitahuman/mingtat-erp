@@ -1,11 +1,10 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   projectsApi,
   companiesApi,
   partnersApi,
-  contractsApi,
 } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -49,12 +48,10 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
-  const [contracts, setContracts] = useState<any[]>([]);
 
   const [form, setForm] = useState<any>({
     company_id: '',
     client_id: '',
-    contract_id: '',
     client_contract_no: '',
     project_name: '',
     description: '',
@@ -89,57 +86,17 @@ export default function ProjectsPage() {
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
     partnersApi.simple().then((res) => setPartners(res.data));
-    contractsApi
-      .simple()
-      .then((res) => setContracts(res.data))
-      .catch(() => {});
   }, []);
 
   useRefetchOnFocus(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
     partnersApi.simple().then((res) => setPartners(res.data));
-    contractsApi
-      .simple()
-      .then((res) => setContracts(res.data))
-      .catch(() => {});
   });
-
-  // Derive whether a contract is selected and the resolved client name
-  const selectedContract = useMemo(() => {
-    if (!form.contract_id) return null;
-    return (
-      contracts.find((c: any) => c.id === Number(form.contract_id)) || null
-    );
-  }, [form.contract_id, contracts]);
-
-  const hasContract = !!selectedContract;
-
-  // When contract is selected, client is auto-resolved from contract
-  const resolvedClientName = useMemo(() => {
-    if (!selectedContract) return '';
-    return selectedContract.client?.name || '';
-  }, [selectedContract]);
-
-  const handleContractChange = (contractIdStr: string) => {
-    if (contractIdStr) {
-      const contract = contracts.find(
-        (c: any) => c.id === Number(contractIdStr),
-      );
-      setForm({
-        ...form,
-        contract_id: contractIdStr,
-        client_id: contract ? String(contract.client_id) : '',
-      });
-    } else {
-      // Clear contract → restore client to editable, keep current client_id
-      setForm({ ...form, contract_id: '', client_id: '' });
-    }
-  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Frontend validation: client must be set
-    if (!hasContract && !form.client_id) {
+    // Frontend validation: client must be set. Contract is auto-created by backend.
+    if (!form.client_id) {
       alert('請選擇客戶');
       return;
     }
@@ -148,13 +105,11 @@ export default function ProjectsPage() {
         ...form,
         company_id: Number(form.company_id),
         client_id: form.client_id ? Number(form.client_id) : null,
-        contract_id: form.contract_id ? Number(form.contract_id) : null,
       });
       setShowModal(false);
       setForm({
         company_id: '',
         client_id: '',
-        contract_id: '',
         client_contract_no: '',
         project_name: '',
         description: '',
@@ -355,51 +310,27 @@ export default function ProjectsPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                關聯合約
-              </label>
-              <select
-                value={form.contract_id}
-                onChange={(e) => handleContractChange(e.target.value)}
-                className="input-field"
-              >
-                <option value="">無合約（選填）</option>
-                {contracts.map((c: any) => (
-                  <option key={c.id} value={c.id}>
-                    {c.contract_no} - {c.contract_name}
-                    {c.client?.name ? ` - ${c.client.name}` : ''}
-                  </option>
-                ))}
-              </select>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+              新增工程後，系統會自動建立對應合約並同步工程名稱、客戶及預計開始/結束日期。
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 客戶 *
               </label>
-              {hasContract ? (
-                <input
-                  value={resolvedClientName}
-                  className="input-field bg-gray-100 cursor-not-allowed"
-                  readOnly
-                  tabIndex={-1}
-                />
-              ) : (
-                <SearchableSelect
-                  value={form.client_id || null}
-                  onChange={(val) =>
-                    setForm({ ...form, client_id: val ? String(val) : '' })
-                  }
-                  options={partners
-                    .filter((p: any) => p.partner_type === 'client')
-                    .map((p: any) => ({
-                      value: String(p.id),
-                      label: p.code ? `${p.code} - ${p.name}` : p.name,
-                    }))}
-                  placeholder="搜尋客戶..."
-                  clearable={true}
-                />
-              )}
+              <SearchableSelect
+                value={form.client_id || null}
+                onChange={(val) =>
+                  setForm({ ...form, client_id: val ? String(val) : '' })
+                }
+                options={partners
+                  .filter((p: any) => p.partner_type === 'client')
+                  .map((p: any) => ({
+                    value: String(p.id),
+                    label: p.code ? `${p.code} - ${p.name}` : p.name,
+                  }))}
+                placeholder="搜尋客戶..."
+                clearable={true}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

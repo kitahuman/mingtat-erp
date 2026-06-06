@@ -109,6 +109,27 @@ export class ProjectsService {
   }
 
   /**
+   * Generate contract number using the same format as ContractsService: CT-{year}-{serial}.
+   */
+  private async generateContractNo(tx: any = this.prisma): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `CT-${year}-`;
+    const contracts = await tx.contract.findMany({
+      where: { contract_no: { startsWith: prefix } },
+      select: { contract_no: true },
+    });
+
+    const maxSerial = contracts.reduce((max: number, contract: { contract_no: string }) => {
+      const match = contract.contract_no.match(/^CT-\d{4}-(\d{3,})$/);
+      if (!match) return max;
+      const serial = Number(match[1]);
+      return Number.isFinite(serial) && serial > max ? serial : max;
+    }, 0);
+
+    return `${prefix}${String(maxSerial + 1).padStart(3, '0')}`;
+  }
+
+  /**
    * Resolve client_id from contract if contract_id is provided.
    * If contract_id is set, client_id is forced from the contract (ignoring frontend value).
    * If no contract, client_id must be explicitly provided.
@@ -162,25 +183,46 @@ export class ProjectsService {
 
   async create(dto: any, userId?: number, ipAddress?: string) {
     const project_no = await this.generateProjectNo(dto.company_id);
-    const { contract_id, client_id } = await this.resolveClientId(dto);
+    const { contract_id: providedContractId, client_id } = await this.resolveClientId(dto);
 
     const sanitized = this.sanitizeDto(dto);
 
-    const saved = await this.prisma.project.create({
-      data: {
-        project_no,
-        project_name: sanitized.project_name ?? dto.project_name,
-        company_id: Number(dto.company_id),
-        client_id,
-        contract_id,
-        status: sanitized.status ?? dto.status ?? 'pending',
-        description: sanitized.description,
-        address: sanitized.address,
-        start_date: sanitized.start_date,
-        end_date: sanitized.end_date,
-        remarks: sanitized.remarks,
-        client_contract_no: sanitized.client_contract_no,
-      },
+    const { saved, createdContract } = await this.prisma.$transaction(async (tx) => {
+      let contractId = providedContractId;
+      let createdContract: any = null;
+
+      if (!contractId) {
+        createdContract = await tx.contract.create({
+          data: {
+            contract_no: await this.generateContractNo(tx),
+            contract_name: sanitized.project_name ?? dto.project_name ?? '',
+            client_id,
+            start_date: sanitized.start_date,
+            end_date: sanitized.end_date,
+            status: 'active',
+          },
+        });
+        contractId = createdContract.id;
+      }
+
+      const saved = await tx.project.create({
+        data: {
+          project_no,
+          project_name: sanitized.project_name ?? dto.project_name,
+          company_id: Number(dto.company_id),
+          client_id,
+          contract_id: contractId,
+          status: sanitized.status ?? dto.status ?? 'pending',
+          description: sanitized.description,
+          address: sanitized.address,
+          start_date: sanitized.start_date,
+          end_date: sanitized.end_date,
+          remarks: sanitized.remarks,
+          client_contract_no: sanitized.client_contract_no,
+        },
+      });
+
+      return { saved, createdContract };
     });
 
     if (saved.project_name) {
@@ -198,6 +240,16 @@ export class ProjectsService {
 
     if (userId) {
       try {
+        if (createdContract) {
+          await this.auditLogsService.log({
+            userId,
+            action: 'create',
+            targetTable: 'contracts',
+            targetId: createdContract.id,
+            changesAfter: createdContract,
+            ipAddress,
+          });
+        }
         await this.auditLogsService.log({
           userId,
           action: 'create',
