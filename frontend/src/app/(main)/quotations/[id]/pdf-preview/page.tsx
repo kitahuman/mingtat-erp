@@ -372,7 +372,7 @@ export default function QuotationPdfPreviewPage() {
             ) : pdfUrl ? (
               <iframe
                 title="報價單 PDF 預覽"
-                src={pdfUrl}
+                src={`${pdfUrl}#page=1&zoom=page-width`}
                 className="h-full w-full border-0 bg-white"
               />
             ) : (

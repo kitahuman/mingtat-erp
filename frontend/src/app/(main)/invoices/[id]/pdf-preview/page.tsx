@@ -403,7 +403,7 @@ export default function InvoicePdfPreviewPage() {
             ) : pdfUrl ? (
               <iframe
                 title="發票 PDF 預覽"
-                src={pdfUrl}
+                src={`${pdfUrl}#page=1&zoom=page-width`}
                 className="h-full w-full border-0 bg-white"
               />
             ) : (
