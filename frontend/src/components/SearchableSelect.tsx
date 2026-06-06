@@ -1,5 +1,6 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Option {
   value: string | number;
@@ -22,22 +23,96 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [mounted, setMounted] = useState(false);
 
   const selected = options.find(o => String(o.value) === String(value ?? ''));
   const filtered = options.filter(o =>
     String(o.label).toLowerCase().includes(search.toLowerCase())
   );
 
+  useEffect(() => { setMounted(true); }, []);
+
+  const updateDropdownPosition = useCallback(() => {
+    if (!ref.current || !open) return;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const dropdownHeight = Math.min(240, filtered.length * 30 + 44);
+    const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+
+    setDropdownStyle({
+      position: 'fixed',
+      left: `${rect.left}px`,
+      width: `${Math.max(rect.width, 140)}px`,
+      ...(showAbove
+        ? { bottom: `${window.innerHeight - rect.top + 2}px`, top: 'auto' }
+        : { top: `${rect.bottom + 2}px`, bottom: 'auto' }),
+    });
+  }, [open, filtered.length]);
+
+  useEffect(() => {
+    if (open) updateDropdownPosition();
+  }, [open, updateDropdownPosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleScrollOrResize = () => updateDropdownPosition();
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [open, updateDropdownPosition]);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
+      const target = e.target as Node;
+      if (ref.current && ref.current.contains(target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(target)) return;
+      setOpen(false);
+      setSearch('');
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const dropdown = open && mounted ? createPortal(
+    <div
+      ref={dropdownRef}
+      style={{ ...dropdownStyle, zIndex: 99999 }}
+      className="bg-white border border-gray-200 rounded shadow-lg"
+    >
+      <div className="p-1.5 border-b border-gray-100">
+        <input
+          autoFocus
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="搜尋..."
+          className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400"
+        />
+      </div>
+      <div className="max-h-48 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-gray-400">無結果</div>
+        ) : (
+          filtered.map(o => (
+            <button
+              key={String(o.value)}
+              type="button"
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${String(o.value) === String(value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
+              onMouseDown={() => { onChange(o.value); setOpen(false); setSearch(''); }}
+            >
+              {o.label}
+            </button>
+          ))
+        )}
+      </div>
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div ref={ref} className={`relative ${className}`}>
@@ -64,37 +139,7 @@ export default function SearchableSelect({
           <span className="text-gray-400">▾</span>
         </span>
       </button>
-
-      {open && (
-        <div className="absolute z-50 mt-0.5 w-full min-w-[140px] bg-white border border-gray-200 rounded shadow-lg">
-          <div className="p-1.5 border-b border-gray-100">
-            <input
-              autoFocus
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="搜尋..."
-              className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400"
-            />
-          </div>
-          <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-400">無結果</div>
-            ) : (
-              filtered.map(o => (
-                <button
-                  key={String(o.value)}
-                  type="button"
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${String(o.value) === String(value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
-                  onMouseDown={() => { onChange(o.value); setOpen(false); setSearch(''); }}
-                >
-                  {o.label}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
