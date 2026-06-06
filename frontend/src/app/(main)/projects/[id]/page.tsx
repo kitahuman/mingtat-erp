@@ -9,6 +9,8 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import AttachmentUpload from '@/components/AttachmentUpload';
+import Modal from '@/components/Modal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const statusLabels: Record<string, string> = {
   pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
@@ -23,6 +25,7 @@ export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { isReadOnly } = useAuth();
+  const projectId = Number(params.id);
   const [project, setProject] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -31,12 +34,16 @@ export default function ProjectDetailPage() {
   const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [linkedQuotations, setLinkedQuotations] = useState<any[]>([]);
+  const [allQuotations, setAllQuotations] = useState<any[]>([]);
+  const [quotationLinkModal, setQuotationLinkModal] = useState(false);
+  const [selectedQuotationId, setSelectedQuotationId] = useState<string | number | null>(null);
+  const [linkingQuotation, setLinkingQuotation] = useState(false);
   const [linkedRateCards, setLinkedRateCards] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [acceptanceReports, setAcceptanceReports] = useState<any[]>([]);
 
   const loadData = () => {
-    projectsApi.get(Number(params.id)).then(res => {
+    projectsApi.get(projectId).then(res => {
       setProject(res.data);
       setForm({ ...res.data });
       setLoading(false);
@@ -44,10 +51,16 @@ export default function ProjectDetailPage() {
   };
 
   const loadLinked = () => {
-    quotationsApi.byProject(Number(params.id)).then(res => setLinkedQuotations(res.data || [])).catch(() => {});
-    rateCardsApi.list({ project_id: Number(params.id), limit: 100 }).then(res => setLinkedRateCards(res.data?.data || [])).catch(() => {});
-    dailyReportsApi.byProject(Number(params.id)).then(res => setDailyReports(res.data?.data || [])).catch(() => {});
-    acceptanceReportsApi.byProject(Number(params.id)).then(res => setAcceptanceReports(res.data?.data || [])).catch(() => {});
+    quotationsApi.byProject(projectId).then(res => setLinkedQuotations(res.data || [])).catch(() => {});
+    rateCardsApi.list({ project_id: projectId, limit: 100 }).then(res => setLinkedRateCards(res.data?.data || [])).catch(() => {});
+    dailyReportsApi.byProject(projectId).then(res => setDailyReports(res.data?.data || [])).catch(() => {});
+    acceptanceReportsApi.byProject(projectId).then(res => setAcceptanceReports(res.data?.data || [])).catch(() => {});
+  };
+
+  const loadQuotationOptions = () => {
+    quotationsApi.list({ limit: 9999 })
+      .then(res => setAllQuotations(res.data?.data || []))
+      .catch(() => setAllQuotations([]));
   };
 
   useEffect(() => {
@@ -66,6 +79,41 @@ export default function ProjectDetailPage() {
   }, [form.contract_id, contracts]);
 
   const hasContract = !!selectedContract;
+
+  const quotationOptions = useMemo(
+    () => allQuotations
+      .filter((q: any) => Number(q.project_id || 0) !== projectId)
+      .map((q: any) => {
+        const client = q.client?.name ? ` · ${q.client.name}` : '';
+        const currentProject = q.project?.project_no ? `（目前工程：${q.project.project_no}）` : '';
+        const amount = q.total_amount != null ? ` · $${Number(q.total_amount || 0).toLocaleString()}` : '';
+        return {
+          value: q.id,
+          label: `${q.quotation_no || `報價單 #${q.id}`}${client}${amount}${currentProject}`,
+        };
+      }),
+    [allQuotations, projectId],
+  );
+
+  const openQuotationLinkModal = () => {
+    setSelectedQuotationId(null);
+    setQuotationLinkModal(true);
+    loadQuotationOptions();
+  };
+
+  const handleLinkQuotation = async () => {
+    if (!selectedQuotationId) return;
+    setLinkingQuotation(true);
+    try {
+      await quotationsApi.update(Number(selectedQuotationId), { project_id: projectId });
+      setQuotationLinkModal(false);
+      setSelectedQuotationId(null);
+      loadLinked();
+      loadQuotationOptions();
+    } catch (err: any) { alert(err.response?.data?.message || '關聯報價單失敗'); }
+    setLinkingQuotation(false);
+  };
+
 
   const resolvedClientName = useMemo(() => {
     if (!selectedContract) return '';
@@ -230,12 +278,15 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="mb-6">
-        <AttachmentUpload entityType="project" entityId={Number(params.id)} title="工程文件" readOnly={isReadOnly('projects')} />
+        <AttachmentUpload entityType="project" entityId={projectId} title="工程文件" readOnly={isReadOnly('projects')} />
       </div>
 
       {/* Linked Quotations */}
       <div className="card mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">關聯報價單</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">關聯報價單</h2>
+          <button type="button" onClick={openQuotationLinkModal} className="btn-primary text-sm">關聯報價單</button>
+        </div>
         {linkedQuotations.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -265,6 +316,28 @@ export default function ProjectDetailPage() {
           <p className="text-gray-400 text-sm">暫無關聯報價單</p>
         )}
       </div>
+
+      <Modal isOpen={quotationLinkModal} onClose={() => setQuotationLinkModal(false)} title="關聯報價單" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">選擇報價單</label>
+            <SearchableSelect
+              value={selectedQuotationId}
+              onChange={setSelectedQuotationId}
+              options={quotationOptions}
+              placeholder="搜尋報價單號或客戶"
+              clearable
+            />
+            <p className="text-xs text-gray-500 mt-2">選擇後會把該報價單的工程設為目前工程。</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setQuotationLinkModal(false)} className="btn-secondary">取消</button>
+            <button type="button" onClick={handleLinkQuotation} disabled={!selectedQuotationId || linkingQuotation} className="btn-primary disabled:opacity-50">
+              {linkingQuotation ? '關聯中...' : '確認關聯'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Linked Rate Cards */}
       <div className="card mb-6">
@@ -341,7 +414,7 @@ export default function ProjectDetailPage() {
       {/* Cost Analysis */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
-        <ProjectCostAnalysis projectId={Number(params.id)} projectNo={project?.project_no} />
+        <ProjectCostAnalysis projectId={projectId} projectNo={project?.project_no} />
       </div>
 
       {/* Acceptance Reports */}

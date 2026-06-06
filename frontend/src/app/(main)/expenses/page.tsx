@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   expensesApi,
   expenseCategoriesApi,
@@ -12,6 +12,7 @@ import {
   vehiclesApi,
   projectsApi,
   quotationsApi,
+  contractsApi,
   fieldOptionsApi,
 } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
@@ -98,6 +99,7 @@ function InlineCombobox({
 
 export default function ExpensesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -109,6 +111,7 @@ export default function ExpensesPage() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [paymentMethodTypeFilter, setPaymentMethodTypeFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [contractFilter, setContractFilter] = useState(() => searchParams.get('contract_id') || '');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
@@ -122,6 +125,7 @@ export default function ExpensesPage() {
   const [machineryList, setMachineryList] = useState<any[]>([]);
   const [vehicleList, setVehicleList] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -179,6 +183,7 @@ export default function ExpensesPage() {
       payment_status: paidFilter !== '' ? paidFilter : undefined,
       source: sourceFilter || undefined,
       project_id: projectFilter || undefined,
+      contract_id: contractFilter || undefined,
       expense_payment_method: paymentMethodTypeFilter || undefined,
       sortBy,
       sortOrder,
@@ -193,6 +198,7 @@ export default function ExpensesPage() {
       paidFilter,
       sourceFilter,
       projectFilter,
+      contractFilter,
       paymentMethodTypeFilter,
       sortBy,
       sortOrder,
@@ -249,6 +255,7 @@ export default function ExpensesPage() {
       );
     vehiclesApi.simple().then((r) => setVehicleList(r.data || []));
     projectsApi.simple().then((r) => setProjects(r.data || []));
+    contractsApi.simple().then((r) => setContracts(r.data || [])).catch(() => setContracts([]));
     quotationsApi
       .list({ limit: 9999 })
       .then((r) => setQuotations(r.data.data || []));
@@ -320,6 +327,14 @@ export default function ExpensesPage() {
         label: `${p.project_no} ${p.project_name || ''}`.trim(),
       })),
     [projects],
+  );
+  const contractOptions = useMemo(
+    () =>
+      contracts.map((c: any) => ({
+        value: c.id,
+        label: `${c.contract_no} ${c.contract_name || ''}`.trim(),
+      })),
+    [contracts],
   );
   const quotationOptions = useMemo(
     () => quotations.map((q: any) => ({ value: q.id, label: q.quotation_no })),
@@ -748,8 +763,16 @@ export default function ExpensesPage() {
       label: '合約',
       sortable: true,
       editable: true,
-      editType: 'text',
-      render: (v: any) => v || '-',
+      editRender: (value: any, onChange: (v: any) => void) => (
+        <SearchableSelect
+          value={value}
+          onChange={onChange}
+          options={contractOptions}
+          placeholder="搜尋合約..."
+        />
+      ),
+      render: (_: any, row: any) => row.contract?.contract_no || '-',
+      filterRender: (_: any, row: any) => row.contract?.contract_no || '-',
     },
     {
       key: 'project_id',
@@ -992,6 +1015,21 @@ export default function ExpensesPage() {
                 <option value="CONTRA">對沖</option>
                 <option value="ERP">ERP</option>
                 <option value="employee_portal">員工報銷</option>
+              </select>
+              <select
+                value={contractFilter}
+                onChange={(e) => {
+                  setContractFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input-field min-w-[9rem] w-auto"
+              >
+                <option value="">全部合約</option>
+                {contracts.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.contract_no} {c.contract_name || ''}
+                  </option>
+                ))}
               </select>
               <select
                 value={projectFilter}

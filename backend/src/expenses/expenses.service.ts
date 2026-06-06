@@ -13,6 +13,7 @@ const EXPENSE_INCLUDE = {
   machinery: true,
   vehicle: true,
   client: true,
+  contract: true,
   project: true,
   quotation: true,
   items: { orderBy: { sort_order: 'asc' as const } },
@@ -38,6 +39,7 @@ type ExpenseListQuery = {
   company_id?: number | string;
   category_id?: number | string;
   employee_id?: number | string;
+  contract_id?: number | string;
   project_id?: number | string;
   is_paid?: string;
   payment_status?: string;
@@ -396,6 +398,11 @@ export class ExpensesService {
         if (nonBlankValues.length > 0) fieldConditions.push({ client: { is: { name: { in: nonBlankValues } } } });
         if (hasBlank) fieldConditions.push({ client_id: null });
         this.addFieldConditions(conditions, fieldConditions);
+      } else if (field === 'contract_id') {
+        const fieldConditions: Prisma.ExpenseWhereInput[] = [];
+        if (nonBlankValues.length > 0) fieldConditions.push({ contract: { is: { contract_no: { in: nonBlankValues } } } });
+        if (hasBlank) fieldConditions.push({ contract_id: null });
+        this.addFieldConditions(conditions, fieldConditions);
       } else if (field === 'project_id') {
         const fieldConditions: Prisma.ExpenseWhereInput[] = [];
         if (nonBlankValues.length > 0) fieldConditions.push({ project: { is: { project_no: { in: nonBlankValues } } } });
@@ -418,6 +425,7 @@ export class ExpensesService {
     if (query.company_id) where.company_id = Number(query.company_id);
     if (query.category_id) where.category_id = Number(query.category_id);
     if (query.employee_id) where.employee_id = Number(query.employee_id);
+    if (query.contract_id) where.contract_id = Number(query.contract_id);
     if (query.project_id) where.project_id = Number(query.project_id);
     if (query.is_paid !== undefined && query.is_paid !== '') {
       where.is_paid = query.is_paid === 'true';
@@ -509,7 +517,7 @@ export class ExpensesService {
       return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     }
 
-    if (column === 'id' || column === 'contract_id') {
+    if (column === 'id') {
       const records = await this.prisma.expense.findMany({
         where,
         select: { [column]: true } as any,
@@ -633,6 +641,16 @@ export class ExpensesService {
         distinct: ['client_id'],
       });
       const values = records.map((record) => record.client?.name || '-');
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'contract_id') {
+      const records = await this.prisma.expense.findMany({
+        where,
+        include: { contract: { select: { contract_no: true } } },
+        distinct: ['contract_id'],
+      });
+      const values = records.map((record) => record.contract?.contract_no || '-');
       return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     }
 

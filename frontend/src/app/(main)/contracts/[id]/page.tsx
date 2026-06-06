@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { contractsApi, partnersApi, projectsApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi } from '@/lib/api';
+import { contractsApi, partnersApi, projectsApi, expensesApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
@@ -41,6 +41,14 @@ export default function ContractDetailPage() {
 
   // ── Tab: 基本資料 ──
   const [linkedProjects, setLinkedProjects] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [allExpenses, setAllExpenses] = useState<any[]>([]);
+  const [projectLinkModal, setProjectLinkModal] = useState(false);
+  const [expenseLinkModal, setExpenseLinkModal] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | number | null>(null);
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | number | null>(null);
+  const [linkingProject, setLinkingProject] = useState(false);
+  const [linkingExpense, setLinkingExpense] = useState(false);
 
   // ── Tab: BQ ──
   const [sections, setSections] = useState<any[]>([]);
@@ -83,6 +91,18 @@ export default function ContractDetailPage() {
       .catch(() => {});
   }, [contractId]);
 
+  const loadProjectOptions = useCallback(() => {
+    projectsApi.list({ limit: 9999 })
+      .then(res => setAllProjects(res.data?.data || []))
+      .catch(() => setAllProjects([]));
+  }, []);
+
+  const loadExpenseOptions = useCallback(() => {
+    expensesApi.list({ limit: 9999 })
+      .then(res => setAllExpenses(res.data?.data || []))
+      .catch(() => setAllExpenses([]));
+  }, []);
+
   const loadBqData = useCallback(() => {
     bqSectionsApi.list(contractId).then(res => setSections(res.data || [])).catch(() => {});
     bqItemsApi.list(contractId).then(res => setBqItems(res.data || [])).catch(() => {});
@@ -99,12 +119,12 @@ export default function ContractDetailPage() {
     partnersApi.simple().then(res => {
       setClients((res.data || []).filter((p: any) => p.partner_type === 'client'));
     });
-  }, [contractId]);
+  }, [contractId, loadContract, loadLinkedProjects]);
 
   useEffect(() => {
     if (activeTab === 'bq') loadBqData();
     if (activeTab === 'vo') loadVoList();
-  }, [activeTab, contractId]);
+  }, [activeTab, loadBqData, loadVoList]);
 
   // ── Contract CRUD ──
   const handleSave = async () => {
@@ -126,6 +146,67 @@ export default function ContractDetailPage() {
       router.push('/contracts');
     } catch (err: any) { alert(err.response?.data?.message || '刪除失敗'); }
   };
+
+  const openProjectLinkModal = () => {
+    setSelectedProjectId(null);
+    setProjectLinkModal(true);
+    loadProjectOptions();
+  };
+
+  const openExpenseLinkModal = () => {
+    setSelectedExpenseId(null);
+    setExpenseLinkModal(true);
+    loadExpenseOptions();
+  };
+
+  const handleLinkProject = async () => {
+    if (!selectedProjectId) return;
+    setLinkingProject(true);
+    try {
+      await projectsApi.update(Number(selectedProjectId), { contract_id: contractId });
+      setProjectLinkModal(false);
+      setSelectedProjectId(null);
+      loadLinkedProjects();
+      loadContract();
+    } catch (err: any) { alert(err.response?.data?.message || '關聯項目失敗'); }
+    setLinkingProject(false);
+  };
+
+  const handleLinkExpense = async () => {
+    if (!selectedExpenseId) return;
+    setLinkingExpense(true);
+    try {
+      await expensesApi.update(Number(selectedExpenseId), { contract_id: contractId });
+      setExpenseLinkModal(false);
+      setSelectedExpenseId(null);
+      loadContract();
+      loadExpenseOptions();
+    } catch (err: any) { alert(err.response?.data?.message || '關聯支出失敗'); }
+    setLinkingExpense(false);
+  };
+
+  const projectOptions = useMemo(
+    () => allProjects
+      .filter((p: any) => Number(p.contract_id || 0) !== contractId)
+      .map((p: any) => ({
+        value: p.id,
+        label: `${p.project_no || ''} ${p.project_name || ''}${p.contract?.contract_no ? `（目前合約：${p.contract.contract_no}）` : ''}`.trim() || `工程 #${p.id}`,
+      })),
+    [allProjects, contractId],
+  );
+
+  const expenseOptions = useMemo(
+    () => allExpenses
+      .filter((e: any) => Number(e.contract_id || 0) !== contractId)
+      .map((e: any) => {
+        const receipt = e.expense_receipt_number || e.receipt_no || `支出 #${e.id}`;
+        const item = e.item ? ` - ${e.item}` : '';
+        const supplier = e.supplier?.name || e.supplier_name ? ` · ${e.supplier?.name || e.supplier_name}` : '';
+        const amount = e.total_amount != null ? ` · ${fmt$(e.total_amount)}` : '';
+        return { value: e.id, label: `${receipt}${item}${supplier}${amount}` };
+      }),
+    [allExpenses, contractId],
+  );
 
   // ── BQ Section CRUD ──
   const handleSaveSection = async () => {
@@ -434,8 +515,40 @@ export default function ContractDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="card text-center"><p className="text-sm text-gray-500">關聯項目</p><p className="text-2xl font-bold text-primary-600">{contract?._count?.projects || 0}</p></div>
-            <div className="card text-center"><p className="text-sm text-gray-500">關聯支出</p><p className="text-2xl font-bold text-orange-600">{contract?._count?.expenses || 0}</p></div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveTab('projects')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('projects'); } }}
+              className="card text-center cursor-pointer hover:shadow-md hover:border-primary-200 transition"
+            >
+              <p className="text-sm text-gray-500">關聯項目</p>
+              <p className="text-2xl font-bold text-primary-600">{contract?._count?.projects || 0}</p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openProjectLinkModal(); }}
+                className="inline-flex mt-2 px-3 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700"
+              >
+                關聯項目
+              </button>
+            </div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(`/expenses?contract_id=${contractId}`)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/expenses?contract_id=${contractId}`); } }}
+              className="card text-center cursor-pointer hover:shadow-md hover:border-orange-200 transition"
+            >
+              <p className="text-sm text-gray-500">關聯支出</p>
+              <p className="text-2xl font-bold text-orange-600">{contract?._count?.expenses || 0}</p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openExpenseLinkModal(); }}
+                className="inline-flex mt-2 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700"
+              >
+                關聯支出
+              </button>
+            </div>
             <div className="card text-center"><p className="text-sm text-gray-500">合約金額</p><p className="text-2xl font-bold text-green-600">{fmt$(contract?.original_amount)}</p></div>
           </div>
 
@@ -577,7 +690,10 @@ export default function ContractDetailPage() {
       {/* ═══════════ Tab: 項目列表 ═══════════ */}
       {activeTab === 'projects' && (
         <div className="card mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">關聯工程項目</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">關聯工程項目</h2>
+            <button type="button" onClick={openProjectLinkModal} className="btn-primary text-sm">關聯項目</button>
+          </div>
           {linkedProjects.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -825,6 +941,52 @@ export default function ContractDetailPage() {
                 <button onClick={handleSaveVo} className="btn-primary">儲存</button>
               )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Link Project Modal */}
+      <Modal isOpen={projectLinkModal} onClose={() => setProjectLinkModal(false)} title="關聯工程項目" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">選擇工程項目</label>
+            <SearchableSelect
+              value={selectedProjectId}
+              onChange={setSelectedProjectId}
+              options={projectOptions}
+              placeholder="搜尋工程編號或工程名稱"
+              clearable
+            />
+            <p className="text-xs text-gray-500 mt-2">選擇後會把該工程項目的合約設為目前合約。</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setProjectLinkModal(false)} className="btn-secondary">取消</button>
+            <button type="button" onClick={handleLinkProject} disabled={!selectedProjectId || linkingProject} className="btn-primary disabled:opacity-50">
+              {linkingProject ? '關聯中...' : '確認關聯'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Link Expense Modal */}
+      <Modal isOpen={expenseLinkModal} onClose={() => setExpenseLinkModal(false)} title="關聯支出" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">選擇支出</label>
+            <SearchableSelect
+              value={selectedExpenseId}
+              onChange={setSelectedExpenseId}
+              options={expenseOptions}
+              placeholder="搜尋支出單號、項目或供應商"
+              clearable
+            />
+            <p className="text-xs text-gray-500 mt-2">選擇後會把該支出的合約設為目前合約。</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setExpenseLinkModal(false)} className="btn-secondary">取消</button>
+            <button type="button" onClick={handleLinkExpense} disabled={!selectedExpenseId || linkingExpense} className="btn-primary disabled:opacity-50">
+              {linkingExpense ? '關聯中...' : '確認關聯'}
+            </button>
           </div>
         </div>
       </Modal>
