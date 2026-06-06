@@ -257,19 +257,13 @@ export default function ProjectDetailPage() {
                   {companies.map((c: any) => <option key={c.id} value={c.id}>{c.internal_prefix ? `${c.internal_prefix} - ${c.name}` : c.name}</option>)}
                 </select>
               </div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">關聯合約</label>
-                <select
-                  value={form.contract_id || ''}
-                  onChange={e => handleContractChange(e.target.value)}
-                  className="input-field"
-                >
-                  <option value="">無合約</option>
-                  {contracts.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.contract_no} - {c.contract_name}{c.client?.name ? ` - ${c.client.name}` : ''}
-                    </option>
-                  ))}
-                </select>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">合約編號</label>
+                <input
+                  value={project?.contract?.contract_no || '自動建立'}
+                  className="input-field bg-gray-100 cursor-not-allowed font-mono"
+                  readOnly
+                  tabIndex={-1}
+                />
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">客戶 *</label>
                 {hasContract ? (
@@ -309,9 +303,12 @@ export default function ProjectDetailPage() {
               <div>
                 <p className="text-sm text-gray-500">關聯合約</p>
                 {project?.contract ? (
-                  <Link href={`/contracts/${project.contract.id}`} className="font-mono text-primary-600 hover:underline">
+                  <button 
+                    onClick={() => setActiveTab('contract-info')}
+                    className="font-mono text-primary-600 hover:underline text-left"
+                  >
                     {project.contract.contract_no} - {project.contract.contract_name}
-                  </Link>
+                  </button>
                 ) : (
                   <p className="text-gray-400">無合約</p>
                 )}
