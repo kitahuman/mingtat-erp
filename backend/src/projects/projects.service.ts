@@ -88,16 +88,49 @@ export class ProjectsService {
   }
 
   async findOne(id: number) {
+    const projectInclude = {
+      company: true,
+      client: true,
+      contract: { select: { id: true, contract_no: true, contract_name: true, original_amount: true, status: true, start_date: true, end_date: true, client: { select: { id: true, name: true } } } },
+    };
+
     const project = await this.prisma.project.findUnique({
       where: { id },
-      include: {
-        company: true,
-        client: true,
-        contract: { select: { id: true, contract_no: true, contract_name: true, original_amount: true, status: true, start_date: true, end_date: true, client: { select: { id: true, name: true } } } },
-      },
+      include: projectInclude,
     });
     if (!project) throw new NotFoundException('工程項目不存在');
-    return project;
+    if (project.contract_id) return project;
+
+    if (!project.client_id) {
+      throw new BadRequestException('工程未設定客戶，無法自動建立合約');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.project.findUnique({
+        where: { id },
+        include: projectInclude,
+      });
+      if (!current) throw new NotFoundException('工程項目不存在');
+      if (current.contract_id) return current;
+      if (!current.client_id) throw new BadRequestException('工程未設定客戶，無法自動建立合約');
+
+      const contract = await tx.contract.create({
+        data: {
+          contract_no: await this.generateContractNo(current.company_id, tx),
+          contract_name: current.project_name ?? '',
+          client_id: current.client_id,
+          start_date: current.start_date,
+          end_date: current.end_date,
+          status: 'active',
+        },
+      });
+
+      return tx.project.update({
+        where: { id },
+        data: { contract_id: contract.id },
+        include: projectInclude,
+      });
+    });
   }
 
   async findSimple() {
@@ -109,18 +142,29 @@ export class ProjectsService {
   }
 
   /**
-   * Generate contract number using the same format as ContractsService: CT-{year}-{serial}.
+   * Generate contract number: {公司代碼}-CT-{年份}-{序號}.
+   * 序號按公司及年份分開計算，例如 DCL-CT-2026-001、DTC-CT-2026-001。
    */
-  private async generateContractNo(tx: any = this.prisma): Promise<string> {
+  private async generateContractNo(companyId: number, tx: any = this.prisma): Promise<string> {
+    const company = await tx.company.findUnique({
+      where: { id: companyId },
+      select: { internal_prefix: true },
+    });
+    if (!company?.internal_prefix) {
+      throw new NotFoundException('公司不存在或未設定前綴');
+    }
+
+    const companyPrefix = company.internal_prefix;
     const year = new Date().getFullYear();
-    const prefix = `CT-${year}-`;
+    const prefix = `${companyPrefix}-CT-${year}-`;
     const contracts = await tx.contract.findMany({
       where: { contract_no: { startsWith: prefix } },
       select: { contract_no: true },
     });
 
+    const pattern = new RegExp(`^${companyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-CT-${year}-(\\d{3,})$`);
     const maxSerial = contracts.reduce((max: number, contract: { contract_no: string }) => {
-      const match = contract.contract_no.match(/^CT-\d{4}-(\d{3,})$/);
+      const match = contract.contract_no.match(pattern);
       if (!match) return max;
       const serial = Number(match[1]);
       return Number.isFinite(serial) && serial > max ? serial : max;
@@ -194,7 +238,7 @@ export class ProjectsService {
       if (!contractId) {
         createdContract = await tx.contract.create({
           data: {
-            contract_no: await this.generateContractNo(tx),
+            contract_no: await this.generateContractNo(Number(dto.company_id), tx),
             contract_name: sanitized.project_name ?? dto.project_name ?? '',
             client_id,
             start_date: sanitized.start_date,

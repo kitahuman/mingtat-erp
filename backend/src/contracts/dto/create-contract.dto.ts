@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class CreateContractDto {
   @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() contract_name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() sign_date?: string;

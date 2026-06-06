@@ -100,16 +100,26 @@ export class ContractsService {
     });
   }
 
-  private async generateContractNo(): Promise<string> {
+  private async generateContractNo(companyId: number): Promise<string> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { internal_prefix: true },
+    });
+    if (!company?.internal_prefix) {
+      throw new BadRequestException('公司不存在或未設定前綴');
+    }
+
+    const companyPrefix = company.internal_prefix;
     const year = new Date().getFullYear();
-    const prefix = `CT-${year}-`;
+    const prefix = `${companyPrefix}-CT-${year}-`;
     const contracts = await this.prisma.contract.findMany({
       where: { contract_no: { startsWith: prefix } },
       select: { contract_no: true },
     });
 
+    const pattern = new RegExp(`^${companyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-CT-${year}-(\\d{3,})$`);
     const maxSerial = contracts.reduce((max, contract) => {
-      const match = contract.contract_no.match(/^CT-\d{4}-(\d{3,})$/);
+      const match = contract.contract_no.match(pattern);
       if (!match) return max;
       const serial = Number(match[1]);
       return Number.isFinite(serial) && serial > max ? serial : max;
@@ -179,6 +189,7 @@ export class ContractsService {
 
     const {
       client_id,
+      company_id,
       contract_name,
       description,
       sign_date,
@@ -192,7 +203,11 @@ export class ContractsService {
       advance_payment_amount,
       advance_payment_invoice_id,
     } = dto;
-    const contractNo = await this.generateContractNo();
+    if (!company_id) {
+      throw new BadRequestException('請選擇公司以建立合約編號');
+    }
+
+    const contractNo = await this.generateContractNo(Number(company_id));
     await this.ensureContractNoUnique(contractNo);
     await this.ensureAdvancePaymentInvoiceExists(advance_payment_invoice_id);
 
