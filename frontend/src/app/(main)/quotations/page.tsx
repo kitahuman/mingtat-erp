@@ -16,12 +16,14 @@ const statusLabels: Record<string, string> = {
   draft: '草稿',
   sent: '已發送',
   accepted: '已接受',
+  confirmed: '已確認',
   rejected: '已拒絕',
 };
 const statusColors: Record<string, string> = {
   draft: 'badge-gray',
   sent: 'badge-blue',
   accepted: 'badge-green',
+  confirmed: 'badge-green',
   rejected: 'badge-red',
 };
 const typeLabels: Record<string, string> = {

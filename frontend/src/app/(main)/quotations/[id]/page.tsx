@@ -13,8 +13,8 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕', invoiced: '已轉發票' };
-const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
+const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', confirmed: '已確認', rejected: '已拒絕', invoiced: '已轉發票' };
+const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', confirmed: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
 const typeLabels: Record<string, string> = { project: '工程報價', rental: '租賃/運輸報價' };
 
 type QuotationRevisionSummary = {
@@ -356,11 +356,21 @@ export default function QuotationDetailPage() {
               <button onClick={() => handleStatusChange('rejected')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">已拒絕</button>
             </>
           )}
-          {(quotation?.status === 'accepted' || quotation?.status === 'sent') && quotation?.status !== 'invoiced' && (
+          {quotation?.status !== 'draft' && quotation?.status !== 'rejected' && (
             <button onClick={() => { setInvoiceForm({ date: new Date().toISOString().slice(0, 10), due_date: '', tax_rate: 0, payment_terms: quotation.payment_terms || '', remarks: '' }); setShowInvoiceModal(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">轉為發票</button>
           )}
-          {quotation?.status === 'invoiced' && quotation?.invoices?.[0] && (
-            <Link href={`/invoices/${quotation.invoices[0].id}`} className="bg-purple-100 text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-200 text-sm">查看發票</Link>
+          {quotation?.invoices?.length > 0 && (
+            <div className="flex items-center gap-1 bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm">
+              <span>已開發票:</span>
+              {quotation.invoices.map((invoice: any, index: number) => (
+                <span key={invoice.id} className="inline-flex items-center">
+                  {index > 0 && <span className="mx-1">,</span>}
+                  <Link href={`/invoices/${invoice.id}`} className="hover:underline font-mono">
+                    {invoice.invoice_no || `INV-${invoice.id}`}
+                  </Link>
+                </span>
+              ))}
+            </div>
           )}
           {editing ? (
             <>

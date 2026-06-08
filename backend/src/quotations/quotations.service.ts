@@ -36,10 +36,12 @@ const STATUS_LABEL_TO_VALUE: Record<string, string> = {
   草稿: 'draft',
   已發送: 'sent',
   已接受: 'accepted',
+  已確認: 'accepted',
   已拒絕: 'rejected',
   draft: 'draft',
   sent: 'sent',
   accepted: 'accepted',
+  confirmed: 'accepted',
   rejected: 'rejected',
 };
 
@@ -47,6 +49,7 @@ const STATUS_VALUE_TO_LABEL: Record<string, string> = {
   draft: '草稿',
   sent: '已發送',
   accepted: '已接受',
+  confirmed: '已確認',
   rejected: '已拒絕',
 };
 
@@ -85,6 +88,11 @@ export class QuotationsService {
     project: true,
     creator: { select: { id: true, displayName: true, username: true } },
     items: { orderBy: { sort_order: 'asc' as const } },
+    invoices: {
+      where: { deleted_at: null },
+      select: { id: true, invoice_no: true },
+      orderBy: { id: 'asc' as const },
+    },
   };
 
   private getQuotationFamilyRootId(quotation: {
