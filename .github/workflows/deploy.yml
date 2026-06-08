@@ -204,6 +204,9 @@ jobs:
             # that failed due to an invalid COMMENT ON COLUMN statement.
             docker compose run --rm --no-deps backend sh -c \
               "npx prisma migrate resolve --rolled-back 20260515000000_add_director_role 2>&1 || true"
+            # One-time recovery for the failed MySQL-style backtick migration on PostgreSQL.
+            docker compose run --rm --no-deps backend sh -c \
+              "npx prisma migrate resolve --rolled-back 20260608000000_add_payment_method_to_payment_in 2>&1 || true"
 
             echo "=== [4/5] Start containers ==="
             # Run without -e so we can capture logs before failing
