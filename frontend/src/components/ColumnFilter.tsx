@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
+const FILTER_OPTION_ROW_HEIGHT = 32;
+const FILTER_LIST_MAX_HEIGHT = 288;
+const FILTER_LIST_OVERSCAN = 8;
+
 interface ColumnFilterProps {
   columnKey: string;
   data: any[];
@@ -21,8 +25,10 @@ export default function ColumnFilter({
 }: ColumnFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [scrollTop, setScrollTop] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Server-side options state
   const [serverOptions, setServerOptions] = useState<string[] | null>(null);
@@ -99,6 +105,34 @@ export default function ColumnFilter({
     const lower = searchTerm.toLowerCase();
     return allUniqueValues.filter(v => getDisplayValue(v).toLowerCase().includes(lower));
   }, [allUniqueValues, searchTerm, getDisplayValue]);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [columnKey, searchTerm, isOpen]);
+
+  const virtualList = useMemo(() => {
+    const totalRows = filteredValues.length;
+    const totalHeight = totalRows * FILTER_OPTION_ROW_HEIGHT;
+    const viewportHeight = Math.min(totalHeight, FILTER_LIST_MAX_HEIGHT);
+    const startIndex = Math.max(
+      0,
+      Math.floor(scrollTop / FILTER_OPTION_ROW_HEIGHT) - FILTER_LIST_OVERSCAN,
+    );
+    const visibleRowCount = Math.ceil(viewportHeight / FILTER_OPTION_ROW_HEIGHT) + FILTER_LIST_OVERSCAN * 2;
+    const endIndex = Math.min(totalRows, startIndex + visibleRowCount);
+
+    return {
+      totalHeight,
+      viewportHeight,
+      items: filteredValues.slice(startIndex, endIndex).map((value, offset) => ({
+        value,
+        index: startIndex + offset,
+      })),
+    };
+  }, [filteredValues, scrollTop]);
 
   // Whether search is actively narrowing the list
   const isSearchActive = searchTerm !== '' && filteredValues.length < allUniqueValues.length;
@@ -250,7 +284,7 @@ export default function ColumnFilter({
           </div>
 
           {/* Values list */}
-          <div className="max-h-[240px] overflow-y-auto">
+          <div className="overflow-y-auto">
             {loadingOptions ? (
               <div className="px-3 py-4 text-xs text-gray-400 text-center">
                 <div className="flex justify-center mb-1">
@@ -269,17 +303,36 @@ export default function ColumnFilter({
             ) : filteredValues.length === 0 ? (
               <div className="px-3 py-2 text-xs text-gray-400">無匹配項目</div>
             ) : (
-              filteredValues.map((value) => (
-                <label key={value} className="flex items-center px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isValueSelected(value)}
-                    onChange={() => handleToggleValue(value)}
-                    className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-xs text-gray-600 truncate">{getDisplayValue(value) || '(空白)'}</span>
-                </label>
-              ))
+              <div
+                ref={listRef}
+                className="overflow-y-auto"
+                style={{ height: `${virtualList.viewportHeight}px` }}
+                onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+              >
+                <div
+                  className="relative"
+                  style={{ height: `${virtualList.totalHeight}px` }}
+                >
+                  {virtualList.items.map(({ value, index }) => (
+                    <label
+                      key={value}
+                      className="absolute left-0 right-0 flex items-center px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
+                      style={{
+                        height: `${FILTER_OPTION_ROW_HEIGHT}px`,
+                        top: `${index * FILTER_OPTION_ROW_HEIGHT}px`,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isValueSelected(value)}
+                        onChange={() => handleToggleValue(value)}
+                        className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-xs text-gray-600 truncate">{getDisplayValue(value) || '(空白)'}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
