@@ -1355,4 +1355,84 @@ export class DashboardService {
       received_at: m.wa_msg_timestamp,
     }));
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // 開單提示功能
+  // ═══════════════════════════════════════════════════════════
+
+  async getBillingReminders(month?: string) {
+    const { month: normalizedMonth, start, end } = this.parseDashboardMonth(month);
+
+    // 查詢該月份所有有工作記錄的客戶
+    const workLogsWithClients = await this.prisma.workLog.findMany({
+      where: {
+        scheduled_date: { gte: start, lte: end },
+        deleted_at: null,
+        client_id: { not: null },
+      },
+      select: {
+        client_id: true,
+        client: { select: { id: true, name: true } },
+      },
+      distinct: ['client_id'],
+    });
+
+    const clientIds = workLogsWithClients
+      .map((wl) => wl.client_id)
+      .filter((id) => id != null) as number[];
+
+    if (clientIds.length === 0) {
+      return {
+        month: normalizedMonth,
+        reminders: [],
+      };
+    }
+
+    // 查詢該月份該客戶的工作記錄數量
+    const workLogCounts = await this.prisma.workLog.groupBy({
+      by: ['client_id'],
+      where: {
+        scheduled_date: { gte: start, lte: end },
+        deleted_at: null,
+        client_id: { in: clientIds },
+      },
+      _count: { id: true },
+    });
+
+    const countMap = new Map(
+      workLogCounts.map((wl) => [wl.client_id, wl._count.id]),
+    );
+
+    // 查詢該月份該客戶是否已有發票
+    const invoicesInMonth = await this.prisma.invoice.findMany({
+      where: {
+        client_id: { in: clientIds },
+        date: { gte: start, lte: end },
+        deleted_at: null,
+        invoice_is_active: true,
+      },
+      select: { client_id: true },
+      distinct: ['client_id'],
+    });
+
+    const clientsWithInvoice = new Set(
+      invoicesInMonth.map((inv) => inv.client_id).filter((id) => id != null),
+    );
+
+    // 構建提醒列表
+    const reminders = workLogsWithClients
+      .filter((wl) => wl.client_id != null)
+      .map((wl) => ({
+        client_id: wl.client_id as number,
+        client_name: wl.client?.name || '未知客戶',
+        work_record_count: countMap.get(wl.client_id as number) || 0,
+        has_invoice: clientsWithInvoice.has(wl.client_id as number),
+      }))
+      .sort((a, b) => b.work_record_count - a.work_record_count);
+
+    return {
+      month: normalizedMonth,
+      reminders,
+    };
+  }
 }

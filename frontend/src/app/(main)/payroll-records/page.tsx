@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
@@ -38,6 +39,11 @@ export default function PayrollRecordsPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [totals, setTotals] = useState<any>(null);
+
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
     employeesApi
@@ -65,6 +71,17 @@ export default function PayrollRecordsPage() {
       const res = await payrollApi.list(params);
       setData(res.data.data);
       setTotal(res.data.total);
+      setTotals({
+        base_amount: res.data.sum_base_amount || 0,
+        allowance_total: res.data.sum_allowance_total || 0,
+        ot_total: res.data.sum_ot_total || 0,
+        commission_total: res.data.sum_commission_total || 0,
+        mpf_deduction: res.data.sum_mpf_deduction || 0,
+        adjustment_total: res.data.sum_adjustment_total || 0,
+        net_amount: res.data.sum_net_amount || 0,
+      });
+      setSelectedIds(new Set());
+      setSelectAll(false);
     } catch (err) {
       console.error(err);
     }
@@ -84,7 +101,70 @@ export default function PayrollRecordsPage() {
     sortOrder,
   ]);
 
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedIds(new Set(data.map((row: any) => row.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+    setSelectAll(newSelected.size === data.length && data.length > 0);
+  };
+
+  const getDisplayTotals = () => {
+    if (selectedIds.size > 0) {
+      // Calculate totals for selected items
+      const selectedData = data.filter((row: any) => selectedIds.has(row.id));
+      return {
+        base_amount: selectedData.reduce((sum: number, row: any) => sum + Number(row.base_amount || 0), 0),
+        allowance_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.allowance_total || 0), 0),
+        ot_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.ot_total || 0), 0),
+        commission_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.commission_total || 0), 0),
+        mpf_deduction: selectedData.reduce((sum: number, row: any) => sum + Number(row.mpf_deduction || 0), 0),
+        adjustment_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.adjustment_total || 0), 0),
+        net_amount: selectedData.reduce((sum: number, row: any) => sum + Number(row.net_amount || 0), 0),
+      };
+    }
+    return totals;
+  };
+
+  const displayTotals = getDisplayTotals();
+
   const columns = [
+    {
+      key: 'select',
+      label: '',
+      headerRender: () => (
+        <input
+          type="checkbox"
+          checked={selectAll}
+          onChange={(e) => handleSelectAll(e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      render: (_v: any, row: any) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(row.id)}
+          onChange={(e) => {
+            e.stopPropagation();
+            handleSelectRow(row.id, e.target.checked);
+          }}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      className: 'w-12',
+    },
     { key: 'period', label: '月份', sortable: true },
     {
       key: 'employee',
@@ -112,28 +192,28 @@ export default function PayrollRecordsPage() {
     },
     {
       key: 'base_amount',
-      label: '底薪',
+      label: `底薪 ${displayTotals ? `$${Number(displayTotals.base_amount).toLocaleString()}` : ''}`,
       render: (_v: any, row: any) =>
         `$${Number(row.base_amount).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'allowance_total',
-      label: '津貼',
+      label: `津貼 ${displayTotals ? `$${Number(displayTotals.allowance_total).toLocaleString()}` : ''}`,
       render: (_v: any, row: any) =>
         `$${Number(row.allowance_total).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'ot_total',
-      label: 'OT',
+      label: `OT ${displayTotals ? `$${Number(displayTotals.ot_total).toLocaleString()}` : ''}`,
       render: (_v: any, row: any) =>
         `$${Number(row.ot_total).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'mpf_deduction',
-      label: '強積金',
+      label: `強積金 ${displayTotals ? `-$${Number(displayTotals.mpf_deduction).toLocaleString()}` : ''}`,
       render: (_v: any, row: any) => (
         <span className="text-red-600">
           -${Number(row.mpf_deduction).toLocaleString()}
@@ -143,7 +223,7 @@ export default function PayrollRecordsPage() {
     },
     {
       key: 'net_amount',
-      label: '淨額',
+      label: `淨額 ${displayTotals ? `$${Number(displayTotals.net_amount).toLocaleString()}` : ''}`,
       sortable: true,
       render: (_v: any, row: any) => (
         <span className="font-bold">
@@ -277,6 +357,14 @@ export default function PayrollRecordsPage() {
           )}
         </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="card mb-4 bg-blue-50 border border-blue-200">
+          <p className="text-sm text-blue-700">
+            已選擇 {selectedIds.size} 項糧單
+          </p>
+        </div>
+      )}
 
       <DataTable
         exportFilename="糧單記錄"

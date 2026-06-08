@@ -462,6 +462,8 @@ export const dashboardApi = {
   financial: () => api.get('/dashboard/financial'),
   whatsappFeed: () => api.get('/dashboard/whatsapp-feed'),
   attendanceSummary: () => api.get('/dashboard/attendance-summary'),
+  billingReminders: (month?: string) =>
+    api.get('/dashboard/billing-reminders', { params: { month } }),
 };
 
 // Contracts (合約)

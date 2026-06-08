@@ -133,6 +133,94 @@ function AlertPanel({ title, icon, alerts, linkBase, linkLabel }: {
 }
 
 
+// ═══════════════════════════════════════════════════════════
+// 開單提示小工具
+// ═══════════════════════════════════════════════════════════
+
+function BillingRemindersWidget() {
+  const [month, setMonth] = useState(getCurrentMonthValue());
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    dashboardApi.billingReminders(month)
+      .then((res) => {
+        setReminders(res.data?.reminders || []);
+      })
+      .catch(() => {
+        setReminders([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [month]);
+
+  const pendingCount = reminders.filter((r) => !r.has_invoice).length;
+
+  return (
+    <div className="card">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">📄 開單提示</h2>
+          <p className="text-xs text-gray-500 mt-1">此月有工作記錄但未開發票的客戶</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          月份
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value || getCurrentMonthValue())}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
+      ) : reminders.length === 0 ? (
+        <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">本月暂無需要開單的客戶</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr className="text-left text-gray-600">
+                <th className="px-3 py-2 font-medium">客戶</th>
+                <th className="px-3 py-2 font-medium text-right">工作記錄數</th>
+                <th className="px-3 py-2 font-medium text-center">已開發票</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {reminders.map((reminder: any) => (
+                <tr key={reminder.client_id} className={reminder.has_invoice ? 'bg-green-50' : 'bg-white hover:bg-gray-50'}>
+                  <td className="px-3 py-3 font-medium text-gray-900">{reminder.client_name}</td>
+                  <td className="px-3 py-3 text-right text-gray-700">{reminder.work_record_count} 筆</td>
+                  <td className="px-3 py-3 text-center">
+                    {reminder.has_invoice ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                        ✓ 已開
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">
+                        ⚠ 待開
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {pendingCount > 0 && (
+            <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <p className="text-sm text-orange-700">⚠ 有 {pendingCount} 位客戶需要開單</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MonthlyWorkStatsSection() {
   const [month, setMonth] = useState(getCurrentMonthValue());
   const [stats, setStats] = useState<any>(null);
@@ -405,6 +493,9 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
       </div>
 
       <MonthlyWorkStatsSection />
+
+      {/* 開單提示小工具 */}
+      <BillingRemindersWidget />
 
       {/* 工程統計（活躍工程）*/}
       <div className="card">

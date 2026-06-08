@@ -73,7 +73,7 @@ export class PayrollService {
       ? { [sortBy]: sortOrder }
       : { id: 'desc' as const };
 
-    const [data, total] = await Promise.all([
+    const [data, total, aggregate] = await Promise.all([
       this.prisma.payroll.findMany({
         where,
         include: {
@@ -86,9 +86,33 @@ export class PayrollService {
         take: limit,
       }),
       this.prisma.payroll.count({ where }),
+      this.prisma.payroll.aggregate({
+        where,
+        _sum: {
+          base_amount: true,
+          allowance_total: true,
+          ot_total: true,
+          commission_total: true,
+          mpf_deduction: true,
+          adjustment_total: true,
+          net_amount: true,
+        },
+      }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data,
+      total,
+      page,
+      limit,
+      sum_base_amount: Number(aggregate._sum.base_amount) || 0,
+      sum_allowance_total: Number(aggregate._sum.allowance_total) || 0,
+      sum_ot_total: Number(aggregate._sum.ot_total) || 0,
+      sum_commission_total: Number(aggregate._sum.commission_total) || 0,
+      sum_mpf_deduction: Number(aggregate._sum.mpf_deduction) || 0,
+      sum_adjustment_total: Number(aggregate._sum.adjustment_total) || 0,
+      sum_net_amount: Number(aggregate._sum.net_amount) || 0,
+    };
   }
 
   // ── 詳情（含工作記錄、調整項、每日津貼）──────────────────────────────

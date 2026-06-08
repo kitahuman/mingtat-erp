@@ -48,4 +48,9 @@ export class DashboardController {
   getAttendanceSummary() {
     return this.service.getAttendanceSummary();
   }
+
+  @Get('billing-reminders')
+  getBillingReminders(@Query('month') month?: string) {
+    return this.service.getBillingReminders(month);
+  }
 }
