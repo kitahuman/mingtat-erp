@@ -337,6 +337,9 @@ export default function WorkLogsPage() {
 
   // ── Selection ───────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectedWorkLogs, setSelectedWorkLogs] = useState<Map<number, any>>(
+    new Map(),
+  );
   const [batchEditOpen, setBatchEditOpen] = useState(false);
   const [invoiceLinkOpen, setInvoiceLinkOpen] = useState(false);
   const [invoiceLinkMode, setInvoiceLinkMode] = useState<'existing' | 'new'>(
@@ -1098,6 +1101,23 @@ export default function WorkLogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
+  useEffect(() => {
+    if (selected.size === 0 || rows.length === 0) return;
+    setSelectedWorkLogs((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      rows.forEach((row) => {
+        const id = Number(row.id);
+        if (!Number.isFinite(id) || !selected.has(id)) return;
+        if (next.get(id) !== row) {
+          next.set(id, row);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [rows, selected]);
+
   // ── Sort handler ──────────────────────────────────────────
   const handleSort = useCallback(
     (field: string) => {
@@ -1400,11 +1420,16 @@ export default function WorkLogsPage() {
     await fetchLogs();
   };
 
+  const clearSelection = useCallback(() => {
+    setSelected(new Set());
+    setSelectedWorkLogs(new Map());
+  }, []);
+
   const handleBulkDelete = async () => {
     if (selected.size === 0) return;
     if (!confirm(`確定刪除選取的 ${selected.size} 筆記錄？`)) return;
     await workLogsApi.bulkDelete(Array.from(selected));
-    setSelected(new Set());
+    clearSelection();
     await fetchLogs();
   };
 
@@ -1413,21 +1438,54 @@ export default function WorkLogsPage() {
     const workLogIds = Array.from(selected);
 
     if (invoiceLinkMode === 'new') {
-      const selectedWorkLogs = workLogIds
-        .map((id) => rows.find((row) => Number(row.id) === Number(id)))
-        .filter((row): row is any => Boolean(row))
-        .map((row) => ({ ...row, ...(dirtyRows.get(row.id) || {}) }));
+      const selectedWorkLogsById = new Map(selectedWorkLogs);
+      rows.forEach((row) => {
+        const id = Number(row.id);
+        if (Number.isFinite(id) && selected.has(id)) {
+          selectedWorkLogsById.set(id, row);
+        }
+      });
 
-      if (selectedWorkLogs.length !== workLogIds.length) {
+      const missingWorkLogIds = workLogIds.filter(
+        (id) => !selectedWorkLogsById.has(id),
+      );
+      if (missingWorkLogIds.length > 0) {
+        try {
+          const fetchedWorkLogs = await Promise.all(
+            missingWorkLogIds.map((id) => workLogsApi.get(id)),
+          );
+          fetchedWorkLogs.forEach((res, index) => {
+            const row = res.data;
+            if (row) selectedWorkLogsById.set(missingWorkLogIds[index], row);
+          });
+          setSelectedWorkLogs(new Map(selectedWorkLogsById));
+        } catch (e: any) {
+          showToast(
+            '無法取得所選工作紀錄資料：' +
+              (e?.response?.data?.message || e?.message || '未知錯誤'),
+          );
+          return;
+        }
+      }
+
+      const selectedWorkLogRows = workLogIds
+        .map((id) => selectedWorkLogsById.get(id))
+        .filter((row): row is any => Boolean(row))
+        .map((row) => ({
+          ...row,
+          ...(dirtyRows.get(Number(row.id)) || {}),
+        }));
+
+      if (selectedWorkLogRows.length !== workLogIds.length) {
         showToast('無法取得所選工作紀錄資料，請重新整理後再試');
         return;
       }
 
       const companyIds = new Set(
-        selectedWorkLogs.map((row) => normalizeInvoiceFieldValue(row.company_id)),
+        selectedWorkLogRows.map((row) => normalizeInvoiceFieldValue(row.company_id)),
       );
       const clientIds = new Set(
-        selectedWorkLogs.map((row) => normalizeInvoiceFieldValue(row.client_id)),
+        selectedWorkLogRows.map((row) => normalizeInvoiceFieldValue(row.client_id)),
       );
 
       if (companyIds.size > 1 || clientIds.size > 1) {
@@ -1437,9 +1495,9 @@ export default function WorkLogsPage() {
 
       const companyId = companyIds.values().next().value || '';
       const clientId = clientIds.values().next().value || '';
-      const clientContractNo = getMostFrequentClientContractNo(selectedWorkLogs);
+      const clientContractNo = getMostFrequentClientContractNo(selectedWorkLogRows);
       const invoiceTitle = buildInvoiceTitleFromWorkLogs(
-        selectedWorkLogs,
+        selectedWorkLogRows,
         clientContractNo,
       );
       const params = new URLSearchParams({
@@ -1467,7 +1525,7 @@ export default function WorkLogsPage() {
       showToast(`已將 ${workLogIds.length} 筆工作紀錄加入發票`, 'success');
       setInvoiceLinkOpen(false);
       setTargetInvoiceId(null);
-      setSelected(new Set());
+      clearSelection();
     } catch (e: any) {
       showToast(
         '加入發票失敗：' +
@@ -1505,7 +1563,7 @@ export default function WorkLogsPage() {
 
   const handleBulkUpdateSuccess = async () => {
     unlockRows(Array.from(selected));
-    setSelected(new Set());
+    clearSelection();
     await fetchLogs();
   };
 
@@ -1529,7 +1587,7 @@ export default function WorkLogsPage() {
     }
     try {
       await workLogsApi.bulkConfirm(ids);
-      setSelected(new Set());
+      clearSelection();
       await fetchLogs();
     } finally {
       unlockRows(ids);
@@ -1552,14 +1610,16 @@ export default function WorkLogsPage() {
     }
     try {
       await workLogsApi.bulkUnconfirm(ids);
-      setSelected(new Set());
+      clearSelection();
       await fetchLogs();
     } finally {
       unlockRows(ids);
     }
   };
 
-  const toggleSelect = (id: number, checked: boolean) => {
+  const toggleSelect = (row: any, checked: boolean) => {
+    const id = Number(row.id);
+    if (!Number.isFinite(id)) return;
     if (checked && isRowLockedByOther(id)) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -1567,12 +1627,39 @@ export default function WorkLogsPage() {
       else next.delete(id);
       return next;
     });
+    setSelectedWorkLogs((prev) => {
+      const next = new Map(prev);
+      if (checked) next.set(id, row);
+      else next.delete(id);
+      return next;
+    });
   };
 
   const toggleSelectAll = (checked: boolean) => {
-    if (checked)
-      setSelected(new Set(rows.filter((r) => !isRowLockedByOther(r.id)).map((r) => r.id)));
-    else setSelected(new Set());
+    const currentPageRows = rows.filter((row) => {
+      const id = Number(row.id);
+      return Number.isFinite(id) && !isRowLockedByOther(id);
+    });
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+      currentPageRows.forEach((row) => {
+        const id = Number(row.id);
+        if (checked) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+
+    setSelectedWorkLogs((prev) => {
+      const next = new Map(prev);
+      currentPageRows.forEach((row) => {
+        const id = Number(row.id);
+        if (checked) next.set(id, row);
+        else next.delete(id);
+      });
+      return next;
+    });
   };
 
   const resetFilters = () => {
@@ -2428,6 +2515,12 @@ export default function WorkLogsPage() {
               >
                 加入發票
               </button>
+              <button
+                onClick={clearSelection}
+                className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                清除選取
+              </button>
             </>
           )}
           <ColumnCustomizer
@@ -2936,7 +3029,10 @@ export default function WorkLogsPage() {
                     <input
                       type="checkbox"
                       checked={
-                        rows.length > 0 && rows.filter((r) => !isRowLockedByOther(r.id)).every((r) => selected.has(r.id))
+                        rows.some((r) => !isRowLockedByOther(Number(r.id))) &&
+                        rows
+                          .filter((r) => !isRowLockedByOther(Number(r.id)))
+                          .every((r) => selected.has(Number(r.id)))
                       }
                       onChange={(e) => toggleSelectAll(e.target.checked)}
                       className="cursor-pointer"
@@ -3143,10 +3239,10 @@ export default function WorkLogsPage() {
                           >
                             <input
                               type="checkbox"
-                              checked={selected.has(row.id)}
+                              checked={selected.has(Number(row.id))}
                               disabled={rowLockedByOther}
                               onChange={(e) =>
-                                toggleSelect(row.id, e.target.checked)
+                                toggleSelect(row, e.target.checked)
                               }
                               className={rowLockedByOther ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                             />
