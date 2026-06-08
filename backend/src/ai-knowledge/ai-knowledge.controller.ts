@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { BatchApproveKnowledgeDto } from './dto/batch-approve-knowledge.dto';
 import { CreateKnowledgeEntryDto } from './dto/create-knowledge-entry.dto';
 import { QueryActivityLogsDto } from './dto/query-activity-logs.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
@@ -81,7 +82,7 @@ export class AiKnowledgeController {
   @Post('entries/batch-approve')
   @ApiOperation({ summary: '批量審核通過知識' })
   batchApprove(
-    @Body() dto: { ids?: number[]; entryIds?: number[]; reason?: string },
+    @Body() dto: BatchApproveKnowledgeDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.service.batchApprove(

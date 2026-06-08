@@ -38,6 +38,8 @@ import { UpdateEntryFieldDto } from './dto/update-entry-field.dto';
 import { MatchEmployeeDto } from './dto/match-employee.dto';
 import { ExcludeEntryDto } from './dto/exclude-entry.dto';
 import { ConfirmPageDto } from './dto/confirm-page.dto';
+import { UpdateAiPayrollBatchDto } from './dto/update-ai-payroll-batch.dto';
+import { UpdateAiPayrollEntryDto } from './dto/update-ai-payroll-entry.dto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'ai-payroll', 'documents');
 
@@ -94,7 +96,7 @@ export class AiPayrollController {
   @ApiOperation({ summary: '更新 AI 計糧批次' })
   updateBatch(
     @Param('batchId', ParseIntPipe) batchId: number,
-    @Body() dto: Record<string, unknown>,
+    @Body() dto: UpdateAiPayrollBatchDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.service.updateBatch(batchId, dto, getUserId(req));
@@ -261,7 +263,7 @@ export class AiPayrollController {
   @ApiOperation({ summary: '確認單條 entry' })
   confirmEntry(
     @Param('entryId', ParseIntPipe) entryId: number,
-    @Body() dto: Record<string, unknown>,
+    @Body() dto: UpdateAiPayrollEntryDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.service.confirmEntry(entryId, dto ?? {}, getUserId(req));
@@ -271,7 +273,7 @@ export class AiPayrollController {
   @ApiOperation({ summary: '更新單條 entry' })
   updateEntry(
     @Param('entryId', ParseIntPipe) entryId: number,
-    @Body() dto: Record<string, unknown>,
+    @Body() dto: UpdateAiPayrollEntryDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.service.updateEntry(entryId, dto ?? {}, getUserId(req));

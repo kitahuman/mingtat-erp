@@ -7,6 +7,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { PrismaService } from '../prisma/prisma.service';
 import { createOpenAIClient } from '../common/openai-client';
 import { AiKnowledgeService } from '../ai-knowledge/ai-knowledge.service';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 
 const MODEL_NAME = 'gpt-4.1';
 const PROMPT_VERSION = 'ai-payroll-v1';
@@ -52,6 +53,7 @@ export class AiPayrollExtractionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiKnowledgeService: AiKnowledgeService,
+    private readonly aiActivityLogService: AiActivityLogService,
   ) {}
 
   async extractPage(pageId: number, formTypeOverride?: string, forceReExtract = false) {
@@ -134,6 +136,26 @@ export class AiPayrollExtractionService {
           page_employee_id: result.employeeId ?? undefined,
         },
       });
+      const durationMs = Date.now() - startedAt;
+      await this.aiActivityLogService.log({
+        module: 'ai_payroll',
+        action: 'extraction',
+        status: 'success',
+        inputSummary: `文件：${page.document.doc_original_filename}；頁碼：${page.page_number}；表格類型：${formType}`,
+        outputSummary: `識別表格類型：${result.formType}；條目數：${result.entries.length}`,
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs,
+        metadata: {
+          page_id: pageId,
+          run_id: run.id,
+          batch_id: page.document.batch.id,
+          knowledge_context_id: knowledge.knowledgeContextId,
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+        entityType: 'ai_payroll_page',
+        entityId: pageId,
+      });
       return { pageId, runId: run.id, status: 'completed', entries: result.entries.length, knowledgeContextId: knowledge.knowledgeContextId };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '未知錯誤';
@@ -152,6 +174,22 @@ export class AiPayrollExtractionService {
         });
       }
       await this.prisma.aiPayrollPage.update({ where: { id: pageId }, data: { page_status: 'failed' } });
+      await this.aiActivityLogService.log({
+        module: 'ai_payroll',
+        action: 'extraction',
+        status: 'error',
+        inputSummary: `文件：${page.document.doc_original_filename}；頁碼：${page.page_number}；表格類型：${formType}`,
+        outputSummary: 'AI 計糧識別失敗',
+        durationMs: Date.now() - startedAt,
+        errorMessage: message,
+        metadata: {
+          page_id: pageId,
+          run_id: runId || undefined,
+          batch_id: page.document.batch.id,
+        },
+        entityType: 'ai_payroll_page',
+        entityId: pageId,
+      });
       throw new BadRequestException(`AI 識別失敗：${message}`);
     }
   }

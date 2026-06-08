@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -84,7 +85,10 @@ export class WhatsappClockinService {
   private readonly logger = new Logger(WhatsappClockinService.name);
   private openai: OpenAI;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiActivityLogService: AiActivityLogService,
+  ) {
     this.openai = createOpenAIClient();
   }
 
@@ -344,6 +348,7 @@ export class WhatsappClockinService {
       contractRef: string;
     },
   ): Promise<ParsedClockIn | null> {
+    const startedAt = Date.now();
     const now = new Date();
     const hkNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     const todayStr = hkNow.toISOString().slice(0, 10);
@@ -672,7 +677,21 @@ ${refs.contractRef}
       const raw = JSON.parse(cleaned);
 
       if (!raw.is_clock_in) {
-        return { is_clock_in: false, entries: [], raw_text: text };
+        await this.aiActivityLogService.log({
+        module: 'whatsapp_clockin',
+        action: 'parse_message',
+        status: 'success',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: '非報工訊息',
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          service_type: serviceType,
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+      });
+      return { is_clock_in: false, entries: [], raw_text: text };
       }
 
       const entries: ParsedClockInEntry[] = (raw.entries || []).map((e: Record<string, unknown>) => ({
@@ -716,10 +735,35 @@ ${refs.contractRef}
         }
       }
 
+      await this.aiActivityLogService.log({
+        module: 'whatsapp_clockin',
+        action: 'parse_message',
+        status: 'success',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: `解析報工條目數：${entries.length}`,
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          service_type: serviceType,
+          entry_count: entries.length,
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+      });
       return { is_clock_in: true, entries, raw_text: text };
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`AI parsing error: ${errMsg}`);
+      await this.aiActivityLogService.log({
+        module: 'whatsapp_clockin',
+        action: 'parse_message',
+        status: 'error',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: 'WhatsApp 報工解析失敗',
+        durationMs: Date.now() - startedAt,
+        errorMessage: errMsg,
+        metadata: { service_type: serviceType },
+      });
       return null;
     }
   }

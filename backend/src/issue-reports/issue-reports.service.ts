@@ -5,12 +5,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateIssueReportDto, FrontendErrorItem } from './issue-reports.dto';
 import { createOpenAIClient } from '../common/openai-client';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 
 @Injectable()
 export class IssueReportsService {
   private readonly logger = new Logger(IssueReportsService.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiActivityLogService: AiActivityLogService,
+  ) {
     IssueReportsService.ensureScreenshotUploadDir();
   }
 
@@ -128,6 +132,8 @@ export class IssueReportsService {
     backendErrors: any[],
     url?: string,
   ): Promise<void> {
+    const startedAt = Date.now();
+    const inputSummary = description.slice(0, 1000);
     try {
       await this.prisma.issueReport.update({
         where: { id: reportId },
@@ -140,6 +146,21 @@ export class IssueReportsService {
           data: {
             issue_report_ai_status: 'failed',
             issue_report_ai_error: 'OPENAI_API_KEY 未設定',
+          },
+        });
+        await this.aiActivityLogService.log({
+          module: 'issue_reports',
+          action: 'analyze',
+          status: 'error',
+          inputSummary,
+          outputSummary: '問題回報 AI 分析未執行',
+          durationMs: Date.now() - startedAt,
+          errorMessage: 'OPENAI_API_KEY 未設定',
+          metadata: {
+            report_id: reportId,
+            url,
+            frontend_error_count: frontendErrors.length,
+            backend_error_count: backendErrors.length,
           },
         });
         return;
@@ -193,6 +214,23 @@ ${backendErrors.length === 0 ? '（無）' : JSON.stringify(backendErrors.slice(
           issue_report_ai_analysis: analysis,
         },
       });
+      await this.aiActivityLogService.log({
+        module: 'issue_reports',
+        action: 'analyze',
+        status: 'success',
+        inputSummary,
+        outputSummary: analysis.slice(0, 1000),
+        tokensUsed: completion.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          report_id: reportId,
+          url,
+          frontend_error_count: frontendErrors.length,
+          backend_error_count: backendErrors.length,
+          prompt_tokens: completion.usage?.prompt_tokens,
+          completion_tokens: completion.usage?.completion_tokens,
+        },
+      });
     } catch (e: any) {
       this.logger.error(`AI analysis error for ${reportId}: ${e?.message}`);
       await this.prisma.issueReport.update({
@@ -200,6 +238,21 @@ ${backendErrors.length === 0 ? '（無）' : JSON.stringify(backendErrors.slice(
         data: {
           issue_report_ai_status: 'failed',
           issue_report_ai_error: e?.message || 'AI 分析失敗',
+        },
+      });
+      await this.aiActivityLogService.log({
+        module: 'issue_reports',
+        action: 'analyze',
+        status: 'error',
+        inputSummary,
+        outputSummary: '問題回報 AI 分析失敗',
+        durationMs: Date.now() - startedAt,
+        errorMessage: e?.message || 'AI 分析失敗',
+        metadata: {
+          report_id: reportId,
+          url,
+          frontend_error_count: frontendErrors.length,
+          backend_error_count: backendErrors.length,
         },
       });
     }

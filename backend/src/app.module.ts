@@ -76,6 +76,7 @@ import { PaymentTermTemplatesModule } from './payment-term-templates/payment-ter
 import { FixedExpenseReportModule } from './fixed-expense-report/fixed-expense-report.module';
 import { AiKnowledgeModule } from './ai-knowledge/ai-knowledge.module';
 import { AiPayrollModule } from './ai-payroll/ai-payroll.module';
+import { AiActivityLogModule } from './ai-activity-log/ai-activity-log.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
 @Module({
@@ -105,6 +106,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
       },
     }),
     AiChatModule,
+    AiActivityLogModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',

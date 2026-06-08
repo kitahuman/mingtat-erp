@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 
 @Injectable()
 export class AiChatService {
   private openai: OpenAI;
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private readonly aiActivityLogService: AiActivityLogService,
+  ) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error('[AiChatService] OPENAI_API_KEY is not set!');
@@ -497,8 +501,18 @@ export class AiChatService {
    * the final text reply plus a list of tools that were called.
    */
   async chatWithTools(messages: any[]): Promise<{ reply: string; tool_calls: string[] }> {
-    const { systemPrompt, tools } = this.getPromptAndTools();
-    const currentMessages: any[] = [
+    const startedAt = Date.now();
+    let totalTokens = 0;
+    const inputSummary = messages
+      .map((message) => String(message?.content ?? ''))
+      .filter(Boolean)
+      .slice(-3)
+      .join('\n')
+      .slice(0, 1000);
+
+    try {
+      const { systemPrompt, tools } = this.getPromptAndTools();
+      const currentMessages: any[] = [
       { role: 'system', content: systemPrompt },
       ...messages,
     ];
@@ -514,6 +528,7 @@ export class AiChatService {
         tools,
       });
 
+      totalTokens += response.usage?.total_tokens ?? 0;
       const choice = response.choices[0];
       const assistantMessage = choice.message;
 
@@ -523,6 +538,20 @@ export class AiChatService {
       if (choice.finish_reason !== 'tool_calls' || !assistantMessage.tool_calls?.length) {
         const reply = assistantMessage.content || '';
         console.log(`[AI Chat] Final reply length: ${reply.length}`);
+        await this.aiActivityLogService.log({
+          module: 'ai_chat',
+          action: 'chat',
+          status: 'success',
+          inputSummary,
+          outputSummary: reply.slice(0, 1000),
+          tokensUsed: totalTokens || null,
+          durationMs: Date.now() - startedAt,
+          metadata: {
+            message_count: messages.length,
+            tool_calls: executedTools,
+            round_count: round + 1,
+          },
+        });
         return { reply, tool_calls: executedTools };
       }
 
@@ -563,7 +592,38 @@ export class AiChatService {
       // Continue to next round for the final AI response
     }
 
-    return { reply: '抱歉，處理時間過長，請稍後再試。', tool_calls: executedTools };
+      const timeoutReply = '抱歉，處理時間過長，請稍後再試。';
+      await this.aiActivityLogService.log({
+        module: 'ai_chat',
+        action: 'chat',
+        status: 'error',
+        inputSummary,
+        outputSummary: timeoutReply,
+        tokensUsed: totalTokens || null,
+        durationMs: Date.now() - startedAt,
+        errorMessage: 'AI chat exceeded max tool-call rounds',
+        metadata: {
+          message_count: messages.length,
+          tool_calls: executedTools,
+          max_rounds: maxRounds,
+        },
+      });
+      return { reply: timeoutReply, tool_calls: executedTools };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.aiActivityLogService.log({
+        module: 'ai_chat',
+        action: 'chat',
+        status: 'error',
+        inputSummary,
+        outputSummary: 'AI 助手對話失敗',
+        tokensUsed: totalTokens || null,
+        durationMs: Date.now() - startedAt,
+        errorMessage: message,
+        metadata: { message_count: messages.length },
+      });
+      throw error;
+    }
   }
 
   private async handleToolCall(toolCall: any) {

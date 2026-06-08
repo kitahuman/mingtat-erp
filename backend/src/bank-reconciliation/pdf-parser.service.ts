@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { createOpenAIClient } from '../common/openai-client';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 import { readFileSync, unlinkSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -34,6 +35,8 @@ export interface PdfParseResult {
 export class PdfParserService {
   private openai = createOpenAIClient();
 
+  constructor(private readonly aiActivityLogService: AiActivityLogService) {}
+
   /**
    * Parse a bank statement PDF.
    * Tries text extraction first; if successful, sends text to AI.
@@ -44,6 +47,7 @@ export class PdfParserService {
     companies: any[] = [],
     bankAccounts: any[] = [],
   ): Promise<PdfParseResult> {
+    const startedAt = Date.now();
     const normalizedFile = this.normalizePdfInput(fileInput);
     const filePath = normalizedFile.filePath;
     const pdfBuffer = normalizedFile.buffer;
@@ -234,11 +238,43 @@ ${identificationContext}
           };
         });
 
+      await this.aiActivityLogService.log({
+        module: 'bank_reconciliation',
+        action: 'ocr',
+        status: 'success',
+        inputSummary: `PDF 銀行月結單；解析模式：${useVision ? 'vision' : 'text'}；公司數：${companies.length}；銀行帳戶數：${bankAccounts.length}`,
+        outputSummary: `銀行：${parsed.bank_name || '未知'}；帳戶：${parsed.account_no || '未知'}；交易數：${parsed.transactions.length}`,
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          mode: useVision ? 'vision' : 'text',
+          page_image_count: pageImages.length,
+          transaction_count: parsed.transactions.length,
+          identified_company_id: parsed.identified_company_id,
+          identified_bank_account_id: parsed.identified_bank_account_id,
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+      });
       return parsed;
     } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.aiActivityLogService.log({
+        module: 'bank_reconciliation',
+        action: 'ocr',
+        status: 'error',
+        inputSummary: `PDF 銀行月結單；解析模式：${useVision ? 'vision' : 'text'}；公司數：${companies.length}；銀行帳戶數：${bankAccounts.length}`,
+        outputSummary: '銀行月結單 OCR/解析失敗',
+        durationMs: Date.now() - startedAt,
+        errorMessage: message,
+        metadata: {
+          mode: useVision ? 'vision' : 'text',
+          page_image_count: pageImages.length,
+        },
+      });
       if (err instanceof BadRequestException) throw err;
-      console.error('[PdfParser] Parsing error:', err.message);
-      throw new BadRequestException(`解析失敗：${err.message}`);
+      console.error('[PdfParser] Parsing error:', message);
+      throw new BadRequestException(`解析失敗：${message}`);
     } finally {
       // Clean up temp images if any
       pageImages.forEach((_, idx) => {

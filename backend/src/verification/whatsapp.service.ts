@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { createOpenAIClient } from '../common/openai-client';
 import { NicknameMatchService } from './nickname-match.service';
 import { WhatsappClockinService } from '../whatsapp-clockin/whatsapp-clockin.service';
+import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -239,6 +240,7 @@ export class WhatsappService {
     private readonly prisma: PrismaService,
     private readonly nicknameMatchService: NicknameMatchService,
     private readonly clockinService: WhatsappClockinService,
+    private readonly aiActivityLogService: AiActivityLogService,
   ) {
     this.openai = createOpenAIClient();
   }
@@ -1514,6 +1516,7 @@ export class WhatsappService {
   // AI 分類和解析（支援 order / modification / chat 三種類型）
   // ══════════════════════════════════════════════════════════════
   private async classifyAndParseMessage(text: string): Promise<AiClassification> {
+    const startedAt = Date.now();
     // ── 文字預處理：修復常見格式問題 ──
     // 1. 修復日期中的空格：「1 7-4-2026」→「17-4-2026」、「2 2-4-2026」→「22-4-2026」
     //    匹配模式：行首或換行後，單個數字 + 空格 + 數字 + 連字號 + 數字 + 連字號 + 4位年份
@@ -1922,7 +1925,8 @@ DC19喺水澗石倉
   "raw_summary": "簡短摘要"
 }`;
 
-    const response = await this.openai.chat.completions.create({
+    try {
+      const response = await this.openai.chat.completions.create({
       model: 'gpt-4.1-mini',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -1949,9 +1953,40 @@ DC19喺水澗石倉
       if (parsed.update_reason === undefined) {
         parsed.update_reason = null;
       }
+      await this.aiActivityLogService.log({
+        module: 'whatsapp_order',
+        action: 'parse_message',
+        status: 'success',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: `訊息類型：${parsed.message_type ?? 'unknown'}；項目數：${Array.isArray(parsed.items) ? parsed.items.length : 0}；修改數：${Array.isArray(parsed.modifications) ? parsed.modifications.length : 0}`,
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
+        metadata: {
+          message_type: parsed.message_type,
+          order_date: parsed.order_date,
+          shift: parsed.shift,
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+      });
       return parsed;
     } catch (_parseError) {
       this.logger.warn(`Failed to parse AI response: ${cleaned.substring(0, 200)}`);
+      await this.aiActivityLogService.log({
+        module: 'whatsapp_order',
+        action: 'parse_message',
+        status: 'error',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: cleaned.slice(0, 1000),
+        tokensUsed: response.usage?.total_tokens ?? null,
+        durationMs: Date.now() - startedAt,
+        errorMessage: 'Failed to parse AI response JSON',
+        metadata: {
+          prompt_tokens: response.usage?.prompt_tokens,
+          completion_tokens: response.usage?.completion_tokens,
+        },
+      });
       return {
         message_type: 'chat' as const,
         confidence: 0,
@@ -1963,6 +1998,19 @@ DC19喺水澗石倉
         leave_list: [],
         raw_summary: 'AI parse error',
       };
+    }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.aiActivityLogService.log({
+        module: 'whatsapp_order',
+        action: 'parse_message',
+        status: 'error',
+        inputSummary: text.slice(0, 1000),
+        outputSummary: 'WhatsApp Order 解析失敗',
+        durationMs: Date.now() - startedAt,
+        errorMessage: message,
+      });
+      throw error;
     }
   }
 
