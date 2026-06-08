@@ -81,17 +81,40 @@ const defaultForm = {
   other_charges: [] as { name: string; amount: number }[],
 };
 
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getMonthRange = (monthOffset: number) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0);
+  return {
+    from: toDateInputValue(start),
+    to: toDateInputValue(end),
+  };
+};
+
 type InvoiceListColumn = {
   key: string;
   label: string;
   sortable?: boolean;
   className?: string;
   minWidth?: number;
+  headerRender?: () => any;
   render?: (value: any, invoice: any) => any;
   filterRender?: (value: any, invoice: any) => string;
 };
 
 const INVOICE_CELL_PADDING = 'px-4';
+
+const getClientDisplayName = (client?: any) => {
+  if (!client) return '-';
+  return client.code || client.partner_code || client.short_name || client.name || '-';
+};
 
 const INVOICE_COLUMNS: InvoiceListColumn[] = [
   {
@@ -102,6 +125,15 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     minWidth: 150,
     render: (v: any) => v || '-',
     filterRender: (v: any) => v || '-',
+  },
+  {
+    key: 'company',
+    label: '公司',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} font-mono text-gray-700`,
+    minWidth: 90,
+    render: (_: any, inv: any) => inv.company?.internal_prefix || '-',
+    filterRender: (_: any, inv: any) => inv.company?.internal_prefix || '-',
   },
   {
     key: 'invoice_title',
@@ -136,14 +168,8 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     sortable: true,
     className: `${INVOICE_CELL_PADDING} text-gray-900`,
     minWidth: 150,
-    render: (_: any, inv: any) =>
-      inv.client?.code
-        ? `${inv.client.code} - ${inv.client.name}`
-        : inv.client?.name || '-',
-    filterRender: (_: any, inv: any) =>
-      inv.client?.code
-        ? `${inv.client.code} - ${inv.client.name}`
-        : inv.client?.name || '-',
+    render: (_: any, inv: any) => getClientDisplayName(inv.client),
+    filterRender: (_: any, inv: any) => getClientDisplayName(inv.client),
   },
   {
     key: 'client_contract_no',
@@ -242,6 +268,7 @@ export default function InvoicesPage() {
   const [workLogIdsFromQuery, setWorkLogIdsFromQuery] = useState<number[]>([]);
 
   // Invoice statement selection flow
+  const selectAllInvoicesRef = useRef<HTMLInputElement>(null);
   const [selectedInvoiceRows, setSelectedInvoiceRows] = useState<Record<number, any>>({});
   const [showStatementCreate, setShowStatementCreate] = useState(false);
   const [creatingStatement, setCreatingStatement] = useState(false);
@@ -324,6 +351,13 @@ export default function InvoicesPage() {
     [buildListParams],
   );
 
+  const applyDateShortcut = (monthOffset: number) => {
+    const { from, to } = getMonthRange(monthOffset);
+    setDateFrom(from);
+    setDateTo(to);
+    setPage(1);
+  };
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -403,6 +437,31 @@ export default function InvoicesPage() {
     () => selectedInvoices.map((invoice: any) => Number(invoice.id)),
     [selectedInvoices],
   );
+  const selectableVisibleInvoices = useMemo(
+    () => data.filter(
+      (invoice: any) =>
+        !!invoice.company_id && !!invoice.client_id && invoice.status !== 'void',
+    ),
+    [data],
+  );
+  const selectedVisibleInvoiceCount = useMemo(
+    () =>
+      selectableVisibleInvoices.filter((invoice: any) =>
+        selectedInvoiceIds.includes(Number(invoice.id)),
+      ).length,
+    [selectableVisibleInvoices, selectedInvoiceIds],
+  );
+  const allVisibleInvoicesSelected =
+    selectableVisibleInvoices.length > 0 &&
+    selectedVisibleInvoiceCount === selectableVisibleInvoices.length;
+  const someVisibleInvoicesSelected =
+    selectedVisibleInvoiceCount > 0 && !allVisibleInvoicesSelected;
+
+  useEffect(() => {
+    if (selectAllInvoicesRef.current) {
+      selectAllInvoicesRef.current.indeterminate = someVisibleInvoicesSelected;
+    }
+  }, [someVisibleInvoicesSelected]);
 
   const summaryInvoices = selectedInvoices.length > 0 ? selectedInvoices : data;
   const invoiceTotalsSummary = useMemo(() => {
@@ -426,20 +485,21 @@ export default function InvoicesPage() {
     ? `已選 ${selectedInvoices.length} 張`
     : `顯示 ${data.length} 張`;
 
-  const toggleInvoiceSelection = (invoice: any, checked: boolean) => {
-    if (checked) {
-      const existing = Object.values(selectedInvoiceRows);
-      const hasMismatch = existing.some(
-        (selected: any) =>
-          selected.company_id !== invoice.company_id ||
-          selected.client_id !== invoice.client_id,
-      );
-      if (hasMismatch) {
-        alert('請只選擇同一公司及同一客戶的發票來建立發票清單');
-        return;
-      }
-    }
+  const toggleVisibleInvoiceSelection = (checked: boolean) => {
+    setSelectedInvoiceRows((prev) => {
+      const next = { ...prev };
+      selectableVisibleInvoices.forEach((invoice: any) => {
+        if (checked) {
+          next[invoice.id] = invoice;
+        } else {
+          delete next[invoice.id];
+        }
+      });
+      return next;
+    });
+  };
 
+  const toggleInvoiceSelection = (invoice: any, checked: boolean) => {
     setSelectedInvoiceRows((prev) => {
       const next = { ...prev };
       if (checked) {
@@ -454,6 +514,14 @@ export default function InvoicesPage() {
   const openStatementCreate = () => {
     if (selectedInvoices.length === 0) return;
     const first = selectedInvoices[0] as any;
+    const hasMismatch = selectedInvoices.some(
+      (invoice: any) =>
+        invoice.company_id !== first.company_id || invoice.client_id !== first.client_id,
+    );
+    if (hasMismatch) {
+      alert('請只選擇同一公司及同一客戶的發票來建立發票清單');
+      return;
+    }
     const dates = selectedInvoices
       .map((invoice: any) => (invoice.date ? String(invoice.date).slice(0, 10) : ''))
       .filter(Boolean)
@@ -593,6 +661,23 @@ export default function InvoicesPage() {
       {
         key: '_statement_select',
         label: '選取',
+        headerRender: () => (
+          <div className="flex items-center justify-center gap-1" title="選取／取消選取目前頁面所有可選發票">
+            <input
+              ref={selectAllInvoicesRef}
+              type="checkbox"
+              checked={allVisibleInvoicesSelected}
+              disabled={pageReadOnly || selectableVisibleInvoices.length === 0}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                toggleVisibleInvoiceSelection(e.target.checked);
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <span>選取</span>
+          </div>
+        ),
         filterable: false,
         className: 'px-3 text-center',
         minWidth: 70,
@@ -618,7 +703,12 @@ export default function InvoicesPage() {
       },
       ...INVOICE_COLUMNS,
     ],
-    [selectedInvoiceIds, pageReadOnly],
+    [
+      allVisibleInvoicesSelected,
+      pageReadOnly,
+      selectableVisibleInvoices.length,
+      selectedInvoiceIds,
+    ],
   );
 
   const {
@@ -755,6 +845,22 @@ export default function InvoicesPage() {
               }}
               className="input-field"
             />
+          </div>
+          <div className="flex items-end gap-2 pb-1">
+            <button
+              type="button"
+              onClick={() => applyDateShortcut(0)}
+              className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            >
+              本月
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDateShortcut(-1)}
+              className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            >
+              上月
+            </button>
           </div>
         </div>
       </div>

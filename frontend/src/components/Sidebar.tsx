@@ -254,6 +254,16 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed: val } }));
   };
 
+  const handleMobileNavigate = () => {
+    if (typeof window === 'undefined' || window.innerWidth < 1024) {
+      setMobileOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   const canAccess = (item: { pageKey?: string; minRole?: UserRole; roles?: UserRole[] }) => {
     // Use page-level permission if pageKey is defined
     if (item.pageKey) return canAccessPage(item.pageKey);
@@ -298,7 +308,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
       <Link
         key={item.href}
         href={item.href}
-        onClick={() => setMobileOpen(false)}
+        onClick={handleMobileNavigate}
         className={className}
       >
         <span className="text-lg">{item.icon}</span>
@@ -405,7 +415,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                     entry={entry}
                     canAccess={canAccess}
                     pathname={pathname}
-                    onNavigate={() => setMobileOpen(false)}
+                    onNavigate={handleMobileNavigate}
                   />
                 );
               }
@@ -423,7 +433,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                 <Link
                   key={entry.href}
                   href={entry.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={handleMobileNavigate}
                   title={entry.label}
                   className={`
                     flex items-center justify-center px-4 py-2.5 mx-2 rounded-lg transition-colors mb-0.5
@@ -476,6 +486,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
             target="_blank"
             rel="noopener noreferrer"
             title="員工手機入口"
+            onClick={handleMobileNavigate}
             className={`
               flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg transition-colors
               bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium
@@ -496,7 +507,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
         <div className={`p-4 border-t border-gray-700 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && (
             <div className="mb-2">
-              <Link href="/settings/profile" className="hover:text-primary-400 transition-colors">
+              <Link href="/settings/profile" onClick={handleMobileNavigate} className="hover:text-primary-400 transition-colors">
                 <p className="text-sm font-medium">{user?.displayName || user?.username}</p>
                 <p className="text-xs text-gray-400">{roleLabel}{user?.department ? ` - ${user.department}` : ''}</p>
               </Link>

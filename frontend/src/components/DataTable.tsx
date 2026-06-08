@@ -7,6 +7,7 @@ import ColumnCustomizer, { ColumnConfig } from './ColumnCustomizer';
 interface Column {
   key: string;
   label: string;
+  headerRender?: () => React.ReactNode;
   render?: (value: any, row: any) => React.ReactNode;
   exportRender?: (value: any, row: any) => string;
   className?: string;
@@ -26,6 +27,7 @@ interface DataTableProps {
   onPageChange: (page: number) => void;
   onSearch?: (search: string) => void;
   searchPlaceholder?: string;
+  searchInputClassName?: string;
   onRowClick?: (row: any) => void;
   filters?: React.ReactNode;
   actions?: React.ReactNode;
@@ -219,6 +221,7 @@ export default function DataTable({
   onPageChange,
   onSearch,
   searchPlaceholder = '搜尋...',
+  searchInputClassName,
   onRowClick,
   filters,
   actions,
@@ -395,7 +398,7 @@ export default function DataTable({
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder={searchPlaceholder}
-              className="input-field flex-1"
+              className={`input-field flex-1 ${searchInputClassName || ''}`.trim()}
             />
             <button
               onClick={handleSearch}
@@ -481,7 +484,7 @@ export default function DataTable({
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className="flex items-center gap-1 whitespace-nowrap">
-                      <span>{col.label}</span>
+                      {col.headerRender ? col.headerRender() : <span>{col.label}</span>}
                       {col.sortable && onSort && (
                         <span className="text-xs text-gray-400 shrink-0">
                           {sortBy === col.key

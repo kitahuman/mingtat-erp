@@ -61,6 +61,23 @@ const ALL_UNITS = [
   '公斤',
 ];
 
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getMonthRange = (monthOffset: number) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0);
+  return {
+    from: toDateInputValue(start),
+    to: toDateInputValue(end),
+  };
+};
+
 // Searchable client dropdown component
 function ClientSearchSelect({
   value,
@@ -172,6 +189,8 @@ export default function QuotationsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [columnFilters, setColumnFilters] = useState<
@@ -224,6 +243,8 @@ export default function QuotationsPage() {
     search,
     status: statusFilter || undefined,
     quotation_type: typeFilter || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
     sortBy,
     sortOrder,
     ...buildColumnFilterParams(),
@@ -248,6 +269,8 @@ export default function QuotationsPage() {
     search,
     statusFilter,
     typeFilter,
+    dateFrom,
+    dateTo,
     sortBy,
     sortOrder,
     columnFilters,
@@ -264,6 +287,13 @@ export default function QuotationsPage() {
       buildListParams({ page: 1, limit: 50 }),
     );
     return res.data;
+  };
+
+  const applyDateShortcut = (monthOffset: number) => {
+    const { from, to } = getMonthRange(monthOffset);
+    setDateFrom(from);
+    setDateTo(to);
+    setPage(1);
   };
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
@@ -515,7 +545,7 @@ export default function QuotationsPage() {
           onColumnFilterChange={handleColumnFilterChange}
           onFetchFilterOptions={handleFetchFilterOptions}
           filters={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <select
                 value={typeFilter}
                 onChange={(e) => {
@@ -542,6 +572,47 @@ export default function QuotationsPage() {
                 <option value="accepted">已接受</option>
                 <option value="rejected">已拒絕</option>
               </select>
+              <DateInput
+                value={dateFrom}
+                onChange={(value) => {
+                  setDateFrom(value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+                placeholder="日期（從）"
+              />
+              <DateInput
+                value={dateTo}
+                onChange={(value) => {
+                  setDateTo(value);
+                  setPage(1);
+                }}
+                className="input-field w-auto"
+                placeholder="日期（至）"
+              />
+              <div className="flex gap-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => applyDateShortcut(0)}
+                  className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  本月
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDateShortcut(-1)}
+                  className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  上月
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDateShortcut(-2)}
+                  className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  上上月
+                </button>
+              </div>
             </div>
           }
         />

@@ -935,6 +935,7 @@ export default function ExpensesPage() {
             setPage(1);
           }}
           searchPlaceholder="搜尋項目、供應商、單號、付款內容..."
+          searchInputClassName="min-w-[250px] sm:min-w-[320px]"
           loading={loading}
           serverSideFilter
           columnFilters={columnFilters}

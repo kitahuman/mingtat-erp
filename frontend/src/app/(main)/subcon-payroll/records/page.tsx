@@ -25,6 +25,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 type Option = { value: any; label: string };
 
+const getShortcutMonth = (monthOffset: number) => {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const year = target.getFullYear();
+  const month = String(target.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
 export default function SubconPayrollRecordsPage() {
   const router = useRouter();
   const { isReadOnly } = useAuth();
@@ -82,6 +90,11 @@ export default function SubconPayrollRecordsPage() {
   useEffect(() => {
     loadData();
   }, [page, selectedSubcon, month, statusFilter]);
+
+  const applyMonthShortcut = (monthOffset: number) => {
+    setMonth(getShortcutMonth(monthOffset));
+    setPage(1);
+  };
 
   const handleDelete = async (id: number, name: string) => {
     if (
@@ -146,6 +159,29 @@ export default function SubconPayrollRecordsPage() {
               }}
               className="border rounded px-2 py-1.5 text-sm w-full"
             />
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => applyMonthShortcut(0)}
+                className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                本月
+              </button>
+              <button
+                type="button"
+                onClick={() => applyMonthShortcut(-1)}
+                className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                上月
+              </button>
+              <button
+                type="button"
+                onClick={() => applyMonthShortcut(-2)}
+                className="text-xs px-2 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                上上月
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

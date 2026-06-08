@@ -23,6 +23,8 @@ type QuotationListQuery = {
   client_id?: number | string;
   status?: string;
   quotation_type?: string;
+  date_from?: string;
+  date_to?: string;
   sortBy?: string;
   sortOrder?: string;
   [key: string]: string | number | undefined;
@@ -476,6 +478,15 @@ export class QuotationsService {
     if (query.status && query.status !== '') where.status = query.status;
     if (query.quotation_type && query.quotation_type !== '')
       where.quotation_type = query.quotation_type;
+    if (query.date_from || query.date_to) {
+      where.quotation_date = {};
+      if (query.date_from) {
+        where.quotation_date.gte = new Date(`${query.date_from}T00:00:00.000Z`);
+      }
+      if (query.date_to) {
+        where.quotation_date.lte = new Date(`${query.date_to}T23:59:59.999Z`);
+      }
+    }
 
     if (query.search) {
       where.OR = [

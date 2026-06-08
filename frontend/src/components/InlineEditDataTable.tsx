@@ -31,6 +31,7 @@ interface InlineEditDataTableProps {
   onPageChange: (page: number) => void;
   onSearch?: (search: string) => void;
   searchPlaceholder?: string;
+  searchInputClassName?: string;
   onRowClick?: (row: any) => void;
   filters?: React.ReactNode;
   actions?: React.ReactNode;
@@ -69,7 +70,7 @@ function toDateInputValue(val: any): string {
 
 export default function InlineEditDataTable({
   columns, data, total, page, limit, onPageChange, onSearch,
-  searchPlaceholder, onRowClick, filters, actions, loading,
+  searchPlaceholder, searchInputClassName, onRowClick, filters, actions, loading,
   sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
   columnWidths, onColumnResize,
@@ -264,6 +265,7 @@ export default function InlineEditDataTable({
       onPageChange={onPageChange}
       onSearch={onSearch}
       searchPlaceholder={searchPlaceholder}
+      searchInputClassName={searchInputClassName}
       onRowClick={editingId ? undefined : onRowClick}
       filters={filters}
       actions={actions}
