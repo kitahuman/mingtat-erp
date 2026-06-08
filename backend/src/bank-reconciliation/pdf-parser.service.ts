@@ -54,9 +54,15 @@ export class PdfParserService {
       // Step 1: Try text extraction
       extractedText = await this.extractTextFromPdf(pdfBuffer);
       
-      // If text is too short or looks like garbage, fallback to vision
+      // If text is too short or does not contain meaningful bank statement data,
+      // fallback to vision. Some scanned PDFs (e.g. Brother scanner output) may
+      // extract only page markers such as "-- 1 of 5 --", which can be longer
+      // than the previous length-only threshold but still contain no transaction data.
       if (!extractedText || extractedText.trim().length < 50) {
         console.log('[PdfParser] Extracted text too short, falling back to vision.');
+        useVision = true;
+      } else if (!this.hasMeaningfulBankStatementText(extractedText)) {
+        console.log('[PdfParser] Extracted text lacks meaningful bank statement data, falling back to vision.');
         useVision = true;
       }
     } catch (err) {
@@ -272,6 +278,42 @@ ${identificationContext}
     }
 
     throw new BadRequestException('PDF 文件內容無效：未能取得上傳文件的 buffer 或 path。');
+  }
+
+  /**
+   * Check whether extracted PDF text contains meaningful bank statement content.
+   *
+   * Text extraction from scanned PDFs can return page markers only (for example,
+   * "-- 1 of 5 --") without any transaction data. Detect common statement
+   * signals such as monetary amounts, dates, and bank/transaction keywords before
+   * trusting text mode.
+   */
+  private hasMeaningfulBankStatementText(text: string): boolean {
+    const textWithoutPageMarkers = text
+      .replace(/--\s*\d+\s*(?:of|\/)\s*\d+\s*--/gi, ' ')
+      .replace(/\bpage\s*\d+\s*(?:of|\/)\s*\d+\b/gi, ' ')
+      .replace(/第\s*\d+\s*頁\s*(?:共\s*\d+\s*頁)?/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (textWithoutPageMarkers.length < 20) {
+      return false;
+    }
+
+    const meaningfulPatterns = [
+      // Monetary amounts such as 1,234.56 or 1234.56.
+      /\b\d{1,3}(?:,\d{3})*\.\d{2}\b/,
+      /\b\d+\.\d{2}\b/,
+      // Common numeric and month-name date formats used by supported statements.
+      /\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b/,
+      /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/,
+      /\b\d{1,2}\s*-?\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s*-?\s*\d{0,4}\b/i,
+      /\b\d{1,2}(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\d{2,4}\b/i,
+      // Bank statement and transaction keywords in English and Chinese.
+      /(?:銀行|月結單|結單|交易|結餘|餘額|存入|提取|提款|入數|支票|帳戶|賬戶|戶口|匯豐|中國銀行|上海商業|華僑|Bank|Statement|Account|Transaction|Balance|Deposit|Withdrawal|Cheque|Check|HSBC|OCBC)/i,
+    ];
+
+    return meaningfulPatterns.some((pattern) => pattern.test(textWithoutPageMarkers));
   }
 
   /**
