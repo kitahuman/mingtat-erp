@@ -87,7 +87,7 @@ export class QuotationsController {
     @Query('client_phone') clientPhone: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const pdf = await this.quotationPdfService.generateQuotationPdf(
+    const result = await this.quotationPdfService.generateQuotationPdf(
       Number(id),
       {
         language,
@@ -106,12 +106,20 @@ export class QuotationsController {
       },
     );
 
+    const quotationNo = result.quotation.quotation_no || `quotation-${id}`;
+    const clientCode =
+      result.quotation.client?.code || result.quotation.client?.name || '';
+    const quotationTitle =
+      result.quotation.contract_name || result.quotation.project_name || '';
+    const rawFilename = `${quotationNo}_${clientCode}_${quotationTitle}.pdf`;
+    const encodedFilename = encodeURIComponent(rawFilename);
+
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="quotation-${Number(id)}.pdf"`,
-      'Content-Length': pdf.length,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
+      'Content-Length': result.pdf.length,
     });
-    return new StreamableFile(pdf);
+    return new StreamableFile(result.pdf);
   }
 
   @Get(':id/pdf-html')

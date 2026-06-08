@@ -56,9 +56,6 @@ export class QuotationPdfService {
       await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
       await page.setContent(html, { waitUntil: 'load' });
       await page.evaluateHandle('document.fonts.ready');
-      const companyName = this.escapeHtml(
-        this.invoiceCompanyNameEn(quotation.company) || quotation.company?.name || 'Quotation',
-      );
       const pdf = await page.pdf({
         format: 'A4',
         preferCSSPageSize: true,
@@ -66,7 +63,7 @@ export class QuotationPdfService {
         displayHeaderFooter: false,
         margin: { top: '0', right: '0', bottom: '0', left: '0' },
       });
-      return Buffer.from(pdf);
+      return { pdf: Buffer.from(pdf), quotation };
     } finally {
       await browser.close();
     }
@@ -198,6 +195,7 @@ export class QuotationPdfService {
 <html lang="${options.language === 'en' ? 'en' : 'zh-Hant'}">
 <head>
   <meta charset="UTF-8" />
+  <title>${this.escapeHtml(quotation.quotation_no || `quotation-${quotation.id}`)}_${this.escapeHtml(client.code || client.name || '')}_${this.escapeHtml(quotation.contract_name || quotation.project_name || '')}</title>
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
