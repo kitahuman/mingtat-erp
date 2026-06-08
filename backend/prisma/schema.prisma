@@ -28,13 +28,13 @@ model User {
 
   work_logs              WorkLog[]
   work_log_locks         WorkLogLock[]
-  employee_id            Int?      @unique @map("employee_id")
-  employee               Employee? @relation(fields: [employee_id], references: [id])
-  user_can_company_clock Boolean   @default(false)
-  can_approve_mid_shift  Boolean   @default(false)
-  can_daily_report       Boolean   @default(false)
-  can_acceptance_report  Boolean   @default(false)
-  page_permissions       Json?     @map("page_permissions")
+  employee_id            Int?          @unique @map("employee_id")
+  employee               Employee?     @relation(fields: [employee_id], references: [id])
+  user_can_company_clock Boolean       @default(false)
+  can_approve_mid_shift  Boolean       @default(false)
+  can_daily_report       Boolean       @default(false)
+  can_acceptance_report  Boolean       @default(false)
+  page_permissions       Json?         @map("page_permissions")
 
   daily_reports_created      DailyReport[]              @relation("daily_report_creator")
   acceptance_reports_created AcceptanceReport[]         @relation("acceptance_report_creator")
@@ -55,11 +55,12 @@ model User {
   created_expenses           Expense[]                  @relation("ExpenseCreatedBy")
   deleted_invoices           Invoice[]                  @relation("InvoiceDeletedBy")
   created_invoices           Invoice[]                  @relation("InvoiceCreatedBy")
+  created_invoice_statements InvoiceStatement[]         @relation("InvoiceStatementCreatedBy")
   deleted_work_logs          WorkLog[]                  @relation("WorkLogDeletedBy")
   deleted_daily_reports      DailyReport[]              @relation("DailyReportDeletedBy")
   scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
   web_push_subscriptions     WebPushSubscription[]
-  document_folders_created   DocumentFolder[]             @relation("DocumentFolderCreatedBy")
+  document_folders_created   DocumentFolder[]           @relation("DocumentFolderCreatedBy")
 
   @@map("users")
 }
@@ -69,30 +70,30 @@ model User {
 // ══════════════════════════════════════════════════════════════
 
 model Company {
-  id              Int       @id @default(autoincrement())
-  name            String
-  name_en         String?
-  company_type    String    @default("internal")
-  internal_prefix String?   @unique
-  contact_person  String?
-  phone           String?
-  address         String?
-  description                    String?   @db.Text
-  company_logo_url               String?   @db.Text
-  invoice_color_theme            String?   @default("#1a365d") @db.VarChar(20)
-  invoice_bank_info              Json?     @db.JsonB
-  invoice_default_payment_terms  String?   @db.Text
-  invoice_address                String?   @db.Text
-  invoice_phone                  String?
-  invoice_fax                    String?
-  invoice_company_name_en        String?
-  company_stamp_url              String?   @db.Text
-  status                         String    @default("active")
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @default(now()) @updatedAt
-  deleted_at      DateTime? // 軟刪除時間戳
-  deleted_by      Int?
-  deletedBy       User?     @relation("CompanyDeletedBy", fields: [deleted_by], references: [id])
+  id                            Int       @id @default(autoincrement())
+  name                          String
+  name_en                       String?
+  company_type                  String    @default("internal")
+  internal_prefix               String?   @unique
+  contact_person                String?
+  phone                         String?
+  address                       String?
+  description                   String?   @db.Text
+  company_logo_url              String?   @db.Text
+  invoice_color_theme           String?   @default("#1a365d") @db.VarChar(20)
+  invoice_bank_info             Json?     @db.JsonB
+  invoice_default_payment_terms String?   @db.Text
+  invoice_address               String?   @db.Text
+  invoice_phone                 String?
+  invoice_fax                   String?
+  invoice_company_name_en       String?
+  company_stamp_url             String?   @db.Text
+  status                        String    @default("active")
+  created_at                    DateTime  @default(now())
+  updated_at                    DateTime  @default(now()) @updatedAt
+  deleted_at                    DateTime? // 軟刪除時間戳
+  deleted_by                    Int?
+  deletedBy                     User?     @relation("CompanyDeletedBy", fields: [deleted_by], references: [id])
 
   employees                    Employee[]
   vehicles                     Vehicle[]
@@ -112,6 +113,7 @@ model Company {
   expenses                     Expense[]
   profiles                     CompanyProfile[]
   invoices                     Invoice[]
+  invoice_statements           InvoiceStatement[]
   fleet_rate_cards             FleetRateCard[]
   subcon_rate_cards            SubconRateCard[]
   work_logs                    WorkLog[]
@@ -614,22 +616,23 @@ model Partner {
   deleted_by          Int?
   deletedBy           User?     @relation("PartnerDeletedBy", fields: [deleted_by], references: [id])
 
-  projects_as_client        Project[]                  @relation("project_client")
-  quotations_as_client      Quotation[]                @relation("quotation_client")
-  rate_cards_as_client      RateCard[]                 @relation("rate_card_client")
-  fleet_rate_cards          FleetRateCard[]
-  subcon_as_subcon          SubconRateCard[]           @relation("subcon_partner")
-  subcon_as_client          SubconRateCard[]           @relation("subcon_client")
-  work_logs                 WorkLog[]
-  subcon_fleet_drivers      SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
-  expenses_as_supplier      Expense[]                  @relation("expense_supplier")
-  expenses_as_client        Expense[]                  @relation("expense_client")
-  contracts_as_client       Contract[]                 @relation("contract_client")
-  invoices_as_client        Invoice[]                  @relation("invoice_client")
-  acceptance_reports_client AcceptanceReport[]         @relation("acceptance_report_client")
-  daily_reports_client      DailyReport[]              @relation("daily_report_client")
-  subcon_payrolls           SubconPayroll[]            @relation("subcon_payroll_partner")
-  payment_term_templates    PaymentTermTemplate[]
+  projects_as_client           Project[]                  @relation("project_client")
+  quotations_as_client         Quotation[]                @relation("quotation_client")
+  rate_cards_as_client         RateCard[]                 @relation("rate_card_client")
+  fleet_rate_cards             FleetRateCard[]
+  subcon_as_subcon             SubconRateCard[]           @relation("subcon_partner")
+  subcon_as_client             SubconRateCard[]           @relation("subcon_client")
+  work_logs                    WorkLog[]
+  subcon_fleet_drivers         SubcontractorFleetDriver[] @relation("subcon_fleet_drivers")
+  expenses_as_supplier         Expense[]                  @relation("expense_supplier")
+  expenses_as_client           Expense[]                  @relation("expense_client")
+  contracts_as_client          Contract[]                 @relation("contract_client")
+  invoices_as_client           Invoice[]                  @relation("invoice_client")
+  invoice_statements_as_client InvoiceStatement[]         @relation("invoice_statement_client")
+  acceptance_reports_client    AcceptanceReport[]         @relation("acceptance_report_client")
+  daily_reports_client         DailyReport[]              @relation("daily_report_client")
+  subcon_payrolls              SubconPayroll[]            @relation("subcon_payroll_partner")
+  payment_term_templates       PaymentTermTemplate[]
 
   @@map("partners")
 }
@@ -664,10 +667,10 @@ model Contract {
   advance_payment_amount     Decimal? @db.Decimal(12, 2)
   advance_payment_invoice_id Int?
 
-  client                  Partner  @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
-  advance_payment_invoice Invoice? @relation("ContractAdvancePaymentInvoice", fields: [advance_payment_invoice_id], references: [id], onDelete: SetNull)
-  projects Project[]
-  expenses Expense[]
+  client                  Partner   @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
+  advance_payment_invoice Invoice?  @relation("ContractAdvancePaymentInvoice", fields: [advance_payment_invoice_id], references: [id], onDelete: SetNull)
+  projects                Project[]
+  expenses                Expense[]
 
   // Phase 2: BQ + VO relations
   bq_sections      ContractBqSection[]
@@ -715,21 +718,21 @@ model ContractBqSection {
 // ══════════════════════════════════════════════════════════════
 
 model ContractBqItem {
-  id          Int      @id @default(autoincrement())
-  contract_id Int
-  section_id  Int?
+  id           Int      @id @default(autoincrement())
+  contract_id  Int
+  section_id   Int?
   item_no      String   @db.VarChar(30)
   bq_item_name String?  @db.Text
   description  String   @db.Text
-  quantity    Decimal  @default(0) @db.Decimal(14, 4)
-  unit        String?  @db.VarChar(20)
-  unit_rate   Decimal  @default(0) @db.Decimal(14, 2)
-  amount      Decimal  @default(0) @db.Decimal(14, 2)
-  sort_order  Int      @default(0)
-  remarks     String?  @db.Text
-  status      String   @default("active") @db.VarChar(20)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @default(now()) @updatedAt
+  quantity     Decimal  @default(0) @db.Decimal(14, 4)
+  unit         String?  @db.VarChar(20)
+  unit_rate    Decimal  @default(0) @db.Decimal(14, 2)
+  amount       Decimal  @default(0) @db.Decimal(14, 2)
+  sort_order   Int      @default(0)
+  remarks      String?  @db.Text
+  status       String   @default("active") @db.VarChar(20)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
 
   contract Contract           @relation(fields: [contract_id], references: [id], onDelete: Restrict)
   section  ContractBqSection? @relation(fields: [section_id], references: [id], onDelete: SetNull)
@@ -853,32 +856,32 @@ model ProjectSequence {
 // ══════════════════════════════════════════════════════════════
 
 model Quotation {
-  id              Int       @id @default(autoincrement())
+  id                        Int       @id @default(autoincrement())
   quotation_no              String    @unique
   quotation_parent_id       Int?
   quotation_revision_number Int       @default(0)
   quotation_is_active       Boolean   @default(true)
   quotation_type            String    @default("project")
-  company_id      Int
-  client_id       Int?
-  quotation_date  DateTime  @db.Date
-  contract_name   String?
-  project_name    String?
-  project_id      Int?
-  total_amount    Decimal   @default(0) @db.Decimal(12, 2)
-  status          String    @default("draft")
-  validity_period String?   @db.Text
-  payment_terms   String?   @db.Text
-  exclusions      String?   @db.Text
-  external_remark String?   @db.Text
-  internal_remark String?   @db.Text
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @default(now()) @updatedAt
-  deleted_at      DateTime? // 軯刪除時間時戳
-  created_by      Int?
-  deleted_by      Int?
-  creator         User?     @relation("QuotationCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
-  deletedBy       User?     @relation("QuotationDeletedBy", fields: [deleted_by], references: [id])
+  company_id                Int
+  client_id                 Int?
+  quotation_date            DateTime  @db.Date
+  contract_name             String?
+  project_name              String?
+  project_id                Int?
+  total_amount              Decimal   @default(0) @db.Decimal(12, 2)
+  status                    String    @default("draft")
+  validity_period           String?   @db.Text
+  payment_terms             String?   @db.Text
+  exclusions                String?   @db.Text
+  external_remark           String?   @db.Text
+  internal_remark           String?   @db.Text
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @default(now()) @updatedAt
+  deleted_at                DateTime? // 軯刪除時間時戳
+  created_by                Int?
+  deleted_by                Int?
+  creator                   User?     @relation("QuotationCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  deletedBy                 User?     @relation("QuotationDeletedBy", fields: [deleted_by], references: [id])
 
   parent_quotation Quotation?  @relation("QuotationRevisions", fields: [quotation_parent_id], references: [id], onDelete: SetNull)
   revisions        Quotation[] @relation("QuotationRevisions")
@@ -927,27 +930,27 @@ model PaymentTermTemplate {
 }
 
 model QuotationItem {
-  id               Int      @id @default(autoincrement())
+  id               Int     @id @default(autoincrement())
   quotation_id     Int
-  sort_order       Int      @default(1)
+  sort_order       Int     @default(1)
   item_name        String?
-  item_description String?  @db.Text
-  quantity         Decimal  @default(0) @db.Decimal(12, 4)
+  item_description String? @db.Text
+  quantity         Decimal @default(0) @db.Decimal(12, 4)
   unit             String?
-  unit_price       Decimal  @default(0) @db.Decimal(12, 2)
-  amount           Decimal  @default(0) @db.Decimal(12, 2)
-  remarks          String?  @db.Text
-  
+  unit_price       Decimal @default(0) @db.Decimal(12, 2)
+  amount           Decimal @default(0) @db.Decimal(12, 2)
+  remarks          String? @db.Text
+
   // 詳細配對欄位
-  qi_service_type    String?
-  qi_day_night       String?
-  qi_tonnage         String?
-  qi_machine_type    String?
-  qi_origin          String?
-  qi_destination     String?
-  qi_ot_rate         Decimal? @db.Decimal(12, 2)
-  qi_mid_shift_rate  Decimal? @db.Decimal(12, 2)
-  qi_sync_to_rate_card Boolean @default(false)
+  qi_service_type      String?
+  qi_day_night         String?
+  qi_tonnage           String?
+  qi_machine_type      String?
+  qi_origin            String?
+  qi_destination       String?
+  qi_ot_rate           Decimal? @db.Decimal(12, 2)
+  qi_mid_shift_rate    Decimal? @db.Decimal(12, 2)
+  qi_sync_to_rate_card Boolean  @default(false)
 
   quotation Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
 
@@ -1236,12 +1239,12 @@ model Attachment {
 }
 
 model DocumentFolder {
-  id         Int              @id @default(autoincrement())
-  name       String           @db.VarChar(255)
+  id         Int       @id @default(autoincrement())
+  name       String    @db.VarChar(255)
   parent_id  Int?
   created_by Int?
-  created_at DateTime         @default(now())
-  updated_at DateTime         @default(now()) @updatedAt
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
   deleted_at DateTime?
 
   parent   DocumentFolder?  @relation("DocumentFolderChildren", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -1688,15 +1691,15 @@ model EmployeeLeave {
 // ══════════════════════════════════════════════════════════════
 
 model ExpenseCategory {
-  id         Int      @id @default(autoincrement())
-  name       String
-  parent_id  Int?
-  type       String?  @db.VarChar(20) // DIRECT | OVERHEAD
-  sort_order Int      @default(0)
-  expense_category_is_fixed Boolean @default(false)
-  is_active  Boolean  @default(true)
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now()) @updatedAt
+  id                        Int      @id @default(autoincrement())
+  name                      String
+  parent_id                 Int?
+  type                      String?  @db.VarChar(20) // DIRECT | OVERHEAD
+  sort_order                Int      @default(0)
+  expense_category_is_fixed Boolean  @default(false)
+  is_active                 Boolean  @default(true)
+  created_at                DateTime @default(now())
+  updated_at                DateTime @default(now()) @updatedAt
 
   parent   ExpenseCategory?  @relation("category_hierarchy", fields: [parent_id], references: [id], onDelete: Cascade)
   children ExpenseCategory[] @relation("category_hierarchy")
@@ -2110,26 +2113,26 @@ model PaymentOutAllocation {
 // ══════════════════════════════════════════════════════════════
 
 model Invoice {
-  id                 Int       @id @default(autoincrement())
-  invoice_no         String    @unique
-  date               DateTime  @db.Date
-  due_date           DateTime? @db.Date
-  client_id          Int?
-  project_id         Int?
-  quotation_id       Int?
-  company_id         Int
-  invoice_title      String? // 發票名稱/標題
-  client_contract_no String? // 客戶合約編號
-  status             String    @default("draft") @db.VarChar(30) // draft | issued | partially_paid | paid | void
-  subtotal           Decimal   @default(0) @db.Decimal(14, 2)
-  tax_rate           Decimal   @default(0) @db.Decimal(5, 2) // kept for backward compat
-  tax_amount         Decimal   @default(0) @db.Decimal(14, 2) // kept for backward compat
-  retention_rate     Decimal   @default(0) @db.Decimal(5, 2) // 保留金百分比
-  retention_amount   Decimal   @default(0) @db.Decimal(14, 2) // 保留金金額
-  other_charges      Json?     @db.JsonB // [{name, amount}] 其他費用
-  total_amount       Decimal   @default(0) @db.Decimal(14, 2)
-  paid_amount        Decimal   @default(0) @db.Decimal(14, 2)
-  outstanding        Decimal   @default(0) @db.Decimal(14, 2)
+  id                           Int       @id @default(autoincrement())
+  invoice_no                   String    @unique
+  date                         DateTime  @db.Date
+  due_date                     DateTime? @db.Date
+  client_id                    Int?
+  project_id                   Int?
+  quotation_id                 Int?
+  company_id                   Int
+  invoice_title                String? // 發票名稱/標題
+  client_contract_no           String? // 客戶合約編號
+  status                       String    @default("draft") @db.VarChar(30) // draft | issued | partially_paid | paid | void
+  subtotal                     Decimal   @default(0) @db.Decimal(14, 2)
+  tax_rate                     Decimal   @default(0) @db.Decimal(5, 2) // kept for backward compat
+  tax_amount                   Decimal   @default(0) @db.Decimal(14, 2) // kept for backward compat
+  retention_rate               Decimal   @default(0) @db.Decimal(5, 2) // 保留金百分比
+  retention_amount             Decimal   @default(0) @db.Decimal(14, 2) // 保留金金額
+  other_charges                Json?     @db.JsonB // [{name, amount}] 其他費用
+  total_amount                 Decimal   @default(0) @db.Decimal(14, 2)
+  paid_amount                  Decimal   @default(0) @db.Decimal(14, 2)
+  outstanding                  Decimal   @default(0) @db.Decimal(14, 2)
   payment_terms                String?   @db.Text
   invoice_custom_payment_terms String?   @db.Text
   invoice_language             String?   @default("zh") @db.VarChar(10)
@@ -2140,26 +2143,27 @@ model Invoice {
   invoice_parent_id            Int?
   invoice_revision_number      Int       @default(0)
   invoice_is_active            Boolean   @default(true)
-  created_at         DateTime  @default(now())
-  updated_at         DateTime  @default(now()) @updatedAt
-  deleted_at         DateTime? // 軯刪除時間時戳
-  created_by         Int?
-  deleted_by         Int?
-  creator            User?     @relation("InvoiceCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
-  deletedBy          User?     @relation("InvoiceDeletedBy", fields: [deleted_by], references: [id])
+  created_at                   DateTime  @default(now())
+  updated_at                   DateTime  @default(now()) @updatedAt
+  deleted_at                   DateTime? // 軯刪除時間時戳
+  created_by                   Int?
+  deleted_by                   Int?
+  creator                      User?     @relation("InvoiceCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  deletedBy                    User?     @relation("InvoiceDeletedBy", fields: [deleted_by], references: [id])
 
-  client                 Partner?              @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
-  project                Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
-  quotation              Quotation?            @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
-  company                Company               @relation(fields: [company_id], references: [id])
-  parent_invoice         Invoice?              @relation("InvoiceRevisionParent", fields: [invoice_parent_id], references: [id], onDelete: SetNull)
-  revisions              Invoice[]             @relation("InvoiceRevisionParent")
-  items                  InvoiceItem[]
-  payment_in_allocations       PaymentInAllocation[] @relation("InvoicePaymentInAllocations")
-  advance_payment_contracts    Contract[]             @relation("ContractAdvancePaymentInvoice")
-  invoice_work_logs            InvoiceWorkLog[]
-  work_log_drafts        InvoiceWorkLogDraft[]
-  pricing_draft          InvoicePricingDraft?
+  client                    Partner?               @relation("invoice_client", fields: [client_id], references: [id], onDelete: SetNull)
+  project                   Project?               @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  quotation                 Quotation?             @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
+  company                   Company                @relation(fields: [company_id], references: [id])
+  parent_invoice            Invoice?               @relation("InvoiceRevisionParent", fields: [invoice_parent_id], references: [id], onDelete: SetNull)
+  revisions                 Invoice[]              @relation("InvoiceRevisionParent")
+  items                     InvoiceItem[]
+  statement_items           InvoiceStatementItem[]
+  payment_in_allocations    PaymentInAllocation[]  @relation("InvoicePaymentInAllocations")
+  advance_payment_contracts Contract[]             @relation("ContractAdvancePaymentInvoice")
+  invoice_work_logs         InvoiceWorkLog[]
+  work_log_drafts           InvoiceWorkLogDraft[]
+  pricing_draft             InvoicePricingDraft?
 
   // ── Performance indexes ──
   @@index([client_id])
@@ -2188,6 +2192,62 @@ model InvoiceItem {
   invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
 
   @@map("invoice_items")
+}
+
+model InvoiceStatement {
+  id                      Int       @id @default(autoincrement())
+  statement_no            String    @unique @db.VarChar(50)
+  statement_title         String?   @db.VarChar(200)
+  company_id              Int
+  client_id               Int
+  statement_period_start  DateTime  @db.Date
+  statement_period_end    DateTime  @db.Date
+  statement_subtotal      Decimal   @default(0) @db.Decimal(14, 2)
+  statement_other_charges Json?     @db.JsonB
+  statement_total_amount  Decimal   @default(0) @db.Decimal(14, 2)
+  statement_invoice_count Int       @default(0)
+  statement_remarks       String?   @db.Text
+  statement_status        String    @default("draft") @db.VarChar(20)
+  created_by              Int?
+  created_at              DateTime  @default(now()) @db.Timestamptz
+  updated_at              DateTime  @default(now()) @updatedAt @db.Timestamptz
+  deleted_at              DateTime? @db.Timestamptz
+
+  company Company                @relation(fields: [company_id], references: [id])
+  client  Partner                @relation("invoice_statement_client", fields: [client_id], references: [id])
+  creator User?                  @relation("InvoiceStatementCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  items   InvoiceStatementItem[]
+
+  @@index([company_id])
+  @@index([client_id])
+  @@index([statement_status])
+  @@index([statement_period_start])
+  @@index([deleted_at])
+  @@map("invoice_statements")
+}
+
+model InvoiceStatementItem {
+  id           Int @id @default(autoincrement())
+  statement_id Int
+  invoice_id   Int
+  sort_order   Int @default(1)
+
+  statement InvoiceStatement @relation(fields: [statement_id], references: [id], onDelete: Cascade)
+  invoice   Invoice          @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@unique([statement_id, invoice_id])
+  @@index([invoice_id])
+  @@map("invoice_statement_items")
+}
+
+model InvoiceStatementSequence {
+  id         Int    @id @default(autoincrement())
+  prefix     String @db.VarChar(50)
+  year_month String @db.VarChar(4)
+  last_seq   Int    @default(0)
+
+  @@unique([prefix, year_month])
+  @@map("invoice_statement_sequences")
 }
 
 model InvoiceWorkLog {

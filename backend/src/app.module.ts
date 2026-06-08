@@ -48,6 +48,7 @@ import { PaymentInModule } from './payment-in/payment-in.module';
 import { PaymentOutModule } from './payment-out/payment-out.module';
 import { RetentionModule } from './retention/retention.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { InvoiceStatementsModule } from './invoice-statements/invoice-statements.module';
 import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { ProjectProfitLossModule } from './project-profit-loss/project-profit-loss.module';
@@ -148,6 +149,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     PaymentOutModule,
     RetentionModule,
     InvoicesModule,
+    InvoiceStatementsModule,
     BankAccountsModule,
     BankReconciliationModule,
     ProjectProfitLossModule,

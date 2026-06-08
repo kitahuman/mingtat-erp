@@ -1,10 +1,11 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 import {
   invoicesApi,
+  invoiceStatementsApi,
   partnersApi,
   companiesApi,
   projectsApi,
@@ -239,6 +240,18 @@ export default function InvoicesPage() {
   const autoInvoiceTitleRef = useRef('');
   const [workLogIdsFromQuery, setWorkLogIdsFromQuery] = useState<number[]>([]);
 
+  // Invoice statement selection flow
+  const [selectedInvoiceRows, setSelectedInvoiceRows] = useState<Record<number, any>>({});
+  const [showStatementCreate, setShowStatementCreate] = useState(false);
+  const [creatingStatement, setCreatingStatement] = useState(false);
+  const [statementForm, setStatementForm] = useState({
+    statement_title: '',
+    company_id: '',
+    client_id: '',
+    period_start: '',
+    period_end: '',
+  });
+
   const buildColumnFilterParams = useCallback(
     (filters: Record<string, Set<string>> = columnFilters) => {
       const params: Record<string, string> = {};
@@ -381,6 +394,83 @@ export default function InvoicesPage() {
     (p: any) => p.partner_type === 'client',
   );
 
+  const selectedInvoices = useMemo(
+    () => Object.values(selectedInvoiceRows),
+    [selectedInvoiceRows],
+  );
+  const selectedInvoiceIds = useMemo(
+    () => selectedInvoices.map((invoice: any) => Number(invoice.id)),
+    [selectedInvoices],
+  );
+
+  const toggleInvoiceSelection = (invoice: any, checked: boolean) => {
+    if (checked) {
+      const existing = Object.values(selectedInvoiceRows);
+      const hasMismatch = existing.some(
+        (selected: any) =>
+          selected.company_id !== invoice.company_id ||
+          selected.client_id !== invoice.client_id,
+      );
+      if (hasMismatch) {
+        alert('請只選擇同一公司及同一客戶的發票來建立發票清單');
+        return;
+      }
+    }
+
+    setSelectedInvoiceRows((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[invoice.id] = invoice;
+      } else {
+        delete next[invoice.id];
+      }
+      return next;
+    });
+  };
+
+  const openStatementCreate = () => {
+    if (selectedInvoices.length === 0) return;
+    const first = selectedInvoices[0] as any;
+    const dates = selectedInvoices
+      .map((invoice: any) => (invoice.date ? String(invoice.date).slice(0, 10) : ''))
+      .filter(Boolean)
+      .sort();
+    setStatementForm({
+      statement_title: '',
+      company_id: first.company_id ? String(first.company_id) : '',
+      client_id: first.client_id ? String(first.client_id) : '',
+      period_start: dates[0] || '',
+      period_end: dates[dates.length - 1] || '',
+    });
+    setShowStatementCreate(true);
+  };
+
+  const handleCreateStatement = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('請先選擇發票');
+      return;
+    }
+    setCreatingStatement(true);
+    try {
+      const payload = {
+        invoice_ids: selectedInvoiceIds,
+        statement_title: statementForm.statement_title || undefined,
+        company_id: statementForm.company_id ? Number(statementForm.company_id) : undefined,
+        client_id: statementForm.client_id ? Number(statementForm.client_id) : undefined,
+        period_start: statementForm.period_start || undefined,
+        period_end: statementForm.period_end || undefined,
+      };
+      const res = await invoiceStatementsApi.create(payload);
+      setShowStatementCreate(false);
+      setSelectedInvoiceRows({});
+      router.push(`/invoice-statements/${res.data.id}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '建立發票清單失敗');
+    } finally {
+      setCreatingStatement(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!form.company_id) {
       alert('請選擇公司');
@@ -473,6 +563,40 @@ export default function InvoicesPage() {
     0,
   );
   const formTotal = formSubtotal - formRetention + formOtherTotal;
+  const pageReadOnly = isReadOnly('invoices');
+
+  const invoiceColumnsWithSelection = useMemo(
+    () => [
+      {
+        key: '_statement_select',
+        label: '選取',
+        filterable: false,
+        className: 'px-3 text-center',
+        minWidth: 70,
+        render: (_: any, invoice: any) => {
+          const isSelected = selectedInvoiceIds.includes(Number(invoice.id));
+          const selectable = !!invoice.company_id && !!invoice.client_id && invoice.status !== 'void';
+          return (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              disabled={pageReadOnly || !selectable}
+              title={selectable ? '選取以建立發票清單' : '此發票不可加入發票清單'}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                toggleInvoiceSelection(invoice, e.target.checked);
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          );
+        },
+        filterRender: () => '',
+      },
+      ...INVOICE_COLUMNS,
+    ],
+    [selectedInvoiceIds, pageReadOnly],
+  );
 
   const {
     columnConfigs,
@@ -481,7 +605,7 @@ export default function InvoicesPage() {
     handleColumnConfigChange,
     handleReset,
     handleColumnResize,
-  } = useColumnConfig('invoices', INVOICE_COLUMNS);
+  } = useColumnConfig('invoices', invoiceColumnsWithSelection);
 
   return (
     <div>
@@ -490,16 +614,23 @@ export default function InvoicesPage() {
           <h1 className="text-2xl font-bold text-gray-900">發票管理</h1>
           <p className="text-gray-500 mt-1">共 {total} 張發票</p>
         </div>
-        <button
-          onClick={() => {
-            autoInvoiceTitleRef.current = '';
-            setForm({ ...defaultForm, company_id: companies[0]?.id || '' });
-            setShowCreate(true);
-          }}
-          className="btn-primary"
-        >
-          新增發票
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {selectedInvoices.length > 0 && !pageReadOnly && (
+            <button onClick={openStatementCreate} className="btn-secondary">
+              新增發票清單 ({selectedInvoices.length})
+            </button>
+          )}
+          <button
+            onClick={() => {
+              autoInvoiceTitleRef.current = '';
+              setForm({ ...defaultForm, company_id: companies[0]?.id || '' });
+              setShowCreate(true);
+            }}
+            className="btn-primary"
+          >
+            新增發票
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -618,6 +749,114 @@ export default function InvoicesPage() {
           }}
         />
       </div>
+
+      {/* Create Invoice Statement Modal */}
+      {showStatementCreate && (
+        <Modal
+          isOpen={showStatementCreate}
+          title="新增發票清單"
+          onClose={() => setShowStatementCreate(false)}
+          size="xl"
+        >
+          <div className="space-y-5">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              已選擇 {selectedInvoices.length} 張發票。發票清單會先以草稿建立，建立後會前往詳情頁讓你補充標題、其他收費及備註。
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公司</label>
+                <select
+                  value={statementForm.company_id}
+                  onChange={(e) => setStatementForm({ ...statementForm, company_id: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">請選擇</option>
+                  {companies.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">客戶</label>
+                <SearchableSelect
+                  value={statementForm.client_id || ''}
+                  onChange={(val) => setStatementForm({ ...statementForm, client_id: val ? String(val) : '' })}
+                  options={clientPartners.map((p: any) => ({
+                    value: String(p.id),
+                    label: p.code ? `${p.code} - ${p.name}` : p.name,
+                  }))}
+                  placeholder="搜尋客戶..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">期間開始</label>
+                <DateInput
+                  value={statementForm.period_start}
+                  onChange={(value) => setStatementForm({ ...statementForm, period_start: value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">期間結束</label>
+                <DateInput
+                  value={statementForm.period_end}
+                  onChange={(value) => setStatementForm({ ...statementForm, period_end: value })}
+                  className="input-field"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">清單標題</label>
+                <input
+                  type="text"
+                  value={statementForm.statement_title}
+                  onChange={(e) => setStatementForm({ ...statementForm, statement_title: e.target.value })}
+                  className="input-field"
+                  placeholder="可留空，建立後亦可於詳情頁修改"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900">已選發票</h3>
+                <button type="button" onClick={() => setSelectedInvoiceRows({})} className="text-sm text-gray-500 hover:text-gray-700">清除選取</button>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">發票編號</th>
+                      <th className="px-3 py-2 text-left">日期</th>
+                      <th className="px-3 py-2 text-left">發票名稱</th>
+                      <th className="px-3 py-2 text-left">狀態</th>
+                      <th className="px-3 py-2 text-right">金額</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {selectedInvoices.map((invoice: any) => (
+                      <tr key={invoice.id}>
+                        <td className="px-3 py-2 font-mono text-primary-600">{invoice.invoice_no}</td>
+                        <td className="px-3 py-2 text-gray-600">{fmtDate(invoice.date)}</td>
+                        <td className="px-3 py-2">{invoice.invoice_title || '-'}</td>
+                        <td className="px-3 py-2">{STATUS_LABELS[invoice.status] || invoice.status || '-'}</td>
+                        <td className="px-3 py-2 text-right font-medium">{fmt$(invoice.total_amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-4">
+              <button onClick={() => setShowStatementCreate(false)} className="btn-secondary">取消</button>
+              <button onClick={handleCreateStatement} disabled={creatingStatement || selectedInvoices.length === 0} className="btn-primary disabled:opacity-50">
+                {creatingStatement ? '建立中...' : '建立發票清單'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Create Modal */}
       {showCreate && (

@@ -1362,6 +1362,25 @@ export const invoicesApi = {
   delete: (id: number) => api.delete(`/invoices/${id}`),
 };
 
+export const invoiceStatementsApi = {
+  list: (params?: any) => api.get('/invoice-statements', { params }),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/invoice-statements/filter-options/${column}`, { params }),
+  get: (id: number) => api.get(`/invoice-statements/${id}`),
+  matchingInvoices: (data: any) =>
+    api.post('/invoice-statements/matching-invoices', data),
+  create: (data: any) => api.post('/invoice-statements', data),
+  update: (id: number, data: any) =>
+    api.put(`/invoice-statements/${id}`, data),
+  updateStatus: (id: number, status: string) =>
+    api.patch(`/invoice-statements/${id}/status`, { status }),
+  exportPdf: (id: number) =>
+    api.get(`/invoice-statements/${id}/pdf`, { responseType: 'blob' }),
+  getPdfHtml: (id: number) =>
+    api.get(`/invoice-statements/${id}/pdf-html`, { responseType: 'text' }),
+  delete: (id: number) => api.delete(`/invoice-statements/${id}`),
+};
+
 export const retentionApi = {
   getSummary: (contractId: number) =>
     api.get(`/contracts/${contractId}/retention`),
