@@ -1944,6 +1944,8 @@ export const issueReportsApi = {
 
 export const aiKnowledgeApi = {
   list: (params?: any) => api.get('/ai-knowledge/entries', { params }),
+  listActivityLogs: (params?: any) => api.get('/ai-knowledge/activity-logs', { params }),
+  migrateExistingData: () => api.post('/ai-knowledge/migrate-existing-data', {}),
   get: (id: string | number) => api.get(`/ai-knowledge/entries/${id}`),
   create: (data: any) => api.post('/ai-knowledge/entries', data),
   update: (id: string | number, data: any) =>

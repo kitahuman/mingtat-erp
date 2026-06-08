@@ -3309,6 +3309,31 @@ model AiKnowledgeModulePolicy {
   @@map("ai_knowledge_module_policies")
 }
 
+model AiActivityLog {
+  id                        Int      @id @default(autoincrement())
+  activity_module_code      String   @db.VarChar(50)
+  activity_type             String   @db.VarChar(50)
+  activity_action           String   @db.VarChar(100)
+  activity_description      String   @db.Text
+  activity_reason           String?  @db.Text
+  activity_input_summary    String?  @db.Text
+  activity_output_summary   String?  @db.Text
+  activity_result           String?  @db.VarChar(30)
+  activity_confidence       Decimal? @db.Decimal(5, 2)
+  activity_knowledge_used   Json?    @db.JsonB
+  activity_knowledge_gained Json?    @db.JsonB
+  activity_entity_type      String?  @db.VarChar(50)
+  activity_entity_id        Int?
+  activity_user_id          Int?
+  activity_created_at       DateTime @default(now())
+
+  @@index([activity_module_code])
+  @@index([activity_type])
+  @@index([activity_created_at])
+  @@index([activity_entity_type, activity_entity_id])
+  @@map("ai_activity_logs")
+}
+
 // ══════════════════════════════════════════════════════════════
 // AI Payroll (AI 計糧)
 // ══════════════════════════════════════════════════════════════

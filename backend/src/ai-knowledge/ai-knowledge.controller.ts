@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import type { Request } from 'express';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { CreateKnowledgeEntryDto } from './dto/create-knowledge-entry.dto';
+import { QueryActivityLogsDto } from './dto/query-activity-logs.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
 import { RejectKnowledgeDto, ReviewKnowledgeDto } from './dto/review-knowledge.dto';
 import { RetrieveKnowledgeDto } from './dto/retrieve-knowledge.dto';
@@ -55,6 +56,18 @@ export class AiKnowledgeController {
   @ApiOperation({ summary: '管理介面列表查詢知識條目' })
   findAll(@Query() query: QueryKnowledgeDto) {
     return this.service.findAll(query);
+  }
+
+  @Get('activity-logs')
+  @ApiOperation({ summary: '查詢 AI 活動歷史紀錄' })
+  activityLogs(@Query() query: QueryActivityLogsDto) {
+    return this.service.findActivityLogs(query);
+  }
+
+  @Post('migrate-existing-data')
+  @ApiOperation({ summary: '匯入既有花名資料到 AI 知識庫' })
+  migrateExistingData(@Req() req: AuthenticatedRequest) {
+    return this.service.migrateExistingData(getUserId(req));
   }
 
   @Get('entries/:id')

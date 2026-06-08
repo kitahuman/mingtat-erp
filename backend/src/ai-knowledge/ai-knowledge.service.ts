@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKnowledgeEntryDto } from './dto/create-knowledge-entry.dto';
+import { QueryActivityLogsDto } from './dto/query-activity-logs.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
 import {
   RetrieveKnowledgeDto,
@@ -305,6 +306,200 @@ export class AiKnowledgeService {
     return { data, total, page, pageSize };
   }
 
+
+  async findActivityLogs(query: QueryActivityLogsDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where: Prisma.AiActivityLogWhereInput = {
+      ...(query.moduleCode ? { activity_module_code: query.moduleCode } : {}),
+      ...(query.activityType ? { activity_type: query.activityType } : {}),
+      ...(query.action ? { activity_action: query.action } : {}),
+      ...(query.result ? { activity_result: query.result } : {}),
+      ...(query.entityType ? { activity_entity_type: query.entityType } : {}),
+      ...(query.entityId ? { activity_entity_id: query.entityId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { activity_action: { contains: query.search, mode: 'insensitive' } },
+              { activity_description: { contains: query.search, mode: 'insensitive' } },
+              { activity_reason: { contains: query.search, mode: 'insensitive' } },
+              { activity_input_summary: { contains: query.search, mode: 'insensitive' } },
+              { activity_output_summary: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const orderBy: Prisma.AiActivityLogOrderByWithRelationInput =
+      query.sortBy === 'confidence'
+        ? { activity_confidence: query.sortOrder ?? 'desc' }
+        : { activity_created_at: query.sortOrder ?? 'desc' };
+
+    const [data, total] = await Promise.all([
+      this.prisma.aiActivityLog.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.aiActivityLog.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
+  }
+
+  async migrateExistingData(userId: number) {
+    const existingEntries = await this.prisma.aiKnowledgeEntry.findMany({
+      where: { knowledge_category: 'nickname_mapping' },
+      select: { knowledge_payload_json: true },
+    });
+    const existingKeys = new Set(
+      existingEntries.map((entry) => {
+        const payload = this.asJsonRecord(entry.knowledge_payload_json);
+        return this.buildNicknameKnowledgeKey(
+          typeof payload.nickname === 'string' ? payload.nickname : '',
+          typeof payload.employeeId === 'number' ? payload.employeeId : null,
+          typeof payload.vehicleNo === 'string' ? payload.vehicleNo : null,
+        );
+      }),
+    );
+
+    let verificationCreated = 0;
+    let verificationSkipped = 0;
+    let employeeCreated = 0;
+    let employeeSkipped = 0;
+
+    const verificationMappings = await this.prisma.verificationNicknameMapping.findMany({
+      orderBy: { id: 'asc' },
+    });
+
+    for (const mapping of verificationMappings) {
+      const nickname = mapping.nickname_value?.trim();
+      if (!nickname) {
+        verificationSkipped += 1;
+        continue;
+      }
+      const key = this.buildNicknameKnowledgeKey(
+        nickname,
+        mapping.nickname_employee_id ?? null,
+        mapping.nickname_vehicle_no ?? null,
+      );
+      if (existingKeys.has(key)) {
+        verificationSkipped += 1;
+        continue;
+      }
+
+      const isVehicleMapping = !mapping.nickname_employee_id && !!mapping.nickname_vehicle_no;
+      const targetLabel = mapping.nickname_employee_name || mapping.nickname_vehicle_no || '未指定對象';
+      await this.prisma.aiKnowledgeEntry.create({
+        data: {
+          knowledge_module_scope: 'global',
+          knowledge_module_code: null,
+          knowledge_category: 'nickname_mapping',
+          knowledge_title: `${nickname} → ${targetLabel}`,
+          knowledge_description: `花名/簡稱對照：${nickname} 代表 ${targetLabel}`,
+          knowledge_payload_json: {
+            nickname,
+            employeeId: mapping.nickname_employee_id,
+            employeeName: mapping.nickname_employee_name,
+            vehicleNo: mapping.nickname_vehicle_no,
+          } as Prisma.InputJsonValue,
+          knowledge_applies_to_entity_type: isVehicleMapping ? 'vehicle' : 'employee',
+          knowledge_applies_to_entity_id: mapping.nickname_employee_id,
+          knowledge_status: mapping.nickname_is_active ? 'active' : 'disabled',
+          knowledge_created_by_type: 'system',
+          knowledge_created_by: userId || undefined,
+          knowledge_confidence_score: 100,
+        },
+      });
+      existingKeys.add(key);
+      verificationCreated += 1;
+    }
+
+    const employeeNicknames = await this.prisma.employeeNickname.findMany({
+      include: { employee: { select: { id: true, name_zh: true } } },
+      orderBy: { id: 'asc' },
+    });
+
+    for (const nicknameRecord of employeeNicknames) {
+      const nickname = nicknameRecord.emp_nickname_value?.trim();
+      const employeeId = nicknameRecord.emp_nickname_employee_id;
+      if (!nickname || !employeeId) {
+        employeeSkipped += 1;
+        continue;
+      }
+      const key = this.buildNicknameKnowledgeKey(nickname, employeeId, null);
+      if (existingKeys.has(key)) {
+        employeeSkipped += 1;
+        continue;
+      }
+      const employeeName = nicknameRecord.employee?.name_zh || `員工 #${employeeId}`;
+      await this.prisma.aiKnowledgeEntry.create({
+        data: {
+          knowledge_module_scope: 'global',
+          knowledge_module_code: null,
+          knowledge_category: 'nickname_mapping',
+          knowledge_title: `${nickname} → ${employeeName}`,
+          knowledge_description: `花名/簡稱對照：${nickname} 代表 ${employeeName}`,
+          knowledge_payload_json: {
+            nickname,
+            employeeId,
+            employeeName,
+            vehicleNo: null,
+          } as Prisma.InputJsonValue,
+          knowledge_applies_to_entity_type: 'employee',
+          knowledge_applies_to_entity_id: employeeId,
+          knowledge_status: 'active',
+          knowledge_created_by_type: 'system',
+          knowledge_created_by: userId || undefined,
+          knowledge_confidence_score: 100,
+        },
+      });
+      existingKeys.add(key);
+      employeeCreated += 1;
+    }
+
+    const created = verificationCreated + employeeCreated;
+    const skipped = verificationSkipped + employeeSkipped;
+    await this.prisma.aiActivityLog.create({
+      data: {
+        activity_module_code: 'nickname_match',
+        activity_type: 'learning',
+        activity_action: 'migrate_existing_nickname_data',
+        activity_description: `匯入既有花名/簡稱對照到 AI 知識庫：新增 ${created} 條，跳過 ${skipped} 條。`,
+        activity_reason: '系統管理員觸發既有資料遷移，將人工確認過的花名資料轉為全域 AI 知識。',
+        activity_input_summary: `VerificationNicknameMapping ${verificationMappings.length} 條；EmployeeNickname ${employeeNicknames.length} 條。`,
+        activity_output_summary: `新增 ${created} 條；跳過重複或無效 ${skipped} 條。`,
+        activity_result: 'success',
+        activity_confidence: 100,
+        activity_knowledge_gained: {
+          category: 'nickname_mapping',
+          created,
+          skipped,
+          verificationCreated,
+          verificationSkipped,
+          employeeCreated,
+          employeeSkipped,
+        } as Prisma.InputJsonValue,
+        activity_user_id: userId || undefined,
+      },
+    });
+
+    return {
+      success: true,
+      created,
+      skipped,
+      verificationNicknameMapping: {
+        scanned: verificationMappings.length,
+        created: verificationCreated,
+        skipped: verificationSkipped,
+      },
+      employeeNickname: {
+        scanned: employeeNicknames.length,
+        created: employeeCreated,
+        skipped: employeeSkipped,
+      },
+    };
+  }
+
   async listPolicies() {
     return this.prisma.aiKnowledgeModulePolicy.findMany({ orderBy: { policy_module_code: 'asc' } });
   }
@@ -328,6 +523,14 @@ export class AiKnowledgeService {
         ...(dto.reviewThreshold !== undefined ? { policy_review_threshold: dto.reviewThreshold } : {}),
       },
     });
+  }
+
+
+  private buildNicknameKnowledgeKey(nickname: string, employeeId?: number | null, vehicleNo?: string | null): string {
+    const normalizedNickname = nickname.trim().toLowerCase();
+    if (employeeId) return `${normalizedNickname}::employee::${employeeId}`;
+    if (vehicleNo) return `${normalizedNickname}::vehicle::${vehicleNo.trim().toLowerCase()}`;
+    return `${normalizedNickname}::unknown`;
   }
 
   private async getPolicySnapshot(moduleCode: string): Promise<KnowledgePolicySnapshot> {

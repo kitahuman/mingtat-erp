@@ -30,7 +30,8 @@
     "react-dom": "^18.3.1",
     "react-signature-canvas": "1.1.0-alpha.2",
     "socket.io-client": "^4.8.3",
-    "tailwindcss": "^3.4.19"
+    "tailwindcss": "^3.4.19",
+    "@radix-ui/react-tabs": "^1.1.13"
   },
   "devDependencies": {
     "@types/react-signature-canvas": "^1.0.7",

@@ -29,15 +29,21 @@ export class AiPayrollService {
   ) {}
 
   async createBatch(dto: CreateAiPayrollBatchDto, userId: number) {
-    const month = `${dto.payrollYear}-${String(dto.payrollMonth).padStart(2, '0')}`;
-    const notes = [dto.remark, dto.periodStartDate && dto.periodEndDate ? `${dto.periodStartDate} 至 ${dto.periodEndDate}` : undefined]
+    const batchPayrollMonth = dto.payroll_month.trim();
+    const notes = [
+      dto.notes,
+      dto.expected_pay_date ? `預計出糧日：${dto.expected_pay_date}` : undefined,
+      dto.department ? `部門：${dto.department}` : undefined,
+      dto.site_name ? `地盤：${dto.site_name}` : undefined,
+    ]
       .filter((item): item is string => Boolean(item))
       .join('\n');
+
     return this.prisma.aiPayrollBatch.create({
       data: {
-        batch_payroll_month: month,
-        batch_period: dto.payrollPeriodType ?? 'full_month',
-        batch_form_type_default: dto.defaultFormType ?? 'auto',
+        batch_payroll_month: batchPayrollMonth,
+        batch_period: dto.payroll_period ?? 'auto',
+        batch_form_type_default: dto.default_form_type ?? 'auto',
         batch_notes: notes || undefined,
         batch_created_by: userId,
       },
