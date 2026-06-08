@@ -54,6 +54,7 @@ type InvoiceListQuery = {
   page?: number;
   limit?: number;
   status?: string;
+  status_ne?: string;
   client_id?: number | string;
   project_id?: number | string;
   date_from?: string;
@@ -463,6 +464,12 @@ export class InvoicesService {
       invoice_is_active: true,
     };
     if (query.status) where.status = String(query.status);
+    if (query.status_ne) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { status: { not: String(query.status_ne) } },
+      ];
+    }
     if (query.client_id) where.client_id = Number(query.client_id);
     if (query.project_id) where.project_id = Number(query.project_id);
     if (query.date_from || query.date_to) {
@@ -579,7 +586,7 @@ export class InvoicesService {
     const orderBy = this.buildOrderBy(query.sortBy, sortOrder);
     const where = this.buildBaseWhere(query);
 
-    const [data, total] = await Promise.all([
+    const [data, total, aggregates] = await Promise.all([
       this.prisma.invoice.findMany({
         where,
         include: this.includeRelations,
@@ -588,9 +595,25 @@ export class InvoicesService {
         take: limit,
       }),
       this.prisma.invoice.count({ where }),
+      this.prisma.invoice.aggregate({
+        where,
+        _sum: {
+          total_amount: true,
+          paid_amount: true,
+          outstanding: true,
+        },
+      }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data,
+      total,
+      page,
+      limit,
+      sum_total_amount: Number(aggregates._sum.total_amount || 0),
+      sum_paid_amount: Number(aggregates._sum.paid_amount || 0),
+      sum_outstanding: Number(aggregates._sum.outstanding || 0),
+    };
   }
 
   async getFilterOptions(

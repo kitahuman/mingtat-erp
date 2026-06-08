@@ -43,6 +43,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => window.removeEventListener('sidebar-toggle' as any, handler);
   }, []);
 
+  const handleMainContentClick = () => {
+    if (sidebarCollapsed) return;
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      setSidebarCollapsed(true);
+      window.dispatchEvent(new CustomEvent('sidebar-collapse-request', { detail: { collapsed: true } }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -56,6 +64,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <Sidebar onCollapse={setSidebarCollapsed} />
       {/* Main content: shifts right by sidebar width, fills remaining space */}
       <main
+        onClick={handleMainContentClick}
         className={`
           flex-1 min-w-0 transition-all duration-300
           pt-16 lg:pt-0

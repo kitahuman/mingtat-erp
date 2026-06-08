@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import WhatsAppBotStatus from './WhatsAppBotStatus';
 import VersionBadge from './VersionBadge';
 import IssueReportModal from './IssueReportModal';
@@ -247,12 +247,21 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
     '系統設定': false,
   });
 
-  const handleCollapse = (val: boolean) => {
+  const handleCollapse = useCallback((val: boolean) => {
     setCollapsed(val);
     onCollapse?.(val);
     // Also broadcast via custom event for layout.tsx
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed: val } }));
-  };
+  }, [onCollapse]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ collapsed?: boolean }>;
+      handleCollapse(customEvent.detail?.collapsed ?? true);
+    };
+    window.addEventListener('sidebar-collapse-request', handler);
+    return () => window.removeEventListener('sidebar-collapse-request', handler);
+  }, [handleCollapse]);
 
   const handleMobileNavigate = () => {
     if (typeof window === 'undefined' || window.innerWidth < 1024) {

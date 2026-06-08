@@ -241,6 +241,12 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void'>('invoices');
+  const [aggregateTotals, setAggregateTotals] = useState({
+    totalAmount: 0,
+    paidAmount: 0,
+    outstanding: 0,
+  });
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -296,7 +302,8 @@ export default function InvoicesPage() {
     (overrides: Record<string, any> = {}) => ({
       page,
       limit: 50,
-      status: statusFilter || undefined,
+      status: invoiceTab === 'void' ? 'void' : statusFilter || undefined,
+      status_ne: invoiceTab === 'invoices' ? 'void' : undefined,
       client_id: clientFilter || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
@@ -308,6 +315,7 @@ export default function InvoicesPage() {
     }),
     [
       page,
+      invoiceTab,
       statusFilter,
       clientFilter,
       dateFrom,
@@ -325,6 +333,11 @@ export default function InvoicesPage() {
       const res = await invoicesApi.list(buildListParams());
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
+      setAggregateTotals({
+        totalAmount: Number(res.data?.sum_total_amount) || 0,
+        paidAmount: Number(res.data?.sum_paid_amount) || 0,
+        outstanding: Number(res.data?.sum_outstanding) || 0,
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -437,13 +450,7 @@ export default function InvoicesPage() {
     () => selectedInvoices.map((invoice: any) => Number(invoice.id)),
     [selectedInvoices],
   );
-  const selectableVisibleInvoices = useMemo(
-    () => data.filter(
-      (invoice: any) =>
-        !!invoice.company_id && !!invoice.client_id && invoice.status !== 'void',
-    ),
-    [data],
-  );
+  const selectableVisibleInvoices = useMemo(() => data, [data]);
   const selectedVisibleInvoiceCount = useMemo(
     () =>
       selectableVisibleInvoices.filter((invoice: any) =>
@@ -463,9 +470,8 @@ export default function InvoicesPage() {
     }
   }, [someVisibleInvoicesSelected]);
 
-  const summaryInvoices = selectedInvoices.length > 0 ? selectedInvoices : data;
-  const invoiceTotalsSummary = useMemo(() => {
-    return summaryInvoices.reduce(
+  const selectedInvoiceTotals = useMemo(() => {
+    return selectedInvoices.reduce(
       (totals: { totalAmount: number; paidAmount: number; outstanding: number }, invoice: any) => {
         const totalAmount = Number(invoice.total_amount) || 0;
         const paidAmount = Number(invoice.paid_amount) || 0;
@@ -480,10 +486,10 @@ export default function InvoicesPage() {
       },
       { totalAmount: 0, paidAmount: 0, outstanding: 0 },
     );
-  }, [summaryInvoices]);
-  const invoiceTotalsNote = selectedInvoices.length > 0
-    ? `已選 ${selectedInvoices.length} 張`
-    : `顯示 ${data.length} 張`;
+  }, [selectedInvoices]);
+  const invoiceTotalsSummary = selectedInvoices.length > 0
+    ? selectedInvoiceTotals
+    : aggregateTotals;
 
   const toggleVisibleInvoiceSelection = (checked: boolean) => {
     setSelectedInvoiceRows((prev) => {
@@ -516,9 +522,12 @@ export default function InvoicesPage() {
     const first = selectedInvoices[0] as any;
     const hasMismatch = selectedInvoices.some(
       (invoice: any) =>
-        invoice.company_id !== first.company_id || invoice.client_id !== first.client_id,
+        !invoice.company_id ||
+        !invoice.client_id ||
+        invoice.company_id !== first.company_id ||
+        invoice.client_id !== first.client_id,
     );
-    if (hasMismatch) {
+    if (!first.company_id || !first.client_id || hasMismatch) {
       alert('請只選擇同一公司及同一客戶的發票來建立發票清單');
       return;
     }
@@ -655,6 +664,35 @@ export default function InvoicesPage() {
   );
   const formTotal = formSubtotal - formRetention + formOtherTotal;
   const pageReadOnly = isReadOnly('invoices');
+  const visibleStatusOptions = useMemo(
+    () => invoiceTab === 'void'
+      ? STATUS_OPTIONS.filter((option) => option.value === 'void')
+      : STATUS_OPTIONS.filter((option) => option.value !== 'void'),
+    [invoiceTab],
+  );
+  const invoiceColumnsWithTotals = useMemo(
+    () => INVOICE_COLUMNS.map((column) => {
+      const amountHeaderConfig: Record<string, { value: number; className: string }> = {
+        total_amount: { value: invoiceTotalsSummary.totalAmount, className: 'text-gray-700' },
+        paid_amount: { value: invoiceTotalsSummary.paidAmount, className: 'text-green-700' },
+        outstanding: { value: invoiceTotalsSummary.outstanding, className: 'text-red-700' },
+      };
+      const config = amountHeaderConfig[column.key];
+      if (!config) return column;
+      return {
+        ...column,
+        headerRender: () => (
+          <div className="flex flex-col items-end leading-tight">
+            <span>{column.label}</span>
+            <span className={`mt-1 text-xs font-medium ${config.className}`}>
+              {fmt$(config.value)}
+            </span>
+          </div>
+        ),
+      };
+    }),
+    [invoiceTotalsSummary],
+  );
 
   const invoiceColumnsWithSelection = useMemo(
     () => [
@@ -683,13 +721,12 @@ export default function InvoicesPage() {
         minWidth: 70,
         render: (_: any, invoice: any) => {
           const isSelected = selectedInvoiceIds.includes(Number(invoice.id));
-          const selectable = !!invoice.company_id && !!invoice.client_id && invoice.status !== 'void';
           return (
             <input
               type="checkbox"
               checked={isSelected}
-              disabled={pageReadOnly || !selectable}
-              title={selectable ? '選取以建立發票清單' : '此發票不可加入發票清單'}
+              disabled={pageReadOnly}
+              title="選取以建立發票清單"
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
                 e.stopPropagation();
@@ -701,13 +738,14 @@ export default function InvoicesPage() {
         },
         filterRender: () => '',
       },
-      ...INVOICE_COLUMNS,
+      ...invoiceColumnsWithTotals,
     ],
     [
       allVisibleInvoicesSelected,
       pageReadOnly,
       selectableVisibleInvoices.length,
       selectedInvoiceIds,
+      invoiceColumnsWithTotals,
     ],
   );
 
@@ -729,9 +767,12 @@ export default function InvoicesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {selectedInvoices.length > 0 && !pageReadOnly && (
-            <button onClick={openStatementCreate} className="btn-secondary">
-              新增發票清單 ({selectedInvoices.length})
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">已選 {selectedInvoices.length} 張</span>
+              <button onClick={openStatementCreate} className="btn-secondary">
+                新增發票清單
+              </button>
+            </div>
           )}
           <button
             onClick={() => {
@@ -748,12 +789,34 @@ export default function InvoicesPage() {
 
       <div className="mb-6 border-b border-gray-200">
         <nav className="flex gap-6" aria-label="發票管理分頁">
-          <Link
-            href="/invoices"
-            className="border-b-2 border-primary-600 px-1 pb-3 text-sm font-semibold text-primary-600"
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceTab('invoices');
+              setStatusFilter('');
+              setPage(1);
+            }}
+            className={`border-b-2 px-1 pb-3 text-sm ${invoiceTab === 'invoices'
+              ? 'border-primary-600 font-semibold text-primary-600'
+              : 'border-transparent font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
           >
             發票
-          </Link>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceTab('void');
+              setStatusFilter('');
+              setPage(1);
+            }}
+            className={`border-b-2 px-1 pb-3 text-sm ${invoiceTab === 'void'
+              ? 'border-primary-600 font-semibold text-primary-600'
+              : 'border-transparent font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            已作廢
+          </button>
           <Link
             href="/invoice-statements"
             className="border-b-2 border-transparent px-1 pb-3 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -786,14 +849,15 @@ export default function InvoicesPage() {
               狀態
             </label>
             <select
-              value={statusFilter}
+              value={invoiceTab === 'void' ? 'void' : statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="input-field"
+              disabled={invoiceTab === 'void'}
+              className="input-field disabled:bg-gray-100 disabled:text-gray-500"
             >
-              {STATUS_OPTIONS.map((opt) => (
+              {visibleStatusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -865,15 +929,6 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <span className="font-semibold">{invoiceTotalsNote}</span>
-        <span className="mx-3 text-blue-300">|</span>
-        <span>總額: <span className="font-semibold">{fmt$(invoiceTotalsSummary.totalAmount)}</span></span>
-        <span className="mx-3 text-blue-300">|</span>
-        <span>已收: <span className="font-semibold text-green-700">{fmt$(invoiceTotalsSummary.paidAmount)}</span></span>
-        <span className="mx-3 text-blue-300">|</span>
-        <span>未收: <span className="font-semibold text-red-700">{fmt$(invoiceTotalsSummary.outstanding)}</span></span>
-      </div>
 
       {/* Table */}
       <div className="card">
