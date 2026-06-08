@@ -283,7 +283,18 @@ export class AiPayrollExtractionService {
               employeeNameRaw: { type: ['string', 'null'] },
               employeeId: { type: ['number', 'null'] },
               overallConfidence: { type: ['number', 'null'], minimum: 0, maximum: 100 },
-              flags: { type: 'object', additionalProperties: true },
+              flags: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  inherited: { type: ['boolean', 'null'] },
+                  ambiguous: { type: ['boolean', 'null'] },
+                  multipleValues: { type: ['boolean', 'null'] },
+                  lowVisibility: { type: ['boolean', 'null'] },
+                  note: { type: ['string', 'null'] },
+                },
+                required: ['inherited', 'ambiguous', 'multipleValues', 'lowVisibility', 'note'],
+              },
               fields: {
                 type: 'array',
                 items: {
@@ -302,7 +313,18 @@ export class AiPayrollExtractionService {
                         x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }, page: { type: 'number' },
                       },
                     },
-                    flags: { type: 'object', additionalProperties: true },
+                    flags: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        inherited: { type: ['boolean', 'null'] },
+                        ambiguous: { type: ['boolean', 'null'] },
+                        multipleValues: { type: ['boolean', 'null'] },
+                        lowVisibility: { type: ['boolean', 'null'] },
+                        note: { type: ['string', 'null'] },
+                      },
+                      required: ['inherited', 'ambiguous', 'multipleValues', 'lowVisibility', 'note'],
+                    },
                   },
                 },
               },
