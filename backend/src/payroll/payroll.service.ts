@@ -176,12 +176,32 @@ export class PayrollService {
       orderBy: { effective_date: 'desc' },
     });
 
+    // Get holidays and leaves for daily calculation display
+    const holidayDates = await this.statutoryHolidaysService.findByDateRange(
+      toDateStr(payroll.date_from),
+      toDateStr(payroll.date_to),
+    );
+    const leaves = await this.prisma.employeeLeave.findMany({
+      where: {
+        employee_id: payroll.employee_id,
+        status: 'approved',
+        date_from: { lte: payroll.date_to || undefined },
+        date_to: { gte: payroll.date_from || undefined },
+      },
+    });
+
     // Build daily calculation
     const dailyAllowances = payroll.daily_allowances || [];
     const dailyCalc = this.calcService.buildDailyCalculation(
       activePwls,
       salarySetting,
       dailyAllowances,
+      {
+        dateFrom: toDateStr(payroll.date_from),
+        dateTo: toDateStr(payroll.date_to),
+        holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
+        leaves,
+      },
     );
 
     const workDayCount = dailyCalc.filter(
@@ -438,11 +458,31 @@ export class PayrollService {
     const grouped =
       this.calcService.buildGroupedSettlementFromWorkLogs(enrichedWorkLogs);
 
+    // Get holidays and leaves for preview daily calculation display
+    const holidayDates = await this.statutoryHolidaysService.findByDateRange(
+      date_from,
+      date_to,
+    );
+    const leaves = await this.prisma.employeeLeave.findMany({
+      where: {
+        employee_id: emp.id,
+        status: 'approved',
+        date_from: { lte: new Date(date_to) },
+        date_to: { gte: new Date(date_from) },
+      },
+    });
+
     // Build daily calculation for preview
     const dailyCalc = this.calcService.buildDailyCalculationFromWorkLogs(
       enrichedWorkLogs,
       salarySetting,
       [],
+      {
+        dateFrom: date_from,
+        dateTo: date_to,
+        holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
+        leaves,
+      },
     );
 
     const workDayCount = dailyCalc.filter(

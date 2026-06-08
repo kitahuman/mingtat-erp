@@ -1013,17 +1013,17 @@ function DailyCalculationView({
               const topUpAmount = getTopUpAmount(day);
               const allowanceBadges = buildAllowanceBadges(day);
               return (
-                <>
-                  <tr key={day.date} className={`border-b ${topUpAmount > 0 ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    <td className="px-3 py-2 text-center">
-                      <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
-                        {isExpanded ? '▼' : '▶'}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2 font-medium">
-                      {displayDate} <span className="text-xs text-gray-400">({weekday})</span>
-                      {(day.work_logs || []).length > 1 && <span className="text-xs text-gray-400 ml-1">({(day.work_logs || []).length}筆)</span>}
-                    </td>
+	                <>
+	                  <tr key={day.date} className={`border-b ${day.special_label ? 'bg-green-50' : topUpAmount > 0 ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+	                    <td className="px-3 py-2 text-center">
+	                      <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
+	                        {isExpanded ? '▼' : '▶'}
+	                      </button>
+	                    </td>
+	                    <td className="px-3 py-2 font-medium">
+	                      {displayDate} <span className="text-xs text-gray-400">({weekday})</span>
+	                      {(day.work_logs || []).length > 1 && <span className="text-xs text-gray-400 ml-1">({(day.work_logs || []).length}筆)</span>}
+	                    </td>
                     <td className="px-3 py-2 text-right font-mono">
                       ${Number(day.work_income).toLocaleString()}
                     </td>
@@ -1101,18 +1101,27 @@ function DailyCalculationView({
                     <td className="px-3 py-2 text-right font-mono font-bold">
                       ${Number(day.day_total).toLocaleString()}
                     </td>
-                    {isDraft && (
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          onClick={() => { setAddingDate(isAdding ? null : day.date); setSelectedAllowance(''); }}
-                          className="text-xs text-blue-500 hover:underline"
-                        >
-                          {isAdding ? '取消' : '+津貼'}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                  {isExpanded && (
+	                    {isDraft && (
+	                      <td className="px-3 py-2 text-center">
+	                        <button
+	                          onClick={() => { setAddingDate(isAdding ? null : day.date); setSelectedAllowance(''); }}
+	                          className="text-xs text-blue-500 hover:underline"
+	                        >
+	                          {isAdding ? '取消' : '+津貼'}
+	                        </button>
+	                      </td>
+	                    )}
+	                  </tr>
+	                  {day.special_label && (
+	                    <tr className="bg-green-50/50">
+	                      <td colSpan={dailyTableColumnCount} className="px-12 py-1.5">
+	                        <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">
+	                          {day.special_label}
+	                        </span>
+	                      </td>
+	                    </tr>
+	                  )}
+	                  {isExpanded && (
                     <tr className="bg-blue-50">
                       <td colSpan={dailyTableColumnCount} className="px-6 py-2">
                         <div className="text-xs space-y-2">

@@ -653,9 +653,14 @@ export class PayrollCalculationService {
     pwls: any[],
     salarySetting: any | null,
     dailyAllowances: any[],
+    options: {
+      dateFrom?: string;
+      dateTo?: string;
+      holidayDates?: { date: Date; name: string }[];
+      leaves?: any[];
+    } = {},
   ): any[] {
     const salaryType = salarySetting?.salary_type || 'daily';
-    // For monthly salary, do NOT apply daily base guarantee / top-up
     const baseSalary =
       salaryType === 'daily'
         ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
@@ -666,6 +671,7 @@ export class PayrollCalculationService {
         : 0;
     const baseSalaryNight =
       configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
+
     const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
       const date = toDateStr(pwl.scheduled_date);
@@ -678,17 +684,59 @@ export class PayrollCalculationService {
       if (!daMap.has(date)) daMap.set(date, []);
       daMap.get(date)!.push(da);
     }
+
+    const leaveMap = new Map<string, any>();
+    if (options.leaves) {
+      for (const leave of options.leaves) {
+        const start = new Date(leave.date_from);
+        const end = new Date(leave.date_to);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          leaveMap.set(toDateStr(d), leave);
+        }
+      }
+    }
+
+    const holidayMap = new Map<string, string>();
+    if (options.holidayDates) {
+      for (const h of options.holidayDates) {
+        holidayMap.set(toDateStr(h.date), h.name);
+      }
+    }
+
     const allDates = new Set([...dateMap.keys(), ...daMap.keys()]);
+    if (options.dateFrom && options.dateTo) {
+      const start = new Date(options.dateFrom);
+      const end = new Date(options.dateTo);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        allDates.add(toDateStr(d));
+      }
+    }
+
     const sortedDates = Array.from(allDates).sort();
     return sortedDates.map((date) => {
       const dayPwls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
-      // 判斷是否為法定假日：該天有 statutory_holiday 津貼且沒有工作記錄
+      const isSunday = new Date(date).getDay() === 0;
+      const leave = leaveMap.get(date);
+      const holidayName = holidayMap.get(date);
+
+      let specialLabel = '';
+      if (holidayName) {
+        specialLabel = holidayName;
+      } else if (isSunday) {
+        if (leave) {
+          const typeLabel = leave.leave_type === 'sick' ? '病假' : leave.leave_type === 'annual' ? '年假' : leave.leave_type;
+          specialLabel = `${typeLabel}${leave.reason ? ` (${leave.reason})` : ''}`;
+        } else {
+          specialLabel = '休息日（星期日）';
+        }
+      }
+
       const isHolidayDay =
         dayPwls.length === 0 &&
-        dayAllowances.some(
-          (da: any) => da.allowance_key === 'statutory_holiday',
-        );
+        (!!holidayName ||
+          dayAllowances.some((da: any) => da.allowance_key === 'statutory_holiday'));
+
       const dayShiftPwls = dayPwls.filter((pwl: any) => pwl.day_night !== '夜');
       const nightShiftPwls = dayPwls.filter((pwl: any) => pwl.day_night === '夜');
       const workIncome = dayPwls.reduce(
@@ -716,7 +764,6 @@ export class PayrollCalculationService {
         (da: any) => da.allowance_key === 'base_top_up_override',
       );
       const isTopUpOverridden = !!override;
-      // 假日天不補底薪（effectiveIncome=0），只顯示假日津貼；手動覆蓋只替代補底薪差額本身
       const topUpAmount = isTopUpOverridden
         ? Number(override.amount) || 0
         : autoTopUpAmount;
@@ -742,6 +789,7 @@ export class PayrollCalculationService {
       return {
         date,
         is_holiday: isHolidayDay,
+        special_label: specialLabel,
         work_logs: dayPwls.map((pwl: any) => ({
           id: pwl.id,
           service_type: pwl.service_type,
@@ -804,156 +852,31 @@ export class PayrollCalculationService {
     workLogs: any[],
     salarySetting: any | null,
     dailyAllowances: any[],
+    options: {
+      dateFrom?: string;
+      dateTo?: string;
+      holidayDates?: { date: Date; name: string }[];
+      leaves?: any[];
+    } = {},
   ): any[] {
-    const salaryType = salarySetting?.salary_type || 'daily';
-    // For monthly salary, do NOT apply daily base guarantee / top-up
-    const baseSalary =
-      salaryType === 'daily'
-        ? (salarySetting ? Number(salarySetting.base_salary) || 0 : 0)
-        : 0;
-    const configuredBaseSalaryNight =
-      salaryType === 'daily' && salarySetting
-        ? Number((salarySetting as any).base_salary_night) || 0
-        : 0;
-    const baseSalaryNight =
-      configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
-    const dateMap = new Map<string, any[]>();
-    for (const wl of workLogs) {
-      const date = toDateStr(wl.scheduled_date);
-      if (!dateMap.has(date)) dateMap.set(date, []);
-      dateMap.get(date)!.push(wl);
-    }
-    const daMap = new Map<string, any[]>();
-    for (const da of dailyAllowances) {
-      const date = toDateStr(da.date);
-      if (!daMap.has(date)) daMap.set(date, []);
-      daMap.get(date)!.push(da);
-    }
-    // 假日日期：daMap 中有 statutory_holiday 且 dateMap 中沒有工作記錄
-    const holidayDatesSet = new Set(
-      Array.from(daMap.entries())
-        .filter(
-          ([, das]) =>
-            das.some((da: any) => da.allowance_key === 'statutory_holiday'),
-        )
-        .filter(([date]) => !dateMap.has(date))
-        .map(([date]) => date),
+    return this.buildDailyCalculation(
+      workLogs.map((wl) => ({
+        ...wl,
+        line_amount:
+          (Number(wl._line_amount) || 0) +
+          (Number(wl._ot_line_amount) || 0) +
+          (Number(wl._mid_shift_line_amount) || 0),
+        ot_line_amount: Number(wl._ot_line_amount) || 0,
+        mid_shift_line_amount: Number(wl._mid_shift_line_amount) || 0,
+        matched_rate: wl._matched_rate,
+        matched_ot_rate: wl._matched_ot_rate,
+        matched_mid_shift_rate: wl._matched_mid_shift_rate,
+        price_match_status: wl._price_match_status,
+      })),
+      salarySetting,
+      dailyAllowances,
+      options,
     );
-    // 合並工作日期和假日日期
-    const allDatesSet = new Set([...dateMap.keys(), ...holidayDatesSet]);
-    const sortedDates = Array.from(allDatesSet).sort();
-    return sortedDates.map((date) => {
-      const dayWls = dateMap.get(date) || [];
-      const dayAllowances = daMap.get(date) || [];
-      const isHolidayDay = holidayDatesSet.has(date);
-      const dayShiftWls = dayWls.filter((wl: any) => wl.day_night !== '夜');
-      const nightShiftWls = dayWls.filter((wl: any) => wl.day_night === '夜');
-      const sumWorkLogIncome = (logs: any[]) =>
-        logs.reduce((sum: number, wl: any) => {
-          const base = Number(wl._line_amount) || 0;
-          const ot = Number(wl._ot_line_amount) || 0;
-          const mid = Number(wl._mid_shift_line_amount) || 0;
-          return sum + base + ot + mid;
-        }, 0);
-      const workIncome = sumWorkLogIncome(dayWls);
-      const dayWorkIncome = sumWorkLogIncome(dayShiftWls);
-      const nightWorkIncome = sumWorkLogIncome(nightShiftWls);
-      const autoDayTopUpAmount =
-        !isHolidayDay && dayShiftWls.length > 0 && baseSalary > 0
-          ? Math.max(baseSalary - dayWorkIncome, 0)
-          : 0;
-      const autoNightTopUpAmount =
-        !isHolidayDay && nightShiftWls.length > 0 && baseSalaryNight > 0
-          ? Math.max(baseSalaryNight - nightWorkIncome, 0)
-          : 0;
-      const autoTopUpAmount = autoDayTopUpAmount + autoNightTopUpAmount;
-      const override = dayAllowances.find(
-        (da: any) => da.allowance_key === 'base_top_up_override',
-      );
-      const isTopUpOverridden = !!override;
-      // 假日天不補底薪；手動覆蓋只替代補底薪差額本身
-      const topUpAmount = isTopUpOverridden
-        ? Number(override.amount) || 0
-        : autoTopUpAmount;
-      const dayTopUpAmount = isTopUpOverridden
-        ? topUpAmount
-        : autoDayTopUpAmount;
-      const nightTopUpAmount = isTopUpOverridden ? 0 : autoNightTopUpAmount;
-      const needsTopUp = !isHolidayDay && topUpAmount > 0;
-      const effectiveIncome = isHolidayDay ? 0 : workIncome + topUpAmount;
-      const displayDayAllowances = dayAllowances.filter(
-        (da: any) => da.allowance_key !== 'base_top_up_override',
-      );
-      const dailyAllowanceTotal = displayDayAllowances.reduce(
-        (sum: number, da: any) => sum + (Number(da.amount) || 0),
-        0,
-      );
-      const fixedAllowancesPerDay = this.buildDailyFixedAllowanceDisplay(
-        dayWls,
-        salarySetting,
-        dayAllowances,
-      );
-      const dayTotal = effectiveIncome + dailyAllowanceTotal;
-      return {
-        date,
-        is_holiday: isHolidayDay,
-        work_logs: dayWls.map((wl: any) => ({
-          id: wl.id,
-          service_type: wl.service_type,
-          day_night: wl.day_night,
-          start_location: wl.start_location,
-          end_location: wl.end_location,
-          machine_type: wl.machine_type,
-          tonnage: wl.tonnage,
-          equipment_number: wl.equipment_number,
-          client_name: wl.client?.name || wl.client_name || '',
-          client_short_name: wl.client?.code || null,
-          client_contract_no:
-            wl.quotation?.quotation_no || wl.client_contract_no || '',
-          quantity: Number(wl.quantity) || 1,
-          ot_quantity: Number(wl.ot_quantity) || 0,
-          is_mid_shift: wl.is_mid_shift || false,
-          matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
-          matched_ot_rate: wl._matched_ot_rate
-            ? Number(wl._matched_ot_rate)
-            : null,
-          matched_mid_shift_rate: wl._matched_mid_shift_rate
-            ? Number(wl._matched_mid_shift_rate)
-            : null,
-          line_amount:
-            (Number(wl._line_amount) || 0) +
-            (Number(wl._ot_line_amount) || 0) +
-            (Number(wl._mid_shift_line_amount) || 0),
-          base_line_amount: Number(wl._line_amount) || 0,
-          ot_line_amount: Number(wl._ot_line_amount) || 0,
-          mid_shift_line_amount: Number(wl._mid_shift_line_amount) || 0,
-          price_match_status: wl._price_match_status || 'unmatched',
-        })),
-        work_income: workIncome,
-        day_work_income: dayWorkIncome,
-        night_work_income: nightWorkIncome,
-        base_salary: baseSalary,
-        base_salary_night: baseSalaryNight,
-        needs_top_up: needsTopUp,
-        top_up_amount: topUpAmount,
-        auto_top_up_amount: autoTopUpAmount,
-        day_top_up_amount: dayTopUpAmount,
-        night_top_up_amount: nightTopUpAmount,
-        is_top_up_overridden: isTopUpOverridden,
-        top_up_override_id: override?.id ?? null,
-        effective_income: effectiveIncome,
-        daily_allowances: displayDayAllowances.map((da: any) => ({
-          id: da.id,
-          allowance_key: da.allowance_key,
-          allowance_name: da.allowance_name,
-          amount: Number(da.amount),
-          remarks: da.remarks,
-        })),
-        fixed_allowances_per_day: fixedAllowancesPerDay,
-        daily_allowance_total: dailyAllowanceTotal,
-        day_total: dayTotal,
-      };
-    });
   }
 
   // ══════════════════════════════════════════════════════════════
