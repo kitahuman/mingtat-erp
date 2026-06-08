@@ -29,6 +29,7 @@ import {
   SaveInvoicePricingDraftDto,
   CreateInvoiceRevisionDto,
   SetActiveInvoiceRevisionDto,
+  CreateFromQuotationDto,
 } from './dto/create-invoice.dto';
 
 type AuthenticatedInvoiceRequest = ExpressRequest & {
@@ -280,7 +281,7 @@ export class InvoicesController {
   @Post('from-quotation/:quotationId')
   createFromQuotation(
     @Param('quotationId') quotationId: number,
-    @Body() dto: CreateInvoiceDto,
+    @Body() dto: CreateFromQuotationDto,
     @Request() req: AuthenticatedInvoiceRequest,
   ) {
     return this.service.createFromQuotation(

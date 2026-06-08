@@ -99,6 +99,15 @@ export class UpdateInvoiceDto {
   items?: InvoiceItemInputDto[];
 }
 
+export class CreateFromQuotationDto {
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() due_date?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() tax_rate?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() retention_rate?: number;
+  @IsOptional() @IsString() payment_terms?: string;
+  @IsOptional() @IsString() remarks?: string;
+}
+
 export class CreateInvoiceRevisionDto {
   @IsOptional() @IsString() invoice_no?: string;
   @IsOptional() @IsString() date?: string;
