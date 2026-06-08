@@ -886,21 +886,20 @@ export default function InvoiceDetailPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 關聯報價單
               </label>
-              <select
+              <SearchableSelect
                 value={form.quotation_id || ''}
-                onChange={(e) =>
-                  setForm({ ...form, quotation_id: e.target.value })
+                onChange={(val) =>
+                  setForm({ ...form, quotation_id: val ? String(val) : '' })
                 }
-                className="input-field"
-              >
-                <option value="">— 無 —</option>
-                {quotations.map((q: any) => (
-                  <option key={q.id} value={q.id}>
-                    {q.quotation_no}
-                    {q.contract_name ? ` - ${q.contract_name}` : ''}
-                  </option>
-                ))}
-              </select>
+                options={quotations.map((q: any) => {
+                  const projectName = q.project_name || q.project?.project_name || q.contract_name;
+                  return {
+                    value: String(q.id),
+                    label: `${q.quotation_no}${projectName ? ` - ${projectName}` : ''}`,
+                  };
+                })}
+                placeholder="搜尋報價單..."
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
