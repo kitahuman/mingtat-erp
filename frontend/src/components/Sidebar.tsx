@@ -34,8 +34,14 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 
 const navEntries: NavEntry[] = [
   { href: '/dashboard', label: '儀表板', icon: '📊', pageKey: 'dashboard' },
-  { href: '/chat', label: 'AI 助手', icon: '🤖', pageKey: 'chat' },
-  { href: '/ai-knowledge', label: 'AI 知識庫', icon: '🧠', pageKey: 'ai-knowledge' },
+  {
+    label: 'AI 助手',
+    icon: '🤖',
+    items: [
+      { href: '/chat', label: '對話助手', icon: '💬', pageKey: 'chat' },
+      { href: '/ai-knowledge', label: 'AI 知識庫', icon: '🧠', pageKey: 'ai-knowledge' },
+    ],
+  },
   { href: '/work-logs', label: '工作記錄', icon: '📝', pageKey: 'work-logs' },
   {
     label: '文件管理',
@@ -238,6 +244,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const [issueModalOpen, setIssueModalOpen] = useState(false);
   useEffect(() => { installGlobalErrorHandlers(); }, []);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    'AI 助手': false,
     '文件管理': false,
     '工作紀錄核對': false,
     '公司內部資料': false,
