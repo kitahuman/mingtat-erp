@@ -262,15 +262,44 @@ export class AiPayrollExtractionService {
   }
 
   private getExtractionJsonSchema(): JsonRecord {
+    // OpenAI strict mode requirements:
+    // 1. All objects MUST have additionalProperties: false
+    // 2. All objects MUST have required array listing ALL property keys
+    // 3. Nullable types use anyOf: [{type: 'object', ...}, {type: 'null'}]
+    // 4. No type arrays like ['string', 'null'] — use anyOf instead
+    const flagsSchema = {
+      type: 'object' as const,
+      additionalProperties: false as const,
+      required: ['inherited', 'ambiguous', 'multipleValues', 'lowVisibility', 'note'],
+      properties: {
+        inherited: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+        ambiguous: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+        multipleValues: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+        lowVisibility: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+        note: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      },
+    };
+    const bboxSchema = {
+      type: 'object' as const,
+      additionalProperties: false as const,
+      required: ['x', 'y', 'width', 'height', 'page'],
+      properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+        page: { type: 'number' },
+      },
+    };
     return {
       type: 'object',
       additionalProperties: false,
       required: ['formType', 'formTypeConfidence', 'employeeNameHint', 'employeeId', 'entries'],
       properties: {
         formType: { type: 'string', enum: ['attendance_sheet', 'daily_report', 'unknown'] },
-        formTypeConfidence: { type: 'number', minimum: 0, maximum: 100 },
-        employeeNameHint: { type: ['string', 'null'] },
-        employeeId: { type: ['number', 'null'] },
+        formTypeConfidence: { type: 'number' },
+        employeeNameHint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        employeeId: { anyOf: [{ type: 'number' }, { type: 'null' }] },
         entries: {
           type: 'array',
           items: {
@@ -278,23 +307,12 @@ export class AiPayrollExtractionService {
             additionalProperties: false,
             required: ['rowNumber', 'workDate', 'employeeNameRaw', 'employeeId', 'overallConfidence', 'flags', 'fields'],
             properties: {
-              rowNumber: { type: ['number', 'null'] },
-              workDate: { type: ['string', 'null'] },
-              employeeNameRaw: { type: ['string', 'null'] },
-              employeeId: { type: ['number', 'null'] },
-              overallConfidence: { type: ['number', 'null'], minimum: 0, maximum: 100 },
-              flags: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  inherited: { type: ['boolean', 'null'] },
-                  ambiguous: { type: ['boolean', 'null'] },
-                  multipleValues: { type: ['boolean', 'null'] },
-                  lowVisibility: { type: ['boolean', 'null'] },
-                  note: { type: ['string', 'null'] },
-                },
-                required: ['inherited', 'ambiguous', 'multipleValues', 'lowVisibility', 'note'],
-              },
+              rowNumber: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+              workDate: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+              employeeNameRaw: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+              employeeId: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+              overallConfidence: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+              flags: flagsSchema,
               fields: {
                 type: 'array',
                 items: {
@@ -303,28 +321,11 @@ export class AiPayrollExtractionService {
                   required: ['fieldName', 'rawText', 'normalizedValue', 'confidence', 'bbox', 'flags'],
                   properties: {
                     fieldName: { type: 'string' },
-                    rawText: { type: ['string', 'null'] },
-                    normalizedValue: { type: ['string', 'null'] },
-                    confidence: { type: 'number', minimum: 0, maximum: 100 },
-                    bbox: {
-                      type: ['object', 'null'],
-                      additionalProperties: false,
-                      properties: {
-                        x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }, page: { type: 'number' },
-                      },
-                    },
-                    flags: {
-                      type: 'object',
-                      additionalProperties: false,
-                      properties: {
-                        inherited: { type: ['boolean', 'null'] },
-                        ambiguous: { type: ['boolean', 'null'] },
-                        multipleValues: { type: ['boolean', 'null'] },
-                        lowVisibility: { type: ['boolean', 'null'] },
-                        note: { type: ['string', 'null'] },
-                      },
-                      required: ['inherited', 'ambiguous', 'multipleValues', 'lowVisibility', 'note'],
-                    },
+                    rawText: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                    normalizedValue: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                    confidence: { type: 'number' },
+                    bbox: { anyOf: [bboxSchema, { type: 'null' }] },
+                    flags: flagsSchema,
                   },
                 },
               },
