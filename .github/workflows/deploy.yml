@@ -55,6 +55,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check migration SQL syntax
+        run: |
+          if grep -r '`' backend/prisma/migrations/*/migration.sql; then
+            echo "ERROR: Found MySQL backtick syntax in migrations. Use double quotes for PostgreSQL."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

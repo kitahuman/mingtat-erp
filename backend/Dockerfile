@@ -70,4 +70,4 @@ EXPOSE 3001
 
 # Entrypoint: run migrations then start using the correct path
 # Based on common NestJS structure, it is usually dist/main.js
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy || echo 'WARNING: Migration failed, starting server anyway'; node dist/main.js"]

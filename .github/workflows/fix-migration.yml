@@ -1,0 +1,22 @@
+name: Fix Failed Migration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fix failed migration on EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 43.199.108.130
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/mingtat-erp
+            docker exec mingtat-erp-backend npx prisma migrate resolve --rolled-back 20260608000000_add_payment_method_to_payment_in
+            docker compose pull
+            docker compose up -d
+            sleep 10
+            docker compose ps
