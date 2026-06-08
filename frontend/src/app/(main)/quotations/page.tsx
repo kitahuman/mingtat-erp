@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { usePageState } from '@/hooks/usePageState';
 import { useRouter } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
@@ -187,17 +188,30 @@ export default function QuotationsPage() {
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [sortBy, setSortBy] = useState('id');
-  const [sortOrder, setSortOrder] = useState('DESC');
-  const [columnFilters, setColumnFilters] = useState<
-    Record<string, Set<string>>
-  >({});
+  const { pageState, saveState, clearState } = usePageState({
+    page: 1,
+    search: '',
+    statusFilter: '',
+    typeFilter: '',
+    dateFrom: '',
+    dateTo: '',
+    sortBy: 'id',
+    sortOrder: 'DESC',
+    columnFilters: {},
+  });
+
+  const { page, search, statusFilter, typeFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters } = pageState;
+
+  // Helper to update state and save it
+  const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
+  const setSearch = (newSearch: string) => saveState({ ...pageState, search: newSearch });
+  const setStatusFilter = (newStatusFilter: string) => saveState({ ...pageState, statusFilter: newStatusFilter });
+  const setTypeFilter = (newTypeFilter: string) => saveState({ ...pageState, typeFilter: newTypeFilter });
+  const setDateFrom = (newDateFrom: string) => saveState({ ...pageState, dateFrom: newDateFrom });
+  const setDateTo = (newDateTo: string) => saveState({ ...pageState, dateTo: newDateTo });
+  const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
+  const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
+  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => saveState({ ...pageState, columnFilters: newColumnFilters });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePageState } from '@/hooks/usePageState';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
@@ -248,9 +249,7 @@ export default function InvoicesPage() {
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void' | 'statements'>('invoices');
   const [statementRecords, setStatementRecords] = useState<any[]>([]);
   const [statementRecordsTotal, setStatementRecordsTotal] = useState(0);
@@ -261,16 +260,30 @@ export default function InvoicesPage() {
     outstanding: 0,
   });
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState('');
-  const [clientFilter, setClientFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('DESC');
-  const [columnFilters, setColumnFilters] = useState<
-    Record<string, Set<string>>
-  >({});
+  const { pageState, saveState, clearState } = usePageState({
+    page: 1,
+    search: '',
+    statusFilter: '',
+    clientFilter: '',
+    dateFrom: '',
+    dateTo: '',
+    sortBy: 'created_at',
+    sortOrder: 'DESC',
+    columnFilters: {},
+  });
+
+  const { page, search, statusFilter, clientFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters } = pageState;
+
+  // Helper to update state and save it
+  const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
+  const setSearch = (newSearch: string) => saveState({ ...pageState, search: newSearch });
+  const setStatusFilter = (newStatusFilter: string) => saveState({ ...pageState, statusFilter: newStatusFilter });
+  const setClientFilter = (newClientFilter: string) => saveState({ ...pageState, clientFilter: newClientFilter });
+  const setDateFrom = (newDateFrom: string) => saveState({ ...pageState, dateFrom: newDateFrom });
+  const setDateTo = (newDateTo: string) => saveState({ ...pageState, dateTo: newDateTo });
+  const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
+  const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
+  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => saveState({ ...pageState, columnFilters: newColumnFilters });
 
   // Reference data
   const [partners, setPartners] = useState<any[]>([]);

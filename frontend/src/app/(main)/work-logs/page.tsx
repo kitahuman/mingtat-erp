@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePageState } from '@/hooks/usePageState';
 import {
   workLogsApi,
   companiesApi,
@@ -296,33 +297,44 @@ export default function WorkLogsPage() {
   // ── List state ──────────────────────────────────────────────
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(25);
   const [loading, setLoading] = useState(false);
 
-  // ── Sort state ───────────────────────────────────────────────
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const { pageState, saveState, clearState } = usePageState({
+    page: 1,
+    limit: 25,
+    sortBy: 'created_at',
+    sortOrder: 'DESC',
+    filterPublisher: [],
+    filterStatus: [],
+    filterCompany: [],
+    filterClient: [],
+    filterQuotation: [],
+    filterContract: [],
+    filterEmployee: [],
+    filterEquipment: '',
+    filterDateFrom: '',
+    filterDateTo: '',
+    columnFilters: {},
+  });
 
-  // ── Filters ───────────────────────────────────────────────
-  const [filterPublisher, setFilterPublisher] = useState<(string | number)[]>(
-    [],
-  );
-  const [filterStatus, setFilterStatus] = useState<(string | number)[]>([]);
-  const [filterCompany, setFilterCompany] = useState<(string | number)[]>([]);
-  const [filterClient, setFilterClient] = useState<(string | number)[]>([]);
-  const [filterQuotation, setFilterQuotation] = useState<(string | number)[]>(
-    [],
-  );
-  const [filterContract, setFilterContract] = useState<(string | number)[]>([]);
-  const [filterEmployee, setFilterEmployee] = useState<(string | number)[]>([]);
-  const [filterEquipment, setFilterEquipment] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
-  // ── Column header filters (漏斗圖標篩選器) ─────────────────
-  const [columnFilters, setColumnFilters] = useState<
-    Record<string, Set<string>>
-  >({});
+  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo, columnFilters } = pageState;
+
+  // Helper to update state and save it
+  const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
+  const setLimit = (newLimit: number) => saveState({ ...pageState, limit: newLimit });
+  const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
+  const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
+  const setFilterPublisher = (newFilterPublisher: (string | number)[]) => saveState({ ...pageState, filterPublisher: newFilterPublisher });
+  const setFilterStatus = (newFilterStatus: (string | number)[]) => saveState({ ...pageState, filterStatus: newFilterStatus });
+  const setFilterCompany = (newFilterCompany: (string | number)[]) => saveState({ ...pageState, filterCompany: newFilterCompany });
+  const setFilterClient = (newFilterClient: (string | number)[]) => saveState({ ...pageState, filterClient: newFilterClient });
+  const setFilterQuotation = (newFilterQuotation: (string | number)[]) => saveState({ ...pageState, filterQuotation: newFilterQuotation });
+  const setFilterContract = (newFilterContract: (string | number)[]) => saveState({ ...pageState, filterContract: newFilterContract });
+  const setFilterEmployee = (newFilterEmployee: (string | number)[]) => saveState({ ...pageState, filterEmployee: newFilterEmployee });
+  const setFilterEquipment = (newFilterEquipment: string) => saveState({ ...pageState, filterEquipment: newFilterEquipment });
+  const setFilterDateFrom = (newFilterDateFrom: string) => saveState({ ...pageState, filterDateFrom: newFilterDateFrom });
+  const setFilterDateTo = (newFilterDateTo: string) => saveState({ ...pageState, filterDateTo: newFilterDateTo });
+  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => saveState({ ...pageState, columnFilters: newColumnFilters });
 
   // ── Dirty tracking (Airtable-style) ─────────────────────────
   // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields
@@ -1120,27 +1132,21 @@ export default function WorkLogsPage() {
 
   // ── Sort handler ──────────────────────────────────────────
   const handleSort = useCallback(
-    (field: string) => {
+    (field: string, order: "ASC" | "DESC") => {
       if (
         hasDirty &&
-        !confirm('有未儲存的修改，切換排序將會丟失。確定要繼續嗎？')
+        !confirm("有未儲存的修改，切換排序將會丟失。確定要繼續嗎？")
       )
         return;
       if (hasDirty) {
         unlockDirtyRows();
         setDirtyRows(new Map());
       }
-      setSortBy((prev) => {
-        if (prev === field) {
-          setSortOrder((o) => (o === 'ASC' ? 'DESC' : 'ASC'));
-          return prev;
-        }
-        setSortOrder('ASC');
-        return field;
-      });
+      setSortBy(field);
+      setSortOrder(order);
       setPage(1);
     },
-    [hasDirty, unlockDirtyRows],
+    [hasDirty, unlockDirtyRows, setSortBy, setSortOrder, setPage],
   );
 
   // ── Dirty tracking ─────────────────────────────────────────
@@ -3051,7 +3057,13 @@ export default function WorkLogsPage() {
                       <th
                         key={col.key}
                         onClick={
-                          sortField ? () => handleSort(sortField) : undefined
+                          sortField
+                            ? () =>
+                                handleSort(
+                                  sortField,
+                                  isActive && sortOrder === 'ASC' ? 'DESC' : 'ASC',
+                                )
+                            : undefined
                         }
                         className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width} ${
                           sortField
@@ -3078,15 +3090,10 @@ export default function WorkLogsPage() {
                               data={rows}
                               activeFilters={columnFilters}
                               onFilterChange={(key, vals) => {
-                                setColumnFilters((prev) => {
-                                  const next = { ...prev };
-                                  if (vals === null) {
-                                    delete next[key];
-                                  } else {
-                                    next[key] = vals;
-                                  }
-                                  return next;
-                                });
+                                 setColumnFilters({
+                                   ...columnFilters,
+                                   [key]: new Set(vals),
+                                 });
                                 setPage(1);
                               }}
                               serverSide={true}
