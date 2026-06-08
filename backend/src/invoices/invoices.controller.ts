@@ -246,8 +246,9 @@ export class InvoicesController {
   createRevision(
     @Param('id') id: number,
     @Body() dto: CreateInvoiceRevisionDto,
+    @Request() req: AuthenticatedInvoiceRequest,
   ) {
-    return this.service.createRevision(Number(id), dto);
+    return this.service.createRevision(Number(id), dto, this.getUserId(req));
   }
 
   @Patch(':id/set-active')

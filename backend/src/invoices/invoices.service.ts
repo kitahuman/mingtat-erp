@@ -789,7 +789,7 @@ export class InvoicesService {
     return invoice;
   }
 
-  async createRevision(id: number, dto: CreateInvoiceRevisionDto = {}) {
+  async createRevision(id: number, dto: CreateInvoiceRevisionDto = {}, userId?: number) {
     const source = await this.prisma.invoice.findUnique({
       where: { id },
       include: { items: { orderBy: { sort_order: 'asc' } } },
@@ -839,6 +839,7 @@ export class InvoicesService {
           project_id: source.project_id,
           quotation_id: source.quotation_id,
           company_id: source.company_id,
+          created_by: userId || null,
           status: source.status,
           subtotal: source.subtotal,
           tax_rate: source.tax_rate,
@@ -984,6 +985,7 @@ export class InvoicesService {
         project_id: dto.project_id ? Number(dto.project_id) : null,
         quotation_id: dto.quotation_id ? Number(dto.quotation_id) : null,
         company_id: companyId,
+        created_by: userId || null,
         retention_rate: retentionRate,
         retention_amount,
         other_charges:
@@ -1113,6 +1115,7 @@ export class InvoicesService {
         project_id: quotation.project_id,
         quotation_id: quotationId,
         company_id: quotation.company_id,
+        created_by: userId || null,
         retention_rate: retentionRate,
         retention_amount,
         tax_rate: 0,
