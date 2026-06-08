@@ -35,10 +35,16 @@ type AuthenticatedInvoiceRequest = ExpressRequest & {
   user?: { id?: number; userId?: number };
 };
 
+type InvoiceBatchOperationBody = {
+  invoice_ids?: number[];
+};
+
 type InvoiceListQuery = {
   page?: number;
   limit?: number;
   status?: string;
+  status_ne?: string;
+  invoice_type?: string;
   client_id?: number | string;
   project_id?: number | string;
   date_from?: string;
@@ -78,6 +84,16 @@ export class InvoicesController {
   @Get()
   findAll(@Query() query: InvoiceListQuery) {
     return this.service.findAll(query);
+  }
+
+  @Post('batch-void')
+  batchVoid(@Body() body: InvoiceBatchOperationBody) {
+    return this.service.batchVoid(body.invoice_ids || []);
+  }
+
+  @Post('batch-move-to-statement')
+  batchMoveToStatement(@Body() body: InvoiceBatchOperationBody) {
+    return this.service.batchMoveToStatement(body.invoice_ids || []);
   }
 
   @Get('filter-options/:column')

@@ -2124,6 +2124,7 @@ model Invoice {
   invoice_title                String? // 發票名稱/標題
   client_contract_no           String? // 客戶合約編號
   status                       String    @default("draft") @db.VarChar(30) // draft | issued | partially_paid | paid | void
+  invoice_type                 String    @default("invoice") // values: "invoice" or "statement"
   subtotal                     Decimal   @default(0) @db.Decimal(14, 2)
   tax_rate                     Decimal   @default(0) @db.Decimal(5, 2) // kept for backward compat
   tax_amount                   Decimal   @default(0) @db.Decimal(14, 2) // kept for backward compat
@@ -2170,6 +2171,7 @@ model Invoice {
   @@index([project_id])
   @@index([company_id])
   @@index([status])
+  @@index([invoice_type])
   @@index([date])
   @@index([invoice_parent_id])
   @@index([invoice_is_active])

@@ -55,6 +55,7 @@ type InvoiceListQuery = {
   limit?: number;
   status?: string;
   status_ne?: string;
+  invoice_type?: string;
   client_id?: number | string;
   project_id?: number | string;
   date_from?: string;
@@ -481,6 +482,7 @@ export class InvoicesService {
       invoice_is_active: true,
     };
     if (query.status) where.status = String(query.status);
+    if (query.invoice_type) where.invoice_type = String(query.invoice_type);
     if (query.status_ne) {
       where.AND = [
         ...(Array.isArray(where.AND) ? where.AND : []),
@@ -594,6 +596,48 @@ export class InvoicesService {
   }
 
   // ── CRUD ─────────────────────────────────────────────────────
+
+  async batchVoid(invoiceIds: number[]) {
+    if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+      throw new BadRequestException('請選擇要作廢的發票');
+    }
+
+    const ids = invoiceIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (ids.length === 0) {
+      throw new BadRequestException('發票 ID 無效');
+    }
+
+    const result = await this.prisma.invoice.updateMany({
+      where: { id: { in: ids }, deleted_at: null },
+      data: { status: 'void' },
+    });
+
+    return { success_count: result.count };
+  }
+
+  async batchMoveToStatement(invoiceIds: number[]) {
+    if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+      throw new BadRequestException('請選擇要移入發票清單的發票');
+    }
+
+    const ids = invoiceIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (ids.length === 0) {
+      throw new BadRequestException('發票 ID 無效');
+    }
+
+    const result = await this.prisma.invoice.updateMany({
+      where: { id: { in: ids }, deleted_at: null },
+      data: { invoice_type: 'statement' },
+    });
+
+    return { success_count: result.count };
+  }
 
   async findAll(query: InvoiceListQuery) {
     const page = Number(query.page) || 1;

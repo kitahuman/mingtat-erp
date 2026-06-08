@@ -1324,6 +1324,10 @@ export const invoicesApi = {
   update: (id: number, data: any) => api.put(`/invoices/${id}`, data),
   updateStatus: (id: number, status: string) =>
     api.patch(`/invoices/${id}/status`, { status }),
+  batchVoid: (invoiceIds: number[]) =>
+    api.post('/invoices/batch-void', { invoice_ids: invoiceIds }),
+  batchMoveToStatement: (invoiceIds: number[]) =>
+    api.post('/invoices/batch-move-to-statement', { invoice_ids: invoiceIds }),
   recordPayment: (id: number, data: any) =>
     api.post(`/invoices/${id}/record-payment`, data),
   deletePayment: (id: number, paymentId: number) =>

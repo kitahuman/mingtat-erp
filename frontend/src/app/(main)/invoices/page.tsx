@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   invoicesApi,
@@ -252,7 +251,10 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void'>('invoices');
+  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void' | 'statements'>('invoices');
+  const [statementRecords, setStatementRecords] = useState<any[]>([]);
+  const [statementRecordsTotal, setStatementRecordsTotal] = useState(0);
+  const [statementRecordsLoading, setStatementRecordsLoading] = useState(false);
   const [aggregateTotals, setAggregateTotals] = useState({
     totalAmount: 0,
     paidAmount: 0,
@@ -314,7 +316,13 @@ export default function InvoicesPage() {
       page,
       limit: 50,
       status: invoiceTab === 'void' ? 'void' : statusFilter || undefined,
-      status_ne: invoiceTab === 'invoices' ? 'void' : undefined,
+      status_ne: invoiceTab === 'void' ? undefined : 'void',
+      invoice_type:
+        invoiceTab === 'invoices'
+          ? 'invoice'
+          : invoiceTab === 'statements'
+            ? 'statement'
+            : undefined,
       client_id: clientFilter || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
@@ -338,23 +346,51 @@ export default function InvoicesPage() {
     ],
   );
 
+  const buildStatementRecordParams = useCallback(
+    () => ({
+      page,
+      limit: 50,
+      client_id: clientFilter || undefined,
+      period_from: dateFrom || undefined,
+      period_to: dateTo || undefined,
+      search: search || undefined,
+      sortBy: 'created_at',
+      sortOrder: 'DESC',
+    }),
+    [page, clientFilter, dateFrom, dateTo, search],
+  );
+
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setStatementRecordsLoading(invoiceTab === 'statements');
     try {
-      const res = await invoicesApi.list(buildListParams());
-      setData(res.data?.data || []);
-      setTotal(res.data?.total || 0);
+      const [invoiceRes, statementRes] = await Promise.all([
+        invoicesApi.list(buildListParams()),
+        invoiceTab === 'statements'
+          ? invoiceStatementsApi.list(buildStatementRecordParams())
+          : Promise.resolve(null),
+      ]);
+      setData(invoiceRes.data?.data || []);
+      setTotal(invoiceRes.data?.total || 0);
       setAggregateTotals({
-        totalAmount: Number(res.data?.sum_total_amount) || 0,
-        paidAmount: Number(res.data?.sum_paid_amount) || 0,
-        outstanding: Number(res.data?.sum_outstanding) || 0,
+        totalAmount: Number(invoiceRes.data?.sum_total_amount) || 0,
+        paidAmount: Number(invoiceRes.data?.sum_paid_amount) || 0,
+        outstanding: Number(invoiceRes.data?.sum_outstanding) || 0,
       });
+      if (statementRes) {
+        setStatementRecords(statementRes.data?.data || []);
+        setStatementRecordsTotal(statementRes.data?.total || 0);
+      } else {
+        setStatementRecords([]);
+        setStatementRecordsTotal(0);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+      setStatementRecordsLoading(false);
     }
-  }, [buildListParams]);
+  }, [buildListParams, buildStatementRecordParams, invoiceTab]);
 
   const handleColumnFilterChange = useCallback(
     (filters: Record<string, Set<string>>) => {
@@ -554,6 +590,36 @@ export default function InvoicesPage() {
       period_end: dates[dates.length - 1] || '',
     });
     setShowStatementCreate(true);
+  };
+
+  const handleBatchVoid = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('請先選擇發票');
+      return;
+    }
+    if (!confirm(`確定要將 ${selectedInvoiceIds.length} 張發票標記為已作廢？`)) return;
+    try {
+      await invoicesApi.batchVoid(selectedInvoiceIds);
+      setSelectedInvoiceRows({});
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量作廢失敗');
+    }
+  };
+
+  const handleBatchMoveToStatement = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('請先選擇發票');
+      return;
+    }
+    if (!confirm(`確定要將 ${selectedInvoiceIds.length} 張發票移入發票清單？`)) return;
+    try {
+      await invoicesApi.batchMoveToStatement(selectedInvoiceIds);
+      setSelectedInvoiceRows({});
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '移入發票清單失敗');
+    }
   };
 
   const handleCreateStatement = async () => {
@@ -774,12 +840,22 @@ export default function InvoicesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">發票管理</h1>
-          <p className="text-gray-500 mt-1">共 {total} 張發票</p>
+          <p className="text-gray-500 mt-1">
+            {invoiceTab === 'statements'
+              ? `共 ${total} 張已移入清單發票，另有 ${statementRecordsTotal} 份發票清單`
+              : `共 ${total} 張發票`}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {selectedInvoices.length > 0 && !pageReadOnly && (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-gray-600">已選 {selectedInvoices.length} 張</span>
+              <button onClick={handleBatchVoid} className="btn-secondary">
+                批量作廢
+              </button>
+              <button onClick={handleBatchMoveToStatement} className="btn-secondary">
+                移入發票清單
+              </button>
               <button onClick={openStatementCreate} className="btn-secondary">
                 新增發票清單
               </button>
@@ -805,6 +881,7 @@ export default function InvoicesPage() {
             onClick={() => {
               setInvoiceTab('invoices');
               setStatusFilter('');
+              setSelectedInvoiceRows({});
               setPage(1);
             }}
             className={`border-b-2 px-1 pb-3 text-sm ${invoiceTab === 'invoices'
@@ -819,6 +896,7 @@ export default function InvoicesPage() {
             onClick={() => {
               setInvoiceTab('void');
               setStatusFilter('');
+              setSelectedInvoiceRows({});
               setPage(1);
             }}
             className={`border-b-2 px-1 pb-3 text-sm ${invoiceTab === 'void'
@@ -828,12 +906,21 @@ export default function InvoicesPage() {
           >
             已作廢
           </button>
-          <Link
-            href="/invoice-statements"
-            className="border-b-2 border-transparent px-1 pb-3 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceTab('statements');
+              setStatusFilter('');
+              setSelectedInvoiceRows({});
+              setPage(1);
+            }}
+            className={`border-b-2 px-1 pb-3 text-sm ${invoiceTab === 'statements'
+              ? 'border-primary-600 font-semibold text-primary-600'
+              : 'border-transparent font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
           >
             發票清單
-          </Link>
+          </button>
         </nav>
       </div>
 
@@ -971,6 +1058,77 @@ export default function InvoicesPage() {
           }}
         />
       </div>
+
+      {invoiceTab === 'statements' && (
+        <div className="card mt-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">已產生發票清單</h2>
+              <p className="text-sm text-gray-500">
+                顯示由新版清單功能產生的 InvoiceStatement 記錄，共 {statementRecordsTotal} 份。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/invoice-statements')}
+              className="btn-secondary"
+            >
+              管理發票清單
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">清單編號</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">標題</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">客戶</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">期間</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">發票數量</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">總金額</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">狀態</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {statementRecordsLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">載入中...</td>
+                  </tr>
+                ) : statementRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">沒有已產生的發票清單</td>
+                  </tr>
+                ) : (
+                  statementRecords.map((statement: any) => (
+                    <tr
+                      key={statement.id}
+                      onClick={() => router.push(`/invoice-statements/${statement.id}`)}
+                      className="cursor-pointer hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-3 font-mono font-medium text-primary-600">{statement.statement_no || '-'}</td>
+                      <td className="px-4 py-3 text-gray-900">{statement.statement_title || '-'}</td>
+                      <td className="px-4 py-3 text-gray-900">
+                        {statement.client?.code ? `${statement.client.code} - ${statement.client.name}` : statement.client?.name || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {fmtDate(statement.statement_period_start)} 至 {fmtDate(statement.statement_period_end)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{Number(statement.statement_invoice_count || 0)}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{fmt$(statement.statement_total_amount)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${statement.statement_status === 'issued' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                          {statement.statement_status === 'issued' ? '已發出' : statement.statement_status === 'draft' ? '草稿' : statement.statement_status || '-'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Create Invoice Statement Modal */}
       {showStatementCreate && (
