@@ -1,0 +1,23 @@
+name: Run One-off SQL
+on:
+  workflow_dispatch:
+    inputs:
+      sql:
+        description: 'SQL to execute'
+        required: true
+        type: string
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute SQL on EC2 via Docker
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: 43.199.108.130
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/mingtat-erp
+            docker exec mingtat-erp-backend sh -c 'npx prisma db execute --stdin <<EOSQL
+            ${{ github.event.inputs.sql }}
+            EOSQL'
