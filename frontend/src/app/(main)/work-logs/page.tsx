@@ -86,6 +86,78 @@ const getMonthRange = (
   };
 };
 
+const normalizeInvoiceFieldValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const getWorkLogInvoiceDate = (row: any): Date | null => {
+  const rawDate = row.date || row.scheduled_date;
+  if (!rawDate) return null;
+
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
+const getWorkLogClientContractNo = (row: any): string => {
+  return normalizeInvoiceFieldValue(
+    row.client_contract_no || row.contract?.contract_no,
+  );
+};
+
+const getMostFrequentClientContractNo = (rows: any[]): string => {
+  const contractCounts = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const contractNo = getWorkLogClientContractNo(row);
+    if (!contractNo) return;
+    contractCounts.set(contractNo, (contractCounts.get(contractNo) || 0) + 1);
+  });
+
+  let selectedContractNo = '';
+  let highestCount = 0;
+  contractCounts.forEach((count, contractNo) => {
+    if (count > highestCount) {
+      selectedContractNo = contractNo;
+      highestCount = count;
+    }
+  });
+
+  return selectedContractNo;
+};
+
+const buildInvoiceTitleFromWorkLogs = (
+  rows: any[],
+  contractNo: string,
+): string => {
+  if (!contractNo) return '';
+
+  const dates = rows
+    .map(getWorkLogInvoiceDate)
+    .filter((date): date is Date => Boolean(date))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (dates.length === 0) return '';
+
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const firstYear = first.getFullYear();
+  const lastYear = last.getFullYear();
+  const firstMonth = first.getMonth() + 1;
+  const lastMonth = last.getMonth() + 1;
+
+  if (firstYear === lastYear && firstMonth === lastMonth) {
+    return `${firstYear}年${firstMonth}月份 - ${contractNo}`;
+  }
+
+  if (firstYear === lastYear) {
+    return `${firstYear}年${firstMonth}-${lastMonth}月份 - ${contractNo}`;
+  }
+
+  return `${firstYear}年${firstMonth}月至${lastYear}年${lastMonth}月份 - ${contractNo}`;
+};
+
 const SOURCE_LABELS: Record<string, { text: string; cls: string }> = {
   attendance: { text: '打卡', cls: 'bg-amber-100 text-amber-700' },
   manual: { text: '手動', cls: 'bg-gray-100 text-gray-600' },
@@ -1341,10 +1413,45 @@ export default function WorkLogsPage() {
     const workLogIds = Array.from(selected);
 
     if (invoiceLinkMode === 'new') {
+      const selectedWorkLogs = workLogIds
+        .map((id) => rows.find((row) => Number(row.id) === Number(id)))
+        .filter((row): row is any => Boolean(row))
+        .map((row) => ({ ...row, ...(dirtyRows.get(row.id) || {}) }));
+
+      if (selectedWorkLogs.length !== workLogIds.length) {
+        showToast('無法取得所選工作紀錄資料，請重新整理後再試');
+        return;
+      }
+
+      const companyIds = new Set(
+        selectedWorkLogs.map((row) => normalizeInvoiceFieldValue(row.company_id)),
+      );
+      const clientIds = new Set(
+        selectedWorkLogs.map((row) => normalizeInvoiceFieldValue(row.client_id)),
+      );
+
+      if (companyIds.size > 1 || clientIds.size > 1) {
+        showToast('所選工作紀錄的公司或客戶不一致，無法合併建立發票');
+        return;
+      }
+
+      const companyId = companyIds.values().next().value || '';
+      const clientId = clientIds.values().next().value || '';
+      const clientContractNo = getMostFrequentClientContractNo(selectedWorkLogs);
+      const invoiceTitle = buildInvoiceTitleFromWorkLogs(
+        selectedWorkLogs,
+        clientContractNo,
+      );
       const params = new URLSearchParams({
         work_log_ids: workLogIds.join(','),
         mode: 'link-only',
       });
+
+      if (companyId) params.set('company_id', companyId);
+      if (clientId) params.set('client_id', clientId);
+      if (clientContractNo) params.set('client_contract_no', clientContractNo);
+      if (invoiceTitle) params.set('invoice_title', invoiceTitle);
+
       window.location.href = `/invoices?${params.toString()}`;
       return;
     }

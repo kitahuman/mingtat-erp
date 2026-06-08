@@ -458,11 +458,19 @@ export default function InvoicesPage() {
       .split(',')
       .map((id) => Number(id))
       .filter((id) => Number.isInteger(id) && id > 0);
+    const companyId = params.get('company_id') || '';
+    const clientId = params.get('client_id') || '';
+    const clientContractNo = params.get('client_contract_no') || '';
+    const invoiceTitle = params.get('invoice_title') || '';
+
     setWorkLogIdsFromQuery(ids);
     setShowCreate(true);
     setForm((prev) => ({
       ...prev,
-      invoice_title: prev.invoice_title || '工作紀錄發票',
+      company_id: companyId || prev.company_id,
+      client_id: clientId || prev.client_id,
+      client_contract_no: clientContractNo || prev.client_contract_no,
+      invoice_title: invoiceTitle || prev.invoice_title || '工作紀錄發票',
     }));
   }, []);
 
