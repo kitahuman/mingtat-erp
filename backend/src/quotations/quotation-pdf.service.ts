@@ -20,6 +20,12 @@ export interface QuotationPdfOptions {
   overrideClientAddress?: string;
   overrideClientContact?: string;
   overrideClientPhone?: string;
+  fontSizes?: {
+    title?: number;
+    itemName?: number;
+    itemDesc?: number;
+    paymentTerms?: number;
+  };
 }
 
 @Injectable()
@@ -96,6 +102,30 @@ export class QuotationPdfService {
     const showClientContact = options.showClientContact ?? true;
     const showClientInfo = options.showClientInfo ?? true;
 
+    // Get system defaults
+    const systemSettings = await this.prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'quotation_pdf_title_font_size',
+            'quotation_pdf_item_name_font_size',
+            'quotation_pdf_item_desc_font_size',
+            'quotation_pdf_payment_terms_font_size',
+          ],
+        },
+      },
+    });
+    const defaults = Object.fromEntries(systemSettings.map((s) => [s.key, s.value]));
+
+    // Merge font sizes: options > document override > system default
+    const docFontSizes = (quotation.pdf_font_sizes as any) || {};
+    const finalFontSizes = {
+      title: Number(options.fontSizes?.title || docFontSizes.title || defaults['quotation_pdf_title_font_size'] || 25),
+      itemName: Number(options.fontSizes?.itemName || docFontSizes.itemName || defaults['quotation_pdf_item_name_font_size'] || 13),
+      itemDesc: Number(options.fontSizes?.itemDesc || docFontSizes.itemDesc || defaults['quotation_pdf_item_desc_font_size'] || 9.3),
+      paymentTerms: Number(options.fontSizes?.paymentTerms || docFontSizes.paymentTerms || defaults['quotation_pdf_payment_terms_font_size'] || 11.2),
+    };
+
     return {
       quotation,
       html: this.buildHtml(quotation as any, {
@@ -112,6 +142,7 @@ export class QuotationPdfService {
         overrideClientAddress: options.overrideClientAddress ?? '',
         overrideClientContact: options.overrideClientContact ?? '',
         overrideClientPhone: options.overrideClientPhone ?? '',
+        fontSizes: finalFontSizes,
       }),
     };
   }
@@ -216,7 +247,7 @@ export class QuotationPdfService {
     .logo-img { max-width: 175px; max-height: 58px; object-fit: contain; }
     .logo-placeholder { width: 175px; height: 48px; margin-left: auto; border: 1.4px solid ${theme}; color: ${theme}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; display: table; text-align: center; background: ${themeLightBg}; }
     .logo-placeholder span { display: table-cell; vertical-align: middle; padding: 7px; line-height: 1.25; }
-    .invoice-title { margin-top: 10px; color: ${theme}; font-size: 25px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
+    .invoice-title { margin-top: 10px; color: ${theme}; font-size: ${(options as any).fontSizes.title}px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
     .subtle-line { border-top: 1px solid ${themeLightBorder}; margin: 8px 0 12px 0; }
     .info-row { margin-bottom: 12px; }
     .client-section { width: 58%; padding-right: 16px; }
@@ -241,15 +272,15 @@ export class QuotationPdfService {
     .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
     .items .center { text-align: center; }
     .items .right { text-align: right; white-space: nowrap; }
-    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
-    .sub-lines { color: #52606d; font-size: 9.3px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
+    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.itemName}px; }
+    .sub-lines { color: #52606d; font-size: ${(options as any).fontSizes.itemDesc}px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
     .after-table { margin-top: 9px; page-break-inside: avoid; display: flex; flex-direction: column; }
     .terms-section { width: 100%; }
-    .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 52px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 52px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.paymentTerms}px; }
     .footer-row { margin-top: 20px; page-break-inside: avoid; }
     .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }

@@ -875,6 +875,7 @@ model Quotation {
   exclusions                String?   @db.Text
   external_remark           String?   @db.Text
   internal_remark           String?   @db.Text
+  pdf_font_sizes            Json?     @db.JsonB
   created_at                DateTime  @default(now())
   updated_at                DateTime  @default(now()) @updatedAt
   deleted_at                DateTime? // 軯刪除時間時戳
@@ -2145,6 +2146,7 @@ model Invoice {
   invoice_parent_id            Int?
   invoice_revision_number      Int       @default(0)
   invoice_is_active            Boolean   @default(true)
+  pdf_font_sizes               Json?     @db.JsonB
   created_at                   DateTime  @default(now())
   updated_at                   DateTime  @default(now()) @updatedAt
   deleted_at                   DateTime? // 軯刪除時間時戳

@@ -313,7 +313,7 @@ export class InvoicePdfService {
     .logo-img { max-width: 175px; max-height: 58px; object-fit: contain; }
     .logo-placeholder { width: 175px; height: 48px; margin-left: auto; border: 1.4px solid ${theme}; color: ${theme}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; display: table; text-align: center; background: ${themeLightBg}; }
     .logo-placeholder span { display: table-cell; vertical-align: middle; padding: 7px; line-height: 1.25; }
-    .invoice-title { margin-top: 10px; color: ${theme}; font-size: 25px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
+    .invoice-title { margin-top: 10px; color: ${theme}; font-size: ${(options as any).fontSizes.title}px; font-weight: 800; letter-spacing: 1.2px; text-align: right; }
     .subtle-line { border-top: 1px solid ${themeLightBorder}; margin: 8px 0 12px 0; }
     .info-row { margin-bottom: 12px; }
     .client-section { width: 58%; padding-right: 16px; }
@@ -339,8 +339,8 @@ export class InvoicePdfService {
     .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
     .items .center { text-align: center; }
     .items .right { text-align: right; }
-    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
-    .sub-lines { color: #52606d; font-size: 9.3px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
+    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.itemName}px; }
+    .sub-lines { color: #52606d; font-size: ${(options as any).fontSizes.itemDesc}px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
@@ -349,7 +349,7 @@ export class InvoicePdfService {
     .after-table { margin-top: 9px; display: flex; flex-direction: column; }
     .terms-section { width: 100%; padding-right: 0; margin-bottom: 10px; }
     .payment-section { width: 100%; }
-    .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 72px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 72px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.paymentTerms}px; }
     .payment-box { border: 1.2px solid ${theme}; padding: 8px 10px; background: #ffffff; min-height: 88px; }
     .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid ${themeLightBorder}; padding-bottom: 5px; }
     .payment-table { font-size: 10.8px; }

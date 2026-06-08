@@ -21,6 +21,10 @@ type PdfPreviewOptions = {
   client_address: string;
   client_contact: string;
   client_phone: string;
+  font_size_title: number;
+  font_size_item_name: number;
+  font_size_item_desc: number;
+  font_size_payment_terms: number;
 };
 
 const DEFAULT_OPTIONS: PdfPreviewOptions = {
@@ -36,6 +40,10 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   client_address: '',
   client_contact: '',
   client_phone: '',
+  font_size_title: 25,
+  font_size_item_name: 13,
+  font_size_item_desc: 9,
+  font_size_payment_terms: 11,
 };
 
 export default function InvoicePdfPreviewPage() {
@@ -64,6 +72,12 @@ export default function InvoicePdfPreviewPage() {
     invoice_show_bank: current.show_bank,
     invoice_show_client_address: current.show_client_address,
     invoice_show_client_phone: current.show_client_phone,
+    pdf_font_sizes: {
+      title: current.font_size_title,
+      itemName: current.font_size_item_name,
+      itemDesc: current.font_size_item_desc,
+      paymentTerms: current.font_size_payment_terms,
+    },
   }), []);
 
   const getOptionsSignature = useCallback(
@@ -86,6 +100,12 @@ export default function InvoicePdfPreviewPage() {
       client_address: options.client_address,
       client_contact: options.client_contact,
       client_phone: options.client_phone,
+      fontSizes: {
+        title: options.font_size_title,
+        itemName: options.font_size_item_name,
+        itemDesc: options.font_size_item_desc,
+        paymentTerms: options.font_size_payment_terms,
+      },
     }),
     [
       options.language,
@@ -100,6 +120,10 @@ export default function InvoicePdfPreviewPage() {
       options.client_address,
       options.client_contact,
       options.client_phone,
+      options.font_size_title,
+      options.font_size_item_name,
+      options.font_size_item_desc,
+      options.font_size_payment_terms,
     ],
   );
 
@@ -111,6 +135,7 @@ export default function InvoicePdfPreviewPage() {
       .then((res) => {
         setInvoice(res.data);
         setOptions((prev) => {
+          const docFontSizes = res.data.pdf_font_sizes || {};
           const loadedOptions = {
             ...prev,
             language: res.data.invoice_language || prev.language,
@@ -127,6 +152,10 @@ export default function InvoicePdfPreviewPage() {
             client_contact:
               prev.client_contact || res.data.client?.contact_person || '',
             client_phone: prev.client_phone || res.data.client?.phone || '',
+            font_size_title: docFontSizes.title || prev.font_size_title,
+            font_size_item_name: docFontSizes.itemName || prev.font_size_item_name,
+            font_size_item_desc: docFontSizes.itemDesc || prev.font_size_item_desc,
+            font_size_payment_terms: docFontSizes.paymentTerms || prev.font_size_payment_terms,
           };
 
           latestOptionsRef.current = loadedOptions;
@@ -401,6 +430,46 @@ export default function InvoicePdfPreviewPage() {
         </div>
 
         <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+          <div className="mb-2 font-medium text-gray-800">字體大小設定 (px)</div>
+          <div className="mb-4 grid gap-3 grid-cols-2 md:grid-cols-4">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">標題</span>
+              <input
+                type="number"
+                value={options.font_size_title}
+                onChange={(e) => updateOption('font_size_title', Number(e.target.value))}
+                className="input-field h-8 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">項目名稱</span>
+              <input
+                type="number"
+                value={options.font_size_item_name}
+                onChange={(e) => updateOption('font_size_item_name', Number(e.target.value))}
+                className="input-field h-8 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">項目描述</span>
+              <input
+                type="number"
+                value={options.font_size_item_desc}
+                onChange={(e) => updateOption('font_size_item_desc', Number(e.target.value))}
+                className="input-field h-8 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">付款條款</span>
+              <input
+                type="number"
+                value={options.font_size_payment_terms}
+                onChange={(e) => updateOption('font_size_payment_terms', Number(e.target.value))}
+                className="input-field h-8 text-sm"
+              />
+            </label>
+          </div>
+
           <div className="mb-2 font-medium text-gray-800">客人資料顯示設定</div>
           <div className="grid gap-3 md:grid-cols-3">
             <label className="flex flex-col gap-1">
