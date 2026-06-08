@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { invoicesApi, paymentTermTemplatesApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
+import Cookies from 'js-cookie';
 
 type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
 
@@ -48,7 +49,28 @@ export default function InvoicePdfPreviewPage() {
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [savingChanges, setSavingChanges] = useState(false);
   const [error, setError] = useState('');
+  const latestOptionsRef = useRef<PdfPreviewOptions>(DEFAULT_OPTIONS);
+  const lastSavedSignatureRef = useRef('');
+
+  useEffect(() => {
+    latestOptionsRef.current = options;
+  }, [options]);
+
+  const buildSavePayload = useCallback((current: PdfPreviewOptions) => ({
+    invoice_custom_payment_terms: current.override_payment_terms || null,
+    invoice_language: current.language,
+    invoice_show_bank: current.show_bank,
+    invoice_show_client_address: current.show_client_address,
+    invoice_show_client_phone: current.show_client_phone,
+  }), []);
+
+  const getOptionsSignature = useCallback(
+    (current: PdfPreviewOptions) => JSON.stringify(buildSavePayload(current)),
+    [buildSavePayload],
+  );
+
   const requestParams = useMemo(
     () => ({
       language: options.language,
@@ -88,20 +110,32 @@ export default function InvoicePdfPreviewPage() {
       .get(invoiceId)
       .then((res) => {
         setInvoice(res.data);
-        setOptions((prev) => ({
-          ...prev,
-          override_payment_terms:
-            res.data.invoice_custom_payment_terms ||
-            res.data.payment_terms ||
-            '',
-          client_address: prev.client_address || res.data.client?.address || '',
-          client_contact:
-            prev.client_contact || res.data.client?.contact_person || '',
-          client_phone: prev.client_phone || res.data.client?.phone || '',
-        }));
+        setOptions((prev) => {
+          const loadedOptions = {
+            ...prev,
+            language: res.data.invoice_language || prev.language,
+            show_bank: res.data.invoice_show_bank ?? prev.show_bank,
+            show_client_address:
+              res.data.invoice_show_client_address ?? prev.show_client_address,
+            show_client_phone:
+              res.data.invoice_show_client_phone ?? prev.show_client_phone,
+            override_payment_terms:
+              res.data.invoice_custom_payment_terms ||
+              res.data.payment_terms ||
+              '',
+            client_address: prev.client_address || res.data.client?.address || '',
+            client_contact:
+              prev.client_contact || res.data.client?.contact_person || '',
+            client_phone: prev.client_phone || res.data.client?.phone || '',
+          };
+
+          latestOptionsRef.current = loadedOptions;
+          lastSavedSignatureRef.current = getOptionsSignature(loadedOptions);
+          return loadedOptions;
+        });
       })
       .catch(() => router.push('/invoices'));
-  }, [invoiceId, router]);
+  }, [invoiceId, router, getOptionsSignature]);
 
   useEffect(() => {
     if (!Number.isFinite(invoiceId)) return;
@@ -145,6 +179,68 @@ export default function InvoicePdfPreviewPage() {
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
   }, [invoiceId, requestParams]);
+
+  const savePdfPreviewOptions = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!Number.isFinite(invoiceId)) return false;
+
+      const currentOptions = latestOptionsRef.current;
+      const signature = getOptionsSignature(currentOptions);
+      if (signature === lastSavedSignatureRef.current) return true;
+
+      setSavingChanges(true);
+      try {
+        await invoicesApi.update(invoiceId, buildSavePayload(currentOptions));
+        lastSavedSignatureRef.current = signature;
+        return true;
+      } catch (err: any) {
+        if (!silent) {
+          alert(err.response?.data?.message || '自動儲存 PDF 設定失敗');
+        }
+        return false;
+      } finally {
+        setSavingChanges(false);
+      }
+    },
+    [buildSavePayload, getOptionsSignature, invoiceId],
+  );
+
+  const savePdfPreviewOptionsKeepalive = useCallback(() => {
+    if (!Number.isFinite(invoiceId)) return;
+
+    const currentOptions = latestOptionsRef.current;
+    const payload = buildSavePayload(currentOptions);
+    const signature = JSON.stringify(payload);
+    if (signature === lastSavedSignatureRef.current) return;
+
+    const token = Cookies.get('token');
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/invoices/${invoiceId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => undefined);
+
+    lastSavedSignatureRef.current = signature;
+  }, [buildSavePayload, invoiceId]);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', savePdfPreviewOptionsKeepalive);
+    window.addEventListener('pagehide', savePdfPreviewOptionsKeepalive);
+
+    return () => {
+      window.removeEventListener('beforeunload', savePdfPreviewOptionsKeepalive);
+      window.removeEventListener('pagehide', savePdfPreviewOptionsKeepalive);
+    };
+  }, [savePdfPreviewOptionsKeepalive]);
+
+  const handleBack = async () => {
+    const saved = await savePdfPreviewOptions();
+    if (saved) router.push(`/invoices/${invoiceId}`);
+  };
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
@@ -208,9 +304,7 @@ export default function InvoicePdfPreviewPage() {
   };
 
   const handleSaveToDocument = async () => {
-    await invoicesApi.update(invoiceId, {
-      invoice_custom_payment_terms: options.override_payment_terms,
-    });
+    await savePdfPreviewOptions();
   };
 
   return (
@@ -241,10 +335,11 @@ export default function InvoicePdfPreviewPage() {
             {printing ? '開啟中...' : '列印'}
           </button>
           <button
-            onClick={() => router.push(`/invoices/${invoiceId}`)}
-            className="btn-secondary px-3 py-1.5 text-sm"
+            onClick={handleBack}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+            disabled={savingChanges}
           >
-            返回
+            {savingChanges ? '儲存中...' : '返回'}
           </button>
         </div>
 
