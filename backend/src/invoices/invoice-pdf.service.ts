@@ -338,14 +338,15 @@ export class InvoicePdfService {
     .items tbody td { padding: 6px 6px; border-bottom: 1px solid ${themeLightBorder}; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
     .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
     .items .center { text-align: center; }
-    .items .right { text-align: right; white-space: nowrap; }
+    .items .right { text-align: right; }
     .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; }
     .sub-lines { color: #52606d; font-size: 9.3px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
-    .after-table { margin-top: 9px; page-break-inside: avoid; display: flex; flex-direction: column; }
+    .avoid-break { page-break-inside: avoid; }
+    .after-table { margin-top: 9px; display: flex; flex-direction: column; }
     .terms-section { width: 100%; padding-right: 0; margin-bottom: 10px; }
     .payment-section { width: 100%; }
     .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 72px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -355,16 +356,16 @@ export class InvoicePdfService {
     .payment-table td { padding: 3px 0; vertical-align: top; }
     .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
     .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
-    .footer-row { margin-top: 20px; page-break-inside: avoid; }
-    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; border: none; }
+    .footer-row { margin-top: 20px; }
+    .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 24px; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
     .signature-table td:first-child { padding-right: 18mm; }
     .signature-table td:last-child { padding-left: 18mm; }
     .signature-block { width: 100%; writing-mode: horizontal-tb; text-orientation: mixed; text-align: center; }
-    .signature-stamp-space { height: 130px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
-    .signature-stamp-space.empty { height: 130px; }
+    .signature-stamp-space { height: 100px; margin-bottom: 0px; display: flex; align-items: flex-end; justify-content: center; }
+    .signature-stamp-space.empty { height: 100px; }
     .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
-    .stamp-img { width: auto; max-width: 120px; max-height: 120px; object-fit: contain; display: block; }
+    .stamp-img { width: auto; max-width: 120px; max-height: 120px; object-fit: contain; display: block; margin-bottom: -5px; }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
@@ -413,46 +414,48 @@ export class InvoicePdfService {
         ${totalsRows}
       </tbody>
     </table>
-    <div class="after-table">
-      <div class="terms-section">
-        <div class="section-label">${labels.paymentTerms}</div>
-        <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
+    <div class="avoid-break">
+      <div class="after-table">
+        <div class="terms-section">
+          <div class="section-label">${labels.paymentTerms}</div>
+          <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
+        </div>
+        <div class="payment-section">
+          ${
+            options.showBank && bankRows
+              ? `
+          <div class="payment-box">
+            <div class="payment-title">${labels.paymentDetails}</div>
+            <table class="payment-table">${bankRows}</table>
+          </div>`
+              : ''
+          }
+        </div>
       </div>
-      <div class="payment-section">
-        ${
-          options.showBank && bankRows
-            ? `
-        <div class="payment-box">
-          <div class="payment-title">${labels.paymentDetails}</div>
-          <table class="payment-table">${bankRows}</table>
-        </div>`
-            : ''
-        }
+      <div class="footer-row">
+        ${options.showClientSignature || options.showCompanySignature ? `
+        <table class="signature-table">
+          <tr>
+            <td>
+              ${options.showClientSignature ? `
+              <div class="signature-block">
+                <div class="signature-stamp-space empty"></div>
+                <div class="signature-line"></div>
+                <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
+              </div>` : ''}
+            </td>
+            <td>
+              ${options.showCompanySignature ? `
+              <div class="signature-block">
+                <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
+                <div class="signature-line"></div>
+                <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
+              </div>` : ''}
+            </td>
+          </tr>
+        </table>
+        ` : ''}
       </div>
-    </div>
-    <div class="footer-row">
-      ${options.showClientSignature || options.showCompanySignature ? `
-      <table class="signature-table">
-        <tr>
-          <td>
-            ${options.showClientSignature ? `
-            <div class="signature-block">
-              <div class="signature-stamp-space empty"></div>
-              <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
-            </div>` : ''}
-          </td>
-          <td>
-            ${options.showCompanySignature ? `
-            <div class="signature-block">
-              <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
-              <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
-            </div>` : ''}
-          </td>
-        </tr>
-      </table>
-      ` : ''}
     </div>
   </div>
 </body>
