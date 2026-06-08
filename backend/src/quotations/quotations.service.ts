@@ -83,6 +83,7 @@ export class QuotationsService {
     company: true,
     client: true,
     project: true,
+    creator: { select: { id: true, displayName: true, username: true } },
     items: { orderBy: { sort_order: 'asc' as const } },
   };
 
@@ -458,6 +459,22 @@ export class QuotationsService {
         }
         if (hasBlank) fieldConditions.push({ project_id: null });
         this.addFieldConditions(conditions, fieldConditions);
+      } else if (field === 'creator') {
+        const fieldConditions: Prisma.QuotationWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({
+            creator: {
+              is: {
+                OR: [
+                  { displayName: { in: nonBlankValues } },
+                  { username: { in: nonBlankValues } },
+                ],
+              },
+            },
+          });
+        }
+        if (hasBlank) fieldConditions.push({ created_by: null });
+        this.addFieldConditions(conditions, fieldConditions);
       }
     }
 
@@ -567,6 +584,7 @@ export class QuotationsService {
       return { company: { internal_prefix: sortOrder } };
     if (sortBy === 'client') return { client: { code: sortOrder } };
     if (sortBy === 'project') return { project: { project_no: sortOrder } };
+    if (sortBy === 'creator') return { creator: { displayName: sortOrder } };
     if (directSortFields.includes(sortBy || '')) {
       return {
         [sortBy!]: sortOrder,
@@ -591,6 +609,7 @@ export class QuotationsService {
           company: true,
           client: true,
           project: true,
+          creator: { select: { id: true, displayName: true, username: true } },
           items: { select: { quantity: true }, orderBy: { sort_order: 'asc' } },
         },
         orderBy,
@@ -733,6 +752,18 @@ export class QuotationsService {
       const values = records.map(
         (record) =>
           record.project?.project_no || record.project?.project_name || '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'creator') {
+      const records = await this.prisma.quotation.findMany({
+        where,
+        include: { creator: { select: { displayName: true, username: true } } },
+        distinct: ['created_by'],
+      });
+      const values = records.map(
+        (record) => record.creator?.displayName || record.creator?.username || '-',
       );
       return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     }

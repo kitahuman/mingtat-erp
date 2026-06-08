@@ -2801,14 +2801,14 @@ export default function WorkLogsPage() {
                   </button>
                 ))}
               </div>
-              {hasFilters && (
-                <button
-                  onClick={resetFilters}
-                  className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50 self-end"
-                >
-                  清除篩選
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={resetFilters}
+                disabled={!hasFilters}
+                className="px-3 py-1 text-xs text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed self-end whitespace-nowrap"
+              >
+                重設篩選
+              </button>
             </div>
           </div>
           {/* ── Table ────────────────────────────────────────────────── */}

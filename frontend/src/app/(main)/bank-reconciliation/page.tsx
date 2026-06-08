@@ -961,7 +961,7 @@ export default function BankReconciliationPage() {
                     </div>
 
                     {/* Status + Actions */}
-                    <div className="px-2 py-2 flex items-center justify-center gap-1 relative">
+                    <div className="px-2 py-2 flex items-center justify-center gap-1 relative overflow-visible">
                       {tx.match_status === 'unmatched' ? (
                         <div className="flex gap-1">
                           <button
@@ -1016,7 +1016,7 @@ export default function BankReconciliationPage() {
                       )}
                       {/* Hover action buttons (edit / delete / remark) */}
                       {!selectionMode && (
-                        <div className="hidden group-hover:flex absolute right-0 top-0 h-full items-center gap-0.5 pr-1 bg-gradient-to-l from-white via-white to-transparent pl-4">
+                        <div className="hidden group-hover:flex absolute right-full top-1/2 z-20 mr-1 -translate-y-1/2 items-center gap-0.5 rounded-md border border-gray-200 bg-white px-1 py-0.5 shadow-sm">
                           <button
                             onClick={() => {
                               setRemarkTxId(tx.id);

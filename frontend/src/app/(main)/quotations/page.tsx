@@ -474,6 +474,15 @@ export default function QuotationsPage() {
         row.is_rate_only_total ? 'Rate Only' : Number(v).toLocaleString('en'),
     },
     {
+      key: 'creator',
+      label: '發佈人',
+      sortable: true,
+      render: (_: any, row: any) =>
+        row.creator?.displayName || row.creator?.username || '-',
+      filterRender: (_: any, row: any) =>
+        row.creator?.displayName || row.creator?.username || '-',
+    },
+    {
       key: 'status',
       label: '狀態',
       sortable: true,

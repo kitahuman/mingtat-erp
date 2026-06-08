@@ -117,6 +117,7 @@ export class InvoicesService {
     },
     project: { select: { id: true, project_no: true, project_name: true } },
     quotation: { select: { id: true, quotation_no: true, project_name: true } },
+    creator: { select: { id: true, displayName: true, username: true } },
     company: {
       select: {
         id: true,
@@ -449,6 +450,22 @@ export class InvoicesService {
         }
         if (hasBlank) fieldConditions.push({ quotation_id: null });
         this.addFieldConditions(conditions, fieldConditions);
+      } else if (field === 'creator') {
+        const fieldConditions: Prisma.InvoiceWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({
+            creator: {
+              is: {
+                OR: [
+                  { displayName: { in: nonBlankValues } },
+                  { username: { in: nonBlankValues } },
+                ],
+              },
+            },
+          });
+        }
+        if (hasBlank) fieldConditions.push({ created_by: null });
+        this.addFieldConditions(conditions, fieldConditions);
       }
     }
 
@@ -539,6 +556,7 @@ export class InvoicesService {
     if (sortBy === 'client') return { client: { name: sortOrder } };
     if (sortBy === 'quotation')
       return { quotation: { quotation_no: sortOrder } };
+    if (sortBy === 'creator') return { creator: { displayName: sortOrder } };
     if (directSortFields.includes(sortBy || '')) {
       return { [sortBy!]: sortOrder } as Prisma.InvoiceOrderByWithRelationInput;
     }
@@ -698,6 +716,18 @@ export class InvoicesService {
       });
       const values = records.map(
         (record) => record.quotation?.quotation_no || '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'creator') {
+      const records = await this.prisma.invoice.findMany({
+        where,
+        select: { creator: { select: { displayName: true, username: true } } },
+        distinct: ['created_by'],
+      });
+      const values = records.map(
+        (record) => record.creator?.displayName || record.creator?.username || '-',
       );
       return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     }

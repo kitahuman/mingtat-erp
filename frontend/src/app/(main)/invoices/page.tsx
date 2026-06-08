@@ -217,6 +217,17 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     filterRender: (v: any) => fmt$(v),
   },
   {
+    key: 'creator',
+    label: '發佈人',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} text-gray-700`,
+    minWidth: 120,
+    render: (_: any, inv: any) =>
+      inv.creator?.displayName || inv.creator?.username || '-',
+    filterRender: (_: any, inv: any) =>
+      inv.creator?.displayName || inv.creator?.username || '-',
+  },
+  {
     key: 'status',
     label: '狀態',
     sortable: true,
