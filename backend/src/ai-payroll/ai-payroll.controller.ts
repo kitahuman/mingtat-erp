@@ -116,6 +116,12 @@ export class AiPayrollController {
     return this.service.listDocuments(batchId);
   }
 
+  @Get('batches/:batchId/pages')
+  @ApiOperation({ summary: '查看批次頁面列表' })
+  listPages(@Param('batchId', ParseIntPipe) batchId: number) {
+    return this.service.listPages(batchId);
+  }
+
   @Post('batches/:batchId/extraction-jobs')
   @ApiOperation({ summary: '開始 AI 識別' })
   startExtractionJob(@Param('batchId', ParseIntPipe) batchId: number, @Body() dto: StartExtractionJobDto) {

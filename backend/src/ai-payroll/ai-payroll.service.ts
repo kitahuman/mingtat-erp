@@ -123,6 +123,15 @@ export class AiPayrollService {
     });
   }
 
+  async listPages(batchId: number) {
+    await this.ensureBatch(batchId);
+    return this.prisma.aiPayrollPage.findMany({
+      where: { document: { doc_batch_id: batchId } },
+      include: { document: { select: { doc_original_filename: true } } },
+      orderBy: [{ page_document_id: 'asc' }, { page_number: 'asc' }],
+    });
+  }
+
   async startExtractionJob(batchId: number, dto: StartExtractionJobDto) {
     await this.ensureBatch(batchId);
     await this.prisma.aiPayrollBatch.update({ where: { id: batchId }, data: { batch_status: 'processing' } });
