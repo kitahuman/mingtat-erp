@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import DataTable from '@/components/DataTable';
 import DateInput from '@/components/DateInput';
 import Modal from '@/components/Modal';
@@ -287,6 +288,23 @@ export default function InvoiceStatementsPage() {
             新增
           </button>
         )}
+      </div>
+
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex gap-6" aria-label="發票管理分頁">
+          <Link
+            href="/invoices"
+            className="border-b-2 border-transparent px-1 pb-3 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          >
+            發票
+          </Link>
+          <Link
+            href="/invoice-statements"
+            className="border-b-2 border-primary-600 px-1 pb-3 text-sm font-semibold text-primary-600"
+          >
+            發票清單
+          </Link>
+        </nav>
       </div>
 
       <DataTable

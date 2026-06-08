@@ -98,7 +98,6 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/expenses', label: '支出管理', icon: '💸', pageKey: 'expenses' },
       { href: '/invoices', label: '發票管理', icon: '🧾', pageKey: 'invoices' },
-      { href: '/invoice-statements', label: '客戶發票清單', icon: '📄', pageKey: 'invoice-statements' },
       { href: '/payment-in', label: '收款記錄', icon: '💰', pageKey: 'payment-in' },
       { href: '/payment-out', label: '付款記錄', icon: '💳', pageKey: 'payment-out' },
       { href: '/bank-reconciliation', label: '銀行對帳', icon: '🏦', pageKey: 'bank-reconciliation' },

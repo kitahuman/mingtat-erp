@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   invoicesApi,
@@ -403,6 +404,28 @@ export default function InvoicesPage() {
     [selectedInvoices],
   );
 
+  const summaryInvoices = selectedInvoices.length > 0 ? selectedInvoices : data;
+  const invoiceTotalsSummary = useMemo(() => {
+    return summaryInvoices.reduce(
+      (totals: { totalAmount: number; paidAmount: number; outstanding: number }, invoice: any) => {
+        const totalAmount = Number(invoice.total_amount) || 0;
+        const paidAmount = Number(invoice.paid_amount) || 0;
+        const outstanding = invoice.outstanding !== undefined && invoice.outstanding !== null
+          ? Number(invoice.outstanding) || 0
+          : totalAmount - paidAmount;
+        return {
+          totalAmount: totals.totalAmount + totalAmount,
+          paidAmount: totals.paidAmount + paidAmount,
+          outstanding: totals.outstanding + outstanding,
+        };
+      },
+      { totalAmount: 0, paidAmount: 0, outstanding: 0 },
+    );
+  }, [summaryInvoices]);
+  const invoiceTotalsNote = selectedInvoices.length > 0
+    ? `已選 ${selectedInvoices.length} 張`
+    : `顯示 ${data.length} 張`;
+
   const toggleInvoiceSelection = (invoice: any, checked: boolean) => {
     if (checked) {
       const existing = Object.values(selectedInvoiceRows);
@@ -633,8 +656,25 @@ export default function InvoicesPage() {
         </div>
       </div>
 
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex gap-6" aria-label="發票管理分頁">
+          <Link
+            href="/invoices"
+            className="border-b-2 border-primary-600 px-1 pb-3 text-sm font-semibold text-primary-600"
+          >
+            發票
+          </Link>
+          <Link
+            href="/invoice-statements"
+            className="border-b-2 border-transparent px-1 pb-3 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          >
+            發票清單
+          </Link>
+        </nav>
+      </div>
+
       {/* Filters */}
-      <div className="card mb-6">
+      <div className="card mb-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -717,6 +757,16 @@ export default function InvoicesPage() {
             />
           </div>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <span className="font-semibold">{invoiceTotalsNote}</span>
+        <span className="mx-3 text-blue-300">|</span>
+        <span>總額: <span className="font-semibold">{fmt$(invoiceTotalsSummary.totalAmount)}</span></span>
+        <span className="mx-3 text-blue-300">|</span>
+        <span>已收: <span className="font-semibold text-green-700">{fmt$(invoiceTotalsSummary.paidAmount)}</span></span>
+        <span className="mx-3 text-blue-300">|</span>
+        <span>未收: <span className="font-semibold text-red-700">{fmt$(invoiceTotalsSummary.outstanding)}</span></span>
       </div>
 
       {/* Table */}
