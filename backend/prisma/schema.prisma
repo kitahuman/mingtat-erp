@@ -3169,3 +3169,274 @@ model IssueReport {
   @@index([issue_report_status])
   @@map("issue_reports")
 }
+
+// ══════════════════════════════════════════════════════════════
+// AI Knowledge Base (AI 知識庫)
+// ══════════════════════════════════════════════════════════════
+model AiKnowledgeEntry {
+  id                               Int       @id @default(autoincrement())
+  knowledge_module_scope           String    @db.VarChar(20)
+  knowledge_module_code            String?   @db.VarChar(50)
+  knowledge_category               String    @db.VarChar(50)
+  knowledge_title                  String    @db.VarChar(255)
+  knowledge_description            String    @db.Text
+  knowledge_payload_json           Json      @db.JsonB
+  knowledge_applies_to_entity_type String?   @db.VarChar(50)
+  knowledge_applies_to_entity_id   Int?
+  knowledge_keywords               Json?     @db.JsonB
+  knowledge_confidence_score       Decimal   @default(0) @db.Decimal(5, 2)
+  knowledge_support_count          Int       @default(0)
+  knowledge_contradiction_count    Int       @default(0)
+  knowledge_usage_count            Int       @default(0)
+  knowledge_last_used_at           DateTime?
+  knowledge_status                 String    @default("candidate") @db.VarChar(30)
+  knowledge_effective_from         DateTime? @db.Date
+  knowledge_effective_to           DateTime? @db.Date
+  knowledge_created_by_type        String    @db.VarChar(20)
+  knowledge_created_by             Int?
+  knowledge_approved_by            Int?
+  knowledge_approved_at            DateTime?
+  created_at                       DateTime  @default(now())
+  updated_at                       DateTime  @default(now()) @updatedAt
+
+  evidence   AiKnowledgeEvidence[]
+  versions   AiKnowledgeVersion[]
+  reviews    AiKnowledgeReview[]
+  usage_logs AiKnowledgeUsageLog[]
+  embedding  AiKnowledgeEmbedding?
+
+  @@index([knowledge_module_code])
+  @@index([knowledge_category])
+  @@index([knowledge_status])
+  @@index([knowledge_applies_to_entity_type, knowledge_applies_to_entity_id])
+  @@map("ai_knowledge_entries")
+}
+
+model AiKnowledgeEvidence {
+  id                          Int       @id @default(autoincrement())
+  evidence_knowledge_entry_id Int
+  evidence_source_module_code String    @db.VarChar(50)
+  evidence_source_entity_type String    @db.VarChar(80)
+  evidence_source_entity_id   Int
+  evidence_before_value       String?   @db.Text
+  evidence_after_value        String?   @db.Text
+  evidence_summary            String    @db.Text
+  evidence_weight             Decimal   @default(1) @db.Decimal(5, 2)
+  evidence_confirmed_by       Int?
+  evidence_confirmed_at       DateTime?
+  evidence_created_at         DateTime  @default(now())
+
+  knowledge_entry AiKnowledgeEntry @relation(fields: [evidence_knowledge_entry_id], references: [id], onDelete: Cascade)
+
+  @@index([evidence_knowledge_entry_id])
+  @@index([evidence_source_module_code])
+  @@map("ai_knowledge_evidence")
+}
+
+model AiKnowledgeVersion {
+  id                         Int      @id @default(autoincrement())
+  version_knowledge_entry_id Int
+  version_number             Int
+  version_payload_json       Json     @db.JsonB
+  version_change_summary     String?  @db.Text
+  version_edited_by          Int?
+  version_created_at         DateTime @default(now())
+
+  knowledge_entry AiKnowledgeEntry @relation(fields: [version_knowledge_entry_id], references: [id], onDelete: Cascade)
+
+  @@index([version_knowledge_entry_id])
+  @@map("ai_knowledge_versions")
+}
+
+model AiKnowledgeReview {
+  id                        Int      @id @default(autoincrement())
+  review_knowledge_entry_id Int
+  review_action             String   @db.VarChar(30)
+  review_reason             String?  @db.Text
+  review_user_id            Int
+  review_created_at         DateTime @default(now())
+
+  knowledge_entry AiKnowledgeEntry @relation(fields: [review_knowledge_entry_id], references: [id], onDelete: Cascade)
+
+  @@index([review_knowledge_entry_id])
+  @@map("ai_knowledge_reviews")
+}
+
+model AiKnowledgeUsageLog {
+  id                           Int      @id @default(autoincrement())
+  usage_knowledge_entry_id     Int
+  usage_task_module_code       String   @db.VarChar(50)
+  usage_task_type              String   @db.VarChar(80)
+  usage_task_entity_id         Int?
+  usage_retrieval_score        Decimal? @db.Decimal(8, 4)
+  usage_injected_to_prompt     Boolean  @default(false)
+  usage_applied_by_rule_engine Boolean  @default(false)
+  usage_outcome                String?  @db.VarChar(30)
+  usage_used_at                DateTime @default(now())
+
+  knowledge_entry AiKnowledgeEntry @relation(fields: [usage_knowledge_entry_id], references: [id], onDelete: Cascade)
+
+  @@index([usage_knowledge_entry_id])
+  @@index([usage_task_module_code])
+  @@index([usage_used_at])
+  @@map("ai_knowledge_usage_logs")
+}
+
+model AiKnowledgeEmbedding {
+  id                           Int      @id @default(autoincrement())
+  embedding_knowledge_entry_id Int      @unique
+  embedding_model              String   @db.VarChar(50)
+  embedding_vector_json        Json?    @db.JsonB
+  embedding_external_id        String?  @db.VarChar(255)
+  embedding_updated_at         DateTime @default(now()) @updatedAt
+
+  knowledge_entry AiKnowledgeEntry @relation(fields: [embedding_knowledge_entry_id], references: [id], onDelete: Cascade)
+
+  @@map("ai_knowledge_embeddings")
+}
+
+model AiKnowledgeModulePolicy {
+  id                            Int      @id @default(autoincrement())
+  policy_module_code            String   @unique @db.VarChar(50)
+  policy_allowed_categories     Json     @db.JsonB
+  policy_max_entries_per_task   Int      @default(20)
+  policy_max_prompt_characters  Int      @default(4000)
+  policy_auto_candidate_enabled Boolean  @default(true)
+  policy_review_threshold       Int      @default(3)
+  policy_created_at             DateTime @default(now())
+  policy_updated_at             DateTime @default(now()) @updatedAt
+
+  @@map("ai_knowledge_module_policies")
+}
+
+// ══════════════════════════════════════════════════════════════
+// AI Payroll (AI 計糧)
+// ══════════════════════════════════════════════════════════════
+model AiPayrollBatch {
+  id                      Int      @id @default(autoincrement())
+  batch_payroll_month     String   @db.VarChar(7)
+  batch_period            String?  @db.VarChar(20)
+  batch_form_type_default String   @default("auto") @db.VarChar(30)
+  batch_status            String   @default("draft") @db.VarChar(30)
+  batch_notes             String?  @db.Text
+  batch_created_by        Int
+  batch_created_at        DateTime @default(now())
+  batch_updated_at        DateTime @default(now()) @updatedAt
+
+  documents AiPayrollDocument[]
+
+  @@index([batch_payroll_month])
+  @@index([batch_status])
+  @@map("ai_payroll_batches")
+}
+
+model AiPayrollDocument {
+  id                    Int      @id @default(autoincrement())
+  doc_batch_id          Int
+  doc_original_filename String   @db.VarChar(500)
+  doc_storage_path      String   @db.VarChar(1000)
+  doc_mime_type         String   @db.VarChar(100)
+  doc_file_size         Int
+  doc_page_count        Int?     @default(1)
+  doc_quality_score     Decimal? @db.Decimal(5, 2)
+  doc_quality_issues    Json?    @db.JsonB
+  doc_status            String   @default("uploaded") @db.VarChar(30)
+  doc_uploaded_by       Int
+  doc_created_at        DateTime @default(now())
+
+  batch AiPayrollBatch  @relation(fields: [doc_batch_id], references: [id], onDelete: Cascade)
+  pages AiPayrollPage[]
+
+  @@index([doc_batch_id])
+  @@map("ai_payroll_documents")
+}
+
+model AiPayrollPage {
+  id                        Int      @id @default(autoincrement())
+  page_document_id          Int
+  page_number               Int      @default(1)
+  page_image_path           String   @db.VarChar(1000)
+  page_form_type            String?  @db.VarChar(30)
+  page_form_type_confidence Decimal? @db.Decimal(5, 2)
+  page_employee_name_hint   String?  @db.VarChar(100)
+  page_employee_id          Int?
+  page_status               String   @default("pending") @db.VarChar(30)
+  page_created_at           DateTime @default(now())
+
+  document        AiPayrollDocument        @relation(fields: [page_document_id], references: [id], onDelete: Cascade)
+  extraction_runs AiPayrollExtractionRun[]
+  entries         AiPayrollEntry[]
+
+  @@index([page_document_id])
+  @@index([page_employee_id])
+  @@map("ai_payroll_pages")
+}
+
+model AiPayrollExtractionRun {
+  id                   Int      @id @default(autoincrement())
+  run_page_id          Int
+  run_model_name       String   @db.VarChar(50)
+  run_prompt_version   String   @db.VarChar(50)
+  run_schema_version   String   @db.VarChar(50)
+  run_input_image_hash String?  @db.VarChar(64)
+  run_raw_response     Json     @db.JsonB
+  run_token_usage      Json?    @db.JsonB
+  run_duration_ms      Int?
+  run_status           String   @default("pending") @db.VarChar(30)
+  run_error_message    String?  @db.Text
+  run_created_at       DateTime @default(now())
+
+  page    AiPayrollPage    @relation(fields: [run_page_id], references: [id], onDelete: Cascade)
+  entries AiPayrollEntry[]
+
+  @@index([run_page_id])
+  @@map("ai_payroll_extraction_runs")
+}
+
+model AiPayrollEntry {
+  id                       Int       @id @default(autoincrement())
+  entry_page_id            Int
+  entry_run_id             Int
+  entry_row_number         Int?
+  entry_work_date          DateTime? @db.Date
+  entry_employee_id        Int?
+  entry_employee_name_raw  String?   @db.VarChar(100)
+  entry_form_type          String    @db.VarChar(30)
+  entry_status             String    @default("extracted") @db.VarChar(30)
+  entry_overall_confidence Decimal?  @db.Decimal(5, 2)
+  entry_flags              Json?     @db.JsonB
+  entry_created_at         DateTime  @default(now())
+  entry_updated_at         DateTime  @default(now()) @updatedAt
+
+  page   AiPayrollPage          @relation(fields: [entry_page_id], references: [id], onDelete: Cascade)
+  run    AiPayrollExtractionRun @relation(fields: [entry_run_id], references: [id], onDelete: Cascade)
+  fields AiPayrollEntryField[]
+
+  @@index([entry_page_id])
+  @@index([entry_run_id])
+  @@index([entry_employee_id])
+  @@index([entry_work_date])
+  @@map("ai_payroll_entries")
+}
+
+model AiPayrollEntryField {
+  id                     Int       @id @default(autoincrement())
+  field_entry_id         Int
+  field_name             String    @db.VarChar(50)
+  field_raw_text         String?   @db.Text
+  field_normalized_value String?   @db.Text
+  field_confidence       Decimal   @default(0) @db.Decimal(5, 2)
+  field_bbox_json        Json?     @db.JsonB
+  field_flags            Json?     @db.JsonB
+  field_is_confirmed     Boolean   @default(false)
+  field_confirmed_value  String?   @db.Text
+  field_confirmed_by     Int?
+  field_confirmed_at     DateTime?
+  field_created_at       DateTime  @default(now())
+
+  entry AiPayrollEntry @relation(fields: [field_entry_id], references: [id], onDelete: Cascade)
+
+  @@index([field_entry_id])
+  @@index([field_name])
+  @@map("ai_payroll_entry_fields")
+}
