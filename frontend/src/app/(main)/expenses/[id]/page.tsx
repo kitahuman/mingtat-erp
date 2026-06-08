@@ -198,6 +198,7 @@ export default function ExpenseDetailPage() {
       total_amount: detailSubtotal,
       other_charges: otherCharges,
       payment_status: e.payment_status || (e.is_paid ? 'paid' : 'unpaid'),
+      payment_method: e.payment_method || '',
       payment_date: e.payment_date ? e.payment_date.slice(0, 10) : '',
       remarks: e.remarks || '',
       machine_code: e.machine_code || '',
@@ -310,6 +311,12 @@ export default function ExpenseDetailPage() {
     value: o.value || o.label || o.name,
     label: o.label || o.value || o.name,
   }));
+  const paymentMethodOptions = paymentMethods
+    .filter((m: any) => m.is_active !== false)
+    .map((m: any) => ({
+      value: m.label || m.value || m.name,
+      label: m.label || m.value || m.name,
+    }));
 
   // ── Items ──────────────────────────────────────────────────────────────────
   const calcItemAmount = (qty: string, up: string) => {
@@ -684,6 +691,26 @@ export default function ExpenseDetailPage() {
                 <option value="cancelled">取消</option>
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                付款方法
+              </label>
+              <input
+                type="text"
+                list="expense-payment-methods-list"
+                value={form.payment_method}
+                onChange={(e) =>
+                  setForm({ ...form, payment_method: e.target.value })
+                }
+                className="input-field text-sm"
+                placeholder="選擇或輸入付款方法"
+              />
+              <datalist id="expense-payment-methods-list">
+                {paymentMethodOptions.map((o: any) => (
+                  <option key={o.value} value={String(o.value)} />
+                ))}
+              </datalist>
+            </div>
             {(form.payment_status === 'paid' ||
               form.payment_status === 'partially_paid') && (
               <div>
@@ -853,6 +880,7 @@ export default function ExpenseDetailPage() {
                 }
               />
             </Field>
+            <Field label="付款方法">{expense.payment_method || '-'}</Field>
             <Field label="付款類型">
               {expense.expense_payment_method === 'COMPANY_PAID' ? (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
