@@ -76,10 +76,12 @@ export default function AiPayrollBatchPage({ params }: { params: { batchId: stri
     if (selectedFiles.length === 0 || readOnly) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      selectedFiles.forEach((file) => formData.append('files', file));
-      formData.append('auto_split_pages', 'true');
-      await aiPayrollApi.uploadDocuments(params.batchId, formData);
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('auto_split_pages', 'true');
+        await aiPayrollApi.uploadDocuments(params.batchId, formData);
+      }
       setSelectedFiles([]);
       if (inputRef.current) inputRef.current.value = '';
       await loadData();
