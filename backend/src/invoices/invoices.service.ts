@@ -562,7 +562,7 @@ export class InvoicesService {
     if (directSortFields.includes(sortBy || '')) {
       return { [sortBy!]: sortOrder } as Prisma.InvoiceOrderByWithRelationInput;
     }
-    return { date: 'desc' };
+    return { created_at: 'desc' };
   }
 
   private buildRevisionInvoiceNo(
@@ -1956,6 +1956,7 @@ export class InvoicesService {
       amount: number;
       bank_account_id?: number | null;
       reference_no?: string;
+      payment_method?: string;
       remarks?: string;
     },
   ) {
@@ -1980,6 +1981,7 @@ export class InvoicesService {
         project_id: invoice.project_id || null,
         bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
+        payment_method: dto.payment_method || null,
         remarks: dto.remarks || `發票 ${invoice.invoice_no} 收款`,
       },
     });

@@ -128,6 +128,7 @@ export class PaymentInService {
         contract_id: dto.contract_id || null,
         bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
+        payment_method: dto.payment_method || null,
         remarks: dto.remarks || null,
         payment_in_status: dto.payment_in_status || 'paid',
       },
@@ -167,6 +168,7 @@ export class PaymentInService {
         : { disconnect: true };
     }
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
+    if (dto.payment_method !== undefined) data.payment_method = dto.payment_method;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
     if (dto.payment_in_status !== undefined)
       data.payment_in_status = dto.payment_in_status;

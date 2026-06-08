@@ -10,6 +10,7 @@ export class CreatePaymentInDto {
   @IsOptional() @Type(() => Number) @IsNumber() contract_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
+  @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() payment_in_status?: string;
 }
@@ -23,6 +24,7 @@ export class UpdatePaymentInDto {
   @IsOptional() @Type(() => Number) @IsNumber() contract_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
+  @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() payment_in_status?: string;
 }

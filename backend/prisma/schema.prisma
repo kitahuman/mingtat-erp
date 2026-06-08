@@ -2010,6 +2010,7 @@ model PaymentIn {
   contract_id       Int?
   bank_account_id   Int? // 關聯銀行帳戶
   reference_no      String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  payment_method    String?  @db.VarChar(50) // 付款方法 (現金, 轉帳, 支票, etc.)
   payment_in_status String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
   remarks           String?  @db.Text
   created_at        DateTime @default(now())

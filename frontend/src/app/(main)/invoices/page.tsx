@@ -266,7 +266,7 @@ export default function InvoicesPage() {
   const [clientFilter, setClientFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [sortBy, setSortBy] = useState('date');
+  const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [columnFilters, setColumnFilters] = useState<
     Record<string, Set<string>>

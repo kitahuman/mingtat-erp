@@ -107,6 +107,9 @@ export default function InvoiceDetailPage() {
   // Bank accounts
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
 
+  // Field options
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<any[]>([]);
+
   // Payment modal
   const [showPayment, setShowPayment] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
@@ -114,6 +117,7 @@ export default function InvoiceDetailPage() {
     amount: '',
     bank_account_id: '',
     reference_no: '',
+    payment_method: '',
     remarks: '',
   });
   const [recordingPayment, setRecordingPayment] = useState(false);
@@ -200,6 +204,10 @@ export default function InvoiceDetailPage() {
     bankAccountsApi
       .simple()
       .then((res) => setBankAccounts(res.data || []))
+      .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((res) => setPaymentMethodOptions(res.data || []))
       .catch(() => {});
     fieldOptionsApi
       .getByCategory('wage_unit')
@@ -423,6 +431,7 @@ export default function InvoiceDetailPage() {
           ? Number(paymentForm.bank_account_id)
           : undefined,
         reference_no: paymentForm.reference_no || undefined,
+        payment_method: paymentForm.payment_method || undefined,
         remarks: paymentForm.remarks || `發票 ${invoice.invoice_no} 收款`,
         payment_in_status: 'paid',
       });
@@ -432,6 +441,7 @@ export default function InvoiceDetailPage() {
         amount: '',
         bank_account_id: '',
         reference_no: '',
+        payment_method: '',
         remarks: '',
       });
       await loadInvoice();
@@ -551,7 +561,7 @@ export default function InvoiceDetailPage() {
               開立發票
             </button>
           )}
-          {['issued', 'partially_paid'].includes(invoice.status) && (
+          {invoice.status !== 'void' && invoice.status !== 'draft' && (
             <button
               onClick={() => {
                 setPaymentForm({
@@ -559,6 +569,7 @@ export default function InvoiceDetailPage() {
                   amount: String(Number(invoice.outstanding)),
                   bank_account_id: '',
                   reference_no: '',
+                  payment_method: '',
                   remarks: '',
                 });
                 setShowPayment(true);
@@ -1469,6 +1480,9 @@ export default function InvoiceDetailPage() {
                     銀行帳戶
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    付款方法
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                     參考編號
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
@@ -1503,6 +1517,9 @@ export default function InvoiceDetailPage() {
                       {p.bank_account?.account_name
                         ? `${p.bank_account.bank_name} - ${p.bank_account.account_no}`
                         : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-500">
+                      {p.payment_method || '—'}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-500">
                       {p.reference_no || '—'}
@@ -1606,6 +1623,28 @@ export default function InvoiceDetailPage() {
                 {bankAccounts.map((ba: any) => (
                   <option key={ba.id} value={ba.id}>
                     {ba.bank_name} - {ba.account_name} ({ba.account_no})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                付款方法
+              </label>
+              <select
+                value={paymentForm.payment_method}
+                onChange={(e) =>
+                  setPaymentForm({
+                    ...paymentForm,
+                    payment_method: e.target.value,
+                  })
+                }
+                className="input-field"
+              >
+                <option value="">請選擇付款方法</option>
+                {paymentMethodOptions.map((opt: any) => (
+                  <option key={opt.id} value={opt.label}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
