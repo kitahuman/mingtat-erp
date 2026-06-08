@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,7 +26,12 @@ const DEFAULT_ALLOWED_CATEGORIES = [
   'vehicle_matching',
 ];
 
-const SORT_FIELD_MAP: Record<string, keyof Prisma.AiKnowledgeEntryOrderByWithRelationInput> = {
+const ACTIVE_STATUSES = ['approved', 'active'];
+
+const SORT_FIELD_MAP: Record<
+  string,
+  keyof Prisma.AiKnowledgeEntryOrderByWithRelationInput
+> = {
   createdAt: 'created_at',
   updatedAt: 'updated_at',
   usageCount: 'knowledge_usage_count',
@@ -42,9 +51,14 @@ interface KnowledgePolicySnapshot {
 export class AiKnowledgeService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async retrieve(dto: RetrieveKnowledgeDto): Promise<RetrieveKnowledgeResponseDto> {
+  async retrieve(
+    dto: RetrieveKnowledgeDto,
+  ): Promise<RetrieveKnowledgeResponseDto> {
     const policy = await this.getPolicySnapshot(dto.moduleCode);
-    const maxEntries = Math.min(dto.limits?.maxEntries ?? policy.maxEntriesPerTask, policy.maxEntriesPerTask);
+    const maxEntries = Math.min(
+      dto.limits?.maxEntries ?? policy.maxEntriesPerTask,
+      policy.maxEntriesPerTask,
+    );
     const maxPromptCharacters = Math.min(
       dto.limits?.maxPromptCharacters ?? policy.maxPromptCharacters,
       policy.maxPromptCharacters,
@@ -54,15 +68,25 @@ export class AiKnowledgeService {
 
     const candidates = await this.prisma.aiKnowledgeEntry.findMany({
       where: {
-        knowledge_status: 'approved',
+        knowledge_status: { in: ACTIVE_STATUSES },
         knowledge_category: { in: policy.allowedCategories },
         OR: [
           { knowledge_module_scope: 'global' },
           { knowledge_module_code: dto.moduleCode },
         ],
         AND: [
-          { OR: [{ knowledge_effective_from: null }, { knowledge_effective_from: { lte: now } }] },
-          { OR: [{ knowledge_effective_to: null }, { knowledge_effective_to: { gte: now } }] },
+          {
+            OR: [
+              { knowledge_effective_from: null },
+              { knowledge_effective_from: { lte: now } },
+            ],
+          },
+          {
+            OR: [
+              { knowledge_effective_to: null },
+              { knowledge_effective_to: { gte: now } },
+            ],
+          },
         ],
       },
       orderBy: [
@@ -74,7 +98,14 @@ export class AiKnowledgeService {
     });
 
     const scored = candidates
-      .map((entry) => ({ entry, score: this.calculateRetrievalScore(entry, contextTokens, dto.moduleCode) }))
+      .map((entry) => ({
+        entry,
+        score: this.calculateRetrievalScore(
+          entry,
+          contextTokens,
+          dto.moduleCode,
+        ),
+      }))
       .filter((item) => item.score > 0)
       .sort((left, right) => right.score - left.score);
 
@@ -83,7 +114,11 @@ export class AiKnowledgeService {
     for (const item of scored) {
       if (entries.length >= maxEntries) break;
       const promptSnippet = this.buildPromptSnippet(item.entry);
-      if (usedCharacters + promptSnippet.length > maxPromptCharacters && entries.length > 0) break;
+      if (
+        usedCharacters + promptSnippet.length > maxPromptCharacters &&
+        entries.length > 0
+      )
+        break;
       entries.push({
         entryId: item.entry.id,
         category: item.entry.knowledge_category,
@@ -100,22 +135,26 @@ export class AiKnowledgeService {
     if (entries.length > 0) {
       const operations: Prisma.PrismaPromise<unknown>[] = [];
       entries.forEach((entry) => {
-        operations.push(this.prisma.aiKnowledgeUsageLog.create({
-          data: {
-            usage_knowledge_entry_id: entry.entryId,
-            usage_task_module_code: dto.moduleCode,
-            usage_task_type: dto.taskType,
-            usage_retrieval_score: entry.retrievalScore,
-            usage_injected_to_prompt: true,
-          },
-        }));
-        operations.push(this.prisma.aiKnowledgeEntry.update({
-          where: { id: entry.entryId },
-          data: {
-            knowledge_usage_count: { increment: 1 },
-            knowledge_last_used_at: new Date(),
-          },
-        }));
+        operations.push(
+          this.prisma.aiKnowledgeUsageLog.create({
+            data: {
+              usage_knowledge_entry_id: entry.entryId,
+              usage_task_module_code: dto.moduleCode,
+              usage_task_type: dto.taskType,
+              usage_retrieval_score: entry.retrievalScore,
+              usage_injected_to_prompt: true,
+            },
+          }),
+        );
+        operations.push(
+          this.prisma.aiKnowledgeEntry.update({
+            where: { id: entry.entryId },
+            data: {
+              knowledge_usage_count: { increment: 1 },
+              knowledge_last_used_at: new Date(),
+            },
+          }),
+        );
       });
       await this.prisma.$transaction(operations);
     }
@@ -129,18 +168,41 @@ export class AiKnowledgeService {
     const where: Prisma.AiKnowledgeEntryWhereInput = {
       ...(query.moduleCode ? { knowledge_module_code: query.moduleCode } : {}),
       ...(query.category ? { knowledge_category: query.category } : {}),
-      ...(query.status ? { knowledge_status: query.status } : { knowledge_status: { not: 'deleted' } }),
-      ...(query.entityType ? { knowledge_applies_to_entity_type: query.entityType } : {}),
-      ...(query.entityId ? { knowledge_applies_to_entity_id: query.entityId } : {}),
-      ...(query.search ? {
-        OR: [
-          { knowledge_title: { contains: query.search, mode: 'insensitive' } },
-          { knowledge_description: { contains: query.search, mode: 'insensitive' } },
-        ],
-      } : {}),
+      ...(query.status
+        ? query.status === 'active'
+          ? { knowledge_status: { in: ACTIVE_STATUSES } }
+          : { knowledge_status: query.status }
+        : { knowledge_status: { not: 'deleted' } }),
+      ...(query.entityType
+        ? { knowledge_applies_to_entity_type: query.entityType }
+        : {}),
+      ...(query.entityId
+        ? { knowledge_applies_to_entity_id: query.entityId }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                knowledge_title: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                knowledge_description: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
     };
-    const orderField = SORT_FIELD_MAP[query.sortBy ?? 'updatedAt'] ?? 'updated_at';
-    const orderBy: Prisma.AiKnowledgeEntryOrderByWithRelationInput = { [orderField]: query.sortOrder ?? 'desc' };
+    const orderField =
+      SORT_FIELD_MAP[query.sortBy ?? 'updatedAt'] ?? 'updated_at';
+    const orderBy: Prisma.AiKnowledgeEntryOrderByWithRelationInput = {
+      [orderField]: query.sortOrder ?? 'desc',
+    };
     const [data, total] = await Promise.all([
       this.prisma.aiKnowledgeEntry.findMany({
         where,
@@ -151,7 +213,12 @@ export class AiKnowledgeService {
       }),
       this.prisma.aiKnowledgeEntry.count({ where }),
     ]);
-    return { data, total, page, pageSize };
+    return {
+      data: data.map((entry) => this.formatKnowledgeEntry(entry)),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async findOne(id: number) {
@@ -167,7 +234,7 @@ export class AiKnowledgeService {
     if (!entry || entry.knowledge_status === 'deleted') {
       throw new NotFoundException('知識不存在');
     }
-    return entry;
+    return this.formatKnowledgeEntry(entry);
   }
 
   async create(dto: CreateKnowledgeEntryDto, userId: number) {
@@ -184,12 +251,18 @@ export class AiKnowledgeService {
         knowledge_keywords: dto.keywords as Prisma.InputJsonValue | undefined,
         knowledge_confidence_score: dto.confidenceScore ?? 80,
         knowledge_status: dto.status ?? 'approved',
-        knowledge_effective_from: dto.effectiveFrom ? new Date(dto.effectiveFrom) : undefined,
-        knowledge_effective_to: dto.effectiveTo ? new Date(dto.effectiveTo) : undefined,
+        knowledge_effective_from: dto.effectiveFrom
+          ? new Date(dto.effectiveFrom)
+          : undefined,
+        knowledge_effective_to: dto.effectiveTo
+          ? new Date(dto.effectiveTo)
+          : undefined,
         knowledge_created_by_type: dto.createdByType ?? 'manual',
         knowledge_created_by: userId,
-        knowledge_approved_by: dto.status === 'approved' || !dto.status ? userId : undefined,
-        knowledge_approved_at: dto.status === 'approved' || !dto.status ? new Date() : undefined,
+        knowledge_approved_by:
+          dto.status === 'approved' || !dto.status ? userId : undefined,
+        knowledge_approved_at:
+          dto.status === 'approved' || !dto.status ? new Date() : undefined,
       },
     });
 
@@ -220,20 +293,47 @@ export class AiKnowledgeService {
     });
     const data: Prisma.AiKnowledgeEntryUpdateInput = {
       ...(dto.moduleScope ? { knowledge_module_scope: dto.moduleScope } : {}),
-      ...(dto.moduleCode !== undefined ? { knowledge_module_code: dto.moduleCode } : {}),
+      ...(dto.moduleCode !== undefined
+        ? { knowledge_module_code: dto.moduleCode }
+        : {}),
       ...(dto.category ? { knowledge_category: dto.category } : {}),
       ...(dto.title ? { knowledge_title: dto.title } : {}),
       ...(dto.description ? { knowledge_description: dto.description } : {}),
-      ...(dto.payload ? { knowledge_payload_json: dto.payload as Prisma.InputJsonValue } : {}),
-      ...(dto.appliesToEntityType !== undefined ? { knowledge_applies_to_entity_type: dto.appliesToEntityType } : {}),
-      ...(dto.appliesToEntityId !== undefined ? { knowledge_applies_to_entity_id: dto.appliesToEntityId } : {}),
-      ...(dto.keywords !== undefined ? { knowledge_keywords: dto.keywords as Prisma.InputJsonValue } : {}),
-      ...(dto.confidenceScore !== undefined ? { knowledge_confidence_score: dto.confidenceScore } : {}),
+      ...(dto.payload
+        ? { knowledge_payload_json: dto.payload as Prisma.InputJsonValue }
+        : {}),
+      ...(dto.appliesToEntityType !== undefined
+        ? { knowledge_applies_to_entity_type: dto.appliesToEntityType }
+        : {}),
+      ...(dto.appliesToEntityId !== undefined
+        ? { knowledge_applies_to_entity_id: dto.appliesToEntityId }
+        : {}),
+      ...(dto.keywords !== undefined
+        ? { knowledge_keywords: dto.keywords as Prisma.InputJsonValue }
+        : {}),
+      ...(dto.confidenceScore !== undefined
+        ? { knowledge_confidence_score: dto.confidenceScore }
+        : {}),
       ...(dto.status ? { knowledge_status: dto.status } : {}),
-      ...(dto.effectiveFrom !== undefined ? { knowledge_effective_from: dto.effectiveFrom ? new Date(dto.effectiveFrom) : null } : {}),
-      ...(dto.effectiveTo !== undefined ? { knowledge_effective_to: dto.effectiveTo ? new Date(dto.effectiveTo) : null } : {}),
+      ...(dto.effectiveFrom !== undefined
+        ? {
+            knowledge_effective_from: dto.effectiveFrom
+              ? new Date(dto.effectiveFrom)
+              : null,
+          }
+        : {}),
+      ...(dto.effectiveTo !== undefined
+        ? {
+            knowledge_effective_to: dto.effectiveTo
+              ? new Date(dto.effectiveTo)
+              : null,
+          }
+        : {}),
     };
-    const updated = await this.prisma.aiKnowledgeEntry.update({ where: { id }, data });
+    const updated = await this.prisma.aiKnowledgeEntry.update({
+      where: { id },
+      data,
+    });
     await this.createVersion(
       id,
       existingVersionCount + 1,
@@ -249,22 +349,117 @@ export class AiKnowledgeService {
     await this.prisma.$transaction([
       this.prisma.aiKnowledgeEntry.update({
         where: { id },
-        data: { knowledge_status: 'approved', knowledge_approved_by: userId, knowledge_approved_at: new Date() },
+        data: {
+          knowledge_status: 'approved',
+          knowledge_approved_by: userId,
+          knowledge_approved_at: new Date(),
+        },
       }),
       this.prisma.aiKnowledgeReview.create({
-        data: { review_knowledge_entry_id: id, review_action: 'approve', review_reason: reason, review_user_id: userId },
+        data: {
+          review_knowledge_entry_id: id,
+          review_action: 'approve',
+          review_reason: reason,
+          review_user_id: userId,
+        },
       }),
     ]);
     return this.findOne(id);
+  }
+
+  async enable(id: number, reason: string | undefined, userId: number) {
+    await this.findOne(id);
+    await this.prisma.$transaction([
+      this.prisma.aiKnowledgeEntry.update({
+        where: { id },
+        data: {
+          knowledge_status: 'approved',
+          knowledge_approved_by: userId,
+          knowledge_approved_at: new Date(),
+        },
+      }),
+      this.prisma.aiKnowledgeReview.create({
+        data: {
+          review_knowledge_entry_id: id,
+          review_action: 'enable',
+          review_reason: reason,
+          review_user_id: userId,
+        },
+      }),
+    ]);
+    return this.findOne(id);
+  }
+
+  async batchApprove(
+    ids: number[],
+    reason: string | undefined,
+    userId: number,
+  ) {
+    const uniqueIds = Array.from(
+      new Set(
+        (ids ?? [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    );
+    if (uniqueIds.length === 0)
+      throw new BadRequestException('請選擇要審核的知識');
+
+    const entries = await this.prisma.aiKnowledgeEntry.findMany({
+      where: { id: { in: uniqueIds }, knowledge_status: { not: 'deleted' } },
+      select: { id: true },
+    });
+    const foundIds = new Set(entries.map((entry) => entry.id));
+    const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+    if (missingIds.length > 0)
+      throw new NotFoundException(`知識不存在：${missingIds.join(', ')}`);
+
+    await this.prisma.$transaction([
+      this.prisma.aiKnowledgeEntry.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: {
+          knowledge_status: 'approved',
+          knowledge_approved_by: userId,
+          knowledge_approved_at: new Date(),
+        },
+      }),
+      this.prisma.aiKnowledgeReview.createMany({
+        data: uniqueIds.map((id) => ({
+          review_knowledge_entry_id: id,
+          review_action: 'approve',
+          review_reason: reason ?? '批量審核通過',
+          review_user_id: userId,
+        })),
+      }),
+    ]);
+
+    const approvedEntries = await this.prisma.aiKnowledgeEntry.findMany({
+      where: { id: { in: uniqueIds } },
+      include: { evidence: true, reviews: true },
+      orderBy: { updated_at: 'desc' },
+    });
+    return {
+      approved: uniqueIds.length,
+      ids: uniqueIds,
+      data: approvedEntries.map((entry) => this.formatKnowledgeEntry(entry)),
+    };
   }
 
   async reject(id: number, reason: string, userId: number) {
     if (!reason.trim()) throw new BadRequestException('拒絕原因不可為空');
     await this.findOne(id);
     await this.prisma.$transaction([
-      this.prisma.aiKnowledgeEntry.update({ where: { id }, data: { knowledge_status: 'rejected' } }),
+      this.prisma.aiKnowledgeEntry.update({
+        where: { id },
+        data: { knowledge_status: 'rejected' },
+      }),
       this.prisma.aiKnowledgeReview.create({
-        data: { review_knowledge_entry_id: id, review_action: 'reject', review_reason: reason, review_user_id: userId },
+        data: {
+          review_knowledge_entry_id: id,
+          review_action: 'reject',
+          review_reason: reason,
+          review_user_id: userId,
+        },
       }),
     ]);
     return this.findOne(id);
@@ -273,9 +468,17 @@ export class AiKnowledgeService {
   async disable(id: number, reason: string | undefined, userId: number) {
     await this.findOne(id);
     await this.prisma.$transaction([
-      this.prisma.aiKnowledgeEntry.update({ where: { id }, data: { knowledge_status: 'disabled' } }),
+      this.prisma.aiKnowledgeEntry.update({
+        where: { id },
+        data: { knowledge_status: 'disabled' },
+      }),
       this.prisma.aiKnowledgeReview.create({
-        data: { review_knowledge_entry_id: id, review_action: 'disable', review_reason: reason, review_user_id: userId },
+        data: {
+          review_knowledge_entry_id: id,
+          review_action: 'disable',
+          review_reason: reason,
+          review_user_id: userId,
+        },
       }),
     ]);
     return this.findOne(id);
@@ -284,9 +487,17 @@ export class AiKnowledgeService {
   async softDelete(id: number, userId: number) {
     await this.findOne(id);
     await this.prisma.$transaction([
-      this.prisma.aiKnowledgeEntry.update({ where: { id }, data: { knowledge_status: 'deleted' } }),
+      this.prisma.aiKnowledgeEntry.update({
+        where: { id },
+        data: { knowledge_status: 'deleted' },
+      }),
       this.prisma.aiKnowledgeReview.create({
-        data: { review_knowledge_entry_id: id, review_action: 'delete', review_reason: '軟刪除', review_user_id: userId },
+        data: {
+          review_knowledge_entry_id: id,
+          review_action: 'delete',
+          review_reason: '軟刪除',
+          review_user_id: userId,
+        },
       }),
     ]);
     return { success: true };
@@ -301,11 +512,12 @@ export class AiKnowledgeService {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.aiKnowledgeUsageLog.count({ where: { usage_knowledge_entry_id: id } }),
+      this.prisma.aiKnowledgeUsageLog.count({
+        where: { usage_knowledge_entry_id: id },
+      }),
     ]);
     return { data, total, page, pageSize };
   }
-
 
   async findActivityLogs(query: QueryActivityLogsDto) {
     const page = query.page ?? 1;
@@ -320,11 +532,11 @@ export class AiKnowledgeService {
       ...(query.search
         ? {
             OR: [
-              { activity_action: { contains: query.search, mode: 'insensitive' } },
-              { activity_description: { contains: query.search, mode: 'insensitive' } },
-              { activity_reason: { contains: query.search, mode: 'insensitive' } },
-              { activity_input_summary: { contains: query.search, mode: 'insensitive' } },
-              { activity_output_summary: { contains: query.search, mode: 'insensitive' } },
+              { activity_action: { contains: query.search } },
+              { activity_description: { contains: query.search } },
+              { activity_reason: { contains: query.search } },
+              { activity_input_summary: { contains: query.search } },
+              { activity_output_summary: { contains: query.search } },
             ],
           }
         : {}),
@@ -367,9 +579,10 @@ export class AiKnowledgeService {
     let employeeCreated = 0;
     let employeeSkipped = 0;
 
-    const verificationMappings = await this.prisma.verificationNicknameMapping.findMany({
-      orderBy: { id: 'asc' },
-    });
+    const verificationMappings =
+      await this.prisma.verificationNicknameMapping.findMany({
+        orderBy: { id: 'asc' },
+      });
 
     for (const mapping of verificationMappings) {
       const nickname = mapping.nickname_value?.trim();
@@ -387,8 +600,12 @@ export class AiKnowledgeService {
         continue;
       }
 
-      const isVehicleMapping = !mapping.nickname_employee_id && !!mapping.nickname_vehicle_no;
-      const targetLabel = mapping.nickname_employee_name || mapping.nickname_vehicle_no || '未指定對象';
+      const isVehicleMapping =
+        !mapping.nickname_employee_id && !!mapping.nickname_vehicle_no;
+      const targetLabel =
+        mapping.nickname_employee_name ||
+        mapping.nickname_vehicle_no ||
+        '未指定對象';
       await this.prisma.aiKnowledgeEntry.create({
         data: {
           knowledge_module_scope: 'global',
@@ -402,7 +619,9 @@ export class AiKnowledgeService {
             employeeName: mapping.nickname_employee_name,
             vehicleNo: mapping.nickname_vehicle_no,
           } as Prisma.InputJsonValue,
-          knowledge_applies_to_entity_type: isVehicleMapping ? 'vehicle' : 'employee',
+          knowledge_applies_to_entity_type: isVehicleMapping
+            ? 'vehicle'
+            : 'employee',
           knowledge_applies_to_entity_id: mapping.nickname_employee_id,
           knowledge_status: mapping.nickname_is_active ? 'active' : 'disabled',
           knowledge_created_by_type: 'system',
@@ -431,7 +650,8 @@ export class AiKnowledgeService {
         employeeSkipped += 1;
         continue;
       }
-      const employeeName = nicknameRecord.employee?.name_zh || `員工 #${employeeId}`;
+      const employeeName =
+        nicknameRecord.employee?.name_zh || `員工 #${employeeId}`;
       await this.prisma.aiKnowledgeEntry.create({
         data: {
           knowledge_module_scope: 'global',
@@ -465,7 +685,8 @@ export class AiKnowledgeService {
         activity_type: 'learning',
         activity_action: 'migrate_existing_nickname_data',
         activity_description: `匯入既有花名/簡稱對照到 AI 知識庫：新增 ${created} 條，跳過 ${skipped} 條。`,
-        activity_reason: '系統管理員觸發既有資料遷移，將人工確認過的花名資料轉為全域 AI 知識。',
+        activity_reason:
+          '系統管理員觸發既有資料遷移，將人工確認過的花名資料轉為全域 AI 知識。',
         activity_input_summary: `VerificationNicknameMapping ${verificationMappings.length} 條；EmployeeNickname ${employeeNicknames.length} 條。`,
         activity_output_summary: `新增 ${created} 條；跳過重複或無效 ${skipped} 條。`,
         activity_result: 'success',
@@ -501,7 +722,9 @@ export class AiKnowledgeService {
   }
 
   async listPolicies() {
-    return this.prisma.aiKnowledgeModulePolicy.findMany({ orderBy: { policy_module_code: 'asc' } });
+    return this.prisma.aiKnowledgeModulePolicy.findMany({
+      orderBy: { policy_module_code: 'asc' },
+    });
   }
 
   async updatePolicy(moduleCode: string, dto: UpdateModulePolicyDto) {
@@ -509,34 +732,58 @@ export class AiKnowledgeService {
       where: { policy_module_code: moduleCode },
       create: {
         policy_module_code: moduleCode,
-        policy_allowed_categories: (dto.allowedCategories ?? DEFAULT_ALLOWED_CATEGORIES) as Prisma.InputJsonValue,
+        policy_allowed_categories: (dto.allowedCategories ??
+          DEFAULT_ALLOWED_CATEGORIES) as Prisma.InputJsonValue,
         policy_max_entries_per_task: dto.maxEntriesPerTask ?? 20,
         policy_max_prompt_characters: dto.maxPromptCharacters ?? 4000,
         policy_auto_candidate_enabled: dto.autoCandidateEnabled ?? true,
         policy_review_threshold: dto.reviewThreshold ?? 3,
       },
       update: {
-        ...(dto.allowedCategories ? { policy_allowed_categories: dto.allowedCategories as Prisma.InputJsonValue } : {}),
-        ...(dto.maxEntriesPerTask !== undefined ? { policy_max_entries_per_task: dto.maxEntriesPerTask } : {}),
-        ...(dto.maxPromptCharacters !== undefined ? { policy_max_prompt_characters: dto.maxPromptCharacters } : {}),
-        ...(dto.autoCandidateEnabled !== undefined ? { policy_auto_candidate_enabled: dto.autoCandidateEnabled } : {}),
-        ...(dto.reviewThreshold !== undefined ? { policy_review_threshold: dto.reviewThreshold } : {}),
+        ...(dto.allowedCategories
+          ? {
+              policy_allowed_categories:
+                dto.allowedCategories as Prisma.InputJsonValue,
+            }
+          : {}),
+        ...(dto.maxEntriesPerTask !== undefined
+          ? { policy_max_entries_per_task: dto.maxEntriesPerTask }
+          : {}),
+        ...(dto.maxPromptCharacters !== undefined
+          ? { policy_max_prompt_characters: dto.maxPromptCharacters }
+          : {}),
+        ...(dto.autoCandidateEnabled !== undefined
+          ? { policy_auto_candidate_enabled: dto.autoCandidateEnabled }
+          : {}),
+        ...(dto.reviewThreshold !== undefined
+          ? { policy_review_threshold: dto.reviewThreshold }
+          : {}),
       },
     });
   }
 
-
-  private buildNicknameKnowledgeKey(nickname: string, employeeId?: number | null, vehicleNo?: string | null): string {
+  private buildNicknameKnowledgeKey(
+    nickname: string,
+    employeeId?: number | null,
+    vehicleNo?: string | null,
+  ): string {
     const normalizedNickname = nickname.trim().toLowerCase();
     if (employeeId) return `${normalizedNickname}::employee::${employeeId}`;
-    if (vehicleNo) return `${normalizedNickname}::vehicle::${vehicleNo.trim().toLowerCase()}`;
+    if (vehicleNo)
+      return `${normalizedNickname}::vehicle::${vehicleNo.trim().toLowerCase()}`;
     return `${normalizedNickname}::unknown`;
   }
 
-  private async getPolicySnapshot(moduleCode: string): Promise<KnowledgePolicySnapshot> {
-    const policy = await this.prisma.aiKnowledgeModulePolicy.findUnique({ where: { policy_module_code: moduleCode } });
+  private async getPolicySnapshot(
+    moduleCode: string,
+  ): Promise<KnowledgePolicySnapshot> {
+    const policy = await this.prisma.aiKnowledgeModulePolicy.findUnique({
+      where: { policy_module_code: moduleCode },
+    });
     return {
-      allowedCategories: this.asStringArray(policy?.policy_allowed_categories) ?? DEFAULT_ALLOWED_CATEGORIES,
+      allowedCategories:
+        this.asStringArray(policy?.policy_allowed_categories) ??
+        DEFAULT_ALLOWED_CATEGORIES,
       maxEntriesPerTask: policy?.policy_max_entries_per_task ?? 20,
       maxPromptCharacters: policy?.policy_max_prompt_characters ?? 4000,
     };
@@ -561,21 +808,41 @@ export class AiKnowledgeService {
   }
 
   private calculateRetrievalScore(
-    entry: { knowledge_keywords: Prisma.JsonValue; knowledge_title: string; knowledge_description: string; knowledge_module_code: string | null; knowledge_applies_to_entity_type: string | null; knowledge_applies_to_entity_id: number | null; knowledge_confidence_score: Prisma.Decimal; knowledge_usage_count: number },
+    entry: {
+      knowledge_keywords: Prisma.JsonValue;
+      knowledge_title: string;
+      knowledge_description: string;
+      knowledge_module_code: string | null;
+      knowledge_applies_to_entity_type: string | null;
+      knowledge_applies_to_entity_id: number | null;
+      knowledge_confidence_score: Prisma.Decimal;
+      knowledge_usage_count: number;
+    },
     contextTokens: Set<string>,
     moduleCode: string,
   ): number {
     let score = entry.knowledge_module_code === moduleCode ? 2 : 1;
-    const searchable = [entry.knowledge_title, entry.knowledge_description, ...this.asStringArray(entry.knowledge_keywords)].join(' ').toLowerCase();
+    const searchable = [
+      entry.knowledge_title,
+      entry.knowledge_description,
+      ...this.asStringArray(entry.knowledge_keywords),
+    ]
+      .join(' ')
+      .toLowerCase();
     for (const token of contextTokens) {
-      if (searchable.includes(token.toLowerCase())) score += token.length > 2 ? 3 : 1;
+      if (searchable.includes(token.toLowerCase()))
+        score += token.length > 2 ? 3 : 1;
     }
     score += Number(entry.knowledge_confidence_score) / 100;
     score += Math.min(entry.knowledge_usage_count / 50, 1);
     return score;
   }
 
-  private buildPromptSnippet(entry: { knowledge_title: string; knowledge_description: string; knowledge_payload_json: Prisma.JsonValue }): string {
+  private buildPromptSnippet(entry: {
+    knowledge_title: string;
+    knowledge_description: string;
+    knowledge_payload_json: Prisma.JsonValue;
+  }): string {
     return `【${entry.knowledge_title}】${entry.knowledge_description}\n規則資料：${JSON.stringify(entry.knowledge_payload_json)}`;
   }
 
@@ -583,7 +850,10 @@ export class AiKnowledgeService {
     const tokens = new Set<string>();
     const addValue = (value: unknown) => {
       if (typeof value === 'string') {
-        value.split(/[\s,，。;；|/]+/).filter((token) => token.trim().length >= 2).forEach((token) => tokens.add(token.trim()));
+        value
+          .split(/[\s,，。;；|/]+/)
+          .filter((token) => token.trim().length >= 2)
+          .forEach((token) => tokens.add(token.trim()));
       } else if (typeof value === 'number') {
         tokens.add(String(value));
       } else if (Array.isArray(value)) {
@@ -596,11 +866,25 @@ export class AiKnowledgeService {
     return tokens;
   }
 
+  private formatKnowledgeEntry<T extends { knowledge_status: string }>(
+    entry: T,
+  ): T & { status: string } {
+    return { ...entry, status: this.toFrontendStatus(entry.knowledge_status) };
+  }
+
+  private toFrontendStatus(status: string): string {
+    return ACTIVE_STATUSES.includes(status) ? 'active' : status;
+  }
+
   private asJsonRecord(value: Prisma.JsonValue): JsonRecord {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : { value };
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as JsonRecord)
+      : { value };
   }
 
   private asStringArray(value: Prisma.JsonValue | undefined): string[] {
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : [];
   }
 }

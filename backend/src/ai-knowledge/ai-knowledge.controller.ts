@@ -12,13 +12,21 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { CreateKnowledgeEntryDto } from './dto/create-knowledge-entry.dto';
 import { QueryActivityLogsDto } from './dto/query-activity-logs.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
-import { RejectKnowledgeDto, ReviewKnowledgeDto } from './dto/review-knowledge.dto';
+import {
+  RejectKnowledgeDto,
+  ReviewKnowledgeDto,
+} from './dto/review-knowledge.dto';
 import { RetrieveKnowledgeDto } from './dto/retrieve-knowledge.dto';
 import { UpdateKnowledgeEntryDto } from './dto/update-knowledge-entry.dto';
 import { UpdateModulePolicyDto } from './dto/update-module-policy.dto';
@@ -70,6 +78,19 @@ export class AiKnowledgeController {
     return this.service.migrateExistingData(getUserId(req));
   }
 
+  @Post('entries/batch-approve')
+  @ApiOperation({ summary: '批量審核通過知識' })
+  batchApprove(
+    @Body() dto: { ids?: number[]; entryIds?: number[]; reason?: string },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.batchApprove(
+      dto.ids ?? dto.entryIds ?? [],
+      dto.reason,
+      getUserId(req),
+    );
+  }
+
   @Get('entries/:id')
   @ApiOperation({ summary: '查看知識詳情（含證據、版本、使用紀錄）' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -78,7 +99,10 @@ export class AiKnowledgeController {
 
   @Post('entries')
   @ApiOperation({ summary: '手動新增知識' })
-  create(@Body() dto: CreateKnowledgeEntryDto, @Req() req: AuthenticatedRequest) {
+  create(
+    @Body() dto: CreateKnowledgeEntryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.service.create(dto, getUserId(req));
   }
 
@@ -112,6 +136,16 @@ export class AiKnowledgeController {
     return this.service.reject(id, dto.reason, getUserId(req));
   }
 
+  @Post('entries/:id/enable')
+  @ApiOperation({ summary: '啟用知識' })
+  enable(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewKnowledgeDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.enable(id, dto.reason, getUserId(req));
+  }
+
   @Post('entries/:id/disable')
   @ApiOperation({ summary: '停用知識' })
   disable(
@@ -124,7 +158,10 @@ export class AiKnowledgeController {
 
   @Delete('entries/:id')
   @ApiOperation({ summary: '軟刪除知識' })
-  remove(@Param('id', ParseIntPipe) id: number, @Req() req: AuthenticatedRequest) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.service.softDelete(id, getUserId(req));
   }
 
@@ -135,7 +172,11 @@ export class AiKnowledgeController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
-    return this.service.usageLogs(id, page ? Number(page) : 1, pageSize ? Number(pageSize) : 20);
+    return this.service.usageLogs(
+      id,
+      page ? Number(page) : 1,
+      pageSize ? Number(pageSize) : 20,
+    );
   }
 
   @Get('module-policies')
@@ -147,7 +188,10 @@ export class AiKnowledgeController {
   @Patch('module-policies/:moduleCode')
   @ApiOperation({ summary: '更新模組知識策略' })
   @ApiParam({ name: 'moduleCode', example: 'ai-payroll' })
-  updatePolicy(@Param('moduleCode') moduleCode: string, @Body() dto: UpdateModulePolicyDto) {
+  updatePolicy(
+    @Param('moduleCode') moduleCode: string,
+    @Body() dto: UpdateModulePolicyDto,
+  ) {
     return this.service.updatePolicy(moduleCode, dto);
   }
 }

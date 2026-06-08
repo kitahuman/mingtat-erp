@@ -9,14 +9,21 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
 import { extname, join } from 'path';
@@ -64,7 +71,10 @@ export class AiPayrollController {
 
   @Post('batches')
   @ApiOperation({ summary: '建立 AI 計糧批次' })
-  createBatch(@Body() dto: CreateAiPayrollBatchDto, @Req() req: AuthenticatedRequest) {
+  createBatch(
+    @Body() dto: CreateAiPayrollBatchDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.service.createBatch(dto, getUserId(req));
   }
 
@@ -80,24 +90,59 @@ export class AiPayrollController {
     return this.service.getBatch(batchId);
   }
 
+  @Patch('batches/:batchId')
+  @ApiOperation({ summary: '更新 AI 計糧批次' })
+  updateBatch(
+    @Param('batchId', ParseIntPipe) batchId: number,
+    @Body() dto: Record<string, unknown>,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.updateBatch(batchId, dto, getUserId(req));
+  }
+
+  @Get('batches/:batchId/export')
+  @ApiOperation({ summary: '匯出批次識別資料' })
+  async exportBatch(
+    @Param('batchId', ParseIntPipe) batchId: number,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.service.exportBatch(batchId);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Content-Length': buffer.length,
+    });
+    return res.send(buffer);
+  }
+
   @Post('batches/:batchId/documents')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => cb(null, getUploadDir()),
-      filename: (_req, file, cb) => {
-        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const ext = extname(decodedName || file.originalname);
-        cb(null, `${randomUUID()}${ext}`);
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => cb(null, getUploadDir()),
+        filename: (_req, file, cb) => {
+          const decodedName = Buffer.from(file.originalname, 'latin1').toString(
+            'utf8',
+          );
+          const ext = extname(decodedName || file.originalname);
+          cb(null, `${randomUUID()}${ext}`);
+        },
+      }),
+      limits: { fileSize: 100 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (
+          !/^(application\/pdf|image\/(png|jpe?g|webp))$/i.test(file.mimetype)
+        ) {
+          return cb(
+            new BadRequestException('只支援 PDF、PNG、JPG、JPEG、WEBP 文件'),
+            false,
+          );
+        }
+        cb(null, true);
       },
     }),
-    limits: { fileSize: 100 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => {
-      if (!/^(application\/pdf|image\/(png|jpe?g|webp))$/i.test(file.mimetype)) {
-        return cb(new BadRequestException('只支援 PDF、PNG、JPG、JPEG、WEBP 文件'), false);
-      }
-      cb(null, true);
-    },
-  }))
+  )
   @ApiOperation({ summary: '上傳 AI 計糧照片或 PDF' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadPayrollDocumentDto })
@@ -124,8 +169,20 @@ export class AiPayrollController {
 
   @Post('batches/:batchId/extraction-jobs')
   @ApiOperation({ summary: '開始 AI 識別' })
-  startExtractionJob(@Param('batchId', ParseIntPipe) batchId: number, @Body() dto: StartExtractionJobDto) {
+  startExtractionJob(
+    @Param('batchId', ParseIntPipe) batchId: number,
+    @Body() dto: StartExtractionJobDto,
+  ) {
     return this.service.startExtractionJob(batchId, dto);
+  }
+
+  @Post('batches/:batchId/extract')
+  @ApiOperation({ summary: '開始 AI 識別（前端 alias）' })
+  extractBatch(
+    @Param('batchId', ParseIntPipe) batchId: number,
+    @Body() dto: StartExtractionJobDto,
+  ) {
+    return this.service.startExtractionJob(batchId, dto ?? {});
   }
 
   @Get('extraction-jobs/:jobId')
@@ -134,15 +191,42 @@ export class AiPayrollController {
     return this.service.getExtractionJob(jobId);
   }
 
+  @Get('pages/:pageId')
+  @ApiOperation({ summary: '取得單頁詳情' })
+  getPage(@Param('pageId', ParseIntPipe) pageId: number) {
+    return this.service.getPage(pageId);
+  }
+
+  @Get('pages/:pageId/entries')
+  @ApiOperation({ summary: '取得單頁識別 entries' })
+  getPageEntries(@Param('pageId', ParseIntPipe) pageId: number) {
+    return this.service.listPageEntries(pageId);
+  }
+
   @Post('pages/:pageId/re-extract')
   @ApiOperation({ summary: '單頁重新識別' })
-  reExtractPage(@Param('pageId', ParseIntPipe) pageId: number, @Body() dto: StartExtractionJobDto) {
-    return this.service.reExtractPage(pageId, dto);
+  reExtractPage(
+    @Param('pageId', ParseIntPipe) pageId: number,
+    @Body() dto: StartExtractionJobDto,
+  ) {
+    return this.service.reExtractPage(pageId, dto ?? {});
+  }
+
+  @Post('pages/:pageId/extract')
+  @ApiOperation({ summary: '單頁重新識別（前端 alias）' })
+  extractPage(
+    @Param('pageId', ParseIntPipe) pageId: number,
+    @Body() dto: StartExtractionJobDto,
+  ) {
+    return this.service.reExtractPage(pageId, dto ?? {});
   }
 
   @Get('batches/:batchId/entries')
   @ApiOperation({ summary: '查詢批次識別出的 entry' })
-  listEntries(@Param('batchId', ParseIntPipe) batchId: number, @Query() query: QueryPayrollEntriesDto) {
+  listEntries(
+    @Param('batchId', ParseIntPipe) batchId: number,
+    @Query() query: QueryPayrollEntriesDto,
+  ) {
     return this.service.listEntries(batchId, query);
   }
 
@@ -173,6 +257,26 @@ export class AiPayrollController {
     return this.service.matchEmployee(entryId, dto, getUserId(req));
   }
 
+  @Post('entries/:entryId/confirm')
+  @ApiOperation({ summary: '確認單條 entry' })
+  confirmEntry(
+    @Param('entryId', ParseIntPipe) entryId: number,
+    @Body() dto: Record<string, unknown>,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.confirmEntry(entryId, dto ?? {}, getUserId(req));
+  }
+
+  @Patch('entries/:entryId')
+  @ApiOperation({ summary: '更新單條 entry' })
+  updateEntry(
+    @Param('entryId', ParseIntPipe) entryId: number,
+    @Body() dto: Record<string, unknown>,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.updateEntry(entryId, dto ?? {}, getUserId(req));
+  }
+
   @Post('entries/:entryId/exclude')
   @ApiOperation({ summary: '排除不計糧資料列' })
   excludeEntry(
@@ -186,6 +290,16 @@ export class AiPayrollController {
   @Post('pages/:pageId/confirm-all')
   @ApiOperation({ summary: '確認整頁所有 entries' })
   confirmPage(
+    @Param('pageId', ParseIntPipe) pageId: number,
+    @Body() dto: ConfirmPageDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.confirmPage(pageId, dto.reason, getUserId(req));
+  }
+
+  @Post('pages/:pageId/confirm')
+  @ApiOperation({ summary: '確認整頁所有 entries（前端 alias）' })
+  confirmPageAlias(
     @Param('pageId', ParseIntPipe) pageId: number,
     @Body() dto: ConfirmPageDto,
     @Req() req: AuthenticatedRequest,
