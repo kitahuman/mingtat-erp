@@ -1937,3 +1937,60 @@ export const issueReportsApi = {
   updateStatus: (id: number, status: 'open' | 'acknowledged' | 'resolved') =>
     api.patch(`/issue-reports/${id}/status`, { status }),
 };
+
+// ══════════════════════════════════════════════════════════════
+// AI Knowledge Base（AI 知識庫）
+// ══════════════════════════════════════════════════════════════
+
+export const aiKnowledgeApi = {
+  list: (params?: any) => api.get('/ai-knowledge/entries', { params }),
+  get: (id: string | number) => api.get(`/ai-knowledge/entries/${id}`),
+  create: (data: any) => api.post('/ai-knowledge/entries', data),
+  update: (id: string | number, data: any) =>
+    api.patch(`/ai-knowledge/entries/${id}`, data),
+  delete: (id: string | number) => api.delete(`/ai-knowledge/entries/${id}`),
+  approve: (id: string | number, data?: any) =>
+    api.post(`/ai-knowledge/entries/${id}/approve`, data || {}),
+  reject: (id: string | number, data?: any) =>
+    api.post(`/ai-knowledge/entries/${id}/reject`, data || {}),
+  enable: (id: string | number) =>
+    api.post(`/ai-knowledge/entries/${id}/enable`, {}),
+  disable: (id: string | number) =>
+    api.post(`/ai-knowledge/entries/${id}/disable`, {}),
+  batchApprove: (ids: Array<string | number>, data?: any) =>
+    api.post('/ai-knowledge/entries/batch-approve', { ids, ...(data || {}) }),
+};
+
+// ══════════════════════════════════════════════════════════════
+// AI Payroll（AI 計糧）
+// ══════════════════════════════════════════════════════════════
+
+export const aiPayrollApi = {
+  listBatches: (params?: any) => api.get('/ai-payroll/batches', { params }),
+  getBatch: (batchId: string | number) => api.get(`/ai-payroll/batches/${batchId}`),
+  createBatch: (data: any) => api.post('/ai-payroll/batches', data),
+  updateBatch: (batchId: string | number, data: any) =>
+    api.patch(`/ai-payroll/batches/${batchId}`, data),
+  uploadDocuments: (batchId: string | number, formData: FormData) =>
+    api.post(`/ai-payroll/batches/${batchId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
+    }),
+  getPages: (batchId: string | number, params?: any) =>
+    api.get(`/ai-payroll/batches/${batchId}/pages`, { params }),
+  triggerBatchExtraction: (batchId: string | number) =>
+    api.post(`/ai-payroll/batches/${batchId}/extract`, {}),
+  exportBatch: (batchId: string | number) =>
+    api.get(`/ai-payroll/batches/${batchId}/export`, { responseType: 'blob' }),
+  getPage: (pageId: string | number) => api.get(`/ai-payroll/pages/${pageId}`),
+  extractPage: (pageId: string | number) =>
+    api.post(`/ai-payroll/pages/${pageId}/extract`, {}),
+  getPageEntries: (pageId: string | number) =>
+    api.get(`/ai-payroll/pages/${pageId}/entries`),
+  confirmEntry: (entryId: string | number, data: any) =>
+    api.post(`/ai-payroll/entries/${entryId}/confirm`, data),
+  updateEntry: (entryId: string | number, data: any) =>
+    api.patch(`/ai-payroll/entries/${entryId}`, data),
+  confirmPage: (pageId: string | number, data?: any) =>
+    api.post(`/ai-payroll/pages/${pageId}/confirm`, data || {}),
+};

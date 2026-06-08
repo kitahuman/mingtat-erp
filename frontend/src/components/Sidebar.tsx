@@ -35,6 +35,7 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 const navEntries: NavEntry[] = [
   { href: '/dashboard', label: '儀表板', icon: '📊', pageKey: 'dashboard' },
   { href: '/chat', label: 'AI 助手', icon: '🤖', pageKey: 'chat' },
+  { href: '/ai-knowledge', label: 'AI 知識庫', icon: '🧠', pageKey: 'ai-knowledge' },
   { href: '/work-logs', label: '工作記錄', icon: '📝', pageKey: 'work-logs' },
   {
     label: '文件管理',
@@ -84,6 +85,7 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/salary-config', label: '員工薪酬', icon: '💵', pageKey: 'salary-config' },
       { href: '/payroll', label: '計糧管理', icon: '🧮', pageKey: 'payroll' },
+      { href: '/ai-payroll', label: 'AI 計糧', icon: '🤖', pageKey: 'ai-payroll' },
       { href: '/payroll-records', label: '糧單記錄', icon: '📄', pageKey: 'payroll-records' },
       { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', pageKey: 'subcon-payroll' },
       { href: '/subcon-payroll/records', label: '判頭糧單記錄', icon: '📋', pageKey: 'subcon-payroll-records' },
