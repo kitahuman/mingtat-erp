@@ -1977,6 +1977,8 @@ export const aiPayrollSessionApi = {
     api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/start`, data || {}),
   getProgress: (id: string | number) =>
     api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/progress`),
+  getSessionProgress: (id: string | number) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/progress`),
   retry: (id: string | number, data?: any) =>
     api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/retry`, data || {}),
   getReconcileItems: (id: string | number, params?: any) =>
@@ -2010,6 +2012,10 @@ export const aiPayrollSessionApi = {
     ),
   batchIgnoreQuestions: (sessionId: string | number, data: any) =>
     api.post(`${AI_PAYROLL_SESSION_BASE}/${sessionId}/questions/batch-dismiss`, data),
+  dismissQuestion: (sessionId: string | number, questionId: string | number) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${sessionId}/questions/batch-dismiss`, {
+      question_ids: [Number(questionId)],
+    }),
   previewPayroll: (id: string | number, params?: any) =>
     api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/payroll-preview`, { params }),
   generatePayroll: (id: string | number, data?: any) =>

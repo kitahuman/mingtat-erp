@@ -91,7 +91,6 @@ const navEntries: NavEntry[] = [
     items: [
       { href: '/salary-config', label: '員工薪酬', icon: '💵', pageKey: 'salary-config' },
       { href: '/payroll', label: '計糧管理', icon: '🧮', pageKey: 'payroll' },
-      { href: '/ai-payroll', label: 'AI 計糧', icon: '🤖', pageKey: 'ai-payroll' },
       { href: '/payroll-records', label: '糧單記錄', icon: '📄', pageKey: 'payroll-records' },
       { href: '/subcon-payroll', label: '供應商計糧', icon: '🚛', pageKey: 'subcon-payroll' },
       { href: '/subcon-payroll/records', label: '判頭糧單記錄', icon: '📋', pageKey: 'subcon-payroll-records' },
