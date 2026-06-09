@@ -647,10 +647,9 @@ export default function AiPayrollReconcilePage() {
     () => buildTimelineSteps(effectiveStatus, progress, session),
     [effectiveStatus, progress, session],
   );
-  const sourceRecordsByType = useMemo(() => groupSourcesByType(sourceRecords), [sourceRecords]);
-  const sourceTypeCount = useMemo(
-    () => countSourceTypes(sourceRecords, sourcesSummary),
-    [sourceRecords, sourcesSummary],
+  const ocrSourceRecords = useMemo(
+    () => sourceRecords.filter((record) => getSourceType(record) === 'homework_sheet'),
+    [sourceRecords],
   );
 
   const loadData = useCallback(
@@ -1157,7 +1156,7 @@ export default function AiPayrollReconcilePage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">來源資料總覽</h2>
-                <p className="text-sm text-gray-500">以下顯示 AI 從工作紀錄、功課紙及其他來源讀取到的標準化內容。</p>
+                <p className="text-sm text-gray-500">以下只顯示 AI 從上載文件（功課紙）OCR / AI 辨識出的標準化內容，供核對文件是否被正確解讀。</p>
               </div>
               {!isProcessing && !hasGeneratedPayroll && (
                 <button
@@ -1168,11 +1167,10 @@ export default function AiPayrollReconcilePage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {[
-                ['文件', progress?.counts?.documents ?? documents.length],
-                ['來源記錄', progress?.counts?.sources ?? sourceRecords.length],
-                ['來源類型', sourceTypeCount],
+                ['文件數量', progress?.counts?.documents ?? documents.length],
+                ['OCR讀取記錄數', ocrSourceRecords.length],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">{label}</p>
@@ -1181,9 +1179,9 @@ export default function AiPayrollReconcilePage() {
               ))}
             </div>
 
-            {sourceRecords.length === 0 ? (
+            {ocrSourceRecords.length === 0 ? (
               <div className="rounded-lg bg-gray-50 p-8 text-center text-sm text-gray-400">
-                暫未有 AI 讀取出的來源記錄。請先上載文件或開始核對流程。
+                暫未有 AI 從上載文件 OCR / AI 辨識出的記錄。請先上載文件或開始核對流程。
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
@@ -1203,7 +1201,7 @@ export default function AiPayrollReconcilePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sourceRecords.map((record, index) => {
+                    {ocrSourceRecords.map((record, index) => {
                       const data = getSourceData(record);
                       const sourceConfig = getSourceConfig(getSourceType(record));
                       return (
@@ -1243,22 +1241,15 @@ export default function AiPayrollReconcilePage() {
               </div>
             )}
 
-            {Object.keys(sourceRecordsByType).length > 0 && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {Object.entries(sourceRecordsByType).map(([sourceType, records]) => {
-                  const config = getSourceConfig(sourceType);
-                  return (
-                    <div key={sourceType} className="rounded-lg border bg-gray-50 p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-gray-900">{config.label}</p>
-                          <p className="text-xs text-gray-500">{config.description}</p>
-                        </div>
-                        <Badge tone={config.tone}>{records.length} 筆</Badge>
-                      </div>
-                    </div>
-                  );
-                })}
+            {ocrSourceRecords.length > 0 && (
+              <div className="rounded-lg border bg-purple-50 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">上載文件 OCR / AI 辨識結果</p>
+                    <p className="text-xs text-gray-500">只包括 homework_sheet 來源類型；工作紀錄、打卡、Order、入帳票及 GPS 會保留在核對結果卡片中比較。</p>
+                  </div>
+                  <Badge tone="purple">{ocrSourceRecords.length} 筆</Badge>
+                </div>
               </div>
             )}
           </div>
