@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AnswerQuestionDto {
@@ -21,7 +21,13 @@ export class BatchDismissQuestionsDto {
 export class QueryQuestionsDto {
   @ApiPropertyOptional({ example: false })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value.toLowerCase() === 'true';
+    return Boolean(value);
+  })
+  @IsBoolean()
   resolved?: boolean;
 
   @ApiPropertyOptional({ example: 'location_conflict' })
