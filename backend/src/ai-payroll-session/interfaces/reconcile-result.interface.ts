@@ -18,6 +18,8 @@ export type AiPayrollQuestionType =
   | 'work_type_uncertain'
   | 'missing_source'
   | 'ocr_error'
+  | 'ocr_employee_unmatched'
+  | 'ocr_date_corrected'
   | 'data_conflict'
   | 'other';
 

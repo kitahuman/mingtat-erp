@@ -41,6 +41,27 @@ interface FieldVote {
 
 type SourceRecordRow = Prisma.AiPayrollSourceRecordGetPayload<Record<string, never>>;
 
+type OcrEntryWithFields = Prisma.AiPayrollEntryGetPayload<{ include: { fields: true } }>;
+
+type OcrEmployeeMatcher = {
+  nameById: Map<number, string>;
+  idByExactName: Map<string, number>;
+  candidates: Array<{ id: number; names: string[] }>;
+};
+
+type NormalizedOcrEntry = {
+  entry: OcrEntryWithFields;
+  employeeId: number | null;
+  employeeName: string | null;
+  employeeMatchBasis: string;
+  workDate: Date | null;
+  rawWorkDate: Date | null;
+  yearCorrected: boolean;
+  rawYear: number | null;
+  correctedYear: number | null;
+  lowConfidence: boolean;
+};
+
 type DocumentOcrWarning = {
   code: string;
   message: string;
@@ -111,7 +132,7 @@ export class AiPayrollReconcileService {
   }
 
   async reconcile(sessionId: number) {
-    await this.getSessionContext(sessionId);
+    const session = await this.getSessionContext(sessionId);
     await this.prisma.aiPayrollReconcileItem.deleteMany({
       where: { reconcile_session_id: sessionId },
     });
@@ -129,7 +150,7 @@ export class AiPayrollReconcileService {
     });
 
     const grouped = this.groupSources(sources);
-    const allQuestions: ReconcileQuestionDraft[] = [];
+    const allQuestions: ReconcileQuestionDraft[] = await this.collectOcrQualityQuestions(session);
     const createInputs: Prisma.AiPayrollReconcileItemCreateManyInput[] = [];
 
     for (const group of grouped.values()) {
@@ -447,36 +468,278 @@ export class AiPayrollReconcileService {
   private async collectOcrSources(
     session: SessionContext,
   ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
-    const entries = await this.prisma.aiPayrollEntry.findMany({
-      where: {
-        entry_employee_id: { in: session.employeeIds },
-        entry_work_date: { gte: session.dateFrom, lte: session.dateTo },
-        page: { document: { batch: { batch_session_id: session.id } } },
-      },
-      include: {
-        fields: true,
-      },
-      orderBy: [{ entry_employee_id: 'asc' }, { entry_work_date: 'asc' }],
-    });
+    const normalizedEntries = await this.getNormalizedOcrEntries(session);
 
-    return entries.flatMap((entry) => {
-      if (!entry.entry_employee_id || !entry.entry_work_date) return [];
-      const data = this.entryFieldsToSourceData(entry.entry_employee_id, entry.entry_work_date, entry.entry_employee_name_raw, entry.fields);
+    return normalizedEntries.flatMap((normalized) => {
+      const { entry, employeeId, employeeName, workDate } = normalized;
+      if (!employeeId || !workDate) return [];
+
+      const data = this.entryFieldsToSourceData(employeeId, workDate, employeeName, entry.fields);
+      data.source_label = 'OCR 工紙';
+      data.source_status = 'found';
+      data.match_basis = normalized.employeeMatchBasis;
+      data.raw_summary = [entry.entry_employee_name_raw, this.toDateString(workDate), entry.entry_form_type]
+        .filter(Boolean)
+        .join(' / ') || null;
+
       return [
         {
           source_record_session_id: session.id,
-          source_record_employee_id: entry.entry_employee_id,
-          source_record_date: entry.entry_work_date,
+          source_record_employee_id: employeeId,
+          source_record_date: workDate,
           source_record_source_type: 'homework_sheet',
           source_record_source_id: entry.id,
           source_record_data: data as unknown as Prisma.InputJsonValue,
-          source_record_raw_data: this.toJson(entry.entry_flags),
-          source_record_confidence: entry.entry_overall_confidence,
+          source_record_raw_data: this.toJson(this.buildOcrRawData(normalized)),
+          source_record_confidence: entry.entry_overall_confidence ?? undefined,
         },
       ];
     });
   }
 
+  private async getNormalizedOcrEntries(session: SessionContext): Promise<NormalizedOcrEntry[]> {
+    const [entries, employeeMatcher] = await Promise.all([
+      this.prisma.aiPayrollEntry.findMany({
+        where: {
+          page: { document: { batch: { batch_session_id: session.id } } },
+        },
+        include: {
+          fields: true,
+        },
+        orderBy: [{ entry_employee_id: 'asc' }, { entry_work_date: 'asc' }],
+      }),
+      this.buildCompanyEmployeeMatcher(session.companyId),
+    ]);
+
+    return entries.map((entry) => {
+      const dateResult = this.correctOcrWorkDateYear(entry, session);
+      const employeeMatch = this.matchOcrEntryEmployee(entry, employeeMatcher);
+      const confidence = this.decimalLikeToNumber(entry.entry_overall_confidence);
+      return {
+        entry,
+        employeeId: employeeMatch.employeeId,
+        employeeName: employeeMatch.employeeName,
+        employeeMatchBasis: employeeMatch.matchBasis,
+        workDate: dateResult.workDate,
+        rawWorkDate: dateResult.rawWorkDate,
+        yearCorrected: dateResult.yearCorrected,
+        rawYear: dateResult.rawYear,
+        correctedYear: dateResult.correctedYear,
+        lowConfidence: confidence !== null && confidence < 70,
+      };
+    });
+  }
+
+  private async collectOcrQualityQuestions(session: SessionContext): Promise<ReconcileQuestionDraft[]> {
+    const normalizedEntries = await this.getNormalizedOcrEntries(session);
+    const questions: ReconcileQuestionDraft[] = [];
+
+    for (const normalized of normalizedEntries) {
+      const { entry, employeeId, workDate } = normalized;
+      const questionDate = workDate ? this.toDateString(workDate) : null;
+      const baseContext = this.buildOcrQuestionContext(normalized);
+
+      if (!employeeId && entry.entry_employee_name_raw) {
+        questions.push({
+          employeeId: null,
+          date: questionDate,
+          type: 'ocr_employee_unmatched',
+          severity: 'warning',
+          text: `OCR 讀取到員工名稱「${entry.entry_employee_name_raw}」但無法匹配系統員工，請確認。`,
+          context: baseContext,
+          aiDecision: '未建立工紙來源紀錄，避免將 OCR 資料錯配至錯誤員工。',
+          aiAction: { field: 'employee_id', value: null, confidence: 40 },
+        });
+      }
+
+      if (normalized.yearCorrected && normalized.rawYear !== null && normalized.correctedYear !== null) {
+        questions.push({
+          employeeId,
+          date: questionDate,
+          type: 'ocr_date_corrected',
+          severity: 'warning',
+          text: `OCR 讀取日期年份異常（讀取為 ${normalized.rawYear}，已自動修正為 ${normalized.correctedYear}），請確認。`,
+          context: baseContext,
+          aiDecision: `已按會話期間年份 ${normalized.correctedYear} 修正 OCR 工紙日期。`,
+          aiAction: {
+            field: 'entry_work_date',
+            value: questionDate,
+            confidence: 80,
+            reason: 'OCR 日期年份與會話年份不一致。',
+          },
+        });
+      }
+
+      if (normalized.lowConfidence) {
+        const confidence = this.decimalLikeToNumber(entry.entry_overall_confidence);
+        questions.push({
+          employeeId,
+          date: questionDate,
+          type: 'ocr_error',
+          severity: 'warning',
+          text: `OCR 讀取信心度偏低（${confidence ?? '未知'}），請抽查原始文件。`,
+          context: baseContext,
+          aiDecision: '已保留 OCR 來源紀錄（如已匹配員工及日期），但建議人工覆核。',
+          aiAction: { field: 'ocr_confidence', value: confidence, confidence: confidence ?? 0 },
+        });
+      }
+    }
+
+    return questions;
+  }
+
+  private correctOcrWorkDateYear(
+    entry: OcrEntryWithFields,
+    session: SessionContext,
+  ): {
+    workDate: Date | null;
+    rawWorkDate: Date | null;
+    yearCorrected: boolean;
+    rawYear: number | null;
+    correctedYear: number | null;
+  } {
+    if (!entry.entry_work_date) {
+      return { workDate: null, rawWorkDate: null, yearCorrected: false, rawYear: null, correctedYear: null };
+    }
+
+    const rawWorkDate = this.toDateOnly(entry.entry_work_date);
+    const sessionYear = session.dateFrom.getUTCFullYear();
+    const rawYear = rawWorkDate.getUTCFullYear();
+    if (rawYear === sessionYear) {
+      return { workDate: rawWorkDate, rawWorkDate, yearCorrected: false, rawYear, correctedYear: sessionYear };
+    }
+
+    const correctedDate = new Date(Date.UTC(sessionYear, rawWorkDate.getUTCMonth(), rawWorkDate.getUTCDate()));
+    this.logger.warn(
+      `OCR entry ${entry.id} work date year ${rawYear} does not match session ${session.id} year ${sessionYear}; auto-corrected to ${this.toDateString(correctedDate)}.`,
+    );
+    return { workDate: correctedDate, rawWorkDate, yearCorrected: true, rawYear, correctedYear: sessionYear };
+  }
+
+  private matchOcrEntryEmployee(
+    entry: OcrEntryWithFields,
+    employeeMatcher: OcrEmployeeMatcher,
+  ): { employeeId: number | null; employeeName: string | null; matchBasis: string } {
+    if (entry.entry_employee_id) {
+      return {
+        employeeId: entry.entry_employee_id,
+        employeeName: employeeMatcher.nameById.get(entry.entry_employee_id) ?? entry.entry_employee_name_raw ?? null,
+        matchBasis: 'entry_employee_id',
+      };
+    }
+
+    const rawName = entry.entry_employee_name_raw;
+    const normalizedName = this.normalizeText(rawName);
+    if (!normalizedName) {
+      return { employeeId: null, employeeName: rawName ?? null, matchBasis: 'unmatched' };
+    }
+
+    const exactEmployeeId = employeeMatcher.idByExactName.get(normalizedName);
+    if (exactEmployeeId) {
+      return {
+        employeeId: exactEmployeeId,
+        employeeName: employeeMatcher.nameById.get(exactEmployeeId) ?? rawName ?? null,
+        matchBasis: 'employee_name_exact',
+      };
+    }
+
+    for (const candidate of employeeMatcher.candidates) {
+      if (
+        candidate.names.some(
+          (candidateName) =>
+            candidateName.length >= 2 &&
+            normalizedName.length >= 2 &&
+            (candidateName.includes(normalizedName) || normalizedName.includes(candidateName)),
+        )
+      ) {
+        return {
+          employeeId: candidate.id,
+          employeeName: employeeMatcher.nameById.get(candidate.id) ?? rawName ?? null,
+          matchBasis: 'employee_name_contains',
+        };
+      }
+    }
+
+    return { employeeId: null, employeeName: rawName ?? null, matchBasis: 'unmatched' };
+  }
+
+  private async buildCompanyEmployeeMatcher(companyId: number): Promise<OcrEmployeeMatcher> {
+    const employees = await this.prisma.employee.findMany({
+      where: { company_id: companyId },
+      select: { id: true, name_zh: true, name_en: true, nickname: true, emp_code: true },
+    });
+    const employeeIds = employees.map((employee) => employee.id);
+    const nicknames = employeeIds.length > 0
+      ? await this.prisma.employeeNickname.findMany({
+        where: { emp_nickname_employee_id: { in: employeeIds } },
+        select: { emp_nickname_employee_id: true, emp_nickname_value: true },
+      })
+      : [];
+
+    const nameById = new Map<number, string>();
+    const idByExactName = new Map<string, number>();
+    const candidateNameMap = new Map<number, Set<string>>();
+    const addName = (employeeId: number, value: string | null | undefined) => {
+      const normalized = this.normalizeText(value);
+      if (!normalized) return;
+      if (!idByExactName.has(normalized)) idByExactName.set(normalized, employeeId);
+      const names = candidateNameMap.get(employeeId) ?? new Set<string>();
+      names.add(normalized);
+      candidateNameMap.set(employeeId, names);
+    };
+
+    for (const employee of employees) {
+      nameById.set(employee.id, employee.name_zh ?? employee.name_en ?? employee.nickname ?? employee.emp_code ?? `#${employee.id}`);
+      addName(employee.id, employee.name_zh);
+      addName(employee.id, employee.name_en);
+      addName(employee.id, employee.nickname);
+      addName(employee.id, employee.emp_code);
+    }
+    for (const nickname of nicknames) {
+      addName(nickname.emp_nickname_employee_id, nickname.emp_nickname_value);
+    }
+
+    return {
+      nameById,
+      idByExactName,
+      candidates: [...candidateNameMap.entries()].map(([id, names]) => ({ id, names: [...names] })),
+    };
+  }
+
+  private buildOcrQuestionContext(normalized: NormalizedOcrEntry): Record<string, unknown> {
+    return this.buildOcrRawData(normalized) as Record<string, unknown>;
+  }
+
+  private buildOcrRawData(normalized: NormalizedOcrEntry): Record<string, unknown> {
+    const { entry } = normalized;
+    return {
+      entry_id: entry.id,
+      entry_page_id: entry.entry_page_id,
+      entry_run_id: entry.entry_run_id,
+      entry_row_number: entry.entry_row_number,
+      raw_employee_id: entry.entry_employee_id,
+      raw_employee_name: entry.entry_employee_name_raw,
+      matched_employee_id: normalized.employeeId,
+      matched_employee_name: normalized.employeeName,
+      employee_match_basis: normalized.employeeMatchBasis,
+      raw_work_date: normalized.rawWorkDate ? this.toDateString(normalized.rawWorkDate) : null,
+      corrected_work_date: normalized.workDate ? this.toDateString(normalized.workDate) : null,
+      year_corrected: normalized.yearCorrected,
+      raw_year: normalized.rawYear,
+      corrected_year: normalized.correctedYear,
+      entry_form_type: entry.entry_form_type,
+      entry_status: entry.entry_status,
+      entry_overall_confidence: this.decimalLikeToNumber(entry.entry_overall_confidence),
+      entry_flags: entry.entry_flags,
+      fields: entry.fields.map((field) => ({
+        field_name: field.field_name,
+        field_raw_text: field.field_raw_text,
+        field_normalized_value: field.field_normalized_value,
+        field_confirmed_value: field.field_confirmed_value,
+        field_confidence: this.decimalLikeToNumber(field.field_confidence),
+      })),
+    };
+  }
 
   private async collectClockSources(
     session: SessionContext,
