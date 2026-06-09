@@ -178,7 +178,8 @@ const PREVIEW_DETAIL_COLUMNS = [
 
 type PreviewDetailColumnKey = typeof PREVIEW_DETAIL_COLUMNS[number]['key'];
 
-const COMPARE_SOURCE_TYPES = ['work_log', 'homework_sheet', 'clock', 'whatsapp_order', 'receipt', 'gps'];
+const HOMEWORK_SHEET_SOURCE_TYPE = 'homework_sheet';
+const COMPARE_SOURCE_TYPES = ['work_log', HOMEWORK_SHEET_SOURCE_TYPE, 'clock', 'whatsapp_order', 'receipt', 'gps'];
 
 const SOURCE_CARD_CONFIGS = [
   { key: 'work_log', title: '工作紀錄卡片（base）', icon: 'WL' },
@@ -463,13 +464,19 @@ function groupSourcesByType(records: SourceRecord[]) {
   }, {});
 }
 
-function countSourceTypes(records: SourceRecord[], summary: any) {
-  if (records.length > 0) return new Set(records.map((record) => getSourceType(record))).size;
-  if (Array.isArray(summary)) {
-    return new Set(summary.flatMap((entry: any) => Object.keys(entry.by_source_type || entry.byType || {}))).size || '—';
-  }
-  if (summary?.byType) return Object.keys(summary.byType).length;
-  return '—';
+function isHomeworkSheetSourceRecord(record: SourceRecord) {
+  return getSourceType(record) === HOMEWORK_SHEET_SOURCE_TYPE;
+}
+
+function getDocumentFileName(document: any) {
+  return toDisplayString(
+    document?.doc_original_filename ||
+      document?.original_filename ||
+      document?.filename ||
+      document?.file_name ||
+      document?.name ||
+      `文件 #${document?.id || '—'}`,
+  );
 }
 
 function getItemEmployeeId(item: ReconcileItem) {
@@ -607,7 +614,6 @@ export default function AiPayrollReconcilePage() {
 
   const [session, setSession] = useState<SessionData | null>(null);
   const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [sourcesSummary, setSourcesSummary] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [sourceRecords, setSourceRecords] = useState<SourceRecord[]>([]);
   const [items, setItems] = useState<ReconcileItem[]>([]);
@@ -648,7 +654,7 @@ export default function AiPayrollReconcilePage() {
     [effectiveStatus, progress, session],
   );
   const ocrSourceRecords = useMemo(
-    () => sourceRecords.filter((record) => getSourceType(record) === 'homework_sheet'),
+    () => sourceRecords.filter(isHomeworkSheetSourceRecord),
     [sourceRecords],
   );
 
@@ -670,10 +676,9 @@ export default function AiPayrollReconcilePage() {
         const sourceCount = Number(progressRes.data?.counts?.sources ?? 0);
         const shouldFetchReviewData = !uploadStatuses.has(currentStatus) || sourceCount > 0;
         if (shouldFetchReviewData) {
-          const [summaryRes, docsRes, sourcesRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
-            aiPayrollSessionApi.getSourcesSummary(sessionId),
+          const [docsRes, sourcesRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
             aiPayrollSessionApi.getDocuments(sessionId),
-            aiPayrollSessionApi.getSources(sessionId),
+            aiPayrollSessionApi.getSources(sessionId, { source_type: HOMEWORK_SHEET_SOURCE_TYPE }),
             aiPayrollSessionApi.getReconcileItems(sessionId, {
               page: 1,
               pageSize: 100,
@@ -682,9 +687,10 @@ export default function AiPayrollReconcilePage() {
             aiPayrollSessionApi.getQuestions(sessionId, { resolved: false }),
             aiPayrollSessionApi.previewPayroll(sessionId),
           ]);
-          if (summaryRes.status === 'fulfilled') setSourcesSummary(summaryRes.value.data || null);
           if (docsRes.status === 'fulfilled') setDocuments(toArray(docsRes.value.data));
-          if (sourcesRes.status === 'fulfilled') setSourceRecords(toArray<SourceRecord>(sourcesRes.value.data));
+          if (sourcesRes.status === 'fulfilled') {
+            setSourceRecords(toArray<SourceRecord>(sourcesRes.value.data).filter(isHomeworkSheetSourceRecord));
+          }
           if (itemsRes.status === 'fulfilled') {
             const payload = itemsRes.value.data;
             const nextItems = toArray<ReconcileItem>(payload);
@@ -1155,7 +1161,7 @@ export default function AiPayrollReconcilePage() {
           <div className="space-y-4 rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">來源資料總覽</h2>
+                <h2 className="text-lg font-semibold text-gray-900">上載文件 OCR 來源資料</h2>
                 <p className="text-sm text-gray-500">以下只顯示 AI 從上載文件（功課紙）OCR / AI 辨識出的標準化內容，供核對文件是否被正確解讀。</p>
               </div>
               {!isProcessing && !hasGeneratedPayroll && (
@@ -1169,7 +1175,7 @@ export default function AiPayrollReconcilePage() {
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {[
-                ['文件數量', progress?.counts?.documents ?? documents.length],
+                ['文件數量', documents.length || progress?.counts?.documents || 0],
                 ['OCR讀取記錄數', ocrSourceRecords.length],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg bg-gray-50 p-4">
@@ -1179,9 +1185,28 @@ export default function AiPayrollReconcilePage() {
               ))}
             </div>
 
+            {documents.length > 0 && (
+              <div className="rounded-lg border bg-gray-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-900">已上載文件</p>
+                  <Badge tone="purple">{documents.length} 份</Badge>
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {documents.map((document, index) => (
+                    <div key={document?.id || document?.doc_id || index} className="rounded-lg border bg-white px-3 py-2 text-sm">
+                      <div className="truncate font-medium text-gray-800" title={getDocumentFileName(document)}>{getDocumentFileName(document)}</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {toDisplayString(document?.doc_status || document?.status, '狀態未明')} · {formatNumber(document?.doc_page_count ?? document?.pages?.length ?? 0)} 頁
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {ocrSourceRecords.length === 0 ? (
               <div className="rounded-lg bg-gray-50 p-8 text-center text-sm text-gray-400">
-                暫未有 AI 從上載文件 OCR / AI 辨識出的記錄。請先上載文件或開始核對流程。
+                暫未有 AI 從上載文件 OCR / AI 辨識出的記錄。請先上載文件或重新執行核對流程。
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
@@ -1331,7 +1356,14 @@ export default function AiPayrollReconcilePage() {
                               );
                             })}
                             <td className="px-2 py-3 text-xs text-gray-700 whitespace-nowrap">
-                              {sourceCount || itemSources.length}/{COMPARE_SOURCE_TYPES.length}
+                              <div className="flex flex-col items-start gap-1">
+                                {baseSourceType !== 'unknown' ? (
+                                  <Badge tone={baseSourceConfig.tone}>{baseSourceConfig.label}(基準)</Badge>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                                <span className="text-[11px] text-gray-400">{sourceCount || itemSources.length}/{COMPARE_SOURCE_TYPES.length} 來源</span>
+                              </div>
                             </td>
                             <td className="px-2 py-3 whitespace-nowrap"><Badge tone={statusTone(item.reconcile_status)}>{reconcileLabel(item.reconcile_status)}</Badge></td>
                             <td className="px-2 py-3 text-xs text-gray-600 whitespace-nowrap">
