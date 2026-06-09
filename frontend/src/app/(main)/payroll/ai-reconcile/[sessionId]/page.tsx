@@ -24,14 +24,31 @@ type SessionData = {
   [key: string]: any;
 };
 
+type ProgressWarning = {
+  code?: string;
+  message?: string;
+  severity?: string;
+};
+
 type ProgressData = {
   status?: string;
   currentStep?: number;
   errorMessage?: string;
   progressPercent?: number;
+  warnings?: ProgressWarning[];
+  documentOcr?: {
+    documents?: number;
+    pages?: number;
+    extractedPages?: number;
+    failedPages?: number;
+    extractedEntries?: number;
+    homeworkSheetSourceRecords?: number;
+    hasWarning?: boolean;
+  };
   counts?: {
     documents?: number;
     sources?: number;
+    homeworkSheetSources?: number;
     reconcileItems?: number;
     unresolvedQuestions?: number;
     payrolls?: number;
@@ -479,6 +496,21 @@ function getDocumentFileName(document: any) {
   );
 }
 
+function getDocumentStoragePath(document: any) {
+  return document?.doc_storage_path || document?.storage_path || document?.path || document?.url || '';
+}
+
+function getDocumentOcrStatus(document: any) {
+  const pages = Array.isArray(document?.pages) ? document.pages : [];
+  const failedPages = pages.filter((page: any) => page?.page_status === 'failed').length;
+  const extractedPages = pages.filter((page: any) => page?.page_status === 'extracted').length;
+  const processingPages = pages.filter((page: any) => page?.page_status === 'processing').length;
+  if (failedPages > 0) return { label: '讀取失敗', tone: 'yellow' as StatusTone };
+  if (processingPages > 0) return { label: '讀取中', tone: 'blue' as StatusTone };
+  if (pages.length > 0 && extractedPages === pages.length) return { label: '已讀取', tone: 'green' as StatusTone };
+  return { label: toDisplayString(document?.doc_status || document?.status, '待讀取'), tone: 'gray' as StatusTone };
+}
+
 function getItemEmployeeId(item: ReconcileItem) {
   return item.reconcile_employee_id || item.reconcile_decided_data?.employee_id;
 }
@@ -516,10 +548,18 @@ function getTimelineStepFromStatus(status: string, progress?: ProgressData | nul
 function buildTimelineSteps(status: string, progress?: ProgressData | null, session?: SessionData | null) {
   const currentStep = getTimelineStepFromStatus(status, progress, session);
   const sourceCount = Number(progress?.counts?.sources ?? 0);
+  const hasDocumentOcrWarning = Boolean(
+    progress?.documentOcr?.hasWarning ||
+      progress?.warnings?.some((warning) => warning.code?.startsWith('document_ocr')),
+  );
   const isFailed = status === 'failed';
   const isWarning = status === 'needs_review';
   const isComplete = status === 'completed' || status === 'confirmed';
-  const step2Label = currentStep > 2 || isComplete ? '完成核對' : '核對文件中';
+  const step2Label = hasDocumentOcrWarning
+    ? '部分文件未能讀取'
+    : currentStep > 2 || isComplete
+      ? '完成核對'
+      : '核對文件中';
   const step3Label = isFailed && currentStep === 3
     ? '核對功課表不成功'
     : currentStep >= 3 && sourceCount === 0 && !processingStatuses.has(status)
@@ -530,7 +570,8 @@ function buildTimelineSteps(status: string, progress?: ProgressData | null, sess
   return labels.map((label, index) => {
     const stepNumber = index + 1;
     let visualStatus: StepVisualStatus = 'pending';
-    if (isFailed && stepNumber === currentStep) visualStatus = 'failed';
+    if (hasDocumentOcrWarning && stepNumber === 2) visualStatus = 'warning';
+    else if (isFailed && stepNumber === currentStep) visualStatus = 'failed';
     else if (isWarning && stepNumber === currentStep) visualStatus = 'warning';
     else if (stepNumber < currentStep || isComplete) visualStatus = 'completed';
     else if (stepNumber === currentStep && !isComplete) visualStatus = 'in_progress';
@@ -657,6 +698,14 @@ export default function AiPayrollReconcilePage() {
     () => sourceRecords.filter(isHomeworkSheetSourceRecord),
     [sourceRecords],
   );
+  const documentOcrWarnings = useMemo(
+    () => (progress?.warnings || []).filter((warning) => warning.code?.startsWith('document_ocr')),
+    [progress],
+  );
+  const hasDocumentWithoutOcrRecords = documents.length > 0 && ocrSourceRecords.length === 0;
+  const shouldShowDocumentOcrWarning =
+    documentOcrWarnings.length > 0 ||
+    (hasDocumentWithoutOcrRecords && !isProcessing && !uploadStatuses.has(effectiveStatus));
 
   const loadData = useCallback(
     async (quiet = false) => {
@@ -678,7 +727,7 @@ export default function AiPayrollReconcilePage() {
         if (shouldFetchReviewData) {
           const [docsRes, sourcesRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
             aiPayrollSessionApi.getDocuments(sessionId),
-            aiPayrollSessionApi.getSources(sessionId, { source_type: HOMEWORK_SHEET_SOURCE_TYPE }),
+            aiPayrollSessionApi.getSources(sessionId),
             aiPayrollSessionApi.getReconcileItems(sessionId, {
               page: 1,
               pageSize: 100,
@@ -689,7 +738,7 @@ export default function AiPayrollReconcilePage() {
           ]);
           if (docsRes.status === 'fulfilled') setDocuments(toArray(docsRes.value.data));
           if (sourcesRes.status === 'fulfilled') {
-            setSourceRecords(toArray<SourceRecord>(sourcesRes.value.data).filter(isHomeworkSheetSourceRecord));
+            setSourceRecords(toArray<SourceRecord>(sourcesRes.value.data));
           }
           if (itemsRes.status === 'fulfilled') {
             const payload = itemsRes.value.data;
@@ -1176,7 +1225,8 @@ export default function AiPayrollReconcilePage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {[
                 ['文件數量', documents.length || progress?.counts?.documents || 0],
-                ['OCR讀取記錄數', ocrSourceRecords.length],
+                ['OCR讀取記錄數', ocrSourceRecords.length || progress?.counts?.homeworkSheetSources || 0],
+                ['未能讀取頁面', progress?.documentOcr?.failedPages || 0],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">{label}</p>
@@ -1185,6 +1235,15 @@ export default function AiPayrollReconcilePage() {
               ))}
             </div>
 
+            {shouldShowDocumentOcrWarning && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+                <p className="font-medium">文件讀取提醒</p>
+                <p className="mt-1">
+                  {documentOcrWarnings[0]?.message || 'AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）'}
+                </p>
+              </div>
+            )}
+
             {documents.length > 0 && (
               <div className="rounded-lg border bg-gray-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
@@ -1192,21 +1251,42 @@ export default function AiPayrollReconcilePage() {
                   <Badge tone="purple">{documents.length} 份</Badge>
                 </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {documents.map((document, index) => (
-                    <div key={document?.id || document?.doc_id || index} className="rounded-lg border bg-white px-3 py-2 text-sm">
-                      <div className="truncate font-medium text-gray-800" title={getDocumentFileName(document)}>{getDocumentFileName(document)}</div>
-                      <div className="mt-1 text-xs text-gray-400">
-                        {toDisplayString(document?.doc_status || document?.status, '狀態未明')} · {formatNumber(document?.doc_page_count ?? document?.pages?.length ?? 0)} 頁
+                  {documents.map((document, index) => {
+                    const fileUrl = aiPayrollSessionApi.getUploadFileUrl(getDocumentStoragePath(document));
+                    const ocrStatus = getDocumentOcrStatus(document);
+                    const fileName = getDocumentFileName(document);
+                    return (
+                      <div key={document?.id || document?.doc_id || index} className="rounded-lg border bg-white px-3 py-2 text-sm">
+                        {fileUrl ? (
+                          <a
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate font-medium text-purple-700 hover:text-purple-900 hover:underline"
+                            title={fileName}
+                          >
+                            {fileName}
+                          </a>
+                        ) : (
+                          <div className="truncate font-medium text-gray-800" title={fileName}>{fileName}</div>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                          <Badge tone={ocrStatus.tone}>{ocrStatus.label}</Badge>
+                          <span>{formatNumber(document?.doc_page_count ?? document?.pages?.length ?? 0)} 頁</span>
+                          {fileUrl && <span>可點擊查看原文件</span>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {ocrSourceRecords.length === 0 ? (
               <div className="rounded-lg bg-gray-50 p-8 text-center text-sm text-gray-400">
-                暫未有 AI 從上載文件 OCR / AI 辨識出的記錄。請先上載文件或重新執行核對流程。
+                {documents.length > 0
+                  ? '暫未有 AI 從上載文件 OCR / AI 辨識出的記錄；系統會繼續使用工作紀錄、打卡等其他來源核對。'
+                  : '暫未有 AI 從上載文件 OCR / AI 辨識出的記錄。請先上載文件或重新執行核對流程。'}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">

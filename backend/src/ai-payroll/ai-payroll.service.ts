@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -30,6 +31,8 @@ type PayrollEntryWithFields = Prisma.AiPayrollEntryGetPayload<{
 
 @Injectable()
 export class AiPayrollService {
+  private readonly logger = new Logger(AiPayrollService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly extractionService: AiPayrollExtractionService,
@@ -314,17 +317,34 @@ export class AiPayrollService {
       },
       orderBy: [{ page_document_id: 'asc' }, { page_number: 'asc' }],
     });
-    const results: Awaited<
-      ReturnType<AiPayrollExtractionService['extractPage']>
-    >[] = [];
+    const results: Array<
+      | Awaited<ReturnType<AiPayrollExtractionService['extractPage']>>
+      | { pageId: number; status: 'failed'; errorMessage: string }
+    > = [];
+    const failedPageIds: number[] = [];
     for (const page of pages) {
-      results.push(
-        await this.extractionService.extractPage(
-          page.id,
-          dto.formTypeOverride,
-          dto.forceReExtract ?? false,
-        ),
-      );
+      try {
+        results.push(
+          await this.extractionService.extractPage(
+            page.id,
+            dto.formTypeOverride,
+            dto.forceReExtract ?? false,
+          ),
+        );
+      } catch (error) {
+        const message = this.getErrorMessage(error);
+        failedPageIds.push(page.id);
+        await this.prisma.aiPayrollPage.update({
+          where: { id: page.id },
+          data: {
+            page_status: 'failed',
+          },
+        });
+        this.logger.warn(
+          `AI payroll OCR failed for page ${page.id} in batch ${batchId}: ${message}`,
+        );
+        results.push({ pageId: page.id, status: 'failed', errorMessage: message });
+      }
     }
     const failed = await this.prisma.aiPayrollPage.count({
       where: { document: { doc_batch_id: batchId }, page_status: 'failed' },
@@ -338,6 +358,7 @@ export class AiPayrollService {
       batchId,
       status: failed > 0 ? 'partially_failed' : 'completed',
       estimatedPages: pages.length,
+      failedPages: failedPageIds.length,
       results,
     };
   }
@@ -868,6 +889,12 @@ export class AiPayrollService {
         ? (current as JsonRecord)
         : {};
     return { ...base, ...updates };
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === 'string' && error.trim()) return error;
+    return 'AI 未能從文件中讀取資料，請檢查文件格式';
   }
 
   private groupByCount<T extends string>(

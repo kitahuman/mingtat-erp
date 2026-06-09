@@ -215,32 +215,79 @@ export class AiPayrollSessionService {
 
   async getProgress(sessionId: number) {
     const session = await this.getSession(sessionId);
-    const [sourceCount, reconcileCount, unresolvedQuestions, documentCount, payrollCount] =
-      await Promise.all([
-        this.prisma.aiPayrollSourceRecord.count({
-          where: { source_record_session_id: sessionId },
-        }),
-        this.prisma.aiPayrollReconcileItem.count({
-          where: { reconcile_session_id: sessionId },
-        }),
-        this.prisma.aiPayrollQuestion.count({
-          where: { question_session_id: sessionId, question_resolved: false },
-        }),
-        this.prisma.aiPayrollDocument.count({
-          where: { batch: { batch_session_id: sessionId } },
-        }),
-        this.prisma.payroll.count({
-          where: { payroll_ai_session_id: sessionId },
-        }),
-      ]);
+    const [
+      sourceCount,
+      reconcileCount,
+      unresolvedQuestions,
+      documentCount,
+      payrollCount,
+      homeworkSheetSourceCount,
+      extractionEntryCount,
+      failedPageCount,
+      extractedPageCount,
+      totalPageCount,
+    ] = await Promise.all([
+      this.prisma.aiPayrollSourceRecord.count({
+        where: { source_record_session_id: sessionId },
+      }),
+      this.prisma.aiPayrollReconcileItem.count({
+        where: { reconcile_session_id: sessionId },
+      }),
+      this.prisma.aiPayrollQuestion.count({
+        where: { question_session_id: sessionId, question_resolved: false },
+      }),
+      this.prisma.aiPayrollDocument.count({
+        where: { batch: { batch_session_id: sessionId } },
+      }),
+      this.prisma.payroll.count({
+        where: { payroll_ai_session_id: sessionId },
+      }),
+      this.prisma.aiPayrollSourceRecord.count({
+        where: {
+          source_record_session_id: sessionId,
+          source_record_source_type: 'homework_sheet',
+        },
+      }),
+      this.prisma.aiPayrollEntry.count({
+        where: { page: { document: { batch: { batch_session_id: sessionId } } } },
+      }),
+      this.prisma.aiPayrollPage.count({
+        where: { document: { batch: { batch_session_id: sessionId } }, page_status: 'failed' },
+      }),
+      this.prisma.aiPayrollPage.count({
+        where: { document: { batch: { batch_session_id: sessionId } }, page_status: 'extracted' },
+      }),
+      this.prisma.aiPayrollPage.count({
+        where: { document: { batch: { batch_session_id: sessionId } } },
+      }),
+    ]);
+    const warnings = this.buildDocumentWarnings({
+      documentCount,
+      homeworkSheetSourceCount,
+      extractionEntryCount,
+      failedPageCount,
+      extractedPageCount,
+      status: session.session_status,
+    });
     return {
       sessionId,
       status: session.session_status,
       currentStep: session.session_current_step,
       errorMessage: session.session_error_message,
+      warnings,
+      documentOcr: {
+        documents: documentCount,
+        pages: totalPageCount,
+        extractedPages: extractedPageCount,
+        failedPages: failedPageCount,
+        extractedEntries: extractionEntryCount,
+        homeworkSheetSourceRecords: homeworkSheetSourceCount,
+        hasWarning: warnings.length > 0,
+      },
       counts: {
         documents: documentCount,
         sources: sourceCount,
+        homeworkSheetSources: homeworkSheetSourceCount,
         reconcileItems: reconcileCount,
         unresolvedQuestions,
         payrolls: payrollCount,
@@ -348,6 +395,37 @@ export class AiPayrollSessionService {
     if (error instanceof Error && error.message) return error.message;
     if (typeof error === 'string' && error.trim()) return error;
     return 'AI 計糧流程執行失敗，請重試';
+  }
+
+  private buildDocumentWarnings(args: {
+    documentCount: number;
+    homeworkSheetSourceCount: number;
+    extractionEntryCount: number;
+    failedPageCount: number;
+    extractedPageCount: number;
+    status: string;
+  }) {
+    const warnings: Array<{ code: string; message: string; severity: 'warning' }> = [];
+    if (args.documentCount === 0) return warnings;
+    if (args.failedPageCount > 0) {
+      warnings.push({
+        code: 'document_ocr_failed',
+        message: '部分文件未能讀取',
+        severity: 'warning',
+      });
+    }
+    const recognitionHasRun =
+      args.failedPageCount > 0 ||
+      args.extractedPageCount > 0 ||
+      ['reconciling', 'needs_review', 'completed', 'confirmed', 'failed'].includes(args.status);
+    if (recognitionHasRun && args.homeworkSheetSourceCount === 0 && args.extractionEntryCount === 0) {
+      warnings.push({
+        code: 'document_ocr_no_records',
+        message: 'AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）',
+        severity: 'warning',
+      });
+    }
+    return warnings;
   }
 
   private calculateProgress(step: number, status: string): number {

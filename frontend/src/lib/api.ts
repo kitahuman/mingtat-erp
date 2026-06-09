@@ -2031,6 +2031,15 @@ export const aiPayrollSessionApi = {
     api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/sources/summary`),
   getDocuments: (id: string | number) =>
     api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/documents`),
+  getUploadFileUrl: (path?: string | null) => {
+    if (!path) return '';
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+    const url = normalizedPath.startsWith('/uploads')
+      ? `${baseUrl}${normalizedPath}`
+      : `${baseUrl}/uploads/${normalizedPath.replace(/^\/+/, '')}`;
+    return withAuthToken(url);
+  },
 };
 
 // ══════════════════════════════════════════════════════════════

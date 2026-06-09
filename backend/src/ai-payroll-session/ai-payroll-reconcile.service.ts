@@ -41,6 +41,26 @@ interface FieldVote {
 
 type SourceRecordRow = Prisma.AiPayrollSourceRecordGetPayload<Record<string, never>>;
 
+type DocumentOcrWarning = {
+  code: string;
+  message: string;
+  severity: 'warning';
+  document_ids?: number[];
+};
+
+type DocumentOcrSummary = {
+  total_documents: number;
+  total_pages: number;
+  extracted_pages: number;
+  failed_pages: number;
+  pending_pages: number;
+  processing_pages: number;
+  total_entries: number;
+  documents_without_entries: number[];
+  documents_with_failed_pages: number[];
+  warnings: DocumentOcrWarning[];
+};
+
 @Injectable()
 export class AiPayrollReconcileService {
   private readonly logger = new Logger(AiPayrollReconcileService.name);
@@ -74,14 +94,20 @@ export class AiPayrollReconcileService {
     }
 
     const summary = await this.getSourcesSummary(sessionId);
+    const documentOcr = await this.buildDocumentOcrSummary(sessionId);
     await this.prisma.aiPayrollSession.update({
       where: { id: sessionId },
       data: {
-        session_sources_summary: summary as unknown as Prisma.InputJsonValue,
+        session_sources_summary: {
+          employees: summary,
+          document_ocr: documentOcr,
+          warnings: documentOcr.warnings,
+          generated_at: new Date().toISOString(),
+        } as unknown as Prisma.InputJsonValue,
         session_current_step: 2,
       },
     });
-    return { inserted: records.length, summary };
+    return { inserted: records.length, summary, document_ocr: documentOcr };
   }
 
   async reconcile(sessionId: number) {
@@ -198,6 +224,75 @@ export class AiPayrollReconcileService {
       summary.set(source.source_record_employee_id, current);
     }
     return [...summary.values()];
+  }
+
+  private async buildDocumentOcrSummary(sessionId: number): Promise<DocumentOcrSummary> {
+    const documents = await this.prisma.aiPayrollDocument.findMany({
+      where: { batch: { batch_session_id: sessionId } },
+      include: {
+        pages: {
+          include: {
+            entries: { select: { id: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const summary: DocumentOcrSummary = {
+      total_documents: documents.length,
+      total_pages: 0,
+      extracted_pages: 0,
+      failed_pages: 0,
+      pending_pages: 0,
+      processing_pages: 0,
+      total_entries: 0,
+      documents_without_entries: [],
+      documents_with_failed_pages: [],
+      warnings: [],
+    };
+
+    for (const document of documents) {
+      const pages = document.pages ?? [];
+      const entryCount = pages.reduce(
+        (count, page) => count + (page.entries?.length ?? 0),
+        0,
+      );
+      const failedPages = pages.filter((page) => page.page_status === 'failed');
+      summary.total_pages += pages.length;
+      summary.extracted_pages += pages.filter((page) => page.page_status === 'extracted').length;
+      summary.failed_pages += failedPages.length;
+      summary.pending_pages += pages.filter((page) => page.page_status === 'pending').length;
+      summary.processing_pages += pages.filter((page) => page.page_status === 'processing').length;
+      summary.total_entries += entryCount;
+      if (pages.length > 0 && entryCount === 0 && failedPages.length > 0) {
+        summary.documents_without_entries.push(document.id);
+      }
+      if (failedPages.length > 0) summary.documents_with_failed_pages.push(document.id);
+    }
+
+    if (summary.total_documents > 0 && summary.failed_pages > 0) {
+      summary.warnings.push({
+        code: 'document_ocr_failed',
+        message: '部分文件未能讀取',
+        severity: 'warning',
+        document_ids: summary.documents_with_failed_pages,
+      });
+    }
+
+    if (
+      summary.total_documents > 0 &&
+      summary.total_entries === 0 &&
+      (summary.failed_pages > 0 || summary.extracted_pages > 0)
+    ) {
+      summary.warnings.push({
+        code: 'document_ocr_no_records',
+        message: 'AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）',
+        severity: 'warning',
+      });
+    }
+
+    return summary;
   }
 
   async listReconcileItems(sessionId: number, query: QueryReconcileItemsDto) {
