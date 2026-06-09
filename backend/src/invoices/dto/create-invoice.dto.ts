@@ -54,6 +54,7 @@ export class CreateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_bank?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
+  @IsOptional() @IsObject() pdf_font_sizes?: Record<string, unknown>;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional()
   @IsArray()
@@ -91,6 +92,7 @@ export class UpdateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_bank?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_address?: boolean;
   @IsOptional() @IsBoolean() invoice_show_client_phone?: boolean;
+  @IsOptional() @IsObject() pdf_font_sizes?: Record<string, unknown>;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional()
   @IsArray()

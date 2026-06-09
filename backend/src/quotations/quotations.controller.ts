@@ -17,7 +17,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import { QuotationsService } from './quotations.service';
 import { QuotationPdfService } from './quotation-pdf.service';
-import type { QuotationPdfLanguage } from './quotation-pdf.service';
+import type { QuotationPdfLanguage, QuotationPdfOptions } from './quotation-pdf.service';
 import {
   AcceptQuotationDto,
   CreateQuotationDto,
@@ -69,6 +69,44 @@ export class QuotationsController {
       : !['false', '0', 'no'].includes(String(value).toLowerCase());
   }
 
+  private parseFontSizes(
+    query: Record<string, unknown>,
+  ): QuotationPdfOptions['fontSizes'] {
+    const readNumber = (...keys: string[]) => {
+      for (const key of keys) {
+        const rawValue = query[key];
+        const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+        if (value === undefined || value === null || value === '') continue;
+        const numberValue = Number(value);
+        if (Number.isFinite(numberValue) && numberValue > 0) return numberValue;
+      }
+      return undefined;
+    };
+
+    const fontSizes = {
+      title: readNumber('font_size_title', 'fontSizes[title]', 'fontSizes.title'),
+      itemName: readNumber(
+        'font_size_item_name',
+        'fontSizes[itemName]',
+        'fontSizes.itemName',
+      ),
+      itemDesc: readNumber(
+        'font_size_item_desc',
+        'fontSizes[itemDesc]',
+        'fontSizes.itemDesc',
+      ),
+      paymentTerms: readNumber(
+        'font_size_payment_terms',
+        'fontSizes[paymentTerms]',
+        'fontSizes.paymentTerms',
+      ),
+    };
+
+    return Object.values(fontSizes).some((value) => value !== undefined)
+      ? fontSizes
+      : undefined;
+  }
+
   @Get(':id/pdf')
   async exportPdf(
     @Param('id') id: number,
@@ -85,6 +123,7 @@ export class QuotationsController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.quotationPdfService.generateQuotationPdf(
@@ -103,6 +142,7 @@ export class QuotationsController {
         overrideClientAddress: clientAddress,
         overrideClientContact: clientContact,
         overrideClientPhone: clientPhone,
+        fontSizes: this.parseFontSizes(query),
       },
     );
 
@@ -138,6 +178,7 @@ export class QuotationsController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.quotationPdfService.generateQuotationHtml(
@@ -156,6 +197,7 @@ export class QuotationsController {
         overrideClientAddress: clientAddress,
         overrideClientContact: clientContact,
         overrideClientPhone: clientPhone,
+        fontSizes: this.parseFontSizes(query),
       },
     );
 

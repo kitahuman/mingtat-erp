@@ -93,12 +93,10 @@ export default function QuotationPdfPreviewPage() {
       client_address: options.client_address,
       client_contact: options.client_contact,
       client_phone: options.client_phone,
-      fontSizes: {
-        title: options.font_size_title,
-        itemName: options.font_size_item_name,
-        itemDesc: options.font_size_item_desc,
-        paymentTerms: options.font_size_payment_terms,
-      },
+      font_size_title: options.font_size_title,
+      font_size_item_name: options.font_size_item_name,
+      font_size_item_desc: options.font_size_item_desc,
+      font_size_payment_terms: options.font_size_payment_terms,
     }),
     [
       options.language,

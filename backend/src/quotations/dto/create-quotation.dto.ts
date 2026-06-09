@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsArray, IsObject, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QuotationItemDto {
@@ -47,6 +47,7 @@ export class CreateQuotationDto {
   @IsOptional() @Type(() => Number) @IsNumber() subtotal?: number;
   @IsOptional() @Type(() => Number) @IsNumber() total_amount?: number;
   @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsObject() pdf_font_sizes?: Record<string, unknown>;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => QuotationItemDto) items?: QuotationItemDto[];
 }
 

@@ -82,6 +82,13 @@ export class QuotationsService {
     'created_at',
   ];
 
+  private toNullableJson(
+    value: unknown,
+  ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+    if (value === null || value === undefined) return Prisma.JsonNull;
+    return value as Prisma.InputJsonValue;
+  }
+
   private readonly includeRelations = {
     company: true,
     client: true,
@@ -936,6 +943,7 @@ export class QuotationsService {
       quotation_revision_number,
       quotation_is_active,
       date,
+      pdf_font_sizes,
       ...quotationData
     } = dto as CreateQuotationDto & {
       company?: unknown;
@@ -945,6 +953,7 @@ export class QuotationsService {
       quotation_revision_number?: number;
       quotation_is_active?: boolean;
       date?: string;
+      pdf_font_sizes?: Record<string, unknown>;
     };
 
     if (quotationData.company_id === undefined) {
@@ -992,6 +1001,9 @@ export class QuotationsService {
         quotation_parent_id: null,
         quotation_revision_number: 0,
         quotation_is_active: true,
+        ...(pdf_font_sizes !== undefined
+          ? { pdf_font_sizes: this.toNullableJson(pdf_font_sizes) }
+          : {}),
         items:
           processedItems.length > 0
             ? {
@@ -1044,6 +1056,7 @@ export class QuotationsService {
       quotation_revision_number,
       quotation_is_active,
       date,
+      pdf_font_sizes,
       ...updateData
     } = dto as UpdateQuotationDto & {
       company?: unknown;
@@ -1058,6 +1071,7 @@ export class QuotationsService {
       quotation_revision_number?: number;
       quotation_is_active?: boolean;
       date?: string;
+      pdf_font_sizes?: Record<string, unknown>;
     };
 
     // Recalculate total
@@ -1073,6 +1087,9 @@ export class QuotationsService {
     const updatePayload: Prisma.QuotationUncheckedUpdateInput = {
       ...updateData,
     };
+    if (pdf_font_sizes !== undefined) {
+      updatePayload.pdf_font_sizes = this.toNullableJson(pdf_font_sizes);
+    }
     if (updateData.quotation_date) {
       updatePayload.quotation_date = new Date(updateData.quotation_date);
     }

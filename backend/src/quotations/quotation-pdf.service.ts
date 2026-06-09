@@ -122,8 +122,8 @@ export class QuotationPdfService {
     const finalFontSizes = {
       title: Number(options.fontSizes?.title || docFontSizes.title || defaults['quotation_pdf_title_font_size'] || 25),
       itemName: Number(options.fontSizes?.itemName || docFontSizes.itemName || defaults['quotation_pdf_item_name_font_size'] || 13),
-      itemDesc: Number(options.fontSizes?.itemDesc || docFontSizes.itemDesc || defaults['quotation_pdf_item_desc_font_size'] || 9.3),
-      paymentTerms: Number(options.fontSizes?.paymentTerms || docFontSizes.paymentTerms || defaults['quotation_pdf_payment_terms_font_size'] || 11.2),
+      itemDesc: Number(options.fontSizes?.itemDesc || docFontSizes.itemDesc || defaults['quotation_pdf_item_desc_font_size'] || 9),
+      paymentTerms: Number(options.fontSizes?.paymentTerms || docFontSizes.paymentTerms || defaults['quotation_pdf_payment_terms_font_size'] || 11),
     };
 
     return {

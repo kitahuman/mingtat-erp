@@ -17,7 +17,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request as ExpressRequest, Response } from 'express';
 import { InvoicesService } from './invoices.service';
 import { InvoicePdfService } from './invoice-pdf.service';
-import type { InvoicePdfLanguage } from './invoice-pdf.service';
+import type { InvoicePdfLanguage, InvoicePdfOptions } from './invoice-pdf.service';
 import {
   CreateInvoiceDto,
   UpdateInvoiceDto,
@@ -68,6 +68,44 @@ export class InvoicesController {
     return value === undefined
       ? undefined
       : !['false', '0', 'no'].includes(String(value).toLowerCase());
+  }
+
+  private parseFontSizes(
+    query: Record<string, unknown>,
+  ): InvoicePdfOptions['fontSizes'] {
+    const readNumber = (...keys: string[]) => {
+      for (const key of keys) {
+        const rawValue = query[key];
+        const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+        if (value === undefined || value === null || value === '') continue;
+        const numberValue = Number(value);
+        if (Number.isFinite(numberValue) && numberValue > 0) return numberValue;
+      }
+      return undefined;
+    };
+
+    const fontSizes = {
+      title: readNumber('font_size_title', 'fontSizes[title]', 'fontSizes.title'),
+      itemName: readNumber(
+        'font_size_item_name',
+        'fontSizes[itemName]',
+        'fontSizes.itemName',
+      ),
+      itemDesc: readNumber(
+        'font_size_item_desc',
+        'fontSizes[itemDesc]',
+        'fontSizes.itemDesc',
+      ),
+      paymentTerms: readNumber(
+        'font_size_payment_terms',
+        'fontSizes[paymentTerms]',
+        'fontSizes.paymentTerms',
+      ),
+    };
+
+    return Object.values(fontSizes).some((value) => value !== undefined)
+      ? fontSizes
+      : undefined;
   }
 
   private getUserId(req: AuthenticatedInvoiceRequest): number {
@@ -135,6 +173,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.invoicePdfService.generateInvoicePdf(Number(id), {
@@ -152,6 +191,7 @@ export class InvoicesController {
       overrideClientAddress: clientAddress,
       overrideClientContact: clientContact,
       overrideClientPhone: clientPhone,
+      fontSizes: this.parseFontSizes(query),
     });
 
     const invoiceNo = result.invoice.invoice_no || `invoice-${id}`;
@@ -186,6 +226,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
     const html = await this.invoicePdfService.generateInvoiceHtml(Number(id), {
@@ -203,6 +244,7 @@ export class InvoicesController {
       overrideClientAddress: clientAddress,
       overrideClientContact: clientContact,
       overrideClientPhone: clientPhone,
+      fontSizes: this.parseFontSizes(query),
     });
 
     res.set({
@@ -229,6 +271,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.previewPdfHtml(
@@ -247,6 +290,7 @@ export class InvoicesController {
       clientAddress,
       clientContact,
       clientPhone,
+      query,
       res,
     );
   }

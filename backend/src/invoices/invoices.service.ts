@@ -1203,6 +1203,8 @@ export class InvoicesService {
       data.invoice_show_client_address = dto.invoice_show_client_address;
     if (dto.invoice_show_client_phone !== undefined)
       data.invoice_show_client_phone = dto.invoice_show_client_phone;
+    if (dto.pdf_font_sizes !== undefined)
+      data.pdf_font_sizes = this.toNullableJson(dto.pdf_font_sizes);
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
     const companyChanged =

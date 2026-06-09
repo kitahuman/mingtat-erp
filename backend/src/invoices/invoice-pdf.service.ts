@@ -21,6 +21,12 @@ export interface InvoicePdfOptions {
   overrideClientAddress?: string;
   overrideClientContact?: string;
   overrideClientPhone?: string;
+  fontSizes?: {
+    title?: number;
+    itemName?: number;
+    itemDesc?: number;
+    paymentTerms?: number;
+  };
 }
 
 interface BankInfo {
@@ -124,6 +130,49 @@ export class InvoicePdfService {
     const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
     const showCompanyStamp = options.showCompanyStamp ?? false;
 
+    const systemSettings = await this.prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'invoice_pdf_title_font_size',
+            'invoice_pdf_item_name_font_size',
+            'invoice_pdf_item_desc_font_size',
+            'invoice_pdf_payment_terms_font_size',
+          ],
+        },
+      },
+    });
+    const defaults = Object.fromEntries(
+      systemSettings.map((setting) => [setting.key, setting.value]),
+    );
+    const docFontSizes = (invoice.pdf_font_sizes as any) || {};
+    const finalFontSizes = {
+      title: this.resolveFontSize(
+        options.fontSizes?.title,
+        docFontSizes.title,
+        defaults['invoice_pdf_title_font_size'],
+        25,
+      ),
+      itemName: this.resolveFontSize(
+        options.fontSizes?.itemName,
+        docFontSizes.itemName,
+        defaults['invoice_pdf_item_name_font_size'],
+        13,
+      ),
+      itemDesc: this.resolveFontSize(
+        options.fontSizes?.itemDesc,
+        docFontSizes.itemDesc,
+        defaults['invoice_pdf_item_desc_font_size'],
+        9,
+      ),
+      paymentTerms: this.resolveFontSize(
+        options.fontSizes?.paymentTerms,
+        docFontSizes.paymentTerms,
+        defaults['invoice_pdf_payment_terms_font_size'],
+        11,
+      ),
+    };
+
     return {
       invoice,
       html: this.buildHtml(invoice as any, {
@@ -141,8 +190,23 @@ export class InvoicePdfService {
         overrideClientAddress: options.overrideClientAddress || '',
         overrideClientContact: options.overrideClientContact || '',
         overrideClientPhone: options.overrideClientPhone || '',
+        fontSizes: finalFontSizes,
       }),
     };
+  }
+
+  private resolveFontSize(
+    optionValue: unknown,
+    documentValue: unknown,
+    systemDefaultValue: unknown,
+    fallback: number,
+  ): number {
+    for (const value of [optionValue, documentValue, systemDefaultValue, fallback]) {
+      if (value === undefined || value === null || value === '') continue;
+      const numberValue = Number(value);
+      if (Number.isFinite(numberValue) && numberValue > 0) return numberValue;
+    }
+    return fallback;
   }
 
   private buildHtml(invoice: any, options: Required<InvoicePdfOptions>) {
