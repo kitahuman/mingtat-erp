@@ -76,6 +76,7 @@ import { PaymentTermTemplatesModule } from './payment-term-templates/payment-ter
 import { FixedExpenseReportModule } from './fixed-expense-report/fixed-expense-report.module';
 import { AiKnowledgeModule } from './ai-knowledge/ai-knowledge.module';
 import { AiPayrollModule } from './ai-payroll/ai-payroll.module';
+import { AiPayrollSessionModule } from './ai-payroll-session/ai-payroll-session.module';
 import { AiActivityLogModule } from './ai-activity-log/ai-activity-log.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
@@ -180,6 +181,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     FixedExpenseReportModule,
     AiKnowledgeModule,
     AiPayrollModule,
+    AiPayrollSessionModule,
   ],
   providers: [
     {
