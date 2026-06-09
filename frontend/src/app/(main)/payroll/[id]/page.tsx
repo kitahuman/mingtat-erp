@@ -1823,7 +1823,7 @@ export default function PayrollDetailPage() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">公司</p>
-          <p className="font-bold text-sm">{cp?.chinese_name || '-'}</p>
+          <p className="font-bold text-sm">{cp?.chinese_name || payroll.company?.company_name || '-'}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">計糧期間</p>

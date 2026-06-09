@@ -736,14 +736,16 @@ export class PayrollService {
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
+    const requestedCompanyId = company_id ? Number(company_id) : null;
+
     // Check for existing payroll in same date range
-    const existingWhere: any = {
+    const existingWhere: Prisma.PayrollWhereInput = {
       employee_id: emp.id,
       date_from: new Date(date_from),
       date_to: new Date(date_to),
     };
-    if (company_id) {
-      existingWhere.company_id = Number(company_id);
+    if (requestedCompanyId) {
+      existingWhere.company_id = requestedCompanyId;
     }
     const existing = await this.prisma.payroll.findFirst({
       where: existingWhere,
@@ -760,12 +762,15 @@ export class PayrollService {
     }
 
     // Get work logs
-    const wlWhere: any = {
+    const wlWhere: Prisma.WorkLogWhereInput = {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
       service_type: { not: '請假/休息' },
       deleted_at: null,
     };
+    if (requestedCompanyId) {
+      wlWhere.company_id = requestedCompanyId;
+    }
 
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
@@ -779,10 +784,13 @@ export class PayrollService {
     });
 
     // Determine company info
-    let actualCompanyId = company_id ?? null;
+    let actualCompanyId = requestedCompanyId ?? null;
     let actualCpId = null as number | null;
     if (!actualCompanyId && workLogs.length > 0) {
       actualCompanyId = workLogs[0].company_id;
+    }
+    if (!actualCompanyId) {
+      actualCompanyId = emp.company_id ?? null;
     }
     if (workLogs.length > 0) {
       actualCpId = workLogs[0].company_profile_id;
