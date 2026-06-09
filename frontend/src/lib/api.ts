@@ -1964,6 +1964,70 @@ export const aiKnowledgeApi = {
 };
 
 // ══════════════════════════════════════════════════════════════
+// AI Payroll Session（AI 計糧會話）
+// ══════════════════════════════════════════════════════════════
+
+const AI_PAYROLL_SESSION_BASE = '/ai-payroll-sessions';
+
+export const aiPayrollSessionApi = {
+  createSession: (data: any) => api.post(AI_PAYROLL_SESSION_BASE, data),
+  getSessions: (params?: any) => api.get(AI_PAYROLL_SESSION_BASE, { params }),
+  getSession: (id: string | number) => api.get(`${AI_PAYROLL_SESSION_BASE}/${id}`),
+  startReconcile: (id: string | number, data?: any) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/start`, data || {}),
+  getProgress: (id: string | number) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/progress`),
+  retry: (id: string | number, data?: any) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/retry`, data || {}),
+  getReconcileItems: (id: string | number, params?: any) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/reconcile-items`, { params }),
+  getReconcileItem: (sessionId: string | number, itemId: string | number) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${sessionId}/reconcile-items/${itemId}`),
+  updateReconcileItem: (
+    sessionId: string | number,
+    itemId: string | number,
+    data: any,
+  ) =>
+    api.patch(
+      `${AI_PAYROLL_SESSION_BASE}/${sessionId}/reconcile-items/${itemId}`,
+      data,
+    ),
+  batchConfirmReconcileItems: (sessionId: string | number, data: any) =>
+    api.post(
+      `${AI_PAYROLL_SESSION_BASE}/${sessionId}/reconcile-items/batch-confirm`,
+      data,
+    ),
+  getQuestions: (id: string | number, params?: any) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/questions`, { params }),
+  answerQuestion: (
+    sessionId: string | number,
+    questionId: string | number,
+    data: any,
+  ) =>
+    api.post(
+      `${AI_PAYROLL_SESSION_BASE}/${sessionId}/questions/${questionId}/answer`,
+      data,
+    ),
+  batchIgnoreQuestions: (sessionId: string | number, data: any) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${sessionId}/questions/batch-dismiss`, data),
+  previewPayroll: (id: string | number, params?: any) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/payroll-preview`, { params }),
+  generatePayroll: (id: string | number, data?: any) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/generate-payroll`, data || {}),
+  uploadSource: (id: string | number, formData: FormData) =>
+    api.post(`${AI_PAYROLL_SESSION_BASE}/${id}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
+    }),
+  getSources: (id: string | number, params?: any) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/sources`, { params }),
+  getSourcesSummary: (id: string | number) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/sources/summary`),
+  getDocuments: (id: string | number) =>
+    api.get(`${AI_PAYROLL_SESSION_BASE}/${id}/documents`),
+};
+
+// ══════════════════════════════════════════════════════════════
 // AI Payroll（AI 計糧）
 // ══════════════════════════════════════════════════════════════
 

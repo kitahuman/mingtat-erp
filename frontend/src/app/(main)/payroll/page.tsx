@@ -9,6 +9,7 @@ import {
   companiesApi,
   vehiclesApi,
   machineryApi,
+  aiPayrollSessionApi,
 } from '@/lib/api';
 import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
@@ -496,6 +497,17 @@ export default function PayrollPage() {
   const [generated, setGenerated] = useState<any>(null);
   const [generateError, setGenerateError] = useState('');
 
+  // ── AI Payroll Modal ──
+  const [showAiPayrollModal, setShowAiPayrollModal] = useState(false);
+  const [aiCompanyId, setAiCompanyId] = useState<number | null>(null);
+  const [aiDateFrom, setAiDateFrom] = useState('');
+  const [aiDateTo, setAiDateTo] = useState('');
+  const [aiEmployees, setAiEmployees] = useState<any[]>([]);
+  const [aiEmployeeIds, setAiEmployeeIds] = useState<number[]>([]);
+  const [aiFiles, setAiFiles] = useState<File[]>([]);
+  const [aiSubmitting, setAiSubmitting] = useState(false);
+  const [aiError, setAiError] = useState('');
+
   // ── Add Rate Modal ──
   const [showAddRateModal, setShowAddRateModal] = useState(false);
   const [addRateForm, setAddRateForm] = useState<any>({
@@ -623,6 +635,16 @@ export default function PayrollPage() {
       });
   }, [selectedCompanyId]);
 
+  useEffect(() => {
+    setAiEmployeeIds([]);
+    setAiEmployees([]);
+    if (!aiCompanyId) return;
+    employeesApi
+      .list({ limit: 1000, status: 'active', company_id: aiCompanyId })
+      .then((res) => setAiEmployees(res.data.data || []))
+      .catch(() => setAiEmployees([]));
+  }, [aiCompanyId]);
+
   const selectedEmployee =
     employees.find((e) => e.id === selectedEmployeeId) || null;
   const selectedCompany =
@@ -636,6 +658,84 @@ export default function PayrollPage() {
     value: c.id,
     label: c.name || c.chinese_name || '',
   }));
+
+  const aiEmployeeOptions = aiEmployees.map((e) => ({
+    id: Number(e.id),
+    label: `${e.name_zh || ''}${e.name_en ? ' ' + e.name_en : ''}${e.emp_code ? ' (' + e.emp_code + ')' : ''}`,
+  }));
+
+  const openAiPayrollModal = () => {
+    const defaultCompanyId = selectedCompanyId || companies[0]?.id || null;
+    setAiCompanyId(defaultCompanyId);
+    setAiDateFrom(dateFrom);
+    setAiDateTo(dateTo);
+    setAiEmployeeIds(selectedEmployeeId ? [selectedEmployeeId] : []);
+    setAiFiles([]);
+    setAiError('');
+    setShowAiPayrollModal(true);
+  };
+
+  const toggleAiEmployee = (employeeId: number) => {
+    setAiEmployeeIds((prev) =>
+      prev.includes(employeeId)
+        ? prev.filter((id) => id !== employeeId)
+        : [...prev, employeeId],
+    );
+  };
+
+  const removeAiFile = (index: number) => {
+    setAiFiles((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAiPayrollSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiCompanyId) {
+      setAiError('請先選擇公司');
+      return;
+    }
+    if (!aiDateFrom || !aiDateTo) {
+      setAiError('請選擇計糧日期範圍');
+      return;
+    }
+    const employeeIds = aiEmployeeIds.length
+      ? aiEmployeeIds
+      : aiEmployees.map((emp) => Number(emp.id)).filter(Boolean);
+    if (employeeIds.length === 0) {
+      setAiError('此公司沒有可用員工，請先新增或啟用員工');
+      return;
+    }
+
+    setAiSubmitting(true);
+    setAiError('');
+    try {
+      const sessionRes = await aiPayrollSessionApi.createSession({
+        company_id: aiCompanyId,
+        period: aiDateFrom.slice(0, 7),
+        date_from: aiDateFrom,
+        date_to: aiDateTo,
+        employee_ids: employeeIds,
+      });
+      const sessionId = sessionRes.data?.id;
+      if (!sessionId) throw new Error('建立 AI 計糧會話失敗');
+
+      for (const file of aiFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('formTypeHint', 'auto');
+        await aiPayrollSessionApi.uploadSource(sessionId, formData);
+      }
+
+      await aiPayrollSessionApi.startReconcile(sessionId);
+      setShowAiPayrollModal(false);
+      router.push(`/payroll/ai-reconcile/${sessionId}`);
+    } catch (err: any) {
+      setAiError(
+        err.response?.data?.message || err.message || 'AI 計糧啟動失敗，請重試',
+      );
+    } finally {
+      setAiSubmitting(false);
+    }
+  };
 
   const handlePreview = async () => {
     if (!selectedEmployeeId || !dateFrom || !dateTo) {
@@ -789,12 +889,23 @@ export default function PayrollPage() {
             選擇員工和日期範圍，核對工作記錄後生成糧單
           </p>
         </div>
-        <button
-          onClick={() => router.push('/payroll-records')}
-          className="btn-secondary"
-        >
-          查看糧單記錄
-        </button>
+        <div className="flex flex-wrap gap-2 justify-end">
+          {!isReadOnly && (
+            <button
+              onClick={openAiPayrollModal}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
+            >
+              <span aria-hidden="true">✦</span>
+              AI 計糧
+            </button>
+          )}
+          <button
+            onClick={() => router.push('/payroll-records')}
+            className="btn-secondary"
+          >
+            查看糧單記錄
+          </button>
+        </div>
       </div>
 
       {/* ── Selection Panel ── */}
@@ -1448,6 +1559,184 @@ export default function PayrollPage() {
           )}
         </div>
       )}
+
+      {/* AI Payroll Launch Modal */}
+      <Modal
+        isOpen={showAiPayrollModal}
+        onClose={() => {
+          if (!aiSubmitting) setShowAiPayrollModal(false);
+        }}
+        title="AI 計糧"
+        size="xl"
+      >
+        <form onSubmit={handleAiPayrollSubmit} className="space-y-5">
+          <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
+            <p className="text-sm font-medium text-purple-900">全自動 AI 計糧流程</p>
+            <p className="mt-1 text-sm text-purple-700">
+              選擇公司、日期及員工後上載功課紙，系統會自動建立會話、上載來源文件並開始核對，完成後會進入 AI 核對頁。
+            </p>
+          </div>
+
+          {aiError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {aiError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                公司 *
+              </label>
+              <SearchableSelect
+                options={companyOptions}
+                value={aiCompanyId}
+                onChange={(v) => setAiCompanyId(v ? Number(v) : null)}
+                placeholder="選擇公司"
+                disabled={aiSubmitting}
+                clearable={false}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                開始日期 *
+              </label>
+              <DateInput
+                value={aiDateFrom}
+                onChange={(val) => setAiDateFrom(val || '')}
+                className="input-field w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                結束日期 *
+              </label>
+              <DateInput
+                value={aiDateTo}
+                onChange={(val) => setAiDateTo(val || '')}
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  員工（可選）
+                </label>
+                <p className="text-xs text-gray-500">
+                  不選擇即代表處理此公司全部員工；目前已選 {aiEmployeeIds.length || '全部'}。
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  disabled={!aiEmployees.length || aiSubmitting}
+                  onClick={() => setAiEmployeeIds(aiEmployees.map((emp) => Number(emp.id)))}
+                >
+                  全選
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  disabled={aiSubmitting}
+                  onClick={() => setAiEmployeeIds([])}
+                >
+                  清空（全部員工）
+                </button>
+              </div>
+            </div>
+            <div className="max-h-52 overflow-y-auto rounded-lg border bg-white p-2">
+              {!aiCompanyId ? (
+                <p className="py-6 text-center text-sm text-gray-400">請先選擇公司</p>
+              ) : aiEmployees.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-400">沒有可選員工</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {aiEmployeeOptions.map((emp) => (
+                    <label
+                      key={emp.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-purple-600"
+                        checked={aiEmployeeIds.includes(emp.id)}
+                        disabled={aiSubmitting}
+                        onChange={() => toggleAiEmployee(emp.id)}
+                      />
+                      <span className="truncate">{emp.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              功課紙（可多選，支援圖片及 PDF）
+            </label>
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/50 px-4 py-8 text-center hover:bg-purple-50">
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf"
+                className="hidden"
+                disabled={aiSubmitting}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setAiFiles((prev) => [...prev, ...files]);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <span className="text-3xl text-purple-500">✦</span>
+              <span className="mt-2 text-sm font-medium text-gray-700">點擊上載功課紙</span>
+              <span className="mt-1 text-xs text-gray-500">可先不提供文件，系統仍會以現有工作記錄核對</span>
+            </label>
+            {aiFiles.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {aiFiles.map((file, idx) => (
+                  <div
+                    key={`${file.name}-${idx}`}
+                    className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      className="ml-3 text-xs text-red-600 hover:text-red-700"
+                      disabled={aiSubmitting}
+                      onClick={() => removeAiFile(idx)}
+                    >
+                      移除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={aiSubmitting}
+              onClick={() => setShowAiPayrollModal(false)}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              disabled={aiSubmitting || !aiCompanyId || !aiDateFrom || !aiDateTo}
+            >
+              {aiSubmitting ? '正在啟動 AI 計糧...' : '開始 AI 計糧'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Add Fleet Rate Card Modal */}
       <Modal
