@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { aiPayrollSessionApi } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -66,6 +66,33 @@ type Question = {
   [key: string]: any;
 };
 
+
+type SourceRecord = {
+  id?: number;
+  source_record_session_id?: number;
+  source_record_employee_id?: number;
+  source_record_date?: string;
+  source_record_source_type?: string;
+  source_record_source_id?: number | string | null;
+  source_record_data?: Record<string, any> | null;
+  source_record_raw_data?: Record<string, any> | null;
+  source_record_confidence?: number | string | null;
+  [key: string]: any;
+};
+
+type SourceTypeConfig = {
+  key: string;
+  label: string;
+  tone: StatusTone;
+  description: string;
+};
+
+type DisplayField = {
+  key: string;
+  label: string;
+  compact?: boolean;
+};
+
 const processingStatuses = new Set([
   'collecting',
   'recognizing',
@@ -77,6 +104,80 @@ const STUCK_PROCESSING_MS = 10 * 60 * 1000;
 
 const uploadStatuses = new Set(['pending', 'uploading']);
 const reviewStatuses = new Set(['needs_review', 'completed']);
+
+
+const SOURCE_TYPE_CONFIGS: SourceTypeConfig[] = [
+  { key: 'work_log', label: '工作紀錄', tone: 'blue', description: '系統工作紀錄' },
+  { key: 'homework_sheet', label: '功課紙', tone: 'purple', description: 'AI 從功課紙或上載文件辨識' },
+  { key: 'attendance', label: '打卡', tone: 'yellow', description: '員工打卡資料' },
+  { key: 'whatsapp_order', label: 'WhatsApp Order', tone: 'green', description: 'WhatsApp Order 資料' },
+  { key: 'chit', label: '入帳票', tone: 'green', description: '入帳票資料' },
+  { key: 'manual', label: '手動輸入', tone: 'gray', description: '人手補充資料' },
+  { key: 'system', label: '系統', tone: 'gray', description: '系統推算資料' },
+];
+
+const SOURCE_TYPE_LABELS = SOURCE_TYPE_CONFIGS.reduce<Record<string, SourceTypeConfig>>((acc, config) => {
+  acc[config.key] = config;
+  return acc;
+}, {});
+
+const SOURCE_DISPLAY_FIELDS: DisplayField[] = [
+  { key: 'date', label: '日期', compact: true },
+  { key: 'employee_name', label: '員工', compact: true },
+  { key: 'service_type', label: '服務類型', compact: true },
+  { key: 'day_night', label: '日/夜', compact: true },
+  { key: 'work_content', label: '工作內容' },
+  { key: 'company_name', label: '公司' },
+  { key: 'client_name', label: '客戶' },
+  { key: 'start_location', label: '起點' },
+  { key: 'end_location', label: '終點' },
+  { key: 'machine_type', label: '機種', compact: true },
+  { key: 'tonnage', label: '噸數', compact: true },
+  { key: 'equipment_number', label: '機號', compact: true },
+  { key: 'quantity', label: '數量', compact: true },
+  { key: 'unit', label: '單位', compact: true },
+  { key: 'start_time', label: '開始時間', compact: true },
+  { key: 'end_time', label: '結束時間', compact: true },
+  { key: 'ot_quantity', label: 'OT', compact: true },
+  { key: 'contract_no', label: '合約', compact: true },
+];
+
+const RECONCILE_TABLE_FIELDS: DisplayField[] = [
+  { key: 'date', label: '日期' },
+  { key: 'service_type', label: '服務類型' },
+  { key: 'work_content', label: '工作內容' },
+  { key: 'company_name', label: '公司' },
+  { key: 'client_name', label: '客戶' },
+  { key: 'employee_name', label: '員工' },
+  { key: 'tonnage', label: '噸數' },
+  { key: 'machine_type', label: '機種' },
+  { key: 'equipment_number', label: '機號' },
+];
+
+const PREVIEW_DETAIL_COLUMNS = [
+  { key: 'date', label: '約定日期', align: 'left' },
+  { key: 'service_type', label: '服務類型', align: 'left' },
+  { key: 'company_name', label: '公司', align: 'left' },
+  { key: 'client_name', label: '客戶公司', align: 'left' },
+  { key: 'client_contract_no', label: '客戶合約', align: 'left' },
+  { key: 'tonnage', label: '噸數', align: 'left' },
+  { key: 'machine_type', label: '機種', align: 'left' },
+  { key: 'equipment_number', label: '機號', align: 'left' },
+  { key: 'day_night', label: '日夜班', align: 'left' },
+  { key: 'start_location', label: '起點', align: 'left' },
+  { key: 'end_location', label: '終點', align: 'left' },
+  { key: 'quantity', label: '數量', align: 'right' },
+  { key: 'unit', label: '單位', align: 'left' },
+  { key: 'ot_quantity', label: 'OT 數量', align: 'right' },
+  { key: 'ot_unit', label: 'OT 單位', align: 'left' },
+  { key: 'is_mid_shift', label: '中直', align: 'center' },
+  { key: 'unit_price', label: '單價', align: 'right' },
+  { key: 'subtotal', label: '小計', align: 'right' },
+] as const;
+
+type PreviewDetailColumnKey = typeof PREVIEW_DETAIL_COLUMNS[number]['key'];
+
+const COMPARE_SOURCE_TYPES = ['work_log', 'homework_sheet', 'attendance', 'whatsapp_order', 'chit', 'manual', 'system'];
 
 function normalizeStatus(status?: string) {
   return status || 'pending';
@@ -110,6 +211,48 @@ function formatNumber(value: any) {
   if (value === undefined || value === null || value === '') return '—';
   const number = Number(value);
   return Number.isFinite(number) ? number.toLocaleString() : toDisplayString(value);
+}
+
+function formatMoney(value: any) {
+  if (value === undefined || value === null || value === '') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return toDisplayString(value);
+  return `$${number.toLocaleString()}`;
+}
+
+function getPreviewRecordValue(record: Record<string, any>, key: PreviewDetailColumnKey) {
+  switch (key) {
+    case 'date':
+      return formatDate(record.date || record.scheduled_date || record.reconcile_date);
+    case 'company_name':
+      return toDisplayString(record.company_name || record.company?.name || record.company?.chinese_name);
+    case 'client_name':
+      return toDisplayString(record.client_name || record.customer_name);
+    case 'client_contract_no':
+      return toDisplayString(record.client_contract_no || record.contract_no || record.contract_number);
+    case 'quantity':
+    case 'ot_quantity':
+      return formatNumber(record[key]);
+    case 'is_mid_shift':
+      return record.is_mid_shift ? '是' : '—';
+    case 'unit_price':
+      return formatMoney(record.unit_price || record.matched_rate || record.rate || record.price);
+    case 'subtotal': {
+      const explicit = record.subtotal || record.line_total || record.amount || record.total_amount;
+      if (explicit !== undefined && explicit !== null && explicit !== '') return formatMoney(explicit);
+      const unitPrice = Number(record.unit_price || record.matched_rate || record.rate || record.price);
+      const quantity = Number(record.quantity || 1);
+      return Number.isFinite(unitPrice) && Number.isFinite(quantity) ? formatMoney(unitPrice * quantity) : '—';
+    }
+    default:
+      return toDisplayString(record[key]);
+  }
+}
+
+function getPreviewColumnClass(column: { align: string }) {
+  if (column.align === 'right') return 'px-2 py-2 text-right whitespace-nowrap';
+  if (column.align === 'center') return 'px-2 py-2 text-center whitespace-nowrap';
+  return 'px-2 py-2 text-left whitespace-nowrap';
 }
 
 function getPayrollIds(session?: SessionData, generated?: any): number[] {
@@ -214,6 +357,87 @@ function toArray<T = any>(value: any): T[] {
   if (Array.isArray(value?.items)) return value.items;
   if (Array.isArray(value?.records)) return value.records;
   return [];
+}
+
+
+function getSourceData(record?: SourceRecord | null): Record<string, any> {
+  return (record?.source_record_data || record?.data || {}) as Record<string, any>;
+}
+
+function getSourceType(record?: SourceRecord | null) {
+  return record?.source_record_source_type || record?.source_type || 'unknown';
+}
+
+function getSourceConfig(sourceType?: string): SourceTypeConfig {
+  const key = sourceType || 'unknown';
+  return SOURCE_TYPE_LABELS[key] || { key, label: key, tone: 'gray', description: '其他來源資料' };
+}
+
+function getFieldValue(data: Record<string, any> | null | undefined, field: string) {
+  if (!data) return undefined;
+  if (field === 'company_name') return data.company_name || data.company || data.company_chinese_name;
+  if (field === 'client_name') return data.client_name || data.customer || data.customer_name || data.unverified_client_name;
+  if (field === 'employee_name') return data.employee_name || data.employee?.name_zh || data.employee?.name_en;
+  if (field === 'date') return data.date || data.work_date || data.scheduled_date;
+  return data[field];
+}
+
+function getSourceRecordKey(record: SourceRecord, index: number) {
+  return `${record.id || record.source_record_source_id || 'source'}-${getSourceType(record)}-${index}`;
+}
+
+function getComparisonArray(comparison: Record<string, any> | null | undefined, key: string): string[] {
+  const value = comparison?.[key];
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+function getComparisonFieldTone(field: string, comparison?: Record<string, any> | null): StatusTone | null {
+  if (getComparisonArray(comparison, 'conflicted_fields').includes(field)) return 'red';
+  if (getComparisonArray(comparison, 'missing_fields').includes(field)) return 'yellow';
+  if (getComparisonArray(comparison, 'agreed_fields').includes(field)) return 'green';
+  return null;
+}
+
+function getSourceFieldClass(field: string, comparison?: Record<string, any> | null) {
+  const tone = getComparisonFieldTone(field, comparison);
+  if (tone === 'red') return 'border-red-200 bg-red-50 text-red-800';
+  if (tone === 'yellow') return 'border-yellow-200 bg-yellow-50 text-yellow-800';
+  if (tone === 'green') return 'border-green-100 bg-green-50 text-green-800';
+  return 'border-gray-100 bg-gray-50 text-gray-700';
+}
+
+function sourceConfidence(record: SourceRecord) {
+  const raw = record.source_record_confidence ?? record.confidence;
+  if (raw === undefined || raw === null || raw === '') return '—';
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return toDisplayString(raw);
+  return value <= 1 ? `${Math.round(value * 100)}%` : `${Math.round(value)}%`;
+}
+
+function groupSourcesByType(records: SourceRecord[]) {
+  return records.reduce<Record<string, SourceRecord[]>>((acc, record) => {
+    const type = getSourceType(record);
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(record);
+    return acc;
+  }, {});
+}
+
+function countSourceTypes(records: SourceRecord[], summary: any) {
+  if (records.length > 0) return new Set(records.map((record) => getSourceType(record))).size;
+  if (Array.isArray(summary)) {
+    return new Set(summary.flatMap((entry: any) => Object.keys(entry.by_source_type || entry.byType || {}))).size || '—';
+  }
+  if (summary?.byType) return Object.keys(summary.byType).length;
+  return '—';
+}
+
+function getItemEmployeeId(item: ReconcileItem) {
+  return item.reconcile_employee_id || item.reconcile_decided_data?.employee_id;
+}
+
+function getItemDate(item: ReconcileItem) {
+  return formatDate(item.reconcile_date || item.reconcile_decided_data?.date);
 }
 
 function isLikelyStuckProcessing(session: SessionData | null, status: string) {
@@ -345,6 +569,7 @@ export default function AiPayrollReconcilePage() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [sourcesSummary, setSourcesSummary] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [sourceRecords, setSourceRecords] = useState<SourceRecord[]>([]);
   const [items, setItems] = useState<ReconcileItem[]>([]);
   const [itemsTotal, setItemsTotal] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -361,6 +586,9 @@ export default function AiPayrollReconcilePage() {
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<ReconcileItem | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<number | null>(null);
+  const [expandedItemSources, setExpandedItemSources] = useState<Record<number, SourceRecord[]>>({});
+  const [loadingExpandedItemId, setLoadingExpandedItemId] = useState<number | null>(null);
   const [overrideJson, setOverrideJson] = useState('{}');
   const [overrideStatus, setOverrideStatus] = useState('confirmed');
   const [savingItem, setSavingItem] = useState(false);
@@ -377,6 +605,11 @@ export default function AiPayrollReconcilePage() {
   const timelineSteps = useMemo(
     () => buildTimelineSteps(effectiveStatus, progress, session),
     [effectiveStatus, progress, session],
+  );
+  const sourceRecordsByType = useMemo(() => groupSourcesByType(sourceRecords), [sourceRecords]);
+  const sourceTypeCount = useMemo(
+    () => countSourceTypes(sourceRecords, sourcesSummary),
+    [sourceRecords, sourcesSummary],
   );
 
   const loadData = useCallback(
@@ -397,9 +630,10 @@ export default function AiPayrollReconcilePage() {
         const sourceCount = Number(progressRes.data?.counts?.sources ?? 0);
         const shouldFetchReviewData = !uploadStatuses.has(currentStatus) || sourceCount > 0;
         if (shouldFetchReviewData) {
-          const [summaryRes, docsRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
+          const [summaryRes, docsRes, sourcesRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
             aiPayrollSessionApi.getSourcesSummary(sessionId),
             aiPayrollSessionApi.getDocuments(sessionId),
+            aiPayrollSessionApi.getSources(sessionId),
             aiPayrollSessionApi.getReconcileItems(sessionId, {
               page: 1,
               pageSize: 100,
@@ -410,6 +644,7 @@ export default function AiPayrollReconcilePage() {
           ]);
           if (summaryRes.status === 'fulfilled') setSourcesSummary(summaryRes.value.data || null);
           if (docsRes.status === 'fulfilled') setDocuments(toArray(docsRes.value.data));
+          if (sourcesRes.status === 'fulfilled') setSourceRecords(toArray<SourceRecord>(sourcesRes.value.data));
           if (itemsRes.status === 'fulfilled') {
             const payload = itemsRes.value.data;
             const nextItems = toArray<ReconcileItem>(payload);
@@ -516,6 +751,32 @@ export default function AiPayrollReconcilePage() {
     }
   };
 
+  const toggleExpandedItem = async (item: ReconcileItem) => {
+    const nextId = expandedItemId === item.id ? null : item.id;
+    setExpandedItemId(nextId);
+    if (!nextId || expandedItemSources[item.id]) return;
+
+    const employeeId = getItemEmployeeId(item);
+    const itemDate = getItemDate(item);
+    if (!employeeId || itemDate === '—') return;
+
+    setLoadingExpandedItemId(item.id);
+    try {
+      const res = await aiPayrollSessionApi.getSources(sessionId, {
+        employee_id: employeeId,
+        date: itemDate,
+      });
+      setExpandedItemSources((prev) => ({
+        ...prev,
+        [item.id]: toArray<SourceRecord>(res.data),
+      }));
+    } catch (err: any) {
+      setError(getErrorString(err, '載入該日來源資料失敗'));
+    } finally {
+      setLoadingExpandedItemId(null);
+    }
+  };
+
   const saveItemOverride = async () => {
     if (!selectedItem) return;
     setSavingItem(true);
@@ -586,6 +847,14 @@ export default function AiPayrollReconcilePage() {
   const progressPercent = Math.min(100, Math.max(0, progress?.progressPercent || (isProcessing ? 45 : 0)));
   const companyName = toDisplayString(session?.company?.chinese_name || session?.company?.name || session?.company_name);
   const previewEmployees = toArray(preview?.employees);
+  const previewDetailRows = previewEmployees.flatMap((employee: any) =>
+    toArray(employee.estimated_records).map((record: any, index: number) => ({
+      ...record,
+      employee_id: record?.employee_id || employee.employee_id,
+      employee_name: record?.employee_name || employee.employee_name,
+      __preview_key: `${employee.employee_id || 'employee'}-${record?.date || 'date'}-${index}`,
+    })),
+  );
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -802,7 +1071,7 @@ export default function AiPayrollReconcilePage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">來源資料總覽</h2>
-                <p className="text-sm text-gray-500">AI 會比對工作記錄、已上載功課紙與其他來源資料。</p>
+                <p className="text-sm text-gray-500">以下顯示 AI 從工作紀錄、功課紙及其他來源讀取到的標準化內容。</p>
               </div>
               {!isProcessing && !hasGeneratedPayroll && (
                 <button
@@ -816,8 +1085,8 @@ export default function AiPayrollReconcilePage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {[
                 ['文件', progress?.counts?.documents ?? documents.length],
-                ['來源記錄', progress?.counts?.sources],
-                ['來源類型', sourcesSummary?.byType ? Object.keys(sourcesSummary.byType).length : '—'],
+                ['來源記錄', progress?.counts?.sources ?? sourceRecords.length],
+                ['來源類型', sourceTypeCount],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">{label}</p>
@@ -825,32 +1094,87 @@ export default function AiPayrollReconcilePage() {
                 </div>
               ))}
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
-                    <th className="px-3 py-2">文件 / 類型</th>
-                    <th className="px-3 py-2">狀態</th>
-                    <th className="px-3 py-2">備註</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documents.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-8 text-center text-gray-400">暫未上載文件</td>
+
+            {sourceRecords.length === 0 ? (
+              <div className="rounded-lg bg-gray-50 p-8 text-center text-sm text-gray-400">
+                暫未有 AI 讀取出的來源記錄。請先上載文件或開始核對流程。
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
+                      <th className="px-3 py-2">來源</th>
+                      <th className="px-3 py-2">日期</th>
+                      <th className="px-3 py-2">員工</th>
+                      <th className="px-3 py-2">服務類型</th>
+                      <th className="px-3 py-2">工作內容</th>
+                      <th className="px-3 py-2">客戶 / 公司</th>
+                      <th className="px-3 py-2">起點 → 終點</th>
+                      <th className="px-3 py-2">噸數 / 機種 / 機號</th>
+                      <th className="px-3 py-2">數量</th>
+                      <th className="px-3 py-2">時間 / OT</th>
                     </tr>
-                  ) : (
-                    documents.map((doc: any) => (
-                      <tr key={doc.id || doc.document_id} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium text-gray-800">{doc.original_name || doc.document_original_name || doc.filename || `文件 #${doc.id}`}</td>
-                        <td className="px-3 py-2"><Badge tone={statusTone(doc.status || doc.document_status)}>{statusLabel(doc.status || doc.document_status || 'completed')}</Badge></td>
-                        <td className="px-3 py-2 text-gray-500">{doc.form_type_hint || doc.document_form_type_hint || '自動辨識'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sourceRecords.map((record, index) => {
+                      const data = getSourceData(record);
+                      const sourceConfig = getSourceConfig(getSourceType(record));
+                      return (
+                        <tr key={getSourceRecordKey(record, index)} className="border-b align-top last:border-0 hover:bg-gray-50">
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <Badge tone={sourceConfig.tone}>{sourceConfig.label}</Badge>
+                            <div className="mt-1 text-xs text-gray-400">信心 {sourceConfidence(record)}</div>
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(getFieldValue(data, 'date') || record.source_record_date)}</td>
+                          <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">{toDisplayString(getFieldValue(data, 'employee_name') || `員工 #${record.source_record_employee_id || '—'}`)}</td>
+                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{toDisplayString(getFieldValue(data, 'service_type'))}</td>
+                          <td className="px-3 py-3 text-gray-700 min-w-[180px] max-w-xs">
+                            <div className="line-clamp-3" title={toDisplayString(getFieldValue(data, 'work_content'), '')}>{toDisplayString(getFieldValue(data, 'work_content'))}</div>
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 min-w-[140px]">
+                            <div>{toDisplayString(getFieldValue(data, 'client_name'))}</div>
+                            <div className="text-xs text-gray-400">{toDisplayString(getFieldValue(data, 'company_name'))}</div>
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 min-w-[180px]">
+                            {toDisplayString(getFieldValue(data, 'start_location'))} → {toDisplayString(getFieldValue(data, 'end_location'))}
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
+                            {toDisplayString(getFieldValue(data, 'tonnage'))} / {toDisplayString(getFieldValue(data, 'machine_type'))} / {toDisplayString(getFieldValue(data, 'equipment_number'))}
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
+                            {toDisplayString(getFieldValue(data, 'quantity'))} {toDisplayString(getFieldValue(data, 'unit'), '')}
+                          </td>
+                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
+                            <div>{toDisplayString(getFieldValue(data, 'start_time'))} - {toDisplayString(getFieldValue(data, 'end_time'))}</div>
+                            <div className="text-xs text-gray-400">OT {toDisplayString(getFieldValue(data, 'ot_quantity'))}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {Object.keys(sourceRecordsByType).length > 0 && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {Object.entries(sourceRecordsByType).map(([sourceType, records]) => {
+                  const config = getSourceConfig(sourceType);
+                  return (
+                    <div key={sourceType} className="rounded-lg border bg-gray-50 p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{config.label}</p>
+                          <p className="text-xs text-gray-500">{config.description}</p>
+                        </div>
+                        <Badge tone={config.tone}>{records.length} 筆</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -859,7 +1183,7 @@ export default function AiPayrollReconcilePage() {
             <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">核對結果</h2>
-                <p className="text-sm text-gray-500">綠色代表已匹配，黃色代表 AI 判斷但信心不足，紅色代表資料衝突需人手處理。</p>
+                <p className="text-sm text-gray-500">點擊每行可展開查看工作紀錄、功課紙、打卡、Order、入帳票等來源的原始欄位值；紅色代表差異欄位，黃色代表缺漏欄位。</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <select
@@ -887,55 +1211,149 @@ export default function AiPayrollReconcilePage() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
-                    <th className="px-3 py-2">員工</th>
-                    <th className="px-3 py-2">日期</th>
-                    <th className="px-3 py-2">狀態</th>
-                    <th className="px-3 py-2">AI 判斷</th>
-                    <th className="px-3 py-2">信心</th>
-                    <th className="px-3 py-2">操作</th>
+                    <th className="px-2 py-2 w-8"></th>
+                    {RECONCILE_TABLE_FIELDS.map((field) => (
+                      <th key={field.key} className="px-2 py-2 whitespace-nowrap">{field.label}</th>
+                    ))}
+                    <th className="px-2 py-2 whitespace-nowrap">來源</th>
+                    <th className="px-2 py-2 whitespace-nowrap">狀態</th>
+                    <th className="px-2 py-2 whitespace-nowrap">信心</th>
+                    <th className="px-2 py-2 whitespace-nowrap">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-10 text-center text-gray-400">暫無核對結果</td>
+                      <td colSpan={14} className="px-3 py-10 text-center text-gray-400">暫無核對結果</td>
                     </tr>
                   ) : (
                     items.map((item) => {
-                      const summary = summarizeDecidedData(item.reconcile_decided_data);
+                      const decidedData = item.reconcile_decided_data || {};
+                      const comparison = item.reconcile_source_comparison || {};
+                      const itemSources = expandedItemSources[item.id] || [];
+                      const grouped = groupSourcesByType(itemSources);
+                      const sourceTypes = Array.isArray(comparison.source_types) && comparison.source_types.length > 0
+                        ? comparison.source_types
+                        : Object.keys(grouped);
+                      const isExpanded = expandedItemId === item.id;
+                      const sourceCount = Number(comparison.source_count ?? sourceTypes.length ?? 0);
                       return (
-                        <tr key={item.id} className="border-b align-top last:border-0">
-                          <td className="px-3 py-3 font-medium text-gray-900">{toDisplayString(getEmployeeName(item))}</td>
-                          <td className="px-3 py-3 text-gray-600">{formatDate(item.reconcile_date || item.reconcile_decided_data?.date)}</td>
-                          <td className="px-3 py-3"><Badge tone={statusTone(item.reconcile_status)}>{reconcileLabel(item.reconcile_status)}</Badge></td>
-                          <td className="px-3 py-3 text-gray-600">
-                            {summary.length === 0 ? (
-                              <span className="text-gray-400">沒有摘要</span>
-                            ) : (
-                              <div className="flex max-w-lg flex-wrap gap-1">
-                                {summary.map((entry) => (
-                                  <span key={entry.key} className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                                    {entry.key}: {String(entry.value)}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {item.reconcile_reason && <p className="mt-1 text-xs text-gray-400">{toDisplayString(item.reconcile_reason)}</p>}
-                          </td>
-                          <td className="px-3 py-3 text-gray-600">
-                            {item.reconcile_confidence !== undefined && item.reconcile_confidence !== null
-                              ? `${Math.round(Number(item.reconcile_confidence) * 100)}%`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-3">
-                            <button
-                              onClick={() => openItemEditor(item)}
-                              className="rounded-lg border px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                            >
-                              查看 / 修正
-                            </button>
-                          </td>
-                        </tr>
+                        <Fragment key={item.id}>
+                          <tr
+                            className={`cursor-pointer border-b align-top hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
+                            onClick={() => toggleExpandedItem(item)}
+                          >
+                            <td className="px-2 py-3 text-xs text-gray-400">{isExpanded ? '▼' : '▶'}</td>
+                            {RECONCILE_TABLE_FIELDS.map((field) => {
+                              const value = field.key === 'date'
+                                ? getItemDate(item)
+                                : getFieldValue(decidedData, field.key);
+                              return (
+                                <td key={field.key} className={`px-2 py-3 text-xs text-gray-700 ${['work_content', 'company_name', 'client_name'].includes(field.key) ? 'max-w-[150px] truncate' : 'whitespace-nowrap'}`} title={toDisplayString(value, '')}>
+                                  {field.key === 'employee_name' ? toDisplayString(value || getEmployeeName(item)) : toDisplayString(value)}
+                                </td>
+                              );
+                            })}
+                            <td className="px-2 py-3 text-xs text-gray-700 whitespace-nowrap">
+                              {sourceCount || itemSources.length}/{COMPARE_SOURCE_TYPES.length}
+                            </td>
+                            <td className="px-2 py-3 whitespace-nowrap"><Badge tone={statusTone(item.reconcile_status)}>{reconcileLabel(item.reconcile_status)}</Badge></td>
+                            <td className="px-2 py-3 text-xs text-gray-600 whitespace-nowrap">
+                              {item.reconcile_confidence !== undefined && item.reconcile_confidence !== null
+                                ? `${Math.round(Number(item.reconcile_confidence) * 100)}%`
+                                : '—'}
+                            </td>
+                            <td className="px-2 py-3 whitespace-nowrap">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openItemEditor(item);
+                                }}
+                                className="rounded-lg border px-3 py-1.5 text-xs text-gray-700 hover:bg-white"
+                              >
+                                查看 / 修正
+                              </button>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={14} className="p-0">
+                                <div className="border-b bg-blue-50 p-4">
+                                  <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-900">來源比對詳情</p>
+                                      <p className="text-xs text-gray-500">
+                                        已一致欄位 {getComparisonArray(comparison, 'agreed_fields').length} 個，差異欄位 {getComparisonArray(comparison, 'conflicted_fields').length} 個，缺漏欄位 {getComparisonArray(comparison, 'missing_fields').length} 個。
+                                      </p>
+                                    </div>
+                                    {item.reconcile_reason && <p className="text-xs text-gray-500">AI 理由：{toDisplayString(item.reconcile_reason)}</p>}
+                                  </div>
+
+                                  {loadingExpandedItemId === item.id ? (
+                                    <div className="rounded-lg bg-white p-6 text-center text-sm text-gray-500">正在載入該員工該日的來源資料...</div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                                      {COMPARE_SOURCE_TYPES.map((sourceType) => {
+                                        const config = getSourceConfig(sourceType);
+                                        const records = grouped[sourceType] || [];
+                                        const isFound = records.length > 0;
+                                        return (
+                                          <div
+                                            key={sourceType}
+                                            className={`rounded-lg border p-3 ${isFound ? 'border-green-200 bg-white' : 'border-gray-200 bg-gray-50'}`}
+                                          >
+                                            <div className="mb-2 flex items-start justify-between gap-2">
+                                              <div>
+                                                <div className="font-medium text-gray-900">{config.label}</div>
+                                                <div className="text-xs text-gray-500">{config.description}</div>
+                                              </div>
+                                              {isFound ? <Badge tone={config.tone}>{records.length} 筆</Badge> : <Badge tone="gray">未找到</Badge>}
+                                            </div>
+
+                                            {!isFound ? (
+                                              <div className="rounded-md border border-dashed border-gray-200 bg-white p-4 text-center text-sm text-gray-400">
+                                                未找到對應資料
+                                              </div>
+                                            ) : (
+                                              <div className="space-y-2">
+                                                {records.map((record, recordIndex) => {
+                                                  const data = getSourceData(record);
+                                                  return (
+                                                    <div key={getSourceRecordKey(record, recordIndex)} className="rounded-md border bg-gray-50 p-2">
+                                                      <div className="mb-2 flex items-center justify-between text-xs text-gray-400">
+                                                        <span>來源 ID: {toDisplayString(record.source_record_source_id || record.id)}</span>
+                                                        <span>信心 {sourceConfidence(record)}</span>
+                                                      </div>
+                                                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                                        {SOURCE_DISPLAY_FIELDS.filter((field) => !field.compact || getFieldValue(data, field.key) !== undefined).map((field) => {
+                                                          const value = field.key === 'date'
+                                                            ? formatDate(getFieldValue(data, field.key) || record.source_record_date)
+                                                            : getFieldValue(data, field.key);
+                                                          if (value === undefined || value === null || value === '') return null;
+                                                          return (
+                                                            <div key={field.key} className={`rounded border px-2 py-1 ${getSourceFieldClass(field.key, comparison)}`}>
+                                                              <div className="text-[10px] font-medium opacity-70">{field.label}</div>
+                                                              <div className="mt-0.5 text-xs font-medium break-words">{toDisplayString(value)}</div>
+                                                            </div>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })
                   )}
@@ -1013,37 +1431,67 @@ export default function AiPayrollReconcilePage() {
                 尚有 {unresolvedCount} 條 AI 問題未處理，請先於「AI 問答」分頁回答或忽略。
               </div>
             )}
+            <div className="border-b bg-gray-50/60 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {previewEmployees.map((employee: any) => (
+                  <div key={employee.employee_id || employee.employee_name} className="rounded-lg border bg-white p-3">
+                    <p className="font-medium text-gray-900">{employee.employee_name || `員工 #${employee.employee_id}`}</p>
+                    <div className="mt-2 flex flex-wrap gap-1 text-xs text-gray-500">
+                      <span>{formatNumber(employee.item_count)} 項核對</span>
+                      <span>·</span>
+                      <span>{formatNumber(employee.work_days)} 個工作日</span>
+                      <span>·</span>
+                      <span>{formatNumber(toArray(employee.estimated_records).length)} 筆明細</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Object.keys(employee.statuses || {}).map((status: string) => (
+                        <Badge key={status} tone={statusTone(status)}>{reconcileLabel(status)}</Badge>
+                      ))}
+                      {employee.has_unresolved_questions && <Badge tone="yellow">有未解答問題</Badge>}
+                    </div>
+                  </div>
+                ))}
+                {previewEmployees.length === 0 && (
+                  <div className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-400 md:col-span-3">
+                    暫無員工預覽摘要。
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
-                    <th className="px-3 py-2">員工</th>
-                    <th className="px-3 py-2">核對項目</th>
-                    <th className="px-3 py-2">工作日</th>
-                    <th className="px-3 py-2">狀態</th>
-                    <th className="px-3 py-2">預計記錄</th>
+              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-2 text-left font-medium uppercase tracking-wider text-gray-500">員工</th>
+                    {PREVIEW_DETAIL_COLUMNS.map((column) => (
+                      <th key={column.key} className={`${getPreviewColumnClass(column)} font-medium uppercase tracking-wider text-gray-500`}>
+                        {column.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {previewEmployees.length === 0 ? (
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {previewDetailRows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-10 text-center text-gray-400">暫無預覽資料</td>
+                      <td colSpan={PREVIEW_DETAIL_COLUMNS.length + 1} className="px-3 py-10 text-center text-gray-400">
+                        暫無預覽明細資料
+                      </td>
                     </tr>
                   ) : (
-                    previewEmployees.map((employee: any) => (
-                      <tr key={employee.employee_id} className="border-b last:border-0">
-                        <td className="px-3 py-3 font-medium text-gray-900">{employee.employee_name || `員工 #${employee.employee_id}`}</td>
-                        <td className="px-3 py-3 text-gray-600">{formatNumber(employee.item_count)}</td>
-                        <td className="px-3 py-3 text-gray-600">{formatNumber(employee.work_days)}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {Object.keys(employee.statuses || {}).map((status: string) => (
-                              <Badge key={status} tone={statusTone(status)}>{reconcileLabel(status)}</Badge>
-                            ))}
-                            {employee.has_unresolved_questions && <Badge tone="yellow">有未解答問題</Badge>}
-                          </div>
+                    previewDetailRows.map((record: Record<string, any>) => (
+                      <tr key={record.__preview_key} className="hover:bg-gray-50">
+                        <td className="px-2 py-2 whitespace-nowrap font-medium text-gray-900">
+                          {record.employee_name || `員工 #${record.employee_id || '—'}`}
                         </td>
-                        <td className="px-3 py-3 text-gray-600">{formatNumber(Array.isArray(employee.estimated_records) ? employee.estimated_records.length : employee.estimated_records)}</td>
+                        {PREVIEW_DETAIL_COLUMNS.map((column) => (
+                          <td
+                            key={column.key}
+                            className={`${getPreviewColumnClass(column)} ${column.key === 'subtotal' ? 'font-mono font-bold text-primary-600' : column.align === 'right' ? 'font-mono text-gray-700' : 'text-gray-700'}`}
+                            title={toDisplayString(getPreviewRecordValue(record, column.key), '')}
+                          >
+                            {getPreviewRecordValue(record, column.key)}
+                          </td>
+                        ))}
                       </tr>
                     ))
                   )}
