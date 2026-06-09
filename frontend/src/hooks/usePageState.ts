@@ -15,7 +15,7 @@ interface PageState {
   dateTo?: string;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
-  columnFilters?: Record<string, Set<string>>;
+  columnFilters?: Record<string, string[]>;
   limit?: number;
   filterPublisher?: (string | number)[];
   filterStatus?: (string | number)[];
@@ -32,34 +32,33 @@ interface PageState {
 const getStorageKey = (path: string) => `pageState:${path}`;
 
 /**
- * Custom serializer that converts Set objects to arrays for JSON storage.
+ * Serialize state directly; page state must remain JSON-serializable for sessionStorage.
  */
 function serializeState(state: PageState): string {
-  return JSON.stringify(state, (key, value) => {
-    if (value instanceof Set) {
-      return { __type: 'Set', values: Array.from(value) };
-    }
-    return value;
-  });
+  return JSON.stringify(state);
 }
 
 /**
- * Custom deserializer that restores Set objects from arrays.
+ * Deserialize state and normalize columnFilters to string arrays.
+ * Older sessions may contain the previous Set wrapper format, so accept it once
+ * and convert it to the new JSON-serializable representation.
  */
 function deserializeState(json: string): PageState {
-  const parsed = JSON.parse(json, (key, value) => {
-    if (value && typeof value === 'object' && value.__type === 'Set' && Array.isArray(value.values)) {
-      return new Set(value.values);
+  const parsed = JSON.parse(json);
+  if (parsed.columnFilters && typeof parsed.columnFilters === 'object' && !Array.isArray(parsed.columnFilters)) {
+    const normalized: Record<string, string[]> = {};
+    let allValid = true;
+    for (const [key, value] of Object.entries(parsed.columnFilters)) {
+      if (Array.isArray(value)) {
+        normalized[key] = value.map(String);
+      } else if (value && typeof value === 'object' && (value as any).__type === 'Set' && Array.isArray((value as any).values)) {
+        normalized[key] = (value as any).values.map(String);
+      } else {
+        allValid = false;
+        break;
+      }
     }
-    return value;
-  });
-  // Validate columnFilters: if any value is not a Set, reset columnFilters
-  if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
-    const entries = Object.entries(parsed.columnFilters);
-    const allValid = entries.every(([, v]) => v instanceof Set);
-    if (!allValid) {
-      parsed.columnFilters = {};
-    }
+    parsed.columnFilters = allValid ? normalized : {};
   }
   return parsed;
 }

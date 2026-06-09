@@ -890,7 +890,7 @@ export default function PayrollPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
-          {!isReadOnly && (
+          {!isReadOnly() && (
             <button
               onClick={openAiPayrollModal}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"

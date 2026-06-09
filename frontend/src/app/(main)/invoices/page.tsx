@@ -272,7 +272,14 @@ export default function InvoicesPage() {
     columnFilters: {},
   });
 
-  const { page, search, statusFilter, clientFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters } = pageState;
+  const { page, search, statusFilter, clientFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters = {} } = pageState;
+
+  const activeColumnFilters = useMemo<Record<string, Set<string>>>(
+    () => Object.fromEntries(
+      Object.entries(columnFilters).map(([key, values]) => [key, new Set(values)]),
+    ),
+    [columnFilters],
+  );
 
   // Helper to update state and save it
   const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
@@ -283,7 +290,13 @@ export default function InvoicesPage() {
   const setDateTo = (newDateTo: string) => saveState({ ...pageState, dateTo: newDateTo });
   const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
   const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
-  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => saveState({ ...pageState, columnFilters: newColumnFilters });
+  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState({ ...pageState, columnFilters: newColumnFilters });
+  const setColumnFiltersFromSets = (newColumnFilters: Record<string, Set<string>>) => {
+    const serializableFilters = Object.fromEntries(
+      Object.entries(newColumnFilters).map(([key, values]) => [key, Array.from(values)]),
+    );
+    setColumnFilters(serializableFilters);
+  };
 
   // Reference data
   const [partners, setPartners] = useState<any[]>([]);
@@ -313,11 +326,11 @@ export default function InvoicesPage() {
   });
 
   const buildColumnFilterParams = useCallback(
-    (filters: Record<string, Set<string>> = columnFilters) => {
+    (filters: Record<string, string[]> = columnFilters) => {
       const params: Record<string, string> = {};
       Object.entries(filters).forEach(([key, values]) => {
         params[`filter_${key}`] =
-          values.size > 0 ? JSON.stringify(Array.from(values)) : '__NO_MATCH__';
+          values.length > 0 ? JSON.stringify(values) : '__NO_MATCH__';
       });
       return params;
     },
@@ -407,7 +420,7 @@ export default function InvoicesPage() {
 
   const handleColumnFilterChange = useCallback(
     (filters: Record<string, Set<string>>) => {
-      setColumnFilters(filters);
+      setColumnFiltersFromSets(filters);
       setPage(1);
     },
     [],
@@ -1067,7 +1080,7 @@ export default function InvoicesPage() {
           onRowClick={(row) => router.push(`/invoices/${row.id}`)}
           loading={loading}
           serverSideFilter
-          columnFilters={columnFilters}
+          columnFilters={activeColumnFilters}
           onColumnFilterChange={handleColumnFilterChange}
           onFetchFilterOptions={handleFetchFilterOptions}
           sortBy={sortBy}

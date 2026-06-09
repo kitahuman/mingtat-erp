@@ -866,10 +866,26 @@ export class AiKnowledgeService {
     return tokens;
   }
 
-  private formatKnowledgeEntry<T extends { knowledge_status: string }>(
-    entry: T,
-  ): T & { status: string } {
-    return { ...entry, status: this.toFrontendStatus(entry.knowledge_status) };
+  private formatKnowledgeEntry<
+    T extends {
+      knowledge_status: string;
+      knowledge_confidence_score?: Prisma.Decimal | number | string | null;
+      knowledge_support_count?: number | null;
+    },
+  >(entry: T): T & { status: string; confidence_score: number; support_count: number } {
+    return {
+      ...entry,
+      status: this.toFrontendStatus(entry.knowledge_status),
+      confidence_score: this.decimalToNumber(entry.knowledge_confidence_score),
+      support_count: entry.knowledge_support_count ?? 0,
+    };
+  }
+
+  private decimalToNumber(value: Prisma.Decimal | number | string | null | undefined): number {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return Number(value);
+    return value.toNumber();
   }
 
   private toFrontendStatus(status: string): string {

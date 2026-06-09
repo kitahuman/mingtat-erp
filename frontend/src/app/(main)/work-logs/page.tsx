@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePageState } from '@/hooks/usePageState';
 import {
   workLogsApi,
@@ -314,12 +314,17 @@ export default function WorkLogsPage() {
     filterEquipment: '',
     filterDateFrom: '',
     filterDateTo: '',
+    columnFilters: {},
   });
 
-  // columnFilters uses independent state to avoid Set serialization issues with sessionStorage
-  const [columnFilters, setColumnFiltersState] = useState<Record<string, Set<string>>>({});
+  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo, columnFilters = {} } = pageState;
 
-  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo } = pageState;
+  const activeColumnFilters = useMemo<Record<string, Set<string>>>(
+    () => Object.fromEntries(
+      Object.entries(columnFilters).map(([key, values]) => [key, new Set(values)]),
+    ),
+    [columnFilters],
+  );
 
   // Helper to update state and save it
   const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
@@ -336,7 +341,7 @@ export default function WorkLogsPage() {
   const setFilterEquipment = (newFilterEquipment: string) => saveState({ ...pageState, filterEquipment: newFilterEquipment });
   const setFilterDateFrom = (newFilterDateFrom: string) => saveState({ ...pageState, filterDateFrom: newFilterDateFrom });
   const setFilterDateTo = (newFilterDateTo: string) => saveState({ ...pageState, filterDateTo: newFilterDateTo });
-  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => setColumnFiltersState(newColumnFilters);
+  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState({ ...pageState, columnFilters: newColumnFilters });
 
   // ── Dirty tracking (Airtable-style) ─────────────────────────
   // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields
@@ -981,8 +986,8 @@ export default function WorkLogsPage() {
         params.date_to = filterDateTo;
       }
       for (const [col, vals] of Object.entries(columnFilters)) {
-        if (vals && vals.size > 0) {
-          params[`filter_${col}`] = JSON.stringify(Array.from(vals));
+        if (Array.isArray(vals) && vals.length > 0) {
+          params[`filter_${col}`] = JSON.stringify(vals);
         }
       }
       return params;
@@ -3090,7 +3095,7 @@ export default function WorkLogsPage() {
                             <ColumnFilter
                               columnKey={col.key}
                               data={rows}
-                              activeFilters={columnFilters}
+                              activeFilters={activeColumnFilters}
                               onFilterChange={(key, vals) => {
                                 if (vals === null) {
                                   const newFilters = { ...columnFilters };
@@ -3099,7 +3104,7 @@ export default function WorkLogsPage() {
                                 } else {
                                   setColumnFilters({
                                     ...columnFilters,
-                                    [key]: vals instanceof Set ? vals : new Set(vals as any),
+                                    [key]: Array.from(vals instanceof Set ? vals : new Set(vals as any)),
                                   });
                                 }
                                 setPage(1);
