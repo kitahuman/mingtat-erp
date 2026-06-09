@@ -61,6 +61,7 @@ model User {
   scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
   web_push_subscriptions     WebPushSubscription[]
   document_folders_created   DocumentFolder[]           @relation("DocumentFolderCreatedBy")
+  created_payrolls          Payroll[]                 @relation("PayrollCreatedBy")
 
   @@map("users")
 }
@@ -1453,6 +1454,7 @@ model Payroll {
   updated_at            DateTime  @default(now()) @updatedAt
   payroll_ai_session_id Int?
   payroll_ai_generated  Boolean   @default(false)
+  payroll_created_by    Int?
 
   employee                Employee                @relation(fields: [employee_id], references: [id])
   company_profile         CompanyProfile?         @relation(fields: [company_profile_id], references: [id])
@@ -1468,6 +1470,7 @@ model Payroll {
   petty_cash_records      PettyCashRecord[]
   payment_out_allocations PaymentOutAllocation[]  @relation("PayrollPaymentOutAllocations")
   ai_session              AiPayrollSession?       @relation("AiSessionPayrolls", fields: [payroll_ai_session_id], references: [id], onDelete: SetNull)
+  created_by_user        User?                   @relation("PayrollCreatedBy", fields: [payroll_created_by], references: [id], onDelete: SetNull)
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1476,6 +1479,7 @@ model Payroll {
   @@index([company_profile_id])
   @@index([status])
   @@index([payroll_ai_session_id])
+  @@index([payroll_created_by])
   @@index([employee_id, period])
   @@map("payrolls")
 }

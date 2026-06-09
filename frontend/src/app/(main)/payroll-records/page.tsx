@@ -40,7 +40,7 @@ export default function PayrollRecordsPage() {
   const [employees, setEmployees] = useState<any[]>([]);
 
   // Selection state
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [totals, setTotals] = useState<any>(null);
 
@@ -104,13 +104,13 @@ export default function PayrollRecordsPage() {
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
     if (checked) {
-      setSelectedIds(new Set(data.map((row: any) => row.id)));
+      setSelectedIds(new Set(data.map((row: any) => row.row_id || String(row.id))));
     } else {
       setSelectedIds(new Set());
     }
   };
 
-  const handleSelectRow = (id: number, checked: boolean) => {
+  const handleSelectRow = (id: string, checked: boolean) => {
     const newSelected = new Set(selectedIds);
     if (checked) {
       newSelected.add(id);
@@ -124,7 +124,7 @@ export default function PayrollRecordsPage() {
   const getDisplayTotals = () => {
     if (selectedIds.size > 0) {
       // Calculate totals for selected items
-      const selectedData = data.filter((row: any) => selectedIds.has(row.id));
+      const selectedData = data.filter((row: any) => selectedIds.has(row.row_id || String(row.id)));
       return {
         base_amount: selectedData.reduce((sum: number, row: any) => sum + Number(row.base_amount || 0), 0),
         allowance_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.allowance_total || 0), 0),
@@ -155,10 +155,10 @@ export default function PayrollRecordsPage() {
       render: (_v: any, row: any) => (
         <input
           type="checkbox"
-          checked={selectedIds.has(row.id)}
+          checked={selectedIds.has(row.row_id || String(row.id))}
           onChange={(e) => {
             e.stopPropagation();
-            handleSelectRow(row.id, e.target.checked);
+            handleSelectRow(row.row_id || String(row.id), e.target.checked);
           }}
           className="w-4 h-4 rounded border-gray-300"
         />
@@ -242,6 +242,11 @@ export default function PayrollRecordsPage() {
           {STATUS_LABELS[row.status] || row.status}
         </span>
       ),
+    },
+    {
+      key: 'publisher',
+      label: '發佈人',
+      render: (_v: any, row: any) => row.publisher_name || '-',
     },
     {
       key: 'payment_date',
@@ -379,7 +384,13 @@ export default function PayrollRecordsPage() {
           setPage(1);
         }}
         searchPlaceholder="搜尋員工姓名/編號..."
-        onRowClick={(row) => router.push(`/payroll/${row.id}`)}
+        onRowClick={(row) => {
+          if (row.record_type === 'ai_session' && row.ai_session_id) {
+            router.push(`/payroll/ai-reconcile/${row.ai_session_id}`);
+            return;
+          }
+          router.push(`/payroll/${row.id}`);
+        }}
         loading={loading}
         sortBy={sortBy}
         sortOrder={sortOrder}

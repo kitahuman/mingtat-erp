@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { PricingService } from '../common/pricing.service';
@@ -45,18 +46,18 @@ export class PayrollService {
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (query.period) where.period = query.period;
+    const payrollWhere: Prisma.PayrollWhereInput = {};
+    if (query.period) payrollWhere.period = String(query.period);
     if (query.company_profile_id)
-      where.company_profile_id = Number(query.company_profile_id);
-    if (query.company_id) where.company_id = Number(query.company_id);
-    if (query.employee_id) where.employee_id = Number(query.employee_id);
+      payrollWhere.company_profile_id = Number(query.company_profile_id);
+    if (query.company_id) payrollWhere.company_id = Number(query.company_id);
+    if (query.employee_id) payrollWhere.employee_id = Number(query.employee_id);
     if (query.status) {
-      where.status = query.status;
+      payrollWhere.status = String(query.status);
     }
     // preparing 狀態也顯示在列表中（作為草稿）
     if (query.search) {
-      where.employee = {
+      payrollWhere.employee = {
         OR: [
           { name_zh: { contains: query.search, mode: 'insensitive' } },
           { name_en: { contains: query.search, mode: 'insensitive' } },
@@ -73,21 +74,35 @@ export class PayrollService {
       ? { [sortBy]: sortOrder }
       : { id: 'desc' as const };
 
-    const [data, total, aggregate] = await Promise.all([
+    const aiSessionWhere: Prisma.AiPayrollSessionWhereInput = {
+      payrolls: { none: {} },
+      session_status: { not: 'cancelled' },
+    };
+    if (query.period) aiSessionWhere.session_period = String(query.period);
+    if (query.company_id) aiSessionWhere.session_company_id = Number(query.company_id);
+
+    const [payrolls, aiSessions, aggregate] = await Promise.all([
       this.prisma.payroll.findMany({
-        where,
+        where: payrollWhere,
         include: {
           employee: { include: { company: true } },
           company_profile: true,
           company: true,
+          created_by_user: {
+            select: { id: true, username: true, displayName: true },
+          },
         },
         orderBy,
-        skip,
-        take: limit,
       }),
-      this.prisma.payroll.count({ where }),
+      this.prisma.aiPayrollSession.findMany({
+        where: aiSessionWhere,
+        include: {
+          company: true,
+        },
+        orderBy: { session_created_at: 'desc' },
+      }),
       this.prisma.payroll.aggregate({
-        where,
+        where: payrollWhere,
         _sum: {
           base_amount: true,
           allowance_total: true,
@@ -100,9 +115,85 @@ export class PayrollService {
       }),
     ]);
 
+    const employeeIds = [
+      ...new Set(
+        aiSessions.flatMap((session) => this.getAiSessionEmployeeIds(session.session_employee_ids)),
+      ),
+    ];
+    const employees = employeeIds.length
+      ? await this.prisma.employee.findMany({
+          where: { id: { in: employeeIds } },
+          include: { company: true },
+        })
+      : [];
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+    const normalizedSearch = String(query.search || '').trim().toLowerCase();
+    const requestedEmployeeId = query.employee_id ? Number(query.employee_id) : null;
+    const includeAiDrafts = !query.status || query.status === 'draft';
+
+    const payrollRows = payrolls.map((payroll: any) => ({
+      ...payroll,
+      record_type: 'payroll',
+      row_id: `payroll-${payroll.id}`,
+      publisher_name: payroll.payroll_ai_generated
+        ? 'AI'
+        : this.formatUserDisplayName(payroll.created_by_user),
+    }));
+
+    const aiRows = includeAiDrafts
+      ? aiSessions
+          .map((session) => {
+            const sessionEmployeeIds = this.getAiSessionEmployeeIds(
+              session.session_employee_ids,
+            );
+            const sessionEmployees = sessionEmployeeIds
+              .map((employeeId) => employeeById.get(employeeId))
+              .filter(Boolean) as any[];
+            return this.buildAiSessionPayrollRecordRow(
+              session,
+              sessionEmployees,
+              sessionEmployeeIds,
+            );
+          })
+          .filter((row) => {
+            if (
+              requestedEmployeeId !== null &&
+              !row.ai_session_employee_ids.includes(requestedEmployeeId)
+            ) {
+              return false;
+            }
+            if (!normalizedSearch) return true;
+            const searchableText = [
+              row.employee?.name_zh,
+              row.employee?.name_en,
+              row.employee?.emp_code,
+              row.company?.name,
+              row.company?.internal_prefix,
+              row.ai_session_id,
+            ]
+              .filter((value) => value !== null && value !== undefined)
+              .join(' ')
+              .toLowerCase();
+            return searchableText.includes(normalizedSearch);
+          })
+      : [];
+
+    const combined = [...payrollRows, ...aiRows].sort((a: any, b: any) => {
+      const direction = sortOrder === 'asc' ? 1 : -1;
+      const av = this.getPayrollRecordSortValue(a, sortBy);
+      const bv = this.getPayrollRecordSortValue(b, sortBy);
+      if (av === bv) return 0;
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      return av > bv ? direction : -direction;
+    });
+
+    const data = combined.slice(skip, skip + limit);
+
     return {
       data,
-      total,
+      total: combined.length,
       page,
       limit,
       sum_base_amount: Number(aggregate._sum.base_amount) || 0,
@@ -113,6 +204,90 @@ export class PayrollService {
       sum_adjustment_total: Number(aggregate._sum.adjustment_total) || 0,
       sum_net_amount: Number(aggregate._sum.net_amount) || 0,
     };
+  }
+
+  private getAiSessionEmployeeIds(value: Prisma.JsonValue): number[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item > 0);
+  }
+
+  private formatUserDisplayName(user?: {
+    displayName?: string | null;
+    username?: string | null;
+  } | null): string {
+    if (!user) return '-';
+    return user.displayName?.trim() || user.username?.trim() || '-';
+  }
+
+  private buildAiSessionPayrollRecordRow(
+    session: any,
+    employees: any[],
+    sessionEmployeeIds: number[],
+  ) {
+    const employeeLabel =
+      employees.length === 1
+        ? employees[0].name_zh || employees[0].name_en || `員工 #${employees[0].id}`
+        : `AI 計糧會話 #${session.id}`;
+    const employeeSubLabel =
+      employees.length === 1
+        ? employees[0].emp_code || `Session #${session.id}`
+        : `${sessionEmployeeIds.length} 位員工`;
+
+    return {
+      id: `ai-session-${session.id}`,
+      record_type: 'ai_session',
+      row_id: `ai-session-${session.id}`,
+      ai_session_id: session.id,
+      ai_session_status: session.session_status,
+      ai_session_employee_ids: sessionEmployeeIds,
+      period: session.session_period,
+      date_from: session.session_date_from,
+      date_to: session.session_date_to,
+      employee_id: employees.length === 1 ? employees[0].id : null,
+      employee: {
+        id: employees.length === 1 ? employees[0].id : null,
+        name_zh: employeeLabel,
+        name_en: employees.length === 1 ? employees[0].name_en : null,
+        emp_code: employeeSubLabel,
+        company: session.company,
+      },
+      company_id: session.session_company_id,
+      company: session.company,
+      company_profile: null,
+      salary_type: 'daily',
+      base_amount: 0,
+      allowance_total: 0,
+      ot_total: 0,
+      commission_total: 0,
+      mpf_deduction: 0,
+      adjustment_total: 0,
+      net_amount: 0,
+      status: 'draft',
+      payment_date: null,
+      cheque_number: null,
+      notes: session.session_error_message,
+      created_at: session.session_created_at,
+      updated_at: session.session_updated_at,
+      payroll_ai_session_id: session.id,
+      payroll_ai_generated: true,
+      publisher_name: 'AI',
+    };
+  }
+
+  private getPayrollRecordSortValue(row: any, sortBy: string) {
+    if (sortBy === 'created_at') {
+      return row.created_at ? new Date(row.created_at).getTime() : 0;
+    }
+    if (sortBy === 'net_amount') return Number(row.net_amount || 0);
+    if (sortBy === 'id') {
+      if (row.record_type === 'ai_session') {
+        return row.created_at ? new Date(row.created_at).getTime() : 0;
+      }
+      return Number(row.id) || 0;
+    }
+    return row[sortBy] ?? null;
   }
 
   // ── 詳情（含工作記錄、調整項、每日津貼）──────────────────────────────
@@ -634,6 +809,7 @@ export class PayrollService {
         adjustment_total: 0,
         net_amount: 0,
         status: 'preparing',
+        payroll_created_by: userId || undefined,
       },
     });
 
@@ -1040,6 +1216,7 @@ export class PayrollService {
         adjustment_total: 0,
         net_amount: calc.net_amount,
         status: 'draft',
+        payroll_created_by: userId || undefined,
       },
     });
 
