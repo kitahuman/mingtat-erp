@@ -1018,32 +1018,6 @@ export default function AiPayrollReconcilePage() {
     }
   };
 
-  const generatePayroll = async (confirm = false) => {
-    setGenerating(true);
-    setError('');
-    try {
-      const res = await aiPayrollSessionApi.generatePayroll(sessionId, { confirm });
-      setGenerated(res.data);
-      await loadData(true);
-      setActiveTab('preview');
-    } catch (err: any) {
-      setError(getErrorString(err, '生成糧單失敗'));
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="mx-auto max-w-5xl rounded-xl border bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-purple-100 border-t-purple-600" />
-          <p className="mt-4 text-sm text-gray-600">正在載入 AI 計糧資料...</p>
-        </div>
-      </div>
-    );
-  }
-
   const progressPercent = Math.min(100, Math.max(0, progress?.progressPercent || (isProcessing ? 45 : 0)));
   const companyName = toDisplayString(session?.company?.chinese_name || session?.company?.name || session?.company_name);
   const previewEmployees = toArray(preview?.employees);
@@ -1086,6 +1060,32 @@ export default function AiPayrollReconcilePage() {
   const handlePreviewWorkLogUpdate = async (_id: number | string, _updates: Record<string, any>) => undefined;
   const handlePreviewBatchUpdate = async (_ids: Array<number | string>, _updates: Record<string, any>) => undefined;
   const handlePreviewGroupBillingQuantityTypeChange = async (_groupKey: string, _billingQuantityType: string) => undefined;
+
+  const generatePayroll = async (confirm = false) => {
+    setGenerating(true);
+    setError('');
+    try {
+      const res = await aiPayrollSessionApi.generatePayroll(sessionId, { confirm });
+      setGenerated(res.data);
+      await loadData(true);
+      setActiveTab('preview');
+    } catch (err: any) {
+      setError(getErrorString(err, '生成糧單失敗'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="mx-auto max-w-5xl rounded-xl border bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-purple-100 border-t-purple-600" />
+          <p className="mt-4 text-sm text-gray-600">正在載入 AI 計糧資料...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 md:p-6">
