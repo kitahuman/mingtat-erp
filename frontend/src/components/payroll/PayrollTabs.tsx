@@ -89,32 +89,37 @@ const DETAIL_COLUMNS: Array<{
   className?: string;
 }> = [
   { key: "scheduled_date", label: "日期", editable: true, type: "date" },
-  { key: "service_type", label: "服務類型", editable: true, type: "text" },
-  { key: "day_night", label: "日/夜", editable: true, type: "select", options: ["日", "夜", "中直"] },
-  { key: "start_location", label: "起點", editable: true, type: "text" },
-  { key: "end_location", label: "終點", editable: true, type: "text" },
-  { key: "machine_type", label: "車種/機械", editable: true, type: "text" },
+  { key: "equipment_number", label: "車牌/機號", editable: true, type: "text" },
+  { key: "client_name", label: "客戶", editable: true, type: "text" },
+  { key: "client_contract_no", label: "客戶合約", editable: true, type: "text" },
+  { key: "service_type", label: "服務", editable: true, type: "text" },
+  { key: "route", label: "路線", type: "text" },
   { key: "tonnage", label: "噸數", editable: true, type: "text" },
-  { key: "equipment_number", label: "車牌/編號", editable: true, type: "text" },
+  { key: "machine_type", label: "機種", editable: true, type: "text" },
+  { key: "day_night", label: "日/夜", editable: true, type: "select", options: ["日", "夜", "中直"] },
   { key: "quantity", label: "數量", editable: true, type: "number", className: "text-right" },
   { key: "unit", label: "單位", editable: true, type: "text" },
   { key: "payroll_work_log_product_quantity", label: "商品數量", editable: true, type: "number", className: "text-right" },
-  { key: "ot_quantity", label: "OT", editable: true, type: "number", className: "text-right" },
-  { key: "ot_unit", label: "OT單位", editable: true, type: "text" },
-  { key: "is_mid_shift", label: "中直", editable: true, type: "checkbox" },
-  { key: "matched_rate", label: "單價", type: "number", className: "text-right" },
-  { key: "line_amount", label: "金額", type: "number", className: "text-right" },
-  { key: "price_match_status", label: "匹配", type: "text" },
-  { key: "remarks", label: "備註", editable: true, type: "text" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", editable: true, type: "text" },
+  { key: "matched_rate", label: "費率", editable: true, type: "number", className: "text-right" },
+  { key: "base_amount", label: "基本", type: "number", className: "text-right" },
+  { key: "ot_amount", label: "OT", type: "number", className: "text-right" },
+  { key: "mid_shift_amount", label: "中直", type: "number", className: "text-right" },
+  { key: "line_amount", label: "合計", type: "number", className: "text-right" },
+  { key: "price_match_status", label: "狀態", type: "text" },
 ];
 
 const BATCH_FIELDS = [
-  { key: "service_type", label: "服務類型", type: "text" },
   { key: "day_night", label: "日/夜", type: "select", options: ["日", "夜", "中直"] },
-  { key: "start_location", label: "起點", type: "text" },
-  { key: "end_location", label: "終點", type: "text" },
-  { key: "machine_type", label: "車種/機械", type: "text" },
+  { key: "start_location", label: "路線起點", type: "text" },
+  { key: "end_location", label: "路線終點", type: "text" },
+  { key: "client_name", label: "客戶", type: "text" },
+  { key: "client_contract_no", label: "客戶合約", type: "text" },
+  { key: "service_type", label: "服務", type: "text" },
+  { key: "machine_type", label: "機種", type: "text" },
   { key: "tonnage", label: "噸數", type: "text" },
+  { key: "unit", label: "單位", type: "text" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", type: "text" },
 ] as const;
 
 function formatDate(value: any) {
@@ -276,14 +281,14 @@ export default function PayrollTabs({
       return DETAIL_COLUMNS.every((column) => {
         const filter = filters[column.key];
         if (!filter) return true;
-        const raw = column.key === "scheduled_date" ? formatDate(row[column.key]) : normalizeText(row[column.key]);
+        const raw = column.key === "scheduled_date" ? formatDate(getColumnValue(row, column.key)) : normalizeText(getColumnValue(row, column.key));
         return raw.toLowerCase().includes(filter.toLowerCase());
       });
     });
 
     return [...filtered].sort((a, b) => {
-      const av = sortKey === "scheduled_date" ? formatDate(a[sortKey]) : a[sortKey];
-      const bv = sortKey === "scheduled_date" ? formatDate(b[sortKey]) : b[sortKey];
+      const av = sortKey === "scheduled_date" ? formatDate(getColumnValue(a, sortKey)) : getColumnValue(a, sortKey);
+      const bv = sortKey === "scheduled_date" ? formatDate(getColumnValue(b, sortKey)) : getColumnValue(b, sortKey);
       const an = Number(av);
       const bn = Number(bv);
       let result = 0;
@@ -363,12 +368,34 @@ export default function PayrollTabs({
     if (onGroupBillingQuantityTypeChange) await onGroupBillingQuantityTypeChange(groupKey, value);
   }
 
+  function getColumnValue(row: PayrollRecord, key: string) {
+    if (key === "route") {
+      const start = row.start_location || row.origin || "";
+      const end = row.end_location || row.destination || "";
+      return start || end ? `${start || "—"} → ${end || "—"}` : "";
+    }
+    if (key === "base_amount") {
+      return asNumber(row.matched_rate) * asNumber(row.quantity, 1);
+    }
+    if (key === "ot_amount") {
+      return asNumber(row.matched_ot_rate) * asNumber(row.ot_quantity);
+    }
+    if (key === "mid_shift_amount") {
+      return row.is_mid_shift ? asNumber(row.matched_mid_shift_rate) : 0;
+    }
+    if (key === "payroll_work_log_product_quantity") {
+      return row.payroll_work_log_product_quantity ?? row.work_log_product_quantity ?? row.goods_quantity ?? row.product_quantity ?? "";
+    }
+    return row[key];
+  }
+
   function renderEditor(row: PayrollRecord, column: (typeof DETAIL_COLUMNS)[number]) {
-    const value = column.key === "scheduled_date" ? formatDate(row[column.key]) : row[column.key] ?? "";
+    const rawValue = getColumnValue(row, column.key);
+    const value = column.key === "scheduled_date" ? formatDate(rawValue) : rawValue ?? "";
     const disabled = readOnly || !column.editable;
 
     if (disabled) {
-      if (column.type === "checkbox") return row[column.key] ? "是" : "否";
+      if (column.type === "checkbox") return rawValue ? "是" : "否";
       if (column.key.includes("amount") || column.key.includes("rate")) return column.key.includes("amount") ? formatMoney(value) : normalizeText(value);
       return normalizeText(value);
     }
@@ -466,7 +493,7 @@ export default function PayrollTabs({
                     />
                   </th>
                   {DETAIL_COLUMNS.map((column) => {
-                    const options = buildUniqueOptions(rows, column.key);
+                    const options = buildUniqueOptions(rows.map((row) => ({ ...row, [column.key]: getColumnValue(row, column.key) })), column.key);
                     return (
                       <th key={column.key} className="min-w-[120px] px-3 py-2 text-left align-top font-medium text-gray-700">
                         <button type="button" onClick={() => toggleSort(column.key)} className="flex w-full items-center justify-between gap-2 text-left hover:text-blue-700">

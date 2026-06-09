@@ -1409,13 +1409,74 @@ export default function PayrollDetailPage() {
   };
 
   const handleFinalizePreparation = async () => {
-    if (!confirm('確定工作記錄已編輯完成？系統將根據糧單工作記錄計算糧單。')) return;
+    if (!confirm('確定要生成糧單？系統將根據目前頁面的工作記錄計算糧單。')) return;
     try {
       const res = await payrollApi.finalizePreparation(payroll.id);
       setPayroll(res.data);
-      alert('糧單已成功計算！');
+      alert('糧單已成功生成！');
     } catch (err: any) {
-      alert(err.response?.data?.message || '計算失敗');
+      alert(err.response?.data?.message || '生成失敗');
+    }
+  };
+
+  const handleGeneratePayroll = async () => {
+    if (isReadOnly('payroll')) return;
+    if (payroll.status === 'preparing') {
+      await handleFinalizePreparation();
+      return;
+    }
+    await handleRecalculate();
+  };
+
+  const handlePayrollTabWorkLogUpdate = async (id: number | string, updates: Record<string, any>) => {
+    try {
+      await payrollApi.updateWorkLog(payroll.id, Number(id), updates);
+      await payrollApi.recalculate(payroll.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新工作記錄失敗');
+      throw err;
+    }
+  };
+
+  const handlePayrollTabBatchUpdate = async (ids: Array<number | string>, updates: Record<string, any>) => {
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => payrollApi.updateWorkLog(payroll.id, Number(id), updates)));
+      await payrollApi.recalculate(payroll.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量更新工作記錄失敗');
+      throw err;
+    }
+  };
+
+  const handlePayrollTabBatchDelete = async (ids: Array<number | string>) => {
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => payrollApi.excludeWorkLog(payroll.id, Number(id))));
+      await payrollApi.recalculate(payroll.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量刪除工作記錄失敗');
+      throw err;
+    }
+  };
+
+  const handleGroupBillingQuantityTypeChange = async (groupKey: string, billingQuantityType: 'days' | 'quantity' | 'product_quantity') => {
+    const group = (payroll.grouped_settlement || []).find((g: any) => {
+      const fallbackKey = `${g.client_name}-${g.service_type}-${g.start_location}-${g.end_location}`;
+      return (g.group_key || fallbackKey) === groupKey;
+    });
+    const ids = (group?.work_log_ids || []) as Array<number | string>;
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => payrollApi.updateWorkLog(payroll.id, Number(id), { billing_quantity_type: billingQuantityType })));
+      await payrollApi.recalculate(payroll.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '更新計費數量類型失敗');
+      throw err;
     }
   };
 
@@ -1723,20 +1784,8 @@ export default function PayrollDetailPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {isPreparing && (
-            <>
-              <button onClick={handleFinalizePreparation} className="btn-primary text-sm">確定並計算糧單</button>
-              <button onClick={handleResetRefetch} className="btn-secondary text-sm border-orange-300 text-orange-700 hover:bg-orange-50">返回上一步</button>
-              <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
-            </>
-          )}
-          {payroll.status === 'draft' && (
-            <>
-              <button onClick={handleRecalculate} className="btn-secondary text-sm">重新計算</button>
-              <button onClick={handleResetRefetch} className="btn-secondary text-sm border-orange-300 text-orange-700 hover:bg-orange-50">返回上一步</button>
-              <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
-              <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
-            </>
+          {isDraft && (
+            <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
           )}
           {payroll.status === 'confirmed' && (
             <>
@@ -1759,7 +1808,7 @@ export default function PayrollDetailPage() {
             <span className="text-2xl">&#x270F;&#xFE0F;</span>
             <div>
               <p className="font-bold text-amber-800">糧單工作記錄編輯中</p>
-              <p className="text-sm text-amber-700">請在下方「逐筆明細」中編輯工作記錄（例如修改計算單位、數量等），修改不會影響原始工作記錄。編輯完成後請按「確定並計算糧單」。</p>
+              <p className="text-sm text-amber-700">請在下方「逐筆明細」中直接編輯工作記錄（例如修改計算單位、數量、商品數量等），修改不會影響原始工作記錄。編輯完成後請按底部「生成糧單」。</p>
             </div>
           </div>
         </div>
@@ -1794,369 +1843,60 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
-      {/* ── Work Logs Tabs ── 順序：工作紀錄 → 津貼 → 總金額 → MPF */}
+      {/* ── Single-page Payroll Generation Tabs ── */}
       <div className="card mb-6">
-        <div className="flex items-center border-b mb-4">
-          {TAB_KEYS.filter(tab => !isPreparing || tab === 'detail').map(tab => (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">糧單明細</h2>
+            <p className="text-sm text-gray-500">
+              逐筆明細為預設分頁，可在同一頁直接編輯、排序、篩選及批量修改工作記錄。
+            </p>
+          </div>
+          {isDraft && (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              onClick={handleResetRefetch}
+              className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
             >
-              {TAB_LABELS[tab]}
-              {tab === 'daily' && dailyCalc.length > 0 && (
-                <span className="ml-1 text-xs bg-primary-100 text-primary-600 px-1.5 py-0.5 rounded-full">{dailyCalc.length}天</span>
-              )}
-              {tab === 'detail' && pwls.length > 0 && (
-                <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{pwls.filter((p: any) => !p.is_excluded).length}筆</span>
-              )}
-              {tab === 'grouped' && grouped.length > 0 && (
-                <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{grouped.length}組</span>
-              )}
-              {tab === 'unmatched' && unmatchedGroups.length > 0 && (
-                <span className="ml-1 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{unmatchedGroups.length}組</span>
-              )}
+              重新抓取資料
             </button>
-          ))}
+          )}
         </div>
-
-        {/* Tab Content */}
-        {activeTab === 'detail' && (
-          <div>
-            {selectedPwlIds.size > 0 && isDraft && (
-              <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-                <div className="font-medium text-blue-900">已選取 {selectedPwlIds.size} 筆記錄。</div>
-                <button type="button" onClick={handleBatchDeleteWorkLogs} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">批量刪除</button>
-                <button type="button" onClick={() => setSelectedPwlIds(new Set())} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100">清除選取</button>
-              </div>
-            )}
-            <div className="overflow-x-auto border rounded-lg">
-            {pwls.length > 0 ? (
-              <table className="min-w-full divide-y divide-gray-200 text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
-                      {isDraft && (
-                        <input
-                          type="checkbox"
-                          checked={allSelectableSelected}
-                          disabled={selectablePwls.length === 0}
-                          onChange={(event) => setSelectedPwlIds(event.target.checked ? new Set(selectablePwls.map((pwl: any) => Number(pwl.id))) : new Set())}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      )}
-                    </th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">約定日期</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">服務類型</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">公司</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">客戶公司</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">報價單</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">客戶合約</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">噸數</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">機種</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">機號</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">日夜班</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">起點</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">終點</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">數量</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">單位</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">OT數量</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">OT單位</th>
-                    <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">中直</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">商品名稱</th>
-                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">商品單位</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">單價</th>
-                    <th className="px-2 py-2 text-right font-medium text-gray-500 uppercase tracking-wider">小計</th>
-                    <th className="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {pwls.map((pwl: any) => {
-                    const isExcluded = pwl.is_excluded;
-                    const canEdit = isDraft && !isExcluded;
-                    const hasPrice = pwl.price_match_status === 'matched' && pwl.matched_rate;
-                    const baseLineAmount = hasPrice ? (Number(pwl.matched_rate) * Number(pwl.quantity || 1)) : 0;
-                    const otLineAmount = pwl.matched_ot_rate && pwl.ot_quantity ? (Number(pwl.matched_ot_rate) * Number(pwl.ot_quantity)) : 0;
-                    const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
-                    const totalLineAmount = baseLineAmount + otLineAmount + midShiftLineAmount;
-                    return (
-                      <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : selectedPwlIds.has(Number(pwl.id)) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-                        <td className="px-2 py-1.5 whitespace-nowrap">
-                          {isDraft && !isExcluded && (
-                            <input
-                              type="checkbox"
-                              checked={selectedPwlIds.has(Number(pwl.id))}
-                              onChange={(event) => setSelectedPwlIds((prev) => {
-                                const next = new Set(prev);
-                                if (event.target.checked) next.add(Number(pwl.id));
-                                else next.delete(Number(pwl.id));
-                                return next;
-                              })}
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
-                        <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} display={fmtDate(pwl.scheduled_date)} />
-                        <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['service_type'] || []} onSaved={recalculateAndLoad} />
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.company_name || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap truncate max-w-[120px]" title={pwl.client_name}>{pwl.client_name || '—'}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">{pwl.quotation_no || '—'}</td>
-                        <InlineEditCell value={pwl.client_contract_no} field="client_contract_no" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.tonnage} field="tonnage" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['tonnage'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.machine_type} field="machine_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['machine_type'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.equipment_number} field="equipment_number" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.day_night} field="day_night" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['day_night'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.start_location} field="start_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.end_location} field="end_location" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['location'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.quantity} field="quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.unit} field="unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.ot_quantity} field="ot_quantity" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="number" align="right" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.ot_unit} field="ot_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['wage_unit'] || fieldOptions['unit'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.is_mid_shift} field="is_mid_shift" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="checkbox" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.payroll_work_log_product_name} field="payroll_work_log_product_name" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} />
-                        <InlineEditCell value={pwl.payroll_work_log_product_unit} field="payroll_work_log_product_unit" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['product_unit'] || []} onSaved={recalculateAndLoad} />
-                        <InlineEditCell
-                          value={pwl.matched_rate}
-                          field="matched_rate"
-                          payrollId={payroll.id}
-                          pwlId={pwl.id}
-                          editable={canEdit}
-                          type="number"
-                          align="right"
-                          onSaved={recalculateAndLoad}
-                          display={hasPrice ? `$${Number(pwl.matched_rate).toLocaleString()}` : undefined}
-                        />
-                        <td className="px-2 py-1.5 whitespace-nowrap text-right font-mono font-bold text-primary-600">
-                          ${totalLineAmount.toLocaleString()}
-                        </td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-center">
-                          {isDraft && (
-                            <div className="flex justify-center gap-1">
-                              {isExcluded ? (
-                                <button onClick={() => handleRestoreWorkLog(pwl.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="恢復">
-                                  🔄
-                                </button>
-                              ) : (
-                                <button onClick={() => handleExcludeWorkLog(pwl.id)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="移除">
-                                  🗑️
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-8">此粮單暫無工作記錄</p>
-            )}
-            </div>
-          </div>
-        )}
-        {/* end detail tab */}
-
-        {activeTab === 'grouped' && (
-          <GroupedSettlementView groups={grouped} payrollId={payroll.id} isDraft={isDraft} onRateSaved={recalculateAndLoad} />
-        )}
-
-        {activeTab === 'daily' && (
-          <DailyCalculationView
-            dailyCalc={dailyCalc}
-            allowanceOptions={allowanceOptions}
-            payrollId={payroll.id}
-            isDraft={isDraft}
-            salaryType={payroll.salary_type}
-            salarySetting={payroll.salary_setting}
-            onAddAllowance={handleAddDailyAllowance}
-            onRemoveAllowance={handleRemoveDailyAllowance}
-            onExcludeBadge={handleExcludeBadge}
-            onSaveTopUpOverride={handleSaveTopUpOverride}
-          />
-        )}
-
-        {activeTab === 'unmatched' && (
-          <UnmatchedSummaryView groups={unmatchedGroups} />
-        )}
-
-        {activeTab === 'print' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showGroupedInPrint}
-                  onChange={(e) => setShowGroupedInPrint(e.target.checked)}
-                  className="rounded"
-                />
-                顯示歸組結算明細
-              </label>
-              <button onClick={handlePrint} className="btn-primary text-sm">列印糧單</button>
-            </div>
-            <div ref={printRef} className="border rounded-lg p-6 bg-white">
-              <div className="payslip">
-                {/* Company Header */}
-                <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
-                  <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
-                    {cp?.chinese_name || '明達建築有限公司'}
-                  </h1>
-                  <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
-                    {cp?.english_name || 'DICKY CONSTRUCTION COMPANY LIMITED'}
-                  </h2>
-                  <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
-                    {cp?.registered_address || cp?.office_address || 'P. O. BOX 120, TUNG CHUNG POST OFFICE, TUNG CHUNG, LANTAU ISLAND, NT'}
-                  </p>
-                </div>
-
-                {/* Employee Info */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-                  <tbody>
-                    {[
-                      ['員工姓名(中)：', emp?.name_zh],
-                      ['員工姓名(英)：', emp?.name_en],
-                      ['身份證號碼：', emp?.id_number],
-                      ['地址：', emp?.address],
-                      ['緊急聯絡人：', emp?.emergency_contact],
-                      ['出糧戶口：', emp?.bank_account],
-                      ['受僱日期：', emp?.join_date ? `${new Date(emp.join_date).getFullYear()}年${new Date(emp.join_date).getMonth() + 1}月${new Date(emp.join_date).getDate()}日` : '-'],
-                    ].map(([label, value], i) => (
-                      <tr key={i}>
-                        <td style={{ padding: '6px 12px', border: '1px solid #000', width: '120px', textAlign: 'right', fontSize: '13px' }}>{label}</td>
-                        <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>{value || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* Period */}
-                <div style={{ margin: '15px 0', fontSize: '14px' }}>
-                  <strong>本月工作日期：</strong>
-                  <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStart}-{lastDay}日</span>
-                </div>
-
-                {/* Grouped Settlement in print */}
-                {showGroupedInPrint && <PrintGroupedSettlement groups={grouped} />}
-
-                {/* Calculation Table */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', width: '200px', fontSize: '13px' }}></th>
-                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>單價($)</th>
-                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>天數/數量</th>
-                      <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'right', fontSize: '13px' }} colSpan={2}>金額($)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item: any, idx: number) => {
-                      const isDeduction = Number(item.amount) < 0;
-                      const displayAmount = Math.abs(Number(item.amount));
-                      return (
-                        <tr key={item.id || idx}>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                            ({idx + 1}) {item.item_name}
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
-                              ? `${(Number(item.quantity) * 100).toFixed(0)}%`
-                              : Number(item.unit_price).toFixed(2)}
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                            {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
-                          </td>
-                          <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                            {isDeduction ? '-$' : '$'}
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                            {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {/* Adjustment items in print */}
-                    {adjustments.map((adj: any, idx: number) => {
-                      const isNeg = Number(adj.amount) < 0;
-                      const displayAmount = Math.abs(Number(adj.amount));
-                      return (
-                        <tr key={`adj-${adj.id}`}>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                            ({items.length + idx + 1}) {adj.item_name}
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                            -
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                            -
-                          </td>
-                          <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                            {isNeg ? '-$' : '$'}
-                          </td>
-                          <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                            {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {/* Total row */}
-                    <tr style={{ borderTop: '2px solid #000' }}>
-                      <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
-                      <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
-                      <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                        {Number(payroll.gross_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Summary */}
-                <div style={{ margin: '15px 0', fontSize: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div>
-                      <div style={{ marginBottom: '5px' }}><strong>應收總額：</strong> ${Number(payroll.gross_amount).toLocaleString()}</div>
-                      <div style={{ marginBottom: '5px' }}><strong>扣款合計：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
-                      <div style={{ marginBottom: '5px' }}><strong>調整合計：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
-                        淨額：${Number(payroll.net_amount).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Signature */}
-                <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', fontSize: '12px' }}>
-                  <div>
-                    <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
-                    <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-                  </div>
-                  <div>
-                    <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
-                    <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!isPreparing && items.length > 0 && (
-          <PayrollItemsSummary
-            items={items}
-            payroll={payroll}
-            payrollId={payroll.id}
-            isEditable={isDraft}
-            onSaved={loadData}
-          />
-        )}
+        <PayrollTabs
+          workLogs={pwls}
+          groupedSettlement={grouped}
+          dailyCalculation={dailyCalc}
+          unmatchedRecords={pwls.filter((p: any) => !p.is_excluded && p.price_match_status !== 'matched')}
+          calculationDetails={{
+            payroll_summary: {
+              gross_amount: payroll.gross_amount,
+              deduction_total: payroll.deduction_total,
+              adjustment_total: payroll.adjustment_total,
+              net_amount: payroll.net_amount,
+              reimbursement_total: payroll.reimbursement_total,
+            },
+            items,
+            adjustments,
+            allowance_options: allowanceOptions,
+          }}
+          readOnly={!isDraft || isReadOnly('payroll')}
+          onUpdateWorkLog={handlePayrollTabWorkLogUpdate}
+          onBatchUpdateWorkLogs={handlePayrollTabBatchUpdate}
+          onBatchDeleteWorkLogs={handlePayrollTabBatchDelete}
+          onGroupBillingQuantityTypeChange={handleGroupBillingQuantityTypeChange}
+        />
       </div>
+
+      {isDraft && (
+        <div className="card mb-6 flex flex-wrap items-center justify-end gap-3">
+          <button
+            onClick={handleGeneratePayroll}
+            disabled={isReadOnly('payroll')}
+            className="btn-primary"
+          >
+            生成糧單
+          </button>
+        </div>
+      )}
 
       {/* ── Custom Adjustments ── */}
       {!isPreparing && <div className="card mb-6">

@@ -2101,7 +2101,9 @@ export class PayrollService {
       'client_name',
       'client_contract_no',
       'payroll_work_log_product_name',
+      'payroll_work_log_product_quantity',
       'payroll_work_log_product_unit',
+      'billing_quantity_type',
     ];
 
     const updateData: any = { is_modified: true };
