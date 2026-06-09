@@ -282,15 +282,15 @@ export default function InvoicesPage() {
   );
 
   // Helper to update state and save it
-  const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
-  const setSearch = (newSearch: string) => saveState({ ...pageState, search: newSearch });
-  const setStatusFilter = (newStatusFilter: string) => saveState({ ...pageState, statusFilter: newStatusFilter });
-  const setClientFilter = (newClientFilter: string) => saveState({ ...pageState, clientFilter: newClientFilter });
-  const setDateFrom = (newDateFrom: string) => saveState({ ...pageState, dateFrom: newDateFrom });
-  const setDateTo = (newDateTo: string) => saveState({ ...pageState, dateTo: newDateTo });
-  const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
-  const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
-  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState({ ...pageState, columnFilters: newColumnFilters });
+  const setPage = (newPage: number) => saveState((prev) => ({ ...prev, page: newPage }));
+  const setSearch = (newSearch: string) => saveState((prev) => ({ ...prev, search: newSearch }));
+  const setStatusFilter = (newStatusFilter: string) => saveState((prev) => ({ ...prev, statusFilter: newStatusFilter }));
+  const setClientFilter = (newClientFilter: string) => saveState((prev) => ({ ...prev, clientFilter: newClientFilter }));
+  const setDateFrom = (newDateFrom: string) => saveState((prev) => ({ ...prev, dateFrom: newDateFrom }));
+  const setDateTo = (newDateTo: string) => saveState((prev) => ({ ...prev, dateTo: newDateTo }));
+  const setSortBy = (newSortBy: string) => saveState((prev) => ({ ...prev, sortBy: newSortBy }));
+  const setSortOrder = (newSortOrder: string) => saveState((prev) => ({ ...prev, sortOrder: newSortOrder as 'ASC' | 'DESC' }));
+  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState((prev) => ({ ...prev, columnFilters: newColumnFilters }));
   const setColumnFiltersFromSets = (newColumnFilters: Record<string, Set<string>>) => {
     const serializableFilters = Object.fromEntries(
       Object.entries(newColumnFilters).map(([key, values]) => [key, Array.from(values)]),

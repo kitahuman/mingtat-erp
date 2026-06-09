@@ -327,21 +327,21 @@ export default function WorkLogsPage() {
   );
 
   // Helper to update state and save it
-  const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
-  const setLimit = (newLimit: number) => saveState({ ...pageState, limit: newLimit });
-  const setSortBy = (newSortBy: string) => saveState({ ...pageState, sortBy: newSortBy });
-  const setSortOrder = (newSortOrder: string) => saveState({ ...pageState, sortOrder: newSortOrder as 'ASC' | 'DESC' });
-  const setFilterPublisher = (newFilterPublisher: (string | number)[]) => saveState({ ...pageState, filterPublisher: newFilterPublisher });
-  const setFilterStatus = (newFilterStatus: (string | number)[]) => saveState({ ...pageState, filterStatus: newFilterStatus });
-  const setFilterCompany = (newFilterCompany: (string | number)[]) => saveState({ ...pageState, filterCompany: newFilterCompany });
-  const setFilterClient = (newFilterClient: (string | number)[]) => saveState({ ...pageState, filterClient: newFilterClient });
-  const setFilterQuotation = (newFilterQuotation: (string | number)[]) => saveState({ ...pageState, filterQuotation: newFilterQuotation });
-  const setFilterContract = (newFilterContract: (string | number)[]) => saveState({ ...pageState, filterContract: newFilterContract });
-  const setFilterEmployee = (newFilterEmployee: (string | number)[]) => saveState({ ...pageState, filterEmployee: newFilterEmployee });
-  const setFilterEquipment = (newFilterEquipment: string) => saveState({ ...pageState, filterEquipment: newFilterEquipment });
-  const setFilterDateFrom = (newFilterDateFrom: string) => saveState({ ...pageState, filterDateFrom: newFilterDateFrom });
-  const setFilterDateTo = (newFilterDateTo: string) => saveState({ ...pageState, filterDateTo: newFilterDateTo });
-  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState({ ...pageState, columnFilters: newColumnFilters });
+  const setPage = (newPage: number) => saveState((prev) => ({ ...prev, page: newPage }));
+  const setLimit = (newLimit: number) => saveState((prev) => ({ ...prev, limit: newLimit }));
+  const setSortBy = (newSortBy: string) => saveState((prev) => ({ ...prev, sortBy: newSortBy }));
+  const setSortOrder = (newSortOrder: string) => saveState((prev) => ({ ...prev, sortOrder: newSortOrder as 'ASC' | 'DESC' }));
+  const setFilterPublisher = (newFilterPublisher: (string | number)[]) => saveState((prev) => ({ ...prev, filterPublisher: newFilterPublisher }));
+  const setFilterStatus = (newFilterStatus: (string | number)[]) => saveState((prev) => ({ ...prev, filterStatus: newFilterStatus }));
+  const setFilterCompany = (newFilterCompany: (string | number)[]) => saveState((prev) => ({ ...prev, filterCompany: newFilterCompany }));
+  const setFilterClient = (newFilterClient: (string | number)[]) => saveState((prev) => ({ ...prev, filterClient: newFilterClient }));
+  const setFilterQuotation = (newFilterQuotation: (string | number)[]) => saveState((prev) => ({ ...prev, filterQuotation: newFilterQuotation }));
+  const setFilterContract = (newFilterContract: (string | number)[]) => saveState((prev) => ({ ...prev, filterContract: newFilterContract }));
+  const setFilterEmployee = (newFilterEmployee: (string | number)[]) => saveState((prev) => ({ ...prev, filterEmployee: newFilterEmployee }));
+  const setFilterEquipment = (newFilterEquipment: string) => saveState((prev) => ({ ...prev, filterEquipment: newFilterEquipment }));
+  const setFilterDateFrom = (newFilterDateFrom: string) => saveState((prev) => ({ ...prev, filterDateFrom: newFilterDateFrom }));
+  const setFilterDateTo = (newFilterDateTo: string) => saveState((prev) => ({ ...prev, filterDateTo: newFilterDateTo }));
+  const setColumnFilters = (newColumnFilters: Record<string, string[]>) => saveState((prev) => ({ ...prev, columnFilters: newColumnFilters }));
 
   // ── Dirty tracking (Airtable-style) ─────────────────────────
   // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields

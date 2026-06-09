@@ -81,18 +81,32 @@ export const usePageState = (initialState: PageState) => {
     return initialState;
   });
 
-  const saveState = useCallback((newState: PageState) => {
-    setPageState(newState);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(storageKey, serializeState(newState));
-    }
+  // Keep a ref to the latest state so we can always read the freshest value
+  // inside callbacks without needing pageState in their dependency arrays.
+  const stateRef = useRef(pageState);
+  stateRef.current = pageState;
+
+  /**
+   * saveState accepts either a new state object OR a functional updater
+   * (prev => newState), similar to React's setState. This prevents stale
+   * closure issues when multiple setters are called in the same event handler.
+   */
+  const saveState = useCallback((updater: PageState | ((prev: PageState) => PageState)) => {
+    setPageState((prev) => {
+      const newState = typeof updater === 'function' ? updater(prev) : updater;
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(storageKey, serializeState(newState));
+      }
+      return newState;
+    });
   }, [storageKey]);
 
   // Save scroll position before navigation
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (typeof window !== 'undefined') {
-        const newState = { ...pageState, scrollPosition: window.scrollY };
+        const currentState = stateRef.current;
+        const newState = { ...currentState, scrollPosition: window.scrollY };
         sessionStorage.setItem(storageKey, serializeState(newState));
       }
     };
@@ -102,7 +116,7 @@ export const usePageState = (initialState: PageState) => {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [pageState, storageKey]);
+  }, [storageKey]);
 
   // Restore scroll position on mount
   useEffect(() => {
