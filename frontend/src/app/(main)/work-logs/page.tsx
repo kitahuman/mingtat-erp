@@ -952,7 +952,7 @@ export default function WorkLogsPage() {
   useRefetchOnFocus(() => loadReferenceData(false));
 
   const buildListParams = useCallback(
-    (overrides: Record<string, unknown> = {}) => {
+    (overrides: Record<string, unknown> = {}, { skipColumnFilters = false }: { skipColumnFilters?: boolean } = {}) => {
       const params: Record<string, unknown> = {
         sortBy,
         sortOrder,
@@ -985,9 +985,11 @@ export default function WorkLogsPage() {
       } else if (filterDateTo) {
         params.date_to = filterDateTo;
       }
-      for (const [col, vals] of Object.entries(columnFilters)) {
-        if (Array.isArray(vals) && vals.length > 0) {
-          params[`filter_${col}`] = JSON.stringify(vals);
+      if (!skipColumnFilters) {
+        for (const [col, vals] of Object.entries(columnFilters)) {
+          if (Array.isArray(vals) && vals.length > 0) {
+            params[`filter_${col}`] = JSON.stringify(vals);
+          }
         }
       }
       return params;
@@ -1061,7 +1063,7 @@ export default function WorkLogsPage() {
         const params = buildListParams({
           page: 1,
           limit: Math.max(total, 100000),
-        });
+        }, { skipColumnFilters: true });
         const [publisher, status, company, client, quotation, contract] =
           await Promise.all([
             workLogsApi.filterOptions('publisher', params),
@@ -3118,7 +3120,7 @@ export default function WorkLogsPage() {
                               onFetchOptions={async (key) => {
                                 const res = await workLogsApi.filterOptions(
                                   key,
-                                  buildListParams(),
+                                  buildListParams({}, { skipColumnFilters: true }),
                                 );
                                 return res.data as string[];
                               }}

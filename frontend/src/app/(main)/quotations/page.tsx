@@ -266,7 +266,7 @@ export default function QuotationsPage() {
     return params;
   };
 
-  const buildListParams = (overrides: Record<string, any> = {}) => ({
+  const buildListParams = (overrides: Record<string, any> = {}, { skipColumnFilters = false }: { skipColumnFilters?: boolean } = {}) => ({
     page,
     limit: 20,
     search,
@@ -276,7 +276,7 @@ export default function QuotationsPage() {
     date_to: dateTo || undefined,
     sortBy,
     sortOrder,
-    ...buildColumnFilterParams(),
+    ...(skipColumnFilters ? {} : buildColumnFilterParams()),
     ...overrides,
   });
 
@@ -313,7 +313,7 @@ export default function QuotationsPage() {
   const handleFetchFilterOptions = async (columnKey: string) => {
     const res = await quotationsApi.filterOptions(
       columnKey,
-      buildListParams({ page: 1, limit: 50 }),
+      buildListParams({ page: 1, limit: 50 }, { skipColumnFilters: true }),
     );
     return res.data;
   };

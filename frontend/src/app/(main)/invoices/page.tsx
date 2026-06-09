@@ -338,7 +338,7 @@ export default function InvoicesPage() {
   );
 
   const buildListParams = useCallback(
-    (overrides: Record<string, any> = {}) => ({
+    (overrides: Record<string, any> = {}, { skipColumnFilters = false }: { skipColumnFilters?: boolean } = {}) => ({
       page,
       limit: 50,
       status: invoiceTab === 'void' ? 'void' : statusFilter || undefined,
@@ -355,7 +355,7 @@ export default function InvoicesPage() {
       search: search || undefined,
       sortBy,
       sortOrder,
-      ...buildColumnFilterParams(),
+      ...(skipColumnFilters ? {} : buildColumnFilterParams()),
       ...overrides,
     }),
     [
@@ -430,7 +430,7 @@ export default function InvoicesPage() {
     async (columnKey: string) => {
       const response = await invoicesApi.filterOptions(
         columnKey,
-        buildListParams({ page: 1, limit: 50 }),
+        buildListParams({ page: 1, limit: 50 }, { skipColumnFilters: true }),
       );
       return response.data || [];
     },
