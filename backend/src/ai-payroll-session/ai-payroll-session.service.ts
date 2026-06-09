@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AiPayrollService } from '../ai-payroll/ai-payroll.service';
 import { StartExtractionJobDto } from '../ai-payroll/dto/start-extraction-job.dto';
@@ -10,8 +10,13 @@ import { QuerySessionsDto } from './dto/query-sessions.dto';
 import { AiPayrollReconcileService } from './ai-payroll-reconcile.service';
 import { AiPayrollGenerateService } from './ai-payroll-generate.service';
 
+const PROCESSING_STATUSES = ['collecting', 'recognizing', 'reconciling', 'calculating', 'generating'];
+const RESTARTABLE_STATUSES = ['pending', 'failed', 'needs_review', 'completed'];
+
 @Injectable()
 export class AiPayrollSessionService {
+  private readonly logger = new Logger(AiPayrollSessionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiPayrollService: AiPayrollService,
@@ -148,36 +153,64 @@ export class AiPayrollSessionService {
 
   async start(sessionId: number, dto: StartSessionDto) {
     const session = await this.ensureSession(sessionId);
-    if (
-      !dto.force_restart &&
-      !['pending', 'failed', 'needs_review', 'completed'].includes(session.session_status)
-    ) {
-      throw new BadRequestException('目前狀態不可重新開始，請使用 force_restart');
+    const isProcessing = PROCESSING_STATUSES.includes(session.session_status);
+    if (!dto.force_restart && !RESTARTABLE_STATUSES.includes(session.session_status)) {
+      throw new BadRequestException(
+        isProcessing
+          ? 'AI 計糧流程仍在處理中，如需重新開始請使用 force_restart'
+          : '目前狀態不可重新開始，請使用 force_restart',
+      );
     }
 
     await this.updateProgress(sessionId, 'collecting', 1, null);
-    await this.reconcileService.collectSources(sessionId);
 
-    await this.updateProgress(sessionId, 'recognizing', 2, null);
-    const batch = await this.ensureSessionBatch(sessionId, session.session_created_by ?? 0);
-    const documents = await this.listDocuments(sessionId);
-    if (documents.length > 0) {
-      await this.aiPayrollService.startExtractionJob(batch.id, {
-        forceReExtract: dto.force_restart ?? false,
-      } as StartExtractionJobDto);
+    setImmediate(() => {
+      void this.runStartWorkflow(
+        sessionId,
+        dto.force_restart ?? false,
+        session.session_created_by ?? 0,
+      ).catch((error) => {
+        this.logger.error(
+          `AI payroll session ${sessionId} background task crashed: ${this.getErrorMessage(error)}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
+    });
+
+    return { status: 'processing' };
+  }
+
+  private async runStartWorkflow(sessionId: number, forceRestart: boolean, userId: number) {
+    try {
+      await this.reconcileService.collectSources(sessionId);
+
+      await this.updateProgress(sessionId, 'recognizing', 2, null);
+      const batch = await this.ensureSessionBatch(sessionId, userId);
+      const documents = await this.listDocuments(sessionId);
+      if (documents.length > 0) {
+        await this.aiPayrollService.startExtractionJob(batch.id, {
+          forceReExtract: forceRestart,
+        } as StartExtractionJobDto);
+      }
+
+      await this.updateProgress(sessionId, 'reconciling', 3, null);
+      await this.reconcileService.collectSources(sessionId);
+      const reconcileResult = await this.reconcileService.reconcile(sessionId);
+
+      await this.updateProgress(
+        sessionId,
+        reconcileResult.needsReview ? 'needs_review' : 'completed',
+        5,
+        null,
+      );
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      this.logger.error(
+        `AI payroll session ${sessionId} start workflow failed: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      await this.markFailed(sessionId, message);
     }
-
-    await this.updateProgress(sessionId, 'reconciling', 3, null);
-    await this.reconcileService.collectSources(sessionId);
-    const reconcileResult = await this.reconcileService.reconcile(sessionId);
-
-    await this.updateProgress(
-      sessionId,
-      reconcileResult.needsReview ? 'needs_review' : 'completed',
-      5,
-      null,
-    );
-    return this.getProgress(sessionId);
   }
 
   async getProgress(sessionId: number) {
@@ -299,6 +332,22 @@ export class AiPayrollSessionService {
         session_error_message: errorMessage,
       },
     });
+  }
+
+  private async markFailed(sessionId: number, errorMessage: string) {
+    await this.prisma.aiPayrollSession.update({
+      where: { id: sessionId },
+      data: {
+        session_status: 'failed',
+        session_error_message: errorMessage,
+      },
+    });
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === 'string' && error.trim()) return error;
+    return 'AI 計糧流程執行失敗，請重試';
   }
 
   private calculateProgress(step: number, status: string): number {

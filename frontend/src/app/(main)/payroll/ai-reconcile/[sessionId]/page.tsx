@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Modal from '@/components/Modal';
 
 type StatusTone = 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple';
+type StepVisualStatus = 'completed' | 'in_progress' | 'failed' | 'pending' | 'warning';
 
 type SessionData = {
   id?: number;
@@ -16,6 +17,9 @@ type SessionData = {
   session_date_to?: string;
   session_error_message?: string;
   session_payroll_ids?: number[] | string | null;
+  session_current_step?: number;
+  session_updated_at?: string;
+  updated_at?: string;
   company?: { name?: string; chinese_name?: string };
   [key: string]: any;
 };
@@ -69,6 +73,7 @@ const processingStatuses = new Set([
   'calculating',
   'generating',
 ]);
+const STUCK_PROCESSING_MS = 10 * 60 * 1000;
 
 const uploadStatuses = new Set(['pending', 'uploading']);
 const reviewStatuses = new Set(['needs_review', 'completed']);
@@ -184,6 +189,134 @@ function safeJson(value: any) {
   }
 }
 
+function toArray<T = any>(value: any): T[] {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.records)) return value.records;
+  return [];
+}
+
+function isLikelyStuckProcessing(session: SessionData | null, status: string) {
+  if (!processingStatuses.has(status)) return false;
+  const updatedAt = session?.session_updated_at || session?.updated_at;
+  if (!updatedAt) return false;
+  const updatedAtTime = Date.parse(updatedAt);
+  if (!Number.isFinite(updatedAtTime)) return false;
+  return Date.now() - updatedAtTime > STUCK_PROCESSING_MS;
+}
+
+function getTimelineStepFromStatus(status: string, progress?: ProgressData | null, session?: SessionData | null) {
+  if (status === 'pending' || status === 'uploading') return 1;
+  if (status === 'recognizing') return 2;
+  if (status === 'collecting' || status === 'reconciling' || status === 'needs_review') return 3;
+  if (status === 'calculating') return 4;
+  if (status === 'generating') return 5;
+  if (status === 'completed' || status === 'confirmed') return 6;
+  if (status === 'failed') {
+    const workflowStep = Number(progress?.currentStep ?? session?.session_current_step ?? 3);
+    if (workflowStep === 2) return 2;
+    if (workflowStep === 4) return 4;
+    if (workflowStep >= 5) return 5;
+    return 3;
+  }
+  return 1;
+}
+
+function buildTimelineSteps(status: string, progress?: ProgressData | null, session?: SessionData | null) {
+  const currentStep = getTimelineStepFromStatus(status, progress, session);
+  const sourceCount = Number(progress?.counts?.sources ?? 0);
+  const isFailed = status === 'failed';
+  const isWarning = status === 'needs_review';
+  const isComplete = status === 'completed' || status === 'confirmed';
+  const step2Label = currentStep > 2 || isComplete ? '完成核對' : '核對文件中';
+  const step3Label = isFailed && currentStep === 3
+    ? '核對功課表不成功'
+    : currentStep >= 3 && sourceCount === 0 && !processingStatuses.has(status)
+      ? '沒有工作紀錄'
+      : '核對工作紀錄';
+  const labels = ['已收到文件', step2Label, step3Label, '計算糧單', '生成糧單', '完成'];
+
+  return labels.map((label, index) => {
+    const stepNumber = index + 1;
+    let visualStatus: StepVisualStatus = 'pending';
+    if (isFailed && stepNumber === currentStep) visualStatus = 'failed';
+    else if (isWarning && stepNumber === currentStep) visualStatus = 'warning';
+    else if (stepNumber < currentStep || isComplete) visualStatus = 'completed';
+    else if (stepNumber === currentStep && !isComplete) visualStatus = 'in_progress';
+    return { stepNumber, label, visualStatus };
+  });
+}
+
+function StepStatusIcon({ status }: { status: StepVisualStatus }) {
+  if (status === 'completed') return <span className="text-sm font-bold text-white">✓</span>;
+  if (status === 'failed') return <span className="text-sm font-bold text-white">×</span>;
+  if (status === 'in_progress') return <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />;
+  if (status === 'warning') return <span className="text-sm font-bold text-white">!</span>;
+  return <span className="h-2.5 w-2.5 rounded-full bg-gray-400" />;
+}
+
+function ProgressStepper({ steps }: { steps: ReturnType<typeof buildTimelineSteps> }) {
+  const statusClasses: Record<StepVisualStatus, string> = {
+    completed: 'border-green-600 bg-green-600',
+    in_progress: 'border-blue-600 bg-blue-600',
+    failed: 'border-red-600 bg-red-600',
+    warning: 'border-yellow-500 bg-yellow-500',
+    pending: 'border-gray-300 bg-gray-100',
+  };
+  const connectorClasses: Record<StepVisualStatus, string> = {
+    completed: 'bg-green-500',
+    in_progress: 'bg-blue-300',
+    failed: 'bg-red-300',
+    warning: 'bg-yellow-300',
+    pending: 'bg-gray-200',
+  };
+  const labelClasses: Record<StepVisualStatus, string> = {
+    completed: 'text-green-700',
+    in_progress: 'text-blue-700',
+    failed: 'text-red-700',
+    warning: 'text-yellow-700',
+    pending: 'text-gray-500',
+  };
+
+  return (
+    <div className="rounded-xl border bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">AI 計糧進度</h2>
+        <p className="mt-1 text-sm text-gray-500">系統會根據目前狀態自動更新以下步驟。</p>
+      </div>
+      <div className="hidden items-start md:flex">
+        {steps.map((step, index) => (
+          <div key={step.stepNumber} className="flex flex-1 items-start">
+            <div className="flex flex-1 flex-col items-center text-center">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 ${statusClasses[step.visualStatus]}`}>
+                <StepStatusIcon status={step.visualStatus} />
+              </div>
+              <div className={`mt-2 text-xs font-medium ${labelClasses[step.visualStatus]}`}>{step.label}</div>
+            </div>
+            {index < steps.length - 1 && (
+              <div className={`mt-4 h-0.5 flex-1 ${connectorClasses[step.visualStatus]}`} />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3 md:hidden">
+        {steps.map((step, index) => (
+          <div key={step.stepNumber} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${statusClasses[step.visualStatus]}`}>
+                <StepStatusIcon status={step.visualStatus} />
+              </div>
+              {index < steps.length - 1 && <div className={`h-7 w-0.5 ${connectorClasses[step.visualStatus]}`} />}
+            </div>
+            <div className={`pt-1 text-sm font-medium ${labelClasses[step.visualStatus]}`}>{step.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AiPayrollReconcilePage() {
   const params = useParams();
   const router = useRouter();
@@ -218,6 +351,7 @@ export default function AiPayrollReconcilePage() {
   const payrollIds = useMemo(() => getPayrollIds(session || undefined, generated), [session, generated]);
   const hasGeneratedPayroll = payrollIds.length > 0 || (progress?.counts?.payrolls || 0) > 0 || effectiveStatus === 'confirmed';
   const isProcessing = processingStatuses.has(effectiveStatus) || generating;
+  const isLikelyStuck = isLikelyStuckProcessing(session, effectiveStatus);
   const isUploadStage = uploadStatuses.has(effectiveStatus);
   const isReviewStage = reviewStatuses.has(effectiveStatus) && !hasGeneratedPayroll;
   const unresolvedCount = progress?.counts?.unresolvedQuestions ?? questions.filter((q) => !q.question_resolved).length;
@@ -237,7 +371,8 @@ export default function AiPayrollReconcilePage() {
         setProgress(progressRes.data);
 
         const currentStatus = normalizeStatus(progressRes.data?.status || sessionRes.data?.session_status);
-        const shouldFetchReviewData = !uploadStatuses.has(currentStatus) || progressRes.data?.counts?.sources;
+        const sourceCount = Number(progressRes.data?.counts?.sources ?? 0);
+        const shouldFetchReviewData = !uploadStatuses.has(currentStatus) || sourceCount > 0;
         if (shouldFetchReviewData) {
           const [summaryRes, docsRes, itemsRes, questionsRes, previewRes] = await Promise.allSettled([
             aiPayrollSessionApi.getSourcesSummary(sessionId),
@@ -250,15 +385,19 @@ export default function AiPayrollReconcilePage() {
             aiPayrollSessionApi.getQuestions(sessionId, { resolved: false }),
             aiPayrollSessionApi.previewPayroll(sessionId),
           ]);
-          if (summaryRes.status === 'fulfilled') setSourcesSummary(summaryRes.value.data);
-          if (docsRes.status === 'fulfilled') setDocuments(docsRes.value.data || []);
+          if (summaryRes.status === 'fulfilled') setSourcesSummary(summaryRes.value.data || null);
+          if (docsRes.status === 'fulfilled') setDocuments(toArray(docsRes.value.data));
           if (itemsRes.status === 'fulfilled') {
             const payload = itemsRes.value.data;
-            setItems(payload.data || payload.items || payload || []);
-            setItemsTotal(payload.total || payload.count || (payload.data || payload || []).length || 0);
+            const nextItems = toArray<ReconcileItem>(payload);
+            setItems(nextItems);
+            setItemsTotal(Number(payload?.total ?? payload?.count ?? nextItems.length) || nextItems.length);
           }
-          if (questionsRes.status === 'fulfilled') setQuestions(questionsRes.value.data.data || questionsRes.value.data || []);
-          if (previewRes.status === 'fulfilled') setPreview(previewRes.value.data);
+          if (questionsRes.status === 'fulfilled') setQuestions(toArray<Question>(questionsRes.value.data));
+          if (previewRes.status === 'fulfilled') {
+            const payload = previewRes.value.data;
+            setPreview({ ...(payload || {}), employees: toArray(payload?.employees) });
+          }
         }
       } catch (err: any) {
         setError(err.response?.data?.message || err.message || '載入 AI 計糧資料失敗');
@@ -423,6 +562,11 @@ export default function AiPayrollReconcilePage() {
 
   const progressPercent = Math.min(100, Math.max(0, progress?.progressPercent || (isProcessing ? 45 : 0)));
   const companyName = session?.company?.chinese_name || session?.company?.name || session?.company_name || '—';
+  const previewEmployees = toArray(preview?.employees);
+  const timelineSteps = useMemo(
+    () => buildTimelineSteps(effectiveStatus, progress, session),
+    [effectiveStatus, progress, session],
+  );
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -470,6 +614,8 @@ export default function AiPayrollReconcilePage() {
         </div>
       </div>
 
+      <ProgressStepper steps={timelineSteps} />
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
@@ -497,7 +643,9 @@ export default function AiPayrollReconcilePage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">{generating ? '正在生成糧單' : 'AI 正在核對資料'}</h2>
               <p className="mt-1 text-sm text-gray-500">
-                系統會自動刷新進度，期間可留在此頁等待完成。
+                {isLikelyStuck
+                  ? '此流程已在處理狀態停留較長時間，可能曾被中斷；可先重新整理，或強制重新啟動流程。'
+                  : '系統會自動刷新進度，期間可留在此頁等待完成。'}
               </p>
             </div>
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
@@ -508,7 +656,20 @@ export default function AiPayrollReconcilePage() {
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <p className="mt-2 text-right text-xs text-gray-500">{progressPercent}%</p>
+          <div className="mt-2 flex flex-col gap-2 text-xs text-gray-500 md:flex-row md:items-center md:justify-between">
+            {isLikelyStuck ? (
+              <button
+                onClick={() => startOrRetry(true)}
+                disabled={refreshing}
+                className="w-fit rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 text-xs font-medium text-yellow-800 hover:bg-yellow-100 disabled:opacity-50"
+              >
+                強制重新啟動流程
+              </button>
+            ) : (
+              <span />
+            )}
+            <span>{progressPercent}%</span>
+          </div>
         </div>
       )}
 
@@ -845,12 +1006,12 @@ export default function AiPayrollReconcilePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(!preview?.employees || preview.employees.length === 0) ? (
+                  {previewEmployees.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-3 py-10 text-center text-gray-400">暫無預覽資料</td>
                     </tr>
                   ) : (
-                    preview.employees.map((employee: any) => (
+                    previewEmployees.map((employee: any) => (
                       <tr key={employee.employee_id} className="border-b last:border-0">
                         <td className="px-3 py-3 font-medium text-gray-900">{employee.employee_name || `員工 #${employee.employee_id}`}</td>
                         <td className="px-3 py-3 text-gray-600">{formatNumber(employee.item_count)}</td>
@@ -922,7 +1083,7 @@ export default function AiPayrollReconcilePage() {
               />
               <p className="mt-1 text-xs text-gray-500">此資料會合併至 AI 判斷結果，適合修正工時、加班、工種、金額或地點等欄位。</p>
             </div>
-            {selectedItem.sources && selectedItem.sources.length > 0 && (
+            {Array.isArray(selectedItem.sources) && selectedItem.sources.length > 0 && (
               <div>
                 <p className="mb-2 text-sm font-medium text-gray-700">來源比對</p>
                 <div className="max-h-48 overflow-y-auto rounded-lg bg-gray-50 p-3">

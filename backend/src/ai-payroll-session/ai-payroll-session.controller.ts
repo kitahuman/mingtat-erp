@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   Patch,
@@ -170,6 +171,7 @@ export class AiPayrollSessionController {
   }
 
   @Post(':sessionId/start')
+  @HttpCode(202)
   @ApiOperation({ summary: '開始 AI 計糧會話流程' })
   start(
     @Param('sessionId', ParseIntPipe) sessionId: number,
