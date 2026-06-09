@@ -156,8 +156,8 @@ export default function PayrollRecordsPage() {
         <input
           type="checkbox"
           checked={selectedIds.has(row.row_id || String(row.id))}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => {
-            e.stopPropagation();
             handleSelectRow(row.row_id || String(row.id), e.target.checked);
           }}
           className="w-4 h-4 rounded border-gray-300"
