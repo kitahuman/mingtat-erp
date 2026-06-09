@@ -3090,10 +3090,16 @@ export default function WorkLogsPage() {
                               data={rows}
                               activeFilters={columnFilters}
                               onFilterChange={(key, vals) => {
-                                 setColumnFilters({
-                                   ...columnFilters,
-                                   [key]: new Set(vals),
-                                 });
+                                if (vals === null) {
+                                  const newFilters = { ...columnFilters };
+                                  delete newFilters[key];
+                                  setColumnFilters(newFilters);
+                                } else {
+                                  setColumnFilters({
+                                    ...columnFilters,
+                                    [key]: vals instanceof Set ? vals : new Set(vals as any),
+                                  });
+                                }
                                 setPage(1);
                               }}
                               serverSide={true}
