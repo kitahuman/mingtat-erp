@@ -71,9 +71,10 @@ function formatTime(dateStr: string | null): string {
 
 interface WhatsAppBotStatusProps {
   collapsed?: boolean;
+  onCollapsedClick?: () => void;
 }
 
-export default function WhatsAppBotStatus({ collapsed = false }: WhatsAppBotStatusProps) {
+export default function WhatsAppBotStatus({ collapsed = false, onCollapsedClick }: WhatsAppBotStatusProps) {
   const [botStatus, setBotStatus] = useState<BotStatusData | null>(null);
   const [qrCode, setQrCode] = useState<QrCodeData | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -183,7 +184,13 @@ export default function WhatsAppBotStatus({ collapsed = false }: WhatsAppBotStat
     <div className="relative" ref={panelRef}>
       {/* ── 狀態指示器（sidebar 底部按鈕）──────────────── */}
       <button
-        onClick={() => setPanelOpen(!panelOpen)}
+        onClick={() => {
+          if (collapsed && onCollapsedClick) {
+            onCollapsedClick();
+            return;
+          }
+          setPanelOpen(!panelOpen);
+        }}
         className={`
           flex items-center gap-2 w-full px-4 py-2 transition-colors
           hover:bg-gray-800 rounded-lg text-left

@@ -155,11 +155,13 @@ function CollapsedGroupItem({
   canAccess,
   pathname,
   onNavigate,
+  onExpand,
 }: {
   entry: NavGroup;
-  canAccess: (item: { minRole?: UserRole; roles?: UserRole[] }) => boolean;
+  canAccess: (item: { pageKey?: string; minRole?: UserRole; roles?: UserRole[] }) => boolean;
   pathname: string;
   onNavigate: () => void;
+  onExpand: (label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const filteredItems = entry.items.filter(canAccess);
@@ -175,14 +177,17 @@ function CollapsedGroupItem({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <div
+      <button
+        type="button"
+        onClick={() => onExpand(entry.label)}
+        title={entry.label}
         className={`
-          flex items-center justify-center px-4 py-2.5 mx-2 rounded-lg cursor-pointer mb-0.5
+          flex items-center justify-center w-[calc(100%-1rem)] px-4 py-2.5 mx-2 rounded-lg cursor-pointer mb-0.5
           ${isGroupActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
         `}
       >
         <span className="text-lg">{entry.icon}</span>
-      </div>
+      </button>
 
       {open && (
         <div className="absolute left-full top-0 ml-1 z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl py-1 min-w-[172px]">
@@ -293,6 +298,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
   const toggleGroup = (label: string) => {
     setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
+
+  const handleCollapsedIconExpand = useCallback((groupLabel?: string) => {
+    if (groupLabel) {
+      setExpandedGroups(prev => ({ ...prev, [groupLabel]: true }));
+    }
+    handleCollapse(false);
+  }, [handleCollapse]);
 
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || '使用者' : '使用者';
 
@@ -433,6 +445,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                     canAccess={canAccess}
                     pathname={pathname}
                     onNavigate={handleMobileNavigate}
+                    onExpand={handleCollapsedIconExpand}
                   />
                 );
               }
@@ -450,7 +463,10 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                 <Link
                   key={entry.href}
                   href={entry.href}
-                  onClick={handleMobileNavigate}
+                  onClick={() => {
+                    handleCollapsedIconExpand();
+                    handleMobileNavigate();
+                  }}
                   title={entry.label}
                   className={`
                     flex items-center justify-center px-4 py-2.5 mx-2 rounded-lg transition-colors mb-0.5
@@ -469,7 +485,7 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
         {/* WhatsApp Bot Status — only visible to admin */}
         {user?.role === 'admin' && (
           <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
-            <WhatsAppBotStatus collapsed={collapsed} />
+            <WhatsAppBotStatus collapsed={collapsed} onCollapsedClick={handleCollapsedIconExpand} />
           </div>
         )}
 
@@ -483,7 +499,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
         {/* Issue Report Button */}
         <div className={`px-2 pb-1 ${collapsed ? 'text-center' : ''}`}>
           <button
-            onClick={() => setIssueModalOpen(true)}
+            onClick={() => {
+              if (collapsed) {
+                handleCollapsedIconExpand();
+                return;
+              }
+              setIssueModalOpen(true);
+            }}
             title={collapsed ? '問題回報' : undefined}
             className={`
               flex items-center gap-2.5 px-4 py-2.5 rounded-lg transition-colors w-full
@@ -503,7 +525,12 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
             target="_blank"
             rel="noopener noreferrer"
             title="員工手機入口"
-            onClick={handleMobileNavigate}
+            onClick={() => {
+              if (collapsed) {
+                handleCollapsedIconExpand();
+              }
+              handleMobileNavigate();
+            }}
             className={`
               flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg transition-colors
               bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium
@@ -531,7 +558,13 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
             </div>
           )}
           <button
-            onClick={logout}
+            onClick={() => {
+              if (collapsed) {
+                handleCollapsedIconExpand();
+                return;
+              }
+              logout();
+            }}
             className={`text-gray-400 hover:text-red-400 transition-colors text-sm ${collapsed ? '' : 'w-full text-left'}`}
             title={collapsed ? '登出系統' : undefined}
           >
