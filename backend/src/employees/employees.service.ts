@@ -16,6 +16,71 @@ export class EmployeesService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
+  private normalizeChineseName(name?: string | null): string {
+    return (name || '').trim();
+  }
+
+  private normalizeEnglishName(name?: string | null): string {
+    return (name || '').trim().toLowerCase();
+  }
+
+  private formatEmployeeDisplay(emp: { name_zh?: string | null; name_en?: string | null; emp_code?: string | null }): string {
+    const name = emp.name_zh || emp.name_en || '未命名員工';
+    return `${name}（${emp.emp_code || 'N/A'}）`;
+  }
+
+  private async buildDuplicateNameSummary(
+    employees: Array<{ id: number; name_zh?: string | null; name_en?: string | null }>,
+  ): Promise<Map<number, { name_zh: boolean; name_en: boolean }>> {
+    const summary = new Map<number, { name_zh: boolean; name_en: boolean }>();
+    employees.forEach((emp) => summary.set(emp.id, { name_zh: false, name_en: false }));
+
+    const zhNames = Array.from(
+      new Set(employees.map((emp) => this.normalizeChineseName(emp.name_zh)).filter(Boolean)),
+    );
+    const enNames = Array.from(
+      new Set(employees.map((emp) => this.normalizeEnglishName(emp.name_en)).filter(Boolean)),
+    );
+
+    if (zhNames.length === 0 && enNames.length === 0) return summary;
+
+    const relatedEmployees = await this.prisma.employee.findMany({
+      where: {
+        deleted_at: null,
+        OR: [
+          ...(zhNames.length > 0 ? [{ name_zh: { in: zhNames } }] : []),
+          ...enNames.map((name) => ({ name_en: { equals: name, mode: 'insensitive' as const } })),
+        ],
+      },
+      select: { id: true, name_zh: true, name_en: true },
+    });
+
+    const zhCounts = new Map<string, Set<number>>();
+    const enCounts = new Map<string, Set<number>>();
+    for (const emp of relatedEmployees) {
+      const zh = this.normalizeChineseName(emp.name_zh);
+      if (zh) {
+        if (!zhCounts.has(zh)) zhCounts.set(zh, new Set<number>());
+        zhCounts.get(zh)!.add(emp.id);
+      }
+      const en = this.normalizeEnglishName(emp.name_en);
+      if (en) {
+        if (!enCounts.has(en)) enCounts.set(en, new Set<number>());
+        enCounts.get(en)!.add(emp.id);
+      }
+    }
+
+    for (const emp of employees) {
+      const duplicateFlags = summary.get(emp.id)!;
+      const zh = this.normalizeChineseName(emp.name_zh);
+      const en = this.normalizeEnglishName(emp.name_en);
+      duplicateFlags.name_zh = !!zh && (zhCounts.get(zh)?.size || 0) > 1;
+      duplicateFlags.name_en = !!en && (enCounts.get(en)?.size || 0) > 1;
+    }
+
+    return summary;
+  }
+
   /**
    * Generate the next available emp_code in format E001, E002, ...
    * Uses gap-filling strategy: finds the smallest positive integer N
@@ -328,16 +393,25 @@ export class EmployeesService {
       this.prisma.employee.count({ where }),
     ]);
 
-    // For temporary employees, attach attendance count
+    const duplicateNameSummary = await this.buildDuplicateNameSummary(employees);
+
+    // For temporary employees, attach attendance count. For all rows, attach duplicate-name flags.
     const data = await Promise.all(
       employees.map(async (emp) => {
+        const base = {
+          ...emp,
+          duplicate_name_fields: duplicateNameSummary.get(emp.id) || {
+            name_zh: false,
+            name_en: false,
+          },
+        };
         if (emp.employee_is_temporary) {
           const attendance_count = await this.prisma.employeeAttendance.count({
             where: { employee_id: emp.id },
           });
-          return { ...emp, attendance_count };
+          return { ...base, attendance_count };
         }
-        return emp;
+        return base;
       }),
     );
 
@@ -482,21 +556,53 @@ export class EmployeesService {
       }
     }
 
-    // 中文姓名重複檢查（警告，非阻擋）
-    if (data.name_zh && !force_create) {
-      const existingByName = await this.prisma.employee.findFirst({
-        where: { name_zh: data.name_zh },
-        select: { id: true, emp_code: true, name_zh: true },
-      });
-      if (existingByName) {
-        throw new HttpException(
-          {
-            code: 'DUPLICATE_NAME_WARNING',
-            message: `已有同名員工 ${existingByName.name_zh}（${existingByName.emp_code || 'N/A'}），是否確定繼續建立？`,
-            existingEmployee: `${existingByName.name_zh}（${existingByName.emp_code || 'N/A'}）`,
+    // 中文或英文姓名重複檢查（警告，非阻擋）
+    if (!force_create) {
+      const duplicateNameConditions: WhereClause[] = [];
+      const normalizedNameZh = this.normalizeChineseName(data.name_zh);
+      const normalizedNameEn = this.normalizeEnglishName(data.name_en);
+
+      if (normalizedNameZh) {
+        duplicateNameConditions.push({ name_zh: normalizedNameZh });
+      }
+      if (normalizedNameEn) {
+        duplicateNameConditions.push({ name_en: { equals: normalizedNameEn, mode: 'insensitive' } });
+      }
+
+      if (duplicateNameConditions.length > 0) {
+        const existingByName = await this.prisma.employee.findFirst({
+          where: {
+            deleted_at: null,
+            OR: duplicateNameConditions,
           },
-          HttpStatus.CONFLICT,
-        );
+          select: { id: true, emp_code: true, name_zh: true, name_en: true },
+          orderBy: { id: 'asc' },
+        });
+        if (existingByName) {
+          const duplicateFields: string[] = [];
+          if (
+            normalizedNameZh &&
+            this.normalizeChineseName(existingByName.name_zh) === normalizedNameZh
+          ) {
+            duplicateFields.push('中文姓名');
+          }
+          if (
+            normalizedNameEn &&
+            this.normalizeEnglishName(existingByName.name_en) === normalizedNameEn
+          ) {
+            duplicateFields.push('英文姓名');
+          }
+          const existingEmployee = this.formatEmployeeDisplay(existingByName);
+          throw new HttpException(
+            {
+              code: 'DUPLICATE_NAME_WARNING',
+              message: `已有員工的${duplicateFields.join('及')}相同：${existingEmployee}。同名可能屬於不同人，是否確定繼續建立？`,
+              existingEmployee,
+              duplicateFields,
+            },
+            HttpStatus.CONFLICT,
+          );
+        }
       }
     }
 
@@ -550,7 +656,32 @@ export class EmployeesService {
       }
     }
 
-    const saved = await this.prisma.employee.create({ data });
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.employee.create({ data });
+      const systemCreatedAt = new Date();
+
+      await tx.employmentHistory.create({
+        data: {
+          employee_id: created.id,
+          event_type: 'created',
+          event_date: systemCreatedAt,
+          reason: '系統新增員工檔案',
+        },
+      });
+
+      if (data.join_date) {
+        await tx.employmentHistory.create({
+          data: {
+            employee_id: created.id,
+            event_type: 'joined',
+            event_date: data.join_date as Date,
+            reason: '員工實際入職日期',
+          },
+        });
+      }
+
+      return created;
+    });
 
     // 自動建立空白薪酬配置（正式員工和臨時員工都建立）
     try {

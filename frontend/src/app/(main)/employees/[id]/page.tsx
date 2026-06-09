@@ -76,9 +76,11 @@ function calcAge(dob: string | null): string {
   return age.toString();
 }
 
+type EmploymentHistoryEventType = 'created' | 'joined' | 'termination' | 'reinstatement';
+
 type EmploymentHistoryEvent = {
   id: number;
-  event_type: 'termination' | 'reinstatement';
+  event_type: EmploymentHistoryEventType | string;
   event_date: string;
   reason?: string | null;
   created_at?: string;
@@ -86,46 +88,45 @@ type EmploymentHistoryEvent = {
 
 type EmploymentHistoryRow = {
   key: string;
-  terminationDate?: string | null;
-  terminationReason?: string | null;
-  reinstateDate?: string | null;
-  remarks?: string | null;
-  sortDate: string;
+  eventType: string;
+  eventTypeLabel: string;
+  eventDate: string;
+  description: string;
+  createdAt?: string;
+  badgeClassName: string;
+};
+
+const employmentHistoryEventMeta: Record<string, { label: string; badgeClassName: string; defaultDescription: string }> = {
+  created: { label: '新增', badgeClassName: 'badge-blue', defaultDescription: '系統新增員工檔案' },
+  joined: { label: '入職', badgeClassName: 'badge-green', defaultDescription: '員工實際入職日期' },
+  termination: { label: '離職', badgeClassName: 'badge-red', defaultDescription: '員工離職' },
+  reinstatement: { label: '復職', badgeClassName: 'badge-green', defaultDescription: '員工復職' },
 };
 
 function buildEmploymentHistoryRows(events: EmploymentHistoryEvent[]): EmploymentHistoryRow[] {
-  const pendingReinstatements: EmploymentHistoryEvent[] = [];
-  const rows: EmploymentHistoryRow[] = [];
+  return events
+    .map((event) => {
+      const meta = employmentHistoryEventMeta[event.event_type] || {
+        label: event.event_type,
+        badgeClassName: 'badge-gray',
+        defaultDescription: event.event_type,
+      };
 
-  for (const event of events) {
-    if (event.event_type === 'reinstatement') {
-      pendingReinstatements.push(event);
-      continue;
-    }
-
-    const matchedReinstatement = pendingReinstatements.shift();
-    rows.push({
-      key: `termination-${event.id}-${matchedReinstatement?.id || 'open'}`,
-      terminationDate: event.event_date,
-      terminationReason: event.reason,
-      reinstateDate: matchedReinstatement?.event_date || null,
-      remarks: matchedReinstatement?.reason || null,
-      sortDate: matchedReinstatement?.event_date || event.event_date,
+      return {
+        key: `${event.event_type}-${event.id}`,
+        eventType: event.event_type,
+        eventTypeLabel: meta.label,
+        eventDate: event.event_date,
+        description: event.reason || meta.defaultDescription,
+        createdAt: event.created_at,
+        badgeClassName: meta.badgeClassName,
+      };
+    })
+    .sort((a, b) => {
+      const dateDiff = new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
-  }
-
-  for (const event of pendingReinstatements) {
-    rows.push({
-      key: `reinstatement-${event.id}`,
-      terminationDate: null,
-      terminationReason: null,
-      reinstateDate: event.event_date,
-      remarks: event.reason,
-      sortDate: event.event_date,
-    });
-  }
-
-  return rows.sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
 }
 
 export default function EmployeeDetailPage() {
@@ -434,19 +435,19 @@ export default function EmployeeDetailPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">離職日期</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">離職原因</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">復職日期</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">復職備註</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">事件</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">事件日期</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">說明</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">系統記錄時間</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
                 {employmentHistoryRows.map(row => (
                   <tr key={row.key}>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{row.terminationDate ? fmtDate(row.terminationDate) : '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{row.terminationReason || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{row.reinstateDate ? fmtDate(row.reinstateDate) : '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{row.remarks || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap"><span className={row.badgeClassName}>{row.eventTypeLabel}</span></td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{fmtDate(row.eventDate)}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.description || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-500">{row.createdAt ? fmtDate(row.createdAt) : '-'}</td>
                   </tr>
                 ))}
               </tbody>

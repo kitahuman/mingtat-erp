@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { employeesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
@@ -593,6 +593,49 @@ export default function EmployeesPage() {
     label: c.internal_prefix || c.name,
   }));
 
+  const createDuplicateNameFields = useMemo(() => {
+    const nameZh = (form.name_zh || '').trim();
+    const nameEn = (form.name_en || '').trim().toLowerCase();
+    const fields = new Set<'name_zh' | 'name_en'>();
+
+    for (const emp of data) {
+      if (nameZh && (emp.name_zh || '').trim() === nameZh) fields.add('name_zh');
+      if (nameEn && (emp.name_en || '').trim().toLowerCase() === nameEn) fields.add('name_en');
+    }
+
+    return fields;
+  }, [data, form.name_zh, form.name_en]);
+
+  const renderDuplicateBadge = (label: string) => (
+    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800 border border-yellow-200">
+      {label}重複
+    </span>
+  );
+
+  const renderNameCell = (row: any) => {
+    const duplicateZh = !!row.duplicate_name_fields?.name_zh;
+    const duplicateEn = !!row.duplicate_name_fields?.name_en;
+
+    return (
+      <div className={duplicateZh || duplicateEn ? 'rounded-md bg-yellow-50 px-2 py-1 -mx-2 -my-1' : ''}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={duplicateZh ? 'font-semibold text-yellow-900' : 'font-medium text-gray-900'}>
+            {row.name_zh || '-'}
+          </span>
+          {duplicateZh && renderDuplicateBadge('中文')}
+        </div>
+        {row.name_en && (
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            <span className={duplicateEn ? 'text-xs font-medium text-yellow-800' : 'text-xs text-gray-500'}>
+              {row.name_en}
+            </span>
+            {duplicateEn && renderDuplicateBadge('英文')}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const activeColumns = [
     {
       key: 'emp_code',
@@ -609,14 +652,7 @@ export default function EmployeesPage() {
       sortable: true,
       editable: true,
       editType: 'text' as const,
-      render: (_: any, row: any) => (
-        <div>
-          <div className="font-medium text-gray-900">{row.name_zh}</div>
-          {row.name_en && (
-            <div className="text-xs text-gray-500">{row.name_en}</div>
-          )}
-        </div>
-      ),
+      render: (_: any, row: any) => renderNameCell(row),
     },
     {
       key: 'name_en',
@@ -746,14 +782,7 @@ export default function EmployeesPage() {
       sortable: true,
       editable: true,
       editType: 'text' as const,
-      render: (_: any, row: any) => (
-        <div>
-          <div className="font-medium text-gray-900">{row.name_zh}</div>
-          {row.name_en && (
-            <div className="text-xs text-gray-500">{row.name_en}</div>
-          )}
-        </div>
-      ),
+      render: (_: any, row: any) => renderNameCell(row),
     },
     {
       key: 'role',
@@ -1586,9 +1615,14 @@ export default function EmployeesPage() {
               <input
                 value={form.name_zh}
                 onChange={(e) => setForm({ ...form, name_zh: e.target.value })}
-                className="input-field"
+                className={createDuplicateNameFields.has('name_zh') ? 'input-field border-yellow-400 bg-yellow-50' : 'input-field'}
                 required
               />
+              {createDuplicateNameFields.has('name_zh') && (
+                <p className="mt-1 text-xs text-yellow-700">
+                  目前列表資料中已有相同中文姓名；提交後系統會再次檢查所有員工並要求確認。
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1597,8 +1631,13 @@ export default function EmployeesPage() {
               <input
                 value={form.name_en}
                 onChange={(e) => setForm({ ...form, name_en: e.target.value })}
-                className="input-field"
+                className={createDuplicateNameFields.has('name_en') ? 'input-field border-yellow-400 bg-yellow-50' : 'input-field'}
               />
+              {createDuplicateNameFields.has('name_en') && (
+                <p className="mt-1 text-xs text-yellow-700">
+                  目前列表資料中已有相同英文姓名；提交後系統會再次檢查所有員工並要求確認。
+                </p>
+              )}
             </div>
             {!form.employee_is_temporary && (
               <div>
