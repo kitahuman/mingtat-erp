@@ -1289,6 +1289,7 @@ export default function PayrollDetailPage() {
 
   // Field options for inline editing dropdowns
   const [fieldOptions, setFieldOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [selectedPwlIds, setSelectedPwlIds] = useState<Set<number>>(new Set());
 
   // Reimbursement (員工報銷)
   const [showReimbursement, setShowReimbursement] = useState(false);
@@ -1301,6 +1302,7 @@ export default function PayrollDetailPage() {
     try {
       const res = await payrollApi.get(Number(params.id));
       setPayroll(res.data);
+      setSelectedPwlIds(new Set());
       setPaymentDate(res.data.payment_date || '');
       setChequeNumber(res.data.cheque_number || '');
       try {
@@ -1446,6 +1448,18 @@ export default function PayrollDetailPage() {
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '操作失敗');
+    }
+  };
+
+  const handleBatchDeleteWorkLogs = async () => {
+    if (!payroll || selectedPwlIds.size === 0) return;
+    if (!window.confirm(`確定刪除已選取的 ${selectedPwlIds.size} 筆記錄？`)) return;
+    try {
+      await payrollApi.batchDeleteWorkLogs(payroll.id, Array.from(selectedPwlIds));
+      await payrollApi.recalculate(payroll.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量刪除失敗');
     }
   };
 
@@ -1685,6 +1699,8 @@ export default function PayrollDetailPage() {
   const unmatchedGroups = buildUnmatchedGroups(pwls);
   const isPreparing = payroll.status === 'preparing';
   const isDraft = payroll.status === 'draft' || isPreparing;
+  const selectablePwls = pwls.filter((pwl: any) => isDraft && !pwl.is_excluded);
+  const allSelectableSelected = selectablePwls.length > 0 && selectablePwls.every((pwl: any) => selectedPwlIds.has(Number(pwl.id)));
   const pettyCashDeducted = pettyCashRecords
     .filter((r: any) => r.type === 'DEDUCT')
     .reduce((sum: number, r: any) => sum + Math.abs(Number(r.amount || 0)), 0);
@@ -1811,11 +1827,29 @@ export default function PayrollDetailPage() {
         {/* Tab Content */}
         {activeTab === 'detail' && (
           <div>
+            {selectedPwlIds.size > 0 && isDraft && (
+              <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                <div className="font-medium text-blue-900">已選取 {selectedPwlIds.size} 筆記錄。</div>
+                <button type="button" onClick={handleBatchDeleteWorkLogs} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">批量刪除</button>
+                <button type="button" onClick={() => setSelectedPwlIds(new Set())} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100">清除選取</button>
+              </div>
+            )}
             <div className="overflow-x-auto border rounded-lg">
             {pwls.length > 0 ? (
               <table className="min-w-full divide-y divide-gray-200 text-xs">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">
+                      {isDraft && (
+                        <input
+                          type="checkbox"
+                          checked={allSelectableSelected}
+                          disabled={selectablePwls.length === 0}
+                          onChange={(event) => setSelectedPwlIds(event.target.checked ? new Set(selectablePwls.map((pwl: any) => Number(pwl.id))) : new Set())}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      )}
+                    </th>
                     <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">約定日期</th>
                     <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">服務類型</th>
@@ -1851,7 +1885,22 @@ export default function PayrollDetailPage() {
                     const midShiftLineAmount = pwl.is_mid_shift && pwl.matched_mid_shift_rate ? (Number(pwl.matched_mid_shift_rate) * 1) : 0;
                     const totalLineAmount = baseLineAmount + otLineAmount + midShiftLineAmount;
                     return (
-                      <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : 'hover:bg-gray-50'}`}>
+                      <tr key={pwl.id} className={`${isExcluded ? 'bg-red-50 opacity-50 line-through' : selectedPwlIds.has(Number(pwl.id)) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          {isDraft && !isExcluded && (
+                            <input
+                              type="checkbox"
+                              checked={selectedPwlIds.has(Number(pwl.id))}
+                              onChange={(event) => setSelectedPwlIds((prev) => {
+                                const next = new Set(prev);
+                                if (event.target.checked) next.add(Number(pwl.id));
+                                else next.delete(Number(pwl.id));
+                                return next;
+                              })}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          )}
+                        </td>
                         <td className="px-2 py-1.5 whitespace-nowrap text-gray-400 font-mono">{pwl.work_log_id || '—'}</td>
                         <InlineEditCell value={pwl.scheduled_date} field="scheduled_date" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="text" onSaved={recalculateAndLoad} display={fmtDate(pwl.scheduled_date)} />
                         <InlineEditCell value={pwl.service_type} field="service_type" payrollId={payroll.id} pwlId={pwl.id} editable={canEdit} type="select" options={fieldOptions['service_type'] || []} onSaved={recalculateAndLoad} />

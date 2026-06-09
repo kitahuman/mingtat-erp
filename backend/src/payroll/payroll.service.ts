@@ -2179,6 +2179,35 @@ export class PayrollService {
     return this.prisma.payrollWorkLog.findUnique({ where: { id: pwlId } });
   }
 
+  // ── 批量刪除糧單工作記錄（只刪除糧單快照，不刪除原始大數據）────────────────
+  async batchDeletePayrollWorkLogs(payrollId: number, ids: number[]) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const safeIds = Array.isArray(ids)
+      ? ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    if (safeIds.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+
+    const result = await this.prisma.payrollWorkLog.deleteMany({
+      where: {
+        payroll_id: payrollId,
+        id: { in: safeIds },
+      },
+    });
+
+    return { success: true, deleted: result.count };
+  }
+
   // ── 編輯原始工作記錄（編輯大數據）──────────────────────────
   async updateOriginalWorkLog(payrollId: number, pwlId: number, body: any) {
     const payroll = await this.prisma.payroll.findUnique({

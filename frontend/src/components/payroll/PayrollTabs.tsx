@@ -68,6 +68,7 @@ export type PayrollTabsProps = {
   className?: string;
   onUpdateWorkLog?: (id: number | string, updates: Record<string, any>) => Promise<void> | void;
   onBatchUpdateWorkLogs?: (ids: Array<number | string>, updates: Record<string, any>) => Promise<void> | void;
+  onBatchDeleteWorkLogs?: (ids: Array<number | string>) => Promise<void> | void;
   onGroupBillingQuantityTypeChange?: (groupKey: string, billingQuantityType: BillingQuantityType) => Promise<void> | void;
 };
 
@@ -244,6 +245,7 @@ export default function PayrollTabs({
   className = "",
   onUpdateWorkLog,
   onBatchUpdateWorkLogs,
+  onBatchDeleteWorkLogs,
   onGroupBillingQuantityTypeChange,
 }: PayrollTabsProps) {
   const [activeTab, setActiveTab] = useState<(typeof TAB_DEFS)[number]["key"]>("detail");
@@ -346,6 +348,16 @@ export default function PayrollTabs({
     setBatchValue("");
   }
 
+  async function applyBatchDelete() {
+    if (selectedCount === 0 || !onBatchDeleteWorkLogs) return;
+    const confirmed = window.confirm(`確定刪除已選取的 ${selectedCount} 筆記錄？`);
+    if (!confirmed) return;
+    const ids = selectedRows.map((row) => row.id);
+    await onBatchDeleteWorkLogs(ids);
+    setRows((prev) => prev.filter((row) => !selectedIds.has(String(row.id))));
+    setSelectedIds(new Set());
+  }
+
   async function handleGroupTypeChange(groupKey: string, value: BillingQuantityType) {
     setLocalGroupTypes((prev) => ({ ...prev, [groupKey]: value }));
     if (onGroupBillingQuantityTypeChange) await onGroupBillingQuantityTypeChange(groupKey, value);
@@ -434,6 +446,9 @@ export default function PayrollTabs({
                 )}
               </label>
               <button type="button" onClick={applyBatchUpdate} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">套用</button>
+              {onBatchDeleteWorkLogs && (
+                <button type="button" onClick={applyBatchDelete} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">批量刪除</button>
+              )}
               <button type="button" onClick={() => setSelectedIds(new Set())} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100">清除選取</button>
             </div>
           )}

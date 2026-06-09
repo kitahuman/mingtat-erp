@@ -56,6 +56,7 @@ export class AiPayrollGenerateService {
     const session = await this.getSession(sessionId);
     const where: Prisma.AiPayrollReconcileItemWhereInput = {
       reconcile_session_id: sessionId,
+      reconcile_status: { not: 'excluded' },
       ...(query.employee_id ? { reconcile_employee_id: query.employee_id } : {}),
     };
     const [items, unresolvedQuestions] = await Promise.all([
@@ -89,7 +90,12 @@ export class AiPayrollGenerateService {
       current.work_days += data.service_type === '請假/休息' ? 0 : 1;
       current.statuses[item.reconcile_status] =
         (current.statuses[item.reconcile_status] ?? 0) + 1;
-      current.estimated_records.push(data);
+      current.estimated_records.push({
+        ...(data as Record<string, any>),
+        id: item.id,
+        reconcile_item_id: item.id,
+        reconcile_status: item.reconcile_status,
+      } as any);
       grouped.set(item.reconcile_employee_id, current);
     }
 

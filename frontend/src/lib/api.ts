@@ -718,6 +718,8 @@ export const payrollApi = {
   // ── 糧單工作記錄管理 ──
   updateWorkLog: (payrollId: number, pwlId: number, data: any) =>
     api.put(`/payroll/${payrollId}/work-logs/${pwlId}`, data),
+  batchDeleteWorkLogs: (payrollId: number, ids: Array<number | string>) =>
+    api.post(`/payroll/${payrollId}/work-logs/bulk/delete`, { ids }),
   updateOriginalWorkLog: (payrollId: number, pwlId: number, data: any) =>
     api.put(`/payroll/${payrollId}/work-logs/${pwlId}/original`, data),
   excludeWorkLog: (payrollId: number, pwlId: number) =>

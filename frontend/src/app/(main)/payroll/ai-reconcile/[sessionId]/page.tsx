@@ -1059,6 +1059,16 @@ export default function AiPayrollReconcilePage() {
 
   const handlePreviewWorkLogUpdate = async (_id: number | string, _updates: Record<string, any>) => undefined;
   const handlePreviewBatchUpdate = async (_ids: Array<number | string>, _updates: Record<string, any>) => undefined;
+  const handlePreviewBatchDelete = async (ids: Array<number | string>) => {
+    const itemIds = Array.from(new Set(ids
+      .map((id) => previewWorkLogsForTabs.find((row: any) => String(row.id) === String(id)))
+      .map((row: any) => Number(row?.reconcile_item_id || row?.id))
+      .filter((id) => Number.isFinite(id))));
+    if (!itemIds.length) return;
+    setError('');
+    await Promise.all(itemIds.map((itemId) => aiPayrollSessionApi.updateReconcileItem(sessionId, itemId, { status: 'excluded' })));
+    await loadData(true);
+  };
   const handlePreviewGroupBillingQuantityTypeChange = async (_groupKey: string, _billingQuantityType: string) => undefined;
 
   const generatePayroll = async (confirm = false) => {
@@ -1827,6 +1837,7 @@ export default function AiPayrollReconcilePage() {
                 calculation={undefined}
                 onUpdateWorkLog={handlePreviewWorkLogUpdate}
                 onBatchUpdateWorkLogs={handlePreviewBatchUpdate}
+                onBatchDeleteWorkLogs={handlePreviewBatchDelete}
                 onGroupBillingQuantityTypeChange={handlePreviewGroupBillingQuantityTypeChange}
               />
             </div>

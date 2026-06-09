@@ -187,6 +187,15 @@ export class PayrollController {
     return this.payrollService.updatePayrollWorkLog(+id, +pwlId, body);
   }
 
+  // 批量刪除糧單工作記錄（只刪除糧單快照，不刪除原始大數據）
+  @Post(':id/work-logs/bulk/delete')
+  batchDeletePayrollWorkLogs(
+    @Param('id') id: string,
+    @Body() body: { ids: number[] },
+  ) {
+    return this.payrollService.batchDeletePayrollWorkLogs(+id, body.ids);
+  }
+
   // 編輯原始工作記錄（編輯大數據）
   @Put(':id/work-logs/:pwlId/original')
   updateOriginalWorkLog(
