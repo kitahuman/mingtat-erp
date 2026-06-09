@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { WorkLog } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
 import { WorkLogsGateway } from './work-logs.gateway';
+import { AiKnowledgeCandidateService } from '../ai-knowledge/ai-knowledge-candidate.service';
 import {
   UnmatchedCombinationsQueryDto,
   AddRateAndRematchDto,
@@ -97,6 +99,24 @@ const VEHICLE_TYPES = [
 // 機械類機種
 const MACHINERY_TYPES = ['挖掘機', '火轆'];
 
+const WHATSAPP_WORK_LOG_SOURCE = 'whatsapp_clockin';
+const WORK_LOG_KNOWLEDGE_LEARNING_FIELDS = [
+  'client_id',
+  'start_location',
+  'end_location',
+  'tonnage',
+  'machine_type',
+  'day_night',
+  'service_type',
+  'equipment_number',
+  'quantity',
+  'remarks',
+  'employee_id',
+] as const;
+
+type WorkLogKnowledgeLearningField =
+  (typeof WORK_LOG_KNOWLEDGE_LEARNING_FIELDS)[number];
+
 @Injectable()
 export class WorkLogsService {
   constructor(
@@ -104,7 +124,86 @@ export class WorkLogsService {
     private readonly pricingService: PricingService,
     private readonly auditLogsService: AuditLogsService,
     private readonly workLogsGateway: WorkLogsGateway,
+    private readonly aiKnowledgeCandidateService: AiKnowledgeCandidateService,
   ) {}
+
+  private formatKnowledgeValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'bigint') return value.toString();
+    if (typeof value === 'object') {
+      const stringifiable = value as { toString?: () => string };
+      const stringValue = stringifiable.toString?.();
+      if (stringValue && stringValue !== '[object Object]') return stringValue;
+      return JSON.stringify(value);
+    }
+    return String(value);
+  }
+
+  private getKnowledgeComparableValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+      const stringifiable = value as { toString?: () => string };
+      const stringValue = stringifiable.toString?.();
+      if (stringValue && stringValue !== '[object Object]') return stringValue;
+      return JSON.stringify(value);
+    }
+    return String(value);
+  }
+
+  private async createKnowledgeCandidatesFromWorkLogCorrection(
+    before: WorkLog | null,
+    after: WorkLog | null,
+    userId?: number,
+  ): Promise<void> {
+    if (!before || !after || !userId) return;
+    if (before.source !== WHATSAPP_WORK_LOG_SOURCE) return;
+
+    try {
+      const employeeId = after.employee_id ?? before.employee_id;
+      const scheduledDate = after.scheduled_date ?? before.scheduled_date;
+      const whatsappReportedAt =
+        after.wl_whatsapp_reported_at ?? before.wl_whatsapp_reported_at;
+
+      await Promise.all(
+        WORK_LOG_KNOWLEDGE_LEARNING_FIELDS.map(async (fieldName) => {
+          const beforeValue = before[fieldName];
+          const afterValue = after[fieldName];
+          if (
+            this.getKnowledgeComparableValue(beforeValue) ===
+            this.getKnowledgeComparableValue(afterValue)
+          ) {
+            return;
+          }
+
+          await this.aiKnowledgeCandidateService.createCandidateFromCorrection({
+            moduleCode: 'whatsapp-worklog',
+            taskType: 'work_log_correction',
+            sourceEntityType: 'work_log',
+            sourceEntityId: after.id,
+            fieldName,
+            beforeValue: this.formatKnowledgeValue(beforeValue),
+            afterValue: this.formatKnowledgeValue(afterValue),
+            confirmedBy: userId,
+            summary: `WhatsApp 報工工作紀錄 ${after.id} 的「${fieldName}」欄位經人工修正。`,
+            extraPayload: {
+              employee_id: employeeId,
+              scheduled_date: scheduledDate?.toISOString() ?? null,
+              whatsapp_reported_at: whatsappReportedAt?.toISOString() ?? null,
+              source: before.source,
+              corrected_field: fieldName,
+              work_log_id: after.id,
+            },
+            entityType: employeeId ? 'employee' : undefined,
+            entityId: employeeId ?? undefined,
+          });
+        }),
+      );
+    } catch (error) {
+      console.error('AI knowledge candidate error:', error);
+    }
+  }
 
   private async assertVehicleIsNotScrappedByWorkLogData(data: any) {
     const vehicleId = data.work_log_vehicle_id
@@ -873,8 +972,9 @@ export class WorkLogsService {
     const existingWl = await this.prisma.workLog.findUnique({ where: { id } });
     await this.prisma.workLog.update({ where: { id }, data: rest });
     if (userId) {
+      let afterWl: WorkLog | null = null;
       try {
-        const afterWl = await this.prisma.workLog.findUnique({ where: { id } });
+        afterWl = await this.prisma.workLog.findUnique({ where: { id } });
         await this.auditLogsService.log({
           userId,
           action: 'update',
@@ -887,6 +987,11 @@ export class WorkLogsService {
       } catch (e) {
         console.error('Audit log error:', e);
       }
+      await this.createKnowledgeCandidatesFromWorkLogCorrection(
+        existingWl,
+        afterWl,
+        userId,
+      );
     }
     // 自動匹配價格（如果關鍵欄位有變動）
     const priceRelatedFields = [
@@ -1257,6 +1362,17 @@ export class WorkLogsService {
             affectedIds,
             fields: auditFields,
           });
+        }),
+      );
+      await Promise.all(
+        beforeLogs.map((before) => {
+          const after = afterById.get(before.id);
+          if (!after) return Promise.resolve();
+          return this.createKnowledgeCandidatesFromWorkLogCorrection(
+            before,
+            after,
+            userId,
+          );
         }),
       );
     }

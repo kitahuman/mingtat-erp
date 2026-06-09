@@ -7,9 +7,10 @@ import { WorkLogLocksService } from './work-log-locks.service';
 import { PricingModule } from '../common/pricing.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { AuthModule } from '../auth/auth.module';
+import { AiKnowledgeModule } from '../ai-knowledge/ai-knowledge.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, PricingModule, AuditLogsModule],
+  imports: [PrismaModule, AuthModule, PricingModule, AuditLogsModule, AiKnowledgeModule],
   controllers: [WorkLogsController],
   providers: [WorkLogsService, WorkLogLocksService, WorkLogsGateway],
   exports: [WorkLogsService],
