@@ -82,15 +82,34 @@ function normalizeStatus(status?: string) {
   return status || 'pending';
 }
 
-function formatDate(value?: string) {
+function toDisplayString(value: any, fallback = '—') {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return fallback;
+    }
+  }
+  return String(value);
+}
+
+function getErrorString(err: any, fallback = '操作失敗'): string {
+  const msg = err?.response?.data?.message || err?.message;
+  if (Array.isArray(msg)) return msg.map((item) => toDisplayString(item, '')).filter(Boolean).join('; ') || fallback;
+  return toDisplayString(msg, fallback);
+}
+
+function formatDate(value?: any) {
   if (!value) return '—';
-  return String(value).slice(0, 10);
+  return toDisplayString(value).slice(0, 10);
 }
 
 function formatNumber(value: any) {
   if (value === undefined || value === null || value === '') return '—';
   const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString() : String(value);
+  return Number.isFinite(number) ? number.toLocaleString() : toDisplayString(value);
 }
 
 function getPayrollIds(session?: SessionData, generated?: any): number[] {
@@ -400,7 +419,7 @@ export default function AiPayrollReconcilePage() {
           }
         }
       } catch (err: any) {
-        setError(err.response?.data?.message || err.message || '載入 AI 計糧資料失敗');
+        setError(getErrorString(err, '載入 AI 計糧資料失敗'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -426,7 +445,7 @@ export default function AiPayrollReconcilePage() {
       await aiPayrollSessionApi.startReconcile(sessionId, force ? { force_restart: true } : {});
       await loadData(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '啟動 AI 核對失敗');
+      setError(getErrorString(err, '啟動 AI 核對失敗'));
     } finally {
       setRefreshing(false);
     }
@@ -445,7 +464,7 @@ export default function AiPayrollReconcilePage() {
       setUploadFiles([]);
       await startOrRetry(false);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '上載文件或啟動核對失敗');
+      setError(getErrorString(err, '上載文件或啟動核對失敗'));
     } finally {
       setUploading(false);
     }
@@ -460,7 +479,7 @@ export default function AiPayrollReconcilePage() {
       setQuestionAnswers((prev) => ({ ...prev, [questionId]: '' }));
       await loadData(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '提交答案失敗');
+      setError(getErrorString(err, '提交答案失敗'));
     } finally {
       setAnsweringId(null);
     }
@@ -472,7 +491,7 @@ export default function AiPayrollReconcilePage() {
       await aiPayrollSessionApi.batchIgnoreQuestions(sessionId, { question_ids: [questionId] });
       await loadData(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '忽略問題失敗');
+      setError(getErrorString(err, '忽略問題失敗'));
     } finally {
       setAnsweringId(null);
     }
@@ -512,7 +531,7 @@ export default function AiPayrollReconcilePage() {
       setSelectedItem(null);
       await loadData(true);
     } catch (err: any) {
-      setItemError(err.response?.data?.message || err.message || '儲存修正失敗');
+      setItemError(getErrorString(err, '儲存修正失敗'));
     } finally {
       setSavingItem(false);
     }
@@ -528,7 +547,7 @@ export default function AiPayrollReconcilePage() {
       await aiPayrollSessionApi.batchConfirmReconcileItems(sessionId, { item_ids: ids });
       await loadData(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '批量確認失敗');
+      setError(getErrorString(err, '批量確認失敗'));
     } finally {
       setRefreshing(false);
     }
@@ -543,7 +562,7 @@ export default function AiPayrollReconcilePage() {
       await loadData(true);
       setActiveTab('preview');
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '生成糧單失敗');
+      setError(getErrorString(err, '生成糧單失敗'));
     } finally {
       setGenerating(false);
     }
@@ -561,7 +580,7 @@ export default function AiPayrollReconcilePage() {
   }
 
   const progressPercent = Math.min(100, Math.max(0, progress?.progressPercent || (isProcessing ? 45 : 0)));
-  const companyName = session?.company?.chinese_name || session?.company?.name || session?.company_name || '—';
+  const companyName = toDisplayString(session?.company?.chinese_name || session?.company?.name || session?.company_name);
   const previewEmployees = toArray(preview?.employees);
   const timelineSteps = useMemo(
     () => buildTimelineSteps(effectiveStatus, progress, session),
@@ -626,7 +645,7 @@ export default function AiPayrollReconcilePage() {
         <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-red-700">流程失敗</h2>
           <p className="mt-2 text-sm text-gray-600">
-            {progress?.errorMessage || session?.session_error_message || 'AI 計糧流程遇到錯誤，請檢查資料後重試。'}
+            {toDisplayString(progress?.errorMessage || session?.session_error_message, 'AI 計糧流程遇到錯誤，請檢查資料後重試。')}
           </p>
           <button
             onClick={() => startOrRetry(true)}
@@ -886,7 +905,7 @@ export default function AiPayrollReconcilePage() {
                       const summary = summarizeDecidedData(item.reconcile_decided_data);
                       return (
                         <tr key={item.id} className="border-b align-top last:border-0">
-                          <td className="px-3 py-3 font-medium text-gray-900">{getEmployeeName(item)}</td>
+                          <td className="px-3 py-3 font-medium text-gray-900">{toDisplayString(getEmployeeName(item))}</td>
                           <td className="px-3 py-3 text-gray-600">{formatDate(item.reconcile_date || item.reconcile_decided_data?.date)}</td>
                           <td className="px-3 py-3"><Badge tone={statusTone(item.reconcile_status)}>{reconcileLabel(item.reconcile_status)}</Badge></td>
                           <td className="px-3 py-3 text-gray-600">
@@ -901,7 +920,7 @@ export default function AiPayrollReconcilePage() {
                                 ))}
                               </div>
                             )}
-                            {item.reconcile_reason && <p className="mt-1 text-xs text-gray-400">{item.reconcile_reason}</p>}
+                            {item.reconcile_reason && <p className="mt-1 text-xs text-gray-400">{toDisplayString(item.reconcile_reason)}</p>}
                           </td>
                           <td className="px-3 py-3 text-gray-600">
                             {item.reconcile_confidence !== undefined && item.reconcile_confidence !== null
@@ -938,11 +957,11 @@ export default function AiPayrollReconcilePage() {
               questions.map((question) => (
                 <div key={question.id} className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge tone={question.question_severity === 'high' ? 'red' : 'yellow'}>{question.question_severity || '需確認'}</Badge>
-                    <span className="text-xs text-gray-500">{question.employee?.name_zh || question.employee?.name_en || '未指定員工'}</span>
+                    <Badge tone={question.question_severity === 'high' ? 'red' : 'yellow'}>{toDisplayString(question.question_severity, '需確認')}</Badge>
+                    <span className="text-xs text-gray-500">{toDisplayString(question.employee?.name_zh || question.employee?.name_en, '未指定員工')}</span>
                   </div>
                   <div className="rounded-2xl rounded-tl-sm bg-white p-3 text-sm text-gray-800 shadow-sm">
-                    {question.question_text || 'AI 需要你確認此項資料。'}
+                    {toDisplayString(question.question_text, 'AI 需要你確認此項資料。')}
                   </div>
                   <div className="mt-3 flex flex-col gap-2 md:flex-row">
                     <textarea
@@ -1018,13 +1037,13 @@ export default function AiPayrollReconcilePage() {
                         <td className="px-3 py-3 text-gray-600">{formatNumber(employee.work_days)}</td>
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap gap-1">
-                            {(employee.statuses || []).map((status: string) => (
+                            {Object.keys(employee.statuses || {}).map((status: string) => (
                               <Badge key={status} tone={statusTone(status)}>{reconcileLabel(status)}</Badge>
                             ))}
                             {employee.has_unresolved_questions && <Badge tone="yellow">有未解答問題</Badge>}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-gray-600">{formatNumber(employee.estimated_records)}</td>
+                        <td className="px-3 py-3 text-gray-600">{formatNumber(Array.isArray(employee.estimated_records) ? employee.estimated_records.length : employee.estimated_records)}</td>
                       </tr>
                     ))
                   )}
@@ -1049,7 +1068,7 @@ export default function AiPayrollReconcilePage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-500">員工</p>
-                <p className="mt-1 font-medium text-gray-900">{getEmployeeName(selectedItem)}</p>
+                <p className="mt-1 font-medium text-gray-900">{toDisplayString(getEmployeeName(selectedItem))}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-500">日期</p>
