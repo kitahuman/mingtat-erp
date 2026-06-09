@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/router';
+import { usePathname } from 'next/navigation';
 
 interface PageState {
   filters?: Record<string, any>;
@@ -32,8 +32,8 @@ interface PageState {
 const getStorageKey = (path: string) => `pageState:${path}`;
 
 export const usePageState = (initialState: PageState) => {
-  const router = useRouter();
-  const storageKey = getStorageKey(router.pathname);
+  const pathname = usePathname();
+  const storageKey = getStorageKey(pathname);
   const [pageState, setPageState] = useState<PageState>(() => {
     if (typeof window !== 'undefined') {
       const savedState = sessionStorage.getItem(storageKey);
