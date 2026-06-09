@@ -314,10 +314,12 @@ export default function WorkLogsPage() {
     filterEquipment: '',
     filterDateFrom: '',
     filterDateTo: '',
-    columnFilters: {},
   });
 
-  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo, columnFilters } = pageState;
+  // columnFilters uses independent state to avoid Set serialization issues with sessionStorage
+  const [columnFilters, setColumnFiltersState] = useState<Record<string, Set<string>>>({});
+
+  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo } = pageState;
 
   // Helper to update state and save it
   const setPage = (newPage: number) => saveState({ ...pageState, page: newPage });
@@ -334,7 +336,7 @@ export default function WorkLogsPage() {
   const setFilterEquipment = (newFilterEquipment: string) => saveState({ ...pageState, filterEquipment: newFilterEquipment });
   const setFilterDateFrom = (newFilterDateFrom: string) => saveState({ ...pageState, filterDateFrom: newFilterDateFrom });
   const setFilterDateTo = (newFilterDateTo: string) => saveState({ ...pageState, filterDateTo: newFilterDateTo });
-  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => saveState({ ...pageState, columnFilters: newColumnFilters });
+  const setColumnFilters = (newColumnFilters: Record<string, Set<string>>) => setColumnFiltersState(newColumnFilters);
 
   // ── Dirty tracking (Airtable-style) ─────────────────────────
   // dirtyRows: Map<rowId, { field: newValue, ... }> — only stores changed fields

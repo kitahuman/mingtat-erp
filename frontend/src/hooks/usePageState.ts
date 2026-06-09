@@ -47,12 +47,21 @@ function serializeState(state: PageState): string {
  * Custom deserializer that restores Set objects from arrays.
  */
 function deserializeState(json: string): PageState {
-  return JSON.parse(json, (key, value) => {
+  const parsed = JSON.parse(json, (key, value) => {
     if (value && typeof value === 'object' && value.__type === 'Set' && Array.isArray(value.values)) {
       return new Set(value.values);
     }
     return value;
   });
+  // Validate columnFilters: if any value is not a Set, reset columnFilters
+  if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
+    const entries = Object.entries(parsed.columnFilters);
+    const allValid = entries.every(([, v]) => v instanceof Set);
+    if (!allValid) {
+      parsed.columnFilters = {};
+    }
+  }
+  return parsed;
 }
 
 export const usePageState = (initialState: PageState) => {
