@@ -107,11 +107,12 @@ const reviewStatuses = new Set(['needs_review', 'completed']);
 
 
 const SOURCE_TYPE_CONFIGS: SourceTypeConfig[] = [
-  { key: 'work_log', label: '工作紀錄', tone: 'blue', description: '系統工作紀錄' },
-  { key: 'homework_sheet', label: '功課紙', tone: 'purple', description: 'AI 從功課紙或上載文件辨識' },
-  { key: 'attendance', label: '打卡', tone: 'yellow', description: '員工打卡資料' },
-  { key: 'whatsapp_order', label: 'WhatsApp Order', tone: 'green', description: 'WhatsApp Order 資料' },
-  { key: 'chit', label: '入帳票', tone: 'green', description: '入帳票資料' },
+  { key: 'work_log', label: '工作紀錄', tone: 'blue', description: '基準優先來源：系統工作紀錄' },
+  { key: 'homework_sheet', label: '上載文件', tone: 'purple', description: 'AI 從功課紙或上載文件辨識出的資料' },
+  { key: 'clock', label: '打卡', tone: 'yellow', description: '員工打卡 / attendance 資料' },
+  { key: 'whatsapp_order', label: 'Order', tone: 'green', description: 'WhatsApp Order 資料' },
+  { key: 'receipt', label: '入帳票', tone: 'green', description: '入帳票 / chit 紀錄' },
+  { key: 'gps', label: 'GPS', tone: 'blue', description: 'GPS 行程及位置紀錄' },
   { key: 'manual', label: '手動輸入', tone: 'gray', description: '人手補充資料' },
   { key: 'system', label: '系統', tone: 'gray', description: '系統推算資料' },
 ];
@@ -177,7 +178,21 @@ const PREVIEW_DETAIL_COLUMNS = [
 
 type PreviewDetailColumnKey = typeof PREVIEW_DETAIL_COLUMNS[number]['key'];
 
-const COMPARE_SOURCE_TYPES = ['work_log', 'homework_sheet', 'attendance', 'whatsapp_order', 'chit', 'manual', 'system'];
+const COMPARE_SOURCE_TYPES = ['work_log', 'homework_sheet', 'clock', 'whatsapp_order', 'receipt', 'gps'];
+
+const SOURCE_CARD_CONFIGS = [
+  { key: 'work_log', title: '工作紀錄卡片（base）', icon: 'WL' },
+  { key: 'homework_sheet', title: '上載文件卡片', icon: 'DOC' },
+  { key: 'clock', title: '打卡卡片', icon: 'CLK' },
+  { key: 'whatsapp_order', title: 'Order 卡片', icon: 'ORD' },
+  { key: 'receipt', title: '入帳票卡片', icon: 'REC' },
+  { key: 'gps', title: 'GPS 卡片', icon: 'GPS' },
+] as const;
+
+const SOURCE_REVIEW_LABELS: Record<string, { label: string; tone: StatusTone }> = {
+  confirmed: { label: '已確認', tone: 'green' },
+  rejected: { label: '已拒絕', tone: 'red' },
+};
 
 function normalizeStatus(status?: string) {
   return status || 'pending';
@@ -364,12 +379,19 @@ function getSourceData(record?: SourceRecord | null): Record<string, any> {
   return (record?.source_record_data || record?.data || {}) as Record<string, any>;
 }
 
+function normalizeSourceType(sourceType?: string) {
+  if (sourceType === 'attendance') return 'clock';
+  if (sourceType === 'chit' || sourceType === 'slip_chit' || sourceType === 'slip_no_chit') return 'receipt';
+  if (sourceType === 'ocr') return 'homework_sheet';
+  return sourceType || 'unknown';
+}
+
 function getSourceType(record?: SourceRecord | null) {
-  return record?.source_record_source_type || record?.source_type || 'unknown';
+  return normalizeSourceType(record?.source_record_source_type || record?.source_type || 'unknown');
 }
 
 function getSourceConfig(sourceType?: string): SourceTypeConfig {
-  const key = sourceType || 'unknown';
+  const key = normalizeSourceType(sourceType);
   return SOURCE_TYPE_LABELS[key] || { key, label: key, tone: 'gray', description: '其他來源資料' };
 }
 
@@ -386,9 +408,27 @@ function getSourceRecordKey(record: SourceRecord, index: number) {
   return `${record.id || record.source_record_source_id || 'source'}-${getSourceType(record)}-${index}`;
 }
 
+function getSourceReviewDecision(item: ReconcileItem, sourceType: string) {
+  const normalized = normalizeSourceType(sourceType);
+  return item.reconcile_decided_data?.source_reviews?.[normalized] || item.reconcile_decided_data?.ai_source_reviews?.[normalized];
+}
+
+function getBaseSourceType(comparison: Record<string, any> | null | undefined, grouped: Record<string, SourceRecord[]>) {
+  const fromComparison = normalizeSourceType(comparison?.base_source_type);
+  if (fromComparison !== 'unknown') return fromComparison;
+  return COMPARE_SOURCE_TYPES.find((type) => (grouped[type] || []).length > 0) || 'unknown';
+}
+
+function getAiSummaryText(item: ReconcileItem, comparison: Record<string, any> | null | undefined) {
+  if (comparison?.ai_summary) return toDisplayString(comparison.ai_summary);
+  const conflicted = getComparisonArray(comparison, 'conflicted_fields');
+  if (conflicted.length === 0) return '各來源一致';
+  return `有差異：${conflicted.join('、')}`;
+}
+
 function getComparisonArray(comparison: Record<string, any> | null | undefined, key: string): string[] {
   const value = comparison?.[key];
-  return Array.isArray(value) ? value.map(String) : [];
+  return Array.isArray(value) ? value.map((entry) => normalizeSourceType(String(entry))) : [];
 }
 
 function getComparisonFieldTone(field: string, comparison?: Record<string, any> | null): StatusTone | null {
@@ -593,6 +633,7 @@ export default function AiPayrollReconcilePage() {
   const [overrideStatus, setOverrideStatus] = useState('confirmed');
   const [savingItem, setSavingItem] = useState(false);
   const [itemError, setItemError] = useState('');
+  const [sourceReviewLoading, setSourceReviewLoading] = useState<string | null>(null);
 
   const effectiveStatus = normalizeStatus(progress?.status || session?.session_status);
   const payrollIds = useMemo(() => getPayrollIds(session || undefined, generated), [session, generated]);
@@ -774,6 +815,51 @@ export default function AiPayrollReconcilePage() {
       setError(getErrorString(err, '載入該日來源資料失敗'));
     } finally {
       setLoadingExpandedItemId(null);
+    }
+  };
+
+  const updateSourceReview = async (item: ReconcileItem, sourceType: string, decision: 'confirmed' | 'rejected') => {
+    const normalized = normalizeSourceType(sourceType);
+    const loadingKey = `${item.id}:${normalized}`;
+    setSourceReviewLoading(loadingKey);
+    setError('');
+    try {
+      const decidedData = item.reconcile_decided_data || {};
+      await aiPayrollSessionApi.updateReconcileItem(sessionId, item.id, {
+        decided_data: {
+          ...decidedData,
+          source_reviews: {
+            ...(decidedData.source_reviews || decidedData.ai_source_reviews || {}),
+            [normalized]: {
+              decision,
+              reviewed_at: new Date().toISOString(),
+            },
+          },
+        },
+        status: decision === 'rejected' ? 'needs_review' : item.reconcile_status || 'confirmed',
+      });
+      setItems((prev) => prev.map((current) => {
+        if (current.id !== item.id) return current;
+        const currentData = current.reconcile_decided_data || {};
+        return {
+          ...current,
+          reconcile_status: decision === 'rejected' ? 'needs_review' : current.reconcile_status,
+          reconcile_decided_data: {
+            ...currentData,
+            source_reviews: {
+              ...(currentData.source_reviews || currentData.ai_source_reviews || {}),
+              [normalized]: {
+                decision,
+                reviewed_at: new Date().toISOString(),
+              },
+            },
+          },
+        };
+      }));
+    } catch (err: any) {
+      setError(getErrorString(err, '更新來源確認狀態失敗'));
+    } finally {
+      setSourceReviewLoading(null);
     }
   };
 
@@ -1232,11 +1318,10 @@ export default function AiPayrollReconcilePage() {
                       const comparison = item.reconcile_source_comparison || {};
                       const itemSources = expandedItemSources[item.id] || [];
                       const grouped = groupSourcesByType(itemSources);
-                      const sourceTypes = Array.isArray(comparison.source_types) && comparison.source_types.length > 0
-                        ? comparison.source_types
-                        : Object.keys(grouped);
                       const isExpanded = expandedItemId === item.id;
-                      const sourceCount = Number(comparison.source_count ?? sourceTypes.length ?? 0);
+                      const sourceCount = COMPARE_SOURCE_TYPES.filter((sourceType) => (grouped[sourceType] || []).length > 0).length || Number(comparison.source_count ?? 0);
+                      const baseSourceType = getBaseSourceType(comparison, grouped);
+                      const baseSourceConfig = getSourceConfig(baseSourceType);
                       return (
                         <Fragment key={item.id}>
                           <tr
@@ -1294,21 +1379,34 @@ export default function AiPayrollReconcilePage() {
                                     <div className="rounded-lg bg-white p-6 text-center text-sm text-gray-500">正在載入該員工該日的來源資料...</div>
                                   ) : (
                                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                                      {COMPARE_SOURCE_TYPES.map((sourceType) => {
-                                        const config = getSourceConfig(sourceType);
-                                        const records = grouped[sourceType] || [];
+                                      {SOURCE_CARD_CONFIGS.map((card) => {
+                                        const config = getSourceConfig(card.key);
+                                        const records = grouped[card.key] || [];
                                         const isFound = records.length > 0;
+                                        const reviewDecision = getSourceReviewDecision(item, card.key);
+                                        const reviewBadge = reviewDecision ? SOURCE_REVIEW_LABELS[reviewDecision] : null;
+                                        const isBase = card.key === baseSourceType;
+                                        const loadingKey = `${item.id}:${card.key}`;
                                         return (
                                           <div
-                                            key={sourceType}
-                                            className={`rounded-lg border p-3 ${isFound ? 'border-green-200 bg-white' : 'border-gray-200 bg-gray-50'}`}
+                                            key={card.key}
+                                            className={`rounded-xl border p-3 ${isBase ? 'border-blue-300 bg-blue-50' : isFound ? 'border-green-200 bg-white' : 'border-gray-200 bg-gray-50'}`}
                                           >
-                                            <div className="mb-2 flex items-start justify-between gap-2">
-                                              <div>
-                                                <div className="font-medium text-gray-900">{config.label}</div>
-                                                <div className="text-xs text-gray-500">{config.description}</div>
+                                            <div className="mb-3 flex items-start justify-between gap-2">
+                                              <div className="flex items-start gap-2">
+                                                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[11px] font-semibold ${isBase ? 'border-blue-300 bg-white text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}>
+                                                  {card.icon}
+                                                </div>
+                                                <div>
+                                                  <div className="font-medium text-gray-900">{card.title}</div>
+                                                  <div className="text-xs text-gray-500">{config.description}</div>
+                                                </div>
                                               </div>
-                                              {isFound ? <Badge tone={config.tone}>{records.length} 筆</Badge> : <Badge tone="gray">未找到</Badge>}
+                                              <div className="flex flex-col items-end gap-1">
+                                                {isBase && <Badge tone="blue">Base</Badge>}
+                                                {isFound ? <Badge tone={config.tone}>{records.length} 筆</Badge> : <Badge tone="gray">未找到</Badge>}
+                                                {reviewBadge && <Badge tone={reviewBadge.tone}>{reviewBadge.label}</Badge>}
+                                              </div>
                                             </div>
 
                                             {!isFound ? (
@@ -1344,9 +1442,59 @@ export default function AiPayrollReconcilePage() {
                                                 })}
                                               </div>
                                             )}
+                                            <div className="mt-3 flex gap-2 border-t pt-3">
+                                              <button
+                                                type="button"
+                                                disabled={sourceReviewLoading === loadingKey}
+                                                onClick={() => updateSourceReview(item, card.key, 'confirmed')}
+                                                className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                                              >
+                                                確認
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={sourceReviewLoading === loadingKey}
+                                                onClick={() => updateSourceReview(item, card.key, 'rejected')}
+                                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                              >
+                                                拒絕
+                                              </button>
+                                            </div>
                                           </div>
                                         );
                                       })}
+                                      <div className="rounded-xl border border-purple-200 bg-purple-50 p-3">
+                                        <div className="mb-3 flex items-start gap-2">
+                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-purple-200 bg-white text-[11px] font-semibold text-purple-700">AI</div>
+                                          <div>
+                                            <div className="font-medium text-gray-900">AI 核對摘要卡片</div>
+                                            <div className="text-xs text-gray-500">AI 對各來源一致性及差異的判斷</div>
+                                          </div>
+                                        </div>
+                                        <div className="space-y-2 rounded-lg border border-purple-100 bg-white p-3 text-sm text-gray-700">
+                                          <p>{getAiSummaryText(item, comparison)}</p>
+                                          <p className="text-xs text-gray-500">基準來源：{baseSourceConfig.label}</p>
+                                          <p className="text-xs text-gray-500">{toDisplayString(item.reconcile_reason, '系統按基準優先順序與多來源比對生成此摘要。')}</p>
+                                        </div>
+                                        <div className="mt-3 flex gap-2 border-t border-purple-100 pt-3">
+                                          <button
+                                            type="button"
+                                            disabled={sourceReviewLoading === `${item.id}:ai_summary`}
+                                            onClick={() => updateSourceReview(item, 'ai_summary', 'confirmed')}
+                                            className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                                          >
+                                            確認
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={sourceReviewLoading === `${item.id}:ai_summary`}
+                                            onClick={() => updateSourceReview(item, 'ai_summary', 'rejected')}
+                                            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                          >
+                                            拒絕
+                                          </button>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </div>

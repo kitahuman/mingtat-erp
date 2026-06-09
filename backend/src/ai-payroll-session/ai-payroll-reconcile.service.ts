@@ -16,6 +16,7 @@ import {
   ReconcileSourceComparison,
 } from './interfaces/reconcile-result.interface';
 import { AiPayrollQuestionService } from './ai-payroll-question.service';
+import { WhatsappService } from '../verification/whatsapp.service';
 
 interface SessionContext {
   id: number;
@@ -51,6 +52,7 @@ export class AiPayrollReconcileService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionService: AiPayrollQuestionService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   async collectSources(sessionId: number) {
@@ -62,6 +64,10 @@ export class AiPayrollReconcileService {
     const records: Prisma.AiPayrollSourceRecordCreateManyInput[] = [];
     records.push(...(await this.collectWorkLogSources(session)));
     records.push(...(await this.collectOcrSources(session)));
+    records.push(...(await this.collectClockSources(session)));
+    records.push(...(await this.collectWhatsappOrderSources(session)));
+    records.push(...(await this.collectReceiptSources(session)));
+    records.push(...(await this.collectGpsSources(session)));
 
     if (records.length > 0) {
       await this.prisma.aiPayrollSourceRecord.createMany({ data: records });
@@ -376,6 +382,312 @@ export class AiPayrollReconcileService {
     });
   }
 
+
+  private async collectClockSources(
+    session: SessionContext,
+  ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
+    const attendances = await this.prisma.employeeAttendance.findMany({
+      where: {
+        employee_id: { in: session.employeeIds },
+        timestamp: { gte: session.dateFrom, lt: this.nextDay(session.dateTo) },
+      },
+      include: {
+        employee: { select: { id: true, name_zh: true, name_en: true, nickname: true, emp_code: true } },
+      },
+      orderBy: [{ employee_id: 'asc' }, { timestamp: 'asc' }],
+    });
+
+    return attendances.map((attendance) => {
+      const date = this.toDateOnly(attendance.timestamp);
+      const data: StandardizedSourceRecordData = {
+        employee_id: attendance.employee_id,
+        employee_name:
+          attendance.employee?.name_zh ?? attendance.employee?.name_en ?? attendance.employee?.nickname ?? null,
+        date: this.toDateString(date),
+        start_time: attendance.type === 'clock_in' ? attendance.timestamp.toISOString() : null,
+        end_time: attendance.type === 'clock_out' ? attendance.timestamp.toISOString() : null,
+        start_location: attendance.address ?? null,
+        work_content: attendance.work_notes ?? attendance.remarks ?? null,
+        source_label: '打卡紀錄',
+        source_status: 'found',
+        match_basis: 'employee_id + date',
+        raw_summary: `${attendance.type === 'clock_in' ? '上班' : attendance.type === 'clock_out' ? '下班' : attendance.type} ${attendance.timestamp.toISOString()}${attendance.address ? ` @ ${attendance.address}` : ''}`,
+      };
+      return {
+        source_record_session_id: session.id,
+        source_record_employee_id: attendance.employee_id,
+        source_record_date: date,
+        source_record_source_type: 'clock',
+        source_record_source_id: attendance.id,
+        source_record_data: data as unknown as Prisma.InputJsonValue,
+        source_record_raw_data: this.toJson({
+          id: attendance.id,
+          employee_id: attendance.employee_id,
+          employee_name: data.employee_name,
+          type: attendance.type,
+          timestamp: attendance.timestamp.toISOString(),
+          address: attendance.address,
+          latitude: attendance.latitude,
+          longitude: attendance.longitude,
+          verification_method: attendance.attendance_verification_method,
+          verification_score: attendance.attendance_verification_score,
+          is_mid_shift: attendance.is_mid_shift,
+          work_notes: attendance.work_notes,
+          remarks: attendance.remarks,
+        }),
+        source_record_confidence:
+          attendance.attendance_verification_score === null || attendance.attendance_verification_score === undefined
+            ? undefined
+            : new Prisma.Decimal(Math.min(100, Math.max(0, attendance.attendance_verification_score))),
+      };
+    });
+  }
+
+  private async collectWhatsappOrderSources(
+    session: SessionContext,
+  ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
+    const [items, employeeMatcher, workLogVehicleEmployeeMap] = await Promise.all([
+      this.whatsappService.getDailySummaryItemsForMatching(session.dateFrom, session.dateTo),
+      this.buildEmployeeMatcher(session.employeeIds),
+      this.buildWorkLogVehicleEmployeeMap(session),
+    ]);
+
+    const records: Prisma.AiPayrollSourceRecordCreateManyInput[] = [];
+    for (const item of items as any[]) {
+      const orderDate = this.parseDateValue(item.order_date ?? item.wa_order_date);
+      if (!orderDate) continue;
+      const date = this.toDateOnly(orderDate);
+      if (date < session.dateFrom || date > session.dateTo) continue;
+
+      const employeeId = this.resolveEmployeeIdForSource(
+        item.wa_item_driver_id,
+        item.wa_item_driver_nickname,
+        employeeMatcher,
+        workLogVehicleEmployeeMap,
+        date,
+        item.wa_item_vehicle_no ?? item.wa_item_machine_code,
+      );
+      if (!employeeId || !session.employeeIds.includes(employeeId)) continue;
+      const employeeName = employeeMatcher.nameById.get(employeeId) ?? item.wa_item_driver_nickname ?? null;
+      const data: StandardizedSourceRecordData = {
+        employee_id: employeeId,
+        employee_name: employeeName,
+        date: this.toDateString(date),
+        service_type: item.wa_item_service_type ?? null,
+        start_location: item.wa_item_location ?? null,
+        machine_type: item.wa_item_machine_type ?? null,
+        equipment_number: item.wa_item_vehicle_no ?? item.wa_item_machine_code ?? null,
+        contract_no: item.wa_item_contract_no ?? null,
+        client_name: item.wa_item_customer ?? null,
+        work_content: item.wa_item_work_desc ?? item.wa_item_remarks ?? null,
+        quantity: this.decimalLikeToNumber(item.wa_item_goods_quantity),
+        unit: item.wa_item_product_unit ?? null,
+        source_label: 'WhatsApp Order',
+        source_status: 'found',
+        match_basis: item.wa_item_driver_id ? 'driver_id + date' : 'driver nickname / vehicle + date',
+        raw_summary: [
+          item.wa_item_customer,
+          item.wa_item_contract_no,
+          item.wa_item_location,
+          item.wa_item_work_desc,
+        ].filter(Boolean).join(' / ') || null,
+      };
+      records.push({
+        source_record_session_id: session.id,
+        source_record_employee_id: employeeId,
+        source_record_date: date,
+        source_record_source_type: 'whatsapp_order',
+        source_record_source_id: item.id,
+        source_record_data: data as unknown as Prisma.InputJsonValue,
+        source_record_raw_data: this.toJson({
+          id: item.id,
+          order_date: this.toDateString(date),
+          order_status: item.order_status,
+          order_version: item.order_version,
+          driver_id: item.wa_item_driver_id,
+          driver_nickname: item.wa_item_driver_nickname,
+          vehicle: item.wa_item_vehicle_no,
+          machine_code: item.wa_item_machine_code,
+          customer: item.wa_item_customer,
+          contract_no: item.wa_item_contract_no,
+          location: item.wa_item_location,
+          work_desc: item.wa_item_work_desc,
+          product_name: item.wa_item_product_name,
+          product_unit: item.wa_item_product_unit,
+          goods_quantity: this.decimalLikeToNumber(item.wa_item_goods_quantity),
+          remarks: item.wa_item_remarks,
+        }),
+        source_record_confidence: undefined,
+      });
+    }
+    return records;
+  }
+
+  private async collectReceiptSources(
+    session: SessionContext,
+  ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
+    const sources = await this.prisma.verificationSource.findMany({
+      where: { source_code: { in: ['receipt', 'slip_chit', 'slip_no_chit'] } },
+      select: { id: true, source_code: true, source_name: true },
+    });
+    const sourceIds = sources.map((source) => source.id);
+    if (sourceIds.length === 0) return [];
+    const sourceById = new Map(sources.map((source) => [source.id, source]));
+    const [records, employeeMatcher, workLogVehicleEmployeeMap] = await Promise.all([
+      this.prisma.verificationRecord.findMany({
+        where: {
+          record_source_id: { in: sourceIds },
+          record_work_date: { gte: session.dateFrom, lte: session.dateTo },
+        },
+        include: { chits: true },
+        orderBy: [{ record_work_date: 'asc' }, { id: 'asc' }],
+      }),
+      this.buildEmployeeMatcher(session.employeeIds),
+      this.buildWorkLogVehicleEmployeeMap(session),
+    ]);
+
+    return records.flatMap((record) => {
+      if (!record.record_work_date) return [];
+      const date = this.toDateOnly(record.record_work_date);
+      const employeeId = this.resolveEmployeeIdForSource(
+        record.record_employee_id,
+        record.record_employee_name ?? record.record_driver_name,
+        employeeMatcher,
+        workLogVehicleEmployeeMap,
+        date,
+        record.record_vehicle_no,
+      );
+      if (!employeeId || !session.employeeIds.includes(employeeId)) return [];
+      const source = sourceById.get(record.record_source_id);
+      const raw = (record.record_raw_data ?? {}) as Record<string, unknown>;
+      const chitNos = record.chits?.map((chit) => chit.chit_no).filter(Boolean) ?? [];
+      const flattenedChitNos = chitNos.flatMap((chitNo) =>
+        String(chitNo).split(',').map((value) => value.trim()).filter(Boolean),
+      );
+      const data: StandardizedSourceRecordData = {
+        employee_id: employeeId,
+        employee_name: employeeMatcher.nameById.get(employeeId) ?? record.record_employee_name ?? record.record_driver_name ?? null,
+        date: this.toDateString(date),
+        start_time: this.timeToString(record.record_time_in),
+        end_time: this.timeToString(record.record_time_out),
+        start_location: record.record_location_from ?? null,
+        end_location: record.record_location_to ?? null,
+        equipment_number: record.record_vehicle_no ?? null,
+        contract_no: record.record_contract_no ?? null,
+        client_name: record.record_customer ?? null,
+        quantity: this.parseNumber(record.record_quantity),
+        unit: this.stringOrNull(raw.unit),
+        work_content: this.stringOrNull(raw.work_desc ?? raw.work_content ?? raw.description),
+        source_label: '入帳票',
+        source_status: 'found',
+        match_basis: record.record_employee_id ? 'record_employee_id + date' : 'driver name / vehicle + date',
+        raw_summary: [
+          record.record_vehicle_no,
+          record.record_customer,
+          record.record_contract_no,
+          flattenedChitNos.join(', '),
+        ].filter(Boolean).join(' / ') || null,
+      };
+      return [{
+        source_record_session_id: session.id,
+        source_record_employee_id: employeeId,
+        source_record_date: date,
+        source_record_source_type: 'receipt',
+        source_record_source_id: record.id,
+        source_record_data: data as unknown as Prisma.InputJsonValue,
+        source_record_raw_data: this.toJson({
+          id: record.id,
+          source_code: source?.source_code,
+          source_name: source?.source_name,
+          date: this.toDateString(date),
+          vehicle: record.record_vehicle_no,
+          driver_name: record.record_driver_name,
+          employee_id: record.record_employee_id,
+          employee_name: record.record_employee_name,
+          customer: record.record_customer,
+          location_from: record.record_location_from,
+          location_to: record.record_location_to,
+          time_in: this.timeToString(record.record_time_in),
+          time_out: this.timeToString(record.record_time_out),
+          contract_no: record.record_contract_no,
+          slip_no: record.record_slip_no,
+          chit_nos: flattenedChitNos.length > 0 ? flattenedChitNos : chitNos,
+          quantity: record.record_quantity,
+          weight_net: this.decimalLikeToNumber(record.record_weight_net),
+          raw_data: raw,
+        }),
+        source_record_confidence: record.record_ocr_confidence ?? undefined,
+      }];
+    });
+  }
+
+  private async collectGpsSources(
+    session: SessionContext,
+  ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
+    const [gpsSummaries, workLogVehicleEmployeeMap] = await Promise.all([
+      this.prisma.verificationGpsSummary.findMany({
+        where: { gps_summary_date: { gte: session.dateFrom, lte: session.dateTo } },
+        orderBy: [{ gps_summary_date: 'asc' }, { id: 'asc' }],
+      }),
+      this.buildWorkLogVehicleEmployeeMap(session),
+    ]);
+
+    const records: Prisma.AiPayrollSourceRecordCreateManyInput[] = [];
+    const seen = new Set<string>();
+    for (const gps of gpsSummaries) {
+      if (!gps.gps_summary_date) continue;
+      const date = this.toDateOnly(gps.gps_summary_date);
+      const employeeIds = this.findEmployeeIdsByVehicleDate(
+        workLogVehicleEmployeeMap,
+        date,
+        gps.gps_summary_vehicle_no,
+      );
+      for (const employeeId of employeeIds) {
+        if (!session.employeeIds.includes(employeeId)) continue;
+        const dedupeKey = `${gps.id}:${employeeId}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        const data: StandardizedSourceRecordData = {
+          employee_id: employeeId,
+          employee_name: null,
+          date: this.toDateString(date),
+          equipment_number: gps.gps_summary_vehicle_no ?? null,
+          start_time: gps.gps_summary_start_time?.toISOString() ?? null,
+          end_time: gps.gps_summary_end_time?.toISOString() ?? null,
+          start_location: this.gpsLocationsToString(gps.gps_summary_locations),
+          quantity: this.decimalLikeToNumber(gps.gps_summary_total_distance),
+          unit: 'km',
+          source_label: 'GPS 追蹤',
+          source_status: 'found',
+          match_basis: 'work_log vehicle + date',
+          raw_summary: `${gps.gps_summary_vehicle_no ?? '—'} / ${this.gpsLocationsToString(gps.gps_summary_locations) ?? '—'}`,
+        };
+        records.push({
+          source_record_session_id: session.id,
+          source_record_employee_id: employeeId,
+          source_record_date: date,
+          source_record_source_type: 'gps',
+          source_record_source_id: gps.id,
+          source_record_data: data as unknown as Prisma.InputJsonValue,
+          source_record_raw_data: this.toJson({
+            id: gps.id,
+            vehicle: gps.gps_summary_vehicle_no,
+            date: this.toDateString(date),
+            start_time: gps.gps_summary_start_time?.toISOString() ?? null,
+            end_time: gps.gps_summary_end_time?.toISOString() ?? null,
+            total_distance: this.decimalLikeToNumber(gps.gps_summary_total_distance),
+            trip_count: gps.gps_summary_trip_count,
+            locations: gps.gps_summary_locations,
+            raw_points: gps.gps_summary_raw_points,
+            ai_model: gps.gps_summary_ai_model,
+          }),
+          source_record_confidence: undefined,
+        });
+      }
+    }
+    return records;
+  }
+
   private async decideGroup(
     group: SourceRecordRow[],
   ): Promise<ReconcileDecisionResult> {
@@ -488,12 +800,18 @@ export class AiPayrollReconcileService {
       else if (uniqueValues.size === 1) agreed.push(field);
       else conflicted.push(field);
     }
+    const sourceTypes = [...new Set(group.map((source) => this.normalizeSourceType(source.source_record_source_type)))];
+    const baseSourceType = group
+      .map((source) => this.normalizeSourceType(source.source_record_source_type))
+      .sort((left, right) => this.sourceWeight(right) - this.sourceWeight(left))[0] ?? null;
     return {
       source_count: group.length,
-      source_types: [...new Set(group.map((source) => source.source_record_source_type))],
+      source_types: sourceTypes,
       agreed_fields: agreed,
       conflicted_fields: conflicted,
       missing_fields: missing,
+      base_source_type: baseSourceType,
+      ai_summary: this.buildAiSummary(group, conflicted),
     };
   }
 
@@ -534,12 +852,71 @@ export class AiPayrollReconcileService {
     return decided;
   }
 
+  private buildAiSummary(group: SourceRecordRow[], conflictedFields: string[]): string {
+    if (conflictedFields.length === 0) return '各來源一致';
+    const baseSource = [...group].sort(
+      (left, right) => this.sourceWeight(right.source_record_source_type) - this.sourceWeight(left.source_record_source_type),
+    )[0];
+    const baseData = this.asSourceData(baseSource?.source_record_data);
+    const baseLabel = this.sourceTypeLabel(baseSource?.source_record_source_type);
+    const fieldLabels: Record<string, string> = {
+      service_type: '服務類型',
+      day_night: '日/夜',
+      start_location: '起點',
+      end_location: '終點',
+      machine_type: '機種',
+      equipment_number: '機號',
+      quantity: '數量/時數',
+      unit: '單位',
+      ot_quantity: 'OT',
+      work_content: '工作內容',
+    };
+    const summaries = conflictedFields.slice(0, 3).map((field) => {
+      const baseValue = this.summaryValue(baseData[field as keyof StandardizedSourceRecordData]);
+      const otherValues = group
+        .filter((source) => source.id !== baseSource?.id)
+        .map((source) => {
+          const value = this.summaryValue(this.asSourceData(source.source_record_data)[field as keyof StandardizedSourceRecordData]);
+          return value ? `${this.sourceTypeLabel(source.source_record_source_type)} ${value}` : null;
+        })
+        .filter((value): value is string => Boolean(value));
+      const label = fieldLabels[field] ?? field;
+      return `${label}有差異：${baseLabel} ${baseValue || '—'}${otherValues.length > 0 ? ` vs ${otherValues.join(' / ')}` : ''}`;
+    });
+    return summaries.join('；');
+  }
+
+  private summaryValue(value: unknown): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'object') return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+  }
+
+  private sourceTypeLabel(sourceType?: string | null): string {
+    const normalized = this.normalizeSourceType(sourceType ?? 'system');
+    const labels: Record<string, string> = {
+      work_log: '工作紀錄',
+      homework_sheet: '功課紙',
+      clock: '打卡',
+      whatsapp_order: 'Order',
+      receipt: '入帳票',
+      gps: 'GPS',
+      manual: '手動輸入',
+      system: '系統',
+    };
+    return labels[normalized] ?? normalized;
+  }
+
   private getFieldWinner(
     group: SourceRecordRow[],
     field: keyof StandardizedSourceRecordData,
   ): string | number | boolean | null | undefined {
-    const votes = new Map<string, FieldVote>();
-    for (const source of group) {
+    const sortedSources = [...group].sort(
+      (left, right) => this.sourceWeight(right.source_record_source_type) - this.sourceWeight(left.source_record_source_type),
+    );
+    for (const source of sortedSources) {
       const rawValue = this.asSourceData(source.source_record_data)[field];
       if (
         rawValue === undefined ||
@@ -550,20 +927,10 @@ export class AiPayrollReconcileService {
       ) {
         continue;
       }
-      const value = rawValue;
-      if (`${value}`.trim() === '') continue;
-      const key = `${value}`.trim();
-      const vote: FieldVote = votes.get(key) ?? {
-        value,
-        count: 0,
-        sourceTypes: [],
-      };
-      vote.count += this.sourceWeight(source.source_record_source_type);
-      vote.sourceTypes.push(source.source_record_source_type);
-      votes.set(key, vote);
+      if (`${rawValue}`.trim() === '') continue;
+      return rawValue;
     }
-    const sorted = [...votes.values()].sort((left, right) => right.count - left.count);
-    return sorted[0]?.value;
+    return undefined;
   }
 
   private async getAiHint(
@@ -775,16 +1142,196 @@ export class AiPayrollReconcileService {
   }
 
   private normalizeWorkLogSource(source: string): AiPayrollSourceType {
-    if (source === 'attendance') return 'attendance';
+    if (source === 'attendance') return 'clock';
     if (source === 'whatsapp_clockin' || source === 'employee_portal') return 'whatsapp_order';
     return 'work_log';
   }
 
+  private normalizeSourceType(sourceType: string): AiPayrollSourceType {
+    if (sourceType === 'attendance') return 'clock';
+    if (sourceType === 'ocr') return 'homework_sheet';
+    if (sourceType === 'chit' || sourceType === 'delivery_note' || sourceType === 'slip_chit' || sourceType === 'slip_no_chit') return 'receipt';
+    if (sourceType === 'whatsapp_clockin' || sourceType === 'employee_portal') return 'whatsapp_order';
+    if (
+      sourceType === 'work_log' ||
+      sourceType === 'homework_sheet' ||
+      sourceType === 'clock' ||
+      sourceType === 'whatsapp_order' ||
+      sourceType === 'receipt' ||
+      sourceType === 'gps' ||
+      sourceType === 'manual' ||
+      sourceType === 'system'
+    ) {
+      return sourceType;
+    }
+    return 'system';
+  }
+
   private sourceWeight(sourceType: string): number {
-    if (sourceType === 'work_log') return 3;
-    if (sourceType === 'attendance') return 2;
-    if (sourceType === 'homework_sheet') return 2;
+    const normalized = this.normalizeSourceType(sourceType);
+    if (normalized === 'work_log') return 50;
+    if (normalized === 'homework_sheet') return 40;
+    if (normalized === 'clock') return 30;
+    if (normalized === 'whatsapp_order') return 20;
+    if (normalized === 'receipt') return 10;
+    if (normalized === 'gps') return 5;
     return 1;
+  }
+
+
+  private async buildEmployeeMatcher(employeeIds: number[]): Promise<{
+    nameById: Map<number, string>;
+    idByName: Map<string, number>;
+  }> {
+    const [employees, nicknames] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: { id: { in: employeeIds } },
+        select: { id: true, name_zh: true, name_en: true, nickname: true, emp_code: true },
+      }),
+      this.prisma.employeeNickname.findMany({
+        where: { emp_nickname_employee_id: { in: employeeIds } },
+        select: { emp_nickname_employee_id: true, emp_nickname_value: true },
+      }),
+    ]);
+    const nameById = new Map<number, string>();
+    const idByName = new Map<string, number>();
+    const addName = (employeeId: number, value: string | null | undefined) => {
+      const normalized = this.normalizeText(value);
+      if (normalized) idByName.set(normalized, employeeId);
+    };
+    for (const employee of employees) {
+      nameById.set(employee.id, employee.name_zh ?? employee.name_en ?? employee.nickname ?? employee.emp_code ?? `#${employee.id}`);
+      addName(employee.id, employee.name_zh);
+      addName(employee.id, employee.name_en);
+      addName(employee.id, employee.nickname);
+      addName(employee.id, employee.emp_code);
+    }
+    for (const nickname of nicknames) {
+      addName(nickname.emp_nickname_employee_id, nickname.emp_nickname_value);
+    }
+    return { nameById, idByName };
+  }
+
+  private async buildWorkLogVehicleEmployeeMap(session: SessionContext): Promise<Map<string, Set<number>>> {
+    const workLogs = await this.prisma.workLog.findMany({
+      where: {
+        employee_id: { in: session.employeeIds },
+        scheduled_date: { gte: session.dateFrom, lte: session.dateTo },
+        deleted_at: null,
+        equipment_number: { not: null },
+      },
+      select: { employee_id: true, scheduled_date: true, equipment_number: true },
+    });
+    const map = new Map<string, Set<number>>();
+    for (const workLog of workLogs) {
+      if (!workLog.employee_id || !workLog.scheduled_date || !workLog.equipment_number) continue;
+      const key = this.vehicleDateKey(workLog.scheduled_date, workLog.equipment_number);
+      const existing = map.get(key) ?? new Set<number>();
+      existing.add(workLog.employee_id);
+      map.set(key, existing);
+    }
+    return map;
+  }
+
+  private resolveEmployeeIdForSource(
+    explicitEmployeeId: number | null | undefined,
+    name: string | null | undefined,
+    employeeMatcher: { idByName: Map<string, number> },
+    workLogVehicleEmployeeMap: Map<string, Set<number>>,
+    date: Date,
+    vehicle: string | null | undefined,
+  ): number | null {
+    if (explicitEmployeeId) return explicitEmployeeId;
+    const normalizedName = this.normalizeText(name);
+    if (normalizedName && employeeMatcher.idByName.has(normalizedName)) {
+      return employeeMatcher.idByName.get(normalizedName) ?? null;
+    }
+    const employeeIds = this.findEmployeeIdsByVehicleDate(workLogVehicleEmployeeMap, date, vehicle);
+    return employeeIds.length === 1 ? employeeIds[0] : null;
+  }
+
+  private findEmployeeIdsByVehicleDate(
+    map: Map<string, Set<number>>,
+    date: Date,
+    vehicle: string | null | undefined,
+  ): number[] {
+    const normalizedVehicle = this.normalizeVehicle(vehicle);
+    if (!normalizedVehicle) return [];
+    const direct = map.get(this.vehicleDateKey(date, normalizedVehicle));
+    if (direct) return [...direct];
+    const dateString = this.toDateString(date);
+    const matched = new Set<number>();
+    for (const [key, employeeIds] of map.entries()) {
+      const [keyDate, keyVehicle] = key.split('|');
+      if (keyDate !== dateString) continue;
+      if (this.fuzzyPlateMatch(keyVehicle, normalizedVehicle)) {
+        for (const employeeId of employeeIds) matched.add(employeeId);
+      }
+    }
+    return [...matched];
+  }
+
+  private vehicleDateKey(date: Date, vehicle: string | null | undefined): string {
+    return `${this.toDateString(date)}|${this.normalizeVehicle(vehicle)}`;
+  }
+
+  private normalizeVehicle(value: string | null | undefined): string {
+    return (value ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  }
+
+  private fuzzyPlateMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+    const a = this.normalizeVehicle(left);
+    const b = this.normalizeVehicle(right);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    return a.includes(b) || b.includes(a);
+  }
+
+  private normalizeText(value: string | null | undefined): string {
+    return (value ?? '').toString().trim().toLowerCase().replace(/\s+/g, '');
+  }
+
+  private nextDay(date: Date): Date {
+    return new Date(this.toDateOnly(date).getTime() + 86400000);
+  }
+
+  private toDateOnly(date: Date): Date {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  }
+
+  private parseDateValue(value: unknown): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private decimalLikeToNumber(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  private timeToString(value: Date | null): string | null {
+    if (!value) return null;
+    return value.toISOString();
+  }
+
+  private gpsLocationsToString(value: unknown): string | null {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      return value.map((entry) => {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object') {
+          const record = entry as Record<string, unknown>;
+          return String(record.location ?? record.address ?? record.name ?? JSON.stringify(record));
+        }
+        return String(entry);
+      }).filter(Boolean).join(' → ');
+    }
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
   }
 
   private decimalToNumber(value: Prisma.Decimal | null): number | null {

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AiPayrollModule } from '../ai-payroll/ai-payroll.module';
+import { VerificationModule } from '../verification/verification.module';
 import { PayrollModule } from '../payroll/payroll.module';
 import { AiKnowledgeModule } from '../ai-knowledge/ai-knowledge.module';
 import { AiActivityLogModule } from '../ai-activity-log/ai-activity-log.module';
@@ -15,6 +16,7 @@ import { AiPayrollGenerateService } from './ai-payroll-generate.service';
   imports: [
     PrismaModule,
     AiPayrollModule,
+    VerificationModule,
     PayrollModule,
     AiKnowledgeModule,
     AiActivityLogModule,

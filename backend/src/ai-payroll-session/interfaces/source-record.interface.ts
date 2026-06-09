@@ -1,8 +1,10 @@
 export type AiPayrollSourceType =
   | 'work_log'
-  | 'attendance'
-  | 'whatsapp_order'
   | 'homework_sheet'
+  | 'clock'
+  | 'whatsapp_order'
+  | 'receipt'
+  | 'gps'
   | 'manual'
   | 'system';
 
@@ -28,6 +30,17 @@ export interface StandardizedSourceRecordData {
   client_name?: string | null;
   contract_no?: string | null;
   remarks?: string | null;
+  source_label?: string | null;
+  source_status?: string | null;
+  match_basis?: string | null;
+  address?: string | null;
+  clock_type?: string | null;
+  timestamp?: string | null;
+  distance?: number | null;
+  trip_count?: number | null;
+  locations?: unknown;
+  raw_items?: unknown;
+  raw_summary?: string | null;
   work_type_decided?: string | null;
   decision_method?: string | null;
   sources_agreed?: string[];

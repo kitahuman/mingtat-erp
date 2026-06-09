@@ -44,6 +44,8 @@ export interface ReconcileSourceComparison {
   agreed_fields: string[];
   conflicted_fields: string[];
   missing_fields: string[];
+  base_source_type?: string | null;
+  ai_summary?: string | null;
 }
 
 export interface ReconcileDecisionResult {
