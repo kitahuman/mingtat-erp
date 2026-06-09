@@ -7,6 +7,7 @@ import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import PayrollTabs from "@/components/payroll/PayrollTabs";
 
 function formatDateDisplay(dateStr: string): string {
   return fmtDate(dateStr);

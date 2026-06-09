@@ -887,10 +887,15 @@ export class PayrollCalculationService {
     const groups = new Map<string, any>();
     for (const pwl of pwls) {
       const key = this.buildGroupKeyFromPwl(pwl);
+      const billingType = this.normalizeBillingQuantityType(pwl.billing_quantity_type);
+      const quantity = Number(pwl.quantity) || 1;
+      const productQuantity = this.getProductQuantity(pwl);
+      const workDate = this.toDateKey(pwl.scheduled_date);
       if (groups.has(key)) {
         const g = groups.get(key)!;
-        g.total_quantity += Number(pwl.quantity) || 1;
-        g.total_amount += Number(pwl.line_amount) || 0;
+        g.total_quantity += quantity;
+        g.product_quantity += productQuantity;
+        if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(pwl.id);
       } else {
@@ -899,6 +904,10 @@ export class PayrollCalculationService {
           client_name: pwl.client_name || '',
           client_id: pwl.client_id || null,
           company_id: pwl.company_id || null,
+          company_name: pwl.company_name || null,
+          company_profile_id: pwl.company_profile_id || null,
+          company_profile_name: pwl.company_profile_name || null,
+          quotation_id: pwl.quotation_id || null,
           client_contract_no: pwl.client_contract_no || '',
           service_type: pwl.service_type || '',
           day_night: pwl.day_night || '日',
@@ -909,8 +918,12 @@ export class PayrollCalculationService {
           matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
           matched_unit: pwl.matched_unit || null,
           unit: pwl.unit || pwl.matched_unit || '天',
-          total_quantity: Number(pwl.quantity) || 1,
-          total_amount: Number(pwl.line_amount) || 0,
+          total_quantity: quantity,
+          product_quantity: productQuantity,
+          work_dates: new Set(workDate ? [workDate] : []),
+          billing_quantity_type: billingType,
+          billing_quantity: quantity,
+          total_amount: 0,
           count: 1,
           price_match_status: pwl.price_match_status || 'unmatched',
           is_manual_rate: pwl.is_manual_rate || false,
@@ -918,17 +931,31 @@ export class PayrollCalculationService {
         });
       }
     }
-    return Array.from(groups.values());
+    return Array.from(groups.values()).map((g) => {
+      const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
+      const rate = Number(g.matched_rate) || 0;
+      return {
+        ...g,
+        work_dates: Array.from(g.work_dates || []),
+        billing_quantity: billingQuantity,
+        total_amount: rate > 0 ? billingQuantity * rate : 0,
+      };
+    });
   }
 
   buildGroupedSettlementFromWorkLogs(workLogs: any[]): any[] {
     const groups = new Map<string, any>();
     for (const wl of workLogs) {
       const key = this.buildGroupKeyFromWorkLog(wl);
+      const billingType = this.normalizeBillingQuantityType(wl.billing_quantity_type);
+      const quantity = Number(wl.quantity) || 1;
+      const productQuantity = this.getProductQuantity(wl);
+      const workDate = this.toDateKey(wl.scheduled_date);
       if (groups.has(key)) {
         const g = groups.get(key)!;
-        g.total_quantity += Number(wl.quantity) || 1;
-        g.total_amount += Number(wl._line_amount) || 0;
+        g.total_quantity += quantity;
+        g.product_quantity += productQuantity;
+        if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(wl.id);
       } else {
@@ -945,15 +972,28 @@ export class PayrollCalculationService {
           tonnage: wl.tonnage || '',
           matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
           matched_unit: wl._matched_unit || null,
-          total_quantity: Number(wl.quantity) || 1,
-          total_amount: Number(wl._line_amount) || 0,
+          total_quantity: quantity,
+          product_quantity: productQuantity,
+          work_dates: new Set(workDate ? [workDate] : []),
+          billing_quantity_type: billingType,
+          billing_quantity: quantity,
+          total_amount: 0,
           count: 1,
           price_match_status: wl._price_match_status || 'unmatched',
           work_log_ids: [wl.id],
         });
       }
     }
-    return Array.from(groups.values());
+    return Array.from(groups.values()).map((g) => {
+      const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
+      const rate = Number(g.matched_rate) || 0;
+      return {
+        ...g,
+        work_dates: Array.from(g.work_dates || []),
+        billing_quantity: billingQuantity,
+        total_amount: rate > 0 ? billingQuantity * rate : 0,
+      };
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1033,7 +1073,7 @@ export class PayrollCalculationService {
   calculateLineAmount(pwl: any): number {
     if (pwl.price_match_status !== 'matched') return 0;
     const rate = Number(pwl.matched_rate) || 0;
-    const qty = Number(pwl.quantity) || 1;
+    const qty = this.getBillingQuantityForRecord(pwl);
     const otRate = Number(pwl.matched_ot_rate) || 0;
     const otQty = Number(pwl.ot_quantity) || 0;
     const midShiftRate = Number(pwl.matched_mid_shift_rate) || 0;
@@ -1042,6 +1082,43 @@ export class PayrollCalculationService {
     const otAmount = otRate * otQty;
     const midShiftAmount = isMidShift ? midShiftRate * 1 : 0;
     return baseAmount + otAmount + midShiftAmount;
+  }
+
+  private normalizeBillingQuantityType(value: any): 'days' | 'quantity' | 'product_quantity' {
+    return value === 'days' || value === 'product_quantity' ? value : 'quantity';
+  }
+
+  private getProductQuantity(record: any): number {
+    return Number(
+      record.payroll_work_log_product_quantity ??
+        record.work_log_product_quantity ??
+        record.goods_quantity ??
+        record.product_quantity ??
+        0,
+    ) || 0;
+  }
+
+  private toDateKey(value: any): string | null {
+    if (!value) return null;
+    if (typeof value === 'string') return value.slice(0, 10);
+    try {
+      return new Date(value).toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  }
+
+  private resolveBillingQuantity(type: any, group: any): number {
+    const normalized = this.normalizeBillingQuantityType(type);
+    if (normalized === 'days') return Number(group.work_dates?.size ?? group.work_dates?.length ?? group.count ?? 0) || 0;
+    if (normalized === 'product_quantity') return Number(group.product_quantity) || 0;
+    return Number(group.total_quantity) || 0;
+  }
+
+  private getBillingQuantityForRecord(record: any): number {
+    const type = this.normalizeBillingQuantityType(record.billing_quantity_type);
+    if (type === 'product_quantity') return this.getProductQuantity(record);
+    return Number(record.quantity) || 1;
   }
 
   async rematchPayrollWorkLogPrice(pwl: any): Promise<any> {

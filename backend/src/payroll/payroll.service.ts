@@ -866,6 +866,8 @@ export class PayrollService {
             wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
           payroll_work_log_product_name: wl.work_log_product_name ?? null,
           payroll_work_log_product_unit: wl.work_log_product_unit ?? null,
+          payroll_work_log_product_quantity: wl.payroll_work_log_product_quantity ?? wl.work_log_product_quantity ?? wl.goods_quantity ?? wl.product_quantity ?? null,
+          billing_quantity_type: wl.billing_quantity_type ?? 'quantity',
           is_modified: false,
           is_excluded: false,
         },
@@ -961,6 +963,8 @@ export class PayrollService {
       line_amount: pwl.line_amount,
       ot_line_amount: pwl.ot_line_amount,
       mid_shift_line_amount: pwl.mid_shift_line_amount,
+      payroll_work_log_product_quantity: pwl.payroll_work_log_product_quantity,
+      billing_quantity_type: pwl.billing_quantity_type,
     }));
 
     // 查出法定假日，傳給 calculatePayroll 以生成假日津貼 item
@@ -1943,6 +1947,8 @@ export class PayrollService {
       matched_ot_rate: pwl.matched_ot_rate,
       price_match_status: pwl.price_match_status,
       price_match_note: pwl.price_match_note,
+      payroll_work_log_product_quantity: pwl.payroll_work_log_product_quantity,
+      billing_quantity_type: pwl.billing_quantity_type,
     }));
 
     // Preserve manual mpf_relevant_income if set

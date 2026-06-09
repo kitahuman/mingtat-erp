@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { aiPayrollSessionApi } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Modal from '@/components/Modal';
+import PayrollTabs from "@/components/payroll/PayrollTabs";
 
 type StatusTone = 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple';
 type StepVisualStatus = 'completed' | 'in_progress' | 'failed' | 'pending' | 'warning';
@@ -327,6 +328,7 @@ function Badge({ children, tone = 'gray' }: { children: React.ReactNode; tone?: 
     gray: 'bg-gray-50 text-gray-700 border-gray-200',
     purple: 'bg-purple-50 text-purple-700 border-purple-200',
   };
+
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${classes[tone]}`}>
       {children}
@@ -1054,6 +1056,37 @@ export default function AiPayrollReconcilePage() {
     })),
   );
 
+  const previewWorkLogsForTabs = useMemo(() => {
+    return (previewDetailRows || []).map((record: Record<string, any>, index: number) => ({
+      ...record,
+      id: record.id || record.__preview_key || `preview-${index}`,
+      scheduled_date: record.scheduled_date || record.date || record.work_date,
+      service_type: record.service_type || record.work_type,
+      payroll_work_log_product_quantity: record.payroll_work_log_product_quantity || record.product_quantity || record.goods_quantity,
+      price_match_status: record.price_match_status || record.match_status || 'pending',
+      billing_quantity_type: record.billing_quantity_type || 'quantity',
+    }));
+  }, [previewDetailRows]);
+
+  const previewGroupedSettlementForTabs = useMemo(() => {
+    const groups = new Map<string, any>();
+    previewWorkLogsForTabs.forEach((row: any) => {
+      const key = [row.company_name || '', row.client_name || '', row.client_contract_no || row.quotation_no || '', row.service_type || '', row.quotation_id || '', row.day_night || '', row.tonnage || '', row.machine_type || '', row.start_location || '', row.end_location || ''].join('|');
+      const existing = groups.get(key) || { ...row, group_key: key, record_count: 0, total_quantity: 0, work_days: new Set<string>(), product_quantity: 0, billing_quantity_type: row.billing_quantity_type || 'quantity', matched_unit_price: row.unit_price || row.matched_unit_price || 0, subtotal: 0 };
+      existing.record_count += 1;
+      existing.total_quantity += Number(row.quantity || 0);
+      existing.product_quantity += Number(row.payroll_work_log_product_quantity || row.product_quantity || row.goods_quantity || 0);
+      if (row.scheduled_date) existing.work_days.add(String(row.scheduled_date).slice(0, 10));
+      existing.subtotal += Number(row.subtotal || row.amount || 0);
+      groups.set(key, existing);
+    });
+    return Array.from(groups.values()).map((group: any) => ({ ...group, work_days: group.work_days?.size || 0 }));
+  }, [previewWorkLogsForTabs]);
+
+  const handlePreviewWorkLogUpdate = async (_id: number | string, _updates: Record<string, any>) => undefined;
+  const handlePreviewBatchUpdate = async (_ids: Array<number | string>, _updates: Record<string, any>) => undefined;
+  const handlePreviewGroupBillingQuantityTypeChange = async (_groupKey: string, _billingQuantityType: string) => undefined;
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1357,7 +1390,8 @@ export default function AiPayrollReconcilePage() {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
-                <table className="min-w-full text-sm">
+                  <div>
+<table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50 text-left text-xs text-gray-500">
                       <th className="px-3 py-2">來源</th>
@@ -1443,6 +1477,7 @@ export default function AiPayrollReconcilePage() {
                     })}
                   </tbody>
                 </table>
+        </div>
               </div>
             )}
 
@@ -1782,72 +1817,18 @@ export default function AiPayrollReconcilePage() {
                 尚有 {unresolvedCount} 條 AI 問題未處理，請先於「AI 問答」分頁回答或忽略。
               </div>
             )}
-            <div className="border-b bg-gray-50/60 p-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                {previewEmployees.map((employee: any) => (
-                  <div key={employee.employee_id || employee.employee_name} className="rounded-lg border bg-white p-3">
-                    <p className="font-medium text-gray-900">{employee.employee_name || `員工 #${employee.employee_id}`}</p>
-                    <div className="mt-2 flex flex-wrap gap-1 text-xs text-gray-500">
-                      <span>{formatNumber(employee.item_count)} 項核對</span>
-                      <span>·</span>
-                      <span>{formatNumber(employee.work_days)} 個工作日</span>
-                      <span>·</span>
-                      <span>{formatNumber(toArray(employee.estimated_records).length)} 筆明細</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {Object.keys(employee.statuses || {}).map((status: string) => (
-                        <Badge key={status} tone={statusTone(status)}>{reconcileLabel(status)}</Badge>
-                      ))}
-                      {employee.has_unresolved_questions && <Badge tone="yellow">有未解答問題</Badge>}
-                    </div>
-                  </div>
-                ))}
-                {previewEmployees.length === 0 && (
-                  <div className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-400 md:col-span-3">
-                    暫無員工預覽摘要。
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-2 text-left font-medium uppercase tracking-wider text-gray-500">員工</th>
-                    {PREVIEW_DETAIL_COLUMNS.map((column) => (
-                      <th key={column.key} className={`${getPreviewColumnClass(column)} font-medium uppercase tracking-wider text-gray-500`}>
-                        {column.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {previewDetailRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={PREVIEW_DETAIL_COLUMNS.length + 1} className="px-3 py-10 text-center text-gray-400">
-                        暫無預覽明細資料
-                      </td>
-                    </tr>
-                  ) : (
-                    previewDetailRows.map((record: Record<string, any>) => (
-                      <tr key={record.__preview_key} className="hover:bg-gray-50">
-                        <td className="px-2 py-2 whitespace-nowrap font-medium text-gray-900">
-                          {record.employee_name || `員工 #${record.employee_id || '—'}`}
-                        </td>
-                        {PREVIEW_DETAIL_COLUMNS.map((column) => (
-                          <td
-                            key={column.key}
-                            className={`${getPreviewColumnClass(column)} ${column.key === 'subtotal' ? 'font-mono font-bold text-primary-600' : column.align === 'right' ? 'font-mono text-gray-700' : 'text-gray-700'}`}
-                            title={toDisplayString(getPreviewRecordValue(record, column.key), '')}
-                          >
-                            {getPreviewRecordValue(record, column.key)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="p-4">
+              <PayrollTabs
+                workLogs={previewWorkLogsForTabs as any[]}
+                groupedSettlement={previewGroupedSettlementForTabs as any[]}
+                dailyCalculation={[] as any[]}
+                unmatchedRecords={previewWorkLogsForTabs.filter((wl: any) => wl.price_match_status && wl.price_match_status !== 'matched') as any[]}
+                calculationDetails={undefined}
+                calculation={undefined}
+                onUpdateWorkLog={handlePreviewWorkLogUpdate}
+                onBatchUpdateWorkLogs={handlePreviewBatchUpdate}
+                onGroupBillingQuantityTypeChange={handlePreviewGroupBillingQuantityTypeChange}
+              />
             </div>
           </div>
         </TabsContent>
