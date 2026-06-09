@@ -374,6 +374,10 @@ export default function AiPayrollReconcilePage() {
   const isUploadStage = uploadStatuses.has(effectiveStatus);
   const isReviewStage = reviewStatuses.has(effectiveStatus) && !hasGeneratedPayroll;
   const unresolvedCount = progress?.counts?.unresolvedQuestions ?? questions.filter((q) => !q.question_resolved).length;
+  const timelineSteps = useMemo(
+    () => buildTimelineSteps(effectiveStatus, progress, session),
+    [effectiveStatus, progress, session],
+  );
 
   const loadData = useCallback(
     async (quiet = false) => {
@@ -582,10 +586,6 @@ export default function AiPayrollReconcilePage() {
   const progressPercent = Math.min(100, Math.max(0, progress?.progressPercent || (isProcessing ? 45 : 0)));
   const companyName = toDisplayString(session?.company?.chinese_name || session?.company?.name || session?.company_name);
   const previewEmployees = toArray(preview?.employees);
-  const timelineSteps = useMemo(
-    () => buildTimelineSteps(effectiveStatus, progress, session),
-    [effectiveStatus, progress, session],
-  );
 
   return (
     <div className="space-y-6 p-4 md:p-6">
