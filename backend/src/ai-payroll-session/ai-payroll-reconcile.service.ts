@@ -295,7 +295,6 @@ export class AiPayrollReconcileService {
   ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
     const workLogs = await this.prisma.workLog.findMany({
       where: {
-        company_id: session.companyId,
         employee_id: { in: session.employeeIds },
         scheduled_date: { gte: session.dateFrom, lte: session.dateTo },
         deleted_at: null,

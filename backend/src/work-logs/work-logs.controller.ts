@@ -21,6 +21,11 @@ export class WorkLogsController {
     return this.service.findAll(query);
   }
 
+  @Post('search')
+  findAllPost(@Body() body: any) {
+    return this.service.findAll(body);
+  }
+
   @Get('location-suggestions')
   getLocationSuggestions(
     @Query('type') type: 'start' | 'end',
@@ -41,6 +46,12 @@ export class WorkLogsController {
   @Get('filter-options/:column')
   getFilterOptions(@Param('column') column: string, @Query() query: any) {
     return this.service.getFilterOptions(column, query);
+  }
+
+  @SkipThrottle()
+  @Post('filter-options/:column')
+  postFilterOptions(@Param('column') column: string, @Body() body: any) {
+    return this.service.getFilterOptions(column, body);
   }
 
   // ── 缺單價組合 ─────────────────────────────────────────────

@@ -171,12 +171,25 @@ export class QuotationsController {
     return this.service.findAll(query);
   }
 
+  @Post('search')
+  findAllPost(@Body() body: any) {
+    return this.service.findAll(body);
+  }
+
   @Get('filter-options/:column')
   getFilterOptions(
     @Param('column') column: string,
     @Query() query: QuotationListQuery,
   ) {
     return this.service.getFilterOptions(column, query);
+  }
+
+  @Post('filter-options/:column')
+  postFilterOptions(
+    @Param('column') column: string,
+    @Body() body: any,
+  ) {
+    return this.service.getFilterOptions(column, body);
   }
 
   @Get('by-project/:projectId')

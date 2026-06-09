@@ -504,6 +504,7 @@ export default function PayrollPage() {
   const [aiDateTo, setAiDateTo] = useState('');
   const [aiEmployees, setAiEmployees] = useState<any[]>([]);
   const [aiEmployeeIds, setAiEmployeeIds] = useState<number[]>([]);
+  const [aiEmployeeSearch, setAiEmployeeSearch] = useState('');
   const [aiFiles, setAiFiles] = useState<File[]>([]);
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState('');
@@ -663,6 +664,12 @@ export default function PayrollPage() {
     id: Number(e.id),
     label: `${e.name_zh || ''}${e.name_en ? ' ' + e.name_en : ''}${e.emp_code ? ' (' + e.emp_code + ')' : ''}`,
   }));
+
+  const filteredAiEmployeeOptions = aiEmployeeSearch.trim()
+    ? aiEmployeeOptions.filter((emp) =>
+        emp.label.toLowerCase().includes(aiEmployeeSearch.trim().toLowerCase()),
+      )
+    : aiEmployeeOptions;
 
   const openAiPayrollModal = () => {
     const defaultCompanyId = selectedCompanyId || companies[0]?.id || null;
@@ -1648,14 +1655,26 @@ export default function PayrollPage() {
                 </button>
               </div>
             </div>
+            {aiCompanyId && aiEmployees.length > 0 && (
+              <input
+                type="text"
+                placeholder="搜尋員工姓名或編號..."
+                value={aiEmployeeSearch}
+                onChange={(e) => setAiEmployeeSearch(e.target.value)}
+                className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                disabled={aiSubmitting}
+              />
+            )}
             <div className="max-h-52 overflow-y-auto rounded-lg border bg-white p-2">
               {!aiCompanyId ? (
                 <p className="py-6 text-center text-sm text-gray-400">請先選擇公司</p>
               ) : aiEmployees.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-400">沒有可選員工</p>
+              ) : filteredAiEmployeeOptions.length === 0 ? (
+                <p className="py-4 text-center text-sm text-gray-400">沒有符合搜尋的員工</p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {aiEmployeeOptions.map((emp) => (
+                  {filteredAiEmployeeOptions.map((emp) => (
                     <label
                       key={emp.id}
                       className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50"

@@ -491,9 +491,9 @@ export const projectsApi = {
 
 // Quotations (報價單)
 export const quotationsApi = {
-  list: (params?: any) => api.get('/quotations', { params }),
+  list: (params?: any) => api.post('/quotations/search', params || {}),
   filterOptions: (column: string, params?: any) =>
-    api.get(`/quotations/filter-options/${column}`, { params }),
+    api.post(`/quotations/filter-options/${column}`, params || {}),
   get: (id: number) => api.get(`/quotations/${id}`),
   create: (data: any) => api.post('/quotations', data),
   update: (id: number, data: any) => api.put(`/quotations/${id}`, data),
@@ -794,7 +794,7 @@ export const enumsApi = {
 
 // Work Logs (工作記錄)
 export const workLogsApi = {
-  list: (params?: any) => api.get('/work-logs', { params }),
+  list: (params?: any) => api.post('/work-logs/search', params || {}),
   get: (id: number) => api.get(`/work-logs/${id}`),
   create: (data: any) => api.post('/work-logs', data),
   update: (id: number, data: any) => api.put(`/work-logs/${id}`, data),
@@ -817,7 +817,7 @@ export const workLogsApi = {
   confirmLocation: (id: number) =>
     api.post(`/work-logs/${id}/confirm-location`),
   filterOptions: (column: string, params?: any) =>
-    api.get(`/work-logs/filter-options/${column}`, { params }),
+    api.post(`/work-logs/filter-options/${column}`, params || {}),
   unmatchedCombinations: (
     params?: Record<string, string | number | undefined>,
   ) => api.get('/work-logs/unmatched-combinations', { params }),
@@ -1308,9 +1308,9 @@ export const paymentInAllocationApi = {
 // ══════════════════════════════════════════════════════════════
 
 export const invoicesApi = {
-  list: (params?: any) => api.get('/invoices', { params }),
+  list: (params?: any) => api.post('/invoices/search', params || {}),
   filterOptions: (column: string, params?: any) =>
-    api.get(`/invoices/filter-options/${column}`, { params }),
+    api.post(`/invoices/filter-options/${column}`, params || {}),
   get: (id: number) => api.get(`/invoices/${id}`),
   getRevisions: (id: number) => api.get(`/invoices/${id}/revisions`),
   createRevision: (id: number) => api.post(`/invoices/${id}/revision`, {}),

@@ -87,6 +87,11 @@ export class InvoicesController {
     return this.service.findAll(query);
   }
 
+  @Post('search')
+  findAllPost(@Body() body: any) {
+    return this.service.findAll(body);
+  }
+
   @Post('batch-void')
   batchVoid(@Body() body: InvoiceBatchOperationBody) {
     return this.service.batchVoid(body.invoice_ids || []);
@@ -103,6 +108,14 @@ export class InvoicesController {
     @Query() query: InvoiceListQuery,
   ) {
     return this.service.getFilterOptions(column, query);
+  }
+
+  @Post('filter-options/:column')
+  postFilterOptions(
+    @Param('column') column: string,
+    @Body() body: any,
+  ) {
+    return this.service.getFilterOptions(column, body);
   }
 
   @Get(':id/pdf')
