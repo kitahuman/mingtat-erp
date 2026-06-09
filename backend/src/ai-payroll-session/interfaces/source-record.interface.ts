@@ -8,6 +8,18 @@ export type AiPayrollSourceType =
   | 'manual'
   | 'system';
 
+export interface OcrSourceIssue {
+  code: 'ocr_employee_unmatched' | 'ocr_date_corrected' | 'ocr_date_missing';
+  label: string;
+  severity: 'info' | 'warning';
+  message: string;
+  raw_employee_name?: string | null;
+  original_date?: string | null;
+  corrected_date?: string | null;
+  original_year?: number | null;
+  corrected_year?: number | null;
+}
+
 export interface StandardizedSourceRecordData {
   employee_id: number;
   employee_name?: string | null;
@@ -41,6 +53,10 @@ export interface StandardizedSourceRecordData {
   locations?: unknown;
   raw_items?: unknown;
   raw_summary?: string | null;
+  raw_employee_name?: string | null;
+  original_work_date?: string | null;
+  corrected_work_date?: string | null;
+  ocr_issues?: OcrSourceIssue[];
   work_type_decided?: string | null;
   decision_method?: string | null;
   sources_agreed?: string[];

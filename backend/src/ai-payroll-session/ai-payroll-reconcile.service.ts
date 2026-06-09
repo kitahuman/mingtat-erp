@@ -7,6 +7,7 @@ import { QueryReconcileItemsDto, QuerySourcesDto } from './dto/query-session-dat
 import { UpdateReconcileItemDto } from './dto/update-reconcile-item.dto';
 import {
   AiPayrollSourceType,
+  OcrSourceIssue,
   SourceSummaryByEmployee,
   StandardizedSourceRecordData,
 } from './interfaces/source-record.interface';
@@ -41,6 +42,15 @@ interface FieldVote {
 
 type SourceRecordRow = Prisma.AiPayrollSourceRecordGetPayload<Record<string, never>>;
 
+const OCR_QUESTION_TYPES = [
+  'ocr_error',
+  'ocr_employee_unmatched',
+  'ocr_date_corrected',
+  'ocr_date_missing',
+] as const;
+
+type OcrQuestionType = (typeof OCR_QUESTION_TYPES)[number];
+
 type OcrEntryWithFields = Prisma.AiPayrollEntryGetPayload<{ include: { fields: true } }>;
 
 type OcrEmployeeMatcher = {
@@ -62,11 +72,18 @@ type NormalizedOcrEntry = {
   lowConfidence: boolean;
 };
 
+type EmployeeMatcher = {
+  nameById: Map<number, string>;
+  idByName: Map<string, number>;
+  matchNames: Array<{ employeeId: number; value: string; normalized: string }>;
+};
+
 type DocumentOcrWarning = {
   code: string;
   message: string;
-  severity: 'warning';
+  severity: 'info' | 'warning';
   document_ids?: number[];
+  entry_ids?: number[];
 };
 
 type DocumentOcrSummary = {
@@ -137,7 +154,11 @@ export class AiPayrollReconcileService {
       where: { reconcile_session_id: sessionId },
     });
     await this.prisma.aiPayrollQuestion.deleteMany({
-      where: { question_session_id: sessionId, question_resolved: false },
+      where: {
+        question_session_id: sessionId,
+        question_resolved: false,
+        question_type: { notIn: [...OCR_QUESTION_TYPES] },
+      },
     });
 
     const sources = await this.prisma.aiPayrollSourceRecord.findMany({
@@ -202,7 +223,7 @@ export class AiPayrollReconcileService {
 
   async listSources(sessionId: number, query: QuerySourcesDto) {
     await this.getSessionContext(sessionId);
-    return this.prisma.aiPayrollSourceRecord.findMany({
+    const sourceRecords = await this.prisma.aiPayrollSourceRecord.findMany({
       where: {
         source_record_session_id: sessionId,
         ...(query.employee_id
@@ -219,6 +240,59 @@ export class AiPayrollReconcileService {
         { source_record_source_type: 'asc' },
       ],
     });
+
+    if (query.source_type && query.source_type !== 'homework_sheet') {
+      return sourceRecords;
+    }
+
+    const existingOcrSourceIds = new Set(
+      sourceRecords
+        .filter((source) => source.source_record_source_type === 'homework_sheet' && source.source_record_source_id)
+        .map((source) => source.source_record_source_id),
+    );
+    const entries = await this.prisma.aiPayrollEntry.findMany({
+      where: { page: { document: { batch: { batch_session_id: sessionId } } } },
+      include: { fields: true },
+      orderBy: [{ entry_page_id: 'asc' }, { entry_row_number: 'asc' }, { id: 'asc' }],
+    });
+
+    const virtualOcrRows = entries.flatMap((entry) => {
+      if (existingOcrSourceIds.has(entry.id)) return [];
+      if (query.employee_id && entry.entry_employee_id !== query.employee_id) return [];
+      const workDate = entry.entry_work_date ? this.toDateOnly(entry.entry_work_date) : null;
+      if (query.date && (!workDate || this.toDateString(workDate) !== query.date)) return [];
+      const flags = this.asJsonObject(entry.entry_flags);
+      const issues = this.extractOcrIssues(flags, entry);
+      const data: StandardizedSourceRecordData = {
+        ...this.entryFieldsToSourceData(entry.entry_employee_id ?? 0, workDate ?? new Date(0), entry.entry_employee_name_raw, entry.fields),
+        employee_id: entry.entry_employee_id ?? 0,
+        employee_name: entry.entry_employee_name_raw ?? null,
+        date: workDate ? this.toDateString(workDate) : '',
+        source_label: '上載文件',
+        source_status: issues.some((issue) => issue.severity === 'warning') ? 'needs_review' : 'found',
+        match_basis: entry.entry_employee_id ? 'entry_employee_id' : 'unmatched_raw_name',
+        raw_employee_name: entry.entry_employee_name_raw ?? null,
+        original_work_date: (flags.original_work_date as string | undefined) ?? (workDate ? this.toDateString(workDate) : null),
+        corrected_work_date: (flags.corrected_work_date as string | undefined) ?? null,
+        ocr_issues: issues,
+      };
+      return [{
+        id: `ocr-entry-${entry.id}`,
+        source_record_session_id: sessionId,
+        source_record_employee_id: entry.entry_employee_id ?? null,
+        source_record_date: workDate,
+        source_record_source_type: 'homework_sheet',
+        source_record_source_id: entry.id,
+        source_record_data: data,
+        source_record_raw_data: { ...flags, virtual_ocr_entry: true },
+        source_record_confidence: entry.entry_overall_confidence,
+        source_record_created_at: null,
+        source_record_updated_at: null,
+        source_record_is_virtual: true,
+      }];
+    });
+
+    return [...sourceRecords, ...virtualOcrRows];
   }
 
   async getSourcesSummary(sessionId: number): Promise<SourceSummaryByEmployee[]> {
@@ -253,7 +327,15 @@ export class AiPayrollReconcileService {
       include: {
         pages: {
           include: {
-            entries: { select: { id: true } },
+            entries: {
+              select: {
+                id: true,
+                entry_employee_id: true,
+                entry_employee_name_raw: true,
+                entry_work_date: true,
+                entry_flags: true,
+              },
+            },
           },
         },
       },
@@ -273,12 +355,14 @@ export class AiPayrollReconcileService {
       warnings: [],
     };
 
+    const unmatchedEmployeeEntryIds: number[] = [];
+    const missingDateEntryIds: number[] = [];
+    const correctedDateEntryIds: number[] = [];
+
     for (const document of documents) {
       const pages = document.pages ?? [];
-      const entryCount = pages.reduce(
-        (count, page) => count + (page.entries?.length ?? 0),
-        0,
-      );
+      const entries = pages.flatMap((page) => page.entries ?? []);
+      const entryCount = entries.length;
       const failedPages = pages.filter((page) => page.page_status === 'failed');
       summary.total_pages += pages.length;
       summary.extracted_pages += pages.filter((page) => page.page_status === 'extracted').length;
@@ -290,6 +374,18 @@ export class AiPayrollReconcileService {
         summary.documents_without_entries.push(document.id);
       }
       if (failedPages.length > 0) summary.documents_with_failed_pages.push(document.id);
+      for (const entry of entries) {
+        const issues = this.extractOcrIssues(this.asJsonObject(entry.entry_flags), entry);
+        if (!entry.entry_employee_id || issues.some((issue) => issue.code === 'ocr_employee_unmatched')) {
+          unmatchedEmployeeEntryIds.push(entry.id);
+        }
+        if (!entry.entry_work_date || issues.some((issue) => issue.code === 'ocr_date_missing')) {
+          missingDateEntryIds.push(entry.id);
+        }
+        if (issues.some((issue) => issue.code === 'ocr_date_corrected')) {
+          correctedDateEntryIds.push(entry.id);
+        }
+      }
     }
 
     if (summary.total_documents > 0 && summary.failed_pages > 0) {
@@ -310,6 +406,31 @@ export class AiPayrollReconcileService {
         code: 'document_ocr_no_records',
         message: 'AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）',
         severity: 'warning',
+      });
+    }
+
+    if (unmatchedEmployeeEntryIds.length > 0) {
+      summary.warnings.push({
+        code: 'ocr_employee_unmatched',
+        message: `文件內有 ${unmatchedEmployeeEntryIds.length} 筆員工未匹配`,
+        severity: 'warning',
+        entry_ids: unmatchedEmployeeEntryIds,
+      });
+    }
+    if (missingDateEntryIds.length > 0) {
+      summary.warnings.push({
+        code: 'ocr_date_missing',
+        message: `文件內有 ${missingDateEntryIds.length} 筆日期缺失`,
+        severity: 'warning',
+        entry_ids: missingDateEntryIds,
+      });
+    }
+    if (correctedDateEntryIds.length > 0) {
+      summary.warnings.push({
+        code: 'ocr_date_corrected',
+        message: `文件內有 ${correctedDateEntryIds.length} 筆日期已按期數自動修正`,
+        severity: 'info',
+        entry_ids: correctedDateEntryIds,
       });
     }
 
@@ -469,32 +590,68 @@ export class AiPayrollReconcileService {
     session: SessionContext,
   ): Promise<Prisma.AiPayrollSourceRecordCreateManyInput[]> {
     const normalizedEntries = await this.getNormalizedOcrEntries(session);
+    const records: Prisma.AiPayrollSourceRecordCreateManyInput[] = [];
 
-    return normalizedEntries.flatMap((normalized) => {
+    for (const normalized of normalizedEntries) {
       const { entry, employeeId, employeeName, workDate } = normalized;
-      if (!employeeId || !workDate) return [];
+      const issues = this.buildOcrIssues(normalized);
 
-      const data = this.entryFieldsToSourceData(employeeId, workDate, employeeName, entry.fields);
-      data.source_label = 'OCR 工紙';
-      data.source_status = 'found';
-      data.match_basis = normalized.employeeMatchBasis;
-      data.raw_summary = [entry.entry_employee_name_raw, this.toDateString(workDate), entry.entry_form_type]
-        .filter(Boolean)
-        .join(' / ') || null;
+      const updateData: Prisma.AiPayrollEntryUpdateInput = {};
+      if (workDate && (!entry.entry_work_date || this.toDateString(entry.entry_work_date) !== this.toDateString(workDate))) {
+        updateData.entry_work_date = workDate;
+      }
+      if (employeeId && entry.entry_employee_id !== employeeId) {
+        updateData.entry_employee_id = employeeId;
+      }
+      if (issues.length > 0 || Object.keys(updateData).length > 0) {
+        updateData.entry_flags = this.toJson({
+          ...this.asJsonObject(entry.entry_flags),
+          ocr_issues: issues,
+          original_work_date: normalized.rawWorkDate ? this.toDateString(normalized.rawWorkDate) : null,
+          corrected_work_date: workDate ? this.toDateString(workDate) : null,
+          employee_match_basis: normalized.employeeMatchBasis,
+          matched_employee_id: employeeId,
+        });
+        await this.prisma.aiPayrollEntry.update({
+          where: { id: entry.id },
+          data: updateData,
+        });
+      }
 
-      return [
-        {
-          source_record_session_id: session.id,
-          source_record_employee_id: employeeId,
-          source_record_date: workDate,
-          source_record_source_type: 'homework_sheet',
-          source_record_source_id: entry.id,
-          source_record_data: data as unknown as Prisma.InputJsonValue,
-          source_record_raw_data: this.toJson(this.buildOcrRawData(normalized)),
-          source_record_confidence: entry.entry_overall_confidence ?? undefined,
-        },
-      ];
-    });
+      if (!employeeId || !workDate) continue;
+      if (!session.employeeIds.includes(employeeId)) continue;
+
+      const data: StandardizedSourceRecordData = {
+        ...this.entryFieldsToSourceData(employeeId, workDate, employeeName, entry.fields),
+        employee_name: employeeName,
+        source_label: '上載文件',
+        source_status: issues.some((issue) => issue.severity === 'warning') ? 'needs_review' : 'found',
+        match_basis: normalized.employeeMatchBasis,
+        raw_employee_name: entry.entry_employee_name_raw ?? null,
+        original_work_date: normalized.rawWorkDate ? this.toDateString(normalized.rawWorkDate) : null,
+        corrected_work_date: normalized.yearCorrected && workDate ? this.toDateString(workDate) : null,
+        ocr_issues: issues,
+        raw_summary: [entry.entry_employee_name_raw, this.toDateString(workDate), entry.entry_form_type]
+          .filter(Boolean)
+          .join(' / ') || null,
+      };
+
+      records.push({
+        source_record_session_id: session.id,
+        source_record_employee_id: employeeId,
+        source_record_date: workDate,
+        source_record_source_type: 'homework_sheet',
+        source_record_source_id: entry.id,
+        source_record_data: data as unknown as Prisma.InputJsonValue,
+        source_record_raw_data: this.toJson({
+          ...this.buildOcrRawData(normalized),
+          ocr_issues: issues,
+        }),
+        source_record_confidence: entry.entry_overall_confidence ?? undefined,
+      });
+    }
+
+    return records;
   }
 
   private async getNormalizedOcrEntries(session: SessionContext): Promise<NormalizedOcrEntry[]> {
@@ -1537,10 +1694,7 @@ export class AiPayrollReconcileService {
   }
 
 
-  private async buildEmployeeMatcher(employeeIds: number[]): Promise<{
-    nameById: Map<number, string>;
-    idByName: Map<string, number>;
-  }> {
+  private async buildEmployeeMatcher(employeeIds: number[]): Promise<EmployeeMatcher> {
     const [employees, nicknames] = await Promise.all([
       this.prisma.employee.findMany({
         where: { id: { in: employeeIds } },
@@ -1553,9 +1707,12 @@ export class AiPayrollReconcileService {
     ]);
     const nameById = new Map<number, string>();
     const idByName = new Map<string, number>();
+    const matchNames: EmployeeMatcher['matchNames'] = [];
     const addName = (employeeId: number, value: string | null | undefined) => {
       const normalized = this.normalizeText(value);
-      if (normalized) idByName.set(normalized, employeeId);
+      if (!normalized) return;
+      idByName.set(normalized, employeeId);
+      matchNames.push({ employeeId, value: String(value), normalized });
     };
     for (const employee of employees) {
       nameById.set(employee.id, employee.name_zh ?? employee.name_en ?? employee.nickname ?? employee.emp_code ?? `#${employee.id}`);
@@ -1567,7 +1724,7 @@ export class AiPayrollReconcileService {
     for (const nickname of nicknames) {
       addName(nickname.emp_nickname_employee_id, nickname.emp_nickname_value);
     }
-    return { nameById, idByName };
+    return { nameById, idByName, matchNames };
   }
 
   private async buildWorkLogVehicleEmployeeMap(session: SessionContext): Promise<Map<string, Set<number>>> {
@@ -1708,6 +1865,154 @@ export class AiPayrollReconcileService {
     if (value === null || value === undefined) return null;
     const stringValue = String(value).trim();
     return stringValue ? stringValue : null;
+  }
+
+  private buildOcrIssues(normalized: NormalizedOcrEntry): OcrSourceIssue[] {
+    const { entry } = normalized;
+    const originalDate = normalized.rawWorkDate ? this.toDateString(normalized.rawWorkDate) : null;
+    const correctedDate = normalized.yearCorrected && normalized.workDate ? this.toDateString(normalized.workDate) : null;
+    const issues: OcrSourceIssue[] = [];
+
+    if (!normalized.employeeId && entry.entry_employee_name_raw) {
+      issues.push(this.buildOcrIssue(
+        'ocr_employee_unmatched',
+        entry.entry_employee_name_raw,
+        originalDate,
+        correctedDate,
+        null,
+        null,
+      ));
+    }
+
+    if (!normalized.workDate) {
+      issues.push(this.buildOcrIssue(
+        'ocr_date_missing',
+        entry.entry_employee_name_raw,
+        originalDate,
+        correctedDate,
+        null,
+        null,
+      ));
+    } else if (normalized.yearCorrected) {
+      issues.push(this.buildOcrIssue(
+        'ocr_date_corrected',
+        entry.entry_employee_name_raw,
+        originalDate,
+        this.toDateString(normalized.workDate),
+        normalized.rawYear,
+        normalized.correctedYear,
+      ));
+    }
+
+    return issues;
+  }
+
+  private buildOcrIssue(
+    code: OcrSourceIssue['code'],
+    rawEmployeeName: string | null | undefined,
+    originalDate: string | null,
+    correctedDate: string | null,
+    originalYear: number | null,
+    correctedYear: number | null,
+  ): OcrSourceIssue {
+    if (code === 'ocr_employee_unmatched') {
+      return {
+        code,
+        label: '員工未匹配',
+        severity: 'warning',
+        message: `AI 從文件讀取到記錄但無法匹配員工（原始名稱：${rawEmployeeName || '—'}），請確認`,
+        raw_employee_name: rawEmployeeName ?? null,
+        original_date: originalDate,
+        corrected_date: correctedDate,
+      };
+    }
+    if (code === 'ocr_date_corrected') {
+      return {
+        code,
+        label: '日期已修正',
+        severity: 'info',
+        message: `AI 讀取的日期年份（${originalYear ?? '—'}）與期數不符，已自動修正為 ${correctedYear ?? '—'}`,
+        raw_employee_name: rawEmployeeName ?? null,
+        original_date: originalDate,
+        corrected_date: correctedDate,
+        original_year: originalYear,
+        corrected_year: correctedYear,
+      };
+    }
+    return {
+      code,
+      label: '日期缺失',
+      severity: 'warning',
+      message: 'AI 從文件讀取到記錄但未能讀取工作日期，請確認',
+      raw_employee_name: rawEmployeeName ?? null,
+      original_date: originalDate,
+      corrected_date: correctedDate,
+    };
+  }
+
+  private buildOcrQuestion(
+    entryId: number,
+    issue: OcrSourceIssue,
+    employeeId: number | null | undefined,
+    date: string | null,
+    extraContext: Record<string, unknown> = {},
+  ): ReconcileQuestionDraft {
+    return {
+      employeeId: employeeId ?? null,
+      date,
+      type: issue.code,
+      severity: issue.severity,
+      text: issue.message,
+      context: {
+        entryId,
+        rawEmployeeName: issue.raw_employee_name ?? null,
+        originalDate: issue.original_date ?? null,
+        correctedDate: issue.corrected_date ?? null,
+        ...extraContext,
+      },
+      aiDecision: issue.code === 'ocr_date_corrected' ? issue.message : null,
+      aiAction: issue.code === 'ocr_date_corrected'
+        ? { field: 'entry_work_date', value: issue.corrected_date ?? null, confidence: 90 }
+        : null,
+    };
+  }
+
+  private findEmployeeMatchesByName(rawName: string, employeeMatcher: EmployeeMatcher): number[] {
+    const normalizedRawName = this.normalizeText(rawName);
+    if (!normalizedRawName) return [];
+    const matchedIds = new Set<number>();
+    for (const matchName of employeeMatcher.matchNames) {
+      if (!matchName.normalized) continue;
+      const isExact = matchName.normalized === normalizedRawName;
+      const isContains =
+        normalizedRawName.length >= 2 &&
+        matchName.normalized.length >= 2 &&
+        (matchName.normalized.includes(normalizedRawName) || normalizedRawName.includes(matchName.normalized));
+      if (isExact || isContains) matchedIds.add(matchName.employeeId);
+    }
+    return [...matchedIds];
+  }
+
+  private extractOcrIssues(
+    flags: Record<string, unknown>,
+    entry: { entry_employee_id: number | null; entry_employee_name_raw: string | null; entry_work_date: Date | null },
+  ): OcrSourceIssue[] {
+    const issues = Array.isArray(flags.ocr_issues)
+      ? (flags.ocr_issues.filter((issue) => issue && typeof issue === 'object') as OcrSourceIssue[])
+      : [];
+    if (!entry.entry_employee_id && !issues.some((issue) => issue.code === 'ocr_employee_unmatched')) {
+      issues.push(this.buildOcrIssue('ocr_employee_unmatched', entry.entry_employee_name_raw, flags.original_work_date as string | null, flags.corrected_work_date as string | null, null, null));
+    }
+    if (!entry.entry_work_date && !issues.some((issue) => issue.code === 'ocr_date_missing')) {
+      issues.push(this.buildOcrIssue('ocr_date_missing', entry.entry_employee_name_raw, null, null, null, null));
+    }
+    return issues;
+  }
+
+  private asJsonObject(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 
   private toDateString(date: Date): string {

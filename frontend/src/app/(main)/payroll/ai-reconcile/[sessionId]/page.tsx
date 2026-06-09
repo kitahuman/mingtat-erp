@@ -28,6 +28,20 @@ type ProgressWarning = {
   code?: string;
   message?: string;
   severity?: string;
+  document_ids?: number[];
+  entry_ids?: number[];
+};
+
+type OcrIssue = {
+  code?: string;
+  label?: string;
+  message?: string;
+  severity?: string;
+  rawEmployeeName?: string | null;
+  originalDate?: string | null;
+  correctedDate?: string | null;
+  matchedEmployeeId?: number | null;
+  matchConfidence?: number | null;
 };
 
 type ProgressData = {
@@ -85,10 +99,10 @@ type Question = {
 
 
 type SourceRecord = {
-  id?: number;
+  id?: number | string;
   source_record_session_id?: number;
-  source_record_employee_id?: number;
-  source_record_date?: string;
+  source_record_employee_id?: number | null;
+  source_record_date?: string | null;
   source_record_source_type?: string;
   source_record_source_id?: number | string | null;
   source_record_data?: Record<string, any> | null;
@@ -417,9 +431,49 @@ function getFieldValue(data: Record<string, any> | null | undefined, field: stri
   if (!data) return undefined;
   if (field === 'company_name') return data.company_name || data.company || data.company_chinese_name;
   if (field === 'client_name') return data.client_name || data.customer || data.customer_name || data.unverified_client_name;
-  if (field === 'employee_name') return data.employee_name || data.employee?.name_zh || data.employee?.name_en;
-  if (field === 'date') return data.date || data.work_date || data.scheduled_date;
+  if (field === 'employee_name') return data.employee_name || data.employee?.name_zh || data.employee?.name_en || data.raw_employee_name;
+  if (field === 'date') return data.date || data.work_date || data.scheduled_date || data.corrected_work_date || data.original_work_date;
   return data[field];
+}
+
+function getOcrIssues(record?: SourceRecord | null): OcrIssue[] {
+  const data = getSourceData(record);
+  const fromData = Array.isArray(data.ocr_issues) ? data.ocr_issues : [];
+  const fromRaw = Array.isArray(record?.source_record_raw_data?.ocr_issues) ? record?.source_record_raw_data?.ocr_issues : [];
+  const seen = new Set<string>();
+  return [...fromData, ...fromRaw].filter((issue) => {
+    if (!issue || typeof issue !== 'object') return false;
+    const key = `${issue.code || 'issue'}-${issue.message || issue.label || issue.originalDate || issue.correctedDate || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getOcrIssueLabel(issue: OcrIssue) {
+  const map: Record<string, string> = {
+    ocr_employee_unmatched: '員工未匹配',
+    ocr_employee_auto_matched: '員工已匹配',
+    ocr_employee_ambiguous: '員工需確認',
+    ocr_date_corrected: '日期已修正',
+    ocr_date_missing: '日期缺失',
+    ocr_date_out_of_period: '日期不在期數',
+  };
+  return issue.label || map[issue.code || ''] || issue.message || 'OCR 提醒';
+}
+
+function getOcrIssueTone(issue: OcrIssue): StatusTone {
+  if (issue.severity === 'info' || issue.code === 'ocr_employee_auto_matched' || issue.code === 'ocr_date_corrected') return 'green';
+  if (issue.severity === 'error') return 'red';
+  return 'yellow';
+}
+
+function getOcrIssueDetail(issue: OcrIssue) {
+  if (issue.message) return issue.message;
+  if (issue.code === 'ocr_date_corrected') return `${issue.originalDate || '原日期'} → ${issue.correctedDate || '修正日期'}`;
+  if (issue.code === 'ocr_employee_unmatched') return `原始姓名：${issue.rawEmployeeName || '未能讀取'}`;
+  if (issue.code === 'ocr_employee_auto_matched') return `原始姓名：${issue.rawEmployeeName || '—'}`;
+  return '';
 }
 
 function getSourceRecordKey(record: SourceRecord, index: number) {
@@ -550,13 +604,13 @@ function buildTimelineSteps(status: string, progress?: ProgressData | null, sess
   const sourceCount = Number(progress?.counts?.sources ?? 0);
   const hasDocumentOcrWarning = Boolean(
     progress?.documentOcr?.hasWarning ||
-      progress?.warnings?.some((warning) => warning.code?.startsWith('document_ocr')),
+      progress?.warnings?.some((warning) => warning.code?.startsWith('document_ocr') || warning.code?.startsWith('ocr_')),
   );
   const isFailed = status === 'failed';
   const isWarning = status === 'needs_review';
   const isComplete = status === 'completed' || status === 'confirmed';
   const step2Label = hasDocumentOcrWarning
-    ? '部分文件未能讀取'
+    ? '文件讀取有問題'
     : currentStep > 2 || isComplete
       ? '完成核對'
       : '核對文件中';
@@ -698,8 +752,12 @@ export default function AiPayrollReconcilePage() {
     () => sourceRecords.filter(isHomeworkSheetSourceRecord),
     [sourceRecords],
   );
+  const ocrIssueCount = useMemo(
+    () => ocrSourceRecords.reduce((count, record) => count + getOcrIssues(record).length, 0),
+    [ocrSourceRecords],
+  );
   const documentOcrWarnings = useMemo(
-    () => (progress?.warnings || []).filter((warning) => warning.code?.startsWith('document_ocr')),
+    () => (progress?.warnings || []).filter((warning) => warning.code?.startsWith('document_ocr') || warning.code?.startsWith('ocr_')),
     [progress],
   );
   const hasDocumentWithoutOcrRecords = documents.length > 0 && ocrSourceRecords.length === 0;
@@ -1226,6 +1284,7 @@ export default function AiPayrollReconcilePage() {
               {[
                 ['文件數量', documents.length || progress?.counts?.documents || 0],
                 ['OCR讀取記錄數', ocrSourceRecords.length || progress?.counts?.homeworkSheetSources || 0],
+                ['OCR提醒', ocrIssueCount || documentOcrWarnings.length || 0],
                 ['未能讀取頁面', progress?.documentOcr?.failedPages || 0],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg bg-gray-50 p-4">
@@ -1238,9 +1297,17 @@ export default function AiPayrollReconcilePage() {
             {shouldShowDocumentOcrWarning && (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
                 <p className="font-medium">文件讀取提醒</p>
-                <p className="mt-1">
-                  {documentOcrWarnings[0]?.message || 'AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）'}
-                </p>
+                <div className="mt-2 space-y-1">
+                  {documentOcrWarnings.length > 0 ? (
+                    documentOcrWarnings.map((warning, index) => (
+                      <p key={`${warning.code || 'ocr-warning'}-${index}`}>
+                        {warning.message || '文件讀取有問題，請檢查 OCR 來源資料。'}
+                      </p>
+                    ))
+                  ) : (
+                    <p>AI 未能從上載文件中讀取資料，核對將使用其他來源（工作紀錄、打卡等）。</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1309,14 +1376,37 @@ export default function AiPayrollReconcilePage() {
                     {ocrSourceRecords.map((record, index) => {
                       const data = getSourceData(record);
                       const sourceConfig = getSourceConfig(getSourceType(record));
+                      const issues = getOcrIssues(record);
+                      const hasWarningIssue = issues.some((issue) => getOcrIssueTone(issue) !== 'green');
+                      const dateIssues = issues.filter((issue) => issue.code?.includes('date'));
+                      const employeeIssues = issues.filter((issue) => issue.code?.includes('employee'));
+                      const rawEmployeeName = data.raw_employee_name || data.rawEmployeeName || data.employee_name_raw;
+                      const employeeDisplay = getFieldValue(data, 'employee_name') || rawEmployeeName || `員工 #${record.source_record_employee_id || '—'}`;
+                      const originalDate = data.original_work_date || data.originalDate;
+                      const correctedDate = data.corrected_work_date || data.correctedDate;
                       return (
-                        <tr key={getSourceRecordKey(record, index)} className="border-b align-top last:border-0 hover:bg-gray-50">
+                        <tr key={getSourceRecordKey(record, index)} className={`border-b align-top last:border-0 hover:bg-gray-50 ${hasWarningIssue ? 'bg-yellow-50/40' : ''}`}>
                           <td className="px-3 py-3 whitespace-nowrap">
-                            <Badge tone={sourceConfig.tone}>{sourceConfig.label}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge tone={sourceConfig.tone}>{sourceConfig.label}</Badge>
+                              {issues.slice(0, 2).map((issue, issueIndex) => (
+                                <Badge key={`${issue.code || 'ocr-issue'}-${issueIndex}`} tone={getOcrIssueTone(issue)}>{getOcrIssueLabel(issue)}</Badge>
+                              ))}
+                            </div>
                             <div className="mt-1 text-xs text-gray-400">信心 {sourceConfidence(record)}</div>
+                            {issues.length > 2 && <div className="mt-1 text-xs text-yellow-700">另有 {issues.length - 2} 個 OCR 提醒</div>}
                           </td>
-                          <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(getFieldValue(data, 'date') || record.source_record_date)}</td>
-                          <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">{toDisplayString(getFieldValue(data, 'employee_name') || `員工 #${record.source_record_employee_id || '—'}`)}</td>
+                          <td className={`px-3 py-3 whitespace-nowrap ${dateIssues.length > 0 ? 'text-yellow-800' : 'text-gray-700'}`}>
+                            <div>{formatDate(getFieldValue(data, 'date') || record.source_record_date)}</div>
+                            {correctedDate && originalDate && correctedDate !== originalDate && (
+                              <div className="text-xs text-yellow-700">原：{formatDate(originalDate)}</div>
+                            )}
+                          </td>
+                          <td className={`px-3 py-3 font-medium whitespace-nowrap ${employeeIssues.length > 0 ? 'text-yellow-900' : 'text-gray-900'}`}>
+                            <div>{toDisplayString(employeeDisplay)}</div>
+                            {rawEmployeeName && rawEmployeeName !== employeeDisplay && <div className="text-xs text-yellow-700">原：{toDisplayString(rawEmployeeName)}</div>}
+                            {!record.source_record_employee_id && <div className="text-xs text-yellow-700">員工未匹配</div>}
+                          </td>
                           <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{toDisplayString(getFieldValue(data, 'service_type'))}</td>
                           <td className="px-3 py-3 text-gray-700 min-w-[180px] max-w-xs">
                             <div className="line-clamp-3" title={toDisplayString(getFieldValue(data, 'work_content'), '')}>{toDisplayString(getFieldValue(data, 'work_content'))}</div>
@@ -1337,6 +1427,16 @@ export default function AiPayrollReconcilePage() {
                           <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
                             <div>{toDisplayString(getFieldValue(data, 'start_time'))} - {toDisplayString(getFieldValue(data, 'end_time'))}</div>
                             <div className="text-xs text-gray-400">OT {toDisplayString(getFieldValue(data, 'ot_quantity'))}</div>
+                            {issues.length > 0 && (
+                              <div className="mt-2 space-y-1 rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-800">
+                                {issues.map((issue, issueIndex) => (
+                                  <div key={`${issue.code || 'ocr-detail'}-${issueIndex}`}>
+                                    <span className="font-medium">{getOcrIssueLabel(issue)}：</span>
+                                    {getOcrIssueDetail(issue) || '請覆核文件辨識結果。'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
