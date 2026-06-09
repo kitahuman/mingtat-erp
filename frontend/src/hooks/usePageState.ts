@@ -31,13 +31,44 @@ interface PageState {
 
 const getStorageKey = (path: string) => `pageState:${path}`;
 
+/**
+ * Custom serializer that converts Set objects to arrays for JSON storage.
+ */
+function serializeState(state: PageState): string {
+  return JSON.stringify(state, (key, value) => {
+    if (value instanceof Set) {
+      return { __type: 'Set', values: Array.from(value) };
+    }
+    return value;
+  });
+}
+
+/**
+ * Custom deserializer that restores Set objects from arrays.
+ */
+function deserializeState(json: string): PageState {
+  return JSON.parse(json, (key, value) => {
+    if (value && typeof value === 'object' && value.__type === 'Set' && Array.isArray(value.values)) {
+      return new Set(value.values);
+    }
+    return value;
+  });
+}
+
 export const usePageState = (initialState: PageState) => {
   const pathname = usePathname();
   const storageKey = getStorageKey(pathname);
   const [pageState, setPageState] = useState<PageState>(() => {
     if (typeof window !== 'undefined') {
       const savedState = sessionStorage.getItem(storageKey);
-      return savedState ? JSON.parse(savedState) : initialState;
+      if (savedState) {
+        try {
+          return deserializeState(savedState);
+        } catch {
+          return initialState;
+        }
+      }
+      return initialState;
     }
     return initialState;
   });
@@ -45,7 +76,7 @@ export const usePageState = (initialState: PageState) => {
   const saveState = useCallback((newState: PageState) => {
     setPageState(newState);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem(storageKey, JSON.stringify(newState));
+      sessionStorage.setItem(storageKey, serializeState(newState));
     }
   }, [storageKey]);
 
@@ -54,7 +85,7 @@ export const usePageState = (initialState: PageState) => {
     const handleBeforeUnload = () => {
       if (typeof window !== 'undefined') {
         const newState = { ...pageState, scrollPosition: window.scrollY };
-        sessionStorage.setItem(storageKey, JSON.stringify(newState));
+        sessionStorage.setItem(storageKey, serializeState(newState));
       }
     };
 
