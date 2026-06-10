@@ -295,27 +295,40 @@ export class PayrollCalculationService {
         condition: (wl) => wl.is_mid_shift === true,
       },
     ];
+    const otSlotQuantities = new Map<string, number>();
+
+    for (const wl of workLogs) {
+      let remainingOtHours = Number(wl.ot_quantity) || 0;
+      if (remainingOtHours <= 0) continue;
+
+      for (const os of otSlots) {
+        if (remainingOtHours <= 0) break;
+        // 排除規則：如果該 OT slot 已被用戶手動排除，則跳過
+        if (excluded.has(`salary-ot-${os.field}`)) continue;
+        const rate = Number((salarySetting as any)[os.field]) || 0;
+        if (rate === 0) continue;
+        if (os.condition && !os.condition(wl)) continue;
+
+        const consumedHours = Math.min(remainingOtHours, 1);
+        otSlotQuantities.set(
+          os.field,
+          (otSlotQuantities.get(os.field) || 0) + consumedHours,
+        );
+        remainingOtHours -= consumedHours;
+      }
+    }
+
     for (const os of otSlots) {
-      // 排除規則：如果該 OT slot 已被用戶手動排除，則跳過
-      if (excluded.has(`salary-ot-${os.field}`)) continue;
+      const quantity = otSlotQuantities.get(os.field) || 0;
+      if (quantity <= 0) continue;
       const rate = Number((salarySetting as any)[os.field]) || 0;
-      if (rate === 0) continue;
-      const filteredLogs = workLogs.filter((wl) => {
-        if (!(wl.ot_quantity && Number(wl.ot_quantity) > 0)) return false;
-        if (os.condition) return os.condition(wl);
-        return true;
-      });
-      const otDays = new Set(
-        filteredLogs.map((wl) => toDateStr(wl.scheduled_date)),
-      ).size;
-      if (otDays === 0) continue;
-      const amount = rate * otDays;
+      const amount = rate * quantity;
       otTotal += amount;
       items.push({
         item_type: 'ot',
         item_name: os.label,
         unit_price: rate,
-        quantity: otDays,
+        quantity,
         amount,
         sort_order: sortOrder++,
       });
