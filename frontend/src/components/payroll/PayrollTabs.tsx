@@ -124,14 +124,16 @@ type GroupedSettlementRecord = {
   billing_quantity?: number | string | null;
   billing_quantity_type?: BillingQuantityType | string | null;
   unit?: string | null;
+  product_unit?: string | null;
   matched_unit?: string | null;
   matched_rate?: number | string | null;
   matched_ot_rate?: number | string | null;
+  matched_mid_shift_rate?: number | string | null;
+  ot_amount?: number | string | null;
+  mid_shift_amount?: number | string | null;
   amount?: number | string | null;
   total_amount?: number | string | null;
   ot_quantity?: number | string | null;
-  ot_amount?: number | string | null;
-  mid_shift_amount?: number | string | null;
   price_match_status?: string | null;
   price_match_note?: string | null;
   work_log_ids?: Array<number | string>;
@@ -571,7 +573,7 @@ function routeOf(row: WorkLogRecord | GroupedSettlementRecord): string {
 }
 
 function isUnmatched(row: WorkLogRecord | GroupedSettlementRecord): boolean {
-  return row.price_match_status !== "matched";
+  return row.price_match_status !== "matched" && row.price_match_status !== "manual";
 }
 
 function readCell(row: WorkLogRecord, key: keyof WorkLogRecord | "route"): CellValue {
@@ -661,7 +663,7 @@ function groupBillingQuantity(group: GroupedSettlementRecord): number {
 
 function groupBillingUnit(group: GroupedSettlementRecord): string {
   const type = group.billing_quantity_type || "days";
-  if (type === "product_quantity") return group.unit || group.matched_unit || "商品";
+  if (type === "product_quantity") return group.product_unit || group.matched_unit || "商品";
   if (type === "quantity") return group.unit || group.matched_unit || "數量";
   return "天";
 }
@@ -922,6 +924,36 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.setGroupRate(payrollId, groupKey, rate), "更新歸組單價失敗");
   }
 
+  async function setGroupOtRate(group: GroupedSettlementRecord) {
+    if (readOnly) return;
+    const groupKey = normalizeGroupKey(group);
+    const current = asOptionalNumber(group.matched_ot_rate);
+    const input = window.prompt("請輸入此歸組的手動 OT 價", current !== undefined ? String(current) : "");
+    if (input === null) return;
+    const otRate = Number(input);
+    if (!Number.isFinite(otRate)) {
+      alert("請輸入有效 OT 價");
+      return;
+    }
+    if (!payrollId) return;
+    await mutateAndReload(() => payrollApi.setGroupOtRate(payrollId, groupKey, otRate), "更新歸組 OT 價失敗");
+  }
+
+  async function setGroupMidShiftRate(group: GroupedSettlementRecord) {
+    if (readOnly) return;
+    const groupKey = normalizeGroupKey(group);
+    const current = asOptionalNumber(group.matched_mid_shift_rate);
+    const input = window.prompt("請輸入此歸組的手動中直價", current !== undefined ? String(current) : "");
+    if (input === null) return;
+    const midShiftRate = Number(input);
+    if (!Number.isFinite(midShiftRate)) {
+      alert("請輸入有效中直價");
+      return;
+    }
+    if (!payrollId) return;
+    await mutateAndReload(() => payrollApi.setGroupMidShiftRate(payrollId, groupKey, midShiftRate), "更新歸組中直價失敗");
+  }
+
   function openRateCardModal(source: RateCardSource) {
     setRateCardSource(source);
     setRateCardForm({
@@ -1064,7 +1096,7 @@ function PayrollTabs({
       </div>
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
-      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onOpenRateCard={openRateCardModal} />}
+      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} />}
@@ -1366,9 +1398,89 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
   );
 }
 
-function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onOpenRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void }) {
+function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void }) {
   if (groups.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無歸組結算資料。</div>;
-  return <div><div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">可按每個歸組選擇計費數量類型。單位邏輯會按「天數 / 數量 / 商品數量」顯示對應數量與單位；未匹配組合可手動設定單價或加入價目表。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[1180px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left font-medium text-gray-600">客戶 / 合約</th><th className="px-3 py-2 text-left font-medium text-gray-600">工種</th><th className="px-3 py-2 text-center font-medium text-gray-600">日/夜</th><th className="px-3 py-2 text-left font-medium text-gray-600">路線</th><th className="px-3 py-2 text-left font-medium text-gray-600">計費數量類型</th><th className="px-3 py-2 text-right font-medium text-gray-600">計費數量</th><th className="px-3 py-2 text-right font-medium text-gray-600">單價</th><th className="px-3 py-2 text-right font-medium text-gray-600">OT</th><th className="px-3 py-2 text-right font-medium text-gray-600">金額</th><th className="px-3 py-2 text-left font-medium text-gray-600">狀態</th><th className="px-3 py-2 text-center font-medium text-gray-600">操作</th></tr></thead><tbody>{groups.map((group) => { const billingType = (group.billing_quantity_type || "days") as BillingQuantityType; const source = buildRateCardSourceFromGroup(group); return <tr key={normalizeGroupKey(group)} className={`border-b hover:bg-gray-50 ${isUnmatched(group) ? "bg-amber-50/40" : ""}`}><td className="px-3 py-2"><div className="font-medium">{group.client_name || group.company_name || "-"}</div><div className="text-xs text-gray-500">{group.client_contract_no || group.contract_no || "-"}</div></td><td className="px-3 py-2">{group.service_type || "-"}</td><td className="px-3 py-2 text-center">{group.day_night || "-"}</td><td className="px-3 py-2 text-gray-600">{routeOf(group)}</td><td className="px-3 py-2"><select disabled={readOnly} value={billingType} onChange={(e) => onBillingTypeChange(group, e.target.value as BillingQuantityType)} className="input h-8 min-w-[120px] px-2 py-1 text-sm"><option value="days">天數</option><option value="quantity">數量</option><option value="product_quantity">商品數量</option></select></td><td className="px-3 py-2 text-right font-mono">{formatPlainNumber(groupBillingQuantity(group))} {groupBillingUnit(group)}</td><td className="px-3 py-2 text-right font-mono">{isUnmatched(group) && !readOnly ? <button type="button" onClick={() => onSetGroupRate(group)} className="font-medium text-primary-600 hover:underline">{asOptionalNumber(group.matched_rate) !== undefined ? formatMoney(group.matched_rate) : "輸入單價"}</button> : formatMoney(group.matched_rate)}</td><td className="px-3 py-2 text-right font-mono">{formatMoney(group.ot_amount)}<div className="text-[11px] text-gray-500">OT價 {formatMoney(group.matched_ot_rate)}</div></td><td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatMoney(group.total_amount ?? group.amount)}</td><td className="px-3 py-2 text-xs">{isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>; })}</tbody></table></div></div>;
+
+  return (
+    <div>
+      <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+        可按每個歸組選擇計費數量類型。單位邏輯會按「天數 / 數量 / 商品數量」顯示對應數量與單位；未匹配或手動設定組合可手動設定單價、OT 價、中直價或加入價目表。
+      </div>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[1280px] text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">客戶 / 合約</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">工種</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">日/夜</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">計費數量類型</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">計費數量</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">OT</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">中直價</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">金額</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-600">狀態</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => {
+              const billingType = (group.billing_quantity_type || "days") as BillingQuantityType;
+              const source = buildRateCardSourceFromGroup(group);
+              const canEditManualRate = isUnmatched(group) || group.price_match_status === "manual";
+              return (
+                <tr key={normalizeGroupKey(group)} className={`border-b hover:bg-gray-50 ${isUnmatched(group) ? "bg-amber-50/40" : ""}`}>
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{group.client_name || group.company_name || "-"}</div>
+                    <div className="text-xs text-gray-500">{group.client_contract_no || group.contract_no || "-"}</div>
+                  </td>
+                  <td className="px-3 py-2">{group.service_type || "-"}</td>
+                  <td className="px-3 py-2 text-center">{group.day_night || "-"}</td>
+                  <td className="px-3 py-2 text-gray-600">{routeOf(group)}</td>
+                  <td className="px-3 py-2">
+                    <select disabled={readOnly} value={billingType} onChange={(e) => onBillingTypeChange(group, e.target.value as BillingQuantityType)} className="input h-8 min-w-[120px] px-2 py-1 text-sm">
+                      <option value="days">天數</option>
+                      <option value="quantity">數量</option>
+                      <option value="product_quantity">商品數量</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">{formatPlainNumber(groupBillingQuantity(group))} {groupBillingUnit(group)}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {canEditManualRate && !readOnly ? (
+                      <button type="button" onClick={() => onSetGroupRate(group)} className="font-medium text-primary-600 hover:underline">
+                        {asOptionalNumber(group.matched_rate) !== undefined ? formatMoney(group.matched_rate) : "輸入單價"}
+                      </button>
+                    ) : formatMoney(group.matched_rate)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {formatMoney(group.ot_amount)}
+                    <div className="text-[11px] text-gray-500">
+                      OT價 {canEditManualRate && !readOnly ? (
+                        <button type="button" onClick={() => onSetGroupOtRate(group)} className="font-medium text-primary-600 hover:underline">
+                          {asOptionalNumber(group.matched_ot_rate) !== undefined ? formatMoney(group.matched_ot_rate) : "輸入OT價"}
+                        </button>
+                      ) : formatMoney(group.matched_ot_rate)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {canEditManualRate && !readOnly ? (
+                      <button type="button" onClick={() => onSetGroupMidShiftRate(group)} className="font-medium text-primary-600 hover:underline">
+                        {asOptionalNumber(group.matched_mid_shift_rate) !== undefined ? formatMoney(group.matched_mid_shift_rate) : "輸入中直價"}
+                      </button>
+                    ) : formatMoney(group.matched_mid_shift_rate)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatMoney(group.total_amount ?? group.amount)}</td>
+                  <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
+                  <td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function dateOnly(value: string | Date | null | undefined): string {

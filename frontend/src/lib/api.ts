@@ -686,6 +686,10 @@ export const payrollApi = {
   resetRefetch: (id: number) => api.post(`/payroll/${id}/reset-refetch`),
   setGroupRate: (id: number, groupKey: string, rate: number) =>
     api.post(`/payroll/${id}/set-group-rate`, { group_key: groupKey, rate }),
+  setGroupOtRate: (id: number, groupKey: string, otRate: number) =>
+    api.post(`/payroll/${id}/set-group-ot-rate`, { group_key: groupKey, ot_rate: otRate }),
+  setGroupMidShiftRate: (id: number, groupKey: string, midShiftRate: number) =>
+    api.post(`/payroll/${id}/set-group-mid-shift-rate`, { group_key: groupKey, mid_shift_rate: midShiftRate }),
   addToRateCard: (
     id: number,
     formData: {

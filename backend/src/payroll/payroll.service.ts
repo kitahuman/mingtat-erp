@@ -3034,8 +3034,90 @@ export class PayrollService {
       const updateData: any = {
         matched_rate: rate,
         is_manual_rate: true,
-        price_match_status: 'matched',
+        price_match_status: 'manual',
         price_match_note: '手動設定',
+      };
+      const finalPwl = { ...pwl, ...updateData };
+      updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+      await this.prisma.payrollWorkLog.update({
+        where: { id: pwl.id },
+        data: updateData,
+      });
+    }
+
+    return { success: true, updated_count: matchingPwls.length };
+  }
+
+  // ── 設定歸組 OT 價（批量更新同組工作記錄的 OT 價）──────────────────
+  async setGroupOtRate(payrollId: number, groupKey: string, otRate: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: payrollId, is_excluded: false },
+    });
+
+    const matchingPwls = pwls.filter(
+      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+    );
+
+    if (matchingPwls.length === 0) {
+      throw new NotFoundException('找不到對應的工作記錄組');
+    }
+
+    for (const pwl of matchingPwls) {
+      const updateData: any = {
+        matched_ot_rate: otRate,
+        is_manual_rate: true,
+        price_match_status: 'manual',
+        price_match_note: '手動設定',
+        ot_line_amount: otRate * (Number(pwl.ot_quantity) || 0),
+      };
+      const finalPwl = { ...pwl, ...updateData };
+      updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+      await this.prisma.payrollWorkLog.update({
+        where: { id: pwl.id },
+        data: updateData,
+      });
+    }
+
+    return { success: true, updated_count: matchingPwls.length };
+  }
+
+  // ── 設定歸組中直價（批量更新同組工作記錄的中直價）──────────────────
+  async setGroupMidShiftRate(payrollId: number, groupKey: string, midShiftRate: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: payrollId, is_excluded: false },
+    });
+
+    const matchingPwls = pwls.filter(
+      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+    );
+
+    if (matchingPwls.length === 0) {
+      throw new NotFoundException('找不到對應的工作記錄組');
+    }
+
+    for (const pwl of matchingPwls) {
+      const updateData: any = {
+        matched_mid_shift_rate: midShiftRate,
+        is_manual_rate: true,
+        price_match_status: 'manual',
+        price_match_note: '手動設定',
+        mid_shift_line_amount: pwl.is_mid_shift === true ? midShiftRate : 0,
       };
       const finalPwl = { ...pwl, ...updateData };
       updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);

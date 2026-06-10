@@ -908,6 +908,9 @@ export class PayrollCalculationService {
         const g = groups.get(key)!;
         g.total_quantity += quantity;
         g.product_quantity += productQuantity;
+        g.ot_quantity += Number(pwl.ot_quantity) || 0;
+        g.ot_amount += Number(pwl.ot_line_amount) || 0;
+        g.mid_shift_amount += Number(pwl.mid_shift_line_amount) || 0;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(pwl.id);
@@ -929,13 +932,19 @@ export class PayrollCalculationService {
           machine_type: pwl.machine_type || '',
           tonnage: pwl.tonnage || '',
           matched_rate: pwl.matched_rate ? Number(pwl.matched_rate) : null,
+          matched_ot_rate: pwl.matched_ot_rate ? Number(pwl.matched_ot_rate) : null,
+          matched_mid_shift_rate: pwl.matched_mid_shift_rate ? Number(pwl.matched_mid_shift_rate) : null,
           matched_unit: pwl.matched_unit || null,
           unit: pwl.unit || pwl.matched_unit || '天',
+          product_unit: pwl.payroll_work_log_product_unit || '',
           total_quantity: quantity,
           product_quantity: productQuantity,
           work_dates: new Set(workDate ? [workDate] : []),
           billing_quantity_type: billingType,
           billing_quantity: quantity,
+          ot_quantity: Number(pwl.ot_quantity) || 0,
+          ot_amount: Number(pwl.ot_line_amount) || 0,
+          mid_shift_amount: Number(pwl.mid_shift_line_amount) || 0,
           total_amount: 0,
           count: 1,
           price_match_status: pwl.price_match_status || 'unmatched',
@@ -947,11 +956,16 @@ export class PayrollCalculationService {
     return Array.from(groups.values()).map((g) => {
       const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
       const rate = Number(g.matched_rate) || 0;
+      const baseAmount = rate > 0 ? billingQuantity * rate : 0;
+      const otAmount = Number(g.ot_amount) || 0;
+      const midShiftAmount = Number(g.mid_shift_amount) || 0;
       return {
         ...g,
         work_dates: Array.from(g.work_dates || []),
         billing_quantity: billingQuantity,
-        total_amount: rate > 0 ? billingQuantity * rate : 0,
+        ot_amount: otAmount,
+        mid_shift_amount: midShiftAmount,
+        total_amount: baseAmount + otAmount + midShiftAmount,
       };
     });
   }
@@ -968,6 +982,9 @@ export class PayrollCalculationService {
         const g = groups.get(key)!;
         g.total_quantity += quantity;
         g.product_quantity += productQuantity;
+        g.ot_quantity += Number(wl.ot_quantity) || 0;
+        g.ot_amount += Number(wl._ot_line_amount) || 0;
+        g.mid_shift_amount += Number(wl._mid_shift_line_amount) || 0;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(wl.id);
@@ -984,12 +1001,19 @@ export class PayrollCalculationService {
           machine_type: wl.machine_type || '',
           tonnage: wl.tonnage || '',
           matched_rate: wl._matched_rate ? Number(wl._matched_rate) : null,
+          matched_ot_rate: wl._matched_ot_rate ? Number(wl._matched_ot_rate) : null,
+          matched_mid_shift_rate: wl._matched_mid_shift_rate ? Number(wl._matched_mid_shift_rate) : null,
           matched_unit: wl._matched_unit || null,
+          unit: wl.unit || wl._matched_unit || '天',
+          product_unit: wl.payroll_work_log_product_unit || '',
           total_quantity: quantity,
           product_quantity: productQuantity,
           work_dates: new Set(workDate ? [workDate] : []),
           billing_quantity_type: billingType,
           billing_quantity: quantity,
+          ot_quantity: Number(wl.ot_quantity) || 0,
+          ot_amount: Number(wl._ot_line_amount) || 0,
+          mid_shift_amount: Number(wl._mid_shift_line_amount) || 0,
           total_amount: 0,
           count: 1,
           price_match_status: wl._price_match_status || 'unmatched',
@@ -1000,11 +1024,16 @@ export class PayrollCalculationService {
     return Array.from(groups.values()).map((g) => {
       const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
       const rate = Number(g.matched_rate) || 0;
+      const baseAmount = rate > 0 ? billingQuantity * rate : 0;
+      const otAmount = Number(g.ot_amount) || 0;
+      const midShiftAmount = Number(g.mid_shift_amount) || 0;
       return {
         ...g,
         work_dates: Array.from(g.work_dates || []),
         billing_quantity: billingQuantity,
-        total_amount: rate > 0 ? billingQuantity * rate : 0,
+        ot_amount: otAmount,
+        mid_shift_amount: midShiftAmount,
+        total_amount: baseAmount + otAmount + midShiftAmount,
       };
     });
   }
@@ -1084,7 +1113,7 @@ export class PayrollCalculationService {
   // ══════════════════════════════════════════════════════════════
 
   calculateLineAmount(pwl: any): number {
-    if (pwl.price_match_status !== 'matched') return 0;
+    if (pwl.price_match_status !== 'matched' && pwl.price_match_status !== 'manual') return 0;
     const rate = Number(pwl.matched_rate) || 0;
     const qty = this.getBillingQuantityForRecord(pwl);
     const otRate = Number(pwl.matched_ot_rate) || 0;

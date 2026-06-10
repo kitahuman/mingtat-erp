@@ -134,6 +134,24 @@ export class PayrollController {
     return this.payrollService.setGroupRate(+id, body.group_key, body.rate);
   }
 
+  // 設定歸組 OT 價（批量更新同組工作記錄的 OT 價）
+  @Post(':id/set-group-ot-rate')
+  setGroupOtRate(
+    @Param('id') id: string,
+    @Body() body: { group_key: string; ot_rate: number },
+  ) {
+    return this.payrollService.setGroupOtRate(+id, body.group_key, body.ot_rate);
+  }
+
+  // 設定歸組中直價（批量更新同組工作記錄的中直價）
+  @Post(':id/set-group-mid-shift-rate')
+  setGroupMidShiftRate(
+    @Param('id') id: string,
+    @Body() body: { group_key: string; mid_shift_rate: number },
+  ) {
+    return this.payrollService.setGroupMidShiftRate(+id, body.group_key, body.mid_shift_rate);
+  }
+
   // 將手動設定的單價加入價目表
   @Post(':id/add-to-rate-card')
   addToRateCard(
