@@ -1257,6 +1257,18 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
 
   const selectedCount = selectedIds.size;
   const selectedRows = localRows.filter((row) => selectedIds.has(String(row.id)));
+  const detailSummary = useMemo(() => {
+    const sourceRows = selectedCount > 0 ? selectedRows : filteredSortedRows;
+    return sourceRows.reduce(
+      (summary, row) => ({
+        quantity: summary.quantity + toNumber(row.quantity),
+        productQuantity: summary.productQuantity + toNumber(getProductQuantity(row) as number | string | null | undefined),
+        otQuantity: summary.otQuantity + toNumber(row.ot_quantity),
+        midShiftCount: summary.midShiftCount + (row.is_mid_shift ? 1 : 0),
+      }),
+      { quantity: 0, productQuantity: 0, otQuantity: 0, midShiftCount: 0 },
+    );
+  }, [filteredSortedRows, selectedCount, selectedRows]);
   const activeBatchField = BATCH_FIELDS.find((field) => field.key === batchField);
 
   function handleColumnFilterChange(columnKey: string, selectedValues: Set<string> | null) {
@@ -1339,6 +1351,18 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
           <button type="button" onClick={() => setSelectedIds(new Set())} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100">清除選取</button>
         </div>
       )}
+
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-medium">
+          <span>數量：<span className="font-mono font-bold">{formatPlainNumber(detailSummary.quantity)}</span></span>
+          <span className="text-blue-300">|</span>
+          <span>商品數量：<span className="font-mono font-bold">{formatPlainNumber(detailSummary.productQuantity)}</span></span>
+          <span className="text-blue-300">|</span>
+          <span>OT：<span className="font-mono font-bold">{formatPlainNumber(detailSummary.otQuantity)}</span></span>
+          <span className="text-blue-300">|</span>
+          <span>中直：<span className="font-mono font-bold">{detailSummary.midShiftCount}</span></span>
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
