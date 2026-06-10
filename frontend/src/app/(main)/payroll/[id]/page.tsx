@@ -1720,7 +1720,7 @@ export default function PayrollDetailPage() {
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-screen-2xl">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">

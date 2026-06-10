@@ -60,6 +60,18 @@ type WorkLogRecord = {
   work_log_product_quantity?: number | string | null;
   goods_quantity?: number | string | null;
   product_quantity?: number | string | null;
+  work_log?: {
+    payroll_work_log_product_quantity?: number | string | null;
+    work_log_product_quantity?: number | string | null;
+    goods_quantity?: number | string | null;
+    product_quantity?: number | string | null;
+  } | null;
+  original_work_log?: {
+    payroll_work_log_product_quantity?: number | string | null;
+    work_log_product_quantity?: number | string | null;
+    goods_quantity?: number | string | null;
+    product_quantity?: number | string | null;
+  } | null;
   payroll_work_log_product_unit?: string | null;
   goods_unit?: string | null;
   product_unit?: string | null;
@@ -322,6 +334,62 @@ const TAB_LABELS: Record<TabKey, string> = {
   print: "列印",
 };
 
+const ALLOWANCE_LABELS: Record<string, string> = {
+  allowance_night: "夜班津貼",
+  night: "夜班津貼",
+  allowance_rent: "租車津貼",
+  rent: "租車津貼",
+  allowance_3runway: "三跑津貼",
+  "3runway": "三跑津貼",
+  allowance_well: "落井津貼",
+  well: "落井津貼",
+  allowance_machine: "揸機津貼",
+  machine: "揸機津貼",
+  allowance_roller: "火轆津貼",
+  roller: "火轆津貼",
+  allowance_crane: "吊/挾車津貼",
+  crane: "吊/挾車津貼",
+  allowance_move_machine: "搬機津貼",
+  move_machine: "搬機津貼",
+  allowance_kwh_night: "嘉華-夜間津貼",
+  kwh_night: "嘉華-夜間津貼",
+  allowance_mid_shift: "中直津貼",
+  mid_shift: "中直津貼",
+};
+
+const DAILY_METRIC_LABELS = ["工作", "底薪", "補底薪", "OT", "合計"];
+
+const SUMMARY_LABELS: Record<string, string> = {
+  gross_amount: "應收總額",
+  deduction_total: "扣款合計",
+  adjustment_total: "調整合計",
+  reimbursement_total: "報銷合計",
+  net_amount: "淨額",
+};
+
+const PAYROLL_ITEM_COLUMN_LABELS: Record<string, string> = {
+  item_type: "類型",
+  item_name: "項目名稱",
+  unit_price: "單價",
+  quantity: "數量",
+  amount: "金額",
+  remarks: "備註",
+};
+
+const ADJUSTMENT_COLUMN_LABELS: Record<string, string> = {
+  item_name: "項目名稱",
+  amount: "金額",
+  remarks: "備註",
+};
+
+const ALLOWANCE_OPTION_COLUMN_LABELS: Record<string, string> = {
+  allowance_key: "津貼代碼",
+  allowance_name: "津貼名稱",
+  amount: "金額",
+  default_amount: "預設金額",
+  remarks: "備註",
+};
+
 type DetailColumn = {
   key: DetailColumnKey;
   label: string;
@@ -406,8 +474,38 @@ function normalizeText(value: unknown) {
   if (value === null || value === undefined || value === "") return "—";
   if (value instanceof Date) return formatDate(value);
   if (typeof value === "boolean") return value ? "是" : "否";
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") {
+    const text = typeof (value as { toString?: () => string }).toString === "function" ? (value as { toString: () => string }).toString() : "";
+    if (text && text !== "[object Object]") return text;
+    return JSON.stringify(value);
+  }
   return String(value);
+}
+
+function getAllowanceOptionLabel(option: AllowanceOption): string {
+  const key = option.allowance_key || option.key || "";
+  const explicitName = option.allowance_name?.trim() || option.name?.trim();
+  if (explicitName && explicitName !== "津貼") return explicitName;
+  return ALLOWANCE_LABELS[key] || explicitName || "津貼";
+}
+
+function getProductQuantity(row: WorkLogRecord): CellValue {
+  const candidates = [
+    row.payroll_work_log_product_quantity,
+    row.work_log_product_quantity,
+    row.goods_quantity,
+    row.product_quantity,
+    row.work_log?.payroll_work_log_product_quantity,
+    row.work_log?.work_log_product_quantity,
+    row.work_log?.goods_quantity,
+    row.work_log?.product_quantity,
+    row.original_work_log?.payroll_work_log_product_quantity,
+    row.original_work_log?.work_log_product_quantity,
+    row.original_work_log?.goods_quantity,
+    row.original_work_log?.product_quantity,
+  ];
+  const value = candidates.find((candidate) => candidate !== null && candidate !== undefined && candidate !== "");
+  return value ?? "";
 }
 
 function getColumnValue(row: WorkLogRecord, key: DetailColumnKey): CellValue {
@@ -417,7 +515,7 @@ function getColumnValue(row: WorkLogRecord, key: DetailColumnKey): CellValue {
     return start || end ? `${start || "—"} → ${end || "—"}` : "";
   }
   if (key === "payroll_work_log_product_quantity") {
-    return row.payroll_work_log_product_quantity ?? row.work_log_product_quantity ?? row.goods_quantity ?? row.product_quantity ?? "";
+    return getProductQuantity(row);
   }
   const value = row[key] as unknown;
   return value instanceof Date || typeof value !== "object" ? (value as CellValue) : "";
@@ -1253,11 +1351,122 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onO
 
 function DailyTab({ days, allowanceOptions, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onExcludeBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
   if (days.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無逐日計算資料。</div>;
-  return <div className="space-y-3">{days.map((day, index) => { const date = day.date || `day-${index}`; const workLogs = day.work_logs || day.logs || []; const allowances = day.daily_allowances || day.allowances || []; const badges = day.allowance_badges || day.badges || []; const topUp = day.base_top_up ?? day.base_top_up_amount; return <div key={date} className="rounded-xl border bg-white shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3 p-4"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-gray-900">{displayDate(day.date)}</h3>{day.weekday && <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{day.weekday}</span>}{day.is_holiday && <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">{day.holiday_name || "假期"}</span>}</div><div className="mt-2 flex flex-wrap gap-2">{badges.map((badge, idx) => { const badgeKey = badge.badge_key || badge.key || String(idx); return <span key={badgeKey} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${badge.className || "bg-green-100 text-green-700"}`}>{badge.label || badge.name || "津貼"} {badge.amount !== undefined && ` ${formatMoney(badge.amount)}`}{!readOnly && badge.removable && day.date && <button type="button" onClick={() => onExcludeBadge(day.date || "", badgeKey)} className="ml-1 font-bold hover:opacity-70">×</button>}</span>; })}{allowances.map((allowance) => <span key={allowance.id || allowance.allowance_key || allowance.key} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">{allowance.allowance_name || allowance.name || "津貼"} {formatMoney(allowance.amount)}{!readOnly && allowance.id && <button type="button" onClick={() => onRemoveAllowance(allowance.id as number | string)} className="ml-1 font-bold hover:opacity-70">×</button>}</span>)}</div></div><div className="grid grid-cols-2 gap-2 text-right md:grid-cols-5"><DailyMetric label="工作" value={`${workLogs.length} 筆`} /><DailyMetric label="底薪" value={formatMoney(day.base_amount)} /><DailyMetric label="補底薪" value={formatMoney(topUp)} action={!readOnly && day.date ? () => onSaveTopUpOverride(day.date || "") : undefined} /><DailyMetric label="OT" value={formatMoney(day.ot_amount)} sub={day.ot_hours ? `${day.ot_hours} 小時` : undefined} /><DailyMetric label="合計" value={formatMoney(day.total_amount)} strong /></div></div><div className="border-t px-4 py-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap gap-2">{allowanceOptions.slice(0, 6).map((option) => <button key={option.allowance_key || option.key || option.allowance_name || option.name} type="button" disabled={readOnly || !day.date} onClick={() => onAddAllowance(day.date || "", option)} className="btn-secondary text-xs">加 {option.allowance_name || option.name || "津貼"}</button>)}</div><button type="button" onClick={() => onToggleExpand(date)} className="text-sm font-medium text-primary-600 hover:underline">{expandedDay === date ? "收起詳情" : "展開詳情"}</button></div>{expandedDay === date && <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">工種</th><th className="px-3 py-2 text-left">路線</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">金額</th><th className="px-3 py-2 text-left">備註</th></tr></thead><tbody>{workLogs.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">本日沒有工作記錄。</td></tr>}{workLogs.map((row) => <tr key={row.id} className="border-b"><td className="px-3 py-2">{row.service_type || "-"}</td><td className="px-3 py-2 text-gray-600">{routeOf(row)}</td><td className="px-3 py-2 text-right font-mono">{formatPlainNumber(row.quantity)} {row.unit || ""}</td><td className="px-3 py-2 text-right font-mono">{formatMoney(row.matched_rate)}</td><td className="px-3 py-2 text-right font-mono">{formatMoney(row.line_amount)}</td><td className="px-3 py-2 text-xs text-gray-500">{row.remarks || "-"}</td></tr>)}</tbody></table></div>}</div></div>; })}</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(220px,1fr)_repeat(5,minmax(88px,120px))] md:items-center">
+          <div>日期 / 津貼</div>
+          {DAILY_METRIC_LABELS.map((label) => (
+            <div key={label} className="text-right">
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {days.map((day, index) => {
+        const date = day.date || `day-${index}`;
+        const workLogs = day.work_logs || day.logs || [];
+        const allowances = day.daily_allowances || day.allowances || [];
+        const badges = day.allowance_badges || day.badges || [];
+        const topUp = day.base_top_up ?? day.base_top_up_amount;
+
+        return (
+          <div key={date} className="rounded-xl border bg-white shadow-sm">
+            <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-[minmax(220px,1fr)_repeat(5,minmax(88px,120px))] md:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-bold text-gray-900">{displayDate(day.date)}</h3>
+                  {day.weekday && <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{day.weekday}</span>}
+                  {day.is_holiday && <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">{day.holiday_name || "假期"}</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {badges.map((badge, idx) => {
+                    const badgeKey = badge.badge_key || badge.key || String(idx);
+                    return (
+                      <span key={badgeKey} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${badge.className || "bg-green-100 text-green-700"}`}>
+                        {badge.label || badge.name || "津貼"} {badge.amount !== undefined && ` ${formatMoney(badge.amount)}`}
+                        {!readOnly && badge.removable && day.date && <button type="button" onClick={() => onExcludeBadge(day.date || "", badgeKey)} className="ml-1 font-bold hover:opacity-70">×</button>}
+                      </span>
+                    );
+                  })}
+                  {allowances.map((allowance) => (
+                    <span key={allowance.id || allowance.allowance_key || allowance.key} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">
+                      {allowance.allowance_name || allowance.name || "津貼"} {formatMoney(allowance.amount)}
+                      {!readOnly && allowance.id && <button type="button" onClick={() => onRemoveAllowance(allowance.id as number | string)} className="ml-1 font-bold hover:opacity-70">×</button>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <DailyMetricValue label="工作" value={`${workLogs.length} 筆`} />
+              <DailyMetricValue label="底薪" value={formatMoney(day.base_amount)} />
+              <DailyMetricValue label="補底薪" value={formatMoney(topUp)} action={!readOnly && day.date ? () => onSaveTopUpOverride(day.date || "") : undefined} />
+              <DailyMetricValue label="OT" value={formatMoney(day.ot_amount)} sub={day.ot_hours ? `${day.ot_hours} 小時` : undefined} />
+              <DailyMetricValue label="合計" value={formatMoney(day.total_amount)} strong />
+            </div>
+
+            <div className="border-t px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {allowanceOptions.slice(0, 6).map((option) => {
+                    const label = getAllowanceOptionLabel(option);
+                    return (
+                      <button key={option.allowance_key || option.key || label} type="button" disabled={readOnly || !day.date} onClick={() => onAddAllowance(day.date || "", option)} className="btn-secondary text-xs">
+                        加 {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => onToggleExpand(date)} className="text-sm font-medium text-primary-600 hover:underline">
+                  {expandedDay === date ? "收起詳情" : "展開詳情"}
+                </button>
+              </div>
+              {expandedDay === date && (
+                <div className="mt-3 overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left">工種</th>
+                        <th className="px-3 py-2 text-left">路線</th>
+                        <th className="px-3 py-2 text-right">數量</th>
+                        <th className="px-3 py-2 text-right">單價</th>
+                        <th className="px-3 py-2 text-right">金額</th>
+                        <th className="px-3 py-2 text-left">備註</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workLogs.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">本日沒有工作記錄。</td></tr>}
+                      {workLogs.map((row) => (
+                        <tr key={row.id} className="border-b">
+                          <td className="px-3 py-2">{row.service_type || "-"}</td>
+                          <td className="px-3 py-2 text-gray-600">{routeOf(row)}</td>
+                          <td className="px-3 py-2 text-right font-mono">{formatPlainNumber(row.quantity)} {row.unit || ""}</td>
+                          <td className="px-3 py-2 text-right font-mono">{formatMoney(row.matched_rate)}</td>
+                          <td className="px-3 py-2 text-right font-mono">{formatMoney(row.line_amount)}</td>
+                          <td className="px-3 py-2 text-xs text-gray-500">{row.remarks || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function DailyMetric({ label, value, sub, strong, action }: { label: string; value: string; sub?: string; strong?: boolean; action?: () => void }) {
-  return <button type="button" onClick={action} disabled={!action} className={`rounded-lg bg-gray-50 px-3 py-2 ${action ? "hover:bg-primary-50" : "cursor-default"}`}><div className="text-[11px] text-gray-500">{label}</div><div className={`font-mono ${strong ? "font-bold text-primary-700" : "font-semibold text-gray-900"}`}>{value}</div>{sub && <div className="text-[11px] text-gray-500">{sub}</div>}</button>;
+function DailyMetricValue({ label, value, sub, strong, action }: { label: string; value: string; sub?: string; strong?: boolean; action?: () => void }) {
+  return (
+    <button type="button" onClick={action} disabled={!action} aria-label={label} title={label} className={`rounded-lg bg-gray-50 px-3 py-2 text-right ${action ? "hover:bg-primary-50" : "cursor-default"}`}>
+      <span className="sr-only">{label}</span>
+      <div className={`font-mono ${strong ? "font-bold text-primary-700" : "font-semibold text-gray-900"}`}>{value}</div>
+      {sub && <div className="text-[11px] text-gray-500">{sub}</div>}
+    </button>
+  );
 }
 
 function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedGroup[]; readOnly: boolean; onOpenRateCard: (source: RateCardSource) => void }) {
@@ -1270,12 +1479,46 @@ function CalculationTab({ calculation }: { calculation: CalculationDetails }) {
   const items = calculation.items || [];
   const adjustments = calculation.adjustments || [];
   const allowanceOptions = calculation.allowance_options || [];
-  return <div className="space-y-5"><section><h3 className="mb-3 font-bold text-gray-900">糧單摘要</h3><div className="grid gap-3 md:grid-cols-5">{Object.entries(summary).map(([key, value]) => <SummaryPill key={key} label={key} value={formatMoney(value)} tone={key === "net_amount" ? "green" : "blue"} />)}{Object.keys(summary).length === 0 && <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-500">暫無摘要資料。</div>}</div></section><SimpleTable title="薪酬項目 items" rows={items} columns={["item_type", "item_name", "unit_price", "quantity", "amount", "remarks"]} moneyColumns={["unit_price", "amount"]} /><SimpleTable title="調整項 adjustments" rows={adjustments} columns={["item_name", "amount", "remarks"]} moneyColumns={["amount"]} /><SimpleTable title="津貼選項 allowance_options" rows={allowanceOptions} columns={["allowance_key", "allowance_name", "amount", "default_amount", "remarks"]} moneyColumns={["amount", "default_amount"]} /></div>;
+  return (
+    <div className="space-y-5">
+      <section>
+        <h3 className="mb-3 font-bold text-gray-900">糧單摘要</h3>
+        <div className="grid gap-3 md:grid-cols-5">
+          {Object.entries(summary).map(([key, value]) => (
+            <SummaryPill key={key} label={SUMMARY_LABELS[key] || key} value={formatMoney(value)} tone={key === "net_amount" ? "green" : "blue"} />
+          ))}
+          {Object.keys(summary).length === 0 && <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-500">暫無摘要資料。</div>}
+        </div>
+      </section>
+      <SimpleTable title="薪酬項目" rows={items} columns={["item_type", "item_name", "unit_price", "quantity", "amount", "remarks"]} columnLabels={PAYROLL_ITEM_COLUMN_LABELS} moneyColumns={["unit_price", "amount"]} />
+      <SimpleTable title="調整項" rows={adjustments} columns={["item_name", "amount", "remarks"]} columnLabels={ADJUSTMENT_COLUMN_LABELS} moneyColumns={["amount"]} />
+      <SimpleTable title="津貼選項" rows={allowanceOptions} columns={["allowance_key", "allowance_name", "amount", "default_amount", "remarks"]} columnLabels={ALLOWANCE_OPTION_COLUMN_LABELS} moneyColumns={["amount", "default_amount"]} />
+    </div>
+  );
 }
 
 type SimpleRow = Record<string, string | number | boolean | null | undefined>;
-function SimpleTable({ title, rows, columns, moneyColumns }: { title: string; rows: SimpleRow[]; columns: string[]; moneyColumns: string[] }) {
-  return <section><h3 className="mb-2 font-bold text-gray-900">{title}</h3><div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-gray-50"><tr>{columns.map((column) => <th key={column} className="px-3 py-2 text-left font-medium text-gray-600">{column}</th>)}</tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">暫無資料。</td></tr>}{rows.map((row, index) => <tr key={String(row.id || index)} className="border-b">{columns.map((column) => <td key={column} className="px-3 py-2 text-gray-700">{moneyColumns.includes(column) ? formatMoney(row[column] as number | string | null | undefined) : String(row[column] ?? "-")}</td>)}</tr>)}</tbody></table></div></section>;
+function SimpleTable({ title, rows, columns, moneyColumns, columnLabels = {} }: { title: string; rows: SimpleRow[]; columns: string[]; moneyColumns: string[]; columnLabels?: Record<string, string> }) {
+  return (
+    <section>
+      <h3 className="mb-2 font-bold text-gray-900">{title}</h3>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>{columns.map((column) => <th key={column} className="px-3 py-2 text-left font-medium text-gray-600">{columnLabels[column] || column}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">暫無資料。</td></tr>}
+            {rows.map((row, index) => (
+              <tr key={String(row.id || index)} className="border-b">
+                {columns.map((column) => <td key={column} className="px-3 py-2 text-gray-700">{moneyColumns.includes(column) ? formatMoney(row[column] as number | string | null | undefined) : String(row[column] ?? "-")}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 function printNumber(value: number | string | null | undefined, digits = 2): string {
