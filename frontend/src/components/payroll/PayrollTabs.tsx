@@ -134,6 +134,10 @@ type GroupedSettlementRecord = {
   amount?: number | string | null;
   total_amount?: number | string | null;
   ot_quantity?: number | string | null;
+  mid_shift?: number | string | null;
+  mid_shift_count?: number | string | null;
+  mid_shift_quantity?: number | string | null;
+  is_mid_shift?: number | string | boolean | null;
   price_match_status?: string | null;
   price_match_note?: string | null;
   work_log_ids?: Array<number | string>;
@@ -1430,13 +1434,34 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
 function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void }) {
   if (groups.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無歸組結算資料。</div>;
 
+  const getGroupMidShiftCount = (group: GroupedSettlementRecord): number => {
+    const explicitCount = [group.mid_shift, group.mid_shift_count, group.mid_shift_quantity].find((value) => value !== null && value !== undefined && value !== "");
+    if (explicitCount !== undefined) return toNumber(explicitCount);
+    if (typeof group.is_mid_shift === "boolean") return group.is_mid_shift ? 1 : 0;
+    if (group.is_mid_shift !== null && group.is_mid_shift !== undefined && group.is_mid_shift !== "") return toNumber(group.is_mid_shift as number | string);
+    const midShiftRate = toNumber(group.matched_mid_shift_rate);
+    const midShiftAmount = toNumber(group.mid_shift_amount);
+    if (midShiftRate > 0 && midShiftAmount > 0) return midShiftAmount / midShiftRate;
+    return midShiftAmount > 0 ? 1 : 0;
+  };
+
+  const renderRateCell = (group: GroupedSettlementRecord, value: number | string | null | undefined, placeholder: string, onClick: () => Promise<void>) => {
+    const canEditManualRate = (isUnmatched(group) || group.price_match_status === "manual") && !readOnly;
+    if (!canEditManualRate) return formatMoney(value);
+    return (
+      <button type="button" onClick={onClick} className="font-medium text-primary-600 hover:underline">
+        {asOptionalNumber(value) !== undefined ? formatMoney(value) : placeholder}
+      </button>
+    );
+  };
+
   return (
     <div>
       <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
         可按每個歸組選擇計費數量類型。單位邏輯會按「天數 / 數量 / 商品數量」顯示對應數量與單位；未匹配或手動設定組合可手動設定單價、OT 價、中直價或加入價目表。
       </div>
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[1280px] text-sm">
+        <table className="w-full min-w-[1500px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-3 py-2 text-left font-medium text-gray-600">客戶 / 合約</th>
@@ -1445,8 +1470,10 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
               <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">計費數量類型</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">計費數量</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">OT</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">中直</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+              <th className="px-3 py-2 text-right font-medium text-gray-600">OT價</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">中直價</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">金額</th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">狀態</th>
@@ -1457,7 +1484,6 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
             {groups.map((group) => {
               const billingType = (group.billing_quantity_type || "days") as BillingQuantityType;
               const source = buildRateCardSourceFromGroup(group);
-              const canEditManualRate = isUnmatched(group) || group.price_match_status === "manual";
               return (
                 <tr key={normalizeGroupKey(group)} className={`border-b hover:bg-gray-50 ${isUnmatched(group) ? "bg-amber-50/40" : ""}`}>
                   <td className="px-3 py-2">
@@ -1475,30 +1501,11 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
                     </select>
                   </td>
                   <td className="px-3 py-2 text-right font-mono">{formatPlainNumber(groupBillingQuantity(group))} {groupBillingUnit(group)}</td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {canEditManualRate && !readOnly ? (
-                      <button type="button" onClick={() => onSetGroupRate(group)} className="font-medium text-primary-600 hover:underline">
-                        {asOptionalNumber(group.matched_rate) !== undefined ? formatMoney(group.matched_rate) : "輸入單價"}
-                      </button>
-                    ) : formatMoney(group.matched_rate)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {formatMoney(group.ot_amount)}
-                    <div className="text-[11px] text-gray-500">
-                      OT價 {canEditManualRate && !readOnly ? (
-                        <button type="button" onClick={() => onSetGroupOtRate(group)} className="font-medium text-primary-600 hover:underline">
-                          {asOptionalNumber(group.matched_ot_rate) !== undefined ? formatMoney(group.matched_ot_rate) : "輸入OT價"}
-                        </button>
-                      ) : formatMoney(group.matched_ot_rate)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {canEditManualRate && !readOnly ? (
-                      <button type="button" onClick={() => onSetGroupMidShiftRate(group)} className="font-medium text-primary-600 hover:underline">
-                        {asOptionalNumber(group.matched_mid_shift_rate) !== undefined ? formatMoney(group.matched_mid_shift_rate) : "輸入中直價"}
-                      </button>
-                    ) : formatMoney(group.matched_mid_shift_rate)}
-                  </td>
+                  <td className="px-3 py-2 text-right font-mono">{formatPlainNumber(group.ot_quantity)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{formatPlainNumber(getGroupMidShiftCount(group))}</td>
+                  <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_rate, "輸入單價", () => onSetGroupRate(group))}</td>
+                  <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_ot_rate, "輸入OT價", () => onSetGroupOtRate(group))}</td>
+                  <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_mid_shift_rate, "輸入中直價", () => onSetGroupMidShiftRate(group))}</td>
                   <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatMoney(group.total_amount ?? group.amount)}</td>
                   <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
                   <td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td>
