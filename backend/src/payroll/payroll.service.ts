@@ -2131,6 +2131,7 @@ export class PayrollService {
 
     // Check if this is a manual rate override
     const isManualRateSet = body.matched_rate !== undefined;
+    const isManualOtRateSet = body.matched_ot_rate !== undefined;
 
     // Update snapshot fields
     const editableFields = [
@@ -2163,18 +2164,24 @@ export class PayrollService {
       }
     }
 
-    if (isManualRateSet) {
+    if (isManualRateSet || isManualOtRateSet) {
       // Manual rate override: set the rate directly
-      const manualRate = body.matched_rate === null ? null : Number(body.matched_rate);
-      updateData.matched_rate = manualRate;
-      updateData.is_manual_rate = true;
-      if (manualRate !== null) {
-        updateData.price_match_status = 'matched';
-        updateData.price_match_note = '手動設定';
-      } else {
-        updateData.price_match_status = 'unmatched';
-        updateData.price_match_note = '未設定';
-        updateData.is_manual_rate = false;
+      if (isManualRateSet) {
+        const manualRate = body.matched_rate === null ? null : Number(body.matched_rate);
+        updateData.matched_rate = manualRate;
+        updateData.is_manual_rate = manualRate !== null;
+        if (manualRate !== null) {
+          updateData.price_match_status = 'matched';
+          updateData.price_match_note = '手動設定';
+        } else {
+          updateData.price_match_status = 'unmatched';
+          updateData.price_match_note = '未設定';
+          updateData.is_manual_rate = false;
+        }
+      }
+      if (isManualOtRateSet) {
+        updateData.matched_ot_rate = body.matched_ot_rate === null ? null : Number(body.matched_ot_rate);
+        updateData.is_manual_rate = true;
       }
     } else {
       // Re-match price if relevant fields changed

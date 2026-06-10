@@ -48,6 +48,7 @@ export class UpdatePayrollWorkLogDto {
   @IsOptional() @IsString() billing_quantity_type?: string;
   @IsOptional() @IsBoolean() is_mid_shift?: boolean;
   @IsOptional() @Type(() => Number) @IsNumber() matched_rate?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() matched_ot_rate?: number;
 }
 
 

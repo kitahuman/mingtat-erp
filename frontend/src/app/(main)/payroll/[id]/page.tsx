@@ -1428,57 +1428,6 @@ export default function PayrollDetailPage() {
     await handleRecalculate();
   };
 
-  const handlePayrollTabWorkLogUpdate = async (id: number | string, updates: Record<string, any>) => {
-    try {
-      await payrollApi.updateWorkLog(payroll.id, Number(id), updates);
-      await payrollApi.recalculate(payroll.id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '更新工作記錄失敗');
-      throw err;
-    }
-  };
-
-  const handlePayrollTabBatchUpdate = async (ids: Array<number | string>, updates: Record<string, any>) => {
-    if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((id) => payrollApi.updateWorkLog(payroll.id, Number(id), updates)));
-      await payrollApi.recalculate(payroll.id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '批量更新工作記錄失敗');
-      throw err;
-    }
-  };
-
-  const handlePayrollTabBatchDelete = async (ids: Array<number | string>) => {
-    if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((id) => payrollApi.excludeWorkLog(payroll.id, Number(id))));
-      await payrollApi.recalculate(payroll.id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '批量刪除工作記錄失敗');
-      throw err;
-    }
-  };
-
-  const handleGroupBillingQuantityTypeChange = async (groupKey: string, billingQuantityType: 'days' | 'quantity' | 'product_quantity') => {
-    const group = (payroll.grouped_settlement || []).find((g: any) => {
-      const fallbackKey = `${g.client_name}-${g.service_type}-${g.start_location}-${g.end_location}`;
-      return (g.group_key || fallbackKey) === groupKey;
-    });
-    const ids = (group?.work_log_ids || []) as Array<number | string>;
-    if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((id) => payrollApi.updateWorkLog(payroll.id, Number(id), { billing_quantity_type: billingQuantityType })));
-      await payrollApi.recalculate(payroll.id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || '更新計費數量類型失敗');
-      throw err;
-    }
-  };
 
   const handleDelete = async () => {
     if (!confirm('確定要刪除此糧單？')) return;
@@ -1862,6 +1811,7 @@ export default function PayrollDetailPage() {
           )}
         </div>
         <PayrollTabs
+          payrollId={payroll.id}
           workLogs={pwls}
           groupedSettlement={grouped}
           dailyCalculation={dailyCalc}
@@ -1879,10 +1829,6 @@ export default function PayrollDetailPage() {
             allowance_options: allowanceOptions,
           }}
           readOnly={!isDraft || isReadOnly('payroll')}
-          onUpdateWorkLog={handlePayrollTabWorkLogUpdate}
-          onBatchUpdateWorkLogs={handlePayrollTabBatchUpdate}
-          onBatchDeleteWorkLogs={handlePayrollTabBatchDelete}
-          onGroupBillingQuantityTypeChange={handleGroupBillingQuantityTypeChange}
         />
       </div>
 
