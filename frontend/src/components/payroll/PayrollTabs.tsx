@@ -169,6 +169,7 @@ type Adjustment = {
 type AllowanceOption = {
   allowance_key?: string | null;
   key?: string | null;
+  label?: string | null;
   allowance_name?: string | null;
   name?: string | null;
   amount?: number | string | null;
@@ -533,7 +534,7 @@ function normalizeText(value: unknown) {
 
 function getAllowanceOptionLabel(option: AllowanceOption): string {
   const key = option.allowance_key || option.key || "";
-  const explicitName = option.allowance_name?.trim() || option.name?.trim();
+  const explicitName = option.label?.trim() || option.allowance_name?.trim() || option.name?.trim();
   if (explicitName && explicitName !== "津貼") return explicitName;
   return ALLOWANCE_LABELS[key] || explicitName || "津貼";
 }
@@ -1054,7 +1055,7 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.addDailyAllowance(payrollId, {
       date,
       allowance_key: option.allowance_key || option.key || "custom_allowance",
-      allowance_name: option.allowance_name || option.name || "津貼",
+      allowance_name: option.label || option.allowance_name || option.name || "津貼",
       amount: toNumber(option.amount ?? option.default_amount),
     }), "新增每日津貼失敗");
   }
