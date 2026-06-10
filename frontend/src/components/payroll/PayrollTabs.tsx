@@ -2052,8 +2052,8 @@ function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalcul
         <div className="grid gap-3 md:grid-cols-4">
           <SummaryPill label="工作天數" value={`${workSummary.workDays}天`} tone="blue" />
           <SummaryPill label="休假天數" value={`${workSummary.leaveDays}天`} tone="gray" />
-          <SummaryPill label="OT筆數" value={`${workSummary.otCount}筆${workSummary.totalOtQuantity > 0 ? ` / ${formatPlainNumber(workSummary.totalOtQuantity)}` : ""}`} tone="amber" />
-          <SummaryPill label="中直筆數" value={`${workSummary.midShiftCount}筆`} tone="green" />
+          <SummaryPill label="OT小時" value={`${workSummary.otCount}小時${workSummary.totalOtQuantity > 0 ? ` / ${formatPlainNumber(workSummary.totalOtQuantity)}` : ""}`} tone="amber" />
+          <SummaryPill label="中直小時" value={`${workSummary.midShiftCount}小時`} tone="green" />
         </div>
       </section>
 

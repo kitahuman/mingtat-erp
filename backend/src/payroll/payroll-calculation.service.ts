@@ -262,71 +262,46 @@ export class PayrollCalculationService {
 
     // ── (3) OT 計算 ──
     let otTotal = 0;
-    const otRate = Number(salarySetting.ot_rate_standard) || 0;
-    let totalOtHours = 0;
-    for (const wl of workLogs) {
-      if (wl.ot_quantity && Number(wl.ot_quantity) > 0) {
-        totalOtHours += Number(wl.ot_quantity);
-      }
-    }
-    if (otRate > 0 && totalOtHours > 0) {
-      otTotal = otRate * totalOtHours;
-      items.push({
-        item_type: 'ot',
-        item_name: 'OT 加班費',
-        unit_price: otRate,
-        quantity: totalOtHours,
-        amount: otTotal,
-        sort_order: sortOrder++,
-      });
-    }
-    const otSlots: {
-      field: string;
-      label: string;
-      condition?: (wl: any) => boolean;
-    }[] = [
-      { field: 'ot_1800_1900', label: 'OT 18:00-19:00' },
-      { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
-      { field: 'ot_0600_0700', label: 'OT 06:00-07:00' },
-      { field: 'ot_0700_0800', label: 'OT 07:00-08:00' },
+    // 移除舊的標準 OT 計算區塊，改用下方的順序累加邏輯
+    const otSlotFields = [
+      'ot_1800_1900',
+      'ot_1900_2000',
+      'ot_0600_0700',
+      'ot_0700_0800',
     ];
-    const otSlotQuantities = new Map<string, number>();
+    const otSlotLabels: Record<string, string> = {
+      ot_1800_1900: 'OT 18:00-19:00',
+      ot_1900_2000: 'OT 19:00-20:00',
+      ot_0600_0700: 'OT 06:00-07:00',
+      ot_0700_0800: 'OT 07:00-08:00',
+    };
 
+    // 依序計算 OT 金額
+    let currentOtHourIndex = 0;
     for (const wl of workLogs) {
-      let remainingOtHours = Number(wl.ot_quantity) || 0;
-      if (remainingOtHours <= 0) continue;
+      const otQty = Number(wl.ot_quantity) || 0;
+      if (otQty <= 0) continue;
 
-      for (const os of otSlots) {
-        if (remainingOtHours <= 0) break;
-        // 排除規則：如果該 OT slot 已被用戶手動排除，則跳過
-        if (excluded.has(`salary-ot-${os.field}`)) continue;
-        const rate = Number((salarySetting as any)[os.field]) || 0;
-        if (rate === 0) continue;
-        if (os.condition && !os.condition(wl)) continue;
+      for (let i = 0; i < otQty; i++) {
+        const slotField = otSlotFields[currentOtHourIndex];
+        const rate = slotField
+          ? Number((salarySetting as any)[slotField]) || 0
+          : Number(salarySetting.ot_rate_standard) || 0;
 
-        const consumedHours = Math.min(remainingOtHours, 1);
-        otSlotQuantities.set(
-          os.field,
-          (otSlotQuantities.get(os.field) || 0) + consumedHours,
-        );
-        remainingOtHours -= consumedHours;
+        const amount = rate * 1;
+        otTotal += amount;
+
+        items.push({
+          item_type: 'ot',
+          item_name: slotField ? otSlotLabels[slotField] : 'OT 加班費 (標準)',
+          unit_price: rate,
+          quantity: 1,
+          amount,
+          sort_order: sortOrder++,
+        });
+
+        currentOtHourIndex++;
       }
-    }
-
-    for (const os of otSlots) {
-      const quantity = otSlotQuantities.get(os.field) || 0;
-      if (quantity <= 0) continue;
-      const rate = Number((salarySetting as any)[os.field]) || 0;
-      const amount = rate * quantity;
-      otTotal += amount;
-      items.push({
-        item_type: 'ot',
-        item_name: os.label,
-        unit_price: rate,
-        quantity,
-        amount,
-        sort_order: sortOrder++,
-      });
     }
 
     // 中直OT津貼 - 額外津貼，不佔用 OT 時數
@@ -710,14 +685,25 @@ export class PayrollCalculationService {
       'ot_0600_0700',
       'ot_0700_0800',
     ];
+
+    // 追蹤累積的 OT 小時數，以便按順序應用時段金額
+    let accumulatedOtHours = 0;
+
     const getSalaryOtAmount = (pwl: any): number => {
       const otQty = Number(pwl.ot_quantity) || 0;
       if (otQty <= 0) return 0;
-      for (const slot of salaryOtSlots) {
-        const rate = Number(salarySetting?.[slot]) || 0;
-        if (rate > 0) return rate * otQty;
+
+      let totalAmount = 0;
+      for (let i = 0; i < otQty; i++) {
+        const slotIndex = accumulatedOtHours + i;
+        const slotField = salaryOtSlots[slotIndex];
+        const rate = slotField
+          ? Number(salarySetting?.[slotField]) || 0
+          : Number(salarySetting?.ot_rate_standard) || 0;
+        totalAmount += rate;
       }
-      return (Number(salarySetting?.ot_rate_standard) || 0) * otQty;
+      accumulatedOtHours += otQty;
+      return totalAmount;
     };
     const getSalaryMidShiftAmount = (pwl: any): number =>
       pwl.is_mid_shift === true
