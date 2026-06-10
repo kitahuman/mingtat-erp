@@ -556,6 +556,14 @@ export default function EmployeesPage() {
     return fmtDate(v);
   };
 
+  const renderMpfPlan = (v?: string | null) => {
+    const plan = String(v || '').toLowerCase();
+    if (plan === 'industry') return '行業計劃';
+    if (plan === 'manulife') return '宏利';
+    if (plan === 'aia') return 'AIA';
+    return '一般計劃';
+  };
+
   // ── Batch delete helpers ──────────────────────────────────────────────────
   const toggleSelectId = (id: number) => {
     setSelectedIds((prev) =>
@@ -710,6 +718,14 @@ export default function EmployeesPage() {
         row.company?.internal_prefix || row.company?.name || '-',
     },
     {
+      key: 'mpf_plan',
+      label: '強積金計劃',
+      sortable: false,
+      editable: false,
+      render: (v: string | null) => renderMpfPlan(v),
+      filterRender: (v: string | null) => renderMpfPlan(v),
+    },
+    {
       key: 'green_card_expiry',
       label: '平安卡到期',
       sortable: true,
@@ -805,6 +821,14 @@ export default function EmployeesPage() {
         row.company?.internal_prefix || row.company?.name || '-',
       filterRender: (_: any, row: any) =>
         row.company?.internal_prefix || row.company?.name || '-',
+    },
+    {
+      key: 'mpf_plan',
+      label: '強積金計劃',
+      sortable: false,
+      editable: false,
+      render: (v: string | null) => renderMpfPlan(v),
+      filterRender: (v: string | null) => renderMpfPlan(v),
     },
     {
       key: 'termination_date',
