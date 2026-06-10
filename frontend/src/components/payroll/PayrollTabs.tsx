@@ -168,6 +168,18 @@ type Adjustment = {
   remarks?: string | null;
 };
 
+type PayrollExpenseRecord = {
+  id?: number | string;
+  expense?: {
+    id?: number | string;
+    date?: string | null;
+    category?: { name?: string | null; parent?: { name?: string | null } | null } | null;
+    description?: string | null;
+    item?: string | null;
+    total_amount?: number | string | null;
+  } | null;
+};
+
 type AllowanceOption = {
   allowance_key?: string | null;
   key?: string | null;
@@ -285,6 +297,7 @@ type PayrollSnapshot = {
   daily_calculation?: DailyCalculationRecord[];
   items?: PayrollItem[];
   adjustments?: Adjustment[];
+  payroll_expenses?: PayrollExpenseRecord[];
   allowance_options?: AllowanceOption[];
   salary_setting?: SalarySetting | null;
   mpf_plan?: string | null;
@@ -403,7 +416,6 @@ const SUMMARY_LABELS: Record<string, string> = {
 };
 
 const PAYROLL_ITEM_COLUMN_LABELS: Record<string, string> = {
-  item_type: "類型",
   item_name: "項目名稱",
   unit_price: "單價",
   quantity: "數量",
@@ -1151,7 +1163,7 @@ function PayrollTabs({
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "calculation" && <CalculationTab calculation={calculation} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} />}
+      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} />}
       {activeTab === "print" && <PrintTab rows={rows} groups={groups} calculation={calculation} snapshot={snapshot} printRef={printRef} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} onPrint={printPayroll} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
@@ -2026,16 +2038,18 @@ function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedG
   return <div><div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">以下工作記錄未能自動匹配價目。可直接將組合加入價目表，重新計算後相關分頁會同步更新。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[980px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">客戶</th><th className="px-3 py-2 text-left">合約</th><th className="px-3 py-2 text-center">日/夜</th><th className="px-3 py-2 text-left">路線</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">筆數</th><th className="px-3 py-2 text-left">原因</th><th className="px-3 py-2 text-center">操作</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key} className="border-b hover:bg-amber-50/50"><td className="px-3 py-2 font-medium">{group.clientName}</td><td className="px-3 py-2 text-gray-600">{group.contractNo}</td><td className="px-3 py-2 text-center">{group.dayNight}</td><td className="px-3 py-2 text-gray-600">{group.route}</td><td className="px-3 py-2 text-right font-mono">{group.quantity.toLocaleString()} {group.unit}</td><td className="px-3 py-2 text-right font-mono">{group.count}</td><td className="px-3 py-2 text-xs text-amber-700">{group.reason}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(group.source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>)}</tbody></table></div></div>;
 }
 
-function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalculation = [] }: { calculation: CalculationDetails; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[] }) {
+function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], dailyCalculation = [] }: { calculation: CalculationDetails; snapshot?: PayrollSnapshot | null; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[] }) {
   const summary = { ...calculation.payroll_summary } || {};
   const items = calculation.items || [];
   const salaryItems = buildSalarySettingDisplayItems(salarySetting, calculation.mpf_plan);
+  const adjustments = calculation.adjustments || snapshot?.adjustments || [];
+  const payrollExpenses = snapshot?.payroll_expenses || [];
   const workSummary = buildCalculationWorkSummary(workLogs, dailyCalculation);
 
   // 計算應付總額
   const netAmount = toNumber(summary.net_amount);
   const reimbursement = toNumber(summary.reimbursement_total);
-  const pettyCashDeducted = toNumber(summary.petty_cash_deducted);
+  const pettyCashDeducted = toNumber(summary.petty_cash_deducted ?? snapshot?.petty_cash_deducted);
   const totalPayable = netAmount + reimbursement - pettyCashDeducted;
   
   const displaySummary = {
@@ -2044,7 +2058,7 @@ function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalcul
     deduction_total: summary.deduction_total,
     net_amount: summary.net_amount,
     reimbursement_total: summary.reimbursement_total,
-    petty_cash_deducted: summary.petty_cash_deducted,
+    petty_cash_deducted: pettyCashDeducted,
     total_payable: totalPayable,
   };
 
@@ -2092,7 +2106,7 @@ function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalcul
           })}
         </div>
       </section>
-      <SimpleTable title="薪酬項目" rows={items} columns={["item_type", "item_name", "unit_price", "quantity", "amount", "remarks"]} columnLabels={PAYROLL_ITEM_COLUMN_LABELS} moneyColumns={["unit_price", "amount"]} />
+      <PayrollItemsGroupedTable items={items} adjustments={adjustments} payrollExpenses={payrollExpenses} summary={displaySummary} mpfPlan={calculation.mpf_plan || salarySetting?.mpf_plan || snapshot?.mpf_plan || null} />
     </div>
   );
 }
@@ -2179,6 +2193,197 @@ function buildCalculationWorkSummary(workLogs: WorkLogRecord[], dailyCalculation
     totalOtQuantity: otRows.reduce((sum, row) => sum + toNumber(row.ot_quantity), 0),
     midShiftCount: midShiftRows.length,
   };
+}
+
+
+function getPayrollItemTypeLabel(type: string | null | undefined): string {
+  if (type === "base_salary") return "底薪";
+  if (type === "allowance") return "津貼";
+  if (type === "ot") return "OT";
+  if (type === "mpf_deduction") return "強積金";
+  return type || "—";
+}
+
+function getMpfPlanShortLabel(plan: string | null | undefined): string {
+  if (plan === "industry") return "行業";
+  if (plan === "manulife") return "宏利";
+  if (plan === "aia") return "AIA";
+  return "一般";
+}
+
+function formatAdjustmentDateForTable(value: string | null | undefined): string {
+  if (!value) return "";
+  const text = String(value).slice(0, 10);
+  const parts = text.split("-");
+  if (parts.length !== 3) return "";
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return "";
+  return `${month}月${day}日`;
+}
+
+function getExpenseCategoryName(record: PayrollExpenseRecord): string {
+  const category = record.expense?.category;
+  if (!category) return "—";
+  return category.parent?.name ? `${category.parent.name} / ${category.name || "—"}` : category.name || "—";
+}
+
+function PayrollItemsGroupedTable({
+  items,
+  adjustments,
+  payrollExpenses,
+  summary,
+  mpfPlan,
+}: {
+  items: PayrollItem[];
+  adjustments: Adjustment[];
+  payrollExpenses: PayrollExpenseRecord[];
+  summary: Record<string, number | string | null | undefined>;
+  mpfPlan?: string | null;
+}) {
+  const columns = ["item_name", "unit_price", "quantity", "amount", "remarks"];
+  const salaryGroups: Array<{ type: string; title: string }> = [
+    { type: "base_salary", title: "底薪項目" },
+    { type: "allowance", title: "津貼項目" },
+    { type: "ot", title: "OT 項目" },
+  ];
+  const mpfItems = items.filter((item) => item.item_type === "mpf_deduction");
+  const hasAdjustments = adjustments.length > 0 || toNumber(summary.adjustment_total) !== 0;
+  const hasReimbursements = payrollExpenses.length > 0 || toNumber(summary.reimbursement_total) > 0;
+  const pettyCashDeducted = toNumber(summary.petty_cash_deducted);
+  const hasPettyCash = pettyCashDeducted > 0;
+  const netAmount = toNumber(summary.net_amount);
+  const totalPayable = toNumber(summary.total_payable);
+  const mpfDeductionTotal = Math.abs(toNumber(summary.deduction_total));
+  const mpfLabel = `強積金（${getMpfPlanShortLabel(mpfPlan)}）(-)`;
+
+  const renderItemRow = (item: PayrollItem, key: string | number | undefined, extraClass = "") => {
+    const isDeduction = toNumber(item.amount) < 0;
+    return (
+      <tr key={String(key)} className={`border-b ${extraClass}`}>
+        <td className="px-3 py-2 font-medium text-gray-800">{item.item_name || "—"}</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : formatMoney(item.unit_price)}</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(toNumber(item.quantity))}</td>
+        <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>{isDeduction ? "-" : ""}{formatMoney(Math.abs(toNumber(item.amount)))}</td>
+        <td className="px-3 py-2 text-xs text-gray-500">{item.remarks || "—"}</td>
+      </tr>
+    );
+  };
+
+  const renderSectionHeader = (title: string, key: string) => (
+    <tr key={key} className="bg-gray-50/80">
+      <td colSpan={columns.length} className="px-3 py-2 text-xs font-bold uppercase tracking-wide text-gray-600">{title}</td>
+    </tr>
+  );
+
+  const renderSpacer = (key: string) => <tr key={key} className="h-3"><td colSpan={columns.length} className="border-0 bg-white p-0" /></tr>;
+  const renderSeparator = (key: string) => <tr key={key}><td colSpan={columns.length} className="border-t border-dashed border-gray-300 p-0" /></tr>;
+  const renderSubtotal = (label: string, amount: number | string | null | undefined, key: string, tone: "primary" | "blue" | "green" = "primary") => (
+    <tr key={key} className={tone === "green" ? "bg-green-50" : tone === "blue" ? "bg-blue-50" : "bg-primary-50"}>
+      <td colSpan={3} className="px-3 py-2 text-right font-bold text-gray-800">{label}</td>
+      <td className={`px-3 py-2 text-right font-mono font-bold ${tone === "green" ? "text-green-700" : tone === "blue" ? "text-blue-700" : "text-primary-700"}`}>{formatMoney(amount)}</td>
+      <td />
+    </tr>
+  );
+
+  const rows: ReactNode[] = [];
+  salaryGroups.forEach((group) => {
+    const groupItems = items.filter((item) => item.item_type === group.type);
+    if (groupItems.length === 0) return;
+    rows.push(renderSectionHeader(group.title, `header-${group.type}`));
+    groupItems.forEach((item, index) => rows.push(renderItemRow(item, item.id || `${group.type}-${index}`)));
+  });
+  rows.push(renderSeparator("sep-gross"));
+  rows.push(renderSubtotal("應收總額", summary.gross_amount, "subtotal-gross"));
+
+  if (hasAdjustments) {
+    rows.push(renderSpacer("space-adjustments"));
+    rows.push(renderSectionHeader("自定義津貼/扣款 (+)", "header-adjustments"));
+    adjustments.forEach((adj, index) => {
+      const amount = toNumber(adj.amount);
+      const dateLabel = formatAdjustmentDateForTable(adj.adjustment_date);
+      rows.push(
+        <tr key={`adjustment-${adj.id || index}`} className="border-b bg-green-50/30">
+          <td className="px-3 py-2 font-medium text-gray-800">{adj.item_name || "自定義津貼/扣款"}{dateLabel ? ` (${dateLabel})` : ""}</td>
+          <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+          <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+          <td className={`px-3 py-2 text-right font-mono font-bold ${amount < 0 ? "text-red-600" : "text-green-600"}`}>{amount < 0 ? "-" : "+"}{formatMoney(Math.abs(amount))}</td>
+          <td className="px-3 py-2 text-xs text-gray-500">{adj.remarks || "—"}</td>
+        </tr>
+      );
+    });
+    if (adjustments.length === 0) rows.push(renderSubtotal("自定義津貼/扣款合計", summary.adjustment_total, "subtotal-adjustments", "green"));
+  }
+
+  rows.push(renderSpacer("space-mpf"));
+  rows.push(renderSectionHeader(mpfLabel, "header-mpf"));
+  if (mpfItems.length > 0) {
+    mpfItems.forEach((item, index) => rows.push(renderItemRow(item, item.id || `mpf-${index}`, "bg-red-50/40")));
+  } else {
+    rows.push(
+      <tr key="mpf-summary" className="border-b bg-red-50/40">
+        <td className="px-3 py-2 font-medium text-gray-800">{mpfLabel}</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+        <td className="px-3 py-2 text-right font-mono font-bold text-red-600">-{formatMoney(mpfDeductionTotal)}</td>
+        <td className="px-3 py-2 text-xs text-gray-500">—</td>
+      </tr>
+    );
+  }
+  rows.push(renderSeparator("sep-net"));
+  rows.push(renderSubtotal("淨薪金", netAmount, "subtotal-net", "blue"));
+
+  if (hasReimbursements) {
+    rows.push(renderSpacer("space-reimbursements"));
+    rows.push(renderSectionHeader("員工報銷 (+)", "header-reimbursements"));
+    payrollExpenses.forEach((record, index) => {
+      const expense = record.expense;
+      rows.push(
+        <tr key={`reimbursement-${record.id || expense?.id || index}`} className="border-b bg-blue-50/30">
+          <td className="px-3 py-2 font-medium text-gray-800">{expense?.date ? fmtDate(expense.date) : "—"} - {getExpenseCategoryName(record)}</td>
+          <td className="px-3 py-2 text-gray-700">{expense?.description || expense?.item || "—"}</td>
+          <td className="px-3 py-2 text-right font-mono font-bold text-blue-600">+{formatMoney(expense?.total_amount)}</td>
+          <td className="px-3 py-2 text-xs text-gray-500">報銷</td>
+        </tr>
+      );
+    });
+    if (payrollExpenses.length === 0) rows.push(renderSubtotal("員工報銷合計", summary.reimbursement_total, "subtotal-reimbursement", "blue"));
+  }
+
+  if (hasPettyCash) {
+    rows.push(renderSpacer("space-petty-cash"));
+    rows.push(renderSectionHeader("零用金 (-)", "header-petty-cash"));
+    rows.push(
+      <tr key="petty-cash" className="border-b bg-amber-50/50">
+        <td className="px-3 py-2 font-medium text-gray-800">零用金抵扣</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">—</td>
+        <td className="px-3 py-2 text-right font-mono font-bold text-red-600">-{formatMoney(pettyCashDeducted)}</td>
+        <td className="px-3 py-2 text-xs text-gray-500">抵扣員工報銷</td>
+      </tr>
+    );
+  }
+
+  rows.push(renderSeparator("sep-payable"));
+  rows.push(renderSubtotal("應付總額", totalPayable, "subtotal-payable", "green"));
+
+  return (
+    <section>
+      <h3 className="mb-2 font-bold text-gray-900">糧單項目</h3>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[920px] text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              {columns.map((column) => <th key={column} className="px-3 py-2 text-left font-medium text-gray-600">{PAYROLL_ITEM_COLUMN_LABELS[column] || column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">暫無資料。</td></tr> : rows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 type SimpleRow = Record<string, string | number | boolean | null | undefined>;

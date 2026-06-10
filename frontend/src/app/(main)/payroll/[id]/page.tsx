@@ -119,7 +119,7 @@ function PayrollItemsSummary({
       await payrollApi.updateItem(payrollId, item.id, { payroll_item_excluded: checked });
       await onSaved();
     } catch (err: any) {
-      alert(err.response?.data?.message || '更新薪酬項目失敗');
+      alert(err.response?.data?.message || '更新糧單項目失敗');
     } finally {
       setSavingItemId(null);
     }
@@ -127,7 +127,7 @@ function PayrollItemsSummary({
 
   return (
     <div className={className}>
-      <h3 className="font-bold text-gray-900 mb-2">薪酬項目明細（底薪 / 津貼 / OT / 強積金）</h3>
+      <h3 className="font-bold text-gray-900 mb-2">糧單項目明細（底薪 / 津貼 / OT / 強積金）</h3>
       <div className="overflow-x-auto border rounded-lg">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
@@ -171,7 +171,7 @@ function PayrollItemsSummary({
                       disabled={!canEditExcluded || savingItemId === item.id}
                       onChange={(e) => handleToggleExcluded(item, e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      title={canEditExcluded ? '勾選後此薪酬項目不計入糧單金額' : readOnlyMode ? '目前帳號沒有此頁面的編輯權限' : '只有草稿或準備中糧單可編輯'}
+                      title={canEditExcluded ? '勾選後此糧單項目不計入糧單金額' : readOnlyMode ? '目前帳號沒有此頁面的編輯權限' : '只有草稿或準備中糧單可編輯'}
                     />
                   </td>
                   <td className={`px-4 py-2 ${excludedClass}`}>
@@ -1660,6 +1660,22 @@ export default function PayrollDetailPage() {
                       }
                     }}
                   />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await payrollApi.update(payroll.id, { mpf_relevant_income: null });
+                        await payrollApi.recalculate(payroll.id, {});
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || '重設失敗');
+                      }
+                    }}
+                    className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                    title={`重設為自動計算值 $${defaultMpfRelevantIncome.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                  >
+                    重設
+                  </button>
                 </div>
               ) : (
                 <p className="font-bold font-mono">${displayMpfRelevantIncome ? displayMpfRelevantIncome.toLocaleString() : '-'}</p>
