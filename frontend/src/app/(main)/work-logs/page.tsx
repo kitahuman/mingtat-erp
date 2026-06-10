@@ -4806,12 +4806,30 @@ export default function WorkLogsPage() {
                                         {item.record_destination || ''}
                                       </div>
                                     )}
-                                    {item.record_time_in && (
+                                    {(item.record_raw_data?.facility || item.record_raw_data?.account_no) && (
+                                      <div className="flex items-center gap-3 flex-wrap text-gray-500 text-xs">
+                                        {item.record_raw_data?.facility && (
+                                          <span>🏗 {item.record_raw_data.facility}</span>
+                                        )}
+                                        {item.record_raw_data?.account_no && (
+                                          <span>🚛 戶口: {item.record_raw_data.account_no}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(item.record_work_date || item.record_time_in) && (
                                       <div className="text-gray-500 text-xs">
-                                        🕐 {item.record_time_in}
-                                        {item.record_time_out
-                                          ? ` - ${item.record_time_out}`
-                                          : ''}
+                                        🕐 {(() => {
+                                          const recDate = item.record_work_date ? new Date(item.record_work_date).toISOString().slice(0, 10) : '';
+                                          const formatT = (iso: string | null) => {
+                                            if (!iso) return '';
+                                            const d = new Date(iso);
+                                            return isNaN(d.getTime()) ? iso : d.toISOString().slice(11, 16);
+                                          };
+                                          const tIn = formatT(item.record_time_in);
+                                          const tOut = formatT(item.record_time_out);
+                                          const tRange = tIn ? (tOut ? `${tIn} - ${tOut}` : tIn) : '';
+                                          return [recDate, tRange].filter(Boolean).join(' ');
+                                        })()}
                                       </div>
                                     )}
                                     {item.record_weight_net != null && (
