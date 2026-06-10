@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { payrollApi, fieldOptionsApi, pettyCashApi } from '@/lib/api';
 import Link from 'next/link';
@@ -879,6 +879,11 @@ function DailyCalculationView({
     }
   };
 
+  const getDailyAllowanceLabel = (item: any) => {
+    const optionLabel = allowanceOptions.find((opt: any) => opt.key === item.allowance_key)?.label;
+    return item.allowance_name || optionLabel || item.allowance_key || '每日津貼';
+  };
+
   const buildAllowanceBadges = (day: any): AllowanceBadge[] => {
     const badges: AllowanceBadge[] = [];
 
@@ -906,7 +911,7 @@ function DailyCalculationView({
           id: item.id,
           label: (
             <span className="inline-flex items-center gap-1">
-              {item.allowance_name || item.allowance_key || '每日津貼'}
+              {getDailyAllowanceLabel(item)}
               {isAuto && <span className="text-[10px] bg-blue-500 text-white px-1 rounded-sm scale-90 origin-left" title="自動連結">A</span>}
             </span>
           ),
@@ -976,9 +981,50 @@ function DailyCalculationView({
     return badges;
   };
 
-  const dailyTableColumnCount = 5 + (isDaily ? 1 : 0) + (isDraft ? 1 : 0);
+  const getWorkLogOtAmount = (wl: any) => {
+    const explicitAmount = Number(wl.ot_line_amount);
+    if (Number.isFinite(explicitAmount) && explicitAmount > 0) return explicitAmount;
+    const quantity = Number(wl.ot_quantity) || 0;
+    const rate = Number(wl.matched_ot_rate) || 0;
+    return quantity > 0 ? quantity * rate : 0;
+  };
+
+  const getWorkLogMidShiftAmount = (wl: any) => {
+    const explicitAmount = Number(wl.mid_shift_line_amount);
+    if (Number.isFinite(explicitAmount) && explicitAmount > 0) return explicitAmount;
+    const rate = Number(wl.matched_mid_shift_rate) || 0;
+    return wl.is_mid_shift ? rate : 0;
+  };
+
+  const calculateOtMidShiftTotals = (day: any) => {
+    const workLogs = day.work_logs || [];
+    return workLogs.reduce((totals: { otAmount: number; midShiftAmount: number }, wl: any) => {
+      totals.otAmount += getWorkLogOtAmount(wl);
+      totals.midShiftAmount += getWorkLogMidShiftAmount(wl);
+      return totals;
+    }, { otAmount: 0, midShiftAmount: 0 });
+  };
+
+  const calculateBaseWorkIncome = (day: any) => {
+    const workLogs = day.work_logs || [];
+    return workLogs.reduce((sum: number, wl: any) => {
+      if (wl.base_line_amount !== undefined && wl.base_line_amount !== null) {
+        return sum + (Number(wl.base_line_amount) || 0);
+      }
+      const lineAmount = Number(wl.line_amount) || 0;
+      return sum + Math.max(0, lineAmount - getWorkLogOtAmount(wl) - getWorkLogMidShiftAmount(wl));
+    }, 0);
+  };
+
+  const calculateDailyTotal = (day: any) => {
+    const { otAmount, midShiftAmount } = calculateOtMidShiftTotals(day);
+    const dailyAllowanceTotal = Number(day.daily_allowance_total) || 0;
+    return calculateBaseWorkIncome(day) + otAmount + midShiftAmount + getTopUpAmount(day) + dailyAllowanceTotal;
+  };
+
+  const dailyTableColumnCount = 6 + (isDaily ? 1 : 0) + (isDraft ? 1 : 0);
   const workDayCount = dailyCalc.filter((d: any) => (d.work_logs || []).length > 0).length;
-  const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.day_total) || 0), 0);
+  const grandTotal = dailyCalc.reduce((sum: number, d: any) => sum + calculateDailyTotal(d), 0);
   const totalTopUp = dailyCalc.reduce((sum: number, d: any) => sum + getTopUpAmount(d), 0);
   const totalAllowances = dailyCalc.reduce((sum: number, d: any) => sum + (Number(d.daily_allowance_total) || 0), 0);
 
@@ -1010,6 +1056,7 @@ function DailyCalculationView({
               <th className="px-3 py-2 text-left font-medium text-gray-600 w-8"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">OT/中直</th>
               {isDaily && <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪差額</th>}
               <th className="px-3 py-2 text-center font-medium text-gray-600">每日津貼</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
@@ -1024,8 +1071,15 @@ function DailyCalculationView({
               const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(day.date).getDay()];
               const topUpAmount = getTopUpAmount(day);
               const allowanceBadges = buildAllowanceBadges(day);
+              const baseWorkIncome = calculateBaseWorkIncome(day);
+              const otMidTotals = calculateOtMidShiftTotals(day);
+              const otMidLabels = [
+                otMidTotals.otAmount > 0 ? `OT $${otMidTotals.otAmount.toLocaleString()}` : '',
+                otMidTotals.midShiftAmount > 0 ? `中直 $${otMidTotals.midShiftAmount.toLocaleString()}` : '',
+              ].filter(Boolean);
+              const dailyTotal = calculateDailyTotal(day);
               return (
-	                <>
+                <Fragment key={day.date}>
 	                  <tr key={day.date} className={`border-b ${day.special_label ? 'bg-green-50' : topUpAmount > 0 ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
 	                    <td className="px-3 py-2 text-center">
 	                      <button onClick={() => setExpandedDate(isExpanded ? null : day.date)} className="text-gray-400 hover:text-gray-600">
@@ -1037,7 +1091,10 @@ function DailyCalculationView({
 	                      {(day.work_logs || []).length > 1 && <span className="text-xs text-gray-400 ml-1">({(day.work_logs || []).length}筆)</span>}
 	                    </td>
                     <td className="px-3 py-2 text-right font-mono">
-                      ${Number(day.work_income).toLocaleString()}
+                      ${baseWorkIncome.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-center font-mono text-xs">
+                      {otMidLabels.length > 0 ? otMidLabels.join(' / ') : <span className="text-gray-300">-</span>}
                     </td>
                     {isDaily && <td className="px-3 py-2 text-right font-mono">
                       {editingTopUpDate === day.date ? (
@@ -1111,7 +1168,7 @@ function DailyCalculationView({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono font-bold">
-                      ${Number(day.day_total).toLocaleString()}
+                      ${dailyTotal.toLocaleString()}
                     </td>
 	                    {isDraft && (
 	                      <td className="px-3 py-2 text-center">
@@ -1199,7 +1256,7 @@ function DailyCalculationView({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -1418,27 +1475,6 @@ export default function PayrollDetailPage() {
       alert(err.response?.data?.message || '操作失敗');
     }
   };
-
-  const handleFinalizePreparation = async () => {
-    if (!confirm('確定要生成糧單？系統將根據目前頁面的工作記錄計算糧單。')) return;
-    try {
-      const res = await payrollApi.finalizePreparation(payroll.id);
-      setPayroll(res.data);
-      alert('糧單已成功生成！');
-    } catch (err: any) {
-      alert(err.response?.data?.message || '生成失敗');
-    }
-  };
-
-  const handleGeneratePayroll = async () => {
-    if (isReadOnly('payroll')) return;
-    if (payroll.status === 'preparing') {
-      await handleFinalizePreparation();
-      return;
-    }
-    await handleRecalculate();
-  };
-
 
   const handleDelete = async () => {
     if (!confirm('確定要刪除此糧單？')) return;
@@ -1718,8 +1754,7 @@ export default function PayrollDetailPage() {
   const dailyCalc = payroll.daily_calculation || [];
   const allowanceOptions = payroll.allowance_options || [];
   const unmatchedGroups = buildUnmatchedGroups(pwls);
-  const isPreparing = payroll.status === 'preparing';
-  const isDraft = payroll.status === 'draft' || isPreparing;
+  const isDraft = payroll.status === 'draft';
   const selectablePwls = pwls.filter((pwl: any) => isDraft && !pwl.is_excluded);
   const allSelectableSelected = selectablePwls.length > 0 && selectablePwls.every((pwl: any) => selectedPwlIds.has(Number(pwl.id)));
   const pettyCashDeducted = pettyCashRecords
@@ -1745,7 +1780,10 @@ export default function PayrollDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {isDraft && (
-            <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
+            <>
+              <button onClick={handleConfirm} className="btn-primary text-sm">確認糧單</button>
+              <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
+            </>
           )}
           {payroll.status === 'confirmed' && (
             <>
@@ -1760,19 +1798,6 @@ export default function PayrollDetailPage() {
           )}
         </div>
       </div>
-
-      {/* ── Preparing Banner ── */}
-      {isPreparing && (
-        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">&#x270F;&#xFE0F;</span>
-            <div>
-              <p className="font-bold text-amber-800">糧單工作記錄編輯中</p>
-              <p className="text-sm text-amber-700">請在下方「逐筆明細」中直接編輯工作記錄（例如修改計算單位、數量、商品數量等），修改不會影響原始工作記錄。編輯完成後請按底部「生成糧單」。</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1789,18 +1814,10 @@ export default function PayrollDetailPage() {
           <p className="text-xs text-gray-500">計糧期間</p>
           <p className="font-bold text-sm">{fmtDate(payroll.date_from)} 至 {fmtDate(payroll.date_to)}</p>
         </div>
-        {!isPreparing && (
-          <div className="card">
-            <p className="text-xs text-gray-500">淨額</p>
-            <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
-          </div>
-        )}
-        {isPreparing && (
-          <div className="card">
-            <p className="text-xs text-gray-500">工作記錄</p>
-            <p className="font-bold text-xl text-amber-600">{pwls.filter((p: any) => !p.is_excluded).length} 筆</p>
-          </div>
-        )}
+        <div className="card">
+          <p className="text-xs text-gray-500">淨額</p>
+          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+        </div>
       </div>
 
       {/* ── Single-page Payroll Generation Tabs ── */}
@@ -1845,20 +1862,8 @@ export default function PayrollDetailPage() {
         />
       </div>
 
-      {isDraft && (
-        <div className="card mb-6 flex flex-wrap items-center justify-end gap-3">
-          <button
-            onClick={handleGeneratePayroll}
-            disabled={isReadOnly('payroll')}
-            className="btn-primary"
-          >
-            生成糧單
-          </button>
-        </div>
-      )}
-
       {/* ── Custom Adjustments ── */}
-      {!isPreparing && <div className="card mb-6">
+      <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">自定義津貼/扣款</h2>
           {isDraft && (
@@ -1912,10 +1917,8 @@ export default function PayrollDetailPage() {
         )}
       </div>
 
-      }
-
       {/* ── Employee Reimbursement (員工報銷) ── */}
-      {!isPreparing && <div className="card mb-6">
+      <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">員工報銷</h2>
           {isDraft && (
@@ -1973,10 +1976,9 @@ export default function PayrollDetailPage() {
         )}
         <p className="text-xs text-gray-400 mt-2">ℹ 員工報銷獨立於薪金計算，不影響淨薪金</p>
       </div>
-      }
 
       {/* ── Petty Cash Settlement ── */}
-      {!isPreparing && pettyCashRecords.length > 0 && <div className="card mb-6">
+      {pettyCashRecords.length > 0 && <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">零用金結算</h2>
           <Link href={`/employees/${emp?.id}`} className="text-sm text-primary-600 hover:underline">查看員工零用金紀錄</Link>
@@ -2010,7 +2012,7 @@ export default function PayrollDetailPage() {
       </div>}
 
       {/* ── Summary Cards (bottom) ── */}
-      {!isPreparing && <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <div className="card">
           <p className="text-xs text-gray-500">應收總額</p>
           <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
@@ -2039,10 +2041,8 @@ export default function PayrollDetailPage() {
         </div>
       </div>
 
-      }
-
       {/* ── MPF 計算薪金（非行業計劃）── 放在最底部 */}
-      {!isPreparing && payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
+      {payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
         <div className="card mb-6">
           <div className="flex flex-col gap-3">
             <div>
@@ -2090,7 +2090,7 @@ export default function PayrollDetailPage() {
       )}
 
       {/* ── Payment Info ── */}
-      {!isPreparing && <div className="card">
+      <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">付款記錄</h2>
           <button onClick={() => setShowAddPayment(true)} className="text-sm text-primary-600 hover:underline">+ 新增付款記錄</button>
@@ -2159,7 +2159,7 @@ export default function PayrollDetailPage() {
         ) : (
           <p className="text-sm text-gray-400 text-center py-4">尚無付款記錄</p>
         )}
-      </div>}
+      </div>
 
       {/* ── Mark as Paid Modal ── */}
       <Modal isOpen={showPayment} onClose={() => setShowPayment(false)} title="確認已付款">

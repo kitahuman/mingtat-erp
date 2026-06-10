@@ -752,9 +752,9 @@ export class PayrollService {
       where: existingWhere,
     });
     if (existing) {
-      // 如果已存在 preparing 狀態的糧單，直接返回該糧單（讓前端跳轉繼續編輯）
+      // 如果已存在舊的 preparing 狀態糧單，立即完成計算並轉為 draft。
       if (existing.status === 'preparing') {
-        return this.findOne(existing.id);
+        return this.finalizePreparation(existing.id, userId);
       }
       // 其他狀態的糧單則報錯
       throw new BadRequestException(
@@ -796,7 +796,7 @@ export class PayrollService {
       actualCpId = workLogs[0].company_profile_id;
     }
 
-    // Create payroll record with status 'preparing'
+    // Create payroll record in transient 'preparing' status; it will be finalized to draft before returning.
     const saved = await this.prisma.payroll.create({
       data: {
         period,
@@ -896,7 +896,7 @@ export class PayrollService {
       }
     }
 
-    return this.findOne(saved.id);
+    return this.finalizePreparation(saved.id, userId);
   }
 
   // ── 確定糧單工作記錄並計算糧單（從 preparing 狀態計算並轉為 draft）────
