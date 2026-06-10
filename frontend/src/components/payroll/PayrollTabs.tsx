@@ -1838,7 +1838,16 @@ function DailyWorkLogDetails({ workLogs }: { workLogs: WorkLogRecord[] }) {
         const equipment = [row.tonnage, row.machine_type, row.equipment_number].filter(Boolean).join("");
         const clientShortName = row.client_short_name || (row.client_name ? row.client_name.substring(0, 4) : "");
         const description = [row.service_type, clientShortName, row.client_contract_no, route !== "-" ? route : "", equipment ? `(${equipment})` : "", row.day_night || "日", toNumber(row.ot_quantity) > 0 ? "OT" : "", row.is_mid_shift ? "中直" : ""].filter(Boolean).join(" ");
-        const baseAmount = row.base_line_amount ?? (row.matched_rate ? toNumber(row.matched_rate) * (toNumber(row.quantity) || 1) : 0);
+        const billingType = row.billing_quantity_type || "quantity";
+        const productUnit = row.product_unit || row.payroll_work_log_product_unit || row.matched_unit || "商品";
+        const tripQuantity = toNumber(row.quantity) || 1;
+        const productQuantity = toNumber(getProductQuantity(row) as number | string | null | undefined);
+        const basicBillingQuantity = billingType === "product_quantity" ? productQuantity : tripQuantity;
+        const normalBillingUnit = billingType === "days" ? "天" : row.unit || "車";
+        const baseAmount = row.base_line_amount ?? (row.matched_rate ? toNumber(row.matched_rate) * basicBillingQuantity : 0);
+        const basicDetail = billingType === "product_quantity"
+          ? `${formatCompactMoney(row.matched_rate)}/${productUnit} × ${formatPlainNumber(productQuantity)}${productUnit} (${formatPlainNumber(tripQuantity)}車) = ${formatCompactMoney(baseAmount)}`
+          : `${formatCompactMoney(row.matched_rate)} × ${formatPlainNumber(tripQuantity)} ${normalBillingUnit} = ${formatCompactMoney(baseAmount)}`;
         const otAmount = row.ot_line_amount ?? (row.matched_ot_rate && row.ot_quantity ? toNumber(row.matched_ot_rate) * toNumber(row.ot_quantity) : 0);
         const midShiftAmount = row.mid_shift_line_amount ?? (row.is_mid_shift && row.matched_mid_shift_rate ? toNumber(row.matched_mid_shift_rate) : 0);
 
@@ -1850,7 +1859,7 @@ function DailyWorkLogDetails({ workLogs }: { workLogs: WorkLogRecord[] }) {
             </div>
             {row.matched_rate && (
               <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1 text-gray-500">
-                <span>基本：{formatCompactMoney(row.matched_rate)} × {formatPlainNumber(row.quantity)} = {formatCompactMoney(baseAmount)}</span>
+                <span>基本：{basicDetail}</span>
                 {toNumber(row.ot_quantity) > 0 && <span>OT：{row.matched_ot_rate ? formatCompactMoney(row.matched_ot_rate) : "未設定"} × {formatPlainNumber(row.ot_quantity)} = {formatCompactMoney(otAmount)}</span>}
                 {row.is_mid_shift && <span>中直：{row.matched_mid_shift_rate ? formatCompactMoney(row.matched_mid_shift_rate) : "未設定"} = {formatCompactMoney(midShiftAmount)}</span>}
               </div>
