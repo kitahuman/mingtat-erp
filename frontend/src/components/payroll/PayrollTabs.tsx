@@ -1046,6 +1046,11 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.excludeBadge(payrollId, { date, badge_key: badgeKey }), "移除津貼失敗");
   }
 
+  async function restoreBadge(date: string, badgeKey: string) {
+    if (!payrollId) return;
+    await mutateAndReload(() => payrollApi.restoreBadge(payrollId, { date, badge_key: badgeKey }), "還原津貼失敗");
+  }
+
   async function saveTopUpOverride(date: string) {
     const input = window.prompt("請輸入補底薪手動覆蓋金額", "0");
     if (input === null) return;
@@ -1097,7 +1102,7 @@ function PayrollTabs({
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onSaveTopUpOverride={saveTopUpOverride} />}
+      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} />}
       {activeTab === "print" && <PrintTab rows={rows} groups={groups} calculation={calculation} snapshot={snapshot} printRef={printRef} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} onPrint={printPayroll} />}
@@ -1494,7 +1499,7 @@ function isAdjustmentOnDate(adjustment: Adjustment, date: string | null | undefi
   return Boolean(adjustmentDate && date && adjustmentDate === dateOnly(date));
 }
 
-function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
+function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState("");
   const [customAllowanceName, setCustomAllowanceName] = useState("");
@@ -1576,6 +1581,16 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               const isAdding = addingDate === rowDate;
               const rowTone = day.special_label ? "bg-green-50" : topUp > 0 ? "bg-orange-50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/60";
               const datedAdjustments = adjustments.filter((adjustment) => isAdjustmentOnDate(adjustment, day.date));
+              const holidayName = getDailyHolidayName(day);
+              const restDayLabel = !day.is_holiday ? day.special_label : null;
+              const statutoryHolidayBadgeKey = getStatutoryHolidayBadgeKey(day);
+              const canRestoreHolidayAllowance = Boolean(
+                !readOnly &&
+                day.date &&
+                holidayName &&
+                statutoryHolidayBadgeKey &&
+                isDailyBadgeExcluded(day, statutoryHolidayBadgeKey),
+              );
 
               return (
                 <Fragment key={rowDate}>
@@ -1586,11 +1601,22 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                       </button>
                     </td>
                     <td className="px-3 py-2 align-middle font-medium text-gray-900">
-                      <span>{displayDate(day.date)}</span>
-                      {day.weekday && <span className="ml-1 text-xs text-gray-400">({day.weekday})</span>}
-                      {!day.weekday && day.date && <span className="ml-1 text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
-                      {workLogs.length > 1 && <span className="ml-1 text-xs text-gray-400">({workLogs.length}筆)</span>}
-                      {day.is_holiday && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">{day.holiday_name || "假期"}</span>}
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span>{displayDate(day.date)}</span>
+                        {day.weekday && <span className="text-xs text-gray-400">({day.weekday})</span>}
+                        {!day.weekday && day.date && <span className="text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
+                        {workLogs.length > 1 && <span className="text-xs text-gray-400">({workLogs.length}筆)</span>}
+                        {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
+                        {holidayName && (
+                          <SpecialDateBadge
+                            label={holidayName}
+                            clickable={canRestoreHolidayAllowance}
+                            title={canRestoreHolidayAllowance ? "點擊還原法定假期津貼" : undefined}
+                            onClick={day.date ? () => onRestoreBadge(day.date || "", statutoryHolidayBadgeKey) : undefined}
+                          />
+                        )}
+                        {restDayLabel && <SpecialDateBadge label={restDayLabel} />}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right align-middle font-mono">{formatCompactMoney(getDailyWorkIncome(day))}</td>
                     <td className="px-3 py-2 text-right align-middle font-mono">
@@ -1635,11 +1661,6 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                       </div>
                     </td>
                   </tr>
-                  {day.special_label && (
-                    <tr className="border-b border-gray-200 bg-green-50/60">
-                      <td colSpan={tableColumnCount} className="px-12 py-1.5"><span className="rounded bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700">{day.special_label}</span></td>
-                    </tr>
-                  )}
                   {isExpanded && (
                     <tr className="border-b border-gray-200 bg-blue-50">
                       <td colSpan={tableColumnCount} className="px-6 py-3">
@@ -1672,6 +1693,42 @@ function formatCompactMoney(value: number | string | null | undefined): string {
 function getWeekdayLabel(date: string): string {
   const weekday = new Date(`${date.slice(0, 10)}T00:00:00`).getDay();
   return ["日", "一", "二", "三", "四", "五", "六"][weekday] || "";
+}
+
+function getDailyHolidayName(day: DailyCalculationRecord): string | null {
+  const label = day.holiday_name || day.special_label || null;
+  if (!day.is_holiday || !label) return null;
+  return label;
+}
+
+function getStatutoryHolidayBadgeKey(day: DailyCalculationRecord): string {
+  const date = dateOnly(day.date);
+  return date ? `statutory_holiday_${date}` : "statutory_holiday";
+}
+
+function isDailyBadgeExcluded(day: DailyCalculationRecord, badgeKey: string): boolean {
+  const excludedKey = `excluded_${badgeKey}`;
+  const allowances = day.daily_allowances || day.allowances || [];
+  return allowances.some((allowance) => (allowance.allowance_key || allowance.key) === excludedKey);
+}
+
+function isExcludedAllowance(allowance: DailyAllowance): boolean {
+  const key = allowance.allowance_key || allowance.key || "";
+  return key.startsWith("excluded_");
+}
+
+function SpecialDateBadge({ label, clickable = false, title, onClick }: { label: string; clickable?: boolean; title?: string; onClick?: () => void }) {
+  const className = `rounded bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700 ${clickable ? "cursor-pointer border border-green-300 hover:bg-green-200 hover:text-green-800" : ""}`;
+
+  if (clickable && onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className} title={title}>
+        {label}<span className="ml-1 text-[10px]">+</span>
+      </button>
+    );
+  }
+
+  return <span className={className}>{label}</span>;
 }
 
 function getDailyTopUpAmount(day: DailyCalculationRecord): number {
@@ -1715,7 +1772,7 @@ function getAllowanceBadgeClass(key: string, label: string, className?: string):
 
 function DailyAllowanceBadges({ day, adjustments, readOnly, onRemoveAllowance, onRemoveAdjustment, onExcludeBadge }: { day: DailyCalculationRecord; adjustments: Adjustment[]; readOnly: boolean; onRemoveAllowance: (id: number | string) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void> }) {
   const badges = day.allowance_badges || day.badges || [];
-  const allowances = day.daily_allowances || day.allowances || [];
+  const allowances = (day.daily_allowances || day.allowances || []).filter((allowance) => !isExcludedAllowance(allowance));
 
   if (badges.length === 0 && allowances.length === 0 && adjustments.length === 0) return <span className="text-gray-300">—</span>;
 

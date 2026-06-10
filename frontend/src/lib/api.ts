@@ -769,6 +769,10 @@ export const payrollApi = {
     payrollId: number,
     data: { date: string; badge_key: string },
   ) => api.post(`/payroll/${payrollId}/exclude-badge`, data),
+  restoreBadge: (
+    payrollId: number,
+    data: { date: string; badge_key: string },
+  ) => api.post(`/payroll/${payrollId}/restore-badge`, data),
 
   // ── 糧單付款記錄管理 ──
   addPayrollPayment: (

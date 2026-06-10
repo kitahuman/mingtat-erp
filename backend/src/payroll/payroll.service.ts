@@ -2636,6 +2636,62 @@ export class PayrollService {
     return { success: true };
   }
 
+  async restoreBadge(id: number, date: string, badgeKey: string) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+
+    const excludedDate = new Date(date);
+    const excludedKey = `excluded_${badgeKey}`;
+
+    await this.prisma.payrollDailyAllowance.deleteMany({
+      where: {
+        payroll_id: id,
+        date: excludedDate,
+        allowance_key: excludedKey,
+      },
+    });
+
+    if (badgeKey.startsWith('statutory_holiday_')) {
+      const existingHolidayAllowance = await this.prisma.payrollDailyAllowance.findFirst({
+        where: {
+          payroll_id: id,
+          date: excludedDate,
+          allowance_key: 'statutory_holiday',
+        },
+      });
+
+      if (!existingHolidayAllowance && payroll.employee_id) {
+        const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+          where: {
+            employee_id: payroll.employee_id,
+            effective_date: { lte: payroll.date_to || excludedDate },
+          },
+          orderBy: { effective_date: 'desc' },
+        });
+        const baseSalaryForHoliday = Number(salarySetting?.base_salary) || 0;
+        const [holiday] = await this.statutoryHolidaysService.findByDateRange(
+          date,
+          date,
+        );
+
+        if (baseSalaryForHoliday > 0) {
+          await this.prisma.payrollDailyAllowance.create({
+            data: {
+              payroll_id: id,
+              date: excludedDate,
+              allowance_key: 'statutory_holiday',
+              allowance_name: `法定假期 - ${holiday?.name || date}`,
+              amount: baseSalaryForHoliday,
+              is_auto: true,
+            },
+          });
+        }
+      }
+    }
+
+    return { success: true };
+  }
+
   // ── 統計摘要 ──────────────────────────────────────────────────
   async getSummary(query: PayrollQuery) {
     const where: any = {};

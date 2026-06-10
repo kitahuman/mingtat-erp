@@ -313,6 +313,14 @@ export class PayrollController {
     return this.payrollService.excludeBadge(+id, body.date, body.badge_key);
   }
 
+  @Post(':id/restore-badge')
+  restoreBadge(
+    @Param('id') id: string,
+    @Body() body: ExcludeBadgeDto,
+  ) {
+    return this.payrollService.restoreBadge(+id, body.date, body.badge_key);
+  }
+
   // 取得員工可用的津貼選項
   @Get(':id/allowance-options')
   async getAllowanceOptions(@Param('id') id: string) {
