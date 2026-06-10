@@ -376,6 +376,9 @@ export class PayrollCalculationService {
       { min: 950, max: Infinity, employer: 50, employee: 50 },
     ];
 
+    const defaultMpfBase = grossIncome + (Number(adjustmentTotalForMpf) || 0);
+    let resolvedMpfRelevantIncome = defaultMpfBase;
+
     if (isMpfAgeExempt) {
       items.push({
         item_type: 'mpf_deduction',
@@ -388,74 +391,36 @@ export class PayrollCalculationService {
         sort_order: sortOrder++,
       });
     } else if (mpfPlan === 'industry') {
-      const dayIncomeMap = new Map<
-        string,
-        { dayIncome: number; nightIncome: number; hasDay: boolean; hasNight: boolean }
-      >();
-      for (const wl of workLogs) {
-        const date = toDateStr(wl.scheduled_date);
-        const current = dayIncomeMap.get(date) || {
-          dayIncome: 0,
-          nightIncome: 0,
-          hasDay: false,
-          hasNight: false,
-        };
-        const lineAmt =
-          Number(wl.line_amount ?? wl._line_amount ?? 0) +
-          Number(wl.ot_line_amount ?? wl._ot_line_amount ?? 0) +
-          Number(wl.mid_shift_line_amount ?? wl._mid_shift_line_amount ?? 0);
-        if (wl.day_night === '夜') {
-          current.nightIncome += lineAmt;
-          current.hasNight = true;
-        } else {
-          current.dayIncome += lineAmt;
-          current.hasDay = true;
-        }
-        dayIncomeMap.set(date, current);
-      }
-      let totalEmployeeContrib = 0;
-      let totalEmployerContrib = 0;
-      for (const [, income] of dayIncomeMap) {
-        // 同一天的日更與夜更合併成一個強積金計算日；日/夜只用於套用各自底薪下限。
-        let effectiveIncome = income.dayIncome + income.nightIncome;
-        if (salaryType === 'daily') {
-          const effectiveDayIncome = income.hasDay
-            ? Math.max(income.dayIncome, baseSalary)
-            : 0;
-          const effectiveNightIncome = income.hasNight
-            ? Math.max(income.nightIncome, baseSalaryNight)
-            : 0;
-          effectiveIncome = effectiveDayIncome + effectiveNightIncome;
-        }
-        const tier =
-          MPF_INDUSTRY_TIERS.find(
-            (t) => effectiveIncome > t.min && effectiveIncome <= t.max,
-          ) || MPF_INDUSTRY_TIERS[MPF_INDUSTRY_TIERS.length - 1];
-        totalEmployeeContrib += tier.employee;
-        totalEmployerContrib += tier.employer;
-      }
-      mpfDeduction = totalEmployeeContrib;
-      mpfEmployer = totalEmployerContrib;
-      const mpfDays = dayIncomeMap.size;
-      const avgEmployee =
-        mpfDays > 0
-          ? Math.round((totalEmployeeContrib / mpfDays) * 100) / 100
-          : 0;
+      const mpfDateSet = new Set(workLogs.map((wl) => toDateStr(wl.scheduled_date)));
+      const mpfDays = mpfDateSet.size;
+      const defaultIndustryDailyIncome = mpfDays > 0 ? defaultMpfBase / mpfDays : 0;
+      const industryDailyIncome =
+        mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
+          ? Number(mpfRelevantIncome)
+          : defaultIndustryDailyIncome;
+      resolvedMpfRelevantIncome = industryDailyIncome;
+
+      const tier =
+        MPF_INDUSTRY_TIERS.find(
+          (t) => industryDailyIncome > t.min && industryDailyIncome <= t.max,
+        ) || MPF_INDUSTRY_TIERS[MPF_INDUSTRY_TIERS.length - 1];
+      mpfDeduction = tier.employee * mpfDays;
+      mpfEmployer = tier.employer * mpfDays;
       items.push({
         item_type: 'mpf_deduction',
         item_name: '強積金（行業計劃）',
-        unit_price: avgEmployee,
+        unit_price: tier.employee,
         quantity: mpfDays,
         amount: -mpfDeduction,
-        remarks: `按日薪級別計算，${mpfDays}天`,
+        remarks: `按日薪級別計算，${mpfDays}天，日薪基數 $${Math.round(industryDailyIncome * 100) / 100}`,
         sort_order: sortOrder++,
       });
     } else {
-      const defaultMpfBase = grossIncome + (Number(adjustmentTotalForMpf) || 0);
       const mpfBase =
         mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
           ? Number(mpfRelevantIncome)
           : defaultMpfBase;
+      resolvedMpfRelevantIncome = mpfBase;
       mpfDeduction = Math.min(mpfBase * 0.05, 1500);
       mpfEmployer = Math.min(mpfBase * 0.05, 1500);
       mpfDeduction = Math.round(mpfDeduction * 100) / 100;
@@ -490,9 +455,7 @@ export class PayrollCalculationService {
       mpf_deduction: mpfDeduction,
       mpf_plan: mpfPlan,
       mpf_employer: mpfEmployer,
-      mpf_relevant_income: (mpfRelevantIncome !== undefined && mpfRelevantIncome !== null)
-        ? Number(mpfRelevantIncome)
-        : grossIncome + (Number(adjustmentTotalForMpf) || 0),
+      mpf_relevant_income: resolvedMpfRelevantIncome,
       gross_income: grossIncome,
       net_amount: netAmount,
       items,

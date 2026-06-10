@@ -1291,11 +1291,41 @@ export default function PayrollDetailPage() {
     .filter((r: any) => r.type === 'DEDUCT')
     .reduce((sum: number, r: any) => sum + Math.abs(Number(r.amount || 0)), 0);
   const pettyCashShortfall = Math.max(0, Number(payroll.reimbursement_total || 0) - pettyCashDeducted);
-  const defaultMpfRelevantIncome = Number(payroll.gross_amount || 0) + Number(payroll.adjustment_total || 0);
+  const mpfPlan = payroll.mpf_plan || emp?.mpf_plan || 'industry';
+  const adjustedMpfBase = Number(payroll.gross_amount || 0) + Number(payroll.adjustment_total || 0);
+  const mpfWorkDayCount = new Set(pwls.map((pwl: any) => String(pwl.scheduled_date).slice(0, 10))).size;
+  const defaultMpfRelevantIncome =
+    mpfPlan === 'industry'
+      ? (mpfWorkDayCount > 0 ? adjustedMpfBase / mpfWorkDayCount : 0)
+      : adjustedMpfBase;
   const displayMpfRelevantIncome =
     payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
       ? Number(payroll.mpf_relevant_income)
       : defaultMpfRelevantIncome;
+  const mpfCardTitle =
+    mpfPlan === 'industry'
+      ? 'MPF 計算 — 行業計劃'
+      : mpfPlan === 'manulife'
+        ? 'MPF 計算 — 宏利：一般計劃 (5%)'
+        : mpfPlan === 'aia'
+          ? 'MPF 計算 — AIA：一般計劃 (5%)'
+          : 'MPF 計算 — 一般計劃 (5%)';
+  const MPF_INDUSTRY_TIERS = [
+    { min: 0, max: 280, employee: 0 },
+    { min: 280, max: 350, employee: 15 },
+    { min: 350, max: 450, employee: 20 },
+    { min: 450, max: 550, employee: 25 },
+    { min: 550, max: 650, employee: 30 },
+    { min: 650, max: 750, employee: 35 },
+    { min: 750, max: 850, employee: 40 },
+    { min: 850, max: 950, employee: 45 },
+    { min: 950, max: Infinity, employee: 50 },
+  ];
+  const industryMpfTier = MPF_INDUSTRY_TIERS.find(
+    (t) => displayMpfRelevantIncome > t.min && displayMpfRelevantIncome <= t.max,
+  ) || MPF_INDUSTRY_TIERS[MPF_INDUSTRY_TIERS.length - 1];
+  const industryEmployeeMpf = industryMpfTier.employee * mpfWorkDayCount;
+  const generalEmployeeMpf = Math.min(displayMpfRelevantIncome * 0.05, 1500);
 
   const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
@@ -1597,12 +1627,20 @@ export default function PayrollDetailPage() {
         </div>
       </div>
 
-      {/* ── MPF 計算薪金（非行業計劃）── 放在最底部 */}
-      {payroll.mpf_plan && payroll.mpf_plan !== 'industry' && (
+      {/* ── MPF 計算薪金 ── 放在最底部 */}
+      {mpfPlan && mpfPlan !== 'none' && (
         <div className="card mb-6">
           <div className="flex flex-col gap-3">
             <div>
-              <p className="text-xs text-gray-500 mb-1">MPF 計算薪金基數 <span className="text-blue-500 ml-1">(完 5% 的強積金數)</span></p>
+              <h2 className="text-lg font-bold text-gray-900 mb-3">{mpfCardTitle}</h2>
+              <p className="text-xs text-gray-500 mb-1">
+                {mpfPlan === 'industry' ? 'MPF 日薪基數' : 'MPF 計算薪金基數'}
+                <span className="text-blue-500 ml-1">
+                  {mpfPlan === 'industry'
+                    ? '((應收總額 + 自定義津貼/扣款) ÷ 工作天數，可手動覆蓋)'
+                    : '(應收總額 + 自定義津貼/扣款，可手動覆蓋)'}
+                </span>
+              </p>
               {isDraft ? (
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">$</span>
@@ -1622,22 +1660,32 @@ export default function PayrollDetailPage() {
                       }
                     }}
                   />
-
                 </div>
               ) : (
                 <p className="font-bold font-mono">${displayMpfRelevantIncome ? displayMpfRelevantIncome.toLocaleString() : '-'}</p>
               )}
             </div>
-            {/* 強積金自動計算：薪金基數 × 5% */}
-            {displayMpfRelevantIncome > 0 && (
+            {displayMpfRelevantIncome > 0 && mpfPlan === 'industry' && (
+              <div className="flex flex-wrap items-center gap-3 bg-blue-50 rounded-lg px-4 py-2">
+                <span className="text-sm text-blue-700 font-medium">行業計劃</span>
+                <span className="text-sm text-blue-500">按日薪級別，{mpfWorkDayCount}天，員工供款</span>
+                <span className="text-lg font-bold font-mono text-blue-700">
+                  ${industryEmployeeMpf.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-xs text-blue-400 ml-1">
+                  (日薪基數 ${displayMpfRelevantIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}，每工作日 $${industryMpfTier.employee})
+                </span>
+              </div>
+            )}
+            {displayMpfRelevantIncome > 0 && mpfPlan !== 'industry' && (
               <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-4 py-2">
                 <span className="text-sm text-blue-700 font-medium">強積金 5%</span>
                 <span className="text-sm text-blue-500">=</span>
                 <span className="text-lg font-bold font-mono text-blue-700">
-                  ${(displayMpfRelevantIncome * 0.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${generalEmployeeMpf.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs text-blue-400 ml-1">
-                  (${displayMpfRelevantIncome.toLocaleString()} × 5%)
+                  (${displayMpfRelevantIncome.toLocaleString()} × 5%，上限 $1,500)
                 </span>
               </div>
             )}

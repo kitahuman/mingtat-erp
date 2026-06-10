@@ -1571,6 +1571,7 @@ export class PayrollService {
       include: {
         employee: { include: { company: true } },
         adjustments: true,
+        items: true,
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
@@ -1741,12 +1742,23 @@ export class PayrollService {
       (Number(payroll.allowance_total) || 0) +
       (Number(payroll.ot_total) || 0) +
       (Number(payroll.commission_total) || 0);
-    const previousGrossOnlyMpfBase = previousGrossAmount;
-    const previousAdjustedMpfBase = previousGrossAmount + adjustmentTotal;
+    const previousMpfItem = (payroll.items || []).find(
+      (item: any) => item.item_type === 'mpf_deduction',
+    );
+    const previousMpfDays = Math.max(0, Number(previousMpfItem?.quantity) || 0);
+    const previousAutoMpfBaseCandidates = payroll.mpf_plan === 'industry'
+      ? [
+          previousGrossAmount,
+          previousGrossAmount + adjustmentTotal,
+          previousMpfDays > 0 ? previousGrossAmount / previousMpfDays : 0,
+          previousMpfDays > 0 ? (previousGrossAmount + adjustmentTotal) / previousMpfDays : 0,
+        ]
+      : [previousGrossAmount, previousGrossAmount + adjustmentTotal];
     const existingMpfRelevantIncome =
       storedMpfRelevantIncome !== undefined &&
-      Math.abs(storedMpfRelevantIncome - previousGrossOnlyMpfBase) >= 0.01 &&
-      Math.abs(storedMpfRelevantIncome - previousAdjustedMpfBase) >= 0.01
+      previousAutoMpfBaseCandidates.every(
+        (candidate) => Math.abs(storedMpfRelevantIncome - candidate) >= 0.01,
+      )
         ? storedMpfRelevantIncome
         : undefined;
 
@@ -1881,6 +1893,7 @@ export class PayrollService {
       include: {
         employee: { include: { company: true } },
         adjustments: true,
+        items: true,
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
@@ -2038,12 +2051,23 @@ export class PayrollService {
       (Number(payroll.allowance_total) || 0) +
       (Number(payroll.ot_total) || 0) +
       (Number(payroll.commission_total) || 0);
-    const previousGrossOnlyMpfBase = previousGrossAmount;
-    const previousAdjustedMpfBase = previousGrossAmount + adjustmentTotal;
+    const previousMpfItem = (payroll.items || []).find(
+      (item: any) => item.item_type === 'mpf_deduction',
+    );
+    const previousMpfDays = Math.max(0, Number(previousMpfItem?.quantity) || 0);
+    const previousAutoMpfBaseCandidates = payroll.mpf_plan === 'industry'
+      ? [
+          previousGrossAmount,
+          previousGrossAmount + adjustmentTotal,
+          previousMpfDays > 0 ? previousGrossAmount / previousMpfDays : 0,
+          previousMpfDays > 0 ? (previousGrossAmount + adjustmentTotal) / previousMpfDays : 0,
+        ]
+      : [previousGrossAmount, previousGrossAmount + adjustmentTotal];
     const existingMpfRelevantIncome =
       storedMpfRelevantIncome !== undefined &&
-      Math.abs(storedMpfRelevantIncome - previousGrossOnlyMpfBase) >= 0.01 &&
-      Math.abs(storedMpfRelevantIncome - previousAdjustedMpfBase) >= 0.01
+      previousAutoMpfBaseCandidates.every(
+        (candidate) => Math.abs(storedMpfRelevantIncome - candidate) >= 0.01,
+      )
         ? storedMpfRelevantIncome
         : undefined;
 
