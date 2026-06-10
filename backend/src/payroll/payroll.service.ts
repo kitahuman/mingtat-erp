@@ -1564,7 +1564,7 @@ export class PayrollService {
   }
 
 
-  // ── 返回上一步：重新抓取原始工作記錄並重建糧單工作記錄快照 ─────
+  // ── 重新抓取原始工作記錄並重建糧單工作記錄快照（維持草稿流程）─────
   async resetAndRefetch(id: number, userId?: number) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
@@ -1805,7 +1805,7 @@ export class PayrollService {
           mpf_relevant_income: calc.mpf_relevant_income,
           adjustment_total: adjustmentTotal,
           net_amount: calc.net_amount + adjustmentTotal,
-          status: 'preparing',
+          status: 'draft',
         },
       });
 
@@ -1847,7 +1847,7 @@ export class PayrollService {
           targetTable: 'payrolls',
           targetId: id,
           changesAfter: {
-            status: 'preparing',
+            status: 'draft',
             work_log_count: payrollWorkLogData.length,
             net_amount: calc.net_amount + adjustmentTotal,
           },
