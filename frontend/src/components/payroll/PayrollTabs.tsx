@@ -176,6 +176,17 @@ type AllowanceOption = {
   remarks?: string | null;
 };
 
+type SalarySetting = Record<string, unknown> & {
+  id?: number | string;
+  salary_type?: string | null;
+  base_salary?: number | string | null;
+  base_salary_day?: number | string | null;
+  base_salary_night?: number | string | null;
+  mpf_plan?: string | null;
+  is_piece_rate?: boolean | null;
+  custom_allowances?: unknown;
+};
+
 type CalculationDetails = {
   payroll_summary?: Record<string, number | string | null | undefined>;
   items?: PayrollItem[];
@@ -268,6 +279,7 @@ type PayrollSnapshot = {
   items?: PayrollItem[];
   adjustments?: Adjustment[];
   allowance_options?: AllowanceOption[];
+  salary_setting?: SalarySetting | null;
   mpf_plan?: string | null;
 };
 
@@ -390,19 +402,41 @@ const PAYROLL_ITEM_COLUMN_LABELS: Record<string, string> = {
   remarks: "備註",
 };
 
-const ADJUSTMENT_COLUMN_LABELS: Record<string, string> = {
-  item_name: "項目名稱",
-  amount: "金額",
-  remarks: "備註",
+const SALARY_TYPE_LABELS: Record<string, string> = {
+  daily: "日薪",
+  monthly: "月薪",
+  piece: "計件",
+  piece_rate: "計件",
 };
 
-const ALLOWANCE_OPTION_COLUMN_LABELS: Record<string, string> = {
-  allowance_key: "津貼代碼",
-  allowance_name: "津貼名稱",
-  amount: "金額",
-  default_amount: "預設金額",
-  remarks: "備註",
+const MPF_PLAN_LABELS: Record<string, string> = {
+  industry: "行業計劃",
+  master_trust: "集成信託計劃",
+  none: "不適用",
 };
+
+const SALARY_SETTING_ALLOWANCE_FIELDS: Array<[keyof SalarySetting & string, string]> = [
+  ["allowance_night", "夜班津貼"],
+  ["allowance_rent", "租車津貼"],
+  ["allowance_3runway", "三跑津貼"],
+  ["allowance_well", "落井津貼"],
+  ["allowance_machine", "揸機津貼"],
+  ["allowance_roller", "火轆津貼"],
+  ["allowance_crane", "吊/挾車津貼"],
+  ["allowance_move_machine", "搬機津貼"],
+  ["allowance_kwh_night", "嘉華-夜間津貼"],
+  ["allowance_mid_shift", "中直津貼"],
+];
+
+const SALARY_SETTING_OT_FIELDS: Array<[keyof SalarySetting & string, string]> = [
+  ["ot_rate_standard", "標準OT"],
+  ["ot_1800_1900", "OT 18:00-19:00"],
+  ["ot_1900_2000", "OT 19:00-20:00"],
+  ["ot_0600_0700", "OT 06:00-07:00"],
+  ["ot_0700_0800", "OT 07:00-08:00"],
+  ["ot_mid_shift", "中直OT"],
+  ["mid_shift_ot_allowance", "中直OT津貼"],
+];
 
 type DetailColumn = {
   key: DetailColumnKey;
@@ -1108,7 +1142,7 @@ function PayrollTabs({
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "calculation" && <CalculationTab calculation={calculation} />}
+      {activeTab === "calculation" && <CalculationTab calculation={calculation} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} />}
       {activeTab === "print" && <PrintTab rows={rows} groups={groups} calculation={calculation} snapshot={snapshot} printRef={printRef} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} onPrint={printPayroll} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
@@ -1916,13 +1950,40 @@ function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedG
   return <div><div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">以下工作記錄未能自動匹配價目。可直接將組合加入價目表，重新計算後相關分頁會同步更新。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[980px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">客戶</th><th className="px-3 py-2 text-left">合約</th><th className="px-3 py-2 text-center">日/夜</th><th className="px-3 py-2 text-left">路線</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">筆數</th><th className="px-3 py-2 text-left">原因</th><th className="px-3 py-2 text-center">操作</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key} className="border-b hover:bg-amber-50/50"><td className="px-3 py-2 font-medium">{group.clientName}</td><td className="px-3 py-2 text-gray-600">{group.contractNo}</td><td className="px-3 py-2 text-center">{group.dayNight}</td><td className="px-3 py-2 text-gray-600">{group.route}</td><td className="px-3 py-2 text-right font-mono">{group.quantity.toLocaleString()} {group.unit}</td><td className="px-3 py-2 text-right font-mono">{group.count}</td><td className="px-3 py-2 text-xs text-amber-700">{group.reason}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(group.source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>)}</tbody></table></div></div>;
 }
 
-function CalculationTab({ calculation }: { calculation: CalculationDetails }) {
+function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalculation = [] }: { calculation: CalculationDetails; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[] }) {
   const summary = calculation.payroll_summary || {};
   const items = calculation.items || [];
-  const adjustments = calculation.adjustments || [];
-  const allowanceOptions = calculation.allowance_options || [];
+  const salaryItems = buildSalarySettingDisplayItems(salarySetting, calculation.mpf_plan);
+  const workSummary = buildCalculationWorkSummary(workLogs, dailyCalculation);
+
   return (
     <div className="space-y-5">
+      <section className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+        <div className="mb-1 font-semibold text-gray-900">薪酬設定</div>
+        {salaryItems.length > 0 ? (
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {salaryItems.map((item, index) => (
+              <Fragment key={`${item.label}-${index}`}>
+                <span className="whitespace-nowrap"><span className="text-gray-500">{item.label}：</span><span className="font-medium text-gray-900">{item.value}</span></span>
+                {index < salaryItems.length - 1 && <span className="hidden text-gray-300 sm:inline">|</span>}
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <div className="text-gray-500">暫無薪酬設定資料。</div>
+        )}
+      </section>
+
+      <section>
+        <h3 className="mb-2 font-bold text-gray-900">工作摘要</h3>
+        <div className="grid gap-3 md:grid-cols-4">
+          <SummaryPill label="工作天數" value={`${workSummary.workDays}天`} tone="blue" />
+          <SummaryPill label="休假天數" value={`${workSummary.leaveDays}天`} tone="gray" />
+          <SummaryPill label="OT筆數" value={`${workSummary.otCount}筆${workSummary.totalOtQuantity > 0 ? ` / ${formatPlainNumber(workSummary.totalOtQuantity)}` : ""}`} tone="amber" />
+          <SummaryPill label="中直筆數" value={`${workSummary.midShiftCount}筆`} tone="green" />
+        </div>
+      </section>
+
       <section>
         <h3 className="mb-3 font-bold text-gray-900">糧單摘要</h3>
         <div className="grid gap-3 md:grid-cols-5">
@@ -1933,10 +1994,92 @@ function CalculationTab({ calculation }: { calculation: CalculationDetails }) {
         </div>
       </section>
       <SimpleTable title="薪酬項目" rows={items} columns={["item_type", "item_name", "unit_price", "quantity", "amount", "remarks"]} columnLabels={PAYROLL_ITEM_COLUMN_LABELS} moneyColumns={["unit_price", "amount"]} />
-      <SimpleTable title="調整項" rows={adjustments} columns={["item_name", "amount", "remarks"]} columnLabels={ADJUSTMENT_COLUMN_LABELS} moneyColumns={["amount"]} />
-      <SimpleTable title="津貼選項" rows={allowanceOptions} columns={["allowance_key", "allowance_name", "amount", "default_amount", "remarks"]} columnLabels={ALLOWANCE_OPTION_COLUMN_LABELS} moneyColumns={["amount", "default_amount"]} />
     </div>
   );
+}
+
+type SalarySettingDisplayItem = { label: string; value: string };
+
+function buildSalarySettingDisplayItems(salarySetting: SalarySetting | null | undefined, calculationMpfPlan?: string | null): SalarySettingDisplayItem[] {
+  if (!salarySetting) return [];
+
+  const items: SalarySettingDisplayItem[] = [];
+  const salaryType = salarySetting.is_piece_rate ? "piece_rate" : normalizeSettingText(salarySetting.salary_type);
+  const baseSalaryDay = getSettingNumber(salarySetting, "base_salary_day", "base_salary");
+  const baseSalaryNight = getSettingNumber(salarySetting, "base_salary_night");
+
+  items.push({ label: "薪酬類型", value: salaryType ? (SALARY_TYPE_LABELS[salaryType] || salaryType) : "—" });
+  items.push({ label: "底薪(日)", value: formatCompactMoney(baseSalaryDay) });
+  items.push({ label: "底薪(夜)", value: baseSalaryNight > 0 ? formatCompactMoney(baseSalaryNight) : "跟日薪" });
+
+  for (const [key, label] of SALARY_SETTING_ALLOWANCE_FIELDS) {
+    const amount = getSettingNumber(salarySetting, key);
+    if (amount !== 0) items.push({ label, value: formatCompactMoney(amount) });
+  }
+
+  for (const item of getCustomAllowanceDisplayItems(salarySetting.custom_allowances)) {
+    items.push(item);
+  }
+
+  for (const [key, label] of SALARY_SETTING_OT_FIELDS) {
+    const amount = getSettingNumber(salarySetting, key);
+    if (amount !== 0) items.push({ label, value: formatCompactMoney(amount) });
+  }
+
+  const mpfPlan = normalizeSettingText(salarySetting.mpf_plan) || normalizeSettingText(calculationMpfPlan);
+  if (mpfPlan) items.push({ label: "強積金計劃", value: MPF_PLAN_LABELS[mpfPlan] || mpfPlan });
+
+  return items;
+}
+
+function getSettingNumber(setting: SalarySetting, ...keys: string[]): number {
+  for (const key of keys) {
+    const value = setting[key];
+    if (value !== null && value !== undefined && value !== "") return toNumber(value as number | string | null | undefined);
+  }
+  return 0;
+}
+
+function normalizeSettingText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function getCustomAllowanceDisplayItems(customAllowances: unknown): SalarySettingDisplayItem[] {
+  if (!customAllowances || typeof customAllowances !== "object") return [];
+
+  if (Array.isArray(customAllowances)) {
+    return customAllowances.flatMap((allowance, index) => {
+      if (!allowance || typeof allowance !== "object") return [];
+      const record = allowance as Record<string, unknown>;
+      const amount = toNumber(record.amount as number | string | null | undefined);
+      if (amount === 0) return [];
+      const label = normalizeSettingText(record.name) || normalizeSettingText(record.label) || `自定義津貼${index + 1}`;
+      return [{ label, value: formatCompactMoney(amount) }];
+    });
+  }
+
+  return Object.entries(customAllowances as Record<string, unknown>).flatMap(([key, value]) => {
+    const amount = toNumber(value as number | string | null | undefined);
+    if (amount === 0) return [];
+    return [{ label: ALLOWANCE_LABELS[key] || key, value: formatCompactMoney(amount) }];
+  });
+}
+
+function buildCalculationWorkSummary(workLogs: WorkLogRecord[], dailyCalculation: DailyCalculationRecord[]) {
+  const activeRows = workLogs.filter((row) => !row.is_excluded);
+  const workDates = new Set(activeRows.map((row) => dateOnly(row.scheduled_date)).filter(Boolean));
+  const dailyWorkDays = dailyCalculation.filter((day) => (day.work_logs || day.logs || []).length > 0).length;
+  const otRows = activeRows.filter((row) => toNumber(row.ot_quantity) > 0);
+  const midShiftRows = activeRows.filter((row) => Boolean(row.is_mid_shift) || normalizeSettingText(row.day_night).includes("中直"));
+
+  return {
+    workDays: dailyWorkDays || workDates.size,
+    leaveDays: dailyCalculation.filter((day) => isLeaveDay(day)).length,
+    otCount: otRows.length,
+    totalOtQuantity: otRows.reduce((sum, row) => sum + toNumber(row.ot_quantity), 0),
+    midShiftCount: midShiftRows.length,
+  };
 }
 
 type SimpleRow = Record<string, string | number | boolean | null | undefined>;
