@@ -138,13 +138,11 @@ export class AiPayrollGenerateService {
         userId,
       )) as PayrollResult;
 
-      let finalPayroll = payroll;
-      if (dto.confirm) {
-        finalPayroll = (await this.payrollService.finalizePreparation(
-          payroll.id,
-          userId,
-        )) as PayrollResult;
-      }
+      // Always finalize to draft status so generated payrolls do not remain in preparing state.
+      const finalPayroll = (await this.payrollService.finalizePreparation(
+        payroll.id,
+        userId,
+      )) as PayrollResult;
       payrollIds.push(payroll.id);
       results.push(finalPayroll);
     }
