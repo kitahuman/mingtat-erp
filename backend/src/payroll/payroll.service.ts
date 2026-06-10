@@ -769,10 +769,9 @@ export class PayrollService {
       service_type: { not: '請假/休息' },
       deleted_at: null,
     };
-    if (requestedCompanyId) {
-      wlWhere.company_id = requestedCompanyId;
-    }
-
+    // Do not filter work logs by requested company_id here. The requestedCompanyId
+    // is used for the payroll record company_id only; work logs may belong to a
+    // related company/profile and should match resetAndRefetch behavior.
     const workLogs = await this.prisma.workLog.findMany({
       where: wlWhere,
       include: {
@@ -966,6 +965,7 @@ export class PayrollService {
       matched_rate: pwl.matched_rate,
       matched_unit: pwl.matched_unit,
       matched_ot_rate: pwl.matched_ot_rate,
+      matched_mid_shift_rate: pwl.matched_mid_shift_rate,
       price_match_status: pwl.price_match_status,
       price_match_note: pwl.price_match_note,
       is_mid_shift: pwl.is_mid_shift,
@@ -1997,8 +1997,13 @@ export class PayrollService {
       matched_rate: pwl.matched_rate,
       matched_unit: pwl.matched_unit,
       matched_ot_rate: pwl.matched_ot_rate,
+      matched_mid_shift_rate: pwl.matched_mid_shift_rate,
       price_match_status: pwl.price_match_status,
       price_match_note: pwl.price_match_note,
+      is_mid_shift: pwl.is_mid_shift || false,
+      line_amount: pwl.line_amount,
+      ot_line_amount: pwl.ot_line_amount,
+      mid_shift_line_amount: pwl.mid_shift_line_amount,
       payroll_work_log_product_quantity: pwl.payroll_work_log_product_quantity,
       billing_quantity_type: pwl.billing_quantity_type,
     }));

@@ -937,6 +937,7 @@ export class PayrollCalculationService {
         g.ot_quantity += Number(pwl.ot_quantity) || 0;
         g.ot_amount += Number(pwl.ot_line_amount) || 0;
         g.mid_shift_amount += Number(pwl.mid_shift_line_amount) || 0;
+        g.mid_shift_count += pwl.is_mid_shift ? 1 : 0;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(pwl.id);
@@ -971,6 +972,7 @@ export class PayrollCalculationService {
           ot_quantity: Number(pwl.ot_quantity) || 0,
           ot_amount: Number(pwl.ot_line_amount) || 0,
           mid_shift_amount: Number(pwl.mid_shift_line_amount) || 0,
+          mid_shift_count: pwl.is_mid_shift ? 1 : 0,
           total_amount: 0,
           count: 1,
           price_match_status: pwl.price_match_status || 'unmatched',
@@ -991,6 +993,7 @@ export class PayrollCalculationService {
         billing_quantity: billingQuantity,
         ot_amount: otAmount,
         mid_shift_amount: midShiftAmount,
+        mid_shift_count: Number(g.mid_shift_count) || 0,
         total_amount: baseAmount + otAmount + midShiftAmount,
       };
     });
@@ -1011,6 +1014,7 @@ export class PayrollCalculationService {
         g.ot_quantity += Number(wl.ot_quantity) || 0;
         g.ot_amount += Number(wl._ot_line_amount) || 0;
         g.mid_shift_amount += Number(wl._mid_shift_line_amount) || 0;
+        g.mid_shift_count += wl.is_mid_shift ? 1 : 0;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(wl.id);
@@ -1040,6 +1044,7 @@ export class PayrollCalculationService {
           ot_quantity: Number(wl.ot_quantity) || 0,
           ot_amount: Number(wl._ot_line_amount) || 0,
           mid_shift_amount: Number(wl._mid_shift_line_amount) || 0,
+          mid_shift_count: wl.is_mid_shift ? 1 : 0,
           total_amount: 0,
           count: 1,
           price_match_status: wl._price_match_status || 'unmatched',
@@ -1059,6 +1064,7 @@ export class PayrollCalculationService {
         billing_quantity: billingQuantity,
         ot_amount: otAmount,
         mid_shift_amount: midShiftAmount,
+        mid_shift_count: Number(g.mid_shift_count) || 0,
         total_amount: baseAmount + otAmount + midShiftAmount,
       };
     });
