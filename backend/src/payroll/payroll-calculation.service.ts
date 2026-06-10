@@ -289,11 +289,6 @@ export class PayrollCalculationService {
       { field: 'ot_1900_2000', label: 'OT 19:00-20:00' },
       { field: 'ot_0600_0700', label: 'OT 06:00-07:00' },
       { field: 'ot_0700_0800', label: 'OT 07:00-08:00' },
-      {
-        field: 'ot_mid_shift',
-        label: '中直OT津貼',
-        condition: (wl) => wl.is_mid_shift === true,
-      },
     ];
     const otSlotQuantities = new Map<string, number>();
 
@@ -332,6 +327,31 @@ export class PayrollCalculationService {
         amount,
         sort_order: sortOrder++,
       });
+    }
+
+    // 中直OT津貼 - 額外津貼，不佔用 OT 時數
+    if (!excluded.has('salary-ot-ot_mid_shift')) {
+      const midShiftOtRate = Number((salarySetting as any).ot_mid_shift) || 0;
+      if (midShiftOtRate > 0) {
+        const midShiftDates = new Set(
+          workLogs
+            .filter((wl) => wl.is_mid_shift === true)
+            .map((wl) => toDateStr(wl.scheduled_date)),
+        );
+        const midShiftDays = midShiftDates.size;
+        if (midShiftDays > 0) {
+          const midShiftOtAmount = midShiftOtRate * midShiftDays;
+          otTotal += midShiftOtAmount;
+          items.push({
+            item_type: 'ot',
+            item_name: '中直OT津貼',
+            unit_price: midShiftOtRate,
+            quantity: midShiftDays,
+            amount: midShiftOtAmount,
+            sort_order: sortOrder++,
+          });
+        }
+      }
     }
 
     // ── (4) 分傭計算 ──
