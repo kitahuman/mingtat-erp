@@ -1511,6 +1511,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
   const workDayCount = days.filter((day) => (day.work_logs || day.logs || []).length > 0).length;
   const topUpDayCount = days.filter((day) => getDailyTopUpAmount(day) > 0).length;
   const totalTopUp = days.reduce((sum, day) => sum + getDailyTopUpAmount(day), 0);
+  const leaveDayCount = days.filter((day) => isLeaveDay(day)).length;
   const totalAllowances = days.reduce((sum, day) => sum + getDailyAllowanceTotal(day), 0);
   const grandTotal = days.reduce((sum, day) => sum + getDailyTotal(day), 0);
 
@@ -1555,6 +1556,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
         <DailySummaryItem label="工作天數" value={`${workDayCount}天`} />
         <DailySummaryItem label="需補底薪天數" value={`${topUpDayCount}天`} valueClassName="text-orange-600" />
         <DailySummaryItem label="補底薪合計" value={formatCompactMoney(totalTopUp)} valueClassName="text-orange-600" />
+        <DailySummaryItem label="休假天數" value={`${leaveDayCount}天`} valueClassName="text-gray-600" />
         <DailySummaryItem label="每日津貼合計" value={formatCompactMoney(totalAllowances)} valueClassName="text-blue-600" />
         <DailySummaryItem label="逐日合計" value={formatCompactMoney(grandTotal)} valueClassName="text-primary-600" />
       </div>
@@ -1583,6 +1585,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               const datedAdjustments = adjustments.filter((adjustment) => isAdjustmentOnDate(adjustment, day.date));
               const holidayName = getDailyHolidayName(day);
               const restDayLabel = !day.is_holiday ? day.special_label : null;
+              const isLeave = isLeaveDay(day);
               const statutoryHolidayBadgeKey = getStatutoryHolidayBadgeKey(day);
               const canRestoreHolidayAllowance = Boolean(
                 !readOnly &&
@@ -1605,7 +1608,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                         <span>{displayDate(day.date)}</span>
                         {day.weekday && <span className="text-xs text-gray-400">({day.weekday})</span>}
                         {!day.weekday && day.date && <span className="text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
-                        {workLogs.length > 1 && <span className="text-xs text-gray-400">({workLogs.length}筆)</span>}
+                        {workLogs.length >= 1 && <span className="text-xs text-gray-400">({workLogs.length}筆)</span>}
                         {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
                         {holidayName && (
                           <SpecialDateBadge
@@ -1616,6 +1619,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                           />
                         )}
                         {restDayLabel && <SpecialDateBadge label={restDayLabel} />}
+                        {isLeave && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">休假</span>}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right align-middle font-mono">{formatCompactMoney(getDailyWorkIncome(day))}</td>
@@ -1715,6 +1719,18 @@ function isDailyBadgeExcluded(day: DailyCalculationRecord, badgeKey: string): bo
 function isExcludedAllowance(allowance: DailyAllowance): boolean {
   const key = allowance.allowance_key || allowance.key || "";
   return key.startsWith("excluded_");
+}
+
+function isRestDay(day: DailyCalculationRecord): boolean {
+  return !day.is_holiday && Boolean(day.special_label?.includes("休息日"));
+}
+
+function isLeaveDay(day: DailyCalculationRecord): boolean {
+  if (day.is_holiday || isRestDay(day)) return false;
+  if (getDailyWorkIncome(day) !== 0) return false;
+
+  const workLogs = day.work_logs || day.logs || [];
+  return workLogs.length === 0 || workLogs.every((log) => toNumber(log.line_amount ?? log.amount) === 0);
 }
 
 function SpecialDateBadge({ label, clickable = false, title, onClick }: { label: string; clickable?: boolean; title?: string; onClick?: () => void }) {
