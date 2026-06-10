@@ -235,7 +235,7 @@ export class PayrollController {
   @Post(':id/adjustments')
   addAdjustment(
     @Param('id') id: string,
-    @Body() body: { item_name: string; amount: number; remarks?: string },
+    @Body() body: { item_name: string; amount: number; remarks?: string; date?: string },
   ) {
     return this.payrollService.addAdjustment(+id, body);
   }

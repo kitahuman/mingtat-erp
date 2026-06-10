@@ -13,6 +13,17 @@ function formatDateDisplay(dateStr: string): string {
   return fmtDate(dateStr);
 }
 
+function formatAdjustmentDateLabel(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  const text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  const parts = text.split('-');
+  if (parts.length !== 3) return '';
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return '';
+  return `${month}月${day}日`;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   preparing: '準備中（編輯工作記錄）',
   draft: '草稿',
@@ -1868,9 +1879,10 @@ export default function PayrollDetailPage() {
               <tbody>
                 {adjustments.map((adj: any) => {
                   const isNeg = Number(adj.amount) < 0;
+                  const adjustmentDateLabel = formatAdjustmentDateLabel(adj.adjustment_date);
                   return (
                     <tr key={adj.id} className="border-b">
-                      <td className="px-4 py-2 font-medium">{adj.item_name}</td>
+                      <td className="px-4 py-2 font-medium">{adj.item_name}{adjustmentDateLabel ? ` (${adjustmentDateLabel})` : ''}</td>
                       <td className={`px-4 py-2 text-right font-mono font-bold ${isNeg ? 'text-red-600' : 'text-green-600'}`}>
                         {isNeg ? '-' : '+'}${Math.abs(Number(adj.amount)).toLocaleString()}
                       </td>

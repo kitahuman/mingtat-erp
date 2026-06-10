@@ -731,7 +731,7 @@ export const payrollApi = {
   // ── 自定義調整項管理 ──
   addAdjustment: (
     payrollId: number,
-    data: { item_name: string; amount: number; remarks?: string },
+    data: { item_name: string; amount: number; remarks?: string; date?: string },
   ) => api.post(`/payroll/${payrollId}/adjustments`, data),
   removeAdjustment: (payrollId: number, adjId: number) =>
     api.delete(`/payroll/${payrollId}/adjustments/${adjId}`),

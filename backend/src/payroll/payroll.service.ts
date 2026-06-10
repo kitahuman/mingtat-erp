@@ -2389,7 +2389,7 @@ export class PayrollService {
   // ── 新增自定義調整項 ──────────────────────────────────────────
   async addAdjustment(
     payrollId: number,
-    body: { item_name: string; amount: number; remarks?: string },
+    body: { item_name: string; amount: number; remarks?: string; date?: string },
   ) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
@@ -2409,6 +2409,7 @@ export class PayrollService {
         payroll_id: payrollId,
         item_name: body.item_name,
         amount: body.amount,
+        adjustment_date: body.date ? new Date(body.date) : undefined,
         remarks: body.remarks || undefined,
         sort_order: (maxSortResult._max.sort_order || 0) + 1,
       },

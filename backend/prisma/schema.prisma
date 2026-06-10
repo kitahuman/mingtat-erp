@@ -61,7 +61,7 @@ model User {
   scrapped_vehicles          Vehicle[]                  @relation("VehicleScrappedBy")
   web_push_subscriptions     WebPushSubscription[]
   document_folders_created   DocumentFolder[]           @relation("DocumentFolderCreatedBy")
-  created_payrolls          Payroll[]                 @relation("PayrollCreatedBy")
+  created_payrolls           Payroll[]                  @relation("PayrollCreatedBy")
 
   @@map("users")
 }
@@ -1470,7 +1470,7 @@ model Payroll {
   petty_cash_records      PettyCashRecord[]
   payment_out_allocations PaymentOutAllocation[]  @relation("PayrollPaymentOutAllocations")
   ai_session              AiPayrollSession?       @relation("AiSessionPayrolls", fields: [payroll_ai_session_id], references: [id], onDelete: SetNull)
-  created_by_user        User?                   @relation("PayrollCreatedBy", fields: [payroll_created_by], references: [id], onDelete: SetNull)
+  created_by_user         User?                   @relation("PayrollCreatedBy", fields: [payroll_created_by], references: [id], onDelete: SetNull)
 
   // ── Performance indexes ──
   @@index([employee_id])
@@ -1502,52 +1502,52 @@ model PayrollItem {
 }
 
 model PayrollWorkLog {
-  id                            Int       @id @default(autoincrement())
-  payroll_id                    Int
-  work_log_id                   Int?
-  service_type                  String?
-  scheduled_date                DateTime? @db.Date
-  day_night                     String?
-  start_location                String?   @db.Text
-  end_location                  String?   @db.Text
-  machine_type                  String?
-  tonnage                       String?
-  equipment_number              String?
-  quantity                      Decimal?  @db.Decimal(10, 2)
-  unit                          String?
-  ot_quantity                   Decimal?  @db.Decimal(10, 2)
-  ot_unit                       String?
-  is_mid_shift                  Boolean   @default(false)
-  remarks                       String?   @db.Text
-  matched_rate_card_id          Int?
-  matched_rate                  Decimal?  @db.Decimal(12, 2)
-  matched_unit                  String?
-  matched_ot_rate               Decimal?  @db.Decimal(12, 2)
-  matched_mid_shift_rate        Decimal?  @db.Decimal(12, 2)
-  price_match_status            String?
-  price_match_note              String?   @db.Text
-  line_amount                   Decimal   @default(0) @db.Decimal(12, 2)
-  ot_line_amount                Decimal   @default(0) @db.Decimal(12, 2)
-  mid_shift_line_amount         Decimal   @default(0) @db.Decimal(12, 2)
-  group_key                     String?   @db.Text
-  client_id                     Int?
-  client_name                   String?
-  company_profile_id            Int?
-  company_profile_name          String?
-  company_id                    Int?
-  company_name                  String?
-  quotation_id                  Int?
-  contract_no                   String?
-  client_contract_no            String?
-  payroll_work_log_product_name String?   @db.Text
-  payroll_work_log_product_unit String?   @db.Text
-  payroll_work_log_product_quantity Decimal? @db.Decimal(10, 2)
-  billing_quantity_type String? @default("quantity")
-  is_manual_rate                Boolean   @default(false)
-  is_modified                   Boolean   @default(false)
-  is_excluded                   Boolean   @default(false)
-  created_at                    DateTime  @default(now())
-  updated_at                    DateTime  @default(now()) @updatedAt
+  id                                Int       @id @default(autoincrement())
+  payroll_id                        Int
+  work_log_id                       Int?
+  service_type                      String?
+  scheduled_date                    DateTime? @db.Date
+  day_night                         String?
+  start_location                    String?   @db.Text
+  end_location                      String?   @db.Text
+  machine_type                      String?
+  tonnage                           String?
+  equipment_number                  String?
+  quantity                          Decimal?  @db.Decimal(10, 2)
+  unit                              String?
+  ot_quantity                       Decimal?  @db.Decimal(10, 2)
+  ot_unit                           String?
+  is_mid_shift                      Boolean   @default(false)
+  remarks                           String?   @db.Text
+  matched_rate_card_id              Int?
+  matched_rate                      Decimal?  @db.Decimal(12, 2)
+  matched_unit                      String?
+  matched_ot_rate                   Decimal?  @db.Decimal(12, 2)
+  matched_mid_shift_rate            Decimal?  @db.Decimal(12, 2)
+  price_match_status                String?
+  price_match_note                  String?   @db.Text
+  line_amount                       Decimal   @default(0) @db.Decimal(12, 2)
+  ot_line_amount                    Decimal   @default(0) @db.Decimal(12, 2)
+  mid_shift_line_amount             Decimal   @default(0) @db.Decimal(12, 2)
+  group_key                         String?   @db.Text
+  client_id                         Int?
+  client_name                       String?
+  company_profile_id                Int?
+  company_profile_name              String?
+  company_id                        Int?
+  company_name                      String?
+  quotation_id                      Int?
+  contract_no                       String?
+  client_contract_no                String?
+  payroll_work_log_product_name     String?   @db.Text
+  payroll_work_log_product_unit     String?   @db.Text
+  payroll_work_log_product_quantity Decimal?  @db.Decimal(10, 2)
+  billing_quantity_type             String?   @default("quantity")
+  is_manual_rate                    Boolean   @default(false)
+  is_modified                       Boolean   @default(false)
+  is_excluded                       Boolean   @default(false)
+  created_at                        DateTime  @default(now())
+  updated_at                        DateTime  @default(now()) @updatedAt
 
   payroll  Payroll  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
   work_log WorkLog? @relation(fields: [work_log_id], references: [id], onDelete: SetNull)
@@ -1556,14 +1556,15 @@ model PayrollWorkLog {
 }
 
 model PayrollAdjustment {
-  id         Int      @id @default(autoincrement())
-  payroll_id Int
-  item_name  String
-  amount     Decimal  @db.Decimal(12, 2)
-  remarks    String?  @db.Text
-  sort_order Int      @default(0)
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now()) @updatedAt
+  id              Int       @id @default(autoincrement())
+  payroll_id      Int
+  item_name       String
+  amount          Decimal   @db.Decimal(12, 2)
+  adjustment_date DateTime? @db.Date
+  remarks         String?   @db.Text
+  sort_order      Int       @default(0)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
 
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 

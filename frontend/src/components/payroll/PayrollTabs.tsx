@@ -156,6 +156,7 @@ type Adjustment = {
   id?: number | string;
   item_name?: string | null;
   amount?: number | string | null;
+  adjustment_date?: string | null;
   remarks?: string | null;
 };
 
@@ -992,6 +993,20 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.removeDailyAllowance(payrollId, Number(id)), "移除每日津貼失敗");
   }
 
+  async function addAdjustment(date: string, item: { item_name: string; amount: number }) {
+    if (!payrollId) return;
+    await mutateAndReload(() => payrollApi.addAdjustment(payrollId, {
+      item_name: item.item_name,
+      amount: item.amount,
+      date,
+    }), "新增自定義津貼失敗");
+  }
+
+  async function removeAdjustment(id: number | string) {
+    if (!payrollId) return;
+    await mutateAndReload(() => payrollApi.removeAdjustment(payrollId, Number(id)), "移除自定義津貼失敗");
+  }
+
   async function excludeBadge(date: string, badgeKey: string) {
     const ok = window.confirm("確定要移除此津貼？");
     if (!ok) return;
@@ -1050,7 +1065,7 @@ function PayrollTabs({
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onExcludeBadge={excludeBadge} onSaveTopUpOverride={saveTopUpOverride} />}
+      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} />}
       {activeTab === "print" && <PrintTab rows={rows} groups={groups} calculation={calculation} snapshot={snapshot} printRef={printRef} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} onPrint={printPayroll} />}
@@ -1356,7 +1371,18 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onO
   return <div><div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">可按每個歸組選擇計費數量類型。單位邏輯會按「天數 / 數量 / 商品數量」顯示對應數量與單位；未匹配組合可手動設定單價或加入價目表。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[1180px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left font-medium text-gray-600">客戶 / 合約</th><th className="px-3 py-2 text-left font-medium text-gray-600">工種</th><th className="px-3 py-2 text-center font-medium text-gray-600">日/夜</th><th className="px-3 py-2 text-left font-medium text-gray-600">路線</th><th className="px-3 py-2 text-left font-medium text-gray-600">計費數量類型</th><th className="px-3 py-2 text-right font-medium text-gray-600">計費數量</th><th className="px-3 py-2 text-right font-medium text-gray-600">單價</th><th className="px-3 py-2 text-right font-medium text-gray-600">OT</th><th className="px-3 py-2 text-right font-medium text-gray-600">金額</th><th className="px-3 py-2 text-left font-medium text-gray-600">狀態</th><th className="px-3 py-2 text-center font-medium text-gray-600">操作</th></tr></thead><tbody>{groups.map((group) => { const billingType = (group.billing_quantity_type || "days") as BillingQuantityType; const source = buildRateCardSourceFromGroup(group); return <tr key={normalizeGroupKey(group)} className={`border-b hover:bg-gray-50 ${isUnmatched(group) ? "bg-amber-50/40" : ""}`}><td className="px-3 py-2"><div className="font-medium">{group.client_name || group.company_name || "-"}</div><div className="text-xs text-gray-500">{group.client_contract_no || group.contract_no || "-"}</div></td><td className="px-3 py-2">{group.service_type || "-"}</td><td className="px-3 py-2 text-center">{group.day_night || "-"}</td><td className="px-3 py-2 text-gray-600">{routeOf(group)}</td><td className="px-3 py-2"><select disabled={readOnly} value={billingType} onChange={(e) => onBillingTypeChange(group, e.target.value as BillingQuantityType)} className="input h-8 min-w-[120px] px-2 py-1 text-sm"><option value="days">天數</option><option value="quantity">數量</option><option value="product_quantity">商品數量</option></select></td><td className="px-3 py-2 text-right font-mono">{formatPlainNumber(groupBillingQuantity(group))} {groupBillingUnit(group)}</td><td className="px-3 py-2 text-right font-mono">{isUnmatched(group) && !readOnly ? <button type="button" onClick={() => onSetGroupRate(group)} className="font-medium text-primary-600 hover:underline">{asOptionalNumber(group.matched_rate) !== undefined ? formatMoney(group.matched_rate) : "輸入單價"}</button> : formatMoney(group.matched_rate)}</td><td className="px-3 py-2 text-right font-mono">{formatMoney(group.ot_amount)}<div className="text-[11px] text-gray-500">OT價 {formatMoney(group.matched_ot_rate)}</div></td><td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatMoney(group.total_amount ?? group.amount)}</td><td className="px-3 py-2 text-xs">{isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>; })}</tbody></table></div></div>;
 }
 
-function DailyTab({ days, allowanceOptions, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onExcludeBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
+function dateOnly(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function isAdjustmentOnDate(adjustment: Adjustment, date: string | null | undefined): boolean {
+  const adjustmentDate = dateOnly(adjustment.adjustment_date);
+  return Boolean(adjustmentDate && date && adjustmentDate === dateOnly(date));
+}
+
+function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState("");
   const [customAllowanceName, setCustomAllowanceName] = useState("");
@@ -1395,7 +1421,7 @@ function DailyTab({ days, allowanceOptions, expandedDay, readOnly, onToggleExpan
         alert("請輸入有效自定義津貼金額");
         return;
       }
-      await onAddAllowance(date, { allowance_key: "custom_allowance", allowance_name: name, amount });
+      await onAddAdjustment(date, { item_name: name, amount });
       resetAllowanceForm();
       return;
     }
@@ -1437,6 +1463,7 @@ function DailyTab({ days, allowanceOptions, expandedDay, readOnly, onToggleExpan
               const isExpanded = expandedDay === rowDate;
               const isAdding = addingDate === rowDate;
               const rowTone = day.special_label ? "bg-green-50" : topUp > 0 ? "bg-orange-50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/60";
+              const datedAdjustments = adjustments.filter((adjustment) => isAdjustmentOnDate(adjustment, day.date));
 
               return (
                 <Fragment key={rowDate}>
@@ -1465,7 +1492,7 @@ function DailyTab({ days, allowanceOptions, expandedDay, readOnly, onToggleExpan
                       )}
                     </td>
                     <td className="px-3 py-2 text-center align-middle">
-                      <DailyAllowanceBadges day={day} readOnly={readOnly} onRemoveAllowance={onRemoveAllowance} onExcludeBadge={onExcludeBadge} />
+                      <DailyAllowanceBadges day={day} adjustments={datedAdjustments} readOnly={readOnly} onRemoveAllowance={onRemoveAllowance} onRemoveAdjustment={onRemoveAdjustment} onExcludeBadge={onExcludeBadge} />
                     </td>
                     <td className="px-3 py-2 text-right align-middle font-mono font-bold text-gray-900">{formatCompactMoney(getDailyTotal(day))}</td>
                     <td className="px-3 py-2 text-center align-middle">
@@ -1574,11 +1601,11 @@ function getAllowanceBadgeClass(key: string, label: string, className?: string):
   return "bg-blue-100 text-blue-700 border-blue-200";
 }
 
-function DailyAllowanceBadges({ day, readOnly, onRemoveAllowance, onExcludeBadge }: { day: DailyCalculationRecord; readOnly: boolean; onRemoveAllowance: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void> }) {
+function DailyAllowanceBadges({ day, adjustments, readOnly, onRemoveAllowance, onRemoveAdjustment, onExcludeBadge }: { day: DailyCalculationRecord; adjustments: Adjustment[]; readOnly: boolean; onRemoveAllowance: (id: number | string) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void> }) {
   const badges = day.allowance_badges || day.badges || [];
   const allowances = day.daily_allowances || day.allowances || [];
 
-  if (badges.length === 0 && allowances.length === 0) return <span className="text-gray-300">—</span>;
+  if (badges.length === 0 && allowances.length === 0 && adjustments.length === 0) return <span className="text-gray-300">—</span>;
 
   return (
     <div className="flex flex-wrap justify-center gap-1">
@@ -1600,6 +1627,15 @@ function DailyAllowanceBadges({ day, readOnly, onRemoveAllowance, onExcludeBadge
           <span key={`allowance-${allowance.id || allowanceKey}-${index}`} className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs ${getAllowanceBadgeClass(allowanceKey, label)}`}>
             {label} {formatCompactMoney(allowance.amount)}
             {!readOnly && allowance.id && <button type="button" onClick={() => onRemoveAllowance(allowance.id as number | string)} className="ml-0.5 font-bold text-current opacity-60 hover:text-red-500 hover:opacity-100">×</button>}
+          </span>
+        );
+      })}
+      {adjustments.map((adjustment, index) => {
+        const label = adjustment.item_name || "自定義津貼";
+        return (
+          <span key={`adjustment-${adjustment.id || index}`} className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs ${getAllowanceBadgeClass("custom_allowance", label)}`}>
+            {label} {formatCompactMoney(adjustment.amount)}
+            {!readOnly && adjustment.id && <button type="button" onClick={() => onRemoveAdjustment(adjustment.id as number | string)} className="ml-0.5 font-bold text-current opacity-60 hover:text-red-500 hover:opacity-100">×</button>}
           </span>
         );
       })}
