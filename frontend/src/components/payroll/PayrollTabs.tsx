@@ -1608,7 +1608,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                         <span>{displayDate(day.date)}</span>
                         {day.weekday && <span className="text-xs text-gray-400">({day.weekday})</span>}
                         {!day.weekday && day.date && <span className="text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
-                        {workLogs.length >= 1 && <span className="text-xs text-gray-400">({workLogs.length}筆)</span>}
+                        {workLogs.length >= 1 && <span className="text-xs font-bold text-blue-600">({workLogs.length}筆)</span>}
                         {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
                         {holidayName && (
                           <SpecialDateBadge
@@ -1727,10 +1727,9 @@ function isRestDay(day: DailyCalculationRecord): boolean {
 
 function isLeaveDay(day: DailyCalculationRecord): boolean {
   if (day.is_holiday || isRestDay(day)) return false;
-  if (getDailyWorkIncome(day) !== 0) return false;
 
   const workLogs = day.work_logs || day.logs || [];
-  return workLogs.length === 0 || workLogs.every((log) => toNumber(log.line_amount ?? log.amount) === 0);
+  return workLogs.length === 0;
 }
 
 function SpecialDateBadge({ label, clickable = false, title, onClick }: { label: string; clickable?: boolean; title?: string; onClick?: () => void }) {
