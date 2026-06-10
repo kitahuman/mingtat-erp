@@ -3406,7 +3406,7 @@ export default function WorkLogsPage() {
                                   colSpan={totalCols + 1}
                                   className="p-0 align-top"
                                 >
-                                  <div className="sticky left-0 box-border w-[calc(100dvw-2rem)] px-4 py-3 sm:w-[calc(100dvw-3rem)] lg:w-[calc(100dvw-19rem)]">
+                                  <div className="sticky left-0 box-border w-[calc(100dvw-2rem)] px-4 py-3 sm:w-[calc(100dvw-3rem)] lg:w-[calc(100dvw-5rem)]">
                                     {vd?.loading && (
                                     <div className="text-xs text-indigo-500 py-1">
                                       核對資料載入中…
