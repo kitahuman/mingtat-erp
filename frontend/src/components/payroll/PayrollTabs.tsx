@@ -240,6 +240,7 @@ type DailyCalculationRecord = {
   allowances?: DailyAllowance[];
   allowance_badges?: DailyBadge[];
   badges?: DailyBadge[];
+  fixed_allowances_per_day?: { key: string; name: string; amount: number }[];
   remarks?: string | null;
   details?: string | null;
 };
@@ -1572,7 +1573,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
 
   if (days.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無逐日計算資料。</div>;
 
-  const tableColumnCount = 7;
+  const tableColumnCount = 8;
   const workDayCount = days.filter((day) => (day.work_logs || day.logs || []).length > 0).length;
   const topUpDayCount = days.filter((day) => getDailyTopUpAmount(day) > 0).length;
   const totalTopUp = days.reduce((sum, day) => sum + getDailyTopUpAmount(day), 0);
@@ -1627,12 +1628,13 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full min-w-[980px] text-sm">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="w-8 px-3 py-2 text-left font-medium text-gray-600"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
+              <th className="px-3 py-2 text-center font-medium text-gray-600">OT/中直</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">補底薪差額</th>
               <th className="px-3 py-2 text-center font-medium text-gray-600">每日津貼</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">當日合計</th>
@@ -1644,6 +1646,9 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               const rowDate = day.date || `day-${index}`;
               const workLogs = day.work_logs || day.logs || [];
               const topUp = getDailyTopUpAmount(day);
+              const baseWorkIncome = getDailyBaseWorkIncome(day);
+              const otMidShiftTotals = getDailyOtMidShiftTotals(day);
+              const otMidShiftLabel = formatDailyOtMidShift(otMidShiftTotals);
               const isExpanded = expandedDay === rowDate;
               const isAdding = addingDate === rowDate;
               const rowTone = day.special_label ? "bg-green-50" : topUp > 0 ? "bg-orange-50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/60";
@@ -1687,7 +1692,10 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                         {isLeave && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">休假</span>}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right align-middle font-mono">{formatCompactMoney(getDailyWorkIncome(day))}</td>
+                    <td className="px-3 py-2 text-right align-middle font-mono">{formatCompactMoney(baseWorkIncome)}</td>
+                    <td className="px-3 py-2 text-center align-middle font-mono text-xs">
+                      {otMidShiftLabel || <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-right align-middle font-mono">
                       {topUp > 0 || day.is_top_up_overridden ? (
                         <button type="button" disabled={readOnly || !day.date} onClick={() => day.date && onSaveTopUpOverride(day.date)} className={`${day.is_top_up_overridden ? "text-blue-600" : "text-orange-600"} font-bold ${readOnly ? "cursor-default" : "hover:underline"}`} title={!readOnly ? "點擊編輯補底薪差額" : undefined}>
@@ -1743,7 +1751,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={5} className="px-3 py-2 text-right font-bold">逐日合計</td>
+              <td colSpan={6} className="px-3 py-2 text-right font-bold">逐日合計</td>
               <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatCompactMoney(grandTotal)}</td>
               <td className="px-3 py-2"></td>
             </tr>
@@ -1820,20 +1828,58 @@ function getDailyAllowanceTotal(day: DailyCalculationRecord): number {
   if (day.allowance_total !== null && day.allowance_total !== undefined) return toNumber(day.allowance_total);
   const allowances = day.daily_allowances || day.allowances || [];
   const badges = day.allowance_badges || day.badges || [];
-  return allowances.reduce((sum, allowance) => sum + toNumber(allowance.amount), 0) + badges.reduce((sum, badge) => sum + toNumber(badge.amount), 0);
+  const fixedAllowances = day.fixed_allowances_per_day || [];
+  return allowances.reduce((sum, allowance) => sum + toNumber(allowance.amount), 0)
+    + badges.reduce((sum, badge) => sum + toNumber(badge.amount), 0)
+    + fixedAllowances.reduce((sum, allowance) => sum + toNumber(allowance.amount), 0);
 }
 
-function getDailyWorkIncome(day: DailyCalculationRecord): number {
-  if (day.work_income !== null && day.work_income !== undefined) return toNumber(day.work_income);
-  if (day.base_amount !== null && day.base_amount !== undefined) return toNumber(day.base_amount);
+function getWorkLogOtAmount(row: WorkLogRecord): number {
+  const explicitAmount = toNumber(row.ot_line_amount);
+  if (explicitAmount > 0) return explicitAmount;
+  return toNumber(row.matched_ot_rate) * toNumber(row.ot_quantity);
+}
+
+function getWorkLogMidShiftAmount(row: WorkLogRecord): number {
+  const explicitAmount = toNumber(row.mid_shift_line_amount);
+  if (explicitAmount > 0) return explicitAmount;
+  return row.is_mid_shift ? toNumber(row.matched_mid_shift_rate) : 0;
+}
+
+function getDailyOtMidShiftTotals(day: DailyCalculationRecord): { otAmount: number; midShiftAmount: number } {
   const workLogs = day.work_logs || day.logs || [];
-  return workLogs.reduce((sum, row) => sum + toNumber(row.line_amount ?? row.amount), 0);
+  return workLogs.reduce(
+    (totals, row) => ({
+      otAmount: totals.otAmount + getWorkLogOtAmount(row),
+      midShiftAmount: totals.midShiftAmount + getWorkLogMidShiftAmount(row),
+    }),
+    { otAmount: 0, midShiftAmount: 0 },
+  );
+}
+
+function formatDailyOtMidShift(totals: { otAmount: number; midShiftAmount: number }): string {
+  return [
+    totals.otAmount > 0 ? `OT ${formatCompactMoney(totals.otAmount)}` : "",
+    totals.midShiftAmount > 0 ? `中直 ${formatCompactMoney(totals.midShiftAmount)}` : "",
+  ].filter(Boolean).join(" / ");
+}
+
+function getDailyBaseWorkIncome(day: DailyCalculationRecord): number {
+  const workLogs = day.work_logs || day.logs || [];
+  if (workLogs.length === 0) return toNumber(day.base_amount);
+  return workLogs.reduce((sum, row) => {
+    const baseAmount = toNumber(row.base_line_amount);
+    if (baseAmount > 0) return sum + baseAmount;
+    const lineAmount = toNumber(row.line_amount ?? row.amount);
+    return sum + Math.max(0, lineAmount - getWorkLogOtAmount(row) - getWorkLogMidShiftAmount(row));
+  }, 0);
 }
 
 function getDailyTotal(day: DailyCalculationRecord): number {
   if (day.day_total !== null && day.day_total !== undefined) return toNumber(day.day_total);
   if (day.total_amount !== null && day.total_amount !== undefined) return toNumber(day.total_amount);
-  return getDailyWorkIncome(day) + getDailyTopUpAmount(day) + getDailyAllowanceTotal(day);
+  const otMidShiftTotals = getDailyOtMidShiftTotals(day);
+  return getDailyBaseWorkIncome(day) + otMidShiftTotals.otAmount + otMidShiftTotals.midShiftAmount + getDailyTopUpAmount(day) + getDailyAllowanceTotal(day);
 }
 
 function DailySummaryItem({ label, value, valueClassName = "text-gray-900" }: { label: string; value: string; valueClassName?: string }) {
@@ -1853,8 +1899,9 @@ function getAllowanceBadgeClass(key: string, label: string, className?: string):
 function DailyAllowanceBadges({ day, adjustments, readOnly, onRemoveAllowance, onRemoveAdjustment, onExcludeBadge }: { day: DailyCalculationRecord; adjustments: Adjustment[]; readOnly: boolean; onRemoveAllowance: (id: number | string) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void> }) {
   const badges = day.allowance_badges || day.badges || [];
   const allowances = (day.daily_allowances || day.allowances || []).filter((allowance) => !isExcludedAllowance(allowance));
+  const fixedAllowances = (day as any).fixed_allowances_per_day || [];
 
-  if (badges.length === 0 && allowances.length === 0 && adjustments.length === 0) return <span className="text-gray-300">—</span>;
+  if (badges.length === 0 && allowances.length === 0 && fixedAllowances.length === 0 && adjustments.length === 0) return <span className="text-gray-300">—</span>;
 
   return (
     <div className="flex flex-wrap justify-center gap-1">
@@ -1879,6 +1926,12 @@ function DailyAllowanceBadges({ day, adjustments, readOnly, onRemoveAllowance, o
           </span>
         );
       })}
+      {fixedAllowances.map((item: any, index: number) => (
+        <span key={`fixed-${item.key || index}`} className="inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs bg-green-100 text-green-700 border-green-200">
+          {item.name || item.key || "固定津貼"} {formatCompactMoney(item.amount)}
+          {!readOnly && day.date && item.key && <button type="button" onClick={() => onExcludeBadge(day.date || "", item.key)} className="ml-0.5 font-bold text-current opacity-60 hover:text-red-500 hover:opacity-100">×</button>}
+        </span>
+      ))}
       {adjustments.map((adjustment, index) => {
         const label = adjustment.item_name || "自定義津貼";
         return (
