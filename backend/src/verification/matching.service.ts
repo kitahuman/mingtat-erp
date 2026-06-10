@@ -1495,11 +1495,192 @@ export class MatchingService {
       sources['whatsapp_order'] = { source: 'WhatsApp Order', status: 'missing', details: [] };
     }
 
+    await this.applyManualMatchOverrides(workLogId, sources);
+
     return {
       work_log_id: workLogId,
       date,
       vehicle: wl.equipment_number,
       sources,
     };
+  }
+
+  private async applyManualMatchOverrides(workLogId: number, sources: Record<string, any>) {
+    const confirmations = await this.prisma.verificationConfirmation.findMany({
+      where: {
+        work_log_id: workLogId,
+        status: 'manual_match',
+        matched_record_id: { not: null },
+      },
+    });
+
+    for (const confirmation of confirmations) {
+      const sourceKey = this.toWorkLogSourceKey(confirmation.source_code);
+      const matchedRecordIds = this.getManualMatchedRecordIds(
+        confirmation.matched_record_id,
+        confirmation.notes,
+      );
+      if (!sourceKey || matchedRecordIds.length === 0) continue;
+
+      const details = (
+        await Promise.all(
+          matchedRecordIds.map((id) => this.buildManualMatchDetail(sourceKey, id)),
+        )
+      ).filter(Boolean);
+      if (details.length === 0) continue;
+
+      sources[sourceKey] = {
+        source: sources[sourceKey]?.source ?? this.getWorkLogSourceLabel(sourceKey),
+        status: 'found',
+        details,
+        manual_match: true,
+      };
+    }
+  }
+
+  private getManualMatchedRecordIds(primaryId: number | null, notes: string | null): number[] {
+    const ids = new Set<number>();
+    if (primaryId) ids.add(primaryId);
+
+    const idListMatch = notes?.match(/記錄ID\s*([0-9,，\s]+)/);
+    if (idListMatch?.[1]) {
+      const parsedIds = idListMatch[1]
+        .split(/[，,\s]+/)
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value > 0);
+      parsedIds.forEach((id) => ids.add(id));
+    }
+
+    return Array.from(ids);
+  }
+
+  private toWorkLogSourceKey(sourceCode: string): string | null {
+    const sourceMap: Record<string, string> = {
+      chit: 'chit',
+      receipt: 'chit',
+      delivery_note: 'delivery_note',
+      slip_chit: 'delivery_note',
+      slip_no_chit: 'delivery_note',
+      gps: 'gps',
+      attendance: 'attendance',
+      clock: 'attendance',
+      whatsapp_order: 'whatsapp_order',
+    };
+
+    return sourceMap[sourceCode] ?? null;
+  }
+
+  private getWorkLogSourceLabel(sourceKey: string): string {
+    const labelMap: Record<string, string> = {
+      chit: '入帳票',
+      delivery_note: '飛仔 OCR',
+      gps: 'GPS 追蹤',
+      attendance: '打卡紀錄',
+      whatsapp_order: 'WhatsApp Order',
+    };
+
+    return labelMap[sourceKey] ?? sourceKey;
+  }
+
+  private async buildManualMatchDetail(sourceKey: string, matchedRecordId: number): Promise<any | null> {
+    switch (sourceKey) {
+      case 'chit': {
+        const record = await this.prisma.verificationRecord.findUnique({
+          where: { id: matchedRecordId },
+          include: { chits: true },
+        });
+        if (!record) return null;
+        const raw = (record.record_raw_data as any) || {};
+        const chitNos = record.chits?.map((c: any) => c.chit_no) || [];
+        const allReceiptNos: string[] = [];
+        for (const chitNo of chitNos) {
+          const receiptNos = chitNo.split(',').map((rn: string) => rn.trim()).filter(Boolean);
+          allReceiptNos.push(...receiptNos);
+        }
+        return {
+          id: record.id,
+          date: record.record_work_date ? record.record_work_date.toISOString().slice(0, 10) : '—',
+          facility: raw.facility || '—',
+          vehicle: record.record_vehicle_no || '—',
+          account_no: raw.account_no || '—',
+          chit_nos: allReceiptNos.length > 0 ? allReceiptNos : chitNos,
+          weight_net: record.record_weight_net ?? '—',
+        };
+      }
+
+      case 'delivery_note': {
+        const record = await this.prisma.verificationRecord.findUnique({
+          where: { id: matchedRecordId },
+          include: { chits: true },
+        });
+        if (!record) return null;
+        return {
+          id: record.id,
+          vehicle: record.record_vehicle_no || '—',
+          slip_no: record.record_slip_no || '—',
+          employee: record.record_driver_name || '—',
+          customer: record.record_customer || '—',
+          location: [record.record_location_from, record.record_location_to].filter(Boolean).join(' → ') || '—',
+          chit_nos: record.chits?.map((c: any) => c.chit_no) || [],
+        };
+      }
+
+      case 'gps': {
+        const gps = await this.prisma.verificationGpsSummary.findUnique({ where: { id: matchedRecordId } });
+        if (!gps) return null;
+        return {
+          id: gps.id,
+          vehicle: gps.gps_summary_vehicle_no || '—',
+          distance: gps.gps_summary_total_distance ?? '—',
+          trip_count: gps.gps_summary_trip_count ?? '—',
+          locations: gps.gps_summary_locations || '—',
+          start_time: gps.gps_summary_start_time || '—',
+          end_time: gps.gps_summary_end_time || '—',
+        };
+      }
+
+      case 'attendance': {
+        const attendance = await this.prisma.employeeAttendance.findUnique({
+          where: { id: matchedRecordId },
+          include: { employee: { select: { id: true, name_zh: true, nickname: true } } },
+        });
+        if (!attendance) return null;
+        return {
+          id: attendance.id,
+          employee: attendance.employee?.name_zh || attendance.employee?.nickname || '—',
+          type: attendance.type || '—',
+          timestamp: attendance.timestamp,
+          address: attendance.address || '—',
+        };
+      }
+
+      case 'whatsapp_order': {
+        const item = await this.prisma.verificationWaOrderItem.findUnique({
+          where: { id: matchedRecordId },
+          include: {
+            order: {
+              select: { wa_order_date: true, wa_order_status: true, wa_order_version: true },
+            },
+          },
+        });
+        if (!item) return null;
+        return {
+          id: item.id,
+          vehicle: item.wa_item_vehicle_no || item.wa_item_machine_code || '—',
+          employee: item.wa_item_driver_nickname || '—',
+          customer: item.wa_item_customer || '—',
+          contract: item.wa_item_contract_no || '—',
+          location: item.wa_item_location || '—',
+          work_desc: item.wa_item_work_desc || '—',
+          product_name: item.wa_item_product_name || null,
+          product_unit: item.wa_item_product_unit || null,
+          goods_quantity: item.wa_item_goods_quantity !== null ? Number(item.wa_item_goods_quantity) : null,
+          order_status: item.order?.wa_order_status || '—',
+        };
+      }
+
+      default:
+        return null;
+    }
   }
 }
