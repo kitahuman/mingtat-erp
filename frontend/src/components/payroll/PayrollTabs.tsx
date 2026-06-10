@@ -1,11 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import ColumnFilter from "@/components/ColumnFilter";
 import { payrollApi } from "@/lib/api";
 import { fmtDate } from "@/lib/dateUtils";
 
 type TabKey = "detail" | "daily" | "grouped" | "unmatched" | "calculation" | "print";
 type SortDirection = "asc" | "desc";
+type DetailColumnKey =
+  | "scheduled_date"
+  | "equipment_number"
+  | "client_name"
+  | "client_contract_no"
+  | "service_type"
+  | "route"
+  | "tonnage"
+  | "machine_type"
+  | "day_night"
+  | "quantity"
+  | "unit"
+  | "payroll_work_log_product_quantity"
+  | "payroll_work_log_product_unit"
+  | "ot_quantity"
+  | "is_mid_shift"
+  | "matched_rate"
+  | "matched_ot_rate"
+  | "line_amount"
+  | "price_match_status";
 type BillingQuantityType = "days" | "quantity" | "product_quantity";
 type CellValue = string | number | boolean | null | undefined;
 type WorkLogUpdatePayload = Record<string, CellValue>;
@@ -17,11 +38,16 @@ type WorkLogRecord = {
   service_type?: string | null;
   client_name?: string | null;
   company_name?: string | null;
+  company_profile_name?: string | null;
   client_contract_no?: string | null;
   contract_no?: string | null;
+  quotation_id?: number | string | null;
+  quotation_no?: string | null;
   day_night?: string | null;
   start_location?: string | null;
   end_location?: string | null;
+  origin?: string | null;
+  destination?: string | null;
   machine_type?: string | null;
   tonnage?: string | null;
   equipment_number?: string | null;
@@ -31,7 +57,12 @@ type WorkLogRecord = {
   ot_unit?: string | null;
   payroll_work_log_product_name?: string | null;
   payroll_work_log_product_quantity?: number | string | null;
+  work_log_product_quantity?: number | string | null;
+  goods_quantity?: number | string | null;
+  product_quantity?: number | string | null;
   payroll_work_log_product_unit?: string | null;
+  goods_unit?: string | null;
+  product_unit?: string | null;
   billing_quantity_type?: BillingQuantityType | string | null;
   matched_rate?: number | string | null;
   matched_unit?: string | null;
@@ -59,12 +90,17 @@ type GroupedSettlementRecord = {
   group_key?: string | null;
   client_name?: string | null;
   company_name?: string | null;
+  company_profile_name?: string | null;
   client_contract_no?: string | null;
   contract_no?: string | null;
+  quotation_id?: number | string | null;
+  quotation_no?: string | null;
   service_type?: string | null;
   day_night?: string | null;
   start_location?: string | null;
   end_location?: string | null;
+  origin?: string | null;
+  destination?: string | null;
   machine_type?: string | null;
   tonnage?: string | null;
   quantity?: number | string | null;
@@ -124,6 +160,7 @@ type CalculationDetails = {
   items?: PayrollItem[];
   adjustments?: Adjustment[];
   allowance_options?: AllowanceOption[];
+  mpf_plan?: string | null;
 };
 
 type DailyAllowance = {
@@ -172,7 +209,24 @@ type DailyCalculationRecord = {
 
 type PayrollSnapshot = {
   id?: number;
-  employee?: { name?: string | null; employee_name?: string | null } | null;
+  employee?: {
+    name?: string | null;
+    employee_name?: string | null;
+    name_zh?: string | null;
+    name_en?: string | null;
+    id_number?: string | null;
+    address?: string | null;
+    emergency_contact?: string | null;
+    bank_account?: string | null;
+    join_date?: string | null;
+  } | null;
+  company_profile?: {
+    chinese_name?: string | null;
+    english_name?: string | null;
+    registered_address?: string | null;
+    office_address?: string | null;
+  } | null;
+  company?: { name?: string | null; company_name?: string | null } | null;
   employee_name?: string | null;
   period?: string | null;
   date_from?: string | null;
@@ -188,6 +242,7 @@ type PayrollSnapshot = {
   items?: PayrollItem[];
   adjustments?: Adjustment[];
   allowance_options?: AllowanceOption[];
+  mpf_plan?: string | null;
 };
 
 type RateCardSource = {
@@ -249,6 +304,7 @@ export type PayrollTabsProps = {
   unmatchedRecords?: WorkLogRecord[];
   calculationDetails?: CalculationDetails | null;
   calculation?: CalculationDetails | null;
+  payrollSnapshot?: PayrollSnapshot | null;
   readOnly?: boolean;
   className?: string;
   onUpdateWorkLog?: (id: number | string, updates: WorkLogUpdatePayload) => Promise<unknown>;
@@ -266,22 +322,50 @@ const TAB_LABELS: Record<TabKey, string> = {
   print: "列印",
 };
 
-const DETAIL_COLUMNS: Array<{ key: keyof WorkLogRecord | "route"; label: string; editable?: boolean; numeric?: boolean }> = [
-  { key: "scheduled_date", label: "日期", editable: true },
-  { key: "client_name", label: "客戶", editable: true },
-  { key: "service_type", label: "工種", editable: true },
-  { key: "day_night", label: "日/夜", editable: true },
-  { key: "route", label: "路線" },
-  { key: "quantity", label: "數量", editable: true, numeric: true },
-  { key: "unit", label: "單位", editable: true },
-  { key: "payroll_work_log_product_quantity", label: "商品數量", editable: true, numeric: true },
-  { key: "matched_rate", label: "費率", editable: true, numeric: true },
-  { key: "ot_quantity", label: "OT數量", editable: true, numeric: true },
-  { key: "matched_ot_rate", label: "OT費率", editable: true, numeric: true },
-  { key: "line_amount", label: "金額", numeric: true },
-  { key: "price_match_status", label: "匹配" },
-  { key: "remarks", label: "備註", editable: true },
+type DetailColumn = {
+  key: DetailColumnKey;
+  label: string;
+  editable?: boolean;
+  type?: "text" | "number" | "date" | "select" | "checkbox";
+  options?: readonly string[];
+  align?: "left" | "center" | "right";
+  minWidth?: string;
+};
+
+const DETAIL_COLUMNS: DetailColumn[] = [
+  { key: "scheduled_date", label: "日期", editable: true, type: "date", minWidth: "110px" },
+  { key: "equipment_number", label: "車牌/機號", editable: true, type: "text", minWidth: "110px" },
+  { key: "client_name", label: "客戶", editable: true, type: "text", minWidth: "140px" },
+  { key: "client_contract_no", label: "客戶合約", editable: true, type: "text", minWidth: "120px" },
+  { key: "service_type", label: "服務", editable: true, type: "text", minWidth: "120px" },
+  { key: "route", label: "路線", minWidth: "160px" },
+  { key: "tonnage", label: "噸數", editable: true, type: "text", minWidth: "90px" },
+  { key: "machine_type", label: "機種", editable: true, type: "text", minWidth: "100px" },
+  { key: "day_night", label: "日/夜", editable: true, type: "select", options: ["日", "夜", "中直"], align: "center", minWidth: "90px" },
+  { key: "quantity", label: "數量", editable: true, type: "number", align: "right", minWidth: "90px" },
+  { key: "unit", label: "單位", editable: true, type: "text", minWidth: "80px" },
+  { key: "payroll_work_log_product_quantity", label: "商品數量", editable: true, type: "number", align: "right", minWidth: "105px" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", editable: true, type: "text", minWidth: "105px" },
+  { key: "ot_quantity", label: "OT", editable: true, type: "number", align: "right", minWidth: "80px" },
+  { key: "is_mid_shift", label: "中直", editable: true, type: "checkbox", align: "center", minWidth: "80px" },
+  { key: "matched_rate", label: "費率", align: "right", minWidth: "90px" },
+  { key: "matched_ot_rate", label: "OT費率", align: "right", minWidth: "95px" },
+  { key: "line_amount", label: "合計", align: "right", minWidth: "100px" },
+  { key: "price_match_status", label: "狀態", align: "center", minWidth: "95px" },
 ];
+
+const BATCH_FIELDS = [
+  { key: "day_night", label: "日/夜", type: "select", options: ["日", "夜", "中直"] },
+  { key: "start_location", label: "路線起點", type: "text" },
+  { key: "end_location", label: "路線終點", type: "text" },
+  { key: "client_name", label: "客戶", type: "text" },
+  { key: "client_contract_no", label: "客戶合約", type: "text" },
+  { key: "service_type", label: "服務", type: "text" },
+  { key: "machine_type", label: "機種", type: "text" },
+  { key: "tonnage", label: "噸數", type: "text" },
+  { key: "unit", label: "單位", type: "text" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", type: "text" },
+] as const;
 
 const currencyFormatter = new Intl.NumberFormat("zh-HK", { style: "currency", currency: "HKD", maximumFractionDigits: 2 });
 
@@ -309,6 +393,59 @@ function formatPlainNumber(value: number | string | null | undefined): string {
 function displayDate(value: string | null | undefined): string {
   if (!value) return "-";
   return fmtDate(value);
+}
+
+function formatDate(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value.slice(0, 10);
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function normalizeText(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (value instanceof Date) return formatDate(value);
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function getColumnValue(row: WorkLogRecord, key: DetailColumnKey): CellValue {
+  if (key === "route") {
+    const start = row.start_location || row.origin || "";
+    const end = row.end_location || row.destination || "";
+    return start || end ? `${start || "—"} → ${end || "—"}` : "";
+  }
+  if (key === "payroll_work_log_product_quantity") {
+    return row.payroll_work_log_product_quantity ?? row.work_log_product_quantity ?? row.goods_quantity ?? row.product_quantity ?? "";
+  }
+  const value = row[key] as unknown;
+  return value instanceof Date || typeof value !== "object" ? (value as CellValue) : "";
+}
+
+function displayCellValue(row: WorkLogRecord, column: DetailColumn): string {
+  const value = getColumnValue(row, column.key);
+  if (column.key === "scheduled_date") return formatDate(value) || "—";
+  if (column.key === "matched_rate" || column.key === "matched_ot_rate" || column.key === "line_amount") {
+    return value === null || value === undefined || value === "" ? "—" : formatMoney(value as number | string | null | undefined);
+  }
+  return normalizeText(value);
+}
+
+function buildFilterRows(rows: WorkLogRecord[]): Array<Record<DetailColumnKey, string>> {
+  return rows.map((row) => {
+    const item = {} as Record<DetailColumnKey, string>;
+    DETAIL_COLUMNS.forEach((column) => {
+      item[column.key] = displayCellValue(row, column);
+    });
+    return item;
+  });
+}
+
+function toUpdateValue(value: string | boolean, type: DetailColumn["type"]): CellValue {
+  if (type === "checkbox") return Boolean(value);
+  if (type === "number") return value === "" ? null : Number(value);
+  return value === "" ? null : String(value);
 }
 
 function getApiMessage(err: unknown, fallback: string): string {
@@ -464,6 +601,7 @@ function PayrollTabs({
   unmatchedRecords = [],
   calculationDetails = null,
   calculation: legacyCalculation = null,
+  payrollSnapshot = null,
   readOnly = false,
   className = "",
   onUpdateWorkLog,
@@ -476,7 +614,7 @@ function PayrollTabs({
   const [groups, setGroups] = useState<GroupedSettlementRecord[]>(groupedSettlement);
   const [dailyRows, setDailyRows] = useState<DailyCalculationRecord[]>(dailyCalculation);
   const [details, setDetails] = useState<CalculationDetails | null>(calculationDetails || legacyCalculation);
-  const [snapshot, setSnapshot] = useState<PayrollSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<PayrollSnapshot | null>(payrollSnapshot);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
@@ -633,6 +771,15 @@ function PayrollTabs({
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     await mutateAndReload(() => onBatchUpdateWorkLogs ? onBatchUpdateWorkLogs(ids, updates) : Promise.all(ids.map((id) => payrollApi.updateWorkLog(payrollId as number, Number(id), updates))), "批量更新工作記錄失敗");
+  }
+
+  async function batchUpdateRows(ids: Array<number | string>, updates: WorkLogUpdatePayload) {
+    if (ids.length === 0) return;
+    await mutateAndReload(() => onBatchUpdateWorkLogs ? onBatchUpdateWorkLogs(ids, updates) : Promise.all(ids.map((id) => payrollApi.updateWorkLog(payrollId as number, Number(id), updates))), "批量更新工作記錄失敗");
+  }
+
+  async function commitDetailRowUpdate(id: number | string, column: DetailColumn, value: CellValue) {
+    await mutateAndReload(() => onUpdateWorkLog ? onUpdateWorkLog(id, { [column.key]: value } as WorkLogUpdatePayload) : payrollApi.updateWorkLog(payrollId as number, Number(id), { [column.key]: value } as WorkLogUpdatePayload), "更新工作記錄失敗");
   }
 
   async function excludeRows(ids: Array<number | string>) {
@@ -796,7 +943,7 @@ function PayrollTabs({
         <SummaryPill label="已移除" value={`${excludedCount} 筆`} tone="gray" />
       </div>
 
-      {activeTab === "detail" && <DetailTab rows={filteredRows} selectedIds={selectedIds} visibleAllSelected={visibleAllSelected} saving={saving} readOnly={readOnly} sortKey={sortKey} sortDirection={sortDirection} filterText={filterText} statusFilter={statusFilter} editingCell={editingCell} cellDraft={cellDraft} onFilterTextChange={setFilterText} onStatusFilterChange={setStatusFilter} onToggleSort={toggleSort} onToggleAll={toggleAllVisible} onToggleRow={toggleRow} onStartEdit={startEdit} onCellDraftChange={setCellDraft} onSaveCell={saveCell} onCancelEdit={cancelEdit} onBatchUpdate={batchUpdate} onExcludeRows={excludeRows} onRestoreRows={restoreRows} />}
+      {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onOpenRateCard={openRateCardModal} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onExcludeBadge={excludeBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
@@ -815,61 +962,288 @@ function SummaryPill({ label, value, tone }: { label: string; value: string; ton
 
 type DetailTabProps = {
   rows: WorkLogRecord[];
-  selectedIds: Set<number | string>;
-  visibleAllSelected: boolean;
   saving: boolean;
   readOnly: boolean;
-  sortKey: keyof WorkLogRecord | "route";
-  sortDirection: SortDirection;
-  filterText: string;
-  statusFilter: "all" | "matched" | "unmatched" | "excluded";
-  editingCell: { id: number | string; field: keyof WorkLogRecord } | null;
-  cellDraft: string;
-  onFilterTextChange: (value: string) => void;
-  onStatusFilterChange: (value: "all" | "matched" | "unmatched" | "excluded") => void;
-  onToggleSort: (key: keyof WorkLogRecord | "route") => void;
-  onToggleAll: () => void;
-  onToggleRow: (id: number | string) => void;
-  onStartEdit: (row: WorkLogRecord, field: keyof WorkLogRecord) => void;
-  onCellDraftChange: (value: string) => void;
-  onSaveCell: (row: WorkLogRecord, field: keyof WorkLogRecord, numeric?: boolean) => Promise<void>;
-  onCancelEdit: () => void;
-  onBatchUpdate: (updates: WorkLogUpdatePayload) => Promise<void>;
-  onExcludeRows: (ids: Array<number | string>) => Promise<void>;
-  onRestoreRows: (ids: Array<number | string>) => Promise<void>;
+  onUpdateWorkLog: (id: number | string, column: DetailColumn, value: CellValue) => Promise<void> | void;
+  onBatchUpdateWorkLogs: (ids: Array<number | string>, updates: WorkLogUpdatePayload) => Promise<void> | void;
+  onBatchDeleteWorkLogs: (ids: Array<number | string>) => Promise<void> | void;
 };
 
-function DetailTab({ rows, selectedIds, visibleAllSelected, saving, readOnly, sortKey, sortDirection, filterText, statusFilter, editingCell, cellDraft, onFilterTextChange, onStatusFilterChange, onToggleSort, onToggleAll, onToggleRow, onStartEdit, onCellDraftChange, onSaveCell, onCancelEdit, onBatchUpdate, onExcludeRows, onRestoreRows }: DetailTabProps) {
-  const selected = Array.from(selectedIds);
+type EditableCellProps = {
+  row: WorkLogRecord;
+  column: DetailColumn;
+  readOnly: boolean;
+  editingKey: string | null;
+  setEditingKey: (key: string | null) => void;
+  onCommit: (id: number | string, column: DetailColumn, value: CellValue) => Promise<void> | void;
+};
+
+function EditableDetailCell({ row, column, readOnly, editingKey, setEditingKey, onCommit }: EditableCellProps) {
+  const cellKey = `${row.id}:${column.key}`;
+  const isEditable = Boolean(column.editable) && !readOnly;
+  const isEditing = isEditable && editingKey === cellKey;
+  const rawValue = getColumnValue(row, column.key);
+  const [localValue, setLocalValue] = useState<string>(column.key === "scheduled_date" ? formatDate(rawValue) : rawValue == null ? "" : String(rawValue));
+
+  useEffect(() => {
+    setLocalValue(column.key === "scheduled_date" ? formatDate(rawValue) : rawValue == null ? "" : String(rawValue));
+  }, [column.key, rawValue]);
+
+  const alignClass = column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left";
+  const baseClass = `px-3 py-2 align-middle whitespace-nowrap ${alignClass}`;
+
+  async function commit(next: string | boolean) {
+    const value = toUpdateValue(next, column.type);
+    await onCommit(row.id, column, value);
+    setEditingKey(null);
+  }
+
+  if (column.type === "checkbox") {
+    const checked = Boolean(rawValue);
+    if (!isEditable) {
+      return <td className={baseClass}>{checked ? <span className="font-semibold text-green-600">是</span> : <span className="text-gray-400">否</span>}</td>;
+    }
+    return (
+      <td className={`${baseClass} cursor-pointer hover:bg-blue-50`} onClick={() => void commit(!checked)} title="點擊切換">
+        {checked ? <span className="font-semibold text-green-600">是</span> : <span className="text-gray-400">否</span>}
+      </td>
+    );
+  }
+
+  if (!isEditing) {
+    return (
+      <td
+        className={`${baseClass} ${isEditable ? "cursor-pointer hover:bg-blue-50" : "text-gray-700"} ${column.align === "right" ? "font-mono" : ""}`}
+        onClick={() => isEditable && setEditingKey(cellKey)}
+        title={isEditable ? "點擊編輯" : undefined}
+      >
+        {displayCellValue(row, column)}
+      </td>
+    );
+  }
+
+  if (column.type === "select") {
+    return (
+      <td className="px-2 py-1 align-middle">
+        <select
+          autoFocus
+          value={localValue}
+          onChange={(event) => void commit(event.target.value)}
+          onBlur={() => setEditingKey(null)}
+          className="w-full min-w-[88px] rounded border border-blue-400 bg-blue-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">—</option>
+          {(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </td>
+    );
+  }
+
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input value={filterText} onChange={(e) => onFilterTextChange(e.target.value)} placeholder="搜尋日期、客戶、工種、路線、備註..." className="input flex min-w-[260px] flex-1" />
-        <select value={statusFilter} onChange={(e) => onStatusFilterChange(e.target.value as DetailTabProps["statusFilter"])} className="input w-36"><option value="all">全部</option><option value="matched">已匹配</option><option value="unmatched">未匹配</option><option value="excluded">已移除</option></select>
-        <button type="button" disabled={readOnly || saving || selected.length === 0} onClick={() => onBatchUpdate({ day_night: "日" })} className="btn-secondary text-sm">批量設日</button>
-        <button type="button" disabled={readOnly || saving || selected.length === 0} onClick={() => onBatchUpdate({ day_night: "夜" })} className="btn-secondary text-sm">批量設夜</button>
-        <button type="button" disabled={readOnly || saving || selected.length === 0} onClick={() => onExcludeRows(selected)} className="btn-secondary border-red-200 text-sm text-red-600 hover:bg-red-50">批量移除</button>
-        <button type="button" disabled={readOnly || saving || selected.length === 0} onClick={() => onRestoreRows(selected)} className="btn-secondary border-green-200 text-sm text-green-600 hover:bg-green-50">批量恢復</button>
-      </div>
-      <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[1320px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-center"><input type="checkbox" checked={visibleAllSelected} onChange={onToggleAll} /></th>{DETAIL_COLUMNS.map((column) => <th key={String(column.key)} className={`px-3 py-2 font-medium text-gray-600 ${column.numeric ? "text-right" : "text-left"}`}><button type="button" onClick={() => onToggleSort(column.key)} className="inline-flex items-center gap-1 hover:text-gray-900">{column.label}{sortKey === column.key && <span className="text-[10px]">{sortDirection === "asc" ? "▲" : "▼"}</span>}</button></th>)}<th className="px-3 py-2 text-center font-medium text-gray-600">操作</th></tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={DETAIL_COLUMNS.length + 2} className="px-3 py-8 text-center text-gray-500">沒有符合條件的工作記錄。</td></tr>}{rows.map((row) => <tr key={row.id} className={`border-b hover:bg-gray-50 ${row.is_excluded ? "bg-gray-50 text-gray-400" : isUnmatched(row) ? "bg-amber-50/40" : ""}`}><td className="px-3 py-2 text-center"><input type="checkbox" checked={selectedIds.has(row.id)} onChange={() => onToggleRow(row.id)} /></td>{DETAIL_COLUMNS.map((column) => <EditableCell key={String(column.key)} row={row} column={column} editingCell={editingCell} cellDraft={cellDraft} readOnly={readOnly} onStartEdit={onStartEdit} onCellDraftChange={onCellDraftChange} onSaveCell={onSaveCell} onCancelEdit={onCancelEdit} />)}<td className="px-3 py-2 text-center">{row.is_excluded ? <button type="button" disabled={readOnly || saving} onClick={() => onRestoreRows([row.id])} className="text-xs font-medium text-green-600 hover:underline">恢復</button> : <button type="button" disabled={readOnly || saving} onClick={() => onExcludeRows([row.id])} className="text-xs font-medium text-red-600 hover:underline">移除</button>}</td></tr>)}</tbody></table></div>
-      <p className="mt-2 text-xs text-gray-500">提示：可點擊可編輯儲存格直接修改。未匹配行的「費率」及「OT費率」可手動輸入單價，儲存後會重新計算所有分頁。</p>
-    </div>
+    <td className="px-2 py-1 align-middle">
+      <input
+        autoFocus
+        type={column.type === "number" ? "number" : column.type === "date" ? "date" : "text"}
+        step={column.type === "number" ? "0.01" : undefined}
+        value={localValue}
+        onChange={(event) => setLocalValue(event.target.value)}
+        onBlur={() => void commit(localValue)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") void commit(localValue);
+          if (event.key === "Escape") setEditingKey(null);
+        }}
+        className={`w-full min-w-[88px] rounded border border-blue-400 bg-blue-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${column.align === "right" ? "text-right" : ""}`}
+      />
+    </td>
   );
 }
 
-function EditableCell({ row, column, editingCell, cellDraft, readOnly, onStartEdit, onCellDraftChange, onSaveCell, onCancelEdit }: { row: WorkLogRecord; column: { key: keyof WorkLogRecord | "route"; label: string; editable?: boolean; numeric?: boolean }; editingCell: { id: number | string; field: keyof WorkLogRecord } | null; cellDraft: string; readOnly: boolean; onStartEdit: (row: WorkLogRecord, field: keyof WorkLogRecord) => void; onCellDraftChange: (value: string) => void; onSaveCell: (row: WorkLogRecord, field: keyof WorkLogRecord, numeric?: boolean) => Promise<void>; onCancelEdit: () => void }) {
-  const key = column.key;
-  const editableField = key !== "route" && column.editable;
-  const editable = Boolean(editableField && !readOnly && !row.is_excluded && (key !== "matched_rate" && key !== "matched_ot_rate" ? true : isUnmatched(row)));
-  const isEditing = editableField && editingCell?.id === row.id && editingCell.field === key;
-  const value = readCell(row, key);
-  const tdClass = `px-3 py-2 ${column.numeric ? "text-right font-mono" : "text-left"} ${row.is_excluded ? "line-through opacity-60" : ""}`;
-  if (isEditing && editableField) return <td className={tdClass}><input autoFocus type={column.numeric ? "number" : key === "scheduled_date" ? "date" : "text"} value={cellDraft} onChange={(e) => onCellDraftChange(e.target.value)} onBlur={() => onSaveCell(row, key, column.numeric)} onKeyDown={(e) => { if (e.key === "Enter") onSaveCell(row, key, column.numeric); if (e.key === "Escape") onCancelEdit(); }} className="input h-8 min-w-[90px] px-2 py-1 text-sm" /></td>;
-  let content: ReactNode = value === null || value === undefined || value === "" ? "-" : String(value);
-  if (key === "scheduled_date") content = displayDate(row.scheduled_date);
-  if (key === "matched_rate" || key === "matched_ot_rate" || key === "line_amount") content = formatMoney(value as number | string | null | undefined);
-  if (key === "price_match_status") content = isUnmatched(row) ? <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">未匹配</span> : <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">已匹配</span>;
-  return <td className={`${tdClass} ${editable ? "cursor-pointer hover:bg-primary-50" : ""}`} onClick={() => editable && editableField && onStartEdit(row, key)} title={editable ? "點擊編輯" : undefined}>{content}</td>;
+function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkLogs, onBatchDeleteWorkLogs }: DetailTabProps) {
+  const [localRows, setLocalRows] = useState<WorkLogRecord[]>(rows || []);
+  const [sortKey, setSortKey] = useState<DetailColumnKey>("scheduled_date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchField, setBatchField] = useState<string>("service_type");
+  const [batchValue, setBatchValue] = useState<string>("");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocalRows(rows || []);
+    setSelectedIds(new Set());
+    setEditingKey(null);
+  }, [rows]);
+
+  const filterRows = useMemo(() => buildFilterRows(localRows), [localRows]);
+
+  const filteredSortedRows = useMemo(() => {
+    const filtered = localRows.filter((row) => DETAIL_COLUMNS.every((column) => {
+      const selected = columnFilters[column.key];
+      if (!selected) return true;
+      return selected.has(displayCellValue(row, column));
+    }));
+
+    return [...filtered].sort((a, b) => {
+      const av = getColumnValue(a, sortKey);
+      const bv = getColumnValue(b, sortKey);
+      const an = Number(av);
+      const bn = Number(bv);
+      let result = 0;
+      if (Number.isFinite(an) && Number.isFinite(bn)) {
+        result = an - bn;
+      } else {
+        result = normalizeText(av).localeCompare(normalizeText(bv), "zh-Hant", { numeric: true });
+      }
+      return sortDirection === "asc" ? result : -result;
+    });
+  }, [localRows, columnFilters, sortKey, sortDirection]);
+
+  const selectedCount = selectedIds.size;
+  const selectedRows = localRows.filter((row) => selectedIds.has(String(row.id)));
+  const activeBatchField = BATCH_FIELDS.find((field) => field.key === batchField);
+
+  function handleColumnFilterChange(columnKey: string, selectedValues: Set<string> | null) {
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      if (selectedValues === null) delete next[columnKey];
+      else next[columnKey] = selectedValues;
+      return next;
+    });
+  }
+
+  function toggleSort(key: DetailColumnKey) {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  }
+
+  function toggleSelectAll(checked: boolean) {
+    setSelectedIds(checked ? new Set(filteredSortedRows.map((row) => String(row.id))) : new Set());
+  }
+
+  function toggleRow(id: number | string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(String(id));
+      else next.delete(String(id));
+      return next;
+    });
+  }
+
+  async function commitRowUpdate(id: number | string, column: DetailColumn, value: CellValue) {
+    setLocalRows((prev) => prev.map((row) => (String(row.id) === String(id) ? { ...row, [column.key]: value, is_modified: true } : row)));
+    await onUpdateWorkLog(id, column, value);
+  }
+
+  async function applyBatchUpdate() {
+    if (!batchField || selectedCount === 0) return;
+    const updates: WorkLogUpdatePayload = { [batchField]: batchValue === "" ? null : batchValue };
+    const ids = selectedRows.map((row) => row.id);
+    setLocalRows((prev) => prev.map((row) => (selectedIds.has(String(row.id)) ? { ...row, ...updates, is_modified: true } : row)));
+    await onBatchUpdateWorkLogs(ids, updates);
+    setBatchValue("");
+  }
+
+  async function applyBatchDelete() {
+    if (selectedCount === 0) return;
+    const ids = selectedRows.map((row) => row.id);
+    await onBatchDeleteWorkLogs(ids);
+    setLocalRows((prev) => prev.filter((row) => !selectedIds.has(String(row.id))));
+    setSelectedIds(new Set());
+  }
+
+  return (
+    <div className="space-y-3">
+      {selectedCount > 0 && !readOnly && (
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+          <div className="font-medium text-blue-900">已選取 {selectedCount} 筆，可批量修改共同欄位。</div>
+          <label className="flex flex-col gap-1 text-xs text-blue-900">
+            欄位
+            <select value={batchField} onChange={(event) => { setBatchField(event.target.value); setBatchValue(""); }} className="rounded border border-blue-200 bg-white px-2 py-1 text-sm">
+              {BATCH_FIELDS.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-blue-900">
+            新值
+            {activeBatchField?.type === "select" ? (
+              <select value={batchValue} onChange={(event) => setBatchValue(event.target.value)} className="rounded border border-blue-200 bg-white px-2 py-1 text-sm">
+                <option value="">請選擇</option>
+                {activeBatchField.options?.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ) : (
+              <input value={batchValue} onChange={(event) => setBatchValue(event.target.value)} className="rounded border border-blue-200 bg-white px-2 py-1 text-sm" />
+            )}
+          </label>
+          <button type="button" disabled={saving} onClick={() => void applyBatchUpdate()} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">套用</button>
+          <button type="button" disabled={saving} onClick={() => void applyBatchDelete()} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">批量刪除</button>
+          <button type="button" onClick={() => setSelectedIds(new Set())} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100">清除選取</button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left">
+                <input
+                  type="checkbox"
+                  checked={filteredSortedRows.length > 0 && filteredSortedRows.every((row) => selectedIds.has(String(row.id)))}
+                  onChange={(event) => toggleSelectAll(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </th>
+              {DETAIL_COLUMNS.map((column) => (
+                <th key={column.key} className="px-3 py-2 text-left align-top font-medium text-gray-700" style={{ minWidth: column.minWidth }}>
+                  <div className="flex items-center justify-between gap-1">
+                    <button type="button" onClick={() => toggleSort(column.key)} className="flex items-center gap-1 text-left hover:text-blue-700">
+                      <span>{column.label}</span>
+                      <span className="text-[10px] text-gray-400">{sortKey === column.key ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}</span>
+                    </button>
+                    <ColumnFilter
+                      columnKey={column.key}
+                      data={filterRows}
+                      activeFilters={columnFilters}
+                      onFilterChange={handleColumnFilterChange}
+                    />
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {filteredSortedRows.length === 0 ? (
+              <tr><td colSpan={DETAIL_COLUMNS.length + 1} className="px-4 py-8 text-center text-gray-500">沒有符合條件的工作記錄。</td></tr>
+            ) : filteredSortedRows.map((row) => (
+              <tr key={String(row.id)} className={selectedIds.has(String(row.id)) ? "bg-blue-50" : "hover:bg-gray-50"}>
+                <td className="sticky left-0 z-10 bg-inherit px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(String(row.id))}
+                    onChange={(event) => toggleRow(row.id, event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </td>
+                {DETAIL_COLUMNS.map((column) => (
+                  <EditableDetailCell
+                    key={column.key}
+                    row={row}
+                    column={column}
+                    readOnly={readOnly || saving}
+                    editingKey={editingKey}
+                    setEditingKey={setEditingKey}
+                    onCommit={commitRowUpdate}
+                  />
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onOpenRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void }) {
@@ -904,11 +1278,197 @@ function SimpleTable({ title, rows, columns, moneyColumns }: { title: string; ro
   return <section><h3 className="mb-2 font-bold text-gray-900">{title}</h3><div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-gray-50"><tr>{columns.map((column) => <th key={column} className="px-3 py-2 text-left font-medium text-gray-600">{column}</th>)}</tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">暫無資料。</td></tr>}{rows.map((row, index) => <tr key={String(row.id || index)} className="border-b">{columns.map((column) => <td key={column} className="px-3 py-2 text-gray-700">{moneyColumns.includes(column) ? formatMoney(row[column] as number | string | null | undefined) : String(row[column] ?? "-")}</td>)}</tr>)}</tbody></table></div></section>;
 }
 
+function printNumber(value: number | string | null | undefined, digits = 2): string {
+  const numeric = Number(value || 0);
+  return numeric.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatEmployeeJoinDate(value: string | null | undefined): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
 function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedInPrint, onShowGroupedChange, onPrint }: { rows: WorkLogRecord[]; groups: GroupedSettlementRecord[]; calculation: CalculationDetails; snapshot: PayrollSnapshot | null; printRef: React.RefObject<HTMLDivElement | null>; showGroupedInPrint: boolean; onShowGroupedChange: (value: boolean) => void; onPrint: () => void }) {
-  const employeeName = snapshot?.employee?.name || snapshot?.employee?.employee_name || snapshot?.employee_name || "-";
-  const period = snapshot?.period || [snapshot?.date_from, snapshot?.date_to].filter(Boolean).map((d) => displayDate(d)).join(" 至 ") || "-";
+  const emp = snapshot?.employee;
+  const cp = snapshot?.company_profile;
+  const items = calculation.items || snapshot?.items || [];
+  const adjustments = calculation.adjustments || snapshot?.adjustments || [];
   const summary = calculation.payroll_summary || {};
-  return <div><div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-gray-50 p-3"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={showGroupedInPrint} onChange={(e) => onShowGroupedChange(e.target.checked)} />列印歸組結算</label><button type="button" onClick={onPrint} className="btn-primary">列印預覽</button></div><div ref={printRef} className="rounded-lg border bg-white p-6"><div className="mb-6 text-center"><h1 className="text-2xl font-bold">糧單</h1><p className="mt-1 text-sm text-gray-500">{employeeName}　{period}</p></div><div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">{Object.entries(summary).map(([key, value]) => <div key={key} className="rounded border p-3"><div className="text-xs text-gray-500">{key}</div><div className="font-mono font-bold">{formatMoney(value)}</div></div>)}</div>{showGroupedInPrint && <PrintGroupedSettlement groups={groups} />}<h2 className="mb-2 mt-5 font-bold">工作記錄明細</h2><table className="print-table w-full border-collapse text-sm"><thead><tr><th>日期</th><th>客戶</th><th>工種</th><th>路線</th><th className="text-right">數量</th><th className="text-right">單價</th><th className="text-right">金額</th></tr></thead><tbody>{rows.filter((row) => !row.is_excluded).map((row) => <tr key={row.id}><td>{displayDate(row.scheduled_date)}</td><td>{row.client_name || row.company_name || "-"}</td><td>{row.service_type || "-"}</td><td>{routeOf(row)}</td><td className="text-right">{formatPlainNumber(row.quantity)} {row.unit || ""}</td><td className="text-right">{formatMoney(row.matched_rate)}</td><td className="text-right">{formatMoney(row.line_amount)}</td></tr>)}</tbody></table></div></div>;
+  const payroll = {
+    gross_amount: summary.gross_amount ?? snapshot?.gross_amount ?? 0,
+    deduction_total: summary.deduction_total ?? snapshot?.deduction_total ?? 0,
+    adjustment_total: summary.adjustment_total ?? snapshot?.adjustment_total ?? 0,
+    net_amount: summary.net_amount ?? snapshot?.net_amount ?? 0,
+    mpf_plan: calculation.mpf_plan ?? snapshot?.mpf_plan ?? null,
+  };
+  const dateFrom = snapshot?.date_from;
+  const dateTo = snapshot?.date_to;
+  const periodStart = dateFrom ? new Date(dateFrom).getDate() : 1;
+  const lastDay = dateTo ? new Date(dateTo).getDate() : 31;
+  void rows;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showGroupedInPrint}
+            onChange={(e) => onShowGroupedChange(e.target.checked)}
+            className="rounded"
+          />
+          顯示歸組結算明細
+        </label>
+        <button onClick={onPrint} className="btn-primary text-sm">列印糧單</button>
+      </div>
+      <div ref={printRef} className="border rounded-lg p-6 bg-white">
+        <div className="payslip">
+          {/* Company Header */}
+          <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
+            <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
+              {cp?.chinese_name || snapshot?.company?.name || snapshot?.company?.company_name || '明達建築有限公司'}
+            </h1>
+            <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
+              {cp?.english_name || 'DICKY CONSTRUCTION COMPANY LIMITED'}
+            </h2>
+            <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
+              {cp?.registered_address || cp?.office_address || 'P. O. BOX 120, TUNG CHUNG POST OFFICE, TUNG CHUNG, LANTAU ISLAND, NT'}
+            </p>
+          </div>
+
+          {/* Employee Info */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
+            <tbody>
+              {[
+                ['員工姓名(中)：', emp?.name_zh || emp?.name || snapshot?.employee_name],
+                ['員工姓名(英)：', emp?.name_en || emp?.employee_name],
+                ['身份證號碼：', emp?.id_number],
+                ['地址：', emp?.address],
+                ['緊急聯絡人：', emp?.emergency_contact],
+                ['出糧戶口：', emp?.bank_account],
+                ['受僱日期：', formatEmployeeJoinDate(emp?.join_date)],
+              ].map(([label, value], i) => (
+                <tr key={i}>
+                  <td style={{ padding: '6px 12px', border: '1px solid #000', width: '120px', textAlign: 'right', fontSize: '13px' }}>{label}</td>
+                  <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>{value || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Period */}
+          <div style={{ margin: '15px 0', fontSize: '14px' }}>
+            <strong>本月工作日期：</strong>
+            <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStart}-{lastDay}日</span>
+          </div>
+
+          {/* Grouped Settlement in print */}
+          {showGroupedInPrint && <PrintGroupedSettlement groups={groups} />}
+
+          {/* Calculation Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', width: '200px', fontSize: '13px' }}>項目名稱</th>
+                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>單價($)</th>
+                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>天數/數量</th>
+                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'right', fontSize: '13px' }} colSpan={2}>金額($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item: PayrollItem, idx: number) => {
+                const isDeduction = Number(item.amount) < 0;
+                const displayAmount = Math.abs(Number(item.amount));
+                return (
+                  <tr key={item.id || idx}>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                      ({idx + 1}) {item.item_name}
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
+                        ? `${(Number(item.quantity) * 100).toFixed(0)}%`
+                        : Number(item.unit_price).toFixed(2)}
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
+                    </td>
+                    <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
+                      {isDeduction ? '-$' : '$'}
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+              {/* Adjustment items in print */}
+              {adjustments.map((adj: Adjustment, idx: number) => {
+                const isNeg = Number(adj.amount) < 0;
+                const displayAmount = Math.abs(Number(adj.amount));
+                return (
+                  <tr key={`adj-${adj.id || idx}`}>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
+                      ({items.length + idx + 1}) {adj.item_name}
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                      -
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
+                      -
+                    </td>
+                    <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
+                      {isNeg ? '-$' : '$'}
+                    </td>
+                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+              {/* Total row */}
+              <tr style={{ borderTop: '2px solid #000' }}>
+                <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
+                <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
+                <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
+                  {printNumber(payroll.gross_amount)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Summary */}
+          <div style={{ margin: '15px 0', fontSize: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div>
+                <div style={{ marginBottom: '5px' }}><strong>應收總額：</strong> ${Number(payroll.gross_amount).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>扣款合計：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>調整合計：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
+                  淨額：${Number(payroll.net_amount).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Signature */}
+          <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', fontSize: '12px' }}>
+            <div>
+              <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
+              <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+            </div>
+            <div>
+              <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
+              <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PrintGroupedSettlement({ groups }: { groups: GroupedSettlementRecord[] }) {

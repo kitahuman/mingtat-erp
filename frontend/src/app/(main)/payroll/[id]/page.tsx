@@ -1772,7 +1772,7 @@ export default function PayrollDetailPage() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">公司</p>
-          <p className="font-bold text-sm">{cp?.chinese_name || payroll.company?.company_name || '-'}</p>
+          <p className="font-bold text-sm">{cp?.chinese_name || payroll.company?.name || '-'}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-500">計糧期間</p>
@@ -1827,7 +1827,9 @@ export default function PayrollDetailPage() {
             items,
             adjustments,
             allowance_options: allowanceOptions,
+            mpf_plan: payroll.mpf_plan,
           }}
+          payrollSnapshot={payroll}
           readOnly={!isDraft || isReadOnly('payroll')}
         />
       </div>
