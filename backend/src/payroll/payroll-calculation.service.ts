@@ -66,6 +66,7 @@ export class PayrollCalculationService {
     mpfRelevantIncome?: number | null,
     holidayDates?: { date: Date; name: string }[],
     excludedBadgeKeys?: Set<string>,
+    adjustmentTotalForMpf = 0,
   ) {
     const excluded = excludedBadgeKeys || new Set<string>();
     const salaryType = salarySetting.salary_type || 'daily';
@@ -450,10 +451,11 @@ export class PayrollCalculationService {
         sort_order: sortOrder++,
       });
     } else {
+      const defaultMpfBase = grossIncome + (Number(adjustmentTotalForMpf) || 0);
       const mpfBase =
         mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
           ? Number(mpfRelevantIncome)
-          : grossIncome;
+          : defaultMpfBase;
       mpfDeduction = Math.min(mpfBase * 0.05, 1500);
       mpfEmployer = Math.min(mpfBase * 0.05, 1500);
       mpfDeduction = Math.round(mpfDeduction * 100) / 100;
@@ -490,7 +492,7 @@ export class PayrollCalculationService {
       mpf_employer: mpfEmployer,
       mpf_relevant_income: (mpfRelevantIncome !== undefined && mpfRelevantIncome !== null)
         ? Number(mpfRelevantIncome)
-        : grossIncome,
+        : grossIncome + (Number(adjustmentTotalForMpf) || 0),
       gross_income: grossIncome,
       net_amount: netAmount,
       items,

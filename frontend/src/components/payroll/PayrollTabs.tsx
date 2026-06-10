@@ -279,6 +279,7 @@ type PayrollSnapshot = {
   adjustment_total?: number | string | null;
   net_amount?: number | string | null;
   reimbursement_total?: number | string | null;
+  petty_cash_deducted?: number | string | null;
   payroll_work_logs?: WorkLogRecord[];
   grouped_settlement?: GroupedSettlementRecord[];
   daily_calculation?: DailyCalculationRecord[];
@@ -393,10 +394,12 @@ const DAILY_METRIC_LABELS = ["工作", "底薪", "補底薪", "OT", "合計"];
 
 const SUMMARY_LABELS: Record<string, string> = {
   gross_amount: "應收總額",
-  deduction_total: "扣款合計",
-  adjustment_total: "調整合計",
-  reimbursement_total: "報銷合計",
-  net_amount: "淨額",
+  adjustment_total: "自定義津貼/扣款合計 (+)",
+  deduction_total: "強積金（員工）5%合計 (-)",
+  net_amount: "淨薪金",
+  reimbursement_total: "員工報銷 (+)",
+  petty_cash_deducted: "零用金抵扣 (-)",
+  total_payable: "應付總額",
 };
 
 const PAYROLL_ITEM_COLUMN_LABELS: Record<string, string> = {
@@ -2024,10 +2027,26 @@ function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedG
 }
 
 function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalculation = [] }: { calculation: CalculationDetails; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[] }) {
-  const summary = calculation.payroll_summary || {};
+  const summary = { ...calculation.payroll_summary } || {};
   const items = calculation.items || [];
   const salaryItems = buildSalarySettingDisplayItems(salarySetting, calculation.mpf_plan);
   const workSummary = buildCalculationWorkSummary(workLogs, dailyCalculation);
+
+  // 計算應付總額
+  const netAmount = toNumber(summary.net_amount);
+  const reimbursement = toNumber(summary.reimbursement_total);
+  const pettyCashDeducted = toNumber(summary.petty_cash_deducted);
+  const totalPayable = netAmount + reimbursement - pettyCashDeducted;
+  
+  const displaySummary = {
+    gross_amount: summary.gross_amount,
+    adjustment_total: summary.adjustment_total,
+    deduction_total: summary.deduction_total,
+    net_amount: summary.net_amount,
+    reimbursement_total: summary.reimbursement_total,
+    petty_cash_deducted: summary.petty_cash_deducted,
+    total_payable: totalPayable,
+  };
 
   return (
     <div className="space-y-5">
@@ -2059,11 +2078,18 @@ function CalculationTab({ calculation, salarySetting, workLogs = [], dailyCalcul
 
       <section>
         <h3 className="mb-3 font-bold text-gray-900">糧單摘要</h3>
-        <div className="grid gap-3 md:grid-cols-5">
-          {Object.entries(summary).map(([key, value]) => (
-            <SummaryPill key={key} label={SUMMARY_LABELS[key] || key} value={formatMoney(value)} tone={key === "net_amount" ? "green" : "blue"} />
-          ))}
-          {Object.keys(summary).length === 0 && <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-500">暫無摘要資料。</div>}
+        <div className="grid gap-2 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+          {Object.entries(displaySummary).map(([key, value]) => {
+            if (value === undefined && key !== 'total_payable') return null;
+            return (
+              <SummaryPill 
+                key={key} 
+                label={SUMMARY_LABELS[key] || key} 
+                value={formatMoney(value)} 
+                tone={key === "total_payable" ? "green" : key === "net_amount" ? "blue" : "gray"} 
+              />
+            );
+          })}
         </div>
       </section>
       <SimpleTable title="薪酬項目" rows={items} columns={["item_type", "item_name", "unit_price", "quantity", "amount", "remarks"]} columnLabels={PAYROLL_ITEM_COLUMN_LABELS} moneyColumns={["unit_price", "amount"]} />
@@ -2202,6 +2228,7 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
     deduction_total: summary.deduction_total ?? snapshot?.deduction_total ?? 0,
     adjustment_total: summary.adjustment_total ?? snapshot?.adjustment_total ?? 0,
     net_amount: summary.net_amount ?? snapshot?.net_amount ?? 0,
+    reimbursement_total: summary.reimbursement_total ?? snapshot?.reimbursement_total ?? 0,
     mpf_plan: calculation.mpf_plan ?? snapshot?.mpf_plan ?? null,
   };
   const dateFrom = snapshot?.date_from;
@@ -2344,12 +2371,15 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div>
                 <div style={{ marginBottom: '5px' }}><strong>應收總額：</strong> ${Number(payroll.gross_amount).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>扣款合計：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>調整合計：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>自定義津貼/扣款合計 (+)：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>強積金（員工）5%合計 (-)：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>淨薪金：</strong> ${Number(payroll.net_amount).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>員工報銷 (+)：</strong> ${Number(payroll.reimbursement_total || 0).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>零用金抵扣 (-)：</strong> ${Math.abs(Number(snapshot?.petty_cash_deducted || 0)).toLocaleString()}</div>
               </div>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
-                  淨額：${Number(payroll.net_amount).toLocaleString()}
+                  應付總額：${(Number(payroll.net_amount) + Number(payroll.reimbursement_total || 0) - Number(snapshot?.petty_cash_deducted || 0)).toLocaleString()}
                 </div>
               </div>
             </div>

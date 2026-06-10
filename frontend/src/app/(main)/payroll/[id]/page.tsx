@@ -1291,6 +1291,11 @@ export default function PayrollDetailPage() {
     .filter((r: any) => r.type === 'DEDUCT')
     .reduce((sum: number, r: any) => sum + Math.abs(Number(r.amount || 0)), 0);
   const pettyCashShortfall = Math.max(0, Number(payroll.reimbursement_total || 0) - pettyCashDeducted);
+  const defaultMpfRelevantIncome = Number(payroll.gross_amount || 0) + Number(payroll.adjustment_total || 0);
+  const displayMpfRelevantIncome =
+    payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
+      ? Number(payroll.mpf_relevant_income)
+      : defaultMpfRelevantIncome;
 
   const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
@@ -1330,23 +1335,38 @@ export default function PayrollDetailPage() {
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
         <div className="card">
-          <p className="text-xs text-gray-500">員工</p>
-          <p className="font-bold">{emp?.name_zh || emp?.name_en || '-'}</p>
-          <p className="text-xs text-gray-400">{emp?.emp_code}</p>
+          <p className="text-xs text-gray-500">應收總額</p>
+          <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">公司</p>
-          <p className="font-bold text-sm">{cp?.chinese_name || payroll.company?.name || '-'}</p>
+          <p className="text-xs text-gray-500">自定義津貼/扣款合計 <span className="text-gray-400">(+)</span></p>
+          <p className={`font-bold text-lg font-mono ${Number(payroll.adjustment_total) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+            {Number(payroll.adjustment_total) < 0 ? '-' : '+'}${Math.abs(Number(payroll.adjustment_total)).toLocaleString()}
+          </p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">計糧期間</p>
-          <p className="font-bold text-sm">{fmtDate(payroll.date_from)} 至 {fmtDate(payroll.date_to)}</p>
+          <p className="text-xs text-gray-500">強積金（員工）5%合計 <span className="text-gray-400">(-)</span></p>
+          <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">淨額</p>
-          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+          <p className="text-xs text-gray-500">淨薪金</p>
+          <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">員工報銷 <span className="text-gray-400">(+)</span></p>
+          <p className="font-bold text-lg text-blue-600 font-mono">${Number(payroll.reimbursement_total || 0).toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">零用金抵扣 <span className="text-gray-400">(-)</span></p>
+          <p className="font-bold text-lg text-green-700 font-mono">-${pettyCashDeducted.toLocaleString()}</p>
+        </div>
+        <div className="card border-primary-200 bg-primary-50">
+          <p className="text-xs text-primary-600 font-semibold">應付總額</p>
+          <p className="font-bold text-xl text-primary-700 font-mono">
+            ${(Number(payroll.net_amount) + Number(payroll.reimbursement_total || 0) - pettyCashDeducted).toLocaleString()}
+          </p>
         </div>
       </div>
 
@@ -1377,8 +1397,8 @@ export default function PayrollDetailPage() {
           calculationDetails={{
             payroll_summary: {
               gross_amount: payroll.gross_amount,
-              deduction_total: payroll.deduction_total,
               adjustment_total: payroll.adjustment_total,
+              deduction_total: payroll.deduction_total,
               net_amount: payroll.net_amount,
               reimbursement_total: payroll.reimbursement_total,
             },
@@ -1542,32 +1562,38 @@ export default function PayrollDetailPage() {
       </div>}
 
       {/* ── Summary Cards (bottom) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
         <div className="card">
           <p className="text-xs text-gray-500">應收總額</p>
           <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.gross_amount).toLocaleString()}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">扣款合計</p>
-          <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500">調整合計</p>
+          <p className="text-xs text-gray-500">自定義津貼/扣款合計 <span className="text-gray-400">(+)</span></p>
           <p className={`font-bold text-lg font-mono ${Number(payroll.adjustment_total) < 0 ? 'text-red-600' : 'text-green-600'}`}>
             {Number(payroll.adjustment_total) < 0 ? '-' : '+'}${Math.abs(Number(payroll.adjustment_total)).toLocaleString()}
           </p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">淨薪金</p>
-          <p className="font-bold text-xl text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+          <p className="text-xs text-gray-500">強積金（員工）5%合計 <span className="text-gray-400">(-)</span></p>
+          <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">員工報銷</p>
+          <p className="text-xs text-gray-500">淨薪金</p>
+          <p className="font-bold text-lg text-primary-600 font-mono">${Number(payroll.net_amount).toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-gray-500">員工報銷 <span className="text-gray-400">(+)</span></p>
           <p className="font-bold text-lg text-blue-600 font-mono">${Number(payroll.reimbursement_total || 0).toLocaleString()}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">零用金抵扣</p>
+          <p className="text-xs text-gray-500">零用金抵扣 <span className="text-gray-400">(-)</span></p>
           <p className="font-bold text-lg text-green-700 font-mono">-${pettyCashDeducted.toLocaleString()}</p>
+        </div>
+        <div className="card border-primary-200 bg-primary-50">
+          <p className="text-xs text-primary-600 font-semibold">應付總額</p>
+          <p className="font-bold text-xl text-primary-700 font-mono">
+            ${(Number(payroll.net_amount) + Number(payroll.reimbursement_total || 0) - pettyCashDeducted).toLocaleString()}
+          </p>
         </div>
       </div>
 
@@ -1584,7 +1610,7 @@ export default function PayrollDetailPage() {
                     type="number"
                     step="0.01"
                     className="input-field w-48 font-mono"
-                    defaultValue={payroll.mpf_relevant_income ?? ''}
+                    defaultValue={displayMpfRelevantIncome || ''}
                     onBlur={async (e) => {
                       const val = e.target.value;
                       try {
@@ -1599,19 +1625,19 @@ export default function PayrollDetailPage() {
 
                 </div>
               ) : (
-                <p className="font-bold font-mono">${payroll.mpf_relevant_income ? Number(payroll.mpf_relevant_income).toLocaleString() : '-'}</p>
+                <p className="font-bold font-mono">${displayMpfRelevantIncome ? displayMpfRelevantIncome.toLocaleString() : '-'}</p>
               )}
             </div>
             {/* 強積金自動計算：薪金基數 × 5% */}
-            {payroll.mpf_relevant_income && Number(payroll.mpf_relevant_income) > 0 && (
+            {displayMpfRelevantIncome > 0 && (
               <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-4 py-2">
                 <span className="text-sm text-blue-700 font-medium">強積金 5%</span>
                 <span className="text-sm text-blue-500">=</span>
                 <span className="text-lg font-bold font-mono text-blue-700">
-                  ${(Number(payroll.mpf_relevant_income) * 0.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${(displayMpfRelevantIncome * 0.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs text-blue-400 ml-1">
-                  (${Number(payroll.mpf_relevant_income).toLocaleString()} × 5%)
+                  (${displayMpfRelevantIncome.toLocaleString()} × 5%)
                 </span>
               </div>
             )}

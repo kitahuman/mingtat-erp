@@ -1728,9 +1728,26 @@ export class PayrollService {
       }));
     }
 
-    const existingMpfRelevantIncome =
+    const adjustmentTotal = (payroll.adjustments || []).reduce(
+      (sum: number, adj: any) => sum + (Number(adj.amount) || 0),
+      0,
+    );
+    const storedMpfRelevantIncome =
       payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
         ? Number(payroll.mpf_relevant_income)
+        : undefined;
+    const previousGrossAmount =
+      (Number(payroll.base_amount) || 0) +
+      (Number(payroll.allowance_total) || 0) +
+      (Number(payroll.ot_total) || 0) +
+      (Number(payroll.commission_total) || 0);
+    const previousGrossOnlyMpfBase = previousGrossAmount;
+    const previousAdjustedMpfBase = previousGrossAmount + adjustmentTotal;
+    const existingMpfRelevantIncome =
+      storedMpfRelevantIncome !== undefined &&
+      Math.abs(storedMpfRelevantIncome - previousGrossOnlyMpfBase) >= 0.01 &&
+      Math.abs(storedMpfRelevantIncome - previousAdjustedMpfBase) >= 0.01
+        ? storedMpfRelevantIncome
         : undefined;
 
     // Query excluded badge keys for this payroll
@@ -1754,10 +1771,7 @@ export class PayrollService {
       existingMpfRelevantIncome,
       holidayDatesForCalc,
       excludedBadgeKeysReset,
-    );
-    const adjustmentTotal = (payroll.adjustments || []).reduce(
-      (sum: number, adj: any) => sum + (Number(adj.amount) || 0),
-      0,
+      adjustmentTotal,
     );
 
     const actualCompanyId =
@@ -2008,12 +2022,30 @@ export class PayrollService {
       billing_quantity_type: pwl.billing_quantity_type,
     }));
 
-    // Preserve manual mpf_relevant_income if set
-    const existingMpfRelevantIncome =
+    // Preserve manual mpf_relevant_income if set; otherwise refresh the automatic default base.
+    const adjustments = payroll.adjustments || [];
+    const adjustmentTotal = adjustments.reduce(
+      (sum: number, adj: any) => sum + (Number(adj.amount) || 0),
+      0,
+    );
+    const storedMpfRelevantIncome =
       payroll.mpf_relevant_income !== null &&
       payroll.mpf_relevant_income !== undefined
         ? Number(payroll.mpf_relevant_income)
-        : null;
+        : undefined;
+    const previousGrossAmount =
+      (Number(payroll.base_amount) || 0) +
+      (Number(payroll.allowance_total) || 0) +
+      (Number(payroll.ot_total) || 0) +
+      (Number(payroll.commission_total) || 0);
+    const previousGrossOnlyMpfBase = previousGrossAmount;
+    const previousAdjustedMpfBase = previousGrossAmount + adjustmentTotal;
+    const existingMpfRelevantIncome =
+      storedMpfRelevantIncome !== undefined &&
+      Math.abs(storedMpfRelevantIncome - previousGrossOnlyMpfBase) >= 0.01 &&
+      Math.abs(storedMpfRelevantIncome - previousAdjustedMpfBase) >= 0.01
+        ? storedMpfRelevantIncome
+        : undefined;
 
     // 查出法定假日，傳給 calculatePayroll
     let recalcHolidayDates: { date: Date; name: string }[] = [];
@@ -2047,12 +2079,7 @@ export class PayrollService {
       existingMpfRelevantIncome,
       recalcHolidayDates,
       excludedBadgeKeys,
-    );
-    // Calculate adjustment total
-    const adjustments = payroll.adjustments || [];
-    const adjustmentTotal = adjustments.reduce(
-      (sum, adj) => sum + Number(adj.amount),
-      0,
+      adjustmentTotal,
     );
 
     // Update payroll items; preserve manually excluded items by stable item signature.
