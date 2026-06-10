@@ -1670,6 +1670,7 @@ export class PayrollService {
           wl.quotation?.quotation_no ?? wl.client_contract_no ?? null,
         payroll_work_log_product_name: wl.work_log_product_name ?? null,
         payroll_work_log_product_unit: wl.work_log_product_unit ?? null,
+        payroll_work_log_product_quantity: wl.goods_quantity ?? null,
         is_modified: false,
         is_excluded: false,
       };
