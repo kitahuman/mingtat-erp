@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
+import type { ColumnConfig } from '@/components/ColumnCustomizer';
 import { fmtDate } from '@/lib/dateUtils';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 
@@ -39,6 +40,7 @@ type PayrollRecordRow = {
   publisher_name?: string | null;
   payment_date?: string | null;
   cheque_number?: string | null;
+  created_at?: string | null;
 };
 
 type CompanyOption = {
@@ -69,6 +71,53 @@ type PayrollBulkDeleteResult = {
   skippedIds: number[];
 };
 
+const PAYROLL_RECORDS_COLUMNS_STORAGE_KEY = 'payroll-records-columns';
+
+const DEFAULT_COLUMN_CONFIGS: ColumnConfig[] = [
+  { key: 'period', label: '月份', visible: true, order: 0 },
+  { key: 'employee', label: '員工', visible: true, order: 1 },
+  { key: 'company', label: '公司', visible: true, order: 2 },
+  { key: 'salary_type', label: '類型', visible: true, order: 3 },
+  { key: 'base_amount', label: '底薪', visible: true, order: 4 },
+  { key: 'allowance_total', label: '津貼', visible: true, order: 5 },
+  { key: 'ot_total', label: 'OT', visible: true, order: 6 },
+  { key: 'mpf_deduction', label: '強積金', visible: true, order: 7 },
+  { key: 'net_amount', label: '淨額', visible: true, order: 8 },
+  { key: 'status', label: '狀態', visible: true, order: 9 },
+  { key: 'publisher', label: '發佈人', visible: true, order: 10 },
+  { key: 'payment_date', label: '付款日期', visible: true, order: 11 },
+  { key: 'cheque_number', label: '支票號碼', visible: true, order: 12 },
+  { key: 'created_at', label: '建立日期', visible: true, order: 13 },
+];
+
+const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] => {
+  if (!configs) return DEFAULT_COLUMN_CONFIGS;
+
+  const savedByKey = new Map(configs.map((config) => [config.key, config]));
+  return DEFAULT_COLUMN_CONFIGS.map((defaultConfig) => {
+    const savedConfig = savedByKey.get(defaultConfig.key);
+    return {
+      ...defaultConfig,
+      visible: savedConfig?.visible ?? defaultConfig.visible,
+      order: savedConfig?.order ?? defaultConfig.order,
+      width: savedConfig?.width,
+    };
+  }).sort((a, b) => a.order - b.order)
+    .map((config, index) => ({ ...config, order: index }));
+};
+
+const loadColumnConfigs = (): ColumnConfig[] => {
+  if (typeof window === 'undefined') return DEFAULT_COLUMN_CONFIGS;
+
+  try {
+    const saved = window.localStorage.getItem(PAYROLL_RECORDS_COLUMNS_STORAGE_KEY);
+    if (!saved) return DEFAULT_COLUMN_CONFIGS;
+    return normalizeColumnConfigs(JSON.parse(saved) as ColumnConfig[]);
+  } catch {
+    return DEFAULT_COLUMN_CONFIGS;
+  }
+};
+
 export default function PayrollRecordsPage() {
   const router = useRouter();
   const [data, setData] = useState<PayrollRecordRow[]>([]);
@@ -92,6 +141,7 @@ export default function PayrollRecordsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [totals, setTotals] = useState<PayrollTotals | null>(null);
+  const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(loadColumnConfigs);
 
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
@@ -106,6 +156,21 @@ export default function PayrollRecordsPage() {
       .list({ limit: 999 })
       .then((res) => setEmployees(res.data.data || []));
   });
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      PAYROLL_RECORDS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(columnConfigs),
+    );
+  }, [columnConfigs]);
+
+  const handleColumnConfigChange = (configs: ColumnConfig[]) => {
+    setColumnConfigs(normalizeColumnConfigs(configs));
+  };
+
+  const handleColumnConfigReset = () => {
+    setColumnConfigs(DEFAULT_COLUMN_CONFIGS);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -334,7 +399,20 @@ export default function PayrollRecordsPage() {
       label: '支票號碼',
       render: (_v: unknown, row: PayrollRecordRow) => row.cheque_number || '-',
     },
+    {
+      key: 'created_at',
+      label: '建立日期',
+      sortable: true,
+      render: (_v: unknown, row: PayrollRecordRow) => fmtDate(row.created_at),
+    },
   ];
+
+  const fixedColumns = columns.filter((column) => column.key === 'select');
+  const configurableColumns = columnConfigs
+    .filter((config) => config.visible)
+    .map((config) => columns.find((column) => column.key === config.key))
+    .filter((column): column is (typeof columns)[number] => Boolean(column));
+  const visibleColumns = [...fixedColumns, ...configurableColumns];
 
   return (
     <div>
@@ -456,7 +534,7 @@ export default function PayrollRecordsPage() {
 
       <DataTable
         exportFilename="糧單記錄"
-        columns={columns}
+        columns={visibleColumns}
         data={data}
         total={total}
         page={page}
@@ -481,6 +559,9 @@ export default function PayrollRecordsPage() {
           setSortBy(key);
           setSortOrder(order as 'ASC' | 'DESC');
         }}
+        columnConfigs={columnConfigs}
+        onColumnConfigChange={handleColumnConfigChange}
+        onColumnConfigReset={handleColumnConfigReset}
       />
     </div>
   );
