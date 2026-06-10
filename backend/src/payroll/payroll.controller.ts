@@ -91,6 +91,11 @@ export class PayrollController {
     return this.payrollService.bulkMarkPaid(body.ids, body.payment_date, body.cheque_number);
   }
 
+  @Post('bulk/delete')
+  bulkDelete(@Body() body: { ids: number[] }, @Request() req: any) {
+    return this.payrollService.bulkDelete(body.ids, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  }
+
   // 確認糧單（finalize）─ 自動產生支出記錄
   @Post(':id/finalize')
   finalize(@Param('id') id: string) {

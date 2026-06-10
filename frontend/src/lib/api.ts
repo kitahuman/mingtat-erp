@@ -680,6 +680,7 @@ export const payrollApi = {
       payment_date: paymentDate,
       cheque_number: chequeNumber,
     }),
+  bulkDelete: (ids: number[]) => api.post('/payroll/bulk/delete', { ids }),
   recalculate: (id: number, body?: { override_manual_rates?: boolean }) =>
     api.post(`/payroll/${id}/recalculate`, body || {}),
   resetRefetch: (id: number) => api.post(`/payroll/${id}/reset-refetch`),

@@ -20,9 +20,58 @@ const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
 };
 
+type PayrollRecordRow = {
+  id: number;
+  row_id?: string;
+  record_type?: string;
+  ai_session_id?: number;
+  status?: string;
+  period?: string;
+  base_amount?: number | string | null;
+  allowance_total?: number | string | null;
+  ot_total?: number | string | null;
+  commission_total?: number | string | null;
+  mpf_deduction?: number | string | null;
+  adjustment_total?: number | string | null;
+  net_amount?: number | string | null;
+  employee?: { name_zh?: string; emp_code?: string; company?: { internal_prefix?: string; name?: string } };
+  salary_type?: string;
+  publisher_name?: string | null;
+  payment_date?: string | null;
+  cheque_number?: string | null;
+};
+
+type CompanyOption = {
+  id: number | string;
+  internal_prefix?: string | null;
+  name?: string | null;
+};
+
+type EmployeeOption = {
+  id: number | string;
+  name_zh?: string | null;
+  emp_code?: string | number | null;
+};
+
+type PayrollTotals = {
+  base_amount: number;
+  allowance_total: number;
+  ot_total: number;
+  commission_total: number;
+  mpf_deduction: number;
+  adjustment_total: number;
+  net_amount: number;
+};
+
+type PayrollBulkDeleteResult = {
+  deleted: number;
+  skipped: number;
+  skippedIds: number[];
+};
+
 export default function PayrollRecordsPage() {
   const router = useRouter();
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<PayrollRecordRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -36,13 +85,13 @@ export default function PayrollRecordsPage() {
   const [companyId, setCompanyId] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [employeeId, setEmployeeId] = useState('');
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
-  const [totals, setTotals] = useState<any>(null);
+  const [totals, setTotals] = useState<PayrollTotals | null>(null);
 
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
@@ -61,7 +110,7 @@ export default function PayrollRecordsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const params: any = { page, limit, sortBy, sortOrder };
+      const params: Record<string, string | number> = { page, limit, sortBy, sortOrder };
       if (period) params.period = period;
       if (companyId) params.company_id = companyId;
       if (statusFilter) params.status = statusFilter;
@@ -104,7 +153,7 @@ export default function PayrollRecordsPage() {
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
     if (checked) {
-      setSelectedIds(new Set(data.map((row: any) => row.row_id || String(row.id))));
+      setSelectedIds(new Set(data.map((row) => row.row_id || String(row.id))));
     } else {
       setSelectedIds(new Set());
     }
@@ -124,21 +173,48 @@ export default function PayrollRecordsPage() {
   const getDisplayTotals = () => {
     if (selectedIds.size > 0) {
       // Calculate totals for selected items
-      const selectedData = data.filter((row: any) => selectedIds.has(row.row_id || String(row.id)));
+      const selectedData = data.filter((row) => selectedIds.has(row.row_id || String(row.id)));
       return {
-        base_amount: selectedData.reduce((sum: number, row: any) => sum + Number(row.base_amount || 0), 0),
-        allowance_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.allowance_total || 0), 0),
-        ot_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.ot_total || 0), 0),
-        commission_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.commission_total || 0), 0),
-        mpf_deduction: selectedData.reduce((sum: number, row: any) => sum + Number(row.mpf_deduction || 0), 0),
-        adjustment_total: selectedData.reduce((sum: number, row: any) => sum + Number(row.adjustment_total || 0), 0),
-        net_amount: selectedData.reduce((sum: number, row: any) => sum + Number(row.net_amount || 0), 0),
+        base_amount: selectedData.reduce((sum: number, row) => sum + Number(row.base_amount || 0), 0),
+        allowance_total: selectedData.reduce((sum: number, row) => sum + Number(row.allowance_total || 0), 0),
+        ot_total: selectedData.reduce((sum: number, row) => sum + Number(row.ot_total || 0), 0),
+        commission_total: selectedData.reduce((sum: number, row) => sum + Number(row.commission_total || 0), 0),
+        mpf_deduction: selectedData.reduce((sum: number, row) => sum + Number(row.mpf_deduction || 0), 0),
+        adjustment_total: selectedData.reduce((sum: number, row) => sum + Number(row.adjustment_total || 0), 0),
+        net_amount: selectedData.reduce((sum: number, row) => sum + Number(row.net_amount || 0), 0),
       };
     }
     return totals;
   };
 
   const displayTotals = getDisplayTotals();
+
+  const handleBulkDelete = async () => {
+    const selectedPayrollRows = data.filter((row) => selectedIds.has(row.row_id || String(row.id)) && row.record_type !== 'ai_session');
+    const ids = selectedPayrollRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0);
+    const nonPayrollCount = selectedIds.size - ids.length;
+
+    if (ids.length === 0) {
+      alert('沒有可刪除的糧單記錄。');
+      return;
+    }
+
+    const confirmed = window.confirm(`確定批量刪除 ${ids.length} 筆糧單？只有草稿或準備中狀態會被刪除。`);
+    if (!confirmed) return;
+
+    try {
+      const res = await payrollApi.bulkDelete(ids);
+      const result = res.data as PayrollBulkDeleteResult;
+      const skipped = result.skipped + nonPayrollCount;
+      alert(`已刪除 ${result.deleted} 筆，跳過 ${skipped} 筆（非草稿/準備中狀態）`);
+      setSelectedIds(new Set());
+      setSelectAll(false);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert('批量刪除失敗，請稍後再試。');
+    }
+  };
 
   const columns = [
     {
@@ -152,7 +228,7 @@ export default function PayrollRecordsPage() {
           className="w-4 h-4 rounded border-gray-300"
         />
       ),
-      render: (_v: any, row: any) => (
+      render: (_v: unknown, row: PayrollRecordRow) => (
         <input
           type="checkbox"
           checked={selectedIds.has(row.row_id || String(row.id))}
@@ -169,7 +245,7 @@ export default function PayrollRecordsPage() {
     {
       key: 'employee',
       label: '員工',
-      render: (_v: any, row: any) => (
+      render: (_v: unknown, row: PayrollRecordRow) => (
         <div>
           <div className="font-medium">{row.employee?.name_zh}</div>
           <div className="text-xs text-gray-500">{row.employee?.emp_code}</div>
@@ -179,7 +255,7 @@ export default function PayrollRecordsPage() {
     {
       key: 'company',
       label: '公司',
-      render: (_v: any, row: any) =>
+      render: (_v: unknown, row: PayrollRecordRow) =>
         row.employee?.company?.internal_prefix ||
         row.employee?.company?.name ||
         '-',
@@ -187,34 +263,34 @@ export default function PayrollRecordsPage() {
     {
       key: 'salary_type',
       label: '類型',
-      render: (_v: any, row: any) =>
+      render: (_v: unknown, row: PayrollRecordRow) =>
         row.salary_type === 'daily' ? '日薪' : '月薪',
     },
     {
       key: 'base_amount',
       label: `底薪 ${displayTotals ? `$${Number(displayTotals.base_amount).toLocaleString()}` : ''}`,
-      render: (_v: any, row: any) =>
+      render: (_v: unknown, row: PayrollRecordRow) =>
         `$${Number(row.base_amount).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'allowance_total',
       label: `津貼 ${displayTotals ? `$${Number(displayTotals.allowance_total).toLocaleString()}` : ''}`,
-      render: (_v: any, row: any) =>
+      render: (_v: unknown, row: PayrollRecordRow) =>
         `$${Number(row.allowance_total).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'ot_total',
       label: `OT ${displayTotals ? `$${Number(displayTotals.ot_total).toLocaleString()}` : ''}`,
-      render: (_v: any, row: any) =>
+      render: (_v: unknown, row: PayrollRecordRow) =>
         `$${Number(row.ot_total).toLocaleString()}`,
       className: 'text-right font-mono',
     },
     {
       key: 'mpf_deduction',
       label: `強積金 ${displayTotals ? `-$${Number(displayTotals.mpf_deduction).toLocaleString()}` : ''}`,
-      render: (_v: any, row: any) => (
+      render: (_v: unknown, row: PayrollRecordRow) => (
         <span className="text-red-600">
           -${Number(row.mpf_deduction).toLocaleString()}
         </span>
@@ -225,7 +301,7 @@ export default function PayrollRecordsPage() {
       key: 'net_amount',
       label: `淨額 ${displayTotals ? `$${Number(displayTotals.net_amount).toLocaleString()}` : ''}`,
       sortable: true,
-      render: (_v: any, row: any) => (
+      render: (_v: unknown, row: PayrollRecordRow) => (
         <span className="font-bold">
           ${Number(row.net_amount).toLocaleString()}
         </span>
@@ -235,7 +311,7 @@ export default function PayrollRecordsPage() {
     {
       key: 'status',
       label: '狀態',
-      render: (_v: any, row: any) => (
+      render: (_v: unknown, row: PayrollRecordRow) => (
         <span
           className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.status] || ''}`}
         >
@@ -246,17 +322,17 @@ export default function PayrollRecordsPage() {
     {
       key: 'publisher',
       label: '發佈人',
-      render: (_v: any, row: any) => row.publisher_name || '-',
+      render: (_v: unknown, row: PayrollRecordRow) => row.publisher_name || '-',
     },
     {
       key: 'payment_date',
       label: '付款日期',
-      render: (_v: any, row: any) => fmtDate(row.payment_date),
+      render: (_v: unknown, row: PayrollRecordRow) => fmtDate(row.payment_date),
     },
     {
       key: 'cheque_number',
       label: '支票號碼',
-      render: (_v: any, row: any) => row.cheque_number || '-',
+      render: (_v: unknown, row: PayrollRecordRow) => row.cheque_number || '-',
     },
   ];
 
@@ -299,7 +375,7 @@ export default function PayrollRecordsPage() {
               className="input-field w-48"
             >
               <option value="">全部公司</option>
-              {companies.map((cp: any) => (
+              {companies.map((cp) => (
                 <option key={cp.id} value={cp.id}>
                   {cp.internal_prefix ? cp.internal_prefix + ' - ' : ''}
                   {cp.name}
@@ -320,7 +396,7 @@ export default function PayrollRecordsPage() {
               className="input-field w-48"
             >
               <option value="">全部員工</option>
-              {employees.map((emp: any) => (
+              {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.name_zh} ({emp.emp_code || emp.id})
                 </option>
@@ -364,10 +440,17 @@ export default function PayrollRecordsPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="card mb-4 bg-blue-50 border border-blue-200">
+        <div className="card mb-4 flex flex-wrap items-center justify-between gap-3 bg-blue-50 border border-blue-200">
           <p className="text-sm text-blue-700">
             已選擇 {selectedIds.size} 項糧單
           </p>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            批量刪除
+          </button>
         </div>
       )}
 

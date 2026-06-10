@@ -67,6 +67,8 @@ type PayrollRecord = Record<string, RecordValue> & {
   goods_quantity?: number | string | null;
   product_quantity?: number | string | null;
   payroll_work_log_product_unit?: string | null;
+  goods_unit?: string | null;
+  product_unit?: string | null;
   billing_quantity_type?: BillingQuantityType | string | null;
   group_key?: string | null;
   is_modified?: boolean | null;
@@ -85,6 +87,9 @@ type PayrollGroup = Record<string, RecordValue> & {
   matched_rate?: number | string | null;
   matched_unit?: string | null;
   unit?: string | null;
+  payroll_work_log_product_unit?: string | null;
+  goods_unit?: string | null;
+  product_unit?: string | null;
   start_location?: string;
   end_location?: string;
   machine_type?: string;
@@ -299,6 +304,7 @@ function deriveGroupsFromRows(rows: PayrollRecord[]): PayrollGroup[] {
       matched_rate: row.matched_rate ?? null,
       matched_unit: row.matched_unit || row.unit || "天",
       unit: row.unit || row.matched_unit || "天",
+      payroll_work_log_product_unit: row.payroll_work_log_product_unit || row.goods_unit || row.product_unit || "",
       total_quantity: quantity,
       total_amount: amount,
       count: 1,
@@ -323,6 +329,42 @@ function calculateBillingQuantity(group: PayrollGroup, rows: PayrollRecord[]) {
     return groupRows.reduce((sum, row) => sum + getProductQuantity(row), 0);
   }
   return asNumber(group.total_quantity ?? group.billing_quantity, 0);
+}
+
+function getGroupRows(group: PayrollGroup, rows: PayrollRecord[]) {
+  const ids = new Set((group.work_log_ids || []).map(String));
+  return rows.filter((row) => ids.size === 0 ? (row.group_key || makeFallbackGroupKey(row)) === group.group_key : ids.has(String(row.id)));
+}
+
+function firstNonEmpty(values: Array<string | null | undefined>) {
+  return values.find((value) => value !== null && value !== undefined && value !== "") || "";
+}
+
+function getBillingQuantityUnit(group: PayrollGroup, rows: PayrollRecord[]) {
+  const type = (group.billing_quantity_type || "quantity") as BillingQuantityType;
+  if (type === "days") return "天";
+
+  const groupRows = getGroupRows(group, rows);
+  if (type === "product_quantity") {
+    return firstNonEmpty([
+      group.payroll_work_log_product_unit,
+      group.goods_unit,
+      group.product_unit,
+      ...groupRows.map((row) => row.payroll_work_log_product_unit || row.goods_unit || row.product_unit),
+    ]);
+  }
+
+  return firstNonEmpty([
+    group.unit,
+    group.matched_unit,
+    ...groupRows.map((row) => row.unit || row.matched_unit),
+  ]);
+}
+
+function renderJsonLike(value: unknown) {
+  if (!value) return <div className="text-sm text-gray-500">沒有可顯示的資料。</div>;
+  if (typeof value === "string" || typeof value === "number") return <div className="text-sm text-gray-700">{String(value)}</div>;
+  return <pre className="max-h-[520px] overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 function getColumnValue(row: PayrollRecord, key: DetailColumnKey): CellValue {
@@ -363,17 +405,6 @@ function toUpdateValue(value: string | boolean, type: DetailColumn["type"]): Cel
   return value === "" ? null : String(value);
 }
 
-function calculationLabel(value: string | null | undefined) {
-  const labels: Record<string, string> = {
-    base_salary: "底薪",
-    allowance: "津貼",
-    ot: "OT",
-    mpf_deduction: "強積金扣款",
-    reimbursement: "報銷",
-    deduction: "扣款",
-  };
-  return value ? labels[value] || value : "—";
-}
 
 type EditableCellProps = {
   row: PayrollRecord;
@@ -464,106 +495,6 @@ function EditableDetailCell({ row, column, readOnly, editingKey, setEditingKey, 
   );
 }
 
-function CalculationDetailsView({ details }: { details?: CalculationDetails }) {
-  const summary = details?.payroll_summary;
-  const items = details?.items || [];
-  const adjustments = details?.adjustments || [];
-  const allowanceOptions = details?.allowance_options || [];
-
-  if (!summary && items.length === 0 && adjustments.length === 0 && allowanceOptions.length === 0) {
-    return <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">沒有可顯示的計算明細。</div>;
-  }
-
-  const summaryCards = [
-    { key: "gross_amount", label: "應收總額", value: summary?.gross_amount },
-    { key: "deduction_total", label: "扣款總額", value: summary?.deduction_total },
-    { key: "adjustment_total", label: "調整總額", value: summary?.adjustment_total },
-    { key: "net_amount", label: "淨額", value: summary?.net_amount },
-    { key: "reimbursement_total", label: "報銷總額", value: summary?.reimbursement_total },
-  ];
-
-  return (
-    <div className="space-y-5">
-      {summary && (
-        <div>
-          <h3 className="mb-2 font-semibold text-gray-900">計糧摘要</h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {summaryCards.map((card) => (
-              <div key={card.key} className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-xs text-gray-500">{card.label}</p>
-                <p className="mt-1 font-mono text-lg font-bold text-blue-700">{formatMoney(card.value)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3 font-semibold text-gray-900">計算項目</div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-medium text-gray-500">
-              <tr><th className="px-3 py-2">類型</th><th className="px-3 py-2">項目</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">金額</th><th className="px-3 py-2">備註</th></tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {items.length === 0 ? <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">沒有計算項目。</td></tr> : items.map((item, index) => (
-                <tr key={String(item.id ?? index)}>
-                  <td className="px-3 py-2">{calculationLabel(item.item_type)}</td>
-                  <td className="px-3 py-2 font-medium text-gray-900">{normalizeText(item.item_name ?? item.name)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{formatMoney(item.unit_price)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{normalizeText(item.quantity)}</td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold">{formatMoney(item.amount)}</td>
-                  <td className="px-3 py-2 text-gray-500">{normalizeText(item.remarks)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3 font-semibold text-gray-900">調整項</div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-medium text-gray-500">
-              <tr><th className="px-3 py-2">類型</th><th className="px-3 py-2">說明</th><th className="px-3 py-2 text-right">金額</th><th className="px-3 py-2">備註</th></tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {adjustments.length === 0 ? <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">沒有調整項。</td></tr> : adjustments.map((adjustment, index) => (
-                <tr key={String(adjustment.id ?? index)}>
-                  <td className="px-3 py-2">{normalizeText(adjustment.type ?? adjustment.adjustment_type)}</td>
-                  <td className="px-3 py-2 font-medium text-gray-900">{normalizeText(adjustment.description ?? adjustment.reason)}</td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold">{formatMoney(adjustment.amount)}</td>
-                  <td className="px-3 py-2 text-gray-500">{normalizeText(adjustment.remarks)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3 font-semibold text-gray-900">津貼選項</div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-medium text-gray-500">
-              <tr><th className="px-3 py-2">Key</th><th className="px-3 py-2">名稱</th><th className="px-3 py-2 text-right">預設金額</th></tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {allowanceOptions.length === 0 ? <tr><td colSpan={3} className="px-4 py-6 text-center text-gray-500">沒有津貼選項。</td></tr> : allowanceOptions.map((option, index) => (
-                <tr key={String(option.key ?? index)}>
-                  <td className="px-3 py-2 font-mono text-xs">{normalizeText(option.key)}</td>
-                  <td className="px-3 py-2 font-medium text-gray-900">{normalizeText(option.label)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{formatMoney(option.default_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function PayrollTabs({
   workLogs,
@@ -636,7 +567,6 @@ export default function PayrollTabs({
   const selectedCount = selectedIds.size;
   const selectedRows = rows.filter((row) => selectedIds.has(String(row.id)));
   const activeBatchField = BATCH_FIELDS.find((field) => field.key === batchField);
-  const details = calculationDetails || calculation;
 
   function handleColumnFilterChange(columnKey: string, selectedValues: Set<string> | null) {
     setColumnFilters((prev) => {
@@ -860,7 +790,7 @@ export default function PayrollTabs({
                         <option value="product_quantity">商品數量</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2 text-right font-mono">{billingQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}{group.matched_unit || group.unit || ""}</td>
+                    <td className="px-3 py-2 text-right font-mono">{billingQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}{getBillingQuantityUnit(group, rows)}</td>
                     <td className="px-3 py-2 text-right font-mono">{rate > 0 ? formatMoney(rate) : "未設定"}</td>
                     <td className="px-3 py-2 text-right font-mono font-semibold">{formatMoney(amount)}</td>
                     <td className="px-3 py-2"><span className={`rounded-full px-2 py-1 text-xs ${group.price_match_status === "matched" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>{group.price_match_status === "matched" ? "已匹配" : "未匹配"}</span></td>
@@ -903,7 +833,11 @@ export default function PayrollTabs({
         </div>
       )}
 
-      {activeTab === "calculation" && <CalculationDetailsView details={details} />}
+      {activeTab === "calculation" && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          {renderJsonLike(calculationDetails || calculation)}
+        </div>
+      )}
     </div>
   );
 }

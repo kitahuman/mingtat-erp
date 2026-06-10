@@ -1521,6 +1521,48 @@ export class PayrollService {
   }
 
 
+  async bulkDelete(ids: number[], userId?: number, ipAddress?: string) {
+    const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
+    let deleted = 0;
+    const skippedIds: number[] = [];
+
+    for (const id of uniqueIds) {
+      const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+      if (!payroll || (payroll.status !== 'draft' && payroll.status !== 'preparing')) {
+        skippedIds.push(id);
+        continue;
+      }
+
+      await this.expensesService.deleteBySourceRef('PAYROLL', id);
+      await this.prisma.payrollWorkLog.deleteMany({ where: { payroll_id: id } });
+      await this.prisma.payrollAdjustment.deleteMany({ where: { payroll_id: id } });
+      await this.prisma.payrollDailyAllowance.deleteMany({ where: { payroll_id: id } });
+      await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+      await this.prisma.payrollPayment.deleteMany({ where: { payroll_payment_payroll_id: id } });
+
+      if (userId) {
+        try {
+          await this.auditLogsService.log({
+            userId,
+            action: 'delete',
+            targetTable: 'payrolls',
+            targetId: id,
+            changesBefore: payroll,
+            ipAddress,
+          });
+        } catch (e) {
+          console.error('Audit log error:', e);
+        }
+      }
+
+      await this.prisma.payroll.delete({ where: { id } });
+      deleted += 1;
+    }
+
+    return { deleted, skipped: skippedIds.length, skippedIds };
+  }
+
+
   // ── 返回上一步：重新抓取原始工作記錄並重建糧單工作記錄快照 ─────
   async resetAndRefetch(id: number, userId?: number) {
     const payroll = await this.prisma.payroll.findUnique({
