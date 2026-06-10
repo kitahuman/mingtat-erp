@@ -704,6 +704,25 @@ export class PayrollCalculationService {
         : 0;
     const baseSalaryNight =
       configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
+    const salaryOtSlots = [
+      'ot_1800_1900',
+      'ot_1900_2000',
+      'ot_0600_0700',
+      'ot_0700_0800',
+    ];
+    const getSalaryOtAmount = (pwl: any): number => {
+      const otQty = Number(pwl.ot_quantity) || 0;
+      if (otQty <= 0) return 0;
+      for (const slot of salaryOtSlots) {
+        const rate = Number(salarySetting?.[slot]) || 0;
+        if (rate > 0) return rate * otQty;
+      }
+      return (Number(salarySetting?.ot_rate_standard) || 0) * otQty;
+    };
+    const getSalaryMidShiftAmount = (pwl: any): number =>
+      pwl.is_mid_shift === true
+        ? Number(salarySetting?.ot_mid_shift) || 0
+        : 0;
 
     const dateMap = new Map<string, any[]>();
     for (const pwl of pwls) {
@@ -818,6 +837,15 @@ export class PayrollCalculationService {
         salarySetting,
         dayAllowances,
       );
+      const dailyOtAmount = dayPwls.reduce(
+        (sum: number, pwl: any) => sum + getSalaryOtAmount(pwl),
+        0,
+      );
+      const dailyMidShiftAmount = dayPwls.some(
+        (pwl: any) => pwl.is_mid_shift === true,
+      )
+        ? Number(salarySetting?.ot_mid_shift) || 0
+        : 0;
       const dayTotal = effectiveIncome + dailyAllowanceTotal;
       return {
         date,
@@ -857,6 +885,8 @@ export class PayrollCalculationService {
             (Number(pwl.mid_shift_line_amount) || 0),
           ot_line_amount: Number(pwl.ot_line_amount) || 0,
           mid_shift_line_amount: Number(pwl.mid_shift_line_amount) || 0,
+          salary_ot_amount: getSalaryOtAmount(pwl),
+          salary_mid_shift_amount: getSalaryMidShiftAmount(pwl),
           price_match_status: pwl.price_match_status,
         })),
         work_income: workIncome,
@@ -882,6 +912,8 @@ export class PayrollCalculationService {
         })),
         fixed_allowances_per_day: fixedAllowancesPerDay,
         daily_allowance_total: dailyAllowanceTotal,
+        daily_ot_amount: dailyOtAmount,
+        daily_mid_shift_amount: dailyMidShiftAmount,
         day_total: dayTotal,
       };
     });

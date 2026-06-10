@@ -86,6 +86,8 @@ type WorkLogRecord = {
   line_amount?: number | string | null;
   ot_line_amount?: number | string | null;
   mid_shift_line_amount?: number | string | null;
+  salary_ot_amount?: number | string | null;
+  salary_mid_shift_amount?: number | string | null;
   base_line_amount?: number | string | null;
   client_short_name?: string | null;
   price_match_status?: string | null;
@@ -233,6 +235,8 @@ type DailyCalculationRecord = {
   base_top_up_amount?: number | string | null;
   ot_amount?: number | string | null;
   ot_hours?: number | string | null;
+  daily_ot_amount?: number | string | null;
+  daily_mid_shift_amount?: number | string | null;
   allowance_total?: number | string | null;
   daily_allowance_total?: number | string | null;
   special_label?: string | null;
@@ -1648,8 +1652,12 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               const workLogs = day.work_logs || day.logs || [];
               const topUp = getDailyTopUpAmount(day);
               const baseWorkIncome = getDailyBaseWorkIncome(day);
-              const otMidShiftTotals = getDailyOtMidShiftTotals(day);
-              const otMidShiftLabel = formatDailyOtMidShift(otMidShiftTotals);
+              const dailyOt = toNumber(day.daily_ot_amount);
+              const dailyMidShift = toNumber(day.daily_mid_shift_amount);
+              const otMidShiftLabel = formatDailyOtMidShift({
+                otAmount: dailyOt,
+                midShiftAmount: dailyMidShift,
+              });
               const isExpanded = expandedDay === rowDate;
               const isAdding = addingDate === rowDate;
               const rowTone = day.special_label ? "bg-green-50" : topUp > 0 ? "bg-orange-50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/60";
@@ -1836,18 +1844,29 @@ function getDailyAllowanceTotal(day: DailyCalculationRecord): number {
 }
 
 function getWorkLogOtAmount(row: WorkLogRecord): number {
+  const salaryAmount = toNumber(row.salary_ot_amount);
+  if (salaryAmount > 0) return salaryAmount;
   const explicitAmount = toNumber(row.ot_line_amount);
   if (explicitAmount > 0) return explicitAmount;
   return toNumber(row.matched_ot_rate) * toNumber(row.ot_quantity);
 }
 
 function getWorkLogMidShiftAmount(row: WorkLogRecord): number {
+  const salaryAmount = toNumber(row.salary_mid_shift_amount);
+  if (salaryAmount > 0) return salaryAmount;
   const explicitAmount = toNumber(row.mid_shift_line_amount);
   if (explicitAmount > 0) return explicitAmount;
   return row.is_mid_shift ? toNumber(row.matched_mid_shift_rate) : 0;
 }
 
 function getDailyOtMidShiftTotals(day: DailyCalculationRecord): { otAmount: number; midShiftAmount: number } {
+  if (day.daily_ot_amount !== null && day.daily_ot_amount !== undefined
+    || day.daily_mid_shift_amount !== null && day.daily_mid_shift_amount !== undefined) {
+    return {
+      otAmount: toNumber(day.daily_ot_amount),
+      midShiftAmount: toNumber(day.daily_mid_shift_amount),
+    };
+  }
   const workLogs = day.work_logs || day.logs || [];
   return workLogs.reduce(
     (totals, row) => ({
