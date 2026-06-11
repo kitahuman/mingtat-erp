@@ -281,7 +281,7 @@ type PayrollSnapshot = {
     registered_address?: string | null;
     office_address?: string | null;
   } | null;
-  company?: { name?: string | null; company_name?: string | null; name_en?: string | null; invoice_address?: string | null } | null;
+  company?: { name?: string | null; company_name?: string | null; name_en?: string | null; invoice_address?: string | null; company_logo_url?: string | null; company_stamp_url?: string | null } | null;
   employee_name?: string | null;
   period?: string | null;
   date_from?: string | null;
@@ -2429,13 +2429,17 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
   const cp = snapshot?.company_profile;
   const items = calculation.items || snapshot?.items || [];
   const adjustments = calculation.adjustments || snapshot?.adjustments || [];
+  const payrollExpenses = snapshot?.payroll_expenses || [];
   const summary = calculation.payroll_summary || {};
+  const pettyCashDeducted = toNumber(summary.petty_cash_deducted ?? snapshot?.petty_cash_deducted);
   const payroll = {
     gross_amount: summary.gross_amount ?? snapshot?.gross_amount ?? 0,
     deduction_total: summary.deduction_total ?? snapshot?.deduction_total ?? 0,
     adjustment_total: summary.adjustment_total ?? snapshot?.adjustment_total ?? 0,
     net_amount: summary.net_amount ?? snapshot?.net_amount ?? 0,
     reimbursement_total: summary.reimbursement_total ?? snapshot?.reimbursement_total ?? 0,
+    petty_cash_deducted: pettyCashDeducted,
+    total_payable: summary.total_payable ?? (toNumber(summary.net_amount ?? snapshot?.net_amount) + toNumber(summary.reimbursement_total ?? snapshot?.reimbursement_total) - pettyCashDeducted),
     mpf_plan: calculation.mpf_plan ?? snapshot?.mpf_plan ?? null,
   };
   const dateFrom = snapshot?.date_from;
@@ -2447,7 +2451,152 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
   };
   const periodStartDate = formatFullDate(dateFrom);
   const periodEndDate = formatFullDate(dateTo);
+  const resolveMediaSrc = (path?: string | null) => {
+    if (!path) return "";
+    if (/^https?:\/\//.test(path)) return path;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+    const origin = apiBase.replace(/\/api\/?$/, "");
+    return `${origin}${path}`;
+  };
+  const companyStampSrc = resolveMediaSrc(snapshot?.company?.company_stamp_url || snapshot?.company?.company_logo_url);
+  const printColumns = 5;
+  const salaryGroups: Array<{ type: string; title: string }> = [
+    { type: "base_salary", title: "底薪項目" },
+    { type: "allowance", title: "津貼項目" },
+    { type: "ot", title: "OT 項目" },
+  ];
+  const mpfItems = items.filter((item) => item.item_type === "mpf_deduction");
+  const hasAdjustments = adjustments.length > 0 || toNumber(payroll.adjustment_total) !== 0;
+  const hasReimbursements = payrollExpenses.length > 0 || toNumber(payroll.reimbursement_total) > 0;
+  const hasPettyCash = pettyCashDeducted > 0;
+  const mpfDeductionTotal = Math.abs(toNumber(payroll.deduction_total));
+  const mpfLabel = `強積金（${getMpfPlanShortLabel(payroll.mpf_plan)}）(-)`;
   void rows;
+
+  const thStyle: React.CSSProperties = { padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', fontSize: '13px' };
+  const tdStyle: React.CSSProperties = { padding: '6px 12px', border: '1px solid #000', fontSize: '13px' };
+  const monoStyle: React.CSSProperties = { ...tdStyle, textAlign: 'right', fontFamily: 'monospace' };
+
+  const renderPrintSectionHeader = (title: string, key: string) => (
+    <tr key={key}>
+      <td colSpan={printColumns} style={{ ...tdStyle, background: '#f3f4f6', fontWeight: 'bold' }}>{title}</td>
+    </tr>
+  );
+
+  const renderPrintSeparator = (key: string) => (
+    <tr key={key}>
+      <td colSpan={printColumns} style={{ padding: 0, borderTop: '2px solid #000' }} />
+    </tr>
+  );
+
+  const renderPrintSpacer = (key: string) => (
+    <tr key={key}>
+      <td colSpan={printColumns} style={{ height: '8px', border: 0, padding: 0 }} />
+    </tr>
+  );
+
+  const renderPrintSubtotal = (label: string, amount: number | string | null | undefined, key: string, background = '#f8fafc') => (
+    <tr key={key} style={{ background }}>
+      <td colSpan={3} style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold' }}>{label}</td>
+      <td style={{ ...monoStyle, fontWeight: 'bold' }}>{formatMoney(amount)}</td>
+      <td style={tdStyle}></td>
+    </tr>
+  );
+
+  const renderPrintItemRow = (item: PayrollItem, key: string | number | undefined, prefix = "") => {
+    const amount = toNumber(item.amount);
+    return (
+      <tr key={String(key)}>
+        <td style={tdStyle}>{prefix}{item.item_name || "—"}</td>
+        <td style={monoStyle}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : formatMoney(item.unit_price)}</td>
+        <td style={monoStyle}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '—' : formatPlainNumber(toNumber(item.quantity))}</td>
+        <td style={{ ...monoStyle, fontWeight: 'bold' }}>{amount < 0 ? '-' : ''}{formatMoney(Math.abs(amount))}</td>
+        <td style={tdStyle}>{item.remarks || '—'}</td>
+      </tr>
+    );
+  };
+
+  const printItemRows: ReactNode[] = [];
+  salaryGroups.forEach((group) => {
+    const groupItems = items.filter((item) => item.item_type === group.type);
+    if (groupItems.length === 0) return;
+    printItemRows.push(renderPrintSectionHeader(group.title, `print-header-${group.type}`));
+    groupItems.forEach((item, index) => printItemRows.push(renderPrintItemRow(item, item.id || `${group.type}-${index}`)));
+  });
+  printItemRows.push(renderPrintSeparator('print-sep-gross'));
+  printItemRows.push(renderPrintSubtotal('應收總額', payroll.gross_amount, 'print-subtotal-gross', '#eef2ff'));
+
+  if (hasAdjustments) {
+    printItemRows.push(renderPrintSpacer('print-space-adjustments'));
+    printItemRows.push(renderPrintSectionHeader('自定義津貼/扣款 (+)', 'print-header-adjustments'));
+    adjustments.forEach((adj, index) => {
+      const amount = toNumber(adj.amount);
+      const dateLabel = formatAdjustmentDateForTable(adj.adjustment_date);
+      printItemRows.push(
+        <tr key={`print-adjustment-${adj.id || index}`}>
+          <td style={tdStyle}>{adj.item_name || '自定義津貼/扣款'}{dateLabel ? ` (${dateLabel})` : ''}</td>
+          <td style={monoStyle}>—</td>
+          <td style={monoStyle}>—</td>
+          <td style={{ ...monoStyle, fontWeight: 'bold' }}>{amount < 0 ? '-' : '+'}{formatMoney(Math.abs(amount))}</td>
+          <td style={tdStyle}>{adj.remarks || '—'}</td>
+        </tr>
+      );
+    });
+    if (adjustments.length === 0) printItemRows.push(renderPrintSubtotal('自定義津貼/扣款合計', payroll.adjustment_total, 'print-subtotal-adjustments', '#f0fdf4'));
+  }
+
+  printItemRows.push(renderPrintSpacer('print-space-mpf'));
+  printItemRows.push(renderPrintSectionHeader(mpfLabel, 'print-header-mpf'));
+  if (mpfItems.length > 0) {
+    mpfItems.forEach((item, index) => printItemRows.push(renderPrintItemRow(item, item.id || `mpf-${index}`)));
+  } else {
+    printItemRows.push(
+      <tr key="print-mpf-summary">
+        <td style={tdStyle}>{mpfLabel}</td>
+        <td style={monoStyle}>—</td>
+        <td style={monoStyle}>—</td>
+        <td style={{ ...monoStyle, fontWeight: 'bold' }}>-{formatMoney(mpfDeductionTotal)}</td>
+        <td style={tdStyle}>—</td>
+      </tr>
+    );
+  }
+  printItemRows.push(renderPrintSeparator('print-sep-net'));
+  printItemRows.push(renderPrintSubtotal('淨薪金', payroll.net_amount, 'print-subtotal-net', '#eff6ff'));
+
+  if (hasReimbursements) {
+    printItemRows.push(renderPrintSpacer('print-space-reimbursements'));
+    printItemRows.push(renderPrintSectionHeader('員工報銷 (+)', 'print-header-reimbursements'));
+    payrollExpenses.forEach((record, index) => {
+      const expense = record.expense;
+      printItemRows.push(
+        <tr key={`print-reimbursement-${record.id || expense?.id || index}`}>
+          <td style={tdStyle}>{expense?.date ? fmtDate(expense.date) : '—'} - {getExpenseCategoryName(record)}</td>
+          <td style={tdStyle}>{expense?.description || expense?.item || '—'}</td>
+          <td style={monoStyle}>—</td>
+          <td style={{ ...monoStyle, fontWeight: 'bold' }}>+{formatMoney(expense?.total_amount)}</td>
+          <td style={tdStyle}>報銷</td>
+        </tr>
+      );
+    });
+    if (payrollExpenses.length === 0) printItemRows.push(renderPrintSubtotal('員工報銷合計', payroll.reimbursement_total, 'print-subtotal-reimbursement', '#eff6ff'));
+  }
+
+  if (hasPettyCash) {
+    printItemRows.push(renderPrintSpacer('print-space-petty-cash'));
+    printItemRows.push(renderPrintSectionHeader('零用金抵扣 (-)', 'print-header-petty-cash'));
+    printItemRows.push(
+      <tr key="print-petty-cash">
+        <td style={tdStyle}>零用金抵扣</td>
+        <td style={monoStyle}>—</td>
+        <td style={monoStyle}>—</td>
+        <td style={{ ...monoStyle, fontWeight: 'bold' }}>-{formatMoney(pettyCashDeducted)}</td>
+        <td style={tdStyle}>抵扣員工報銷</td>
+      </tr>
+    );
+  }
+
+  printItemRows.push(renderPrintSeparator('print-sep-payable'));
+  printItemRows.push(renderPrintSubtotal('應付總額', payroll.total_payable, 'print-subtotal-payable', '#f0fdf4'));
 
   return (
     <div>
@@ -2531,71 +2680,14 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
           <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
             <thead>
               <tr>
-                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', width: '200px', fontSize: '13px' }}>項目名稱</th>
-                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>單價($)</th>
-                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontSize: '13px' }}>天數/數量</th>
-                <th style={{ padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'right', fontSize: '13px' }} colSpan={2}>金額($)</th>
+                <th style={{ ...thStyle, width: '220px' }}>項目名稱</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>單價($)</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>天數/數量</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>金額($)</th>
+                <th style={{ ...thStyle, width: '160px' }}>備註</th>
               </tr>
             </thead>
-            <tbody>
-              {items.map((item: PayrollItem, idx: number) => {
-                const isDeduction = Number(item.amount) < 0;
-                const displayAmount = Math.abs(Number(item.amount));
-                return (
-                  <tr key={item.id || idx}>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                      ({idx + 1}) {item.item_name}
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry'
-                        ? `${(Number(item.quantity) * 100).toFixed(0)}%`
-                        : Number(item.unit_price).toFixed(2)}
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}
-                    </td>
-                    <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                      {isDeduction ? '-$' : '$'}
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* Adjustment items in print */}
-              {adjustments.map((adj: Adjustment, idx: number) => {
-                const isNeg = Number(adj.amount) < 0;
-                const displayAmount = Math.abs(Number(adj.amount));
-                return (
-                  <tr key={`adj-${adj.id || idx}`}>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>
-                      ({items.length + idx + 1}) {adj.item_name}
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                      -
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'center', fontFamily: 'monospace', fontSize: '13px' }}>
-                      -
-                    </td>
-                    <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px', width: '30px' }}>
-                      {isNeg ? '-$' : '$'}
-                    </td>
-                    <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* Total row */}
-              <tr style={{ borderTop: '2px solid #000' }}>
-                <td colSpan={3} style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '14px', fontWeight: 'bold' }}></td>
-                <td style={{ padding: '6px 4px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>$</td>
-                <td style={{ padding: '6px 12px', border: '1px solid #000', textAlign: 'right', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                  {printNumber(payroll.gross_amount)}
-                </td>
-              </tr>
-            </tbody>
+            <tbody>{printItemRows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</tbody>
           </table>
 
           {/* Summary */}
@@ -2607,11 +2699,11 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
                 <div style={{ marginBottom: '5px' }}><strong>強積金（員工）5%合計 (-)：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
                 <div style={{ marginBottom: '5px' }}><strong>淨薪金：</strong> ${Number(payroll.net_amount).toLocaleString()}</div>
                 <div style={{ marginBottom: '5px' }}><strong>員工報銷 (+)：</strong> ${Number(payroll.reimbursement_total || 0).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>零用金抵扣 (-)：</strong> ${Math.abs(Number(snapshot?.petty_cash_deducted || 0)).toLocaleString()}</div>
+                <div style={{ marginBottom: '5px' }}><strong>零用金抵扣 (-)：</strong> ${Math.abs(Number(payroll.petty_cash_deducted || 0)).toLocaleString()}</div>
               </div>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
-                  應付總額：${(Number(payroll.net_amount) + Number(payroll.reimbursement_total || 0) - Number(snapshot?.petty_cash_deducted || 0)).toLocaleString()}
+                  應付總額：${Number(payroll.total_payable).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -2619,17 +2711,22 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
 
           {/* Signature */}
           {(showEmployeeSignature || showCompanyStamp) && (
-            <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: showEmployeeSignature && showCompanyStamp ? '1fr 1fr' : '1fr', gap: '40px', fontSize: '12px' }}>
+            <div style={{ marginTop: '30px', display: 'flex', justifyContent: showEmployeeSignature ? 'space-between' : 'flex-end', alignItems: 'flex-end', gap: '40px', fontSize: '12px' }}>
               {showEmployeeSignature && (
-                <div>
+                <div style={{ width: '240px' }}>
                   <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
                   <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
                 </div>
               )}
               {showCompanyStamp && (
-                <div>
-                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
-                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+                <div style={{ width: '240px', marginLeft: 'auto', textAlign: 'center' }}>
+                  {companyStampSrc ? (
+                    <img src={companyStampSrc} alt="公司印" style={{ maxWidth: '160px', maxHeight: '90px', objectFit: 'contain', margin: '0 auto 8px' }} />
+                  ) : (
+                    <div style={{ height: '90px', marginBottom: '8px' }} />
+                  )}
+                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px' }}>公司簽署</div>
+                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666', textAlign: 'left' }}>日期：_________</div>
                 </div>
               )}
             </div>
