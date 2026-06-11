@@ -9,3 +9,12 @@ export class AttachPayrollExpensesDto {
   @IsNumber({}, { each: true })
   expense_ids: number[];
 }
+
+export class GenerateMpfEmployerExpenseDto {
+  @IsNotEmpty()
+  @IsArray()
+  @ArrayMinSize(1)
+  @Type(() => Number)
+  @IsNumber({}, { each: true })
+  payroll_ids: number[];
+}

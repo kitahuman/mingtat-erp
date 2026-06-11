@@ -1572,6 +1572,111 @@ export class PayrollService {
     return { deleted, skipped: skippedIds.length, skippedIds };
   }
 
+  // ── 批量生成強積金僱主供款支出 ──────────────────────────────────
+  async generateMpfEmployerExpense(ids: number[]) {
+    const uniqueIds = Array.from(new Set((ids || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)));
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('請先選擇糧單');
+    }
+
+    const payrolls = await this.prisma.payroll.findMany({
+      where: { id: { in: uniqueIds } },
+      include: {
+        employee: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (payrolls.length !== uniqueIds.length) {
+      throw new BadRequestException('部分糧單不存在，請重新選擇');
+    }
+
+    const getMonthKey = (payroll: any) => {
+      const source = payroll.date_from || payroll.date_to;
+      if (source) {
+        const date = new Date(source);
+        if (!Number.isNaN(date.getTime())) {
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        }
+      }
+      const period = String(payroll.period || '');
+      const match = period.match(/(\d{4})[-年/](\d{1,2})/);
+      if (match) return `${match[1]}-${String(Number(match[2])).padStart(2, '0')}`;
+      return period;
+    };
+
+    const monthKeys = new Set(payrolls.map(getMonthKey));
+    if (monthKeys.size !== 1) {
+      throw new BadRequestException('所選糧單包含不同月份，請只選同一月份的糧單');
+    }
+
+    const companyIds = new Set(payrolls.map((payroll) => payroll.company_id ?? null));
+    if (companyIds.size !== 1) {
+      throw new BadRequestException('所選糧單包含不同公司，請只選同一公司的糧單');
+    }
+
+    const plans = new Set(payrolls.map((payroll) => payroll.mpf_plan || ''));
+    if (payrolls.some((payroll) => payroll.mpf_plan === 'exempt_age65')) {
+      throw new BadRequestException('所選糧單包含免供強積金的員工，請移除後再試');
+    }
+    if (plans.size !== 1) {
+      throw new BadRequestException('所選糧單包含不同強積金計劃（宏利、AIA），請只選同一計劃的糧單');
+    }
+
+    const first = payrolls[0];
+    const monthKey = getMonthKey(first);
+    const [yearText, monthText] = monthKey.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const periodLabel = year && month ? `${year}年${month}月` : String(first.period || monthKey);
+    const plan = first.mpf_plan || '';
+    const planLabelMap: Record<string, string> = {
+      aia: 'AIA',
+      manulife: '宏利',
+      industry: '行業計劃',
+      bea_mpf: '東亞',
+      other: '其他',
+    };
+    const planLabel = planLabelMap[plan] || plan || '未設定';
+    const totalAmount = payrolls.reduce((sum, payroll) => sum + Number(payroll.mpf_employer || 0), 0);
+    const title = `${periodLabel}份-${planLabel}強積金僱主供款（${payrolls.length}人）`;
+
+    const expense = await this.prisma.expense.create({
+      data: {
+        date: new Date(),
+        company_id: first.company_id,
+        category_id: 40,
+        item: title,
+        total_amount: totalAmount,
+        source: 'PAYROLL',
+        remarks: `由 ${payrolls.length} 張糧單批量生成`,
+      },
+    });
+
+    await this.prisma.expenseItem.createMany({
+      data: payrolls.map((payroll, index) => {
+        const employeeName = payroll.employee?.name_zh || payroll.employee?.name_en || payroll.employee?.emp_code || `員工 #${payroll.employee_id}`;
+        const amount = Number(payroll.mpf_employer || 0);
+        return {
+          expense_id: expense.id,
+          description: employeeName,
+          quantity: 1,
+          unit: periodLabel,
+          unit_price: amount,
+          amount,
+          sort_order: index,
+        };
+      }),
+    });
+
+    return {
+      expense_id: expense.id,
+      expense,
+      total_amount: totalAmount,
+      item_count: payrolls.length,
+    };
+  }
+
 
   // ── 重新抓取原始工作記錄並重建糧單工作記錄快照（維持草稿流程）─────
   async resetAndRefetch(id: number, userId?: number) {

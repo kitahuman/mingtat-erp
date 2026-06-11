@@ -159,6 +159,7 @@ export default function PayrollRecordsPage() {
   const [selectAll, setSelectAll] = useState(false);
   const [totals, setTotals] = useState<PayrollTotals | null>(null);
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(loadColumnConfigs);
+  const [generatingMpfExpense, setGeneratingMpfExpense] = useState(false);
 
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
@@ -297,6 +298,35 @@ export default function PayrollRecordsPage() {
     } catch (err) {
       console.error(err);
       alert('批量刪除失敗，請稍後再試。');
+    }
+  };
+
+  const handleGenerateMpfEmployerExpense = async () => {
+    const selectedPayrollRows = data.filter((row) => selectedIds.has(row.row_id || String(row.id)) && row.record_type !== 'ai_session');
+    const ids = selectedPayrollRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0);
+
+    if (ids.length === 0) {
+      alert('沒有可生成強積金支出的糧單記錄。');
+      return;
+    }
+
+    setGeneratingMpfExpense(true);
+    try {
+      const res = await payrollApi.generateMpfEmployerExpense(ids);
+      const expenseId = res.data?.expense_id || res.data?.expense?.id;
+      if (!expenseId) {
+        alert('已生成強積金支出，但無法取得支出紀錄 ID。');
+        await loadData();
+        return;
+      }
+      setSelectedIds(new Set());
+      setSelectAll(false);
+      router.push(`/expenses/${expenseId}`);
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.response?.data?.message || '生成強積金支出失敗，請稍後再試。');
+    } finally {
+      setGeneratingMpfExpense(false);
     }
   };
 
@@ -556,13 +586,23 @@ export default function PayrollRecordsPage() {
           <p className="text-sm text-blue-700">
             已選擇 {selectedIds.size} 項糧單
           </p>
-          <button
-            type="button"
-            onClick={() => void handleBulkDelete()}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-          >
-            批量刪除
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleGenerateMpfEmployerExpense()}
+              disabled={generatingMpfExpense}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {generatingMpfExpense ? '生成中...' : '生成強積金支出'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkDelete()}
+              className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              批量刪除
+            </button>
+          </div>
         </div>
       )}
 

@@ -9,7 +9,7 @@ import { PayrollService } from './payroll.service';
 import { PayrollPdfService } from './payroll-pdf.service';
 import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
-import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
+import { AttachPayrollExpensesDto, GenerateMpfEmployerExpenseDto } from './dto/payroll-expense.dto';
 
 @Controller('payroll')
 @UseGuards(AuthGuard('jwt'))
@@ -132,6 +132,11 @@ export class PayrollController {
   @Post('bulk/delete')
   bulkDelete(@Body() body: { ids: number[] }, @Request() req: any) {
     return this.payrollService.bulkDelete(body.ids, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
+  }
+
+  @Post('bulk/generate-mpf-employer-expense')
+  generateMpfEmployerExpense(@Body() body: GenerateMpfEmployerExpenseDto) {
+    return this.payrollService.generateMpfEmployerExpense(body.payroll_ids);
   }
 
   // 確認糧單（finalize）─ 自動產生支出記錄
