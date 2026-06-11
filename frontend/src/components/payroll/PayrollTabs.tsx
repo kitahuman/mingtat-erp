@@ -288,6 +288,7 @@ type PayrollSnapshot = {
   date_to?: string | null;
   gross_amount?: number | string | null;
   deduction_total?: number | string | null;
+  mpf_employer?: number | string | null;
   adjustment_total?: number | string | null;
   net_amount?: number | string | null;
   reimbursement_total?: number | string | null;
@@ -408,7 +409,8 @@ const DAILY_METRIC_LABELS = ["工作", "底薪", "補底薪", "OT", "合計"];
 const SUMMARY_LABELS: Record<string, string> = {
   gross_amount: "應收總額",
   adjustment_total: "自定義津貼/扣款合計 (+)",
-  deduction_total: "強積金（員工）5%合計 (-)",
+  deduction_total: "強積金（僱員）5%合計 (-)",
+  mpf_employer: "強積金（僱主）",
   net_amount: "淨薪金",
   reimbursement_total: "員工報銷 (+)",
   petty_cash_deducted: "零用金抵扣 (-)",
@@ -733,6 +735,7 @@ function summarizeCalculation(details: CalculationDetails | null | undefined, sn
     payroll_summary: details?.payroll_summary || {
       gross_amount: snapshot?.gross_amount,
       deduction_total: snapshot?.deduction_total,
+      mpf_employer: snapshot?.mpf_employer,
       adjustment_total: snapshot?.adjustment_total,
       reimbursement_total: snapshot?.reimbursement_total,
       net_amount: snapshot?.net_amount,
@@ -844,6 +847,7 @@ function PayrollTabs({
         payroll_summary: {
           gross_amount: data.gross_amount,
           deduction_total: data.deduction_total,
+          mpf_employer: data.mpf_employer,
           adjustment_total: data.adjustment_total,
           reimbursement_total: data.reimbursement_total,
           net_amount: data.net_amount,
@@ -2057,6 +2061,7 @@ function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], d
     gross_amount: summary.gross_amount,
     adjustment_total: summary.adjustment_total,
     deduction_total: summary.deduction_total,
+    mpf_employer: summary.mpf_employer ?? snapshot?.mpf_employer,
     net_amount: summary.net_amount,
     reimbursement_total: summary.reimbursement_total,
     petty_cash_deducted: pettyCashDeducted,

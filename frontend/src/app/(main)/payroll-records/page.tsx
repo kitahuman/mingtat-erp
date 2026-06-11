@@ -33,6 +33,7 @@ type PayrollRecordRow = {
   ot_total?: number | string | null;
   commission_total?: number | string | null;
   mpf_deduction?: number | string | null;
+  mpf_employer?: number | string | null;
   adjustment_total?: number | string | null;
   net_amount?: number | string | null;
   employee?: {
@@ -66,6 +67,7 @@ type PayrollTotals = {
   ot_total: number;
   commission_total: number;
   mpf_deduction: number;
+  mpf_employer: number;
   adjustment_total: number;
   net_amount: number;
 };
@@ -87,13 +89,14 @@ const DEFAULT_COLUMN_CONFIGS: ColumnConfig[] = [
   { key: 'base_amount', label: '底薪', visible: true, order: 5 },
   { key: 'allowance_total', label: '津貼', visible: true, order: 6 },
   { key: 'ot_total', label: 'OT', visible: true, order: 7 },
-  { key: 'mpf_deduction', label: '強積金', visible: true, order: 8 },
-  { key: 'net_amount', label: '淨額', visible: true, order: 9 },
-  { key: 'status', label: '狀態', visible: true, order: 10 },
-  { key: 'publisher', label: '發佈人', visible: true, order: 11 },
-  { key: 'payment_date', label: '付款日期', visible: true, order: 12 },
-  { key: 'cheque_number', label: '支票號碼', visible: true, order: 13 },
-  { key: 'created_at', label: '建立日期', visible: true, order: 14 },
+  { key: 'mpf_deduction', label: '強積金（僱員）', visible: true, order: 8 },
+  { key: 'mpf_employer', label: '強積金（僱主）', visible: true, order: 9 },
+  { key: 'net_amount', label: '淨額', visible: true, order: 10 },
+  { key: 'status', label: '狀態', visible: true, order: 11 },
+  { key: 'publisher', label: '發佈人', visible: true, order: 12 },
+  { key: 'payment_date', label: '付款日期', visible: true, order: 13 },
+  { key: 'cheque_number', label: '支票號碼', visible: true, order: 14 },
+  { key: 'created_at', label: '建立日期', visible: true, order: 15 },
 ];
 
 const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] => {
@@ -205,6 +208,7 @@ export default function PayrollRecordsPage() {
         ot_total: res.data.sum_ot_total || 0,
         commission_total: res.data.sum_commission_total || 0,
         mpf_deduction: res.data.sum_mpf_deduction || 0,
+        mpf_employer: res.data.sum_mpf_employer || 0,
         adjustment_total: res.data.sum_adjustment_total || 0,
         net_amount: res.data.sum_net_amount || 0,
       });
@@ -259,6 +263,7 @@ export default function PayrollRecordsPage() {
         ot_total: selectedData.reduce((sum: number, row) => sum + Number(row.ot_total || 0), 0),
         commission_total: selectedData.reduce((sum: number, row) => sum + Number(row.commission_total || 0), 0),
         mpf_deduction: selectedData.reduce((sum: number, row) => sum + Number(row.mpf_deduction || 0), 0),
+        mpf_employer: selectedData.reduce((sum: number, row) => sum + Number(row.mpf_employer || 0), 0),
         adjustment_total: selectedData.reduce((sum: number, row) => sum + Number(row.adjustment_total || 0), 0),
         net_amount: selectedData.reduce((sum: number, row) => sum + Number(row.net_amount || 0), 0),
       };
@@ -373,10 +378,20 @@ export default function PayrollRecordsPage() {
     },
     {
       key: 'mpf_deduction',
-      label: `強積金 ${displayTotals ? `-$${Number(displayTotals.mpf_deduction).toLocaleString()}` : ''}`,
+      label: `強積金（僱員） ${displayTotals ? `-$${Number(displayTotals.mpf_deduction).toLocaleString()}` : ''}`,
       render: (_v: unknown, row: PayrollRecordRow) => (
         <span className="text-red-600">
           -${Number(row.mpf_deduction).toLocaleString()}
+        </span>
+      ),
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'mpf_employer',
+      label: `強積金（僱主） ${displayTotals ? `$${Number(displayTotals.mpf_employer).toLocaleString()}` : ''}`,
+      render: (_v: unknown, row: PayrollRecordRow) => (
+        <span className="text-blue-600">
+          ${Number(row.mpf_employer || 0).toLocaleString()}
         </span>
       ),
       className: 'text-right font-mono',

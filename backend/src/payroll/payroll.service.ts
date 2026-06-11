@@ -109,6 +109,7 @@ export class PayrollService {
           ot_total: true,
           commission_total: true,
           mpf_deduction: true,
+          mpf_employer: true,
           adjustment_total: true,
           net_amount: true,
         },
@@ -201,6 +202,7 @@ export class PayrollService {
       sum_ot_total: Number(aggregate._sum.ot_total) || 0,
       sum_commission_total: Number(aggregate._sum.commission_total) || 0,
       sum_mpf_deduction: Number(aggregate._sum.mpf_deduction) || 0,
+      sum_mpf_employer: Number(aggregate._sum.mpf_employer) || 0,
       sum_adjustment_total: Number(aggregate._sum.adjustment_total) || 0,
       sum_net_amount: Number(aggregate._sum.net_amount) || 0,
     };
@@ -263,6 +265,7 @@ export class PayrollService {
       ot_total: 0,
       commission_total: 0,
       mpf_deduction: 0,
+      mpf_employer: 0,
       adjustment_total: 0,
       net_amount: 0,
       status: 'draft',
@@ -1360,6 +1363,11 @@ export class PayrollService {
         body.mpf_relevant_income !== null && body.mpf_relevant_income !== ''
           ? Number(body.mpf_relevant_income)
           : null;
+    if (body.mpf_employer !== undefined)
+      updateData.mpf_employer =
+        body.mpf_employer !== null && body.mpf_employer !== ''
+          ? Number(body.mpf_employer)
+          : 0;
 
     const updated = await this.prisma.payroll.update({
       where: { id },

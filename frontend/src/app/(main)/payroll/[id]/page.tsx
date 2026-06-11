@@ -1318,6 +1318,16 @@ export default function PayrollDetailPage() {
   ) || MPF_INDUSTRY_TIERS[MPF_INDUSTRY_TIERS.length - 1];
   const industryEmployeeMpf = industryMpfTier.employee * mpfWorkDayCount;
   const generalEmployeeMpf = Math.min(displayMpfRelevantIncome * 0.05, 1500);
+  const employeeMpfAmount =
+    mpfPlan === 'industry'
+      ? industryEmployeeMpf
+      : mpfPlan === 'exempt_age65'
+        ? 0
+        : generalEmployeeMpf;
+  const employerMpfAmount =
+    payroll.mpf_employer !== null && payroll.mpf_employer !== undefined
+      ? Number(payroll.mpf_employer)
+      : employeeMpfAmount;
 
   const periodStart = payroll.date_from ? new Date(payroll.date_from).getDate() : 1;
   const lastDay = payroll.date_to ? new Date(payroll.date_to).getDate() : 31;
@@ -1369,7 +1379,7 @@ export default function PayrollDetailPage() {
           </p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">強積金（員工）5%合計 <span className="text-gray-400">(-)</span></p>
+          <p className="text-xs text-gray-500">強積金（僱員）5%合計 <span className="text-gray-400">(-)</span></p>
           <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
         </div>
         <div className="card">
@@ -1421,6 +1431,7 @@ export default function PayrollDetailPage() {
               gross_amount: payroll.gross_amount,
               adjustment_total: payroll.adjustment_total,
               deduction_total: payroll.deduction_total,
+              mpf_employer: payroll.mpf_employer,
               net_amount: payroll.net_amount,
               reimbursement_total: payroll.reimbursement_total,
             },
@@ -1596,7 +1607,7 @@ export default function PayrollDetailPage() {
           </p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-500">強積金（員工）5%合計 <span className="text-gray-400">(-)</span></p>
+          <p className="text-xs text-gray-500">強積金（僱員）5%合計 <span className="text-gray-400">(-)</span></p>
           <p className="font-bold text-lg text-red-600 font-mono">-${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</p>
         </div>
         <div className="card">
@@ -1678,7 +1689,7 @@ export default function PayrollDetailPage() {
                 <span className="text-sm text-blue-700 font-medium">行業計劃</span>
                 <span className="text-sm text-blue-500">按日薪級別，{mpfWorkDayCount}天，員工供款</span>
                 <span className="text-lg font-bold font-mono text-blue-700">
-                  ${industryEmployeeMpf.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${employeeMpfAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs text-blue-400 ml-1">
                   (日薪基數 ${displayMpfRelevantIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}，每工作日 $${industryMpfTier.employee})
@@ -1690,13 +1701,40 @@ export default function PayrollDetailPage() {
                 <span className="text-sm text-blue-700 font-medium">強積金 5%</span>
                 <span className="text-sm text-blue-500">=</span>
                 <span className="text-lg font-bold font-mono text-blue-700">
-                  ${generalEmployeeMpf.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${employeeMpfAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs text-blue-400 ml-1">
-                  (${displayMpfRelevantIncome.toLocaleString()} × 5%，上限 $1,500)
+                  {mpfPlan === 'exempt_age65'
+                    ? '(過65歲, 不用供)'
+                    : `(${displayMpfRelevantIncome.toLocaleString()} × 5%，上限 $1,500)`}
                 </span>
               </div>
             )}
+            <div>
+              <p className="text-xs text-gray-500 mb-1">強積金（僱主）</p>
+              {isDraft ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field w-48 font-mono"
+                    defaultValue={employerMpfAmount || ''}
+                    onBlur={async (e) => {
+                      const val = e.target.value;
+                      try {
+                        await payrollApi.update(payroll.id, { mpf_employer: val || 0 });
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || '更新失敗');
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <p className="font-bold font-mono">${employerMpfAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              )}
+            </div>
           </div>
         </div>
       )}
