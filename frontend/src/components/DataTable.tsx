@@ -10,6 +10,7 @@ interface Column {
   headerRender?: () => React.ReactNode;
   render?: (value: any, row: any) => React.ReactNode;
   exportRender?: (value: any, row: any) => string;
+  onCellClick?: (event: React.MouseEvent<HTMLTableCellElement>, row: any) => void;
   className?: string;
   sortable?: boolean;
   filterable?: boolean;
@@ -560,6 +561,7 @@ export default function DataTable({
                       <td
                         key={col.key}
                         className={`px-3 py-3 ${col.className || ''}`}
+                        onClick={(e) => col.onCellClick?.(e, row)}
                         style={
                           explicitW
                             ? {

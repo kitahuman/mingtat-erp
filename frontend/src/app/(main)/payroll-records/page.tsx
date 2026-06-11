@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
@@ -353,7 +353,8 @@ export default function PayrollRecordsPage() {
           className="w-4 h-4 rounded border-gray-300"
         />
       ),
-      className: 'w-12',
+      onCellClick: (e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation(),
+      className: 'w-12 px-5 py-4',
     },
     { key: 'period', label: '月份', sortable: true },
     {
