@@ -251,6 +251,7 @@ export class PayrollService {
         name_zh: employeeLabel,
         name_en: employees.length === 1 ? employees[0].name_en : null,
         emp_code: employeeSubLabel,
+        mpf_plan: employees.length === 1 ? employees[0].mpf_plan : null,
         company: session.company,
       },
       company_id: session.session_company_id,

@@ -35,7 +35,12 @@ type PayrollRecordRow = {
   mpf_deduction?: number | string | null;
   adjustment_total?: number | string | null;
   net_amount?: number | string | null;
-  employee?: { name_zh?: string; emp_code?: string; company?: { internal_prefix?: string; name?: string } };
+  employee?: {
+    name_zh?: string;
+    emp_code?: string;
+    mpf_plan?: string | null;
+    company?: { internal_prefix?: string; name?: string };
+  };
   salary_type?: string;
   publisher_name?: string | null;
   payment_date?: string | null;
@@ -76,18 +81,19 @@ const PAYROLL_RECORDS_COLUMNS_STORAGE_KEY = 'payroll-records-columns';
 const DEFAULT_COLUMN_CONFIGS: ColumnConfig[] = [
   { key: 'period', label: '月份', visible: true, order: 0 },
   { key: 'employee', label: '員工', visible: true, order: 1 },
-  { key: 'company', label: '公司', visible: true, order: 2 },
-  { key: 'salary_type', label: '類型', visible: true, order: 3 },
-  { key: 'base_amount', label: '底薪', visible: true, order: 4 },
-  { key: 'allowance_total', label: '津貼', visible: true, order: 5 },
-  { key: 'ot_total', label: 'OT', visible: true, order: 6 },
-  { key: 'mpf_deduction', label: '強積金', visible: true, order: 7 },
-  { key: 'net_amount', label: '淨額', visible: true, order: 8 },
-  { key: 'status', label: '狀態', visible: true, order: 9 },
-  { key: 'publisher', label: '發佈人', visible: true, order: 10 },
-  { key: 'payment_date', label: '付款日期', visible: true, order: 11 },
-  { key: 'cheque_number', label: '支票號碼', visible: true, order: 12 },
-  { key: 'created_at', label: '建立日期', visible: true, order: 13 },
+  { key: 'mpf_plan', label: '強積金計劃公司', visible: true, order: 2 },
+  { key: 'company', label: '公司', visible: true, order: 3 },
+  { key: 'salary_type', label: '類型', visible: true, order: 4 },
+  { key: 'base_amount', label: '底薪', visible: true, order: 5 },
+  { key: 'allowance_total', label: '津貼', visible: true, order: 6 },
+  { key: 'ot_total', label: 'OT', visible: true, order: 7 },
+  { key: 'mpf_deduction', label: '強積金', visible: true, order: 8 },
+  { key: 'net_amount', label: '淨額', visible: true, order: 9 },
+  { key: 'status', label: '狀態', visible: true, order: 10 },
+  { key: 'publisher', label: '發佈人', visible: true, order: 11 },
+  { key: 'payment_date', label: '付款日期', visible: true, order: 12 },
+  { key: 'cheque_number', label: '支票號碼', visible: true, order: 13 },
+  { key: 'created_at', label: '建立日期', visible: true, order: 14 },
 ];
 
 const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] => {
@@ -104,6 +110,13 @@ const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] 
     };
   }).sort((a, b) => a.order - b.order)
     .map((config, index) => ({ ...config, order: index }));
+};
+
+const mpfPlanLabel = (plan?: string | null) => {
+  if (plan === 'industry') return '東亞（行業計劃）';
+  if (plan === 'manulife') return '宏利';
+  if (plan === 'aia') return 'AIA';
+  return plan || '未設定';
 };
 
 const loadColumnConfigs = (): ColumnConfig[] => {
@@ -316,6 +329,11 @@ export default function PayrollRecordsPage() {
           <div className="text-xs text-gray-500">{row.employee?.emp_code}</div>
         </div>
       ),
+    },
+    {
+      key: 'mpf_plan',
+      label: '強積金計劃公司',
+      render: (_v: unknown, row: PayrollRecordRow) => mpfPlanLabel(row.employee?.mpf_plan),
     },
     {
       key: 'company',
