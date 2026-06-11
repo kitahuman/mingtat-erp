@@ -1295,11 +1295,13 @@ export default function PayrollDetailPage() {
   const mpfCardTitle =
     mpfPlan === 'industry'
       ? 'MPF 計算 — 行業計劃'
-      : mpfPlan === 'manulife'
-        ? 'MPF 計算 — 宏利：一般計劃 (5%)'
-        : mpfPlan === 'aia'
-          ? 'MPF 計算 — AIA：一般計劃 (5%)'
-          : 'MPF 計算 — 一般計劃 (5%)';
+      : mpfPlan === 'exempt_age65'
+        ? 'MPF 計算 — 過65歲, 不用供'
+        : mpfPlan === 'manulife'
+          ? 'MPF 計算 — 宏利：一般計劃 (5%)'
+          : mpfPlan === 'aia'
+            ? 'MPF 計算 — AIA：一般計劃 (5%)'
+            : 'MPF 計算 — 一般計劃 (5%)';
   const MPF_INDUSTRY_TIERS = [
     { min: 0, max: 280, employee: 0 },
     { min: 280, max: 350, employee: 15 },

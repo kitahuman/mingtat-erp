@@ -341,6 +341,7 @@ export class PayrollPdfService {
 
   private getMpfPlanShortLabel(plan?: string | null): string {
     if (plan === 'industry') return '行業';
+    if (plan === 'exempt_age65') return '過65歲, 不用供';
     if (plan === 'manulife') return '宏利';
     if (plan === 'aia') return 'AIA';
     return '一般';

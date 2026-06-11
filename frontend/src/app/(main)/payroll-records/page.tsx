@@ -114,6 +114,7 @@ const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] 
 
 const mpfPlanLabel = (plan?: string | null) => {
   if (plan === 'industry') return '東亞（行業計劃）';
+  if (plan === 'exempt_age65') return '過65歲, 不用供';
   if (plan === 'manulife') return '宏利';
   if (plan === 'aia') return 'AIA';
   return plan || '未設定';

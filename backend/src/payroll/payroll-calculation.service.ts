@@ -363,6 +363,7 @@ export class PayrollCalculationService {
     let mpfEmployer = 0;
     const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
     const isMpfAgeExempt = isAgeAtLeastOn(emp?.date_of_birth, dateTo, 65);
+    const isMpfExempt = isMpfAgeExempt || mpfPlan === 'exempt_age65';
 
     const MPF_INDUSTRY_TIERS = [
       { min: 0, max: 280, employer: 10, employee: 0 },
@@ -379,14 +380,17 @@ export class PayrollCalculationService {
     const defaultMpfBase = grossIncome + (Number(adjustmentTotalForMpf) || 0);
     let resolvedMpfRelevantIncome = defaultMpfBase;
 
-    if (isMpfAgeExempt) {
+    if (isMpfExempt) {
       items.push({
         item_type: 'mpf_deduction',
-        item_name: '強積金（65歲或以上免供）',
+        item_name: '強積金（過65歲, 不用供）',
         unit_price: 0,
         quantity: 0,
         amount: 0,
-        remarks: '計糧期完結日已滿65歲，僱員扣款及僱主供款均為$0',
+        remarks:
+          mpfPlan === 'exempt_age65'
+            ? '強積金計劃設定為過65歲免供，僱員扣款及僱主供款均為$0'
+            : '計糧期完結日已滿65歲，僱員扣款及僱主供款均為$0',
         payroll_item_excluded: true,
         sort_order: sortOrder++,
       });
@@ -430,7 +434,9 @@ export class PayrollCalculationService {
           ? 'Manulife'
           : mpfPlan === 'aia'
             ? 'AIA'
-            : '一般計劃';
+            : mpfPlan === 'exempt_age65'
+              ? '過65歲, 不用供'
+              : '一般計劃';
       items.push({
         item_type: 'mpf_deduction',
         item_name: `強積金（${planLabel}）`,

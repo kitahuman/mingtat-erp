@@ -19,6 +19,7 @@ const mpfOptions = [
   { value: 'manulife', label: '宏利 Manulife' },
   { value: 'bea_mpf', label: '東亞銀行MPF' },
   { value: 'industry', label: '東亞（行業計劃）' },
+  { value: 'exempt_age65', label: '過65歲, 不用供' },
   { value: 'other', label: '其他' },
 ];
 

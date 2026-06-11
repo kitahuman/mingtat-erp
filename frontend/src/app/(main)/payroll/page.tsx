@@ -817,6 +817,7 @@ export default function PayrollPage() {
 
   const mpfLabel = (plan: string) => {
     if (plan === 'industry') return '東亞（行業計劃）';
+    if (plan === 'exempt_age65') return '過65歲, 不用供';
     if (plan === 'manulife') return 'Manulife';
     if (plan === 'aia') return 'AIA';
     return plan || '未設定';

@@ -559,6 +559,7 @@ export default function EmployeesPage() {
   const renderMpfPlan = (v?: string | null) => {
     const plan = String(v || '').toLowerCase();
     if (plan === 'industry') return '行業計劃';
+    if (plan === 'exempt_age65') return '過65歲, 不用供';
     if (plan === 'manulife') return '宏利';
     if (plan === 'aia') return 'AIA';
     return '一般計劃';

@@ -433,6 +433,7 @@ const SALARY_TYPE_LABELS: Record<string, string> = {
 const MPF_PLAN_LABELS: Record<string, string> = {
   industry: "行業計劃",
   master_trust: "集成信託計劃",
+  exempt_age65: "過65歲, 不用供",
   none: "不適用",
 };
 
@@ -2206,6 +2207,7 @@ function getPayrollItemTypeLabel(type: string | null | undefined): string {
 
 function getMpfPlanShortLabel(plan: string | null | undefined): string {
   if (plan === "industry") return "行業";
+  if (plan === "exempt_age65") return "過65歲, 不用供";
   if (plan === "manulife") return "宏利";
   if (plan === "aia") return "AIA";
   return "一般";
