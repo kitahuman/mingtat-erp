@@ -281,7 +281,7 @@ type PayrollSnapshot = {
     registered_address?: string | null;
     office_address?: string | null;
   } | null;
-  company?: { name?: string | null; company_name?: string | null } | null;
+  company?: { name?: string | null; company_name?: string | null; name_en?: string | null; invoice_address?: string | null } | null;
   employee_name?: string | null;
   period?: string | null;
   date_from?: string | null;
@@ -2423,6 +2423,8 @@ function formatEmployeeJoinDate(value: string | null | undefined): string {
 }
 
 function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedInPrint, onShowGroupedChange, onPrint }: { rows: WorkLogRecord[]; groups: GroupedSettlementRecord[]; calculation: CalculationDetails; snapshot: PayrollSnapshot | null; printRef: React.RefObject<HTMLDivElement | null>; showGroupedInPrint: boolean; onShowGroupedChange: (value: boolean) => void; onPrint: () => void }) {
+  const [showEmployeeSignature, setShowEmployeeSignature] = useState(false);
+  const [showCompanyStamp, setShowCompanyStamp] = useState(true);
   const emp = snapshot?.employee;
   const cp = snapshot?.company_profile;
   const items = calculation.items || snapshot?.items || [];
@@ -2438,22 +2440,47 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
   };
   const dateFrom = snapshot?.date_from;
   const dateTo = snapshot?.date_to;
-  const periodStart = dateFrom ? new Date(dateFrom).getDate() : 1;
-  const lastDay = dateTo ? new Date(dateTo).getDate() : 31;
+  const formatFullDate = (date: string | Date | undefined) => {
+    if (!date) return "";
+    const d = new Date(date);
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  };
+  const periodStartDate = formatFullDate(dateFrom);
+  const periodEndDate = formatFullDate(dateTo);
   void rows;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGroupedInPrint}
-            onChange={(e) => onShowGroupedChange(e.target.checked)}
-            className="rounded"
-          />
-          顯示歸組結算明細
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showGroupedInPrint}
+              onChange={(e) => onShowGroupedChange(e.target.checked)}
+              className="rounded"
+            />
+            顯示歸組結算明細
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showEmployeeSignature}
+              onChange={(e) => setShowEmployeeSignature(e.target.checked)}
+              className="rounded"
+            />
+            員工簽署
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showCompanyStamp}
+              onChange={(e) => setShowCompanyStamp(e.target.checked)}
+              className="rounded"
+            />
+            公司印
+          </label>
+        </div>
         <button onClick={onPrint} className="btn-primary text-sm">列印糧單</button>
       </div>
       <div ref={printRef} className="border rounded-lg p-6 bg-white">
@@ -2461,13 +2488,13 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
           {/* Company Header */}
           <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
             <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
-              {cp?.chinese_name || snapshot?.company?.name || snapshot?.company?.company_name || '明達建築有限公司'}
+              {cp?.chinese_name || snapshot?.company?.name || '公司名稱'}
             </h1>
             <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
-              {cp?.english_name || 'DICKY CONSTRUCTION COMPANY LIMITED'}
+              {cp?.english_name || snapshot?.company?.name_en || ''}
             </h2>
             <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
-              {cp?.registered_address || cp?.office_address || 'P. O. BOX 120, TUNG CHUNG POST OFFICE, TUNG CHUNG, LANTAU ISLAND, NT'}
+              {snapshot?.company?.invoice_address || cp?.office_address || ''}
             </p>
           </div>
 
@@ -2494,7 +2521,7 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
           {/* Period */}
           <div style={{ margin: '15px 0', fontSize: '14px' }}>
             <strong>本月工作日期：</strong>
-            <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStart}-{lastDay}日</span>
+            <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStartDate}-{periodEndDate}</span>
           </div>
 
           {/* Grouped Settlement in print */}
@@ -2591,16 +2618,22 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
           </div>
 
           {/* Signature */}
-          <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', fontSize: '12px' }}>
-            <div>
-              <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
-              <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+          {(showEmployeeSignature || showCompanyStamp) && (
+            <div style={{ marginTop: '30px', display: 'grid', gridTemplateColumns: showEmployeeSignature && showCompanyStamp ? '1fr 1fr' : '1fr', gap: '40px', fontSize: '12px' }}>
+              {showEmployeeSignature && (
+                <div>
+                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
+                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+                </div>
+              )}
+              {showCompanyStamp && (
+                <div>
+                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
+                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
+                </div>
+              )}
             </div>
-            <div>
-              <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>公司簽署</div>
-              <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
