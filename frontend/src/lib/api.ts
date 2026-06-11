@@ -644,6 +644,8 @@ export const salaryConfigApi = {
 export const payrollApi = {
   list: (params?: any) => api.get('/payroll', { params }),
   get: (id: number) => api.get(`/payroll/${id}`),
+  exportPdf: (id: number, params?: any) =>
+    api.get(`/payroll/${id}/pdf`, { params, responseType: 'blob' }),
   // 預覽計糧（不儲存）
   preview: (data: {
     employee_id: number;

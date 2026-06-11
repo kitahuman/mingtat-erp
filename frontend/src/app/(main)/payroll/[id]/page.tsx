@@ -868,8 +868,6 @@ export default function PayrollDetailPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [paymentDate, setPaymentDate] = useState('');
   const [chequeNumber, setChequeNumber] = useState('');
-  const printRef = useRef<HTMLDivElement>(null);
-
   // Tab state
   const [activeTab, setActiveTab] = useState<TabKey>('detail');
 
@@ -1257,19 +1255,6 @@ export default function PayrollDetailPage() {
     setSelectedExpenseIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  };
-
-  const handlePrint = () => {
-    if (!printRef.current) return;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>糧單</title>
-      <style>body{font-family:'Microsoft JhengHei','PingFang TC',sans-serif;padding:20px}
-      @media print{body{padding:0}}</style></head><body>`);
-    w.document.write(printRef.current.innerHTML);
-    w.document.write('</body></html>');
-    w.document.close();
-    setTimeout(() => { w.print(); }, 500);
   };
 
   if (loading) return <div className="p-8 text-center text-gray-400">載入中...</div>;

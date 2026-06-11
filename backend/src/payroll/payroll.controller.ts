@@ -1,10 +1,12 @@
 import {
   Controller, Get, Post, Put, Delete,
   Param, Query, Body,
-  UseGuards, Request,
+  UseGuards, Request, Res, StreamableFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { PayrollService } from './payroll.service';
+import { PayrollPdfService } from './payroll-pdf.service';
 import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
 import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
@@ -12,7 +14,16 @@ import { AttachPayrollExpensesDto } from './dto/payroll-expense.dto';
 @Controller('payroll')
 @UseGuards(AuthGuard('jwt'))
 export class PayrollController {
-  constructor(private readonly payrollService: PayrollService) {}
+  constructor(
+    private readonly payrollService: PayrollService,
+    private readonly payrollPdfService: PayrollPdfService,
+  ) {}
+
+  private parseBool(value: string | undefined) {
+    return value === undefined
+      ? undefined
+      : !['false', '0', 'no'].includes(String(value).toLowerCase());
+  }
 
   @Get()
   findAll(@Query() query: any) {
@@ -22,6 +33,33 @@ export class PayrollController {
   @Get('summary')
   getSummary(@Query() query: any) {
     return this.payrollService.getSummary(query);
+  }
+
+  @Get(':id/pdf')
+  async exportPdf(
+    @Param('id') id: string,
+    @Query('show_grouped_settlement') showGroupedSettlement: string,
+    @Query('show_employee_signature') showEmployeeSignature: string,
+    @Query('show_company_stamp') showCompanyStamp: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.payrollPdfService.generatePayrollPdf(Number(id), {
+      showGroupedSettlement: this.parseBool(showGroupedSettlement),
+      showEmployeeSignature: this.parseBool(showEmployeeSignature),
+      showCompanyStamp: this.parseBool(showCompanyStamp),
+    });
+
+    const employeeName = result.payroll.employee?.name_zh || result.payroll.employee?.name || result.payroll.employee_name || 'payroll';
+    const period = result.payroll.period || `${String(result.payroll.date_from || '').slice(0, 10)}_${String(result.payroll.date_to || '').slice(0, 10)}`;
+    const rawFilename = `payroll_${employeeName}_${period}.pdf`;
+    const encodedFilename = encodeURIComponent(rawFilename);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
+      'Content-Length': result.pdf.length,
+    });
+    return new StreamableFile(result.pdf);
   }
 
   @Get(':id')

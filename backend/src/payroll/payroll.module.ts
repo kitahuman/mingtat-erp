@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PayrollService } from './payroll.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
+import { PayrollPdfService } from './payroll-pdf.service';
 import { PayrollController } from './payroll.controller';
 import { ExpensesModule } from '../expenses/expenses.module';
 import { ExpenseCategoriesModule } from '../expense-categories/expense-categories.module';
@@ -22,7 +23,7 @@ import { PettyCashModule } from '../petty-cash/petty-cash.module';
     FleetRateCardsModule,
     PettyCashModule,
   ],
-  providers: [PayrollService, PayrollCalculationService],
+  providers: [PayrollService, PayrollCalculationService, PayrollPdfService],
   controllers: [PayrollController],
   exports: [PayrollService, PayrollCalculationService],
 })

@@ -1164,7 +1164,7 @@ function PayrollTabs({
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} />}
-      {activeTab === "print" && <PrintTab rows={rows} groups={groups} calculation={calculation} snapshot={snapshot} printRef={printRef} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} onPrint={printPayroll} />}
+      {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
     </div>
@@ -2422,187 +2422,86 @@ function formatEmployeeJoinDate(value: string | null | undefined): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedInPrint, onShowGroupedChange, onPrint }: { rows: WorkLogRecord[]; groups: GroupedSettlementRecord[]; calculation: CalculationDetails; snapshot: PayrollSnapshot | null; printRef: React.RefObject<HTMLDivElement | null>; showGroupedInPrint: boolean; onShowGroupedChange: (value: boolean) => void; onPrint: () => void }) {
+function PrintTab({
+  payrollId,
+  showGroupedInPrint,
+  onShowGroupedChange,
+}: {
+  payrollId?: number;
+  showGroupedInPrint: boolean;
+  onShowGroupedChange: (value: boolean) => void;
+}) {
   const [showEmployeeSignature, setShowEmployeeSignature] = useState(false);
   const [showCompanyStamp, setShowCompanyStamp] = useState(true);
-  const emp = snapshot?.employee;
-  const cp = snapshot?.company_profile;
-  const items = calculation.items || snapshot?.items || [];
-  const adjustments = calculation.adjustments || snapshot?.adjustments || [];
-  const payrollExpenses = snapshot?.payroll_expenses || [];
-  const summary = calculation.payroll_summary || {};
-  const pettyCashDeducted = toNumber(summary.petty_cash_deducted ?? snapshot?.petty_cash_deducted);
-  const payroll = {
-    gross_amount: summary.gross_amount ?? snapshot?.gross_amount ?? 0,
-    deduction_total: summary.deduction_total ?? snapshot?.deduction_total ?? 0,
-    adjustment_total: summary.adjustment_total ?? snapshot?.adjustment_total ?? 0,
-    net_amount: summary.net_amount ?? snapshot?.net_amount ?? 0,
-    reimbursement_total: summary.reimbursement_total ?? snapshot?.reimbursement_total ?? 0,
-    petty_cash_deducted: pettyCashDeducted,
-    total_payable: summary.total_payable ?? (toNumber(summary.net_amount ?? snapshot?.net_amount) + toNumber(summary.reimbursement_total ?? snapshot?.reimbursement_total) - pettyCashDeducted),
-    mpf_plan: calculation.mpf_plan ?? snapshot?.mpf_plan ?? null,
-  };
-  const dateFrom = snapshot?.date_from;
-  const dateTo = snapshot?.date_to;
-  const formatFullDate = (date: string | Date | undefined) => {
-    if (!date) return "";
-    const d = new Date(date);
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-  };
-  const periodStartDate = formatFullDate(dateFrom);
-  const periodEndDate = formatFullDate(dateTo);
-  const resolveMediaSrc = (path?: string | null) => {
-    if (!path) return "";
-    if (/^https?:\/\//.test(path)) return path;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
-    const origin = apiBase.replace(/\/api\/?$/, "");
-    return `${origin}${path}`;
-  };
-  const companyStampSrc = resolveMediaSrc(snapshot?.company?.company_stamp_url || snapshot?.company?.company_logo_url);
-  const printColumns = 5;
-  const salaryGroups: Array<{ type: string; title: string }> = [
-    { type: "base_salary", title: "底薪項目" },
-    { type: "allowance", title: "津貼項目" },
-    { type: "ot", title: "OT 項目" },
-  ];
-  const mpfItems = items.filter((item) => item.item_type === "mpf_deduction");
-  const hasAdjustments = adjustments.length > 0 || toNumber(payroll.adjustment_total) !== 0;
-  const hasReimbursements = payrollExpenses.length > 0 || toNumber(payroll.reimbursement_total) > 0;
-  const hasPettyCash = pettyCashDeducted > 0;
-  const mpfDeductionTotal = Math.abs(toNumber(payroll.deduction_total));
-  const mpfLabel = `強積金（${getMpfPlanShortLabel(payroll.mpf_plan)}）(-)`;
-  void rows;
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const thStyle: React.CSSProperties = { padding: '6px 12px', border: '1px solid #000', borderBottom: '2px solid #000', textAlign: 'left', fontSize: '13px' };
-  const tdStyle: React.CSSProperties = { padding: '6px 12px', border: '1px solid #000', fontSize: '13px' };
-  const monoStyle: React.CSSProperties = { ...tdStyle, textAlign: 'right', fontFamily: 'monospace' };
+  useEffect(() => {
+    if (!payrollId) {
+      setPdfUrl(null);
+      setPdfError("找不到糧單編號，無法產生 PDF 預覽。");
+      return;
+    }
 
-  const renderPrintSectionHeader = (title: string, key: string) => (
-    <tr key={key}>
-      <td colSpan={printColumns} style={{ ...tdStyle, background: '#f3f4f6', fontWeight: 'bold' }}>{title}</td>
-    </tr>
-  );
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setPdfLoading(true);
+    setPdfError(null);
 
-  const renderPrintSeparator = (key: string) => (
-    <tr key={key}>
-      <td colSpan={printColumns} style={{ padding: 0, borderTop: '2px solid #000' }} />
-    </tr>
-  );
+    payrollApi.exportPdf(payrollId, {
+      show_grouped_settlement: showGroupedInPrint,
+      show_employee_signature: showEmployeeSignature,
+      show_company_stamp: showCompanyStamp,
+      preview: true,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          return objectUrl;
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPdfError(getApiMessage(err, "產生 PDF 預覽失敗"));
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          return null;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setPdfLoading(false);
+      });
 
-  const renderPrintSpacer = (key: string) => (
-    <tr key={key}>
-      <td colSpan={printColumns} style={{ height: '8px', border: 0, padding: 0 }} />
-    </tr>
-  );
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [payrollId, showCompanyStamp, showEmployeeSignature, showGroupedInPrint]);
 
-  const renderPrintSubtotal = (label: string, amount: number | string | null | undefined, key: string, background = '#f8fafc') => (
-    <tr key={key} style={{ background }}>
-      <td colSpan={3} style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold' }}>{label}</td>
-      <td style={{ ...monoStyle, fontWeight: 'bold' }}>{formatMoney(amount)}</td>
-      <td style={tdStyle}></td>
-    </tr>
-  );
-
-  const renderPrintItemRow = (item: PayrollItem, key: string | number | undefined, prefix = "") => {
-    const amount = toNumber(item.amount);
-    return (
-      <tr key={String(key)}>
-        <td style={tdStyle}>{prefix}{item.item_name || "—"}</td>
-        <td style={monoStyle}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : formatMoney(item.unit_price)}</td>
-        <td style={monoStyle}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '—' : formatPlainNumber(toNumber(item.quantity))}</td>
-        <td style={{ ...monoStyle, fontWeight: 'bold' }}>{amount < 0 ? '-' : ''}{formatMoney(Math.abs(amount))}</td>
-        <td style={tdStyle}>{item.remarks || '—'}</td>
-      </tr>
-    );
-  };
-
-  const printItemRows: ReactNode[] = [];
-  salaryGroups.forEach((group) => {
-    const groupItems = items.filter((item) => item.item_type === group.type);
-    if (groupItems.length === 0) return;
-    printItemRows.push(renderPrintSectionHeader(group.title, `print-header-${group.type}`));
-    groupItems.forEach((item, index) => printItemRows.push(renderPrintItemRow(item, item.id || `${group.type}-${index}`)));
-  });
-  printItemRows.push(renderPrintSeparator('print-sep-gross'));
-  printItemRows.push(renderPrintSubtotal('應收總額', payroll.gross_amount, 'print-subtotal-gross', '#eef2ff'));
-
-  if (hasAdjustments) {
-    printItemRows.push(renderPrintSpacer('print-space-adjustments'));
-    printItemRows.push(renderPrintSectionHeader('自定義津貼/扣款 (+)', 'print-header-adjustments'));
-    adjustments.forEach((adj, index) => {
-      const amount = toNumber(adj.amount);
-      const dateLabel = formatAdjustmentDateForTable(adj.adjustment_date);
-      printItemRows.push(
-        <tr key={`print-adjustment-${adj.id || index}`}>
-          <td style={tdStyle}>{adj.item_name || '自定義津貼/扣款'}{dateLabel ? ` (${dateLabel})` : ''}</td>
-          <td style={monoStyle}>—</td>
-          <td style={monoStyle}>—</td>
-          <td style={{ ...monoStyle, fontWeight: 'bold' }}>{amount < 0 ? '-' : '+'}{formatMoney(Math.abs(amount))}</td>
-          <td style={tdStyle}>{adj.remarks || '—'}</td>
-        </tr>
-      );
-    });
-    if (adjustments.length === 0) printItemRows.push(renderPrintSubtotal('自定義津貼/扣款合計', payroll.adjustment_total, 'print-subtotal-adjustments', '#f0fdf4'));
+  function handlePrintPdf() {
+    const iframeWindow = iframeRef.current?.contentWindow;
+    if (iframeWindow) {
+      iframeWindow.focus();
+      iframeWindow.print();
+      return;
+    }
+    if (pdfUrl) window.open(pdfUrl, "_blank", "noopener,noreferrer");
   }
 
-  printItemRows.push(renderPrintSpacer('print-space-mpf'));
-  printItemRows.push(renderPrintSectionHeader(mpfLabel, 'print-header-mpf'));
-  if (mpfItems.length > 0) {
-    mpfItems.forEach((item, index) => printItemRows.push(renderPrintItemRow(item, item.id || `mpf-${index}`)));
-  } else {
-    printItemRows.push(
-      <tr key="print-mpf-summary">
-        <td style={tdStyle}>{mpfLabel}</td>
-        <td style={monoStyle}>—</td>
-        <td style={monoStyle}>—</td>
-        <td style={{ ...monoStyle, fontWeight: 'bold' }}>-{formatMoney(mpfDeductionTotal)}</td>
-        <td style={tdStyle}>—</td>
-      </tr>
-    );
+  function handleOpenPdf() {
+    if (pdfUrl) window.open(pdfUrl, "_blank", "noopener,noreferrer");
   }
-  printItemRows.push(renderPrintSeparator('print-sep-net'));
-  printItemRows.push(renderPrintSubtotal('淨薪金', payroll.net_amount, 'print-subtotal-net', '#eff6ff'));
-
-  if (hasReimbursements) {
-    printItemRows.push(renderPrintSpacer('print-space-reimbursements'));
-    printItemRows.push(renderPrintSectionHeader('員工報銷 (+)', 'print-header-reimbursements'));
-    payrollExpenses.forEach((record, index) => {
-      const expense = record.expense;
-      printItemRows.push(
-        <tr key={`print-reimbursement-${record.id || expense?.id || index}`}>
-          <td style={tdStyle}>{expense?.date ? fmtDate(expense.date) : '—'} - {getExpenseCategoryName(record)}</td>
-          <td style={tdStyle}>{expense?.description || expense?.item || '—'}</td>
-          <td style={monoStyle}>—</td>
-          <td style={{ ...monoStyle, fontWeight: 'bold' }}>+{formatMoney(expense?.total_amount)}</td>
-          <td style={tdStyle}>報銷</td>
-        </tr>
-      );
-    });
-    if (payrollExpenses.length === 0) printItemRows.push(renderPrintSubtotal('員工報銷合計', payroll.reimbursement_total, 'print-subtotal-reimbursement', '#eff6ff'));
-  }
-
-  if (hasPettyCash) {
-    printItemRows.push(renderPrintSpacer('print-space-petty-cash'));
-    printItemRows.push(renderPrintSectionHeader('零用金抵扣 (-)', 'print-header-petty-cash'));
-    printItemRows.push(
-      <tr key="print-petty-cash">
-        <td style={tdStyle}>零用金抵扣</td>
-        <td style={monoStyle}>—</td>
-        <td style={monoStyle}>—</td>
-        <td style={{ ...monoStyle, fontWeight: 'bold' }}>-{formatMoney(pettyCashDeducted)}</td>
-        <td style={tdStyle}>抵扣員工報銷</td>
-      </tr>
-    );
-  }
-
-  printItemRows.push(renderPrintSeparator('print-sep-payable'));
-  printItemRows.push(renderPrintSubtotal('應付總額', payroll.total_payable, 'print-subtotal-payable', '#f0fdf4'));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
             <input
               type="checkbox"
               checked={showGroupedInPrint}
@@ -2611,7 +2510,7 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
             />
             顯示歸組結算明細
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
             <input
               type="checkbox"
               checked={showEmployeeSignature}
@@ -2620,7 +2519,7 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
             />
             員工簽署
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
             <input
               type="checkbox"
               checked={showCompanyStamp}
@@ -2630,108 +2529,34 @@ function PrintTab({ rows, groups, calculation, snapshot, printRef, showGroupedIn
             公司印
           </label>
         </div>
-        <button onClick={onPrint} className="btn-primary text-sm">列印糧單</button>
-      </div>
-      <div ref={printRef} className="border rounded-lg p-6 bg-white">
-        <div className="payslip">
-          {/* Company Header */}
-          <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '10px' }}>
-            <h1 style={{ fontSize: '24px', margin: '0 0 5px', fontWeight: 'bold' }}>
-              {cp?.chinese_name || snapshot?.company?.name || '公司名稱'}
-            </h1>
-            <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px', letterSpacing: '1px' }}>
-              {cp?.english_name || snapshot?.company?.name_en || ''}
-            </h2>
-            <p style={{ fontSize: '11px', fontWeight: 'bold', margin: 0, letterSpacing: '0.5px' }}>
-              {snapshot?.company?.invoice_address || cp?.office_address || ''}
-            </p>
-          </div>
-
-          {/* Employee Info */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-            <tbody>
-              {[
-                ['員工姓名(中)：', emp?.name_zh || emp?.name || snapshot?.employee_name],
-                ['員工姓名(英)：', emp?.name_en || emp?.employee_name],
-                ['身份證號碼：', emp?.id_number],
-                ['地址：', emp?.address],
-                ['緊急聯絡人：', emp?.emergency_contact],
-                ['出糧戶口：', emp?.bank_account],
-                ['受僱日期：', formatEmployeeJoinDate(emp?.join_date)],
-              ].map(([label, value], i) => (
-                <tr key={i}>
-                  <td style={{ padding: '6px 12px', border: '1px solid #000', width: '120px', textAlign: 'right', fontSize: '13px' }}>{label}</td>
-                  <td style={{ padding: '6px 12px', border: '1px solid #000', fontSize: '13px' }}>{value || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Period */}
-          <div style={{ margin: '15px 0', fontSize: '14px' }}>
-            <strong>本月工作日期：</strong>
-            <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{periodStartDate}-{periodEndDate}</span>
-          </div>
-
-          {/* Grouped Settlement in print */}
-          {showGroupedInPrint && <PrintGroupedSettlement groups={groups} />}
-
-          {/* Calculation Table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', margin: '15px 0', border: '2px solid #000' }}>
-            <thead>
-              <tr>
-                <th style={{ ...thStyle, width: '220px' }}>項目名稱</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>單價($)</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>天數/數量</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>金額($)</th>
-                <th style={{ ...thStyle, width: '160px' }}>備註</th>
-              </tr>
-            </thead>
-            <tbody>{printItemRows.map((row, index) => <Fragment key={index}>{row}</Fragment>)}</tbody>
-          </table>
-
-          {/* Summary */}
-          <div style={{ margin: '15px 0', fontSize: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              <div>
-                <div style={{ marginBottom: '5px' }}><strong>應收總額：</strong> ${Number(payroll.gross_amount).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>自定義津貼/扣款合計 (+)：</strong> ${Number(payroll.adjustment_total).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>強積金（員工）5%合計 (-)：</strong> ${Math.abs(Number(payroll.deduction_total)).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>淨薪金：</strong> ${Number(payroll.net_amount).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>員工報銷 (+)：</strong> ${Number(payroll.reimbursement_total || 0).toLocaleString()}</div>
-                <div style={{ marginBottom: '5px' }}><strong>零用金抵扣 (-)：</strong> ${Math.abs(Number(payroll.petty_cash_deducted || 0)).toLocaleString()}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', padding: '10px', border: '2px solid #000', textAlign: 'center' }}>
-                  應付總額：${Number(payroll.total_payable).toLocaleString()}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Signature */}
-          {(showEmployeeSignature || showCompanyStamp) && (
-            <div style={{ marginTop: '30px', display: 'flex', justifyContent: showEmployeeSignature ? 'space-between' : 'flex-end', alignItems: 'flex-end', gap: '40px', fontSize: '12px' }}>
-              {showEmployeeSignature && (
-                <div style={{ width: '240px' }}>
-                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px', textAlign: 'center' }}>員工簽署</div>
-                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666' }}>日期：_________</div>
-                </div>
-              )}
-              {showCompanyStamp && (
-                <div style={{ width: '240px', marginLeft: 'auto', textAlign: 'center' }}>
-                  {companyStampSrc ? (
-                    <img src={companyStampSrc} alt="公司印" style={{ maxWidth: '160px', maxHeight: '90px', objectFit: 'contain', margin: '0 auto 8px' }} />
-                  ) : (
-                    <div style={{ height: '90px', marginBottom: '8px' }} />
-                  )}
-                  <div style={{ borderTop: '1px solid #000', paddingTop: '5px' }}>公司簽署</div>
-                  <div style={{ marginTop: '20px', fontSize: '10px', color: '#666', textAlign: 'left' }}>日期：_________</div>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={handleOpenPdf} disabled={!pdfUrl || pdfLoading} className="btn-secondary text-sm disabled:opacity-50">開啟 PDF</button>
+          <button type="button" onClick={handlePrintPdf} disabled={!pdfUrl || pdfLoading} className="btn-primary text-sm disabled:opacity-50">列印糧單</button>
         </div>
+      </div>
+
+      <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+        {pdfLoading && (
+          <div className="absolute inset-x-0 top-0 z-10 bg-blue-50 px-4 py-2 text-sm text-blue-700 shadow-sm">
+            正在更新 PDF 預覽...
+          </div>
+        )}
+        {pdfError ? (
+          <div className="flex min-h-[520px] items-center justify-center p-8 text-center text-sm text-red-600">
+            {pdfError}
+          </div>
+        ) : pdfUrl ? (
+          <iframe
+            ref={iframeRef}
+            src={pdfUrl}
+            title="糧單 PDF 預覽"
+            className="h-[calc(100vh-260px)] min-h-[640px] w-full bg-white"
+          />
+        ) : (
+          <div className="flex min-h-[520px] items-center justify-center p-8 text-center text-sm text-gray-500">
+            準備 PDF 預覽中...
+          </div>
+        )}
       </div>
     </div>
   );
