@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 
 const FILTER_OPTION_ROW_HEIGHT = 32;
 const FILTER_LIST_MAX_HEIGHT = 288;
@@ -26,6 +27,8 @@ export default function ColumnFilter({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [scrollTop, setScrollTop] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -39,6 +42,10 @@ export default function ColumnFilter({
   useEffect(() => {
     onFetchOptionsRef.current = onFetchOptions;
   }, [onFetchOptions]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Get all unique values for this column from the raw data (client-side mode)
   const clientUniqueValues = useMemo(() => {
@@ -133,6 +140,51 @@ export default function ColumnFilter({
       })),
     };
   }, [filteredValues, scrollTop]);
+
+  const updateDropdownPosition = useCallback(() => {
+    if (!buttonRef.current || !isOpen) return;
+
+    const rect = buttonRef.current.getBoundingClientRect();
+    const viewportPadding = 8;
+    const dropdownWidth = 240;
+    const searchAndSelectAllHeight = 90;
+    const dropdownHeight = Math.min(
+      FILTER_LIST_MAX_HEIGHT + searchAndSelectAllHeight,
+      virtualList.viewportHeight + searchAndSelectAllHeight,
+    );
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+    const left = Math.min(
+      Math.max(rect.left, viewportPadding),
+      window.innerWidth - dropdownWidth - viewportPadding,
+    );
+
+    setDropdownStyle({
+      position: 'fixed',
+      left: `${left}px`,
+      width: `${dropdownWidth}px`,
+      zIndex: 99999,
+      ...(showAbove
+        ? { bottom: `${window.innerHeight - rect.top + 4}px`, top: 'auto' }
+        : { top: `${rect.bottom + 4}px`, bottom: 'auto' }),
+    });
+  }, [isOpen, virtualList.viewportHeight]);
+
+  useEffect(() => {
+    if (isOpen) updateDropdownPosition();
+  }, [isOpen, updateDropdownPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleScrollOrResize = () => updateDropdownPosition();
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [isOpen, updateDropdownPosition]);
 
   // Whether search is actively narrowing the list
   const isSearchActive = searchTerm !== '' && filteredValues.length < allUniqueValues.length;
@@ -237,8 +289,98 @@ export default function ColumnFilter({
     }
   };
 
+  const dropdown = isOpen && mounted ? createPortal(
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-gray-200 rounded-lg shadow-lg min-w-[200px] max-w-[280px]"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Search */}
+      <div className="p-2 border-b border-gray-100">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="搜尋..."
+          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-primary-400"
+          autoFocus
+        />
+      </div>
+
+      {/* Select All */}
+      <div className="border-b border-gray-100">
+        <label className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isSelectAllChecked}
+            onChange={handleToggleAll}
+            className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-xs font-medium text-gray-700">
+            {isSearchActive ? '選擇搜尋結果' : '選擇全部'}
+          </span>
+        </label>
+      </div>
+
+      {/* Values list */}
+      <div className="overflow-y-auto">
+        {loadingOptions ? (
+          <div className="px-3 py-4 text-xs text-gray-400 text-center">
+            <div className="flex justify-center mb-1">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+            </div>
+            載入中...
+          </div>
+        ) : loadError ? (
+          <button
+            type="button"
+            onClick={handleRetryLoad}
+            className="w-full px-3 py-4 text-xs text-red-500 text-center hover:bg-red-50"
+          >
+            載入失敗，點擊重試
+          </button>
+        ) : filteredValues.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-gray-400">無匹配項目</div>
+        ) : (
+          <div
+            ref={listRef}
+            className="overflow-y-auto"
+            style={{ height: `${virtualList.viewportHeight}px` }}
+            onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+          >
+            <div
+              className="relative"
+              style={{ height: `${virtualList.totalHeight}px` }}
+            >
+              {virtualList.items.map(({ value, index }) => (
+                <label
+                  key={value}
+                  className="absolute left-0 right-0 flex items-center px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
+                  style={{
+                    height: `${FILTER_OPTION_ROW_HEIGHT}px`,
+                    top: `${index * FILTER_OPTION_ROW_HEIGHT}px`,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isValueSelected(value)}
+                    onChange={() => handleToggleValue(value)}
+                    className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-600 truncate">{getDisplayValue(value) || '(空白)'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
-    <div className="relative inline-block">
+    <div className="inline-block">
       <button
         ref={buttonRef}
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); setSearchTerm(''); }}
@@ -249,94 +391,7 @@ export default function ColumnFilter({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
         </svg>
       </button>
-
-      {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-w-[280px]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Search */}
-          <div className="p-2 border-b border-gray-100">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜尋..."
-              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-primary-400"
-              autoFocus
-            />
-          </div>
-
-          {/* Select All */}
-          <div className="border-b border-gray-100">
-            <label className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isSelectAllChecked}
-                onChange={handleToggleAll}
-                className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-xs font-medium text-gray-700">
-                {isSearchActive ? '選擇搜尋結果' : '選擇全部'}
-              </span>
-            </label>
-          </div>
-
-          {/* Values list */}
-          <div className="overflow-y-auto">
-            {loadingOptions ? (
-              <div className="px-3 py-4 text-xs text-gray-400 text-center">
-                <div className="flex justify-center mb-1">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-                </div>
-                載入中...
-              </div>
-            ) : loadError ? (
-              <button
-                type="button"
-                onClick={handleRetryLoad}
-                className="w-full px-3 py-4 text-xs text-red-500 text-center hover:bg-red-50"
-              >
-                載入失敗，點擊重試
-              </button>
-            ) : filteredValues.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-400">無匹配項目</div>
-            ) : (
-              <div
-                ref={listRef}
-                className="overflow-y-auto"
-                style={{ height: `${virtualList.viewportHeight}px` }}
-                onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-              >
-                <div
-                  className="relative"
-                  style={{ height: `${virtualList.totalHeight}px` }}
-                >
-                  {virtualList.items.map(({ value, index }) => (
-                    <label
-                      key={value}
-                      className="absolute left-0 right-0 flex items-center px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
-                      style={{
-                        height: `${FILTER_OPTION_ROW_HEIGHT}px`,
-                        top: `${index * FILTER_OPTION_ROW_HEIGHT}px`,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isValueSelected(value)}
-                        onChange={() => handleToggleValue(value)}
-                        className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-xs text-gray-600 truncate">{getDisplayValue(value) || '(空白)'}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
