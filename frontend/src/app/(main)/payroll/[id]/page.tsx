@@ -926,7 +926,9 @@ export default function PayrollDetailPage() {
       // res.data is Record<category, FieldOption[]> (grouped object, same as work-logs page)
       const grouped: Record<string, { value: string; label: string }[]> = {};
       for (const [cat, opts] of Object.entries(res.data || {})) {
-        grouped[cat] = (opts as any[]).map((o: any) => ({ value: o.label, label: o.label }));
+        grouped[cat] = (opts as any[])
+          .filter((o: any) => o.is_active !== false)
+          .map((o: any) => ({ value: o.label, label: o.label }));
       }
       setFieldOptions(grouped);
     } catch { /* ignore */ }
@@ -1092,6 +1094,7 @@ export default function PayrollDetailPage() {
   const [newPaymentDate, setNewPaymentDate] = useState('');
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentRef, setNewPaymentRef] = useState('');
+  const [newPaymentMethod, setNewPaymentMethod] = useState('');
   const [newPaymentBank, setNewPaymentBank] = useState('');
   const [newPaymentRemarks, setNewPaymentRemarks] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
@@ -1104,6 +1107,7 @@ export default function PayrollDetailPage() {
         payroll_payment_date: newPaymentDate,
         payroll_payment_amount: Number(newPaymentAmount),
         payroll_payment_reference_no: newPaymentRef || undefined,
+        payroll_payment_method: newPaymentMethod || undefined,
         payroll_payment_bank_account: newPaymentBank || undefined,
         payroll_payment_remarks: newPaymentRemarks || undefined,
       });
@@ -1111,6 +1115,7 @@ export default function PayrollDetailPage() {
       setNewPaymentDate('');
       setNewPaymentAmount('');
       setNewPaymentRef('');
+      setNewPaymentMethod('');
       setNewPaymentBank('');
       setNewPaymentRemarks('');
       loadData();
@@ -1728,6 +1733,7 @@ export default function PayrollDetailPage() {
                   <th className="px-4 py-2 text-left font-medium text-gray-600">付款日期</th>
                   <th className="px-4 py-2 text-right font-medium text-gray-600">金額</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-600">參考號碼</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">付款方法</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-600">銀行賬戶</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-600">備註</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-600">付款記錄頁</th>
@@ -1742,6 +1748,7 @@ export default function PayrollDetailPage() {
                       ${Number(p.payroll_payment_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 py-2 font-mono text-gray-600">{p.payroll_payment_reference_no || '-'}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.payroll_payment_method || '-'}</td>
                     <td className="px-4 py-2 text-gray-600">{p.payroll_payment_bank_account || '-'}</td>
                     <td className="px-4 py-2 text-gray-500 text-xs">{p.payroll_payment_remarks || '-'}</td>
                     <td className="px-4 py-2">
@@ -1804,9 +1811,18 @@ export default function PayrollDetailPage() {
               <input value={newPaymentRef} onChange={e => setNewPaymentRef(e.target.value)} className="input-field" placeholder="例：SCB237081" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
-              <input value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field" placeholder="例：滙豐" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">付款方法</label>
+              <select value={newPaymentMethod} onChange={e => setNewPaymentMethod(e.target.value)} className="input-field">
+                <option value="">請選擇</option>
+                {(fieldOptions.payment_method || []).map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
+            <input value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field" placeholder="例：滙豐" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>

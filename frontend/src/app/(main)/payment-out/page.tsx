@@ -6,6 +6,7 @@ import {
   expensesApi,
   companiesApi,
   bankAccountsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, {
@@ -51,6 +52,7 @@ export default function PaymentOutPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
   // Create form
   const defaultForm = {
@@ -61,6 +63,7 @@ export default function PaymentOutPage() {
     payment_out_status: 'unpaid',
     bank_account_id: '',
     reference_no: '',
+    payment_method: '',
     remarks: '',
   };
   const [form, setForm] = useState(defaultForm);
@@ -100,6 +103,10 @@ export default function PaymentOutPage() {
       .simple()
       .then((r) => setBankAccounts(r.data || []))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
+      .catch(() => setPaymentMethods([]));
   }, []);
 
   useRefetchOnFocus(() => {
@@ -115,6 +122,10 @@ export default function PaymentOutPage() {
       .simple()
       .then((r) => setBankAccounts(r.data || []))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
+      .catch(() => setPaymentMethods([]));
   });
 
   const expenseOptions = useMemo(
@@ -314,6 +325,16 @@ export default function PaymentOutPage() {
         ) : (
           <span className="text-gray-400">-</span>
         ),
+    },
+    {
+      key: 'payment_method',
+      label: '付款方法',
+      editType: 'select',
+      editOptions: [
+        { value: '', label: '（未指定）' },
+        ...paymentMethods.map((method) => ({ value: method, label: method })),
+      ],
+      render: (v: any) => v || <span className="text-gray-400">-</span>,
     },
     {
       key: 'remarks',
@@ -534,6 +555,27 @@ export default function PaymentOutPage() {
                 className="input-field"
                 placeholder="選填"
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                付款方法
+              </label>
+              <select
+                value={form.payment_method}
+                onChange={(e) =>
+                  setForm({ ...form, payment_method: e.target.value })
+                }
+                className="input-field"
+              >
+                <option value="">未指定</option>
+                {paymentMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

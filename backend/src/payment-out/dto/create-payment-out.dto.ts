@@ -12,6 +12,7 @@ export class CreatePaymentOutDto {
   @IsOptional() @IsString() payment_out_status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
+  @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
 }
 
@@ -26,6 +27,7 @@ export class UpdatePaymentOutDto {
   @IsOptional() @IsString() payment_out_status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() bank_account_id?: number;
   @IsOptional() @IsString() reference_no?: string;
+  @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
 }
 

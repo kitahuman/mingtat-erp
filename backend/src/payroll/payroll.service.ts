@@ -3333,7 +3333,8 @@ export class PayrollService {
       payroll_payment_date: string;
       payroll_payment_amount: number;
       payroll_payment_reference_no?: string;
-      payroll_payment_bank_account?: number | null;
+      payroll_payment_method?: string;
+      payroll_payment_bank_account?: string | number | null;
       payroll_payment_remarks?: string;
       payroll_payment_payment_out_id?: number;
     },
@@ -3361,12 +3362,20 @@ export class PayrollService {
       const employeeName = payroll.employee?.name_zh || payroll.employee?.name_en || '';
       const periodLabel = formatPeriod(payroll.period);
       const baseRemarks = `${periodLabel} ${employeeName}的糧單`;
+      const rawBankAccount = body.payroll_payment_bank_account;
+      const bankAccountId =
+        typeof rawBankAccount === 'number'
+          ? rawBankAccount
+          : typeof rawBankAccount === 'string' && /^\d+$/.test(rawBankAccount.trim())
+            ? Number(rawBankAccount.trim())
+            : null;
       const paymentOut = await tx.paymentOut.create({
         data: {
           date: new Date(body.payroll_payment_date),
           amount: body.payroll_payment_amount,
-          bank_account_id: body.payroll_payment_bank_account || null,
+          bank_account_id: bankAccountId,
           reference_no: body.payroll_payment_reference_no || null,
+          payment_method: body.payroll_payment_method || null,
           payment_out_description: baseRemarks,
           payment_out_status: 'paid',
           remarks: body.payroll_payment_remarks || null,
@@ -3382,6 +3391,7 @@ export class PayrollService {
           payroll_payment_date: new Date(body.payroll_payment_date),
           payroll_payment_amount: body.payroll_payment_amount,
           payroll_payment_reference_no: body.payroll_payment_reference_no || null,
+          payroll_payment_method: body.payroll_payment_method || null,
           payroll_payment_bank_account: body.payroll_payment_bank_account ? String(body.payroll_payment_bank_account) : null,
           payroll_payment_remarks: body.payroll_payment_remarks || null,
           payroll_payment_payment_out_id: paymentOut.id,

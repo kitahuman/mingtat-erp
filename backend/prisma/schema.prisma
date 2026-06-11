@@ -1594,6 +1594,7 @@ model PayrollPayment {
   payroll_payment_date           DateTime @db.Date
   payroll_payment_amount         Decimal  @db.Decimal(14, 2)
   payroll_payment_reference_no   String?  @db.VarChar(100)
+  payroll_payment_method         String?  @db.VarChar(50)
   payroll_payment_bank_account   String?  @db.VarChar(100)
   payroll_payment_remarks        String?  @db.Text
   payroll_payment_payment_out_id Int?
@@ -2077,6 +2078,7 @@ model PaymentOut {
   payment_out_status      String   @default("unpaid") @db.VarChar(20) // unpaid | partially_paid | paid | cancelled
   bank_account_id         Int? // 關聯銀行帳戶
   reference_no            String?  @db.VarChar(100) // 支票號碼 / 交易號碼
+  payment_method          String?  @db.VarChar(50) // 付款方法 (現金, 轉帳, 支票, etc.)
   remarks                 String?  @db.Text
   created_at              DateTime @default(now())
   updated_at              DateTime @default(now()) @updatedAt

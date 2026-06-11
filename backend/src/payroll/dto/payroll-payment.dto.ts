@@ -16,9 +16,12 @@ export class CreatePayrollPaymentDto {
   payroll_payment_reference_no?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  payroll_payment_bank_account?: number;
+  @IsString()
+  payroll_payment_method?: string;
+
+  @IsOptional()
+  @IsString()
+  payroll_payment_bank_account?: string;
 
   @IsOptional()
   @IsString()
@@ -45,9 +48,12 @@ export class UpdatePayrollPaymentDto {
   payroll_payment_reference_no?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  payroll_payment_bank_account?: number;
+  @IsString()
+  payroll_payment_method?: string;
+
+  @IsOptional()
+  @IsString()
+  payroll_payment_bank_account?: string;
 
   @IsOptional()
   @IsString()

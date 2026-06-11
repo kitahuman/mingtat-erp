@@ -783,6 +783,7 @@ export const payrollApi = {
       payroll_payment_date: string;
       payroll_payment_amount: number;
       payroll_payment_reference_no?: string;
+      payroll_payment_method?: string;
       payroll_payment_bank_account?: string;
       payroll_payment_remarks?: string;
       payroll_payment_payment_out_id?: number;

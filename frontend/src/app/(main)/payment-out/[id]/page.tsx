@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { paymentOutApi, expensesApi, bankAccountsApi } from '@/lib/api';
+import { paymentOutApi, expensesApi, bankAccountsApi, fieldOptionsApi } from '@/lib/api';
 import AllocationsCard from './AllocationsCard';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
@@ -111,6 +111,7 @@ interface PaymentOutRecord {
   payment_out_status: string;
   bank_account_id: number | null;
   reference_no: string | null;
+  payment_method: string | null;
   remarks: string | null;
   created_at: string;
   updated_at: string;
@@ -131,6 +132,7 @@ interface PaymentOutForm {
   payment_out_status: string;
   bank_account_id: number | '';
   reference_no: string;
+  payment_method: string;
   remarks: string;
   payroll_id: number | null;
   company_id: number | null;
@@ -174,6 +176,7 @@ export default function PaymentOutDetailPage() {
     payment_out_status: 'unpaid',
     bank_account_id: '',
     reference_no: '',
+    payment_method: '',
     remarks: '',
     payroll_id: null,
     company_id: null,
@@ -182,6 +185,7 @@ export default function PaymentOutDetailPage() {
   // Reference data
   const [expenses, setExpenses] = useState<ExpenseMini[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
   const loadRecord = useCallback(() => {
     setLoading(true);
@@ -209,6 +213,10 @@ export default function PaymentOutDetailPage() {
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
+      .catch(() => setPaymentMethods([]));
   }, []);
 
   useRefetchOnFocus(() => {
@@ -220,6 +228,10 @@ export default function PaymentOutDetailPage() {
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
+      .catch(() => setPaymentMethods([]));
   });
 
   const expenseOptions: SelectOption[] = useMemo(
@@ -249,6 +261,7 @@ export default function PaymentOutDetailPage() {
       payment_out_status: r.payment_out_status || 'unpaid',
       bank_account_id: r.bank_account_id ?? '',
       reference_no: r.reference_no || '',
+      payment_method: r.payment_method || '',
       remarks: r.remarks || '',
       // read-only fields preserved
       payroll_id: r.payroll_id ?? null,
@@ -273,6 +286,7 @@ export default function PaymentOutDetailPage() {
           ? Number(form.bank_account_id)
           : null,
         reference_no: form.reference_no || null,
+        payment_method: form.payment_method || null,
         remarks: form.remarks || null,
         // preserve payroll_id and company_id on update
         payroll_id: form.payroll_id ?? null,
@@ -477,6 +491,27 @@ export default function PaymentOutDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款方法
+                </label>
+                <select
+                  value={form.payment_method}
+                  onChange={(e) =>
+                    setForm({ ...form, payment_method: e.target.value })
+                  }
+                  className="input-field"
+                >
+                  <option value="">未指定</option>
+                  {paymentMethods.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   關聯支出
                 </label>
                 <SearchableSelect
@@ -512,6 +547,7 @@ export default function PaymentOutDetailPage() {
             <Field label="項目描述">
               {record.payment_out_description || null}
             </Field>
+            <Field label="付款方法">{record.payment_method || null}</Field>
             <Field label="公司">
               {record.company ? (
                 <span className="text-gray-900">{record.company.name}</span>

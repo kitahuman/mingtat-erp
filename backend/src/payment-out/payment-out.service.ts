@@ -33,6 +33,7 @@ interface CreatePaymentOutInput {
   payment_out_status?: string;
   bank_account_id?: number;
   reference_no?: string;
+  payment_method?: string;
   remarks?: string;
 }
 
@@ -278,6 +279,7 @@ export class PaymentOutService {
         payment_out_status: dto.payment_out_status || 'unpaid',
         bank_account_id: dto.bank_account_id || null,
         reference_no: dto.reference_no || null,
+        payment_method: dto.payment_method || null,
         remarks: dto.remarks || null,
       },
       include: this.listInclude,
@@ -328,6 +330,7 @@ export class PaymentOutService {
         : { disconnect: true };
     }
     if (dto.reference_no !== undefined) data.reference_no = dto.reference_no;
+    if (dto.payment_method !== undefined) data.payment_method = dto.payment_method;
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
 
     const updated = await this.prisma.paymentOut.update({
