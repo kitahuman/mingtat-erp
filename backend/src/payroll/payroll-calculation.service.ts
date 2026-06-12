@@ -593,9 +593,8 @@ export class PayrollCalculationService {
   /**
    * 建立逐日顯示用固定津貼。
    *
-   * 注意：此資料只供前端逐日 badge 顯示，不參與 payroll_items、
-   * daily_allowance_total 或 day_total 的金額計算，避免把已計入糧單
-   * item 的固定津貼再反向分攤或重複加總。
+   * 注意：此資料只供前端逐日 badge 顯示，不參與 payroll_items，
+   * 避免把已計入糧單 item 的固定津貼再反向分攤成獨立項目。
    */
   private buildDailyFixedAllowanceDisplay(
     dayWorkLogs: any[],
@@ -803,7 +802,11 @@ export class PayrollCalculationService {
       )
         ? Number(salarySetting?.ot_mid_shift) || 0
         : 0;
-      const dayTotal = effectiveIncome + dailyAllowanceTotal;
+      const fixedAllowanceTotal = fixedAllowancesPerDay.reduce(
+        (sum, item) => sum + item.amount,
+        0,
+      );
+      const dayTotal = effectiveIncome + dailyAllowanceTotal + fixedAllowanceTotal;
       return {
         date,
         is_holiday: isHolidayDay,
