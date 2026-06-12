@@ -993,6 +993,18 @@ export class PayrollService {
       }));
     }
 
+     // Reset and generate auto daily allowances before payroll item calculation.
+    await this.prisma.payrollDailyAllowance.deleteMany({
+      where: { payroll_id: id, is_auto: true },
+    });
+    await this.generateAllAutoDailyAllowances(
+      id,
+      salarySetting,
+      pwls as any,
+      dateFrom,
+      dateTo,
+    );
+
      // Query excluded badge keys for this payroll
     const excludedRecordsFinalize = await this.prisma.payrollDailyAllowance.findMany({
       where: {
@@ -1004,6 +1016,7 @@ export class PayrollService {
     const excludedBadgeKeysFinalize = new Set<string>(
       excludedRecordsFinalize.map(r => r.allowance_key.replace('excluded_', '')),
     );
+    const calculationDailyAllowancesFinalize = await this.getCalculationDailyAllowances(id);
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1014,6 +1027,7 @@ export class PayrollService {
       undefined,
       holidayDatesForCalc,
       excludedBadgeKeysFinalize,
+      calculationDailyAllowancesFinalize,
     );
     // Update payroll items; preserve manually excluded items by stable item signature.
     const previouslyExcludedItemKeys = new Set(
@@ -1053,32 +1067,6 @@ export class PayrollService {
         status: 'draft',
       },
     });
-
-    // Auto-generate statutory holiday daily allowances for daily-salary employees
-    if (calc.salary_type === 'daily') {
-      const holidays = await this.statutoryHolidaysService.findByDateRange(
-        dateFrom,
-        dateTo,
-      );
-      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
-      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
-        for (const holiday of holidays) {
-          await this.prisma.payrollDailyAllowance.create({
-            data: {
-              payroll_id: id,
-              date: holiday.date,
-              allowance_key: 'statutory_holiday',
-              allowance_name: `法定假期 - ${holiday.name}`,
-              amount: baseSalaryForHoliday,
-              is_auto: true,
-            },
-          });
-        }
-      }
-    }
-
-    // Auto-generate linked allowances from rate cards
-    await this.generateLinkedAllowances(id, pwls as any);
 
     if (userId) {
       try {
@@ -1304,28 +1292,61 @@ export class PayrollService {
       });
     }
 
-    // ── Auto-generate statutory holiday daily allowances for daily-salary employees ──
-    if (calc.salary_type === 'daily') {
-      const holidays = await this.statutoryHolidaysService.findByDateRange(
-        date_from,
-        date_to,
-      );
-      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
-      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
-        for (const holiday of holidays) {
-          await this.prisma.payrollDailyAllowance.create({
-            data: {
-              payroll_id: saved.id,
-              date: holiday.date,
-              allowance_key: 'statutory_holiday',
-              allowance_name: `法定假期 - ${holiday.name}`,
-              amount: baseSalaryForHoliday,
-              remarks: '自動生成',
-            },
-          });
-        }
-      }
+    // 生成所有自動逐日津貼，然後以 PayrollDailyAllowance 作為 source of truth 重新計算 items。
+    const savedPwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: saved.id, is_excluded: false },
+      orderBy: { scheduled_date: 'asc' },
+    });
+    await this.generateAllAutoDailyAllowances(
+      saved.id,
+      salarySetting,
+      savedPwls as any,
+      date_from,
+      date_to,
+    );
+    const calculationDailyAllowancesGenerate = await this.getCalculationDailyAllowances(saved.id);
+    const finalCalc = await this.calcService.calculatePayroll(
+      emp,
+      salarySetting,
+      savedPwls as any,
+      date_from,
+      date_to,
+      actualCompanyId ?? actualCpId,
+      undefined,
+      holidayDatesForGenerate,
+      new Set<string>(),
+      calculationDailyAllowancesGenerate,
+    );
+
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: saved.id } });
+    for (const item of finalCalc.items) {
+      await this.prisma.payrollItem.create({
+        data: {
+          ...item,
+          payroll_id: saved.id,
+        },
+      });
     }
+    await this.prisma.payroll.update({
+      where: { id: saved.id },
+      data: {
+        salary_type: finalCalc.salary_type,
+        base_rate: finalCalc.base_rate,
+        work_days: finalCalc.work_days,
+        work_nights: finalCalc.work_nights || 0,
+        base_amount: finalCalc.base_amount,
+        allowance_total: finalCalc.allowance_total,
+        ot_total: finalCalc.ot_total,
+        commission_total: finalCalc.commission_total,
+        mpf_deduction: finalCalc.mpf_deduction,
+        mpf_plan: finalCalc.mpf_plan,
+        mpf_employer: finalCalc.mpf_employer,
+        mpf_relevant_income: finalCalc.mpf_relevant_income,
+        adjustment_total: 0,
+        net_amount: finalCalc.net_amount,
+        status: 'draft',
+      },
+    });
 
     if (userId) {
       try {
@@ -1887,6 +1908,7 @@ export class PayrollService {
     const excludedBadgeKeysReset = new Set<string>(
       excludedRecordsReset.map(r => r.allowance_key.replace('excluded_', '')),
     );
+    const calculationDailyAllowancesResetPre = await this.getCalculationDailyAllowances(id);
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1897,6 +1919,7 @@ export class PayrollService {
       existingMpfRelevantIncome,
       holidayDatesForCalc,
       excludedBadgeKeysReset,
+      calculationDailyAllowancesResetPre,
       adjustmentTotal,
     );
 
@@ -1955,29 +1978,57 @@ export class PayrollService {
       });
     });
 
-    // Re-generate auto daily allowances
-    if ((salarySetting.salary_type || 'daily') === 'daily') {
-      const holidays = await this.statutoryHolidaysService.findByDateRange(
-        dateFrom,
-        dateTo,
-      );
-      const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
-      if (holidays.length > 0 && baseSalaryForHoliday > 0) {
-        for (const holiday of holidays) {
-          await this.prisma.payrollDailyAllowance.create({
-            data: {
-              payroll_id: id,
-              date: holiday.date,
-              allowance_key: 'statutory_holiday',
-              allowance_name: `法定假期 - ${holiday.name}`,
-              amount: baseSalaryForHoliday,
-              is_auto: true,
-            },
-          });
-        }
-      }
+    // Re-generate auto daily allowances, then recalculate from PayrollDailyAllowance as source of truth.
+    await this.generateAllAutoDailyAllowances(
+      id,
+      salarySetting,
+      payrollWorkLogData,
+      dateFrom,
+      dateTo,
+    );
+    const calculationDailyAllowancesReset = await this.getCalculationDailyAllowances(id);
+    const finalResetCalc = await this.calcService.calculatePayroll(
+      emp,
+      salarySetting,
+      workLogLike,
+      dateFrom,
+      dateTo,
+      payroll.company_id ?? payroll.company_profile_id ?? null,
+      existingMpfRelevantIncome,
+      holidayDatesForCalc,
+      excludedBadgeKeysReset,
+      calculationDailyAllowancesReset,
+      adjustmentTotal,
+    );
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
+    if (finalResetCalc.items.length > 0) {
+      await this.prisma.payrollItem.createMany({
+        data: finalResetCalc.items.map((item: any) => ({
+          ...item,
+          payroll_id: id,
+        })),
+      });
     }
-    await this.generateLinkedAllowances(id, payrollWorkLogData);
+    await this.prisma.payroll.update({
+      where: { id },
+      data: {
+        salary_type: finalResetCalc.salary_type,
+        base_rate: finalResetCalc.base_rate,
+        work_days: finalResetCalc.work_days,
+        work_nights: finalResetCalc.work_nights || 0,
+        base_amount: finalResetCalc.base_amount,
+        allowance_total: finalResetCalc.allowance_total,
+        ot_total: finalResetCalc.ot_total,
+        commission_total: finalResetCalc.commission_total,
+        mpf_deduction: finalResetCalc.mpf_deduction,
+        mpf_plan: finalResetCalc.mpf_plan,
+        mpf_employer: finalResetCalc.mpf_employer,
+        mpf_relevant_income: finalResetCalc.mpf_relevant_income,
+        adjustment_total: adjustmentTotal,
+        net_amount: finalResetCalc.net_amount + adjustmentTotal,
+        status: 'draft',
+      },
+    });
 
     if (userId) {
       try {
@@ -1989,7 +2040,7 @@ export class PayrollService {
           changesAfter: {
             status: 'draft',
             work_log_count: payrollWorkLogData.length,
-            net_amount: calc.net_amount + adjustmentTotal,
+            net_amount: finalResetCalc.net_amount + adjustmentTotal,
           },
         });
       } catch (e) {
@@ -2207,6 +2258,19 @@ export class PayrollService {
     const excludedBadgeKeys = new Set<string>(
       excludedRecords.map(r => r.allowance_key.replace('excluded_', '')),
     );
+
+    await this.prisma.payrollDailyAllowance.deleteMany({
+      where: { payroll_id: id, is_auto: true },
+    });
+    await this.generateAllAutoDailyAllowances(
+      id,
+      salarySetting,
+      updatedPwls as any,
+      dateFrom,
+      dateTo,
+    );
+    const calculationDailyAllowances = await this.getCalculationDailyAllowances(id);
+
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -2217,6 +2281,7 @@ export class PayrollService {
       existingMpfRelevantIncome,
       recalcHolidayDates,
       excludedBadgeKeys,
+      calculationDailyAllowances,
       adjustmentTotal,
     );
 
@@ -2690,11 +2755,10 @@ export class PayrollService {
     });
     if (!da) throw new NotFoundException('Daily allowance not found');
     await this.prisma.payrollDailyAllowance.delete({ where: { id: daId } });
-    // If removing a statutory_holiday or auto-generated allowance, create excluded_ record
-    // so recalculate won't recreate it
-    if (da.allowance_key === 'statutory_holiday' && da.date) {
-      const dateStr = da.date.toISOString().split('T')[0];
-      const excludedKey = `excluded_statutory_holiday_${dateStr}`;
+    // 刪除任何自動生成的逐日津貼時，建立日期級 excluded_ 記錄，避免重算後被加回。
+    if (da.is_auto === true && da.date && !da.allowance_key.startsWith('excluded_')) {
+      const dateStr = toDateStr(da.date);
+      const excludedKey = `excluded_${da.allowance_key}_${dateStr}`;
       const existing = await this.prisma.payrollDailyAllowance.findFirst({
         where: { payroll_id: payrollId, allowance_key: excludedKey },
       });
@@ -2704,7 +2768,7 @@ export class PayrollService {
             payroll_id: payrollId,
             date: da.date,
             allowance_key: excludedKey,
-            allowance_name: `排除法定假日津貼 (${dateStr})`,
+            allowance_name: `排除${da.allowance_name || da.allowance_key} (${dateStr})`,
             amount: 0,
             is_auto: false,
           },
@@ -3548,6 +3612,207 @@ export class PayrollService {
     return { success: true };
   }
 
+
+  private getAutoFixedAllowanceDefinitions(): {
+    field: string;
+    label: string;
+    condition?: (wl: any) => boolean;
+  }[] {
+    return [
+      {
+        field: 'allowance_night',
+        label: '夜班津貼',
+        condition: (wl) => wl.day_night === '夜',
+      },
+      {
+        field: 'allowance_rent',
+        label: '租車津貼',
+        condition: (wl) => wl.unit === '天',
+      },
+      { field: 'allowance_3runway', label: '三跑津貼' },
+      { field: 'allowance_well', label: '落井津貼' },
+      { field: 'allowance_machine', label: '揸機津貼' },
+      { field: 'allowance_roller', label: '火轆津貼' },
+      { field: 'allowance_crane', label: '吊/挾車津貼' },
+      { field: 'allowance_move_machine', label: '搬機津貼' },
+      {
+        field: 'allowance_kwh_night',
+        label: '嘉華-夜間津貼',
+        condition: (wl) => wl.day_night === '夜',
+      },
+      {
+        field: 'allowance_mid_shift',
+        label: '中直津貼',
+        condition: (wl) => wl.is_mid_shift === true,
+      },
+    ];
+  }
+
+  private async getCalculationDailyAllowances(payrollId: number) {
+    return this.prisma.payrollDailyAllowance.findMany({
+      where: {
+        payroll_id: payrollId,
+        NOT: { allowance_key: { startsWith: 'excluded_' } },
+      },
+      select: {
+        allowance_key: true,
+        allowance_name: true,
+        date: true,
+        amount: true,
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  private async getExcludedDailyAllowanceRecords(payrollId: number) {
+    return this.prisma.payrollDailyAllowance.findMany({
+      where: {
+        payroll_id: payrollId,
+        allowance_key: { startsWith: 'excluded_' },
+      },
+      select: { allowance_key: true, date: true },
+    });
+  }
+
+  private async getExistingDailyAllowanceKeySet(payrollId: number) {
+    const records = await this.prisma.payrollDailyAllowance.findMany({
+      where: {
+        payroll_id: payrollId,
+        NOT: { allowance_key: { startsWith: 'excluded_' } },
+      },
+      select: { allowance_key: true, date: true },
+    });
+    return new Set(records.map((r) => `${toDateStr(r.date)}:${r.allowance_key}`));
+  }
+
+  private isDailyAllowanceExcluded(
+    excludedRecords: { allowance_key: string; date: Date | null }[],
+    allowanceKey: string,
+    dateStr: string,
+  ): boolean {
+    return excludedRecords.some((record) => {
+      const excludedDate = toDateStr(record.date);
+      return (
+        record.allowance_key === `excluded_${allowanceKey}_${dateStr}` ||
+        (record.allowance_key === `excluded_${allowanceKey}` && excludedDate === dateStr)
+      );
+    });
+  }
+
+  private async generateStatutoryHolidayDailyAllowances(
+    payrollId: number,
+    salarySetting: any,
+    dateFrom: string,
+    dateTo: string,
+  ) {
+    if ((salarySetting.salary_type || 'daily') !== 'daily') return;
+
+    const holidays = await this.statutoryHolidaysService.findByDateRange(
+      dateFrom,
+      dateTo,
+    );
+    const baseSalaryForHoliday = Number(salarySetting.base_salary) || 0;
+    if (holidays.length === 0 || baseSalaryForHoliday <= 0) return;
+
+    const excludedRecords = await this.getExcludedDailyAllowanceRecords(payrollId);
+    const existingKeys = await this.getExistingDailyAllowanceKeySet(payrollId);
+
+    for (const holiday of holidays) {
+      const dateStr = toDateStr(holiday.date);
+      const allowanceKey = 'statutory_holiday';
+      const dailyKey = `${dateStr}:${allowanceKey}`;
+      if (existingKeys.has(dailyKey)) continue;
+      if (this.isDailyAllowanceExcluded(excludedRecords, allowanceKey, dateStr)) {
+        continue;
+      }
+
+      await this.prisma.payrollDailyAllowance.create({
+        data: {
+          payroll_id: payrollId,
+          date: holiday.date,
+          allowance_key: allowanceKey,
+          allowance_name: `法定假期 - ${holiday.name}`,
+          amount: baseSalaryForHoliday,
+          remarks: '自動生成',
+          is_auto: true,
+        },
+      });
+      existingKeys.add(dailyKey);
+    }
+  }
+
+  private async generateFixedDailyAllowances(
+    payrollId: number,
+    salarySetting: any,
+    workLogs: any[],
+  ) {
+    const definitions = this.getAutoFixedAllowanceDefinitions();
+    const activeDefinitions = definitions
+      .map((definition) => ({
+        ...definition,
+        amount: Number((salarySetting as any)[definition.field]) || 0,
+      }))
+      .filter((definition) => definition.amount > 0);
+    if (activeDefinitions.length === 0 || workLogs.length === 0) return;
+
+    const logsByDate = new Map<string, any[]>();
+    for (const wl of workLogs) {
+      const dateStr = toDateStr(wl.scheduled_date);
+      if (!dateStr) continue;
+      if (!logsByDate.has(dateStr)) logsByDate.set(dateStr, []);
+      logsByDate.get(dateStr)!.push(wl);
+    }
+    if (logsByDate.size === 0) return;
+
+    const excludedRecords = await this.getExcludedDailyAllowanceRecords(payrollId);
+    const existingKeys = await this.getExistingDailyAllowanceKeySet(payrollId);
+
+    for (const [dateStr, dayLogs] of logsByDate.entries()) {
+      for (const definition of activeDefinitions) {
+        const shouldGenerate = definition.condition
+          ? dayLogs.some(definition.condition)
+          : dayLogs.length > 0;
+        if (!shouldGenerate) continue;
+
+        const dailyKey = `${dateStr}:${definition.field}`;
+        if (existingKeys.has(dailyKey)) continue;
+        if (this.isDailyAllowanceExcluded(excludedRecords, definition.field, dateStr)) {
+          continue;
+        }
+
+        await this.prisma.payrollDailyAllowance.create({
+          data: {
+            payroll_id: payrollId,
+            date: new Date(dateStr),
+            allowance_key: definition.field,
+            allowance_name: definition.label,
+            amount: definition.amount,
+            remarks: '自動生成',
+            is_auto: true,
+          },
+        });
+        existingKeys.add(dailyKey);
+      }
+    }
+  }
+
+  private async generateAllAutoDailyAllowances(
+    payrollId: number,
+    salarySetting: any,
+    workLogs: any[],
+    dateFrom: string,
+    dateTo: string,
+  ) {
+    await this.generateStatutoryHolidayDailyAllowances(
+      payrollId,
+      salarySetting,
+      dateFrom,
+      dateTo,
+    );
+    await this.generateLinkedAllowances(payrollId, workLogs);
+    await this.generateFixedDailyAllowances(payrollId, salarySetting, workLogs);
+  }
+
   /**
    * 根據工作記錄匹配到的價目表，自動生成連結津貼
    */
@@ -3555,6 +3820,9 @@ export class PayrollService {
     // 1. 找出所有匹配到價目表的工作記錄
     const matchedLogs = enrichedWorkLogs.filter(wl => wl.matched_rate_card_id);
     if (matchedLogs.length === 0) return;
+
+    const excludedRecords = await this.getExcludedDailyAllowanceRecords(payrollId);
+    const existingKeys = await this.getExistingDailyAllowanceKeySet(payrollId);
 
     // 2. 獲取所有相關的 FleetRateCard 資料
     const cardIds = [...new Set(matchedLogs.map(wl => wl.matched_rate_card_id as number))];
@@ -3602,6 +3870,10 @@ export class PayrollService {
         const finalAmount = data.mode === 'per_trip' ? data.amount * data.count : data.amount;
         if (finalAmount === 0) continue;
 
+        const dailyKey = `${date}:${key}`;
+        if (existingKeys.has(dailyKey)) continue;
+        if (this.isDailyAllowanceExcluded(excludedRecords, key, date)) continue;
+
         await this.prisma.payrollDailyAllowance.create({
           data: {
             payroll_id: payrollId,
@@ -3613,6 +3885,7 @@ export class PayrollService {
             remarks: data.mode === 'per_trip' ? `自動生成 (可多次: ${data.count}次)` : '自動生成 (每日一次)',
           },
         });
+        existingKeys.add(dailyKey);
       }
     }
   }

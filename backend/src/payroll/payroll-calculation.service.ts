@@ -2,6 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 
+type PayrollDailyAllowanceForCalculation = {
+  allowance_key: string;
+  date: Date | string | null | undefined;
+  amount: any;
+  allowance_name?: string | null;
+};
+
 /**
  * 將日期轉為 YYYY-MM-DD 字串
  */
@@ -66,6 +73,7 @@ export class PayrollCalculationService {
     mpfRelevantIncome?: number | null,
     holidayDates?: { date: Date; name: string }[],
     excludedBadgeKeys?: Set<string>,
+    dailyAllowances: PayrollDailyAllowanceForCalculation[] = [],
     adjustmentTotalForMpf = 0,
   ) {
     const excluded = excludedBadgeKeys || new Set<string>();
@@ -161,15 +169,6 @@ export class PayrollCalculationService {
       });
     }
 
-    // Phase 2: 連結優先規則 - 如果某個 allowance_key 在 PayrollDailyAllowance 中已有自動記錄，則跳過固定津貼計算
-    // 注意：workLogs 這裡如果包含了 _linked_allowance_keys 標記，我們可以用它來跳過
-    const linkedAllowanceKeys = new Set<string>();
-    workLogs.forEach(wl => {
-      if (wl._linked_allowance_keys && Array.isArray(wl._linked_allowance_keys)) {
-        wl._linked_allowance_keys.forEach((k: string) => linkedAllowanceKeys.add(k));
-      }
-    });
-
     const allowanceFields: {
       field: string;
       label: string;
@@ -202,30 +201,35 @@ export class PayrollCalculationService {
         condition: (wl) => wl.is_mid_shift === true,
       },
     ];
-    for (const af of allowanceFields) {
-      // 排除規則：如果該津貼已被用戶手動排除，則跳過
-      if (excluded.has(af.field)) continue;
-      // 連結優先規則：如果該津貼已由價目表自動產生，則跳過固定津貼
-      if (linkedAllowanceKeys.has(af.field)) continue;
-
-      const rate = Number((salarySetting as any)[af.field]) || 0;
-      if (rate === 0) continue;
-      let days = 0;
-      if (af.condition) {
-        const matchDates = new Set(
-          workLogs
-            .filter(af.condition)
-            .map((wl) => toDateStr(wl.scheduled_date)),
-        );
-        days = matchDates.size;
-      } else {
-        const workDates = new Set(
-          workLogs.map((wl) => toDateStr(wl.scheduled_date)),
-        );
-        days = workDates.size;
+    const allowanceRows = (dailyAllowances || []).filter((da) => {
+      const key = da.allowance_key;
+      if (!key || key === 'statutory_holiday' || key.startsWith('excluded_')) {
+        return false;
       }
+      const dateStr = toDateStr(da.date);
+      return !excluded.has(key) && !excluded.has(`${key}_${dateStr}`);
+    });
+
+    for (const af of allowanceFields) {
+      // 固定津貼 items 以 PayrollDailyAllowance 作為 source of truth。
+      if (excluded.has(af.field)) continue;
+
+      const amountsByDate = new Map<string, number>();
+      for (const da of allowanceRows) {
+        if (da.allowance_key !== af.field) continue;
+        const dateStr = toDateStr(da.date);
+        if (!dateStr || excluded.has(`${af.field}_${dateStr}`)) continue;
+        if (!amountsByDate.has(dateStr)) {
+          amountsByDate.set(dateStr, Number(da.amount) || 0);
+        }
+      }
+
+      const days = amountsByDate.size;
       if (days === 0) continue;
-      const amount = rate * days;
+      const amounts = Array.from(amountsByDate.values());
+      const amount = amounts.reduce((sum, value) => sum + value, 0);
+      if (amount === 0) continue;
+      const rate = days > 0 ? amount / days : 0;
       allowanceTotal += amount;
       items.push({
         item_type: 'allowance',
@@ -610,9 +614,17 @@ export class PayrollCalculationService {
 
     return displayAllowances
       .filter((item) => {
+        // 若 DB 已有同日同 key 的 daily allowance，DB 記錄就是 source of truth，避免前端重複計算。
+        const existsInDailyAllowances = dayAllowances.some(
+          (da) => da.allowance_key === item.key,
+        );
+        if (existsInDailyAllowances) return false;
+
         // 檢查是否有排除記錄
         const isExcluded = dayAllowances.some(
-          (da) => da.allowance_key === `excluded_${item.key}`,
+          (da) =>
+            da.allowance_key === `excluded_${item.key}` ||
+            da.allowance_key.startsWith(`excluded_${item.key}_`),
         );
         if (isExcluded) return false;
 
