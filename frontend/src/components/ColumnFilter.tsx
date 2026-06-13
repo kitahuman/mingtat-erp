@@ -298,14 +298,24 @@ export default function ColumnFilter({
     >
       {/* Search */}
       <div className="p-2 border-b border-gray-100">
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="搜尋..."
-          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-primary-400"
-          autoFocus
-        />
+          <input
+            ref={(el) => {
+              if (el && isOpen) {
+                // Use requestAnimationFrame to focus after the portal is fully mounted and positioned
+                // This prevents the page from jumping when autoFocus is used in a portaled element
+                requestAnimationFrame(() => {
+                  if (document.activeElement !== el) {
+                    el.focus();
+                  }
+                });
+              }
+            }}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="搜尋..."
+            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-primary-400"
+          />
       </div>
 
       {/* Select All */}
@@ -383,6 +393,7 @@ export default function ColumnFilter({
     <div className="inline-block">
       <button
         ref={buttonRef}
+        type="button"
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); setSearchTerm(''); }}
         className={`ml-1 p-0.5 rounded hover:bg-gray-200 transition-colors ${isFiltered ? 'text-primary-600' : 'text-gray-400'}`}
         title="篩選"

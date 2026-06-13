@@ -93,7 +93,9 @@ export class CompanyClockService {
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
-    const where: any = {};
+    const where: any = {
+      deleted_at: null,
+    };
 
     // Default to active employees
     where.status = query.status || 'active';

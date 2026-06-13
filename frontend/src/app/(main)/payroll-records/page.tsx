@@ -366,11 +366,16 @@ export default function PayrollRecordsPage() {
           <div className="text-xs text-gray-500">{row.employee?.emp_code}</div>
         </div>
       ),
+      filterRender: (_v: unknown, row: PayrollRecordRow) => {
+        if (!row.employee) return '-';
+        return `${row.employee.name_zh} (${row.employee.emp_code})`;
+      },
     },
     {
       key: 'mpf_plan',
       label: '強積金計劃公司',
       render: (_v: unknown, row: PayrollRecordRow) => mpfPlanLabel(row.employee?.mpf_plan),
+      filterRender: (_v: unknown, row: PayrollRecordRow) => mpfPlanLabel(row.employee?.mpf_plan),
     },
     {
       key: 'company',
