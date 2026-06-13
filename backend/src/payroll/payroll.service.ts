@@ -3890,4 +3890,131 @@ export class PayrollService {
     }
   }
 
+  // ── 糧單休假統計 ──────────────────────────────────────────────
+  /**
+   * 統計某員工所有糧單中的「休假」天數（自動，不可手動修改）。
+   * 「休假」定義：糧單期間內的某天
+   *   - 沒有工作記錄（payrollWorkLogs 中沒有該天的記錄）
+   *   - 不是法定假期
+   *   - 不是休息日（星期日）
+   *   - 不是已批准的請假（病假/年假）
+   * 直接重用 calcService.buildDailyCalculation 的逐日結果：
+   *   work_logs.length === 0 且 is_holiday === false 且 special_label === '' 即為休假。
+   * 回傳按月分組的休假天數、年度小計與入職以來總計。
+   */
+  async getLeaveSummary(employeeId: number) {
+    // 取出該員工所有具完整期間的糧單
+    const payrolls = await this.prisma.payroll.findMany({
+      where: {
+        employee_id: employeeId,
+        date_from: { not: null },
+        date_to: { not: null },
+      },
+      orderBy: [{ date_from: 'asc' }, { id: 'asc' }],
+    });
+
+    // 以日期字串去重，避免同一天在多張糧單重複計算
+    const restDays = new Set<string>();
+
+    for (const payroll of payrolls) {
+      if (!payroll.date_from || !payroll.date_to) continue;
+
+      // 載入該糧單的工作記錄（含舊糧單回填）
+      let pwls = await this.prisma.payrollWorkLog.findMany({
+        where: { payroll_id: payroll.id },
+        orderBy: [{ scheduled_date: 'asc' }, { id: 'asc' }],
+      });
+      if (pwls.length === 0) {
+        pwls = await this.backfillPayrollWorkLogs(payroll as any);
+      }
+      const activePwls = pwls.filter((p) => !p.is_excluded);
+
+      // 取該糧單適用的薪資設定
+      const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
+        where: {
+          employee_id: employeeId,
+          effective_date: {
+            lte: payroll.date_to || new Date(payroll.period + '-28'),
+          },
+        },
+        orderBy: { effective_date: 'desc' },
+      });
+
+      // 取該期間的法定假期
+      const holidayDates = await this.statutoryHolidaysService.findByDateRange(
+        toDateStr(payroll.date_from),
+        toDateStr(payroll.date_to),
+      );
+
+      // 取該員工已批准、與期間重疊的請假
+      const leaves = await this.prisma.employeeLeave.findMany({
+        where: {
+          employee_id: employeeId,
+          status: 'approved',
+          date_from: { lte: payroll.date_to || undefined },
+          date_to: { gte: payroll.date_from || undefined },
+        },
+      });
+
+      // 取該糧單的逐日津貼（buildDailyCalculation 需要）
+      const dailyAllowances = await this.prisma.payrollDailyAllowance.findMany({
+        where: { payroll_id: payroll.id },
+      });
+
+      const dailyCalc = this.calcService.buildDailyCalculation(
+        activePwls,
+        salarySetting,
+        dailyAllowances,
+        {
+          dateFrom: toDateStr(payroll.date_from),
+          dateTo: toDateStr(payroll.date_to),
+          holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
+          leaves,
+        },
+      );
+
+      const periodStart = toDateStr(payroll.date_from);
+      const periodEnd = toDateStr(payroll.date_to);
+
+      for (const day of dailyCalc) {
+        const dateStr = toDateStr(day.date);
+        if (!dateStr) continue;
+        // 僅統計確實落在糧單期間內的天
+        if (dateStr < periodStart || dateStr > periodEnd) continue;
+        const hasWork = (day.work_logs || []).length > 0;
+        const isHoliday = day.is_holiday === true;
+        const hasSpecialLabel = !!(day.special_label && String(day.special_label).trim());
+        // 休假：無工作、非假期、無特殊標籤（星期日/請假皆會有 special_label）
+        if (!hasWork && !isHoliday && !hasSpecialLabel) {
+          restDays.add(dateStr);
+        }
+      }
+    }
+
+    // 按月份分組
+    const monthlyMap = new Map<string, number>();
+    for (const dateStr of restDays) {
+      const ym = dateStr.slice(0, 7); // YYYY-MM
+      monthlyMap.set(ym, (monthlyMap.get(ym) || 0) + 1);
+    }
+
+    const monthly = Array.from(monthlyMap.entries())
+      .map(([month, rest_days]) => ({ month, rest_days }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    // 按年度小計
+    const yearlyMap = new Map<string, number>();
+    for (const m of monthly) {
+      const year = m.month.slice(0, 4);
+      yearlyMap.set(year, (yearlyMap.get(year) || 0) + m.rest_days);
+    }
+    const yearly = Array.from(yearlyMap.entries())
+      .map(([year, rest_days]) => ({ year, rest_days }))
+      .sort((a, b) => a.year.localeCompare(b.year));
+
+    const total = monthly.reduce((sum, m) => sum + m.rest_days, 0);
+
+    return { monthly, yearly, total };
+  }
+
 }

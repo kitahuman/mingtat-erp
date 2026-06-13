@@ -77,6 +77,33 @@ export class LeavesService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async create(dto: any, userId?: number, ipAddress?: string) {
+    const data: any = {
+      employee_id: Number(dto.employee_id),
+      leave_type: dto.leave_type,
+      date_from: new Date(dto.date_from),
+      date_to: new Date(dto.date_to),
+      days: dto.days !== undefined && dto.days !== null ? Number(dto.days) : 1,
+      reason: dto.reason ?? null,
+      status: dto.status ?? 'approved',
+      remarks: dto.remarks ?? null,
+    };
+    const created = await this.prisma.employeeLeave.create({ data });
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'leaves',
+          targetId: created.id,
+          changesAfter: created,
+          ipAddress,
+        });
+      } catch (e) { console.error('Audit log error:', e); }
+    }
+    return created;
+  }
+
   async findOne(id: number) {
     const record = await this.prisma.employeeLeave.findUnique({
       where: { id },

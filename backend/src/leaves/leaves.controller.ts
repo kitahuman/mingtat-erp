@@ -2,6 +2,7 @@ import { Controller, Get, Put, Delete, Post, Param, Body, Query, ParseIntPipe, U
 import { AuthGuard } from '@nestjs/passport';
 import { LeavesService } from './leaves.service';
 import { UpdateLeaveDto } from './dto/update-leave.dto';
+import { CreateLeaveDto } from './dto/create-leave.dto';
 
 @Controller('leaves')
 @UseGuards(AuthGuard('jwt'))
@@ -11,6 +12,11 @@ export class LeavesController {
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
+  }
+
+  @Post()
+  create(@Body() dto: CreateLeaveDto, @Request() req: any) {
+    return this.service.create(dto, req.user?.id || req.user?.userId || 0, req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || undefined);
   }
 
   @Get(':id')

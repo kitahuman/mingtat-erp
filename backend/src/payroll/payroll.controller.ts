@@ -62,6 +62,12 @@ export class PayrollController {
     return new StreamableFile(result.pdf);
   }
 
+  // 糧單休假統計（自動統計某員工所有糧單中沒有工作記錄、非假期、非星期日、非請假的天數）
+  @Get('leave-summary/:employeeId')
+  getLeaveSummary(@Param('employeeId') employeeId: string) {
+    return this.payrollService.getLeaveSummary(+employeeId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.payrollService.findOne(+id);

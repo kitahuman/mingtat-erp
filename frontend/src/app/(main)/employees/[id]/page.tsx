@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { employeesApi, companiesApi, fieldOptionsApi, pettyCashApi } from '@/lib/api';
+import { employeesApi, companiesApi, fieldOptionsApi, pettyCashApi, leavesApi, payrollApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
@@ -104,6 +104,111 @@ const employmentHistoryEventMeta: Record<string, { label: string; badgeClassName
   reinstatement: { label: '復職', badgeClassName: 'badge-green', defaultDescription: '員工復職' },
 };
 
+// ── 休假紀錄相關常數與工具函數 ──────────────────────────────
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  sick: '病假',
+  annual: '年假',
+  unpaid: '無薪假',
+  other: '其他',
+};
+
+const LEAVE_TYPE_BADGE: Record<string, string> = {
+  sick: 'bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  annual: 'bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  unpaid: 'bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full text-xs font-medium',
+  other: 'bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-xs font-medium',
+};
+
+// 香港勞工法例：受僱滿 N 年後享有的每年有薪年假日數
+const ANNUAL_LEAVE_TABLE: { years: number; days: number }[] = [
+  { years: 1, days: 7 },
+  { years: 2, days: 7 },
+  { years: 3, days: 8 },
+  { years: 4, days: 9 },
+  { years: 5, days: 10 },
+  { years: 6, days: 11 },
+  { years: 7, days: 12 },
+  { years: 8, days: 13 },
+  { years: 9, days: 14 }, // 9 年及以上 = 14 天
+];
+
+// 取得受僱滿某年數時「該年度」可享的年假天數
+function annualLeaveDaysForYear(completedYear: number): number {
+  if (completedYear < 1) return 0;
+  if (completedYear >= 9) return 14;
+  const row = ANNUAL_LEAVE_TABLE.find((r) => r.years === completedYear);
+  return row ? row.days : 0;
+}
+
+// 計算完整受僱年數（以入職日到今天，滿一整年才 +1）
+function completedServiceYears(joinDate: string | null | undefined): number {
+  if (!joinDate) return 0;
+  const join = new Date(joinDate);
+  if (isNaN(join.getTime())) return 0;
+  const now = new Date();
+  let years = now.getFullYear() - join.getFullYear();
+  const m = now.getMonth() - join.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < join.getDate())) years--;
+  return years < 0 ? 0 : years;
+}
+
+// 累積可放年假總天數：對受僱滿 1 年起的每一個完整年度，累加當年度應得年假
+function accumulatedAnnualLeave(joinDate: string | null | undefined): number {
+  const years = completedServiceYears(joinDate);
+  let total = 0;
+  for (let y = 1; y <= years; y++) {
+    total += annualLeaveDaysForYear(y);
+  }
+  return total;
+}
+
+type LeaveMonthRow = { month: string; sick: number; annual: number };
+
+// 將請假紀錄按月彙總（病假/年假分開），逐日展開於跨月情況下歸入起始月份對應天數
+function buildLeaveMonthlySummary(records: any[]): {
+  monthly: LeaveMonthRow[];
+  yearly: { year: string; sick: number; annual: number }[];
+  totalSick: number;
+  totalAnnual: number;
+} {
+  const monthMap = new Map<string, { sick: number; annual: number }>();
+  for (const rec of records) {
+    const ym = String(rec.date_from || '').slice(0, 7); // YYYY-MM
+    if (!ym) continue;
+    if (!monthMap.has(ym)) monthMap.set(ym, { sick: 0, annual: 0 });
+    const bucket = monthMap.get(ym)!;
+    const days = Number(rec.days) || 0;
+    if (rec.leave_type === 'sick') bucket.sick += days;
+    else if (rec.leave_type === 'annual') bucket.annual += days;
+  }
+  const monthly = Array.from(monthMap.entries())
+    .map(([month, v]) => ({ month, sick: v.sick, annual: v.annual }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  const yearMap = new Map<string, { sick: number; annual: number }>();
+  for (const m of monthly) {
+    const year = m.month.slice(0, 4);
+    if (!yearMap.has(year)) yearMap.set(year, { sick: 0, annual: 0 });
+    const yb = yearMap.get(year)!;
+    yb.sick += m.sick;
+    yb.annual += m.annual;
+  }
+  const yearly = Array.from(yearMap.entries())
+    .map(([year, v]) => ({ year, sick: v.sick, annual: v.annual }))
+    .sort((a, b) => a.year.localeCompare(b.year));
+
+  const totalSick = monthly.reduce((s, m) => s + m.sick, 0);
+  const totalAnnual = monthly.reduce((s, m) => s + m.annual, 0);
+  return { monthly, yearly, totalSick, totalAnnual };
+}
+
+// 將 YYYY-MM 轉為「YYYY年MM月」
+function fmtYearMonth(ym: string): string {
+  const [y, m] = ym.split('-');
+  if (!y || !m) return ym;
+  return `${y}年${m}月`;
+}
+
 function buildEmploymentHistoryRows(events: EmploymentHistoryEvent[]): EmploymentHistoryRow[] {
   return events
     .map((event) => {
@@ -168,6 +273,27 @@ export default function EmployeeDetailPage() {
     description: '',
   });
 
+  // ── 休假紀錄 ──────────────────────────────────────────────
+  // A. 請假紀錄（EmployeeLeave）
+  const [leaveRecords, setLeaveRecords] = useState<any[]>([]);
+  const [leaveRecordsLoading, setLeaveRecordsLoading] = useState(false);
+  const [leaveListExpanded, setLeaveListExpanded] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<any>(null);
+  const [leaveForm, setLeaveForm] = useState<any>({
+    leave_type: 'annual',
+    date_from: new Date().toISOString().slice(0, 10),
+    date_to: new Date().toISOString().slice(0, 10),
+    days: 1,
+    remarks: '',
+  });
+  // B. 糧單休假統計（自動）
+  const [payrollLeaveSummary, setPayrollLeaveSummary] = useState<any>(null);
+  const [payrollLeaveLoading, setPayrollLeaveLoading] = useState(false);
+  const [payrollLeaveExpanded, setPayrollLeaveExpanded] = useState(false);
+  // C. 年假餘額 tooltip
+  const [showAnnualLeaveTooltip, setShowAnnualLeaveTooltip] = useState(false);
+
   const loadPettyCash = async (employeeId: number) => {
     setPettyCashLoading(true);
     try {
@@ -200,6 +326,93 @@ export default function EmployeeDetailPage() {
     employeesApi.getNicknames(Number(params.id)).then(res => {
       setNicknames(res.data || []);
     }).catch(() => {});
+    loadLeaveRecords(Number(params.id));
+    loadPayrollLeaveSummary(Number(params.id));
+  };
+
+  // ── A. 請假紀錄載入 ──
+  const loadLeaveRecords = async (employeeId: number) => {
+    setLeaveRecordsLoading(true);
+    try {
+      const res = await leavesApi.list({ employee_id: employeeId, limit: 1000, sortBy: 'date_from', sortOrder: 'ASC' });
+      setLeaveRecords(res.data?.data || []);
+    } catch {
+      setLeaveRecords([]);
+    } finally {
+      setLeaveRecordsLoading(false);
+    }
+  };
+
+  // ── B. 糧單休假統計載入 ──
+  const loadPayrollLeaveSummary = async (employeeId: number) => {
+    setPayrollLeaveLoading(true);
+    try {
+      const res = await payrollApi.leaveSummary(employeeId);
+      setPayrollLeaveSummary(res.data || null);
+    } catch {
+      setPayrollLeaveSummary(null);
+    } finally {
+      setPayrollLeaveLoading(false);
+    }
+  };
+
+  const openCreateLeave = () => {
+    setEditingLeave(null);
+    setLeaveForm({
+      leave_type: 'annual',
+      date_from: new Date().toISOString().slice(0, 10),
+      date_to: new Date().toISOString().slice(0, 10),
+      days: 1,
+      remarks: '',
+    });
+    setShowLeaveModal(true);
+  };
+
+  const openEditLeave = (rec: any) => {
+    setEditingLeave(rec);
+    setLeaveForm({
+      leave_type: rec.leave_type || 'annual',
+      date_from: toInputDate(rec.date_from),
+      date_to: toInputDate(rec.date_to),
+      days: Number(rec.days) || 1,
+      remarks: rec.remarks || '',
+    });
+    setShowLeaveModal(true);
+  };
+
+  const handleSaveLeave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        employee_id: emp.id,
+        leave_type: leaveForm.leave_type,
+        date_from: leaveForm.date_from,
+        date_to: leaveForm.date_to,
+        days: Number(leaveForm.days) || 1,
+        remarks: leaveForm.remarks || null,
+        status: 'approved',
+      };
+      if (editingLeave) {
+        await leavesApi.update(editingLeave.id, payload);
+      } else {
+        await leavesApi.create(payload);
+      }
+      setShowLeaveModal(false);
+      setEditingLeave(null);
+      loadLeaveRecords(emp.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '儲存失敗');
+    }
+  };
+
+  const handleDeleteLeave = async (id: number) => {
+    if (!confirm('確定刪除此請假紀錄？此操作只影響員工總紀錄，不影響糧單。')) return;
+    try {
+      await leavesApi.delete(id);
+      loadLeaveRecords(emp.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || '刪除失敗');
+    }
   };
 
   const handleAddNickname = async () => {
@@ -236,6 +449,14 @@ export default function EmployeeDetailPage() {
       setCertTypes((res.data || []).filter((o: any) => o.is_active));
     }).catch(() => {});
   }, [params.id]);
+
+  // Close annual-leave tooltip when clicking outside
+  useEffect(() => {
+    if (!showAnnualLeaveTooltip) return;
+    const handler = () => setShowAnnualLeaveTooltip(false);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [showAnnualLeaveTooltip]);
 
   const handleSave = async () => {
     try {
@@ -651,6 +872,294 @@ export default function EmployeeDetailPage() {
         ) : <p className="text-gray-500 text-sm">暫無薪資紀錄</p>}
       </div>
 
+      {/* Leave Records (休假紀錄) */}
+      {(() => {
+        const leaveSummary = buildLeaveMonthlySummary(leaveRecords);
+        const serviceYears = completedServiceYears(emp?.join_date);
+        const accumulated = accumulatedAnnualLeave(emp?.join_date);
+        const usedAnnual = leaveSummary.totalAnnual;
+        const remainingAnnual = accumulated - usedAnnual;
+        const overUsed = remainingAnnual < 0 ? Math.abs(remainingAnnual) : 0;
+        const payrollMonthly: { month: string; rest_days: number }[] = payrollLeaveSummary?.monthly || [];
+        const payrollYearly: { year: string; rest_days: number }[] = payrollLeaveSummary?.yearly || [];
+        const payrollTotal: number = payrollLeaveSummary?.total || 0;
+        const readOnly = isReadOnly();
+        return (
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">休假紀錄</h2>
+            <p className="text-sm text-gray-500 mt-1">員工請假、糧單休假統計與年假餘額</p>
+          </div>
+        </div>
+
+        {/* C. 年假餘額計算 */}
+        <div className="rounded-lg border border-gray-200 bg-blue-50/40 p-4 mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <h3 className="text-sm font-semibold text-gray-800">年假餘額</h3>
+            <span className="relative inline-flex">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowAnnualLeaveTooltip((v) => !v); }}
+                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-400 text-white text-[10px] font-bold hover:bg-gray-500"
+                title="年假計算方法"
+              >
+                1
+              </button>
+              {showAnnualLeaveTooltip && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute z-50 left-1/2 -translate-x-1/2 top-6 w-72 rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
+                >
+                  <div className="text-xs font-semibold text-gray-800 mb-2">香港勞工法例 — 有薪年假計算方法</div>
+                  <p className="text-[11px] text-gray-600 mb-2">按《僱傭條例》，僱員按連續性合約受僱每滿 12 個月，可享有以下有薪年假：</p>
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b text-gray-500">
+                        <th className="py-1 text-left">受僱年資</th>
+                        <th className="py-1 text-right">有薪年假</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b"><td className="py-1">1 年</td><td className="py-1 text-right">7 天</td></tr>
+                      <tr className="border-b"><td className="py-1">2 年</td><td className="py-1 text-right">7 天</td></tr>
+                      <tr className="border-b"><td className="py-1">3 年</td><td className="py-1 text-right">8 天</td></tr>
+                      <tr className="border-b"><td className="py-1">4 年</td><td className="py-1 text-right">9 天</td></tr>
+                      <tr className="border-b"><td className="py-1">5 年</td><td className="py-1 text-right">10 天</td></tr>
+                      <tr className="border-b"><td className="py-1">6 年</td><td className="py-1 text-right">11 天</td></tr>
+                      <tr className="border-b"><td className="py-1">7 年</td><td className="py-1 text-right">12 天</td></tr>
+                      <tr className="border-b"><td className="py-1">8 年</td><td className="py-1 text-right">13 天</td></tr>
+                      <tr><td className="py-1">9 年及以上</td><td className="py-1 text-right">14 天</td></tr>
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-gray-400 mt-2">註：本頁累積可放年假為入職至今每一個完整受僱年度應得年假之總和。</p>
+                </div>
+              )}
+            </span>
+          </div>
+          {emp?.join_date ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md bg-white border border-gray-200 p-3">
+                <div className="text-xs text-gray-500">入職日期</div>
+                <div className="mt-1 text-sm font-semibold text-gray-900">{fmtDate(emp.join_date)}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5">受僱滿 {serviceYears} 年</div>
+              </div>
+              <div className="rounded-md bg-white border border-gray-200 p-3">
+                <div className="text-xs text-gray-500">累積可放年假</div>
+                <div className="mt-1 text-xl font-bold font-mono text-blue-700">{accumulated} 天</div>
+              </div>
+              <div className="rounded-md bg-white border border-gray-200 p-3">
+                <div className="text-xs text-gray-500">已放年假</div>
+                <div className="mt-1 text-xl font-bold font-mono text-gray-900">{usedAnnual} 天</div>
+              </div>
+              <div className="rounded-md bg-white border border-gray-200 p-3">
+                <div className="text-xs text-gray-500">年假餘額</div>
+                <div className={`mt-1 text-xl font-bold font-mono ${remainingAnnual < 0 ? 'text-red-600' : 'text-green-700'}`}>{remainingAnnual} 天</div>
+                {overUsed > 0 && (
+                  <div className="text-[11px] text-red-600 mt-0.5 font-medium">已超額 {overUsed} 天</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">尚未設定入職日期（join_date），無法計算年假餘額。</p>
+          )}
+        </div>
+
+        {/* A. 請假紀錄 */}
+        <div className="rounded-lg border border-gray-200 mb-4">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setLeaveListExpanded((v) => !v)}
+              className="flex items-center gap-2 text-left"
+            >
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${leaveListExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <span className="text-sm font-semibold text-gray-800">請假紀錄</span>
+              <span className="text-xs text-gray-500">（入職以來：病假 {leaveSummary.totalSick} 天、年假 {leaveSummary.totalAnnual} 天）</span>
+            </button>
+            {!readOnly && (
+              <button onClick={openCreateLeave} className="text-sm text-primary-600 hover:underline">新增請假</button>
+            )}
+          </div>
+          {leaveListExpanded && (
+            <div className="px-4 pb-4 border-t pt-3">
+              {leaveRecordsLoading ? (
+                <p className="text-gray-500 text-sm">載入請假紀錄中...</p>
+              ) : leaveRecords.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="px-3 py-2 text-left">年月</th>
+                        <th className="px-3 py-2 text-right">病假天數</th>
+                        <th className="px-3 py-2 text-right">年假天數</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const rows: any[] = [];
+                        let currentYear = '';
+                        for (const m of leaveSummary.monthly) {
+                          const year = m.month.slice(0, 4);
+                          if (currentYear && year !== currentYear) {
+                            const yr = leaveSummary.yearly.find((y) => y.year === currentYear);
+                            rows.push(
+                              <tr key={`sub-${currentYear}`} className="bg-blue-50 border-b font-medium">
+                                <td className="px-3 py-2">{currentYear} 年度小計</td>
+                                <td className="px-3 py-2 text-right font-mono">{yr?.sick ?? 0}</td>
+                                <td className="px-3 py-2 text-right font-mono">{yr?.annual ?? 0}</td>
+                              </tr>
+                            );
+                          }
+                          currentYear = year;
+                          rows.push(
+                            <tr key={m.month} className="border-b">
+                              <td className="px-3 py-2">{fmtYearMonth(m.month)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{m.sick || '-'}</td>
+                              <td className="px-3 py-2 text-right font-mono">{m.annual || '-'}</td>
+                            </tr>
+                          );
+                        }
+                        if (currentYear) {
+                          const yr = leaveSummary.yearly.find((y) => y.year === currentYear);
+                          rows.push(
+                            <tr key={`sub-${currentYear}`} className="bg-blue-50 border-b font-medium">
+                              <td className="px-3 py-2">{currentYear} 年度小計</td>
+                              <td className="px-3 py-2 text-right font-mono">{yr?.sick ?? 0}</td>
+                              <td className="px-3 py-2 text-right font-mono">{yr?.annual ?? 0}</td>
+                            </tr>
+                          );
+                        }
+                        return rows;
+                      })()}
+                      <tr className="bg-gray-100 border-b font-bold">
+                        <td className="px-3 py-2">入職以來總計</td>
+                        <td className="px-3 py-2 text-right font-mono">{leaveSummary.totalSick}</td>
+                        <td className="px-3 py-2 text-right font-mono">{leaveSummary.totalAnnual}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* 明細列表（含備註與操作） */}
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">明細</div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b">
+                          <th className="px-3 py-2 text-left">類型</th>
+                          <th className="px-3 py-2 text-left">開始</th>
+                          <th className="px-3 py-2 text-left">結束</th>
+                          <th className="px-3 py-2 text-right">天數</th>
+                          <th className="px-3 py-2 text-left">備註</th>
+                          {!readOnly && <th className="px-3 py-2 text-right">操作</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaveRecords.map((rec) => (
+                          <tr key={rec.id} className="border-b">
+                            <td className="px-3 py-2"><span className={LEAVE_TYPE_BADGE[rec.leave_type] || LEAVE_TYPE_BADGE.other}>{LEAVE_TYPE_LABELS[rec.leave_type] || rec.leave_type}</span></td>
+                            <td className="px-3 py-2">{fmtDate(rec.date_from)}</td>
+                            <td className="px-3 py-2">{fmtDate(rec.date_to)}</td>
+                            <td className="px-3 py-2 text-right font-mono">{Number(rec.days)}</td>
+                            <td className="px-3 py-2 text-gray-500">{rec.remarks || '-'}</td>
+                            {!readOnly && (
+                              <td className="px-3 py-2 text-right whitespace-nowrap">
+                                <button onClick={() => openEditLeave(rec)} className="text-primary-600 hover:underline mr-3">修改</button>
+                                <button onClick={() => handleDeleteLeave(rec.id)} className="text-red-600 hover:underline">刪除</button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">暫無請假紀錄</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* B. 糧單休假紀錄（自動） */}
+        <div className="rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setPayrollLeaveExpanded((v) => !v)}
+              className="flex items-center gap-2 text-left"
+            >
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${payrollLeaveExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <span className="text-sm font-semibold text-gray-800">糧單休假紀錄</span>
+              <span className="text-xs text-gray-500">（入職以來總計：{payrollTotal} 天）</span>
+            </button>
+            <span className="text-[11px] text-gray-400">自動統計，不可修改</span>
+          </div>
+          {payrollLeaveExpanded && (
+            <div className="px-4 pb-4 border-t pt-3">
+              {payrollLeaveLoading ? (
+                <p className="text-gray-500 text-sm">載入糧單休假統計中...</p>
+              ) : payrollMonthly.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="px-3 py-2 text-left">年月</th>
+                        <th className="px-3 py-2 text-right">休假天數</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const rows: any[] = [];
+                        let currentYear = '';
+                        for (const m of payrollMonthly) {
+                          const year = m.month.slice(0, 4);
+                          if (currentYear && year !== currentYear) {
+                            const yr = payrollYearly.find((y) => y.year === currentYear);
+                            rows.push(
+                              <tr key={`psub-${currentYear}`} className="bg-blue-50 border-b font-medium">
+                                <td className="px-3 py-2">{currentYear} 年度小計</td>
+                                <td className="px-3 py-2 text-right font-mono">{yr?.rest_days ?? 0}</td>
+                              </tr>
+                            );
+                          }
+                          currentYear = year;
+                          rows.push(
+                            <tr key={m.month} className="border-b">
+                              <td className="px-3 py-2">{fmtYearMonth(m.month)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{m.rest_days}</td>
+                            </tr>
+                          );
+                        }
+                        if (currentYear) {
+                          const yr = payrollYearly.find((y) => y.year === currentYear);
+                          rows.push(
+                            <tr key={`psub-${currentYear}`} className="bg-blue-50 border-b font-medium">
+                              <td className="px-3 py-2">{currentYear} 年度小計</td>
+                              <td className="px-3 py-2 text-right font-mono">{yr?.rest_days ?? 0}</td>
+                            </tr>
+                          );
+                        }
+                        return rows;
+                      })()}
+                      <tr className="bg-gray-100 border-b font-bold">
+                        <td className="px-3 py-2">入職以來總計</td>
+                        <td className="px-3 py-2 text-right font-mono">{payrollTotal}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="text-[11px] text-gray-400 mt-2">休假天數 = 糧單期間內沒有工作記錄、且非法定假期、非星期日、非請假的天數。</p>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">暫無糧單休假紀錄</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+        );
+      })()}
+
       {/* Petty Cash Records */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -807,6 +1316,42 @@ export default function EmployeeDetailPage() {
           </div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={salaryForm.notes} onChange={e => setSalaryForm({...salaryForm, notes: e.target.value})} className="input-field" rows={2} /></div>
           <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowSalaryModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">新增</button></div>
+        </form>
+      </Modal>
+
+      {/* Leave Modal (新增/修改請假) */}
+      <Modal isOpen={showLeaveModal} onClose={() => { setShowLeaveModal(false); setEditingLeave(null); }} title={editingLeave ? '修改請假紀錄' : '新增請假紀錄'} size="lg">
+        <form onSubmit={handleSaveLeave} className="space-y-4">
+          <p className="text-xs text-gray-500">此請假紀錄只影響員工總紀錄與年假統計，不影響糧單計算。</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">請假類型 *</label>
+              <select value={leaveForm.leave_type} onChange={e => setLeaveForm({ ...leaveForm, leave_type: e.target.value })} className="input-field" required>
+                <option value="annual">年假</option>
+                <option value="sick">病假</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">天數 *</label>
+              <input type="number" step="0.5" min="0" value={leaveForm.days} onChange={e => setLeaveForm({ ...leaveForm, days: e.target.value })} className="input-field" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
+              <DateInput value={leaveForm.date_from} onChange={v => setLeaveForm({ ...leaveForm, date_from: v })} className="input-field" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
+              <DateInput value={leaveForm.date_to} onChange={v => setLeaveForm({ ...leaveForm, date_to: v })} className="input-field" required />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
+            <textarea value={leaveForm.remarks} onChange={e => setLeaveForm({ ...leaveForm, remarks: e.target.value })} className="input-field" rows={2} placeholder="例：抵銷年假、補登等原因" />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowLeaveModal(false); setEditingLeave(null); }} className="btn-secondary">取消</button>
+            <button type="submit" className="btn-primary">{editingLeave ? '儲存' : '新增'}</button>
+          </div>
         </form>
       </Modal>
 

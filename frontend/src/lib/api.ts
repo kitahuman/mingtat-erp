@@ -644,6 +644,9 @@ export const salaryConfigApi = {
 export const payrollApi = {
   list: (params?: any) => api.get('/payroll', { params }),
   get: (id: number) => api.get(`/payroll/${id}`),
+  // 糧單休假統計（自動統計某員工所有糧單中的休假天數）
+  leaveSummary: (employeeId: number) =>
+    api.get(`/payroll/leave-summary/${employeeId}`),
   exportPdf: (id: number, params?: any) =>
     api.get(`/payroll/${id}/pdf`, { params, responseType: 'blob' }),
   // 預覽計糧（不儲存）
@@ -1027,6 +1030,7 @@ export const attendancesApi = {
 export const leavesApi = {
   list: (params?: any) => api.get('/leaves', { params }),
   get: (id: number) => api.get(`/leaves/${id}`),
+  create: (data: any) => api.post('/leaves', data),
   update: (id: number, data: any) => api.put(`/leaves/${id}`, data),
   approve: (id: number) => api.post(`/leaves/${id}/approve`),
   reject: (id: number, remarks?: string) =>
