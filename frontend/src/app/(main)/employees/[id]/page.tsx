@@ -1257,6 +1257,19 @@ export default function EmployeeDetailPage() {
       {/* Transfer History */}
       <div className="card">
         <h2 className="text-lg font-bold text-gray-900 mb-4">調動紀錄</h2>
+        {/* Display creation date and join date */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-600 font-medium">建立日期</p>
+              <p className="text-gray-900 font-semibold">{emp?.created_at ? fmtDate(emp.created_at) : '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">入職日期</p>
+              <p className="text-gray-900 font-semibold">{emp?.join_date ? fmtDate(emp.join_date) : '-'}</p>
+            </div>
+          </div>
+        </div>
         {emp?.transfers?.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -1338,9 +1338,16 @@ export default function PayrollDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <Link href="/payroll-records" className="text-gray-400 hover:text-gray-600">← 返回</Link>
-          <h1 className="text-2xl font-bold text-gray-900">
-            糧單 #{payroll.id}
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              糧單 #{payroll.id}
+              {payroll.employee && (
+                <span className="text-gray-600 font-normal ml-2">
+                  - {payroll.employee.name_zh || payroll.employee.name_en || '未知'} ({payroll.employee.emp_code || '-'})
+                </span>
+              )}
+            </h1>
+          </div>
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[payroll.status] || ''}`}>
             {STATUS_LABELS[payroll.status] || payroll.status}
           </span>
