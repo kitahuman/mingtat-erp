@@ -384,11 +384,17 @@ export default function PayrollRecordsPage() {
         row.employee?.company?.internal_prefix ||
         row.employee?.company?.name ||
         '-',
+      filterRender: (_v: unknown, row: PayrollRecordRow) =>
+        row.employee?.company?.internal_prefix ||
+        row.employee?.company?.name ||
+        '-',
     },
     {
       key: 'salary_type',
       label: '類型',
       render: (_v: unknown, row: PayrollRecordRow) =>
+        row.salary_type === 'daily' ? '日薪' : '月薪',
+      filterRender: (_v: unknown, row: PayrollRecordRow) =>
         row.salary_type === 'daily' ? '日薪' : '月薪',
     },
     {
@@ -453,11 +459,13 @@ export default function PayrollRecordsPage() {
           {STATUS_LABELS[row.status] || row.status}
         </span>
       ),
+      filterRender: (_v: unknown, row: PayrollRecordRow) => STATUS_LABELS[row.status] || row.status || '-',
     },
     {
       key: 'publisher',
       label: '發佈人',
       render: (_v: unknown, row: PayrollRecordRow) => row.publisher_name || '-',
+      filterRender: (_v: unknown, row: PayrollRecordRow) => row.publisher_name || '-',
     },
     {
       key: 'payment_date',

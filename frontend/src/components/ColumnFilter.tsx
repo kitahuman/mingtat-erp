@@ -32,6 +32,7 @@ export default function ColumnFilter({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Server-side options state
   const [serverOptions, setServerOptions] = useState<string[] | null>(null);
@@ -171,7 +172,15 @@ export default function ColumnFilter({
   }, [isOpen, virtualList.viewportHeight]);
 
   useEffect(() => {
-    if (isOpen) updateDropdownPosition();
+    if (isOpen) {
+      updateDropdownPosition();
+      // Delay focus to ensure the portal is fully mounted and positioned.
+      // preventScroll: true stops the browser from jumping to the focused element.
+      const timer = setTimeout(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
   }, [isOpen, updateDropdownPosition]);
 
   useEffect(() => {
@@ -299,17 +308,7 @@ export default function ColumnFilter({
       {/* Search */}
       <div className="p-2 border-b border-gray-100">
           <input
-            ref={(el) => {
-              if (el && isOpen) {
-                // Use requestAnimationFrame to focus after the portal is fully mounted and positioned
-                // This prevents the page from jumping when autoFocus is used in a portaled element
-                requestAnimationFrame(() => {
-                  if (document.activeElement !== el) {
-                    el.focus();
-                  }
-                });
-              }
-            }}
+            ref={inputRef}
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
