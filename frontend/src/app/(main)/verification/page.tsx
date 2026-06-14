@@ -8,6 +8,7 @@ import DateInput from '@/components/DateInput';
 // ── 狀態圖標 ──────────────────────────────────────────────
 const STATUS_ICON: Record<string, string> = {
   matched: '✅',
+  quantity_matched: '≈',
   diff: '⚠️',
   missing: '❌',
   source_missing: '🔍',
@@ -17,6 +18,7 @@ const STATUS_ICON: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   matched: '已匹配',
+  quantity_matched: '數量匹配',
   diff: '部分匹配',
   missing: '缺失',
   source_missing: '來源缺失',
@@ -26,6 +28,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   matched: 'text-green-600',
+  quantity_matched: 'text-orange-500',
   diff: 'text-amber-500',
   missing: 'text-red-500',
   source_missing: 'text-orange-500',

@@ -33,7 +33,7 @@ const categoryLabels: Record<string, string> = {
 
 // ── 核對狀態 Badge ──────────────────────────────────────────
 function VerificationStatusBadge({ reportId }: { reportId: number }) {
-  const [status, setStatus] = useState<{ matched: number; total: number } | null>(null);
+  const [status, setStatus] = useState<{ matched: number; quantityMatched: number; diff: number; total: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +42,9 @@ function VerificationStatusBadge({ reportId }: { reportId: number }) {
         if (cancelled) return;
         const items = res.data as Array<{ status: string }>;
         const matched = items.filter((i) => i.status === 'matched').length;
-        setStatus({ matched, total: items.length });
+        const quantityMatched = items.filter((i) => i.status === 'quantity_matched').length;
+        const diff = items.filter((i) => i.status === 'diff').length;
+        setStatus({ matched, quantityMatched, diff, total: items.length });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -50,22 +52,27 @@ function VerificationStatusBadge({ reportId }: { reportId: number }) {
 
   if (!status || status.total === 0) return <span className="text-gray-300 text-xs">—</span>;
 
-  const allMatched = status.matched === status.total;
-  const partial = status.matched > 0 && !allMatched;
+  const positiveCount = status.matched + status.quantityMatched;
+  const allExact = status.matched === status.total;
+  const allPositive = positiveCount === status.total;
+  const hasQuantityOnly = status.quantityMatched > 0 && status.matched === 0 && status.diff === 0;
+  const partial = positiveCount > 0 && !allPositive;
 
   return (
     <span
       className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-        allMatched
+        allExact
           ? 'bg-green-100 text-green-700'
-          : partial
-            ? 'bg-amber-100 text-amber-700'
-            : 'bg-red-100 text-red-700'
+          : allPositive
+            ? 'bg-orange-100 text-orange-700'
+            : partial || status.diff > 0
+              ? 'bg-amber-100 text-amber-700'
+              : 'bg-red-100 text-red-700'
       }`}
-      title={`${status.matched}/${status.total} 已配對`}
+      title={`精確 ${status.matched} / 數量 ${status.quantityMatched} / 不符 ${status.diff} / 總共 ${status.total}`}
     >
-      {allMatched ? '✅' : partial ? '⚠️' : '❌'}
-      {status.matched}/{status.total}
+      {allExact ? '✅' : allPositive ? '≈' : partial || status.diff > 0 ? '⚠️' : '❌'}
+      {positiveCount}/{status.total}
     </span>
   );
 }

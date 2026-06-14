@@ -1421,11 +1421,12 @@ export class VerificationService {
       const activeStatuses = allStatuses.filter((s) => s !== 'na' && s !== 'unverified');
       let overallStatus = 'unverified';
       if (activeStatuses.length > 0) {
-        const matchedCount = activeStatuses.filter((s) => s === 'matched').length;
+        const matchedCount = activeStatuses.filter((s) => s === 'matched' || s === 'quantity_matched').length;
         const missingCount = activeStatuses.filter((s) => s === 'missing').length;
+        const diffCount = activeStatuses.filter((s) => s === 'diff').length;
         if (matchedCount === activeStatuses.length) {
           overallStatus = 'matched';
-        } else if (matchedCount > 0) {
+        } else if (matchedCount > 0 || diffCount > 0) {
           overallStatus = 'diff'; // 部分匹配 → 顯示為有差異
         } else if (missingCount === activeStatuses.length) {
           overallStatus = 'missing';
@@ -1530,10 +1531,11 @@ export class VerificationService {
       const active = [sReceipt, sSlip, sSheet, sCustomer, sGps, sClock, sWa, sDailyReport].filter((s) => s !== 'na' && s !== 'unverified');
       let overall = 'unverified';
       if (active.length > 0) {
-        const mc = active.filter((s) => s === 'matched').length;
+        const mc = active.filter((s) => s === 'matched' || s === 'quantity_matched').length;
         const misc = active.filter((s) => s === 'missing').length;
+        const dc = active.filter((s) => s === 'diff').length;
         if (mc === active.length) overall = 'matched';
-        else if (mc > 0) overall = 'diff';
+        else if (mc > 0 || dc > 0) overall = 'diff';
         else if (misc === active.length) overall = 'missing';
       }
       if (overall === 'matched') globalMatched++;

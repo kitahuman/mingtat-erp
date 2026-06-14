@@ -654,27 +654,30 @@ export class MatchingService {
       }
 
       // 工程日報
-      const dailyReportStatus = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
-      const dailyReportMatched = wls.some((wl: any) => dailyReportStatus.get(wl.id) === 'matched');
-      if (dailyReportMatched) {
+      const dailyReportStatuses = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
+      const bestDrStatus = this.getBestDailyReportStatus(dailyReportStatuses);
+      if (bestDrStatus && bestDrStatus !== 'missing' && bestDrStatus !== 'unverified') {
         // 查詢配對的日報 items
         const matchedItems = await this.prisma.verificationMatch.findMany({
           where: {
             match_work_record_id: { in: wls.map((wl: any) => wl.id) },
             match_source_id: 10,
-            match_status: 'matched',
+            match_status: { in: ['matched', 'quantity_matched', 'diff'] },
           },
-          select: { match_record_id: true },
+          select: { match_diff_fields: true, match_status: true },
         });
-        const itemIds = matchedItems.map(m => m.match_record_id).filter(Boolean) as number[];
+        const itemIds = [...new Set(matchedItems.map(m => (m.match_diff_fields as Record<string, unknown>)?.daily_report_item_id as number).filter(Boolean))];
         const items = itemIds.length > 0 ? await this.prisma.dailyReportItem.findMany({
           where: { id: { in: itemIds } },
           include: { report: { select: { daily_report_date: true, daily_report_shift_type: true, daily_report_project_name: true } } },
         }) : [];
+        // 取得數量資訊
+        const quantityInfoEntry = matchedItems.find(m => m.match_status === 'quantity_matched' || m.match_status === 'diff');
+        const quantityInfo = quantityInfoEntry ? (quantityInfoEntry.match_diff_fields as Record<string, unknown>)?.quantity_info as { report_quantity: number; actual_quantity: number } | undefined : undefined;
         sources['daily_report'] = {
           source: '工程日報',
           status: 'found',
-          match_score: 100,
+          match_score: bestDrStatus === 'matched' ? 100 : bestDrStatus === 'quantity_matched' ? 80 : 60,
           field_scores: [],
           details: items.map((item: any) => ({
             id: item.id,
@@ -685,6 +688,8 @@ export class MatchingService {
             content: item.daily_report_item_content || null,
             name_or_plate: item.daily_report_item_name_or_plate || null,
             quantity: item.daily_report_item_quantity != null ? Number(item.daily_report_item_quantity) : null,
+            match_type: bestDrStatus,
+            quantity_info: quantityInfo || null,
           })),
         };
       } else {
@@ -954,26 +959,28 @@ export class MatchingService {
       }
 
       // 工程日報
-      const dailyReportStatus = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
-      const dailyReportMatched = wls.some((wl: any) => dailyReportStatus.get(wl.id) === 'matched');
-      if (dailyReportMatched) {
+      const dailyReportStatuses = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
+      const bestDrStatus = this.getBestDailyReportStatus(dailyReportStatuses);
+      if (bestDrStatus && bestDrStatus !== 'missing' && bestDrStatus !== 'unverified') {
         const matchedItems = await this.prisma.verificationMatch.findMany({
           where: {
             match_work_record_id: { in: wls.map((wl: any) => wl.id) },
             match_source_id: 10,
-            match_status: 'matched',
+            match_status: { in: ['matched', 'quantity_matched', 'diff'] },
           },
-          select: { match_record_id: true },
+          select: { match_diff_fields: true, match_status: true },
         });
-        const itemIds = matchedItems.map(m => m.match_record_id).filter(Boolean) as number[];
+        const itemIds = [...new Set(matchedItems.map(m => (m.match_diff_fields as Record<string, unknown>)?.daily_report_item_id as number).filter(Boolean))];
         const items = itemIds.length > 0 ? await this.prisma.dailyReportItem.findMany({
           where: { id: { in: itemIds } },
           include: { report: { select: { daily_report_date: true, daily_report_shift_type: true, daily_report_project_name: true } } },
         }) : [];
+        const quantityInfoEntry = matchedItems.find(m => m.match_status === 'quantity_matched' || m.match_status === 'diff');
+        const quantityInfo = quantityInfoEntry ? (quantityInfoEntry.match_diff_fields as Record<string, unknown>)?.quantity_info as { report_quantity: number; actual_quantity: number } | undefined : undefined;
         sources['daily_report'] = {
           source: '工程日報',
           status: 'found',
-          match_score: 100,
+          match_score: bestDrStatus === 'matched' ? 100 : bestDrStatus === 'quantity_matched' ? 80 : 60,
           field_scores: [],
           details: items.map((item: any) => ({
             id: item.id,
@@ -984,6 +991,8 @@ export class MatchingService {
             content: item.daily_report_item_content || null,
             name_or_plate: item.daily_report_item_name_or_plate || null,
             quantity: item.daily_report_item_quantity != null ? Number(item.daily_report_item_quantity) : null,
+            match_type: bestDrStatus,
+            quantity_info: quantityInfo || null,
           })),
         };
       } else {
@@ -1288,6 +1297,31 @@ export class MatchingService {
       field_scores: [],
       details: [],
     };
+  }
+
+  /**
+   * 從多個工作記錄的日報狀態中取得最佳狀態
+   * 優先級: matched > quantity_matched > diff > missing > unverified
+   */
+  private getBestDailyReportStatus(statusMap: Map<number, string>): string | null {
+    const priority: Record<string, number> = {
+      matched: 4,
+      quantity_matched: 3,
+      diff: 2,
+      missing: 1,
+      source_missing: 1,
+      unverified: 0,
+    };
+    let best: string | null = null;
+    let bestPriority = -1;
+    for (const status of statusMap.values()) {
+      const p = priority[status] ?? 0;
+      if (p > bestPriority) {
+        bestPriority = p;
+        best = status;
+      }
+    }
+    return best;
   }
 
   // ══════════════════════════════════════════════════════════════

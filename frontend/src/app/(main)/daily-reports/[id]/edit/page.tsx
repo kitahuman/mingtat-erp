@@ -128,7 +128,7 @@ export default function EditDailyReportPage() {
   const [originalReport, setOriginalReport] = useState<any>(null);
 
   // 核對狀態（每個 item 的配對狀態）
-  const [verificationStatuses, setVerificationStatuses] = useState<Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>>(new Map());
+  const [verificationStatuses, setVerificationStatuses] = useState<Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }>; quantity_info?: { report_quantity: number; actual_quantity: number } }>>(new Map());
 
   const normalizeProjectNames = (data: any): string[] => {
     const list = Array.isArray(data) ? data : [];
@@ -405,9 +405,9 @@ export default function EditDailyReportPage() {
     // 載入核對狀態
     verificationApi.getDailyReportVerification(reportId)
       .then((res) => {
-        const statusMap = new Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>();
-        (res.data as Array<{ item_id: number; status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>).forEach((item) => {
-          statusMap.set(item.item_id, { status: item.status, matched_work_logs: item.matched_work_logs });
+        const statusMap = new Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }>; quantity_info?: { report_quantity: number; actual_quantity: number } }>();
+        (res.data as Array<{ item_id: number; status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }>; quantity_info?: { report_quantity: number; actual_quantity: number } }>).forEach((item) => {
+          statusMap.set(item.item_id, { status: item.status, matched_work_logs: item.matched_work_logs, quantity_info: item.quantity_info });
         });
         setVerificationStatuses(statusMap);
       })
@@ -840,22 +840,33 @@ export default function EditDailyReportPage() {
 
             {items.map((item, idx) => {
               const vStatus = item._id ? verificationStatuses.get(item._id) : undefined;
-              const vColor = vStatus?.status === 'matched' ? 'border-l-green-500' : vStatus?.status === 'missing' ? 'border-l-red-400' : 'border-l-transparent';
+              const vColor = vStatus?.status === 'matched' ? 'border-l-green-500'
+                : vStatus?.status === 'quantity_matched' ? 'border-l-orange-400'
+                : vStatus?.status === 'diff' ? 'border-l-amber-400'
+                : vStatus?.status === 'missing' ? 'border-l-red-400'
+                : 'border-l-transparent';
               return (
               <div
                 key={item._key}
                 className={`grid grid-cols-12 gap-2 items-start bg-gray-50 rounded-lg px-2 py-2 border-l-4 ${vColor}`}
-                title={vStatus?.status === 'matched' ? `已配對 ${vStatus.matched_work_logs.length} 筆工作記錄` : vStatus?.status === 'missing' ? '未找到對應工作記錄' : ''}
+                title={vStatus?.status === 'matched' ? `已配對 ${vStatus.matched_work_logs.length} 筆工作記錄`
+                  : vStatus?.status === 'quantity_matched' ? `數量匹配：找到 ${vStatus.matched_work_logs.length} 條工作記錄`
+                  : vStatus?.status === 'diff' ? `數量不符：日報 ${vStatus.quantity_info?.report_quantity ?? '?'} / 實際 ${vStatus.quantity_info?.actual_quantity ?? '?'}`
+                  : vStatus?.status === 'missing' ? '未找到對應工作記錄' : ''}
               >
                 {/* Verification indicator */}
                 {vStatus && (
                   <div className="col-span-12 flex items-center gap-2 text-xs mb-1">
                     {vStatus.status === 'matched' ? (
                       <span className="text-green-600">✅ 已配對 {vStatus.matched_work_logs.length} 筆工作記錄</span>
+                    ) : vStatus.status === 'quantity_matched' ? (
+                      <span className="text-orange-600">≈ 數量匹配：找到 {vStatus.matched_work_logs.length} 條工作記錄</span>
+                    ) : vStatus.status === 'diff' ? (
+                      <span className="text-amber-600">⚠ 數量不符：日報 {vStatus.quantity_info?.report_quantity ?? '?'} / 實際 {vStatus.quantity_info?.actual_quantity ?? '?'}</span>
                     ) : (
                       <span className="text-red-500">❌ 未找到對應工作記錄</span>
                     )}
-                    {vStatus.status === 'matched' && vStatus.matched_work_logs.length > 0 && (
+                    {(vStatus.status === 'matched' || vStatus.status === 'quantity_matched') && vStatus.matched_work_logs.length > 0 && (
                       <span className="text-gray-400">
                         ({vStatus.matched_work_logs.map(wl => wl.employee_name || wl.equipment_number || `#${wl.id}`).join(', ')})
                       </span>

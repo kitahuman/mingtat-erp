@@ -869,7 +869,9 @@ function MatchingTableRow({
                                 ? 'bg-red-50 border-red-300'
                                 : 'bg-purple-50 border-purple-300'
                             : src.status === 'found'
-                              ? 'bg-white border-green-200 hover:border-green-400 cursor-pointer'
+                              ? (col.key === 'daily_report' && src.match_score < 100 && src.match_score >= 60
+                                ? 'bg-orange-50 border-orange-200 hover:border-orange-400 cursor-pointer'
+                                : 'bg-white border-green-200 hover:border-green-400 cursor-pointer')
                               : 'bg-gray-50 border-gray-200'
                       }`}
                       onClick={(e) => {
@@ -898,7 +900,13 @@ function MatchingTableRow({
                             <ScoreBadge score={src.match_score ?? 0} size="sm" />
                           )}
                           {src.status === 'found' ? (
-                            <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                            <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                              col.key === 'daily_report' && src.match_score < 100 && src.match_score >= 60
+                                ? 'text-orange-600 bg-orange-50 border-orange-200'
+                                : 'text-green-600 bg-green-50 border-green-200'
+                            }`}>
+                              {col.key === 'daily_report' && src.match_score === 80 && '≈ '}
+                              {col.key === 'daily_report' && src.match_score === 60 && '⚠ '}
                               {src.details.length} 筆
                             </span>
                           ) : (
@@ -1213,6 +1221,13 @@ function renderSourceDetail(sourceKey: string, detail: any) {
     case 'daily_report':
       return (
         <div className="space-y-0.5">
+          {detail.match_type && detail.match_type !== 'matched' && (
+            <div className={`text-xs font-medium px-1.5 py-0.5 rounded inline-block mb-1 ${
+              detail.match_type === 'quantity_matched' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              {detail.match_type === 'quantity_matched' ? '≈ 數量匹配' : '⚠ 數量不符'}
+            </div>
+          )}
           {detail.project_name && (
             <div><span className="text-gray-400">工程:</span> <span className="font-medium">{detail.project_name}</span></div>
           )}
@@ -1231,8 +1246,15 @@ function renderSourceDetail(sourceKey: string, detail: any) {
           {detail.name_or_plate && (
             <div><span className="text-gray-400">車牌/姓名:</span> <span className="font-mono">{detail.name_or_plate}</span></div>
           )}
-          {detail.quantity && (
+          {detail.quantity != null && (
             <div><span className="text-gray-400">數量:</span> {detail.quantity}</div>
+          )}
+          {detail.quantity_info && (
+            <div className={`text-xs mt-0.5 ${
+              detail.quantity_info.report_quantity === detail.quantity_info.actual_quantity ? 'text-green-600' : 'text-amber-600'
+            }`}>
+              日報 {detail.quantity_info.report_quantity} / 實際 {detail.quantity_info.actual_quantity}
+            </div>
           )}
         </div>
       );
