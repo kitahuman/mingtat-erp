@@ -31,6 +31,7 @@ import {
 } from './dto/verification-records-query.dto';
 import type { VerificationRecordFilterColumn } from './dto/verification-records-query.dto';
 import { GpsService } from './gps.service';
+import { DailyReportVerificationService } from './daily-report-verification.service';
 import {
   FileValidationPipe,
   FilesValidationPipe,
@@ -62,6 +63,7 @@ export class VerificationController {
     private readonly service: VerificationService,
     private readonly ocrService: OcrService,
     private readonly gpsService: GpsService,
+    private readonly dailyReportVerificationService: DailyReportVerificationService,
   ) {}
 
   // ── 上傳入帳票 Excel ──────────────────────────────────────
@@ -377,5 +379,26 @@ export class VerificationController {
   @Get('sources')
   async getSources() {
     return this.service.getSources();
+  }
+
+  // ── 工程日報核對狀態 ────────────────────────────────────────
+  @Get('daily-report-verification/:reportId')
+  async getDailyReportVerificationStatus(
+    @Param('reportId') reportId: string,
+  ) {
+    return this.dailyReportVerificationService.getDailyReportItemVerificationStatus(
+      parseInt(reportId, 10),
+    );
+  }
+
+  // ── 觸發日報重新核對 ────────────────────────────────────────
+  @Post('daily-report-verification/trigger/:reportId')
+  async triggerDailyReportVerification(
+    @Param('reportId') reportId: string,
+  ) {
+    await this.dailyReportVerificationService.verifyByDailyReport(
+      parseInt(reportId, 10),
+    );
+    return { success: true };
   }
 }

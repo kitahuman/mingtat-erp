@@ -1,12 +1,14 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
+import { DailyReportVerificationService } from '../verification/daily-report-verification.service';
 
 @Injectable()
 export class DailyReportsService {
   constructor(
     private prisma: PrismaService,
     private readonly projectsService: ProjectsService,
+    private readonly dailyReportVerificationService: DailyReportVerificationService,
   ) {}
 
   /**
@@ -229,6 +231,10 @@ export class DailyReportsService {
       },
       include: this.includeAll,
     });
+
+    // 觸發日報核對
+    this.dailyReportVerificationService.verifyByDailyReport(report.id).catch(() => {});
+
     return report;
   }
 
@@ -282,6 +288,10 @@ export class DailyReportsService {
       data,
       include: this.includeAll,
     });
+
+    // 觸發日報核對
+    this.dailyReportVerificationService.verifyByDailyReport(report.id).catch(() => {});
+
     return report;
   }
 

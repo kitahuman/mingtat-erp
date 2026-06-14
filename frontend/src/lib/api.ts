@@ -1833,6 +1833,14 @@ export const verificationApi = {
     date: string;
     search: string;
   }) => api.get('/verification/confirmations/search/records', { params }),
+
+  // 工程日報核對狀態
+  getDailyReportVerification: (reportId: number) =>
+    api.get(`/verification/daily-report-verification/${reportId}`),
+
+  // 觸發日報重新核對
+  triggerDailyReportVerification: (reportId: number) =>
+    api.post(`/verification/daily-report-verification/trigger/${reportId}`),
 };
 
 // Statutory Holidays (法定假期)

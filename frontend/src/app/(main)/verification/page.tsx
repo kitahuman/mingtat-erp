@@ -41,6 +41,7 @@ const SOURCE_LABELS: Record<string, string> = {
   gps: 'GPS',
   clock: '打卡',
   whatsapp: 'WhatsApp',
+  daily_report: '工程日報',
 };
 
 // 前端 source key → matchSingle 返回的 source key
@@ -52,9 +53,10 @@ const FE_TO_MATCH_SOURCE: Record<string, string> = {
   gps: 'gps',
   clock: 'attendance',
   whatsapp: 'whatsapp_order',
+  daily_report: 'daily_report',
 };
 
-const SOURCE_KEYS = ['receipt', 'slip', 'sheet', 'customer', 'gps', 'clock', 'whatsapp'];
+const SOURCE_KEYS = ['receipt', 'slip', 'sheet', 'customer', 'gps', 'clock', 'whatsapp', 'daily_report'];
 
 interface WorkbenchRecord {
   work_record_id: number;
@@ -73,6 +75,7 @@ interface WorkbenchRecord {
   status_gps: string;
   status_clock: string;
   status_whatsapp: string;
+  status_daily_report: string;
   overall_status: string;
 }
 

@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from './whatsapp.service';
+import { DailyReportVerificationService } from './daily-report-verification.service';
 import * as ExcelJS from 'exceljs';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -90,6 +91,7 @@ export class VerificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
+    private readonly dailyReportVerificationService: DailyReportVerificationService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════
@@ -1355,8 +1357,11 @@ export class VerificationService {
       }
     }
 
+    // ── 工程日報核對狀態（批量取得）───────────────────
+    const dailyReportStatusMap = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(workLogIds);
+
     // ── 逐筆工作紀錄計算各來源狀態 ─────────────────────────
-    // 來源 key 對應: receipt, slip_chit(→slip), driver_sheet(→sheet), customer_record(→customer), gps, clock, whatsapp_order(→whatsapp)
+    // 來源 key 對應: receipt, slip_chit(→slip), driver_sheet(→sheet), customer_record(→customer), gps, clock, whatsapp_order(→whatsapp), daily_report
     const records = workLogs.map((wl) => {
       const date = wl.scheduled_date?.toISOString().slice(0, 10) || '';
       const vehicleNorm = normalizeVehicle(wl.equipment_number);
@@ -1408,8 +1413,11 @@ export class VerificationService {
       }
       const statusWhatsapp = date ? getSourceStatus('whatsapp_order', hasWa) : 'unverified';
 
+      // 工程日報（從預先計算的 map 取得）
+      const statusDailyReport = dailyReportStatusMap.get(wl.id) || 'unverified';
+
       // 計算整體狀態
-      const allStatuses = [statusReceipt, statusSlip, statusSheet, statusCustomer, statusGps, statusClock, statusWhatsapp];
+      const allStatuses = [statusReceipt, statusSlip, statusSheet, statusCustomer, statusGps, statusClock, statusWhatsapp, statusDailyReport];
       const activeStatuses = allStatuses.filter((s) => s !== 'na' && s !== 'unverified');
       let overallStatus = 'unverified';
       if (activeStatuses.length > 0) {
@@ -1443,6 +1451,7 @@ export class VerificationService {
         status_gps: statusGps,
         status_clock: statusClock,
         status_whatsapp: statusWhatsapp,
+        status_daily_report: statusDailyReport,
         // 不再提供 match_id（舊系統），前端改用 work_record_id 調用 matchSingle
         match_id_receipt: null,
         match_id_slip: null,
@@ -1451,6 +1460,7 @@ export class VerificationService {
         match_id_gps: null,
         match_id_clock: null,
         match_id_whatsapp: null,
+        match_id_daily_report: null,
         overall_status: overallStatus,
       };
     });
@@ -1479,6 +1489,9 @@ export class VerificationService {
       if (!allConfirmMap.has(c.work_log_id)) allConfirmMap.set(c.work_log_id, new Map());
       allConfirmMap.get(c.work_log_id)!.set(c.source_code, c);
     }
+
+    // 工程日報核對狀態（全部 workLogs）
+    const allDailyReportStatusMap = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(allWorkLogIdList);
 
     // 對全部 workLogs 做輕量版狀態計算（只需 overall_status）
     let globalMatched = 0, globalDiff = 0, globalMissing = 0, globalUnverified = 0;
@@ -1512,8 +1525,9 @@ export class VerificationService {
       const waC = wlC?.get('whatsapp_order');
       if (waC?.status === 'manual_match' && waC.matched_record_id) hasWa2 = true;
       const sWa = calcStatus('whatsapp_order', hasWa2);
+      const sDailyReport = allDailyReportStatusMap.get(wl.id) || 'unverified';
 
-      const active = [sReceipt, sSlip, sSheet, sCustomer, sGps, sClock, sWa].filter((s) => s !== 'na' && s !== 'unverified');
+      const active = [sReceipt, sSlip, sSheet, sCustomer, sGps, sClock, sWa, sDailyReport].filter((s) => s !== 'na' && s !== 'unverified');
       let overall = 'unverified';
       if (active.length > 0) {
         const mc = active.filter((s) => s === 'matched').length;

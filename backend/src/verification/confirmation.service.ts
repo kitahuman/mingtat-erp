@@ -190,6 +190,7 @@ export class ConfirmationService {
       receipt: ['receipt'],
       slip_chit: ['slip_chit'],
       slip_no_chit: ['slip_no_chit'],
+      daily_report: ['daily_report'],
     };
 
     return sourceMap[sourceCode] ?? [sourceCode];
@@ -317,6 +318,45 @@ export class ConfirmationService {
           ],
           take: 50,
         });
+      }
+
+      case 'daily_report': {
+        const drWhere: any = {
+          report: {
+            daily_report_date: dateObj,
+            daily_report_deleted_at: null,
+          },
+        };
+        if (params.search && params.search.trim()) {
+          drWhere.OR = [
+            { daily_report_item_content: { contains: params.search, mode: 'insensitive' } },
+            { daily_report_item_name_or_plate: { contains: params.search, mode: 'insensitive' } },
+          ];
+        }
+        const drItems = await this.prisma.dailyReportItem.findMany({
+          where: drWhere,
+          include: {
+            report: {
+              select: {
+                id: true,
+                daily_report_date: true,
+                daily_report_shift_type: true,
+                daily_report_project_name: true,
+              },
+            },
+          },
+          take: 50,
+        });
+        return drItems.map((item) => ({
+          id: item.id,
+          report_id: item.report.id,
+          report_date: item.report.daily_report_date?.toISOString().slice(0, 10),
+          shift_type: item.report.daily_report_shift_type,
+          category: item.daily_report_item_category,
+          content: item.daily_report_item_content,
+          name_or_plate: item.daily_report_item_name_or_plate,
+          project_name: item.report.daily_report_project_name,
+        }));
       }
 
       default:

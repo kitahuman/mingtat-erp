@@ -12,11 +12,12 @@ import { WhatsappController } from './whatsapp.controller';
 import { MatchingController } from './matching.controller';
 import { ConfirmationController } from './confirmation.controller';
 import { NicknameMatchService } from './nickname-match.service';
+import { DailyReportVerificationService } from './daily-report-verification.service';
 
 @Module({
   imports: [PrismaModule, WhatsappClockinModule],
-  providers: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],
+  providers: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService, DailyReportVerificationService],
   controllers: [VerificationController, WhatsappController, MatchingController, ConfirmationController],
-  exports: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService],
+  exports: [VerificationService, OcrService, GpsService, WhatsappService, MatchingService, ConfirmationService, NicknameMatchService, DailyReportVerificationService],
 })
 export class VerificationModule {}

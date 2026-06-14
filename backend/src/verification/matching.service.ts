@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from './whatsapp.service';
 import { NicknameMatchService } from './nickname-match.service';
+import { DailyReportVerificationService } from './daily-report-verification.service';
 
 // ══════════════════════════════════════════════════════════════
 // 六來源交叉比對服務（含欄位層級匹配評分）
@@ -64,6 +65,7 @@ export class MatchingService {
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
     private readonly nicknameMatchService: NicknameMatchService,
+    private readonly dailyReportVerificationService: DailyReportVerificationService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════
@@ -1495,6 +1497,24 @@ export class MatchingService {
       sources['whatsapp_order'] = { source: 'WhatsApp Order', status: 'missing', details: [] };
     }
 
+    // 工程日報
+    const dailyReportResult = await this.dailyReportVerificationService.getWorkLogDailyReportStatus(workLogId);
+    if (dailyReportResult.status === 'matched') {
+      sources['daily_report'] = {
+        source: '工程日報',
+        status: 'found',
+        details: dailyReportResult.matched_items.map((item) => ({
+          id: item.id,
+          daily_report_id: item.daily_report_id,
+          category: item.category,
+          content: item.content,
+          name_or_plate: item.name_or_plate || '—',
+        })),
+      };
+    } else {
+      sources['daily_report'] = { source: '工程日報', status: 'missing', details: [] };
+    }
+
     await this.applyManualMatchOverrides(workLogId, sources);
 
     return {
@@ -1565,6 +1585,7 @@ export class MatchingService {
       attendance: 'attendance',
       clock: 'attendance',
       whatsapp_order: 'whatsapp_order',
+      daily_report: 'daily_report',
     };
 
     return sourceMap[sourceCode] ?? null;
@@ -1577,6 +1598,7 @@ export class MatchingService {
       gps: 'GPS 追蹤',
       attendance: '打卡紀錄',
       whatsapp_order: 'WhatsApp Order',
+      daily_report: '工程日報',
     };
 
     return labelMap[sourceKey] ?? sourceKey;
@@ -1676,6 +1698,23 @@ export class MatchingService {
           product_unit: item.wa_item_product_unit || null,
           goods_quantity: item.wa_item_goods_quantity !== null ? Number(item.wa_item_goods_quantity) : null,
           order_status: item.order?.wa_order_status || '—',
+        };
+      }
+
+      case 'daily_report': {
+        const item = await this.prisma.dailyReportItem.findUnique({
+          where: { id: matchedRecordId },
+          include: { report: { select: { id: true, daily_report_date: true, daily_report_shift_type: true } } },
+        });
+        if (!item) return null;
+        return {
+          id: item.id,
+          daily_report_id: item.report.id,
+          category: item.daily_report_item_category,
+          content: item.daily_report_item_content,
+          name_or_plate: item.daily_report_item_name_or_plate || '—',
+          date: item.report.daily_report_date?.toISOString().slice(0, 10) || '—',
+          shift_type: item.report.daily_report_shift_type,
         };
       }
 

@@ -9,6 +9,7 @@ import {
   partnersApi,
   fieldOptionsApi,
   projectsApi,
+  verificationApi,
 } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +26,7 @@ const CATEGORIES = ['worker', 'vehicle', 'machinery', 'tool'];
 
 interface EditItem {
   _key: string;
+  _id?: number; // DB item ID for verification status lookup
   category: string;
   worker_type: string;
   content: string;
@@ -124,6 +126,9 @@ export default function EditDailyReportPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [originalReport, setOriginalReport] = useState<any>(null);
+
+  // 核對狀態（每個 item 的配對狀態）
+  const [verificationStatuses, setVerificationStatuses] = useState<Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>>(new Map());
 
   const normalizeProjectNames = (data: any): string[] => {
     const list = Array.isArray(data) ? data : [];
@@ -368,6 +373,7 @@ export default function EditDailyReportPage() {
         setItems(
           (r.items || []).map((item: any) => ({
             _key: Math.random().toString(36).slice(2),
+            _id: item.id,
             category: item.daily_report_item_category || 'worker',
             worker_type: item.daily_report_item_worker_type || '',
             content: item.daily_report_item_content || '',
@@ -395,6 +401,17 @@ export default function EditDailyReportPage() {
       })
       .catch(() => setError('載入日報失敗'))
       .finally(() => setLoading(false));
+
+    // 載入核對狀態
+    verificationApi.getDailyReportVerification(reportId)
+      .then((res) => {
+        const statusMap = new Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>();
+        (res.data as Array<{ item_id: number; status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }> }>).forEach((item) => {
+          statusMap.set(item.item_id, { status: item.status, matched_work_logs: item.matched_work_logs });
+        });
+        setVerificationStatuses(statusMap);
+      })
+      .catch(() => {});
   }, [reportId]);
 
   // When project name is selected from dropdown:
@@ -821,11 +838,30 @@ export default function EditDailyReportPage() {
               <div className="col-span-1 text-center">操作</div>
             </div>
 
-            {items.map((item, idx) => (
+            {items.map((item, idx) => {
+              const vStatus = item._id ? verificationStatuses.get(item._id) : undefined;
+              const vColor = vStatus?.status === 'matched' ? 'border-l-green-500' : vStatus?.status === 'missing' ? 'border-l-red-400' : 'border-l-transparent';
+              return (
               <div
                 key={item._key}
-                className="grid grid-cols-12 gap-2 items-start bg-gray-50 rounded-lg px-2 py-2"
+                className={`grid grid-cols-12 gap-2 items-start bg-gray-50 rounded-lg px-2 py-2 border-l-4 ${vColor}`}
+                title={vStatus?.status === 'matched' ? `已配對 ${vStatus.matched_work_logs.length} 筆工作記錄` : vStatus?.status === 'missing' ? '未找到對應工作記錄' : ''}
               >
+                {/* Verification indicator */}
+                {vStatus && (
+                  <div className="col-span-12 flex items-center gap-2 text-xs mb-1">
+                    {vStatus.status === 'matched' ? (
+                      <span className="text-green-600">✅ 已配對 {vStatus.matched_work_logs.length} 筆工作記錄</span>
+                    ) : (
+                      <span className="text-red-500">❌ 未找到對應工作記錄</span>
+                    )}
+                    {vStatus.status === 'matched' && vStatus.matched_work_logs.length > 0 && (
+                      <span className="text-gray-400">
+                        ({vStatus.matched_work_logs.map(wl => wl.employee_name || wl.equipment_number || `#${wl.id}`).join(', ')})
+                      </span>
+                    )}
+                  </div>
+                )}
                 {/* Category */}
                 <div className="col-span-1">
                   <SearchableSelect
@@ -1008,7 +1044,8 @@ export default function EditDailyReportPage() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

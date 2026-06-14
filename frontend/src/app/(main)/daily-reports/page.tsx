@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter } from 'next/navigation';
 import {
@@ -8,6 +8,7 @@ import {
   partnersApi,
   fieldOptionsApi,
   projectsApi,
+  verificationApi,
 } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -29,6 +30,45 @@ const categoryLabels: Record<string, string> = {
   machinery: '車輛/機械',
   tool: '工具',
 };
+
+// ── 核對狀態 Badge ──────────────────────────────────────────
+function VerificationStatusBadge({ reportId }: { reportId: number }) {
+  const [status, setStatus] = useState<{ matched: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    verificationApi.getDailyReportVerification(reportId)
+      .then((res) => {
+        if (cancelled) return;
+        const items = res.data as Array<{ status: string }>;
+        const matched = items.filter((i) => i.status === 'matched').length;
+        setStatus({ matched, total: items.length });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [reportId]);
+
+  if (!status || status.total === 0) return <span className="text-gray-300 text-xs">—</span>;
+
+  const allMatched = status.matched === status.total;
+  const partial = status.matched > 0 && !allMatched;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+        allMatched
+          ? 'bg-green-100 text-green-700'
+          : partial
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-red-100 text-red-700'
+      }`}
+      title={`${status.matched}/${status.total} 已配對`}
+    >
+      {allMatched ? '✅' : partial ? '⚠️' : '❌'}
+      {status.matched}/{status.total}
+    </span>
+  );
+}
 
 export default function DailyReportsAdminPage() {
   const router = useRouter();
@@ -530,6 +570,9 @@ export default function DailyReportsAdminPage() {
                     狀態
                     <SortIcon field="daily_report_status" />
                   </th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">
+                    核對
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">
                     操作
                   </th>
@@ -599,6 +642,9 @@ export default function DailyReportsAdminPage() {
                             report.daily_report_status}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <VerificationStatusBadge reportId={report.id} />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <button
@@ -632,7 +678,7 @@ export default function DailyReportsAdminPage() {
                     {expandedId === report.id && (
                       <tr key={`${report.id}-detail`}>
                         <td
-                          colSpan={isReadOnly() ? 10 : 11}
+                          colSpan={isReadOnly() ? 11 : 12}
                           className="px-4 py-4 bg-blue-50/50"
                         >
                           <div className="space-y-3">

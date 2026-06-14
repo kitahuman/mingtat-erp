@@ -7,6 +7,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
 import { WorkLogsGateway } from './work-logs.gateway';
 import { AiKnowledgeCandidateService } from '../ai-knowledge/ai-knowledge-candidate.service';
+import { DailyReportVerificationService } from '../verification/daily-report-verification.service';
 import {
   UnmatchedCombinationsQueryDto,
   AddRateAndRematchDto,
@@ -125,6 +126,7 @@ export class WorkLogsService {
     private readonly auditLogsService: AuditLogsService,
     private readonly workLogsGateway: WorkLogsGateway,
     private readonly aiKnowledgeCandidateService: AiKnowledgeCandidateService,
+    private readonly dailyReportVerificationService: DailyReportVerificationService,
   ) {}
 
   private formatKnowledgeValue(value: unknown): string {
@@ -904,6 +906,12 @@ export class WorkLogsService {
     }
     // 自動匹配價格
     await this.matchAndSavePrice(saved);
+
+    // 觸發日報核對
+    if (saved.scheduled_date) {
+      this.dailyReportVerificationService.verifyByDate(saved.scheduled_date).catch(() => {});
+    }
+
     return this.findOne(saved.id);
   }
 
@@ -1020,6 +1028,21 @@ export class WorkLogsService {
     if (broadcast && updated) {
       this.workLogsGateway.broadcastRowsUpdated([updated]);
     }
+
+    // 觸發日報核對（工作記錄修改時重新核對相關日報）
+    const verifyRelatedFields = ['scheduled_date', 'employee_id', 'equipment_number', 'work_log_machinery_id', 'work_log_vehicle_id'];
+    const hasVerifyChange = verifyRelatedFields.some((f) => f in rest);
+    if (hasVerifyChange) {
+      const wlForVerify = await this.prisma.workLog.findUnique({ where: { id }, select: { scheduled_date: true } });
+      if (wlForVerify?.scheduled_date) {
+        this.dailyReportVerificationService.verifyByDate(wlForVerify.scheduled_date).catch(() => {});
+      }
+      // 如果日期變更，也要重新核對舊日期
+      if (existingWl?.scheduled_date && rest.scheduled_date && existingWl.scheduled_date.toISOString() !== new Date(rest.scheduled_date).toISOString()) {
+        this.dailyReportVerificationService.verifyByDate(existingWl.scheduled_date).catch(() => {});
+      }
+    }
+
     return updated;
   }
 
