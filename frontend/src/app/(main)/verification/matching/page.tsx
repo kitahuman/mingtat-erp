@@ -76,6 +76,7 @@ const ALL_SOURCE_COLUMNS = [
   { key: 'delivery_note', label: '飛仔 OCR', icon: '📄', alwaysOn: false },
   { key: 'gps', label: 'GPS', icon: '📍', alwaysOn: false },
   { key: 'attendance', label: '打卡', icon: '⏰', alwaysOn: false },
+  { key: 'daily_report', label: '工程日報', icon: '📑', alwaysOn: false },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
@@ -381,9 +382,9 @@ export default function MatchingPage() {
   return (
     <div className="p-4 sm:p-6 max-w-full">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">六來源交叉比對</h1>
+        <h1 className="text-2xl font-bold text-gray-800">七來源交叉比對</h1>
         <p className="text-sm text-gray-500 mt-1">
-          以工作紀錄為主軸，比對入帳票、飛仔 OCR、GPS、打卡、WhatsApp Order 六個數據來源
+          以工作紀錄為主軸，比對入帳票、飛仔 OCR、GPS、打卡、WhatsApp Order、工程日報七個數據來源
         </p>
       </div>
 
@@ -1205,6 +1206,33 @@ function renderSourceDetail(sourceKey: string, detail: any) {
               <span className="text-gray-400">版本:</span> v{detail.order_version}{' '}
               ({detail.order_status === 'confirmed' ? '已確定' : '暫定'})
             </div>
+          )}
+        </div>
+      );
+
+    case 'daily_report':
+      return (
+        <div className="space-y-0.5">
+          {detail.project_name && (
+            <div><span className="text-gray-400">工程:</span> <span className="font-medium">{detail.project_name}</span></div>
+          )}
+          {detail.report_date && (
+            <div><span className="text-gray-400">日期:</span> {detail.report_date}</div>
+          )}
+          {detail.shift_type && (
+            <div><span className="text-gray-400">更次:</span> {detail.shift_type === 'day' ? '日更' : '夜更'}</div>
+          )}
+          {detail.category && (
+            <div><span className="text-gray-400">類別:</span> {detail.category === 'worker' ? '工人' : detail.category === 'vehicle' ? '車輛' : detail.category === 'machinery' ? '機械' : detail.category === 'tool' ? '工具' : detail.category}</div>
+          )}
+          {detail.content && (
+            <div><span className="text-gray-400">內容:</span> {detail.content}</div>
+          )}
+          {detail.name_or_plate && (
+            <div><span className="text-gray-400">車牌/姓名:</span> <span className="font-mono">{detail.name_or_plate}</span></div>
+          )}
+          {detail.quantity && (
+            <div><span className="text-gray-400">數量:</span> {detail.quantity}</div>
           )}
         </div>
       );

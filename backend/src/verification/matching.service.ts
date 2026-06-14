@@ -214,9 +214,9 @@ export class MatchingService {
     const results: MatchingRow[] = [];
 
     if (group_by === 'vehicle') {
-      results.push(...this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, fleetNicknameMap, empNicknameMap, locationAliasMap));
+      results.push(...await this.matchByVehicle(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, fleetNicknameMap, empNicknameMap, locationAliasMap));
     } else {
-      results.push(...this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, empNicknameMap, locationAliasMap));
+      results.push(...await this.matchByEmployee(workLogs, receiptRecords, slipRecords, gpsSummaries, attendances, waOrderItems, empNicknameMap, locationAliasMap));
     }
 
     // 7. 載入確認狀態
@@ -245,6 +245,7 @@ export class MatchingService {
       gps: 'gps',
       clock: 'attendance',
       whatsapp_order: 'whatsapp_order',
+      daily_report: 'daily_report',
     };
 
     // 附加確認狀態到每一行，並把手動配對/確認回饋到 sources，重新計算 match_status
@@ -360,7 +361,7 @@ export class MatchingService {
     // 審核狀態過濾
     if (review_status && review_status !== 'all') {
       filtered = filtered.filter((row) => {
-        const sourceKeys = ['chit', 'delivery_note', 'gps', 'attendance', 'whatsapp_order'];
+        const sourceKeys = ['chit', 'delivery_note', 'gps', 'attendance', 'whatsapp_order', 'daily_report'];
         if (review_status === 'unreviewed') {
           // 至少有一個來源沒有確認記錄
           return sourceKeys.some((k) => !row.confirmations[k]);
@@ -398,7 +399,7 @@ export class MatchingService {
   // ══════════════════════════════════════════════════════════════
   // 按車牌分組比對
   // ══════════════════════════════════════════════════════════════
-  private matchByVehicle(
+  private async matchByVehicle(
     workLogs: any[],
     receiptRecords: any[],
     slipRecords: any[],
@@ -408,7 +409,7 @@ export class MatchingService {
     fleetNicknameMap: Map<string, string[]> = new Map(),
     empNicknameMap: Map<number, string[]> = new Map(),
     locationAliasMap: Map<string, string[]> = new Map(),
-  ): MatchingRow[] {
+  ): Promise<MatchingRow[]> {
     const groupMap = new Map<string, any[]>();
     for (const wl of workLogs) {
       if (!wl.equipment_number) continue;
@@ -652,6 +653,44 @@ export class MatchingService {
         sources['whatsapp_order'] = this.missingSource('WhatsApp Order');
       }
 
+      // 工程日報
+      const dailyReportStatus = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
+      const dailyReportMatched = wls.some((wl: any) => dailyReportStatus.get(wl.id) === 'matched');
+      if (dailyReportMatched) {
+        // 查詢配對的日報 items
+        const matchedItems = await this.prisma.verificationMatch.findMany({
+          where: {
+            match_work_record_id: { in: wls.map((wl: any) => wl.id) },
+            match_source_id: 10,
+            match_status: 'matched',
+          },
+          select: { match_record_id: true },
+        });
+        const itemIds = matchedItems.map(m => m.match_record_id).filter(Boolean) as number[];
+        const items = itemIds.length > 0 ? await this.prisma.dailyReportItem.findMany({
+          where: { id: { in: itemIds } },
+          include: { report: { select: { daily_report_date: true, daily_report_shift_type: true, daily_report_project_name: true } } },
+        }) : [];
+        sources['daily_report'] = {
+          source: '工程日報',
+          status: 'found',
+          match_score: 100,
+          field_scores: [],
+          details: items.map((item: any) => ({
+            id: item.id,
+            report_date: item.report?.daily_report_date ? new Date(item.report.daily_report_date).toISOString().slice(0, 10) : null,
+            shift_type: item.report?.daily_report_shift_type || null,
+            project_name: item.report?.daily_report_project_name || null,
+            category: item.daily_report_item_category || null,
+            content: item.daily_report_item_content || null,
+            name_or_plate: item.daily_report_item_name_or_plate || null,
+            quantity: item.daily_report_item_quantity != null ? Number(item.daily_report_item_quantity) : null,
+          })),
+        };
+      } else {
+        sources['daily_report'] = this.missingSource('工程日報');
+      }
+
       // 計算匹配狀態（考慮 match_score）
       const { matchStatus, avgScore } = this.computeMatchStatus(sources);
 
@@ -663,7 +702,7 @@ export class MatchingService {
         confirmations: {},
         match_status: matchStatus,
         match_count: Object.values(sources).filter((s) => s.status === 'found').length,
-        total_sources: 6,
+        total_sources: 7,
         avg_score: avgScore,
       });
     }
@@ -675,7 +714,7 @@ export class MatchingService {
   // ══════════════════════════════════════════════════════════════
   // 按員工分組比對
   // ══════════════════════════════════════════════════════════════
-  private matchByEmployee(
+  private async matchByEmployee(
     workLogs: any[],
     receiptRecords: any[],
     slipRecords: any[],
@@ -684,7 +723,7 @@ export class MatchingService {
     waOrderItems: any[],
     empNicknameMap: Map<number, string[]> = new Map(),
     locationAliasMap: Map<string, string[]> = new Map(),
-  ): MatchingRow[] {
+  ): Promise<MatchingRow[]> {
     const groupMap = new Map<string, any[]>();
     for (const wl of workLogs) {
       if (!wl.employee_id) continue;
@@ -914,6 +953,43 @@ export class MatchingService {
         sources['whatsapp_order'] = this.missingSource('WhatsApp Order');
       }
 
+      // 工程日報
+      const dailyReportStatus = await this.dailyReportVerificationService.getWorkLogsDailyReportStatuses(wls.map((wl: any) => wl.id));
+      const dailyReportMatched = wls.some((wl: any) => dailyReportStatus.get(wl.id) === 'matched');
+      if (dailyReportMatched) {
+        const matchedItems = await this.prisma.verificationMatch.findMany({
+          where: {
+            match_work_record_id: { in: wls.map((wl: any) => wl.id) },
+            match_source_id: 10,
+            match_status: 'matched',
+          },
+          select: { match_record_id: true },
+        });
+        const itemIds = matchedItems.map(m => m.match_record_id).filter(Boolean) as number[];
+        const items = itemIds.length > 0 ? await this.prisma.dailyReportItem.findMany({
+          where: { id: { in: itemIds } },
+          include: { report: { select: { daily_report_date: true, daily_report_shift_type: true, daily_report_project_name: true } } },
+        }) : [];
+        sources['daily_report'] = {
+          source: '工程日報',
+          status: 'found',
+          match_score: 100,
+          field_scores: [],
+          details: items.map((item: any) => ({
+            id: item.id,
+            report_date: item.report?.daily_report_date ? new Date(item.report.daily_report_date).toISOString().slice(0, 10) : null,
+            shift_type: item.report?.daily_report_shift_type || null,
+            project_name: item.report?.daily_report_project_name || null,
+            category: item.daily_report_item_category || null,
+            content: item.daily_report_item_content || null,
+            name_or_plate: item.daily_report_item_name_or_plate || null,
+            quantity: item.daily_report_item_quantity != null ? Number(item.daily_report_item_quantity) : null,
+          })),
+        };
+      } else {
+        sources['daily_report'] = this.missingSource('工程日報');
+      }
+
       const { matchStatus, avgScore } = this.computeMatchStatus(sources);
 
       results.push({
@@ -924,7 +1000,7 @@ export class MatchingService {
         confirmations: {},
         match_status: matchStatus,
         match_count: Object.values(sources).filter((s) => s.status === 'found').length,
-        total_sources: 6,
+        total_sources: 7,
         avg_score: avgScore,
       });
     }
