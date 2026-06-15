@@ -84,7 +84,7 @@ export class PayrollCalculationService {
     const items: any[] = [];
     let sortOrder = 1;
 
-    // ── (1) 底薪計算 ──
+    // ── (1) 工作收入計算（基於 workLog 的 line_amount）──
     let baseAmount = 0;
     let workDays = 0;
     let workNights = 0;
@@ -102,36 +102,95 @@ export class PayrollCalculationService {
         .filter((wl) => wl.day_night === '夜')
         .map((wl) => toDateStr(wl.scheduled_date)),
     );
-    // 法定假日：假日没上班才算（假日有上班則已包含在 workDateSet 中），並固定用日更底薪計算
+    // 法定假日：假日沒上班才算（假日有上班則已包含在 workDateSet 中），並固定用日更底薪計算
     const validHolidays = (holidayDates || []).filter(
       (h) => !workDateSet.has(toDateStr(h.date)),
     );
     const holidayCount = validHolidays.length;
+
     if (salaryType === 'daily') {
       workDays = dayWorkDateSet.size;
       workNights = nightWorkDateSet.size;
-      const dayBaseAmount = baseSalary * workDays;
-      const nightBaseAmount = baseSalaryNight * workNights;
-      baseAmount = dayBaseAmount + nightBaseAmount;
+
+      // 工作收入 = sum(line_amount - ot_line_amount - mid_shift_line_amount)
+      // 如果 line_amount 為 0（未匹配價格），用底薪作為 fallback
+      let baseWorkIncome = 0;
+      for (const wl of workLogs) {
+        const lineAmt = Number(wl.line_amount) || 0;
+        const otLineAmt = Number(wl.ot_line_amount) || 0;
+        const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
+        const baseLineAmt = lineAmt - otLineAmt - midShiftLineAmt;
+        if (lineAmt > 0) {
+          baseWorkIncome += baseLineAmt;
+        } else {
+          // 未匹配價格，用底薪作為 fallback
+          baseWorkIncome += wl.day_night === '夜' ? baseSalaryNight : baseSalary;
+        }
+      }
+
+      // 補底薪：每天檢查，如果當天工作收入 < 底薪，補差額
+      let topUpTotal = 0;
+      const dateWorkLogs = new Map<string, any[]>();
+      for (const wl of workLogs) {
+        const dateStr = toDateStr(wl.scheduled_date);
+        if (!dateWorkLogs.has(dateStr)) dateWorkLogs.set(dateStr, []);
+        dateWorkLogs.get(dateStr)!.push(wl);
+      }
+
+      for (const [, dayWls] of dateWorkLogs) {
+        const dayShiftWls = dayWls.filter((wl) => wl.day_night !== '夜');
+        const nightShiftWls = dayWls.filter((wl) => wl.day_night === '夜');
+
+        if (dayShiftWls.length > 0 && baseSalary > 0) {
+          let dayIncome = 0;
+          for (const wl of dayShiftWls) {
+            const lineAmt = Number(wl.line_amount) || 0;
+            const otLineAmt = Number(wl.ot_line_amount) || 0;
+            const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
+            dayIncome += lineAmt > 0 ? (lineAmt - otLineAmt - midShiftLineAmt) : baseSalary;
+          }
+          if (dayIncome < baseSalary) {
+            topUpTotal += baseSalary - dayIncome;
+          }
+        }
+
+        if (nightShiftWls.length > 0 && baseSalaryNight > 0) {
+          let nightIncome = 0;
+          for (const wl of nightShiftWls) {
+            const lineAmt = Number(wl.line_amount) || 0;
+            const otLineAmt = Number(wl.ot_line_amount) || 0;
+            const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
+            nightIncome += lineAmt > 0 ? (lineAmt - otLineAmt - midShiftLineAmt) : baseSalaryNight;
+          }
+          if (nightIncome < baseSalaryNight) {
+            topUpTotal += baseSalaryNight - nightIncome;
+          }
+        }
+      }
+
+      baseAmount = baseWorkIncome + topUpTotal;
+
       items.push({
         item_type: 'base_salary',
-        item_name: '底薪-日更',
-        unit_price: baseSalary,
-        quantity: workDays,
-        amount: dayBaseAmount,
+        item_name: '工作收入',
+        unit_price: 0,
+        quantity: workDays + workNights,
+        amount: baseWorkIncome,
         sort_order: sortOrder++,
       });
-      if (workNights > 0) {
+
+      if (topUpTotal > 0) {
         items.push({
           item_type: 'base_salary',
-          item_name: '底薪-夜更',
-          unit_price: baseSalaryNight,
-          quantity: workNights,
-          amount: nightBaseAmount,
+          item_name: '補底薪差額',
+          unit_price: 0,
+          quantity: 1,
+          amount: topUpTotal,
           sort_order: sortOrder++,
         });
       }
     } else {
+      // 月薪制：底薪固定，不需要補底薪
       workDays = workDateSet.size;
       workNights = nightWorkDateSet.size;
       baseAmount = baseSalary;
