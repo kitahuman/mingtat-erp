@@ -254,6 +254,8 @@ type DailyCalculationRecord = {
   daily_allowance_total?: number | string | null;
   special_label?: string | null;
   is_top_up_overridden?: boolean | null;
+  day_quantity?: number | null;
+  night_quantity?: number | null;
   daily_allowances?: DailyAllowance[];
   allowances?: DailyAllowance[];
   allowance_badges?: DailyBadge[];
@@ -1711,6 +1713,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                         {day.weekday && <span className="text-xs text-gray-400">({day.weekday})</span>}
                         {!day.weekday && day.date && <span className="text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
                         {workLogs.length >= 1 && <span className="text-xs font-bold text-blue-600">({workLogs.length}筆)</span>}
+                        {workLogs.length >= 1 && day.day_quantity !== undefined && day.day_quantity < 1 && <span className="text-xs font-bold text-amber-600">({day.day_quantity}天)</span>}
                         {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
                         {holidayName && (
                           <SpecialDateBadge

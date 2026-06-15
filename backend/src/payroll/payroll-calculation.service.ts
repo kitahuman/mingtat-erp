@@ -141,12 +141,16 @@ export class PayrollCalculationService {
       otTotal += day.daily_ot_amount || 0;
       midShiftTotal += day.daily_mid_shift_amount || 0;
 
-      // 工作天數
+      // 工作天數（按 quantity 比例計算）
       if (day.work_logs && day.work_logs.length > 0) {
-        const hasDayShift = day.work_logs.some((wl: any) => wl.day_night !== '夜');
-        const hasNightShift = day.work_logs.some((wl: any) => wl.day_night === '夜');
-        if (hasDayShift) workDays += 1;
-        if (hasNightShift) workNights += 1;
+        const dayShiftWls = day.work_logs.filter((wl: any) => wl.day_night !== '夜');
+        const nightShiftWls = day.work_logs.filter((wl: any) => wl.day_night === '夜');
+        if (dayShiftWls.length > 0) {
+          workDays += Math.min(dayShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 1), 0), 1);
+        }
+        if (nightShiftWls.length > 0) {
+          workNights += Math.min(nightShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 1), 0), 1);
+        }
       }
 
       // 法定假日津貼（假日沒上班時）
@@ -849,13 +853,22 @@ export class PayrollCalculationService {
         (sum: number, pwl: any) => sum + (Number(pwl.line_amount) || 0),
         0,
       );
+      // 計算日班和夜班的工作天數（按 quantity 比例）
+      const dayQuantity = Math.min(
+        dayShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 1), 0),
+        1,
+      );
+      const nightQuantity = Math.min(
+        nightShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 1), 0),
+        1,
+      );
       const autoDayTopUpAmount =
         !isHolidayDay && dayShiftPwls.length > 0 && baseSalary > 0
-          ? Math.max(baseSalary - dayWorkIncome, 0)
+          ? Math.max(baseSalary * dayQuantity - dayWorkIncome, 0)
           : 0;
       const autoNightTopUpAmount =
         !isHolidayDay && nightShiftPwls.length > 0 && baseSalaryNight > 0
-          ? Math.max(baseSalaryNight - nightWorkIncome, 0)
+          ? Math.max(baseSalaryNight * nightQuantity - nightWorkIncome, 0)
           : 0;
       const autoTopUpAmount = autoDayTopUpAmount + autoNightTopUpAmount;
       const override = dayAllowances.find(
@@ -950,6 +963,8 @@ export class PayrollCalculationService {
         auto_top_up_amount: autoTopUpAmount,
         day_top_up_amount: dayTopUpAmount,
         night_top_up_amount: nightTopUpAmount,
+        day_quantity: dayQuantity,
+        night_quantity: nightQuantity,
         is_top_up_overridden: isTopUpOverridden,
         top_up_override_id: override?.id ?? null,
         effective_income: effectiveIncome,
