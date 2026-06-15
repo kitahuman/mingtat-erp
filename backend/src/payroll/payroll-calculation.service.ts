@@ -1224,6 +1224,8 @@ export class PayrollCalculationService {
         label: '中直津貼',
         field: 'allowance_mid_shift',
       },
+      { key: 'ot_0600_0700', label: 'OT 06:00-07:00', field: 'ot_0600_0700' },
+      { key: 'ot_0700_0800', label: 'OT 07:00-08:00', field: 'ot_0700_0800' },
     ];
     for (const ba of builtInAllowances) {
       const amount = Number((salarySetting as any)[ba.field]) || 0;
