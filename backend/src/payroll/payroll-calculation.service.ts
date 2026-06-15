@@ -315,29 +315,8 @@ export class PayrollCalculationService {
     }
 
     // Custom allowances from salary setting
-    if (
-      salarySetting.custom_allowances &&
-      Array.isArray(salarySetting.custom_allowances)
-    ) {
-      for (const ca of salarySetting.custom_allowances as any[]) {
-        if (!ca.amount || ca.amount === 0) continue;
-        const workDatesSet = new Set(
-          dailyCalcWorkLogs.map((wl) => toDateStr(wl.scheduled_date)),
-        );
-        const days = workDatesSet.size;
-        if (days === 0) continue;
-        const amount = Number(ca.amount) * days;
-        allowanceTotal += amount;
-        items.push({
-          item_type: 'allowance',
-          item_name: ca.name || '自定義津貼',
-          unit_price: Number(ca.amount),
-          quantity: days,
-          amount,
-          sort_order: sortOrder++,
-        });
-      }
-    }
+    // 注：自定義津貼已經透過 buildDailyCalculation 的 buildDailyFixedAllowanceDisplay 加入 fixed_allowances_per_day，
+    // 並透過上面的固定津貼匹總邏輯已經計算載入 allowanceTotal 和 items，故此處不需載入。
 
     // ── (3) OT 計算（保留時段分配邏輯用於分時段顯示）──
     // OT 時段：每條 workLog 獨立計算
@@ -711,7 +690,7 @@ export class PayrollCalculationService {
       { key: 'allowance_3runway', name: '三跑津貼' },
     ];
 
-    return displayAllowances
+    const result: { key: string; name: string; amount: number }[] = displayAllowances
       .filter((item) => {
         // 若 DB 已有同日同 key 的 daily allowance，DB 記錄就是 source of truth，避免前端重複計算。
         const existsInDailyAllowances = dayAllowances.some(
@@ -736,6 +715,40 @@ export class PayrollCalculationService {
         amount: Number((salarySetting as any)[item.key]) || 0,
       }))
       .filter((item) => item.amount > 0);
+
+    // 自定義津貼
+    if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
+      for (const ca of salarySetting.custom_allowances as any[]) {
+        if (!ca.amount || Number(ca.amount) === 0) continue;
+        const key = `custom:${ca.name}`;
+        
+        // 若 DB 已有同日同 key 的 daily allowance，跳過（避免重複）
+        const existsInDailyAllowances = dayAllowances.some(
+          (da) => da.allowance_key === key,
+        );
+        if (existsInDailyAllowances) continue;
+        
+        // 檢查是否有排除記錄
+        const isExcluded = dayAllowances.some(
+          (da) => da.allowance_key === `excluded_${key}` || da.allowance_key.startsWith(`excluded_${key}_`),
+        );
+        if (isExcluded) continue;
+        
+        // 按當天工作量比例計算金額
+        const dayQuantity = Math.min(
+          dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 1), 0),
+          1
+        );
+        
+        result.push({
+          key,
+          name: ca.name || '自定義津貼',
+          amount: Number(ca.amount) * dayQuantity,
+        });
+      }
+    }
+
+    return result;
   }
 
   buildDailyCalculation(
