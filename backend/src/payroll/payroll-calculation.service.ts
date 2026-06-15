@@ -203,7 +203,8 @@ export class PayrollCalculationService {
     ];
     const allowanceRows = (dailyAllowances || []).filter((da) => {
       const key = da.allowance_key;
-      if (!key || key === 'statutory_holiday' || key.startsWith('excluded_')) {
+      // Exclude statutory holidays, excluded items, and manual OT allowances
+      if (!key || key === 'statutory_holiday' || key.startsWith('excluded_') || key === 'ot_0600_0700' || key === 'ot_0700_0800') {
         return false;
       }
       const dateStr = toDateStr(da.date);
@@ -331,6 +332,35 @@ export class PayrollCalculationService {
           });
         }
       }
+    }
+
+    // 手動 OT 津貼（早上 OT）- 從 dailyAllowances 中提取
+    const manualOtKeys = ['ot_0600_0700', 'ot_0700_0800'];
+    for (const otKey of manualOtKeys) {
+      const manualOtAllowances = (dailyAllowances || []).filter(
+        (da) => da.allowance_key === otKey,
+      );
+      if (manualOtAllowances.length === 0) continue;
+
+      const otRate = Number((salarySetting as any)[otKey]) || 0;
+      if (otRate <= 0) continue;
+
+      const manualOtAmount = otRate * manualOtAllowances.length;
+      otTotal += manualOtAmount;
+
+      const otLabel =
+        otKey === 'ot_0600_0700'
+          ? 'OT 06:00-07:00'
+          : 'OT 07:00-08:00';
+
+      items.push({
+        item_type: 'ot',
+        item_name: otLabel,
+        unit_price: otRate,
+        quantity: manualOtAllowances.length,
+        amount: manualOtAmount,
+        sort_order: sortOrder++,
+      });
     }
 
     // ── (4) 分傭計算 ──
