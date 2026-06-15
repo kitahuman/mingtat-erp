@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { salaryConfigApi, employeesApi } from '@/lib/api';
+import { salaryConfigApi, employeesApi, partnersApi } from '@/lib/api';
+import SearchableSelect from '@/components/SearchableSelect';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
@@ -40,6 +41,7 @@ export default function SalaryConfigDetailPage() {
   const [form, setForm] = useState<any>({});
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [partners, setPartners] = useState<any[]>([]);
 
   const loadData = () => {
     salaryConfigApi.get(Number(params.id)).then(res => {
@@ -55,7 +57,7 @@ export default function SalaryConfigDetailPage() {
     }).catch(() => router.push('/salary-config'));
   };
 
-  useEffect(() => { loadData(); }, [params.id]);
+  useEffect(() => { loadData(); partnersApi.simple().then(r => setPartners(r.data || [])).catch(() => {}); }, [params.id]);
 
   const handleSave = async () => {
     try {
@@ -221,7 +223,14 @@ export default function SalaryConfigDetailPage() {
                     <option value="manual">手動添加</option>
                   </select>
                   {ca.trigger_type === 'specific_client' && (
-                    <input type="number" value={ca.trigger_params?.client_id || ''} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], trigger_params: { client_id: Number(e.target.value) || undefined }}; setForm({...form, custom_allowances: cas}); }} className="input-field w-28 text-sm" placeholder="客戶 ID" />
+                    <div className="w-48">
+                      <SearchableSelect
+                        value={ca.trigger_params?.client_id || null}
+                        onChange={(val) => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], trigger_params: { client_id: val ? Number(val) : undefined }}; setForm({...form, custom_allowances: cas}); }}
+                        options={partners.map((p: any) => ({ value: p.id, label: p.name }))}
+                        placeholder="選擇客戶"
+                      />
+                    </div>
                   )}
                   {ca.trigger_type === 'specific_weekday' && (
                     <div className="flex gap-1">
@@ -248,13 +257,34 @@ export default function SalaryConfigDetailPage() {
           ) : <p className="text-gray-400 text-sm">暫無自定義津貼</p>
         ) : (
           (record?.custom_allowances || []).length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {record.custom_allowances.map((ca: any, idx: number) => (
-                <div key={idx} className="bg-purple-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">{ca.name}</p>
-                  <p className="font-mono font-bold text-purple-700">${Number(ca.amount).toLocaleString()}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {record.custom_allowances.map((ca: any, idx: number) => {
+                const triggerLabels: Record<string, string> = {
+                  every_work_day: '每個工作天',
+                  day_shift_only: '只限日班',
+                  night_shift_only: '只限夜班',
+                  specific_client: '特定客戶',
+                  specific_weekday: '特定星期',
+                  manual: '手動添加',
+                };
+                const triggerType = ca.trigger_type || 'every_work_day';
+                let triggerDetail = triggerLabels[triggerType] || triggerType;
+                if (triggerType === 'specific_client' && ca.trigger_params?.client_id) {
+                  const partner = partners.find((p: any) => p.id === ca.trigger_params.client_id);
+                  triggerDetail += partner ? `：${partner.name}` : `：ID ${ca.trigger_params.client_id}`;
+                }
+                if (triggerType === 'specific_weekday' && ca.trigger_params?.weekdays?.length > 0) {
+                  const dayNames = ['日','一','二','三','四','五','六'];
+                  triggerDetail += `：${ca.trigger_params.weekdays.map((d: number) => dayNames[d]).join('、')}`;
+                }
+                return (
+                  <div key={idx} className="bg-purple-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1">{ca.name}</p>
+                    <p className="font-mono font-bold text-purple-700">${Number(ca.amount).toLocaleString()}</p>
+                    <p className="text-xs text-gray-400 mt-1">{triggerDetail}</p>
+                  </div>
+                );
+              })}
             </div>
           ) : <p className="text-gray-400 text-sm">暫無自定義津貼</p>
         )}

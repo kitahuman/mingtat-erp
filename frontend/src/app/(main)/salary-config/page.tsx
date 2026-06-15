@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { salaryConfigApi, employeesApi } from '@/lib/api';
+import { salaryConfigApi, employeesApi, partnersApi } from '@/lib/api';
+import SearchableSelect from '@/components/SearchableSelect';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
@@ -58,6 +59,7 @@ export default function SalaryConfigPage() {
     { value: string; label: string }[]
   >([]);
   const [roleFilter, setRoleFilter] = useState('');
+  const [partners, setPartners] = useState<any[]>([]);
 
   const defaultForm = {
     employee_id: '',
@@ -83,7 +85,7 @@ export default function SalaryConfigPage() {
     ot_mid_shift: 0,
     is_piece_rate: false,
     fleet_rate_card_id: null,
-    custom_allowances: [] as { name: string; amount: number }[],
+    custom_allowances: [] as { name: string; amount: number; trigger_type?: string; trigger_params?: any }[],
     change_type: '',
     change_amount: 0,
     notes: '',
@@ -125,6 +127,7 @@ export default function SalaryConfigPage() {
     employeesApi
       .list({ limit: 500 })
       .then((res) => setEmployees(res.data.data || []));
+    partnersApi.simple().then((r) => setPartners(r.data || [])).catch(() => {});
     // Load role options from field-options API
     import('@/lib/api').then(({ fieldOptionsApi }) => {
       fieldOptionsApi
@@ -170,7 +173,7 @@ export default function SalaryConfigPage() {
       ...form,
       custom_allowances: [
         ...(form.custom_allowances || []),
-        { name: '', amount: 0 },
+        { name: '', amount: 0, trigger_type: 'every_work_day', trigger_params: {} },
       ],
     });
   };
@@ -626,35 +629,89 @@ export default function SalaryConfigPage() {
               </button>
             </div>
             {(form.custom_allowances || []).map((ca: any, idx: number) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <input
-                  value={ca.name}
-                  onChange={(e) => {
-                    const cas = [...form.custom_allowances];
-                    cas[idx] = { ...cas[idx], name: e.target.value };
-                    setForm({ ...form, custom_allowances: cas });
-                  }}
-                  className="input-field flex-1 text-sm"
-                  placeholder="津貼名稱"
-                />
-                <input
-                  type="number"
-                  value={ca.amount}
-                  onChange={(e) => {
-                    const cas = [...form.custom_allowances];
-                    cas[idx] = { ...cas[idx], amount: Number(e.target.value) };
-                    setForm({ ...form, custom_allowances: cas });
-                  }}
-                  className="input-field w-32 text-sm"
-                  placeholder="金額"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeCustomAllowance(idx)}
-                  className="text-red-500 text-sm"
-                >
-                  刪除
-                </button>
+              <div key={idx} className="rounded-lg border border-gray-200 p-3 mb-2">
+                <div className="flex gap-2 mb-2">
+                  <input
+                    value={ca.name}
+                    onChange={(e) => {
+                      const cas = [...form.custom_allowances];
+                      cas[idx] = { ...cas[idx], name: e.target.value };
+                      setForm({ ...form, custom_allowances: cas });
+                    }}
+                    className="input-field flex-1 text-sm"
+                    placeholder="津貼名稱"
+                  />
+                  <input
+                    type="number"
+                    value={ca.amount}
+                    onChange={(e) => {
+                      const cas = [...form.custom_allowances];
+                      cas[idx] = { ...cas[idx], amount: Number(e.target.value) };
+                      setForm({ ...form, custom_allowances: cas });
+                    }}
+                    className="input-field w-32 text-sm"
+                    placeholder="金額"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomAllowance(idx)}
+                    className="text-red-500 text-sm"
+                  >
+                    刪除
+                  </button>
+                </div>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <label className="text-xs text-gray-500">觸發條件：</label>
+                  <select
+                    value={ca.trigger_type || 'every_work_day'}
+                    onChange={(e) => {
+                      const cas = [...form.custom_allowances];
+                      cas[idx] = { ...cas[idx], trigger_type: e.target.value, trigger_params: {} };
+                      setForm({ ...form, custom_allowances: cas });
+                    }}
+                    className="input-field text-sm w-auto"
+                  >
+                    <option value="every_work_day">每個工作天</option>
+                    <option value="day_shift_only">只限日班</option>
+                    <option value="night_shift_only">只限夜班</option>
+                    <option value="specific_client">特定客戶</option>
+                    <option value="specific_weekday">特定星期</option>
+                    <option value="manual">手動添加</option>
+                  </select>
+                  {ca.trigger_type === 'specific_client' && (
+                    <div className="w-48">
+                      <SearchableSelect
+                        value={ca.trigger_params?.client_id || null}
+                        onChange={(val) => {
+                          const cas = [...form.custom_allowances];
+                          cas[idx] = { ...cas[idx], trigger_params: { client_id: val ? Number(val) : undefined } };
+                          setForm({ ...form, custom_allowances: cas });
+                        }}
+                        options={partners.map((p: any) => ({ value: p.id, label: p.name }))}
+                        placeholder="選擇客戶"
+                      />
+                    </div>
+                  )}
+                  {ca.trigger_type === 'specific_weekday' && (
+                    <div className="flex gap-1">
+                      {['日','一','二','三','四','五','六'].map((label, dayIdx) => {
+                        const weekdays: number[] = ca.trigger_params?.weekdays || [];
+                        const checked = weekdays.includes(dayIdx);
+                        return (
+                          <label key={dayIdx} className={`cursor-pointer rounded px-1.5 py-0.5 text-xs border ${checked ? 'bg-primary-100 border-primary-400 text-primary-700' : 'bg-gray-50 border-gray-300 text-gray-500'}`}>
+                            <input type="checkbox" className="sr-only" checked={checked} onChange={() => {
+                              const cas = [...form.custom_allowances];
+                              const newWeekdays = checked ? weekdays.filter((d: number) => d !== dayIdx) : [...weekdays, dayIdx];
+                              cas[idx] = { ...cas[idx], trigger_params: { weekdays: newWeekdays } };
+                              setForm({ ...form, custom_allowances: cas });
+                            }} />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
