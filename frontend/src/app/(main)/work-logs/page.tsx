@@ -657,6 +657,8 @@ export default function WorkLogsPage() {
       return item.gps_summary_vehicle_no || `#${item.id}`;
     if (sourceCode === 'attendance')
       return item.employee?.name_zh || `#${item.id}`;
+    if (sourceCode === 'daily_report')
+      return `${item.content || ''} ${item.name_or_plate || ''}`.trim() || `#${item.id}`;
     return `#${item.id}`;
   };
 
@@ -667,6 +669,7 @@ export default function WorkLogsPage() {
       delivery_note: '手動配對飛仔',
       gps: '手動配對 GPS',
       attendance: '手動配對打卡',
+      daily_report: '手動配對工程日報',
     };
     return prefixMap[sourceCode] || '手動配對';
   };
@@ -685,6 +688,7 @@ export default function WorkLogsPage() {
         delivery_note: 'verification_record',
         gps: 'gps_summary',
         attendance: 'attendance',
+        daily_report: 'daily_report_item',
       };
       const selectedLabels = manualMatchSelected
         .map((item) => getManualMatchItemLabel(sc, item))
@@ -3458,6 +3462,11 @@ export default function WorkLogsPage() {
                                           icon: '💬',
                                           color: 'emerald',
                                         },
+                                        daily_report: {
+                                          label: '工程日報',
+                                          icon: '📑',
+                                          color: 'cyan',
+                                        },
                                       };
                                       const SOURCE_ORDER = [
                                         'whatsapp_order',
@@ -3466,6 +3475,7 @@ export default function WorkLogsPage() {
                                         'delivery_note',
                                         'gps',
                                         'attendance',
+                                        'daily_report',
                                       ];
                                       return (
                                         <div className="flex flex-wrap gap-3">
@@ -3489,6 +3499,7 @@ export default function WorkLogsPage() {
                                               teal: 'border-teal-300 bg-teal-50',
                                               emerald:
                                                 'border-emerald-300 bg-emerald-50',
+                                              cyan: 'border-cyan-300 bg-cyan-50',
                                             };
                                             const missingColor =
                                               'border-gray-200 bg-gray-50';
@@ -4098,6 +4109,43 @@ export default function WorkLogsPage() {
                                                           )}
                                                         </div>
                                                       );
+                                                    if (key === 'daily_report')
+                                                      return (
+                                                        <div className="space-y-0.5 text-gray-600">
+                                                          {d.category && (
+                                                            <div>
+                                                              📋 {d.category === 'worker' ? '工人' : d.category === 'vehicle' ? '車輛' : d.category === 'machinery' ? '機械' : '工具'}
+                                                            </div>
+                                                          )}
+                                                          {d.content && d.content !== '—' && (
+                                                            <div>
+                                                              📝 {d.content}
+                                                            </div>
+                                                          )}
+                                                          {d.name_or_plate && d.name_or_plate !== '—' && (
+                                                            <div>
+                                                              🏷 {d.name_or_plate}
+                                                            </div>
+                                                          )}
+                                                          {d.quantity_info && (
+                                                            <div className={`text-xs ${
+                                                              d.quantity_info.report_quantity === d.quantity_info.actual_quantity ? 'text-green-600' : 'text-amber-600'
+                                                            }`}>
+                                                              日報 {d.quantity_info.report_quantity} / 實際 {d.quantity_info.actual_quantity}
+                                                            </div>
+                                                          )}
+                                                          {d.match_type && d.match_type !== 'matched' && (
+                                                            <div className={`text-xs font-medium ${
+                                                              d.match_type === 'quantity_matched' ? 'text-orange-600' : 'text-amber-600'
+                                                            }`}>
+                                                              {d.match_type === 'quantity_matched' ? '≈ 數量匹配' : '⚠ 數量不符'}
+                                                            </div>
+                                                          )}
+                                                          {d.daily_report_id && (
+                                                            <div className="text-gray-400">日報 #{d.daily_report_id}</div>
+                                                          )}
+                                                        </div>
+                                                      );
                                                     return null;
                                                   })()}
                                                 {!found && (
@@ -4607,6 +4655,7 @@ export default function WorkLogsPage() {
                           delivery_note: '飛仔 OCR',
                           gps: 'GPS 追蹤',
                           attendance: '打卡紀錄',
+                          daily_report: '工程日報',
                         };
                         return (
                           m[manualMatchPopup.sourceCode] ||
@@ -4656,6 +4705,7 @@ export default function WorkLogsPage() {
                           delivery_note: '飛仔記錄',
                           gps: ' GPS 記錄',
                           attendance: '打卡記錄',
+                          daily_report: '工程日報項目',
                         };
                         return m[manualMatchPopup.sourceCode] || '記錄';
                       })()}
@@ -4879,6 +4929,29 @@ export default function WorkLogsPage() {
                                         </span>
                                       )}
                                     </div>
+                                  </>
+                                ) : sc === 'daily_report' ? (
+                                  /* ── 工程日報格式 ── */
+                                  <>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {item.category && (
+                                        <span className="px-1.5 py-0.5 text-xs rounded bg-cyan-100 text-cyan-700">
+                                          {item.category === 'worker' ? '工人' : item.category === 'vehicle' ? '車輛' : item.category === 'machinery' ? '機械' : '工具'}
+                                        </span>
+                                      )}
+                                      {item.content && (
+                                        <span className="font-semibold text-gray-800">{item.content}</span>
+                                      )}
+                                    </div>
+                                    {item.name_or_plate && (
+                                      <div className="text-gray-600">🏷 {item.name_or_plate}</div>
+                                    )}
+                                    {item.project_name && (
+                                      <div className="text-gray-500 text-xs">🏗 {item.project_name}</div>
+                                    )}
+                                    {item.report_date && (
+                                      <div className="text-gray-500 text-xs">📅 {item.report_date} {item.shift_type === 'day' ? '日更' : item.shift_type === 'night' ? '夜更' : ''}</div>
+                                    )}
                                   </>
                                 ) : (
                                   /* ── 其他來源 fallback ── */
