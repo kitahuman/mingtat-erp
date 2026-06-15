@@ -221,7 +221,7 @@ export class PayrollPdfService {
     .signature-section { margin-top: 45px; display: flex; justify-content: space-between; gap: 36px; page-break-inside: avoid; }
     .signature-box { flex: 1; min-height: 118px; position: relative; }
     .signature-line { border-top: 1px solid #000; margin-top: 68px; padding-top: 8px; font-size: 13px; }
-    .stamp { max-width: 150px; max-height: 110px; object-fit: contain; position: absolute; right: 30px; top: 0; opacity: 0.95; }
+    .stamp { max-width: 150px; max-height: 110px; object-fit: contain; position: absolute; right: 30px; bottom: 25px; opacity: 0.95; }
     .muted { color: #6b7280; }
   </style>
 </head>
