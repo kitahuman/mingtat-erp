@@ -2353,7 +2353,7 @@ function PayrollItemsGroupedTable({
     return (
       <tr key={String(key)} className={`border-b ${extraClass}`}>
         <td className="px-3 py-2 font-medium text-gray-800">{item.item_name || "—"}</td>
-        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : formatMoney(item.unit_price)}</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : toNumber(item.unit_price) === 0 ? "—" : formatMoney(item.unit_price)}</td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(toNumber(item.quantity))}</td>
         <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>
           <div className="flex items-center justify-end gap-1">

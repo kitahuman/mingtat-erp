@@ -197,22 +197,37 @@ export class PayrollCalculationService {
     // ── (2) 計算明細項目 ──
 
     // 工作收入
-    items.push({
-      item_type: 'base_salary',
-      item_name: '工作收入',
-      unit_price: 0,
-      quantity: workDays + workNights,
-      amount: baseWorkIncome,
-      sort_order: sortOrder++,
-    });
-
-    // 補底薪差額
-    if (topUpTotal > 0) {
+    if (baseWorkIncome > 0) {
       items.push({
         item_type: 'base_salary',
-        item_name: '補底薪差額',
+        item_name: '工作收入',
         unit_price: 0,
-        quantity: 1,
+        quantity: workDays + workNights,
+        amount: baseWorkIncome,
+        sort_order: sortOrder++,
+      });
+    }
+
+    // 補底薪
+    if (topUpTotal > 0) {
+      // 計算需補底薪的實際天數（按 quantity 比例）
+      const topUpDayCount = dailyCalc.reduce((sum: number, day: any) => {
+        if ((day.top_up_amount || 0) <= 0) return sum;
+        const dayQ = day.day_quantity != null ? Number(day.day_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night !== '夜').length > 0 ? 1 : 0;
+        const nightQ = day.night_quantity != null ? Number(day.night_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night === '夜').length > 0 ? 1 : 0;
+        return sum + Math.min(dayQ + nightQ, 1);
+      }, 0);
+      
+      // 判斷單價是否整除：如果 topUpTotal / topUpDayCount = baseSalary，顯示單價
+      const effectiveUnitPrice = topUpDayCount > 0 && Math.abs(topUpTotal / topUpDayCount - baseSalary) < 0.01
+        ? baseSalary
+        : 0;
+      
+      items.push({
+        item_type: 'base_salary',
+        item_name: '底薪',
+        unit_price: effectiveUnitPrice,
+        quantity: topUpDayCount,
         amount: topUpTotal,
         sort_order: sortOrder++,
       });
