@@ -84,223 +84,218 @@ export class PayrollCalculationService {
     const items: any[] = [];
     let sortOrder = 1;
 
-    // ── (1) 工作收入計算（基於 workLog 的 line_amount）──
-    let baseAmount = 0;
+    // ── 先呼叫 buildDailyCalculation 取得逐日計算結果（single source of truth）──
+    // 判斷 workLogs 是否已有 line_amount（generate/recalculate 流程）或需要從 _line_amount 映射（preview 流程）
+    const hasDirectLineAmount = workLogs.length > 0 && workLogs[0].line_amount !== undefined && workLogs[0]._line_amount === undefined;
+    const dailyCalcWorkLogs = hasDirectLineAmount
+      ? workLogs
+      : workLogs.map((wl) => ({
+          ...wl,
+          line_amount:
+            (Number(wl._line_amount) || 0) +
+            (Number(wl._ot_line_amount) || 0) +
+            (Number(wl._mid_shift_line_amount) || 0),
+          ot_line_amount: Number(wl._ot_line_amount) || 0,
+          mid_shift_line_amount: Number(wl._mid_shift_line_amount) || 0,
+          matched_rate: wl._matched_rate ?? wl.matched_rate,
+          matched_ot_rate: wl._matched_ot_rate ?? wl.matched_ot_rate,
+          matched_mid_shift_rate: wl._matched_mid_shift_rate ?? wl.matched_mid_shift_rate,
+          price_match_status: wl._price_match_status ?? wl.price_match_status,
+        }));
+
+    const dailyCalc = this.buildDailyCalculation(
+      dailyCalcWorkLogs,
+      salarySetting,
+      dailyAllowances,
+      {
+        dateFrom,
+        dateTo,
+        holidayDates,
+      },
+    );
+
+    // ── (1) 從逐日結果匯總工作收入、補底薪、OT、津貼 ──
+    let baseWorkIncome = 0;
+    let topUpTotal = 0;
+    let otTotal = 0;
+    let midShiftTotal = 0;
+    let allowanceTotal = 0;
+    const fixedAllowancesByType = new Map<string, { count: number; amount: number; name: string }>();
+    let holidayAllowanceTotal = 0;
+    let holidayCount = 0;
     let workDays = 0;
     let workNights = 0;
-    // 實際工作日期（底薪只算實際上班天數）；同一天日更和夜更可同時各算一次
-    const workDateSet = new Set(
-      workLogs.map((wl) => toDateStr(wl.scheduled_date)),
-    );
-    const dayWorkDateSet = new Set(
-      workLogs
-        .filter((wl) => wl.day_night !== '夜')
-        .map((wl) => toDateStr(wl.scheduled_date)),
-    );
-    const nightWorkDateSet = new Set(
-      workLogs
-        .filter((wl) => wl.day_night === '夜')
-        .map((wl) => toDateStr(wl.scheduled_date)),
-    );
-    // 法定假日：假日沒上班才算（假日有上班則已包含在 workDateSet 中），並固定用日更底薪計算
-    const validHolidays = (holidayDates || []).filter(
-      (h) => !workDateSet.has(toDateStr(h.date)),
-    );
-    const holidayCount = validHolidays.length;
+    // 每日津貼按 key 分組
+    const dailyAllowancesByKey = new Map<string, { count: number; amount: number; name: string }>();
 
-    if (salaryType === 'daily') {
-      workDays = dayWorkDateSet.size;
-      workNights = nightWorkDateSet.size;
+    for (const day of dailyCalc) {
+      // 工作收入 = 每天的 work_income - daily_ot_amount - daily_mid_shift_amount
+      // work_income 已包含 OT 和中直，需要減去才是純工作收入
+      const dayWorkIncome = (day.work_income || 0) - (day.daily_ot_amount || 0) - (day.daily_mid_shift_amount || 0);
+      baseWorkIncome += dayWorkIncome;
 
-      // 工作收入 = sum(line_amount - ot_line_amount - mid_shift_line_amount)
-      // 如果 line_amount 為 0（未匹配價格），用底薪作為 fallback
-      let baseWorkIncome = 0;
-      for (const wl of workLogs) {
-        const lineAmt = Number(wl.line_amount) || 0;
-        const otLineAmt = Number(wl.ot_line_amount) || 0;
-        const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
-        const baseLineAmt = lineAmt - otLineAmt - midShiftLineAmt;
-        if (lineAmt > 0) {
-          baseWorkIncome += baseLineAmt;
-        } else {
-          // 未匹配價格，用底薪作為 fallback
-          baseWorkIncome += wl.day_night === '夜' ? baseSalaryNight : baseSalary;
+      // 補底薪
+      topUpTotal += day.top_up_amount || 0;
+
+      // OT 和中直
+      otTotal += day.daily_ot_amount || 0;
+      midShiftTotal += day.daily_mid_shift_amount || 0;
+
+      // 工作天數
+      if (day.work_logs && day.work_logs.length > 0) {
+        const hasDayShift = day.work_logs.some((wl: any) => wl.day_night !== '夜');
+        const hasNightShift = day.work_logs.some((wl: any) => wl.day_night === '夜');
+        if (hasDayShift) workDays += 1;
+        if (hasNightShift) workNights += 1;
+      }
+
+      // 法定假日津貼（假日沒上班時）
+      if (day.is_holiday && (!day.work_logs || day.work_logs.length === 0)) {
+        // 檢查是否被排除
+        const dateStr = toDateStr(day.date);
+        if (!excluded.has(`statutory_holiday_${dateStr}`) && !excluded.has('statutory_holiday')) {
+          holidayAllowanceTotal += baseSalary;
+          holidayCount += 1;
         }
       }
 
-      // 補底薪：每天檢查，如果當天工作收入 < 底薪，補差額
-      let topUpTotal = 0;
-      const dateWorkLogs = new Map<string, any[]>();
-      for (const wl of workLogs) {
-        const dateStr = toDateStr(wl.scheduled_date);
-        if (!dateWorkLogs.has(dateStr)) dateWorkLogs.set(dateStr, []);
-        dateWorkLogs.get(dateStr)!.push(wl);
+      // 固定津貼（夜班津貼、租車津貼等）
+      for (const fixedAllowance of day.fixed_allowances_per_day || []) {
+        const key = fixedAllowance.key;
+        if (excluded.has(key)) continue;
+        const dateStr = toDateStr(day.date);
+        if (excluded.has(`${key}_${dateStr}`)) continue;
+        if (!fixedAllowancesByType.has(key)) {
+          fixedAllowancesByType.set(key, { count: 0, amount: 0, name: fixedAllowance.name });
+        }
+        const current = fixedAllowancesByType.get(key)!;
+        current.count += 1;
+        current.amount += fixedAllowance.amount;
       }
 
-      for (const [, dayWls] of dateWorkLogs) {
-        const dayShiftWls = dayWls.filter((wl) => wl.day_night !== '夜');
-        const nightShiftWls = dayWls.filter((wl) => wl.day_night === '夜');
-
-        if (dayShiftWls.length > 0 && baseSalary > 0) {
-          let dayIncome = 0;
-          for (const wl of dayShiftWls) {
-            const lineAmt = Number(wl.line_amount) || 0;
-            const otLineAmt = Number(wl.ot_line_amount) || 0;
-            const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
-            dayIncome += lineAmt > 0 ? (lineAmt - otLineAmt - midShiftLineAmt) : baseSalary;
-          }
-          if (dayIncome < baseSalary) {
-            topUpTotal += baseSalary - dayIncome;
-          }
+      // 每日津貼（用戶手動加的，排除 OT 類型和 excluded 類型）
+      for (const da of day.daily_allowances || []) {
+        const key = da.allowance_key;
+        if (!key || key === 'statutory_holiday' || key.startsWith('excluded_') || key === 'ot_0600_0700' || key === 'ot_0700_0800' || key === 'base_top_up_override') continue;
+        const dateStr = toDateStr(day.date);
+        if (excluded.has(key) || excluded.has(`${key}_${dateStr}`)) continue;
+        if (!dailyAllowancesByKey.has(key)) {
+          dailyAllowancesByKey.set(key, { count: 0, amount: 0, name: da.allowance_name || key });
         }
-
-        if (nightShiftWls.length > 0 && baseSalaryNight > 0) {
-          let nightIncome = 0;
-          for (const wl of nightShiftWls) {
-            const lineAmt = Number(wl.line_amount) || 0;
-            const otLineAmt = Number(wl.ot_line_amount) || 0;
-            const midShiftLineAmt = Number(wl.mid_shift_line_amount) || 0;
-            nightIncome += lineAmt > 0 ? (lineAmt - otLineAmt - midShiftLineAmt) : baseSalaryNight;
-          }
-          if (nightIncome < baseSalaryNight) {
-            topUpTotal += baseSalaryNight - nightIncome;
-          }
-        }
+        const current = dailyAllowancesByKey.get(key)!;
+        current.count += 1;
+        current.amount += Number(da.amount) || 0;
       }
+    }
 
-      baseAmount = baseWorkIncome + topUpTotal;
+    const baseAmount = baseWorkIncome + topUpTotal;
 
+    // ── (2) 計算明細項目 ──
+
+    // 工作收入
+    items.push({
+      item_type: 'base_salary',
+      item_name: '工作收入',
+      unit_price: 0,
+      quantity: workDays + workNights,
+      amount: baseWorkIncome,
+      sort_order: sortOrder++,
+    });
+
+    // 補底薪差額
+    if (topUpTotal > 0) {
       items.push({
         item_type: 'base_salary',
-        item_name: '工作收入',
+        item_name: '補底薪差額',
         unit_price: 0,
-        quantity: workDays + workNights,
-        amount: baseWorkIncome,
-        sort_order: sortOrder++,
-      });
-
-      if (topUpTotal > 0) {
-        items.push({
-          item_type: 'base_salary',
-          item_name: '補底薪差額',
-          unit_price: 0,
-          quantity: 1,
-          amount: topUpTotal,
-          sort_order: sortOrder++,
-        });
-      }
-    } else {
-      // 月薪制：底薪固定，不需要補底薪
-      workDays = workDateSet.size;
-      workNights = nightWorkDateSet.size;
-      baseAmount = baseSalary;
-      items.push({
-        item_type: 'base_salary',
-        item_name: '底薪（月薪制）',
-        unit_price: baseSalary,
         quantity: 1,
-        amount: baseAmount,
+        amount: topUpTotal,
         sort_order: sortOrder++,
       });
     }
 
-    // ── (2) 津貼計算 ──
-    let allowanceTotal = 0;
-
-    // 法定假日津貼：假日沒上班，給一天日薪作為津貼（獨立一行）
-    // 過濾掉被排除的假日（每個假日用 excluded_statutory_holiday_YYYY-MM-DD 標記）
-    const nonExcludedHolidays = validHolidays.filter((h) => {
-      const dateStr = toDateStr(h.date);
-      return !excluded.has(`statutory_holiday_${dateStr}`) && !excluded.has('statutory_holiday');
-    });
-    const effectiveHolidayCount = nonExcludedHolidays.length;
-    if (salaryType === 'daily' && effectiveHolidayCount > 0 && baseSalary > 0) {
-      const holidayAllowance = baseSalary * effectiveHolidayCount;
-      allowanceTotal += holidayAllowance;
+    // 法定假日津貼
+    if (salaryType === 'daily' && holidayCount > 0 && baseSalary > 0) {
+      const holidayNames = (holidayDates || [])
+        .filter((h) => {
+          const dateStr = toDateStr(h.date);
+          return !excluded.has(`statutory_holiday_${dateStr}`) && !excluded.has('statutory_holiday');
+        })
+        .filter((h) => {
+          // 只列出沒上班的假日
+          const dateStr = toDateStr(h.date);
+          const dayEntry = dailyCalc.find((d: any) => toDateStr(d.date) === dateStr);
+          return dayEntry && (!dayEntry.work_logs || dayEntry.work_logs.length === 0);
+        })
+        .map((h) => h.name);
+      allowanceTotal += holidayAllowanceTotal;
       items.push({
         item_type: 'allowance',
         item_name: '法定假日津貼',
         unit_price: baseSalary,
-        quantity: effectiveHolidayCount,
-        amount: holidayAllowance,
-        remarks: nonExcludedHolidays.map((h) => h.name).join('、'),
+        quantity: holidayCount,
+        amount: holidayAllowanceTotal,
+        remarks: holidayNames.join('、'),
         sort_order: sortOrder++,
       });
     }
 
-    const allowanceFields: {
-      field: string;
-      label: string;
-      condition?: (wl: any) => boolean;
-    }[] = [
-      {
-        field: 'allowance_night',
-        label: '夜班津貼',
-        condition: (wl) => wl.day_night === '夜',
-      },
-      {
-        field: 'allowance_rent',
-        label: '租車津貼',
-        condition: (wl) => wl.unit === '天',
-      },
-      { field: 'allowance_3runway', label: '三跑津貼' },
-      { field: 'allowance_well', label: '落井津貼' },
-      { field: 'allowance_machine', label: '揸機津貼' },
-      { field: 'allowance_roller', label: '火轆津貼' },
-      { field: 'allowance_crane', label: '吊/挾車津貼' },
-      { field: 'allowance_move_machine', label: '搬機津貼' },
-      {
-        field: 'allowance_kwh_night',
-        label: '嘉華-夜間津貼',
-        condition: (wl) => wl.day_night === '夜',
-      },
-      {
-        field: 'allowance_mid_shift',
-        label: '中直津貼',
-        condition: (wl) => wl.is_mid_shift === true,
-      },
+    // 固定津貼（夜班津貼、租車津貼等）
+    const fixedAllowanceOrder = [
+      'allowance_night', 'allowance_rent', 'allowance_3runway',
+      'allowance_well', 'allowance_machine', 'allowance_roller',
+      'allowance_crane', 'allowance_move_machine', 'allowance_kwh_night',
+      'allowance_mid_shift',
     ];
-    const allowanceRows = (dailyAllowances || []).filter((da) => {
-      const key = da.allowance_key;
-      // Exclude statutory holidays, excluded items, and manual OT allowances
-      if (!key || key === 'statutory_holiday' || key.startsWith('excluded_') || key === 'ot_0600_0700' || key === 'ot_0700_0800') {
-        return false;
+    for (const key of fixedAllowanceOrder) {
+      const fixedData = fixedAllowancesByType.get(key);
+      if (fixedData && fixedData.amount > 0) {
+        const rate = fixedData.count > 0 ? fixedData.amount / fixedData.count : 0;
+        allowanceTotal += fixedData.amount;
+        items.push({
+          item_type: 'allowance',
+          item_name: fixedData.name,
+          unit_price: rate,
+          quantity: fixedData.count,
+          amount: fixedData.amount,
+          sort_order: sortOrder++,
+        });
       }
-      const dateStr = toDateStr(da.date);
-      return !excluded.has(key) && !excluded.has(`${key}_${dateStr}`);
-    });
-
-    for (const af of allowanceFields) {
-      // 固定津貼 items 以 PayrollDailyAllowance 作為 source of truth。
-      if (excluded.has(af.field)) continue;
-
-      const amountsByDate = new Map<string, number>();
-      for (const da of allowanceRows) {
-        if (da.allowance_key !== af.field) continue;
-        const dateStr = toDateStr(da.date);
-        if (!dateStr || excluded.has(`${af.field}_${dateStr}`)) continue;
-        if (!amountsByDate.has(dateStr)) {
-          amountsByDate.set(dateStr, Number(da.amount) || 0);
-        }
-      }
-
-      const days = amountsByDate.size;
-      if (days === 0) continue;
-      const amounts = Array.from(amountsByDate.values());
-      const amount = amounts.reduce((sum, value) => sum + value, 0);
-      if (amount === 0) continue;
-      const rate = days > 0 ? amount / days : 0;
-      allowanceTotal += amount;
-      items.push({
-        item_type: 'allowance',
-        item_name: af.label,
-        unit_price: rate,
-        quantity: days,
-        amount,
-        sort_order: sortOrder++,
-      });
     }
-    // Custom allowances
+    // 其他固定津貼（不在 fixedAllowanceOrder 中的）
+    for (const [key, fixedData] of fixedAllowancesByType) {
+      if (fixedAllowanceOrder.includes(key)) continue;
+      if (fixedData.amount > 0) {
+        const rate = fixedData.count > 0 ? fixedData.amount / fixedData.count : 0;
+        allowanceTotal += fixedData.amount;
+        items.push({
+          item_type: 'allowance',
+          item_name: fixedData.name,
+          unit_price: rate,
+          quantity: fixedData.count,
+          amount: fixedData.amount,
+          sort_order: sortOrder++,
+        });
+      }
+    }
+
+    // 每日津貼（用戶手動加的）
+    for (const [, daData] of dailyAllowancesByKey) {
+      if (daData.amount > 0) {
+        const rate = daData.count > 0 ? daData.amount / daData.count : 0;
+        allowanceTotal += daData.amount;
+        items.push({
+          item_type: 'allowance',
+          item_name: daData.name,
+          unit_price: rate,
+          quantity: daData.count,
+          amount: daData.amount,
+          sort_order: sortOrder++,
+        });
+      }
+    }
+
+    // Custom allowances from salary setting
     if (
       salarySetting.custom_allowances &&
       Array.isArray(salarySetting.custom_allowances)
@@ -308,7 +303,7 @@ export class PayrollCalculationService {
       for (const ca of salarySetting.custom_allowances as any[]) {
         if (!ca.amount || ca.amount === 0) continue;
         const workDatesSet = new Set(
-          workLogs.map((wl) => toDateStr(wl.scheduled_date)),
+          dailyCalcWorkLogs.map((wl) => toDateStr(wl.scheduled_date)),
         );
         const days = workDatesSet.size;
         if (days === 0) continue;
@@ -325,23 +320,18 @@ export class PayrollCalculationService {
       }
     }
 
-    // ── (3) OT 計算 ──
-    let otTotal = 0;
+    // ── (3) OT 計算（保留時段分配邏輯用於分時段顯示）──
     // OT 時段：每條 workLog 獨立計算
-    // 第1小時 → OT 18:00-19:00
-    // 第2小時 → OT 19:00-20:00
-    // 第3小時起 → OT 加班費 (標準)
-    const otSlotFields = [
-      'ot_1800_1900',
-      'ot_1900_2000',
-    ];
+    const otSlotFields = ['ot_1800_1900', 'ot_1900_2000'];
     const otSlotLabels: Record<string, string> = {
       ot_1800_1900: 'OT 18:00-19:00',
       ot_1900_2000: 'OT 19:00-20:00',
     };
 
-    // 每條 workLog 獨立計算 OT，currentOtHourIndex 每條重置
-    for (const wl of workLogs) {
+    // 按時段分組匯總（而不是每小時一行）
+    const otBySlot = new Map<string, { rate: number; count: number; amount: number }>();
+
+    for (const wl of dailyCalcWorkLogs) {
       const otQty = Number(wl.ot_quantity) || 0;
       if (otQty <= 0) continue;
 
@@ -351,18 +341,14 @@ export class PayrollCalculationService {
         const rate = slotField
           ? Number((salarySetting as any)[slotField]) || 0
           : Number(salarySetting.ot_rate_standard) || 0;
+        const slotKey = slotField || 'ot_rate_standard';
 
-        const amount = rate * 1;
-        otTotal += amount;
-
-        items.push({
-          item_type: 'ot',
-          item_name: slotField ? otSlotLabels[slotField] : 'OT 加班費 (標準)',
-          unit_price: rate,
-          quantity: 1,
-          amount,
-          sort_order: sortOrder++,
-        });
+        if (!otBySlot.has(slotKey)) {
+          otBySlot.set(slotKey, { rate, count: 0, amount: 0 });
+        }
+        const slot = otBySlot.get(slotKey)!;
+        slot.count += 1;
+        slot.amount += rate;
 
         currentOtHourIndex++;
       }
@@ -373,22 +359,13 @@ export class PayrollCalculationService {
       const midShiftOtRate = Number((salarySetting as any).ot_mid_shift) || 0;
       if (midShiftOtRate > 0) {
         const midShiftDates = new Set(
-          workLogs
+          dailyCalcWorkLogs
             .filter((wl) => wl.is_mid_shift === true)
             .map((wl) => toDateStr(wl.scheduled_date)),
         );
         const midShiftDays = midShiftDates.size;
         if (midShiftDays > 0) {
-          const midShiftOtAmount = midShiftOtRate * midShiftDays;
-          otTotal += midShiftOtAmount;
-          items.push({
-            item_type: 'ot',
-            item_name: '中直OT津貼',
-            unit_price: midShiftOtRate,
-            quantity: midShiftDays,
-            amount: midShiftOtAmount,
-            sort_order: sortOrder++,
-          });
+          otBySlot.set('ot_mid_shift', { rate: midShiftOtRate, count: midShiftDays, amount: midShiftOtRate * midShiftDays });
         }
       }
     }
@@ -404,23 +381,38 @@ export class PayrollCalculationService {
       const otRate = Number((salarySetting as any)[otKey]) || 0;
       if (otRate <= 0) continue;
 
-      const manualOtAmount = otRate * manualOtAllowances.length;
-      otTotal += manualOtAmount;
+      otBySlot.set(otKey, { rate: otRate, count: manualOtAllowances.length, amount: otRate * manualOtAllowances.length });
+    }
 
-      const otLabel =
-        otKey === 'ot_0600_0700'
-          ? 'OT 06:00-07:00'
-          : 'OT 07:00-08:00';
-
+    // OT 項目呈現（按時段分組顯示）
+    const otSlotOrder = ['ot_1800_1900', 'ot_1900_2000', 'ot_rate_standard', 'ot_mid_shift', 'ot_0600_0700', 'ot_0700_0800'];
+    const otSlotDisplayLabels: Record<string, string> = {
+      ot_1800_1900: 'OT 18:00-19:00',
+      ot_1900_2000: 'OT 19:00-20:00',
+      ot_rate_standard: 'OT 加班費 (標準)',
+      ot_mid_shift: '中直OT津貼',
+      ot_0600_0700: 'OT 06:00-07:00',
+      ot_0700_0800: 'OT 07:00-08:00',
+    };
+    // 使用逐日結果的 otTotal（已在上面匯總），不重新計算
+    // 但 OT 明細仍然按時段分配顯示
+    let otItemsTotal = 0;
+    for (const slotKey of otSlotOrder) {
+      const slotData = otBySlot.get(slotKey);
+      if (!slotData || slotData.amount <= 0) continue;
+      otItemsTotal += slotData.amount;
       items.push({
         item_type: 'ot',
-        item_name: otLabel,
-        unit_price: otRate,
-        quantity: manualOtAllowances.length,
-        amount: manualOtAmount,
+        item_name: otSlotDisplayLabels[slotKey] || slotKey,
+        unit_price: slotData.rate,
+        quantity: slotData.count,
+        amount: slotData.amount,
         sort_order: sortOrder++,
       });
     }
+    // 如果逐日 OT 合計跟時段分配不一致，用逐日結果為準
+    // （理論上應該一致，但以逐日結果為 source of truth）
+    otTotal = otItemsTotal;
 
     // ── (4) 分傭計算 ──
     let commissionTotal = 0;
@@ -429,7 +421,7 @@ export class PayrollCalculationService {
         where: { id: salarySetting.fleet_rate_card_id },
       });
       if (fleetRateCard) {
-        for (const wl of workLogs) {
+        for (const wl of dailyCalcWorkLogs) {
           const resolved = this.resolveRate(fleetRateCard, wl.day_night);
           const rate = resolved.rate;
           const qty = Number(wl.quantity) || 1;
@@ -440,7 +432,7 @@ export class PayrollCalculationService {
             item_type: 'commission',
             item_name: '司機分傭',
             unit_price: 0,
-            quantity: workLogs.length,
+            quantity: dailyCalcWorkLogs.length,
             amount: commissionTotal,
             remarks: `租賃價目表 #${fleetRateCard.id}`,
             sort_order: sortOrder++,
