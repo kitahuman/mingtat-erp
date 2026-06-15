@@ -261,7 +261,9 @@ export default function QuotationPdfPreviewPage() {
       const link = document.createElement('a');
       link.href = url;
       const clientCode = quotation?.client?.code || quotation?.client?.name || '';
-      link.download = `${quotation?.quotation_no || `quotation-${quotationId}`}_${clientCode}.pdf`;
+      const quotationName = quotation?.contract_name || quotation?.project_name || '';
+      const fileNameParts = [quotation?.quotation_no || `quotation-${quotationId}`, clientCode, quotationName].filter(Boolean);
+      link.download = `${fileNameParts.join('_')}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
