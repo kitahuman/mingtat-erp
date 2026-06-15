@@ -267,26 +267,25 @@ export class PayrollCalculationService {
 
     // ── (3) OT 計算 ──
     let otTotal = 0;
-    // 移除舊的標準 OT 計算區塊，改用下方的順序累加邏輯
+    // OT 時段：每條 workLog 獨立計算
+    // 第1小時 → OT 18:00-19:00
+    // 第2小時 → OT 19:00-20:00
+    // 第3小時起 → OT 加班費 (標準)
     const otSlotFields = [
       'ot_1800_1900',
       'ot_1900_2000',
-      'ot_0600_0700',
-      'ot_0700_0800',
     ];
     const otSlotLabels: Record<string, string> = {
       ot_1800_1900: 'OT 18:00-19:00',
       ot_1900_2000: 'OT 19:00-20:00',
-      ot_0600_0700: 'OT 06:00-07:00',
-      ot_0700_0800: 'OT 07:00-08:00',
     };
 
-    // 依序計算 OT 金額
-    let currentOtHourIndex = 0;
+    // 每條 workLog 獨立計算 OT，currentOtHourIndex 每條重置
     for (const wl of workLogs) {
       const otQty = Number(wl.ot_quantity) || 0;
       if (otQty <= 0) continue;
 
+      let currentOtHourIndex = 0;
       for (let i = 0; i < otQty; i++) {
         const slotField = otSlotFields[currentOtHourIndex];
         const rate = slotField
@@ -664,8 +663,6 @@ export class PayrollCalculationService {
     const salaryOtSlots = [
       'ot_1800_1900',
       'ot_1900_2000',
-      'ot_0600_0700',
-      'ot_0700_0800',
     ];
 
     // 追蹤累積的 OT 小時數，以便按順序應用時段金額

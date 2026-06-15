@@ -402,6 +402,8 @@ const ALLOWANCE_LABELS: Record<string, string> = {
   kwh_night: "嘉華-夜間津貼",
   allowance_mid_shift: "中直津貼",
   mid_shift: "中直津貼",
+  ot_0600_0700: "OT 06:00-07:00",
+  ot_0700_0800: "OT 07:00-08:00",
 };
 
 const DAILY_METRIC_LABELS = ["工作", "底薪", "補底薪", "OT", "合計"];
