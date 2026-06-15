@@ -375,9 +375,9 @@ export type PayrollTabsProps = {
 
 const TAB_LABELS: Record<TabKey, string> = {
   detail: "逐筆明細",
-  daily: "逐日計算",
   grouped: "歸組結算",
   unmatched: "未匹配摘要",
+  daily: "逐日計算",
   calculation: "計算明細",
   print: "列印",
 };
@@ -1157,7 +1157,7 @@ function PayrollTabs({
             </button>
           ))}
         </div>
-        <button type="button" onClick={loadSnapshot} disabled={loading || saving} className="btn-secondary text-sm">{loading ? "重新載入中..." : "重新載入分頁資料"}</button>
+        <button type="button" onClick={loadSnapshot} disabled={loading || saving} className="btn-secondary text-sm" title="重新載入頁面資料，不觸發重新計算">{loading ? "重新載入中..." : "重新載入分頁資料"}</button>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1783,7 +1783,12 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
-              <td colSpan={6} className="px-3 py-2 text-right font-bold">逐日合計</td>
+              <td className="px-3 py-2"></td>
+              <td className="px-3 py-2 text-left font-bold">小計</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-gray-900">{formatCompactMoney(days.reduce((sum, day) => sum + getDailyBaseWorkIncome(day), 0))}</td>
+              <td className="px-3 py-2 text-center font-mono font-bold text-gray-900">{formatCompactMoney(days.reduce((sum, day) => sum + getDailyOtMidShiftTotals(day).otAmount + getDailyOtMidShiftTotals(day).midShiftAmount, 0))}</td>
+              <td className="px-3 py-2 text-right font-mono font-bold text-gray-900">{formatCompactMoney(totalTopUp)}</td>
+              <td className="px-3 py-2 text-center font-mono font-bold text-gray-900">{formatCompactMoney(totalAllowances)}</td>
               <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatCompactMoney(grandTotal)}</td>
               <td className="px-3 py-2"></td>
             </tr>

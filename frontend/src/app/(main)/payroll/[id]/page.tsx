@@ -1423,12 +1423,14 @@ export default function PayrollDetailPage() {
               <button
                 onClick={handleRecalculate}
                 className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
+                title="重新計算糧單項目，保留手動修改的金額"
               >
                 重新計算
               </button>
               <button
                 onClick={handleResetRefetch}
                 className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
+                title="從工作記錄重新抓取資料並重新計算"
               >
                 重新抓取資料
               </button>
