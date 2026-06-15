@@ -68,7 +68,7 @@ export default function SalaryConfigDetailPage() {
   };
 
   const addCustomAllowance = () => {
-    setForm({ ...form, custom_allowances: [...(form.custom_allowances || []), { name: '', amount: 0 }] });
+    setForm({ ...form, custom_allowances: [...(form.custom_allowances || []), { name: '', amount: 0, trigger_type: 'every_work_day', trigger_params: {} }] });
   };
   const removeCustomAllowance = (idx: number) => {
     setForm({ ...form, custom_allowances: form.custom_allowances.filter((_: any, i: number) => i !== idx) });
@@ -204,10 +204,45 @@ export default function SalaryConfigDetailPage() {
         {editing ? (
           (form.custom_allowances || []).length > 0 ? (
             form.custom_allowances.map((ca: any, idx: number) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <input value={ca.name} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], name: e.target.value}; setForm({...form, custom_allowances: cas}); }} className="input-field flex-1 text-sm" placeholder="津貼名稱" />
-                <input type="number" value={ca.amount} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], amount: Number(e.target.value)}; setForm({...form, custom_allowances: cas}); }} className="input-field w-32 text-sm" placeholder="金額" />
-                <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 hover:text-red-700">×</button>
+              <div key={idx} className="rounded-lg border border-gray-200 p-3 mb-2">
+                <div className="flex gap-2 mb-2">
+                  <input value={ca.name} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], name: e.target.value}; setForm({...form, custom_allowances: cas}); }} className="input-field flex-1 text-sm" placeholder="津貼名稱" />
+                  <input type="number" value={ca.amount} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], amount: Number(e.target.value)}; setForm({...form, custom_allowances: cas}); }} className="input-field w-32 text-sm" placeholder="金額" />
+                  <button type="button" onClick={() => removeCustomAllowance(idx)} className="text-red-500 hover:text-red-700">×</button>
+                </div>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <label className="text-xs text-gray-500">觸發條件：</label>
+                  <select value={ca.trigger_type || 'every_work_day'} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], trigger_type: e.target.value, trigger_params: {}}; setForm({...form, custom_allowances: cas}); }} className="input-field text-sm w-auto">
+                    <option value="every_work_day">每個工作天</option>
+                    <option value="day_shift_only">只限日班</option>
+                    <option value="night_shift_only">只限夜班</option>
+                    <option value="specific_client">特定客戶</option>
+                    <option value="specific_weekday">特定星期</option>
+                    <option value="manual">手動添加</option>
+                  </select>
+                  {ca.trigger_type === 'specific_client' && (
+                    <input type="number" value={ca.trigger_params?.client_id || ''} onChange={e => { const cas = [...form.custom_allowances]; cas[idx] = {...cas[idx], trigger_params: { client_id: Number(e.target.value) || undefined }}; setForm({...form, custom_allowances: cas}); }} className="input-field w-28 text-sm" placeholder="客戶 ID" />
+                  )}
+                  {ca.trigger_type === 'specific_weekday' && (
+                    <div className="flex gap-1">
+                      {['日','一','二','三','四','五','六'].map((label, dayIdx) => {
+                        const weekdays: number[] = ca.trigger_params?.weekdays || [];
+                        const checked = weekdays.includes(dayIdx);
+                        return (
+                          <label key={dayIdx} className={`cursor-pointer rounded px-1.5 py-0.5 text-xs border ${checked ? 'bg-primary-100 border-primary-400 text-primary-700' : 'bg-gray-50 border-gray-300 text-gray-500'}`}>
+                            <input type="checkbox" className="sr-only" checked={checked} onChange={() => {
+                              const cas = [...form.custom_allowances];
+                              const newWeekdays = checked ? weekdays.filter((d: number) => d !== dayIdx) : [...weekdays, dayIdx];
+                              cas[idx] = {...cas[idx], trigger_params: { weekdays: newWeekdays }};
+                              setForm({...form, custom_allowances: cas});
+                            }} />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           ) : <p className="text-gray-400 text-sm">暫無自定義津貼</p>

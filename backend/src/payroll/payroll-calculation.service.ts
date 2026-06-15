@@ -269,13 +269,23 @@ export class PayrollCalculationService {
     for (const key of fixedAllowanceOrder) {
       const fixedData = fixedAllowancesByType.get(key);
       if (fixedData && fixedData.amount > 0) {
-        const rate = fixedData.count > 0 ? fixedData.amount / fixedData.count : 0;
+        // 取得原始單價
+        let unitPrice = 0;
+        if (key.startsWith('custom:')) {
+          const customName = key.replace('custom:', '');
+          const customAllowance = (salarySetting.custom_allowances as any[] || []).find((ca: any) => ca.name === customName);
+          unitPrice = customAllowance ? Number(customAllowance.amount) : 0;
+        } else {
+          unitPrice = Number((salarySetting as any)[key]) || 0;
+        }
+        // quantity 用 amount / unitPrice 計算（反映 0.5 天比例）
+        const quantity = unitPrice > 0 ? fixedData.amount / unitPrice : fixedData.count;
         allowanceTotal += fixedData.amount;
         items.push({
           item_type: 'allowance',
           item_name: fixedData.name,
-          unit_price: rate,
-          quantity: fixedData.count,
+          unit_price: unitPrice,
+          quantity: quantity,
           amount: fixedData.amount,
           sort_order: sortOrder++,
         });
@@ -285,13 +295,23 @@ export class PayrollCalculationService {
     for (const [key, fixedData] of fixedAllowancesByType) {
       if (fixedAllowanceOrder.includes(key)) continue;
       if (fixedData.amount > 0) {
-        const rate = fixedData.count > 0 ? fixedData.amount / fixedData.count : 0;
+        // 取得原始單價
+        let unitPrice = 0;
+        if (key.startsWith('custom:')) {
+          const customName = key.replace('custom:', '');
+          const customAllowance = (salarySetting.custom_allowances as any[] || []).find((ca: any) => ca.name === customName);
+          unitPrice = customAllowance ? Number(customAllowance.amount) : 0;
+        } else {
+          unitPrice = Number((salarySetting as any)[key]) || 0;
+        }
+        // quantity 用 amount / unitPrice 計算（反映 0.5 天比例）
+        const quantity = unitPrice > 0 ? fixedData.amount / unitPrice : fixedData.count;
         allowanceTotal += fixedData.amount;
         items.push({
           item_type: 'allowance',
           item_name: fixedData.name,
-          unit_price: rate,
-          quantity: fixedData.count,
+          unit_price: unitPrice,
+          quantity: quantity,
           amount: fixedData.amount,
           sort_order: sortOrder++,
         });
@@ -720,26 +740,65 @@ export class PayrollCalculationService {
     if (salarySetting.custom_allowances && Array.isArray(salarySetting.custom_allowances)) {
       for (const ca of salarySetting.custom_allowances as any[]) {
         if (!ca.amount || Number(ca.amount) === 0) continue;
+        const triggerType = ca.trigger_type || 'every_work_day';
+
+        // manual 類型不自動給
+        if (triggerType === 'manual') continue;
+
+        // 日班條件
+        if (triggerType === 'day_shift_only') {
+          const hasDayShift = dayWorkLogs.some((wl) => wl.day_night !== '夜');
+          if (!hasDayShift) continue;
+        }
+
+        // 夜班條件
+        if (triggerType === 'night_shift_only') {
+          const hasNightShift = dayWorkLogs.some((wl) => wl.day_night === '夜');
+          if (!hasNightShift) continue;
+        }
+
+        // 特定客戶條件
+        if (triggerType === 'specific_client') {
+          const clientId = ca.trigger_params?.client_id;
+          if (clientId) {
+            const hasClient = dayWorkLogs.some((wl) => wl.client_id === clientId || wl.customer_id === clientId);
+            if (!hasClient) continue;
+          }
+        }
+
+        // 特定星期幾條件
+        if (triggerType === 'specific_weekday') {
+          const weekdays: number[] = ca.trigger_params?.weekdays || [];
+          if (weekdays.length > 0) {
+            const firstLog = dayWorkLogs[0];
+            if (firstLog) {
+              const date = new Date(firstLog.scheduled_date);
+              const dayOfWeek = date.getDay(); // 0=日 1=一 ... 6=六
+              if (!weekdays.includes(dayOfWeek)) continue;
+            }
+          }
+        }
+
         const key = `custom:${ca.name}`;
-        
+
         // 若 DB 已有同日同 key 的 daily allowance，跳過（避免重複）
         const existsInDailyAllowances = dayAllowances.some(
           (da) => da.allowance_key === key,
         );
         if (existsInDailyAllowances) continue;
-        
+
         // 檢查是否有排除記錄
         const isExcluded = dayAllowances.some(
           (da) => da.allowance_key === `excluded_${key}` || da.allowance_key.startsWith(`excluded_${key}_`),
         );
         if (isExcluded) continue;
-        
+
         // 按當天工作量比例計算金額
         const dayQuantity = Math.min(
           dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 1), 0),
           1
         );
-        
+
         result.push({
           key,
           name: ca.name || '自定義津貼',
@@ -747,6 +806,7 @@ export class PayrollCalculationService {
         });
       }
     }
+
 
     return result;
   }
@@ -1004,7 +1064,7 @@ export class PayrollCalculationService {
           remarks: da.remarks,
         })),
         fixed_allowances_per_day: fixedAllowancesPerDay,
-        daily_allowance_total: dailyAllowanceTotal,
+        daily_allowance_total: dailyAllowanceTotal + fixedAllowanceTotal,
         daily_ot_amount: dailyOtAmount,
         daily_mid_shift_amount: dailyMidShiftAmount,
         day_total: dayTotal,
@@ -1260,6 +1320,7 @@ export class PayrollCalculationService {
             key: `custom:${ca.name}`,
             label: ca.name || '自定義津貼',
             default_amount: Number(ca.amount),
+            trigger_type: ca.trigger_type || 'every_work_day',
           });
         }
       }
