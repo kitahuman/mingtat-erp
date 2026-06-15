@@ -54,6 +54,8 @@ export class UpdatePayrollWorkLogDto {
 
 export class UpdatePayrollItemDto {
   @IsOptional() @IsBoolean() payroll_item_excluded?: boolean;
+  @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
+  @IsOptional() @IsBoolean() reset_manual_amount?: boolean;
 }
 
 export class ExcludeBadgeDto {

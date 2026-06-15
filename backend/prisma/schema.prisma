@@ -1495,6 +1495,7 @@ model PayrollItem {
   remarks               String? @db.Text
   sort_order            Int     @default(0)
   payroll_item_excluded Boolean @default(false)
+  payroll_item_is_manual_amount Boolean @default(false)
 
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 

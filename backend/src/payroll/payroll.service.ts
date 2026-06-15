@@ -910,6 +910,7 @@ export class PayrollService {
       include: {
         employee: { include: { company: true } },
         adjustments: true,
+        items: true,
       },
     });
     if (!payroll) throw new NotFoundException('Payroll not found');
@@ -1035,13 +1036,27 @@ export class PayrollService {
         .filter((item: any) => item.payroll_item_excluded)
         .map((item: any) => this.buildPayrollItemSignature(item)),
     );
+
+    // Preserve manual amount items: record their amounts before deletion
+    const manualAmountItemsFinalize = new Map<string, { amount: number }>();
+    for (const item of ((payroll as any).items || [])) {
+      if (item.payroll_item_is_manual_amount) {
+        const key = `${item.item_type || ''}|${item.item_name || ''}`;
+        manualAmountItemsFinalize.set(key, { amount: Number(item.amount) });
+      }
+    }
+
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
     for (const item of calc.items) {
+      const signature = this.buildPayrollItemSignature(item);
+      const manualKey = `${item.item_type || ''}|${item.item_name || ''}`;
+      const manualEntry = manualAmountItemsFinalize.get(manualKey);
       await this.prisma.payrollItem.create({
         data: {
           ...item,
           payroll_id: id,
-          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(this.buildPayrollItemSignature(item)),
+          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(signature),
+          ...(manualEntry ? { amount: manualEntry.amount, payroll_item_is_manual_amount: true } : {}),
         },
       });
     }
@@ -2291,13 +2306,27 @@ export class PayrollService {
         .filter((item: any) => item.payroll_item_excluded)
         .map((item: any) => this.buildPayrollItemSignature(item)),
     );
+
+    // Preserve manual amount items: record their amounts before deletion
+    const manualAmountItems = new Map<string, { amount: number }>();
+    for (const item of ((payroll as any).items || [])) {
+      if (item.payroll_item_is_manual_amount) {
+        const key = `${item.item_type || ''}|${item.item_name || ''}`;
+        manualAmountItems.set(key, { amount: Number(item.amount) });
+      }
+    }
+
     await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
     for (const item of calc.items) {
+      const signature = this.buildPayrollItemSignature(item);
+      const manualKey = `${item.item_type || ''}|${item.item_name || ''}`;
+      const manualEntry = manualAmountItems.get(manualKey);
       await this.prisma.payrollItem.create({
         data: {
           ...item,
           payroll_id: id,
-          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(this.buildPayrollItemSignature(item)),
+          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(signature),
+          ...(manualEntry ? { amount: manualEntry.amount, payroll_item_is_manual_amount: true } : {}),
         },
       });
     }
@@ -2327,7 +2356,7 @@ export class PayrollService {
   }
 
 
-  async updatePayrollItem(payrollId: number, itemId: number, body: any) {
+  async updatePayrollItem(payrollId: number, itemId: number, body: { payroll_item_excluded?: boolean; amount?: number; reset_manual_amount?: boolean }) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
     });
@@ -2341,12 +2370,37 @@ export class PayrollService {
     });
     if (!item) throw new NotFoundException('Payroll item not found');
 
-    await this.prisma.payrollItem.update({
-      where: { id: itemId },
-      data: {
-        payroll_item_excluded: Boolean(body.payroll_item_excluded),
-      },
-    });
+    // Handle reset_manual_amount: clear flag and trigger recalculate to restore system amount
+    if (body.reset_manual_amount === true) {
+      await this.prisma.payrollItem.update({
+        where: { id: itemId },
+        data: { payroll_item_is_manual_amount: false },
+      });
+      // Recalculate to restore system-computed amount for this item
+      await this.recalculate(payrollId, false);
+      return this.findOne(payrollId);
+    }
+
+    const updateData: { payroll_item_excluded?: boolean; amount?: number; payroll_item_is_manual_amount?: boolean } = {};
+
+    // Handle excluded toggle
+    if (body.payroll_item_excluded !== undefined) {
+      updateData.payroll_item_excluded = Boolean(body.payroll_item_excluded);
+    }
+
+    // Handle manual amount update
+    if (body.amount !== undefined && Number(body.amount) !== Number(item.amount)) {
+      updateData.amount = Number(body.amount);
+      updateData.payroll_item_is_manual_amount = true;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await this.prisma.payrollItem.update({
+        where: { id: itemId },
+        data: updateData,
+      });
+    }
+
     await this.rebuildPayrollTotalsFromItems(payrollId);
     return this.findOne(payrollId);
   }

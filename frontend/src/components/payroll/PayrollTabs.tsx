@@ -158,6 +158,7 @@ type PayrollItem = {
   amount?: number | string | null;
   remarks?: string | null;
   payroll_item_excluded?: boolean | null;
+  payroll_item_is_manual_amount?: boolean | null;
 };
 
 type Adjustment = {
@@ -1170,7 +1171,7 @@ function PayrollTabs({
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} />}
+      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} />}
       {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
@@ -2045,7 +2046,7 @@ function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedG
   return <div><div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">以下工作記錄未能自動匹配價目。可直接將組合加入價目表，重新計算後相關分頁會同步更新。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[980px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">客戶</th><th className="px-3 py-2 text-left">合約</th><th className="px-3 py-2 text-center">日/夜</th><th className="px-3 py-2 text-left">路線</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">筆數</th><th className="px-3 py-2 text-left">原因</th><th className="px-3 py-2 text-center">操作</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key} className="border-b hover:bg-amber-50/50"><td className="px-3 py-2 font-medium">{group.clientName}</td><td className="px-3 py-2 text-gray-600">{group.contractNo}</td><td className="px-3 py-2 text-center">{group.dayNight}</td><td className="px-3 py-2 text-gray-600">{group.route}</td><td className="px-3 py-2 text-right font-mono">{group.quantity.toLocaleString()} {group.unit}</td><td className="px-3 py-2 text-right font-mono">{group.count}</td><td className="px-3 py-2 text-xs text-amber-700">{group.reason}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(group.source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>)}</tbody></table></div></div>;
 }
 
-function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], dailyCalculation = [] }: { calculation: CalculationDetails; snapshot?: PayrollSnapshot | null; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[] }) {
+function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], dailyCalculation = [], payrollId, readOnly = false, onItemUpdated }: { calculation: CalculationDetails; snapshot?: PayrollSnapshot | null; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[]; payrollId?: number; readOnly?: boolean; onItemUpdated?: () => Promise<void> }) {
   const summary = { ...calculation.payroll_summary } || {};
   const items = calculation.items || [];
   const salaryItems = buildSalarySettingDisplayItems(salarySetting, calculation.mpf_plan);
@@ -2114,7 +2115,7 @@ function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], d
           })}
         </div>
       </section>
-      <PayrollItemsGroupedTable items={items} adjustments={adjustments} payrollExpenses={payrollExpenses} summary={displaySummary} mpfPlan={calculation.mpf_plan || salarySetting?.mpf_plan || snapshot?.mpf_plan || null} />
+      <PayrollItemsGroupedTable items={items} adjustments={adjustments} payrollExpenses={payrollExpenses} summary={displaySummary} mpfPlan={calculation.mpf_plan || salarySetting?.mpf_plan || snapshot?.mpf_plan || null} payrollId={payrollId} readOnly={readOnly} onItemUpdated={onItemUpdated} />
     </div>
   );
 }
@@ -2243,13 +2244,66 @@ function PayrollItemsGroupedTable({
   payrollExpenses,
   summary,
   mpfPlan,
+  payrollId,
+  readOnly = false,
+  onItemUpdated,
 }: {
   items: PayrollItem[];
   adjustments: Adjustment[];
   payrollExpenses: PayrollExpenseRecord[];
   summary: Record<string, number | string | null | undefined>;
   mpfPlan?: string | null;
+  payrollId?: number;
+  readOnly?: boolean;
+  onItemUpdated?: () => Promise<void>;
 }) {
+  const [editingItemId, setEditingItemId] = useState<number | string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleDoubleClickAmount = (item: PayrollItem) => {
+    if (readOnly || !payrollId || !item.id) return;
+    setEditingItemId(item.id);
+    setEditAmount(String(Math.abs(toNumber(item.amount))));
+  };
+
+  const handleAmountSave = async (item: PayrollItem) => {
+    if (!payrollId || !item.id) return;
+    const newAmount = parseFloat(editAmount);
+    if (isNaN(newAmount)) { setEditingItemId(null); return; }
+    const finalAmount = toNumber(item.amount) < 0 ? -Math.abs(newAmount) : Math.abs(newAmount);
+    if (finalAmount === toNumber(item.amount)) { setEditingItemId(null); return; }
+    setSaving(true);
+    try {
+      await payrollApi.updateItem(payrollId, Number(item.id), { amount: finalAmount });
+      if (onItemUpdated) await onItemUpdated();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "更新金額失敗");
+    } finally {
+      setSaving(false);
+      setEditingItemId(null);
+    }
+  };
+
+  const handleAmountKeyDown = (e: React.KeyboardEvent, item: PayrollItem) => {
+    if (e.key === "Enter") { e.preventDefault(); handleAmountSave(item); }
+    if (e.key === "Escape") { setEditingItemId(null); }
+  };
+
+  const handleResetManualAmount = async (item: PayrollItem) => {
+    if (!payrollId || !item.id) return;
+    if (!confirm("確定要還原為系統計算金額？")) return;
+    setSaving(true);
+    try {
+      await payrollApi.updateItem(payrollId, Number(item.id), { reset_manual_amount: true });
+      if (onItemUpdated) await onItemUpdated();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "還原金額失敗");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const columns = ["item_name", "unit_price", "quantity", "amount", "remarks"];
   const salaryGroups: Array<{ type: string; title: string }> = [
     { type: "base_salary", title: "底薪項目" },
@@ -2268,12 +2322,55 @@ function PayrollItemsGroupedTable({
 
   const renderItemRow = (item: PayrollItem, key: string | number | undefined, extraClass = "") => {
     const isDeduction = toNumber(item.amount) < 0;
+    const isManual = Boolean(item.payroll_item_is_manual_amount);
+    const isEditing = editingItemId === item.id;
+    const canEdit = !readOnly && !!payrollId && !!item.id;
     return (
       <tr key={String(key)} className={`border-b ${extraClass}`}>
         <td className="px-3 py-2 font-medium text-gray-800">{item.item_name || "—"}</td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : formatMoney(item.unit_price)}</td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(toNumber(item.quantity))}</td>
-        <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>{isDeduction ? "-" : ""}{formatMoney(Math.abs(toNumber(item.amount)))}</td>
+        <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>
+          <div className="flex items-center justify-end gap-1">
+            {isEditing ? (
+              <input
+                type="number"
+                step="0.01"
+                className="w-24 rounded border border-blue-400 px-2 py-0.5 text-right text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                onKeyDown={(e) => handleAmountKeyDown(e, item)}
+                onBlur={() => handleAmountSave(item)}
+                autoFocus
+                disabled={saving}
+              />
+            ) : (
+              <span
+                className={canEdit ? "cursor-pointer hover:bg-blue-50 px-1 rounded" : ""}
+                onDoubleClick={() => handleDoubleClickAmount(item)}
+                title={canEdit ? "雙擊編輯金額" : undefined}
+              >
+                {isDeduction ? "-" : ""}{formatMoney(Math.abs(toNumber(item.amount)))}
+              </span>
+            )}
+            {isManual && (
+              <>
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700">手動</span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => handleResetManualAmount(item)}
+                    className="text-[11px] text-gray-500 hover:text-blue-600 ml-0.5"
+                    title="還原為系統計算金額"
+                    disabled={saving}
+                  >
+                    ↺
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </td>
         <td className="px-3 py-2 text-xs text-gray-500">{item.remarks || "—"}</td>
       </tr>
     );

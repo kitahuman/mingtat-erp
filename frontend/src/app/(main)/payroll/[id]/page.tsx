@@ -1419,12 +1419,20 @@ export default function PayrollDetailPage() {
             </p>
           </div>
           {isDraft && (
-            <button
-              onClick={handleResetRefetch}
-              className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
-            >
-              重新抓取資料
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRecalculate}
+                className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                重新計算
+              </button>
+              <button
+                onClick={handleResetRefetch}
+                className="btn-secondary text-sm border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                重新抓取資料
+              </button>
+            </div>
           )}
         </div>
         <PayrollTabs
