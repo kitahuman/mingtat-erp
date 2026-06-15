@@ -1604,8 +1604,19 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
   if (days.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無逐日計算資料。</div>;
 
   const tableColumnCount = 8;
-  const workDayCount = days.filter((day) => (day.work_logs || day.logs || []).length > 0).length;
-  const topUpDayCount = days.filter((day) => getDailyTopUpAmount(day) > 0).length;
+  const workDayCount = days.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    const dayQ = day.day_quantity != null ? day.day_quantity : 1;
+    const nightQ = day.night_quantity != null ? day.night_quantity : 0;
+    return sum + Math.min(dayQ + nightQ, 1);
+  }, 0);
+  const topUpDayCount = days.reduce((sum, day) => {
+    if (getDailyTopUpAmount(day) <= 0) return sum;
+    const dayQ = day.day_quantity != null ? day.day_quantity : 1;
+    const nightQ = day.night_quantity != null ? day.night_quantity : 0;
+    return sum + Math.min(dayQ + nightQ, 1);
+  }, 0);
   const totalTopUp = days.reduce((sum, day) => sum + getDailyTopUpAmount(day), 0);
   const leaveDayCount = days.filter((day) => isLeaveDay(day)).length;
   const totalAllowances = days.reduce((sum, day) => sum + getDailyAllowanceTotal(day), 0);
@@ -1649,8 +1660,8 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
-        <DailySummaryItem label="工作天數" value={`${workDayCount}天`} />
-        <DailySummaryItem label="需補底薪天數" value={`${topUpDayCount}天`} valueClassName="text-orange-600" />
+        <DailySummaryItem label="工作天數" value={`${formatPlainNumber(workDayCount)}天`} />
+        <DailySummaryItem label="需補底薪天數" value={`${formatPlainNumber(topUpDayCount)}天`} valueClassName="text-orange-600" />
         <DailySummaryItem label="補底薪合計" value={formatCompactMoney(totalTopUp)} valueClassName="text-orange-600" />
         <DailySummaryItem label="休假天數" value={`${leaveDayCount}天`} valueClassName="text-gray-600" />
         <DailySummaryItem label="每日津貼合計" value={formatCompactMoney(totalAllowances)} valueClassName="text-blue-600" />
@@ -2199,7 +2210,13 @@ function getCustomAllowanceDisplayItems(customAllowances: unknown): SalarySettin
 function buildCalculationWorkSummary(workLogs: WorkLogRecord[], dailyCalculation: DailyCalculationRecord[]) {
   const activeRows = workLogs.filter((row) => !row.is_excluded);
   const workDates = new Set(activeRows.map((row) => dateOnly(row.scheduled_date)).filter(Boolean));
-  const dailyWorkDays = dailyCalculation.filter((day) => (day.work_logs || day.logs || []).length > 0).length;
+  const dailyWorkDays = dailyCalculation.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    const dayQ = day.day_quantity != null ? day.day_quantity : 1;
+    const nightQ = day.night_quantity != null ? day.night_quantity : 0;
+    return sum + Math.min(dayQ + nightQ, 1);
+  }, 0);
   const otRows = activeRows.filter((row) => toNumber(row.ot_quantity) > 0);
   const midShiftRows = activeRows.filter((row) => Boolean(row.is_mid_shift) || normalizeSettingText(row.day_night).includes("中直"));
 

@@ -383,9 +383,13 @@ export class PayrollService {
       },
     );
 
-    const workDayCount = dailyCalc.filter(
-      (day: any) => (day.work_logs || []).length > 0,
-    ).length;
+    const workDayCount = dailyCalc.reduce((sum: number, day: any) => {
+      const logs = day.work_logs || [];
+      if (logs.length === 0) return sum;
+      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+      const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
+      return sum + Math.min(dayQ + nightQ, 1);
+    }, 0);
 
     // Build available allowance options from salary setting
     const allowanceOptions =
@@ -665,9 +669,13 @@ export class PayrollService {
       },
     );
 
-    const workDayCount = dailyCalc.filter(
-      (day: any) => (day.work_logs || []).length > 0,
-    ).length;
+    const workDayCount = dailyCalc.reduce((sum: number, day: any) => {
+      const logs = day.work_logs || [];
+      if (logs.length === 0) return sum;
+      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+      const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
+      return sum + Math.min(dayQ + nightQ, 1);
+    }, 0);
 
     // Build available allowance options
     const allowanceOptions =
