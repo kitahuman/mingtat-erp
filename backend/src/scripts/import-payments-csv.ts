@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parse } from 'csv-parse/sync';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { parse } = require('csv-parse/sync');
 
 const prisma = new PrismaClient();
 
