@@ -1,0 +1,68 @@
+name: Fix PaymentIn bank_account_id
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (read-only, no modifications)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  fix:
+    name: Fix PaymentIn bank_account_id
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run fix script inside backend container on EC2
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          echo "Running fix script inside Docker container with DRY_RUN=${DRY_RUN}..."
+
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
+          set -e
+
+          WORK_DIR="/opt/mingtat-erp"
+
+          echo "=== Pulling latest code ==="
+          cd "\${WORK_DIR}"
+          git fetch origin main
+          git reset --hard origin/main
+
+          echo "=== Finding backend container ==="
+          CONTAINER=\$(docker ps --filter "name=backend" --format "{{.Names}}" | head -1)
+          if [ -z "\$CONTAINER" ]; then
+            echo "ERROR: No running backend container found"
+            docker ps
+            exit 1
+          fi
+          echo "Using container: \$CONTAINER"
+
+          echo "=== Copying script into container ==="
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist
+          docker cp "\${WORK_DIR}/backend/src/scripts/dist/fix-payment-bank-account.js" "\${CONTAINER}:/app/src/scripts/dist/fix-payment-bank-account.js"
+
+          echo "=== Running fix script inside container ==="
+          docker exec -e DRY_RUN="${DRY_RUN}" "\${CONTAINER}" node /app/src/scripts/dist/fix-payment-bank-account.js
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts
