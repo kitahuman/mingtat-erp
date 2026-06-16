@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ColumnFilter from "@/components/ColumnFilter";
-import { payrollApi } from "@/lib/api";
+import { payrollApi, systemSettingsApi } from "@/lib/api";
 import { fmtDate } from "@/lib/dateUtils";
 
 type TabKey = "detail" | "daily" | "grouped" | "unmatched" | "calculation" | "print";
@@ -2596,6 +2596,17 @@ function PrintTab({
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    // Load system defaults for payroll print options on mount
+    systemSettingsApi.getAll().then((res: any) => {
+      const settings = res.data || {};
+      setShowEmployeeSignature(settings.print_payroll_show_employee_signature === 'true');
+      setShowCompanyStamp(settings.print_payroll_show_company_stamp !== 'false');
+    }).catch(() => {
+      // Use defaults if system settings fail to load
+    });
+  }, []);
 
   useEffect(() => {
     if (!payrollId) {

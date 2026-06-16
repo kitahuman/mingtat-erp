@@ -8,11 +8,12 @@ interface SettingField {
   key: string;
   label: string;
   description: string;
-  type: 'number' | 'text' | 'boolean';
+  type: 'number' | 'text' | 'boolean' | 'select';
   defaultValue: string;
   min?: number;
   max?: number;
   unit?: string;
+  options?: { label: string; value: string }[];
 }
 
 const SETTING_FIELDS: SettingField[] = [
@@ -107,6 +108,145 @@ const SETTING_FIELDS: SettingField[] = [
     min: 6,
     max: 72,
     unit: 'px',
+  },
+  // Invoice Print Defaults
+  {
+    key: 'print_invoice_language',
+    label: '預設語言',
+    description: '設定發票列印的預設語言。',
+    type: 'select',
+    defaultValue: 'zh',
+    options: [
+      { label: '中文', value: 'zh' },
+      { label: 'English', value: 'en' },
+      { label: '雙語', value: 'bilingual' },
+    ],
+  },
+  {
+    key: 'print_invoice_show_bank',
+    label: '顯示銀行資料',
+    description: '發票列印時預設是否顯示銀行資料。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_client_address',
+    label: '顯示客戶地址',
+    description: '發票列印時預設是否顯示客戶地址。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_client_phone',
+    label: '顯示客戶電話',
+    description: '發票列印時預設是否顯示客戶電話。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_client_contact',
+    label: '顯示客戶聯絡人',
+    description: '發票列印時預設是否顯示客戶聯絡人。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_client_signature',
+    label: '顯示客戶簽名欄',
+    description: '發票列印時預設是否顯示客戶簽名欄。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_company_signature',
+    label: '顯示公司簽名欄',
+    description: '發票列印時預設是否顯示公司簽名欄。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_invoice_show_company_stamp',
+    label: '顯示公司印',
+    description: '發票列印時預設是否顯示公司印。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  // Quotation Print Defaults
+  {
+    key: 'print_quotation_language',
+    label: '預設語言',
+    description: '設定報價單列印的預設語言。',
+    type: 'select',
+    defaultValue: 'zh',
+    options: [
+      { label: '中文', value: 'zh' },
+      { label: 'English', value: 'en' },
+      { label: '雙語', value: 'bilingual' },
+    ],
+  },
+  {
+    key: 'print_quotation_show_client_address',
+    label: '顯示客戶地址',
+    description: '報價單列印時預設是否顯示客戶地址。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_quotation_show_client_phone',
+    label: '顯示客戶電話',
+    description: '報價單列印時預設是否顯示客戶電話。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_quotation_show_client_contact',
+    label: '顯示客戶聯絡人',
+    description: '報價單列印時預設是否顯示客戶聯絡人。',
+    type: 'boolean',
+    defaultValue: 'true',
+  },
+  {
+    key: 'print_quotation_show_client_signature',
+    label: '顯示客戶簽名欄',
+    description: '報價單列印時預設是否顯示客戶簽名欄。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: 'print_quotation_show_company_signature',
+    label: '顯示公司簽名欄',
+    description: '報價單列印時預設是否顯示公司簽名欄。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: 'print_quotation_show_company_stamp',
+    label: '顯示公司印',
+    description: '報價單列印時預設是否顯示公司印。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  // Payroll Print Defaults
+  {
+    key: 'print_payroll_show_grouped_settlement',
+    label: '顯示歸組結算明細',
+    description: '糧單列印時預設是否顯示歸組結算明細。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: 'print_payroll_show_employee_signature',
+    label: '顯示員工簽署',
+    description: '糧單列印時預設是否顯示員工簽署欄。',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: 'print_payroll_show_company_stamp',
+    label: '顯示公司印',
+    description: '糧單列印時預設是否顯示公司印。',
+    type: 'boolean',
+    defaultValue: 'true',
   },
 ];
 
@@ -204,6 +344,23 @@ export default function SystemSettingsPage() {
                           onChange={e => handleChange(field.key, e.target.value)}
                           className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
+                      ) : field.type === 'select' ? (
+                        <select
+                          value={values[field.key] ?? field.defaultValue}
+                          onChange={e => handleChange(field.key, e.target.value)}
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {field.options?.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : field.type === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={values[field.key] === 'true'}
+                          onChange={e => handleChange(field.key, e.target.checked ? 'true' : 'false')}
+                          className="w-4 h-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
                       ) : (
                         <input
                           type="text"
@@ -280,6 +437,107 @@ export default function SystemSettingsPage() {
                       {field.unit && (
                         <span className="text-sm text-gray-500">{field.unit}</span>
                       )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Invoice Print Defaults */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-base font-semibold text-gray-800">🖨️ 發票列印預設值</h2>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                {SETTING_FIELDS.filter(f => f.key.startsWith('print_invoice')).map(field => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">{field.description}</p>
+                    <div className="flex items-center gap-3">
+                      {field.type === 'select' ? (
+                        <select
+                          value={values[field.key] ?? field.defaultValue}
+                          onChange={e => handleChange(field.key, e.target.value)}
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {field.options?.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : field.type === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={values[field.key] === 'true'}
+                          onChange={e => handleChange(field.key, e.target.checked ? 'true' : 'false')}
+                          className="w-4 h-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quotation Print Defaults */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-base font-semibold text-gray-800">🖨️ 報價單列印預設值</h2>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                {SETTING_FIELDS.filter(f => f.key.startsWith('print_quotation')).map(field => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">{field.description}</p>
+                    <div className="flex items-center gap-3">
+                      {field.type === 'select' ? (
+                        <select
+                          value={values[field.key] ?? field.defaultValue}
+                          onChange={e => handleChange(field.key, e.target.value)}
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {field.options?.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : field.type === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={values[field.key] === 'true'}
+                          onChange={e => handleChange(field.key, e.target.checked ? 'true' : 'false')}
+                          className="w-4 h-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Payroll Print Defaults */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-base font-semibold text-gray-800">🖨️ 糧單列印預設值</h2>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                {SETTING_FIELDS.filter(f => f.key.startsWith('print_payroll')).map(field => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">{field.description}</p>
+                    <div className="flex items-center gap-3">
+                      {field.type === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={values[field.key] === 'true'}
+                          onChange={e => handleChange(field.key, e.target.checked ? 'true' : 'false')}
+                          className="w-4 h-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      ) : null}
                     </div>
                   </div>
                 ))}

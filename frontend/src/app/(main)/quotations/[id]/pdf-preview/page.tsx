@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { quotationsApi, paymentTermTemplatesApi } from '@/lib/api';
+import { quotationsApi, paymentTermTemplatesApi, systemSettingsApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
 import Cookies from 'js-cookie';
 
@@ -44,13 +44,15 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   font_size_payment_terms: 11,
 };
 
+let SYSTEM_DEFAULTS: PdfPreviewOptions = { ...DEFAULT_OPTIONS };
+
 export default function QuotationPdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const quotationId = Number(id);
 
   const [quotation, setQuotation] = useState<any>(null);
-  const [options, setOptions] = useState<PdfPreviewOptions>(DEFAULT_OPTIONS);
+  const [options, setOptions] = useState<PdfPreviewOptions>(SYSTEM_DEFAULTS);
   const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -59,6 +61,26 @@ export default function QuotationPdfPreviewPage() {
   const [error, setError] = useState('');
   const latestOptionsRef = useRef<PdfPreviewOptions>(DEFAULT_OPTIONS);
   const lastSavedSignatureRef = useRef('');
+
+  useEffect(() => {
+    // Load system defaults on mount
+    systemSettingsApi.getAll().then(res => {
+      const settings = res.data || {};
+      SYSTEM_DEFAULTS = {
+        ...DEFAULT_OPTIONS,
+        language: (settings.print_quotation_language || 'zh') as QuotationPdfLanguage,
+        show_client_address: settings.print_quotation_show_client_address !== 'false',
+        show_client_phone: settings.print_quotation_show_client_phone !== 'false',
+        show_client_contact: settings.print_quotation_show_client_contact !== 'false',
+        show_client_signature: settings.print_quotation_show_client_signature !== 'false',
+        show_company_signature: settings.print_quotation_show_company_signature !== 'false',
+        show_company_stamp: settings.print_quotation_show_company_stamp === 'true',
+      };
+      setOptions(prev => ({ ...SYSTEM_DEFAULTS, ...prev }));
+    }).catch(() => {
+      // Use default if system settings fail to load
+    });
+  }, []);
 
   useEffect(() => {
     latestOptionsRef.current = options;
