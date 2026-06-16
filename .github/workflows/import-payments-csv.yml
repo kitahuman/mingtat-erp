@@ -50,7 +50,8 @@ jobs:
 
           echo "=== Pulling latest code ==="
           cd "\${WORK_DIR}"
-          git pull --rebase origin main
+          git fetch origin main
+          git reset --hard origin/main
 
           echo "=== Running import script ==="
           cd "\${BACKEND_DIR}"
