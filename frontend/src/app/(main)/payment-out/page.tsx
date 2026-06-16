@@ -47,6 +47,7 @@ export default function PaymentOutPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -76,6 +77,9 @@ export default function PaymentOutPage() {
       if (statusFilter) params.payment_out_status = statusFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      Object.entries(columnFilters).forEach(([key, values]) => {
+        if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
+      });
       const res = await paymentOutApi.list(params);
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
@@ -84,7 +88,7 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters]);
 
   useEffect(() => {
     fetchData();
@@ -238,12 +242,14 @@ export default function PaymentOutPage() {
       label: '公司',
       editable: false,
       minWidth: 100,
-      render: (_: any, row: any) =>
-        row.company ? (
-          <span className="text-xs text-gray-700">{row.company.name}</span>
+      render: (_: any, row: any) => {
+        const display = row.company?.internal_prefix || row.company?.name;
+        return display ? (
+          <span className="text-xs font-medium">{display}</span>
         ) : (
           <span className="text-gray-400">-</span>
-        ),
+        );
+      },
     },
     {
       key: '_source',
@@ -462,6 +468,13 @@ export default function PaymentOutPage() {
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
         onRowClick={(row: any) => router.push(`/payment-out/${row.id}`)}
+        serverSideFilter={true}
+        columnFilters={columnFilters}
+        onColumnFilterChange={(f) => { setColumnFilters(f); setPage(1); }}
+        onFetchFilterOptions={async (col) => {
+          const res = await paymentOutApi.filterOptions(col);
+          return Array.isArray(res.data) ? res.data : [];
+        }}
       />
 
       {/* Create Modal */}

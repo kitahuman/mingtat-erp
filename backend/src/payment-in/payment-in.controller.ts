@@ -19,6 +19,16 @@ import { CreatePaymentInDto, UpdatePaymentInDto, UpdatePaymentInStatusDto } from
 export class PaymentInController {
   constructor(private readonly service: PaymentInService) {}
 
+  @Get('filter-options')
+  getFilterOptions(@Query('column') column: string) {
+    return this.service.getFilterOptions(column);
+  }
+
+  @Get('by-invoice/:invoiceId')
+  findByInvoiceId(@Param('invoiceId') invoiceId: string) {
+    return this.service.findByInvoiceId(+invoiceId);
+  }
+
   @Get()
   findAll(
     @Query('page') page?: string,
@@ -27,8 +37,16 @@ export class PaymentInController {
     @Query('source_ref_id') source_ref_id?: string,
     @Query('project_id') project_id?: string,
     @Query('contract_id') contract_id?: string,
+    @Query('payment_in_status') payment_in_status?: string,
     @Query('date_from') date_from?: string,
     @Query('date_to') date_to?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('filter_payment_in_status') filter_payment_in_status?: string,
+    @Query('filter_source_type') filter_source_type?: string,
+    @Query('filter_company') filter_company?: string,
+    @Query('filter_payment_method') filter_payment_method?: string,
+    @Query('filter_bank_account_id') filter_bank_account_id?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : undefined,
@@ -37,8 +55,16 @@ export class PaymentInController {
       source_ref_id: source_ref_id ? +source_ref_id : undefined,
       project_id: project_id ? +project_id : undefined,
       contract_id: contract_id ? +contract_id : undefined,
+      payment_in_status,
       date_from,
       date_to,
+      sortBy,
+      sortOrder,
+      filter_payment_in_status,
+      filter_source_type,
+      filter_company,
+      filter_payment_method,
+      filter_bank_account_id,
     });
   }
 

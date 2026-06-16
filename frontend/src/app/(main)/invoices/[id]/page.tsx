@@ -168,12 +168,9 @@ export default function InvoiceDetailPage() {
 
   const loadPayments = async () => {
     try {
-      const res = await paymentInApi.list({
-        source_type: 'INVOICE',
-        source_ref_id: invoiceId,
-        limit: 200,
-      });
-      setPayments(res.data?.data || []);
+      // Use the allocation-aware endpoint to find PaymentIn records linked to this invoice
+      const res = await paymentInApi.byInvoice(invoiceId);
+      setPayments(res.data || []);
     } catch {}
   };
 
@@ -1518,7 +1515,7 @@ export default function InvoiceDetailPage() {
                   >
                     <td className="px-4 py-2 text-sm">{fmtDate(p.date)}</td>
                     <td className="px-4 py-2 text-sm text-right font-medium text-green-600 font-mono">
-                      {fmt$(p.amount)}
+                      {fmt$(p.allocation_amount ?? p.amount)}
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-500">
                       {p.bank_account?.account_name

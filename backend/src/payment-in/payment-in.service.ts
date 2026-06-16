@@ -21,10 +21,17 @@ interface FindAllQuery {
   source_ref_id?: number;
   project_id?: number;
   contract_id?: number;
+  payment_in_status?: string;
   date_from?: string;
   date_to?: string;
   sortBy?: string;
   sortOrder?: string;
+  // column filters (filter_*)
+  filter_payment_in_status?: string;
+  filter_source_type?: string;
+  filter_company?: string;
+  filter_payment_method?: string;
+  filter_bank_account_id?: string;
 }
 
 @Injectable()
@@ -47,7 +54,7 @@ export class PaymentInService {
         account_name: true,
         bank_name: true,
         account_no: true,
-        company: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true, internal_prefix: true } },
       },
     },
     allocations: {
@@ -63,7 +70,7 @@ export class PaymentInService {
             status: true,
             date: true,
             client: { select: { id: true, name: true } },
-            company: { select: { id: true, name: true } },
+            company: { select: { id: true, name: true, internal_prefix: true } },
           },
         },
       },
@@ -98,6 +105,46 @@ export class PaymentInService {
     if (query.source_ref_id) where.source_ref_id = query.source_ref_id;
     if (query.project_id) where.project_id = query.project_id;
     if (query.contract_id) where.contract_id = query.contract_id;
+    if (query.payment_in_status) where.payment_in_status = query.payment_in_status;
+    // Column filters from the customizer panel
+    if (query.filter_payment_in_status) {
+      const vals = query.filter_payment_in_status.split(',').filter(Boolean);
+      const STATUS_REVERSE: Record<string, string> = { '未收款': 'unpaid', '部分收款': 'partially_paid', '已收款': 'paid', '取消': 'cancelled' };
+      const dbVals = vals.map(v => STATUS_REVERSE[v] || v);
+      if (dbVals.length) where.payment_in_status = { in: dbVals };
+    }
+    if (query.filter_source_type) {
+      const SOURCE_REVERSE: Record<string, string> = { 'Payment Certificate': 'payment_certificate', '發票': 'invoice', '扣留金釋放': 'retention_release', '其他收入': 'other' };
+      const vals = query.filter_source_type.split(',').filter(Boolean);
+      const dbVals = vals.map(v => SOURCE_REVERSE[v] || v);
+      if (dbVals.length) where.source_type = { in: dbVals };
+    }
+    if (query.filter_payment_method) {
+      const vals = query.filter_payment_method.split(',').filter(Boolean);
+      if (vals.length) where.payment_method = { in: vals };
+    }
+    if (query.filter_company) {
+      const vals = query.filter_company.split(',').filter(Boolean);
+      if (vals.length) {
+        where.bank_account = {
+          company: { OR: [{ internal_prefix: { in: vals } }, { name: { in: vals } }] },
+        };
+      }
+    }
+    if (query.filter_bank_account_id) {
+      const vals = query.filter_bank_account_id.split(',').filter(Boolean);
+      if (vals.length) {
+        // vals are display strings like "HSBC - 123456"
+        const bankAccounts = await this.prisma.bankAccount.findMany({
+          where: { deleted_at: null },
+          select: { id: true, bank_name: true, account_no: true },
+        });
+        const matchedIds = bankAccounts
+          .filter(a => vals.some(v => v === `${a.bank_name} - ${a.account_no}`))
+          .map(a => a.id);
+        if (matchedIds.length) where.bank_account_id = { in: matchedIds };
+      }
+    }
     if (query.date_from || query.date_to) {
       const dateFilter: Prisma.DateTimeFilter = {};
       if (query.date_from) dateFilter.gte = new Date(query.date_from);
@@ -253,6 +300,61 @@ export class PaymentInService {
     return record;
   }
 
+  // ── Filter Options ──────────────────────────────────────────
+  async getFilterOptions(column: string): Promise<string[]> {
+    const STATUS_LABELS: Record<string, string> = {
+      unpaid: '未收款',
+      partially_paid: '部分收款',
+      paid: '已收款',
+      cancelled: '取消',
+    };
+    const SOURCE_TYPE_LABELS: Record<string, string> = {
+      payment_certificate: 'Payment Certificate',
+      invoice: '發票',
+      retention_release: '扣留金釋放',
+      other: '其他收入',
+    };
+    if (column === 'payment_in_status') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { payment_in_status: true },
+        distinct: ['payment_in_status'],
+      });
+      return records.map(r => STATUS_LABELS[r.payment_in_status] || r.payment_in_status || '-');
+    }
+    if (column === 'source_type') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { source_type: true },
+        distinct: ['source_type'],
+      });
+      return records.map(r => SOURCE_TYPE_LABELS[r.source_type] || r.source_type || '-');
+    }
+    if (column === 'company') {
+      const companies = await this.prisma.company.findMany({
+        where: { status: 'active', company_type: { not: 'external' } },
+        select: { internal_prefix: true, name: true },
+        orderBy: { id: 'asc' },
+      });
+      return companies.map(c => c.internal_prefix || c.name);
+    }
+    if (column === 'payment_method') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { payment_method: true },
+        distinct: ['payment_method'],
+        where: { payment_method: { not: null } },
+      });
+      return records.map(r => r.payment_method!).filter(Boolean).sort();
+    }
+    if (column === 'bank_account_id') {
+      const accounts = await this.prisma.bankAccount.findMany({
+        where: { deleted_at: null },
+        select: { bank_name: true, account_no: true },
+        orderBy: { bank_name: 'asc' },
+      });
+      return accounts.map(a => `${a.bank_name} - ${a.account_no}`);
+    }
+    return [];
+  }
+
   // ══════════════════════════════════════════════════════════════
   // Shared: recalculatePaymentStatus
   // ══════════════════════════════════════════════════════════════
@@ -317,6 +419,32 @@ export class PaymentInService {
         );
       }
     }
+  }
+
+  // ── Find PaymentIn records by Invoice ID (via allocations) ─────────
+  async findByInvoiceId(invoiceId: number) {
+    const allocations = await this.prisma.paymentInAllocation.findMany({
+      where: { payment_in_allocation_invoice_id: invoiceId },
+      include: {
+        payment_in: {
+          include: {
+            bank_account: {
+              include: {
+                company: { select: { id: true, name: true, internal_prefix: true } },
+              },
+            },
+            deductions: true,
+          },
+        },
+      },
+      orderBy: { payment_in: { date: 'desc' } },
+    });
+    return allocations.map((a) => ({
+      allocation_id: a.id,
+      allocation_amount: a.payment_in_allocation_amount,
+      allocation_remarks: a.payment_in_allocation_remarks,
+      ...a.payment_in,
+    }));
   }
 
   private async recalcIpa(

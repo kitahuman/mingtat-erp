@@ -19,6 +19,11 @@ import { CreatePaymentOutDto, UpdatePaymentOutDto, UpdatePaymentOutStatusDto } f
 export class PaymentOutController {
   constructor(private readonly service: PaymentOutService) {}
 
+  @Get('filter-options')
+  getFilterOptions(@Query('column') column: string) {
+    return this.service.getFilterOptions(column);
+  }
+
   @Get()
   findAll(
     @Query('page') page?: string,
@@ -29,6 +34,12 @@ export class PaymentOutController {
     @Query('payment_out_status') payment_out_status?: string,
     @Query('date_from') date_from?: string,
     @Query('date_to') date_to?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('filter_payment_out_status') filter_payment_out_status?: string,
+    @Query('filter_company') filter_company?: string,
+    @Query('filter_payment_method') filter_payment_method?: string,
+    @Query('filter_bank_account_id') filter_bank_account_id?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : undefined,
@@ -39,6 +50,12 @@ export class PaymentOutController {
       payment_out_status: payment_out_status || undefined,
       date_from,
       date_to,
+      sortBy,
+      sortOrder,
+      filter_payment_out_status,
+      filter_company,
+      filter_payment_method,
+      filter_bank_account_id,
     });
   }
 

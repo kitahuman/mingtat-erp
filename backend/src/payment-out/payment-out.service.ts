@@ -20,6 +20,11 @@ interface FindAllQuery {
   date_to?: string;
   sortBy?: string;
   sortOrder?: string;
+  // column filters
+  filter_payment_out_status?: string;
+  filter_company?: string;
+  filter_payment_method?: string;
+  filter_bank_account_id?: string;
 }
 
 interface CreatePaymentOutInput {
@@ -73,7 +78,7 @@ export class PaymentOutService {
         subcontractor: { select: { id: true, name: true } },
       },
     },
-    company: { select: { id: true, name: true, name_en: true } },
+    company: { select: { id: true, name: true, name_en: true, internal_prefix: true } },
     bank_account: { select: { id: true, account_name: true, bank_name: true, account_no: true } },
     allocations: {
       include: {
@@ -117,6 +122,41 @@ export class PaymentOutService {
     if (query.subcon_payroll_id) where.subcon_payroll_id = query.subcon_payroll_id;
     if (query.company_id) where.company_id = query.company_id;
     if (query.payment_out_status) where.payment_out_status = query.payment_out_status;
+    // Column filters
+    if (query.filter_payment_out_status) {
+      const vals = query.filter_payment_out_status.split(',').filter(Boolean);
+      const STATUS_REVERSE: Record<string, string> = { '未付款': 'unpaid', '部分付款': 'partially_paid', '已付款': 'paid', '取消': 'cancelled' };
+      const dbVals = vals.map(v => STATUS_REVERSE[v] || v);
+      if (dbVals.length) where.payment_out_status = { in: dbVals };
+    }
+    if (query.filter_payment_method) {
+      const vals = query.filter_payment_method.split(',').filter(Boolean);
+      if (vals.length) where.payment_method = { in: vals };
+    }
+    if (query.filter_company) {
+      const vals = query.filter_company.split(',').filter(Boolean);
+      if (vals.length) {
+        const companies = await this.prisma.company.findMany({
+          where: { OR: [{ internal_prefix: { in: vals } }, { name: { in: vals } }] },
+          select: { id: true },
+        });
+        const companyIds = companies.map(c => c.id);
+        if (companyIds.length) where.company_id = { in: companyIds };
+      }
+    }
+    if (query.filter_bank_account_id) {
+      const vals = query.filter_bank_account_id.split(',').filter(Boolean);
+      if (vals.length) {
+        const bankAccounts = await this.prisma.bankAccount.findMany({
+          where: { deleted_at: null },
+          select: { id: true, bank_name: true, account_no: true },
+        });
+        const matchedIds = bankAccounts
+          .filter(a => vals.some(v => v === `${a.bank_name} - ${a.account_no}`))
+          .map(a => a.id);
+        if (matchedIds.length) where.bank_account_id = { in: matchedIds };
+      }
+    }
     if (query.date_from || query.date_to) {
       const dateFilter: Prisma.DateTimeFilter = {};
       if (query.date_from) dateFilter.gte = new Date(query.date_from);
@@ -475,5 +515,47 @@ export class PaymentOutService {
 
   async recalculateSubconPayrollStatus(subconPayrollId: number): Promise<void> {
     await this.allocationService.recalculateSubconPayroll(subconPayrollId);
+  }
+
+  // ── Filter Options ─────────────────────────────────────────────────────────
+  async getFilterOptions(column: string): Promise<string[]> {
+    const STATUS_LABELS: Record<string, string> = {
+      unpaid: '未付款',
+      partially_paid: '部分付款',
+      paid: '已付款',
+      cancelled: '取消',
+    };
+    if (column === 'payment_out_status') {
+      const records = await this.prisma.paymentOut.findMany({
+        select: { payment_out_status: true },
+        distinct: ['payment_out_status'],
+      });
+      return records.map(r => STATUS_LABELS[r.payment_out_status] || r.payment_out_status || '-');
+    }
+    if (column === 'company') {
+      const companies = await this.prisma.company.findMany({
+        where: { status: 'active', company_type: { not: 'external' } },
+        select: { internal_prefix: true, name: true },
+        orderBy: { id: 'asc' },
+      });
+      return companies.map(c => c.internal_prefix || c.name);
+    }
+    if (column === 'payment_method') {
+      const records = await this.prisma.paymentOut.findMany({
+        select: { payment_method: true },
+        distinct: ['payment_method'],
+        where: { payment_method: { not: null } },
+      });
+      return records.map(r => r.payment_method!).filter(Boolean).sort();
+    }
+    if (column === 'bank_account_id') {
+      const accounts = await this.prisma.bankAccount.findMany({
+        where: { deleted_at: null },
+        select: { bank_name: true, account_no: true },
+        orderBy: { bank_name: 'asc' },
+      });
+      return accounts.map(a => `${a.bank_name} - ${a.account_no}`);
+    }
+    return [];
   }
 }

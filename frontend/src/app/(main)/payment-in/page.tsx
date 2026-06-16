@@ -71,6 +71,7 @@ export default function PaymentInPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   // Reference data
   const [projects, setProjects] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
@@ -103,6 +104,10 @@ export default function PaymentInPage() {
       if (contractFilter) params.contract_id = contractFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      // Apply column filters
+      Object.entries(columnFilters).forEach(([key, values]) => {
+        if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
+      });
       const res = await paymentInApi.list(params);
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
@@ -113,6 +118,7 @@ export default function PaymentInPage() {
     }
   }, [
     page,
+    statusFilter,
     sourceFilter,
     projectFilter,
     contractFilter,
@@ -120,6 +126,7 @@ export default function PaymentInPage() {
     dateTo,
     sortBy,
     sortOrder,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -270,11 +277,15 @@ export default function PaymentInPage() {
       label: '公司',
       editable: false,
       render: (_: any, row: any) => {
+        const prefix =
+          row.bank_account?.company?.internal_prefix ||
+          row.allocations?.[0]?.invoice?.company?.internal_prefix;
         const name =
           row.bank_account?.company?.name ||
           row.allocations?.[0]?.invoice?.company?.name;
-        return name ? (
-          <span className="text-xs">{name}</span>
+        const display = prefix || name;
+        return display ? (
+          <span className="text-xs font-medium">{display}</span>
         ) : (
           <span className="text-gray-400">-</span>
         );
@@ -539,6 +550,13 @@ export default function PaymentInPage() {
         onColumnConfigReset={handleReset}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
+        serverSideFilter={true}
+        columnFilters={columnFilters}
+        onColumnFilterChange={(f) => { setColumnFilters(f); setPage(1); }}
+        onFetchFilterOptions={async (col) => {
+          const res = await paymentInApi.filterOptions(col);
+          return Array.isArray(res.data) ? res.data : [];
+        }}
       />
 
       {/* Create Modal */}
