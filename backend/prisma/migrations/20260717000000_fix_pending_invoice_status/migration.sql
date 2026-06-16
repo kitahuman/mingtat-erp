@@ -1,5 +1,5 @@
 -- Fix migrated invoices with invalid 'pending' status
--- Convert all invoices with status='pending' to status='draft'
+-- Convert all invoices with status='pending' to status='issued'
 UPDATE "invoices"
-SET "status" = 'draft'
+SET "status" = 'issued'
 WHERE "status" = 'pending';
