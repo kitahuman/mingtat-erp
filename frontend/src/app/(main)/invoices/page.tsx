@@ -251,6 +251,24 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     ),
     filterRender: (v: any) => STATUS_LABELS[v] || v || '-',
   },
+  {
+    key: 'created_at',
+    label: '建立日期',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} text-gray-500`,
+    minWidth: 120,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
+  {
+    key: 'updated_at',
+    label: '修改日期',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} text-gray-500`,
+    minWidth: 120,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
 ];
 
 export default function InvoicesPage() {

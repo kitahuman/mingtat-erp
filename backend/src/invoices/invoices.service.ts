@@ -554,6 +554,7 @@ export class InvoicesService {
       'outstanding',
       'status',
       'created_at',
+      'updated_at',
     ];
     if (sortBy === 'client') return { client: { name: sortOrder } };
     if (sortBy === 'quotation')
