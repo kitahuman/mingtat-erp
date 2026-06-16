@@ -94,7 +94,7 @@ export class PartnersService {
 
   async simple() {
     return this.prisma.partner.findMany({
-      where: { status: 'active' },
+      where: { deleted_at: null },
       select: { id: true, name: true, code: true, english_code: true, partner_type: true, category: true },
       orderBy: { code: 'asc' },
     });
