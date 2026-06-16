@@ -1,0 +1,306 @@
+name: Backfill Payroll Expense Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (read-only, no modifications)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  backfill:
+    name: Backfill Payroll Expense Data
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run dry-run (read-only check)
+        if: ${{ inputs.dry_run == 'true' }}
+        run: |
+          echo "Running DRY RUN - checking what would be modified..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          
+          WORK_DIR="/opt/mingtat-erp"
+          ENV_FILE="${WORK_DIR}/backend/.env"
+          
+          # Extract DATABASE_URL from .env
+          if [ ! -f "${ENV_FILE}" ]; then
+            echo "ERROR: .env file not found at ${ENV_FILE}"
+            exit 1
+          fi
+          
+          DATABASE_URL=$(grep "^DATABASE_URL=" "${ENV_FILE}" | cut -d'=' -f2-)
+          
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "ERROR: DATABASE_URL not found in .env"
+            exit 1
+          fi
+          
+          echo "=========================================="
+          echo "DRY RUN: Checking affected records"
+          echo "=========================================="
+          echo ""
+          
+          # Check 1: Expenses with incorrect amount
+          echo "1. Expenses needing amount fix (using grossIncome instead of net_amount):"
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            e.id as expense_id,
+            e.source_ref_id as payroll_id,
+            e.total_amount as current_amount,
+            p.net_amount as correct_amount,
+            (p.net_amount - e.total_amount) as difference
+          FROM \"Expense\" e
+          INNER JOIN \"Payroll\" p ON e.source_ref_id = p.id
+          WHERE e.source = 'PAYROLL'
+            AND e.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+            AND e.total_amount != p.net_amount
+          ORDER BY e.id DESC
+          LIMIT 20;
+          " || true
+          
+          echo ""
+          echo "2. PaymentOut records missing expense_id:"
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            po.id as payment_out_id,
+            po.payroll_id,
+            po.amount
+          FROM \"PaymentOut\" po
+          WHERE po.payroll_id IS NOT NULL
+            AND po.deleted_at IS NULL
+            AND po.expense_id IS NULL
+          ORDER BY po.id DESC
+          LIMIT 20;
+          " || true
+          
+          echo ""
+          echo "3. PaymentOut records missing PaymentOutAllocation:"
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            po.id as payment_out_id,
+            po.payroll_id,
+            po.amount,
+            COUNT(poa.id) as allocation_count
+          FROM \"PaymentOut\" po
+          LEFT JOIN \"PaymentOutAllocation\" poa 
+            ON poa.payment_out_allocation_payment_out_id = po.id
+          WHERE po.payroll_id IS NOT NULL
+            AND po.deleted_at IS NULL
+          GROUP BY po.id, po.payroll_id, po.amount
+          HAVING COUNT(poa.id) = 0
+          LIMIT 20;
+          " || true
+          
+          echo ""
+          echo "4. Summary:"
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            (SELECT COUNT(*) FROM \"Expense\" e 
+             INNER JOIN \"Payroll\" p ON e.source_ref_id = p.id
+             WHERE e.source = 'PAYROLL' AND e.deleted_at IS NULL AND p.deleted_at IS NULL
+               AND e.total_amount != p.net_amount) as expenses_to_fix,
+            (SELECT COUNT(*) FROM \"PaymentOut\" po
+             WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL AND po.expense_id IS NULL) as payment_outs_missing_expense_id;
+          " || true
+          
+          echo ""
+          echo "=========================================="
+          echo "DRY RUN completed. Review the results above."
+          echo "If satisfied, re-run with dry_run=false to apply changes."
+          echo "=========================================="
+          EOF
+
+      - name: Run actual backfill
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          echo "Running ACTUAL BACKFILL - modifying production data..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          
+          WORK_DIR="/opt/mingtat-erp"
+          ENV_FILE="${WORK_DIR}/backend/.env"
+          
+          # Extract DATABASE_URL from .env
+          if [ ! -f "${ENV_FILE}" ]; then
+            echo "ERROR: .env file not found at ${ENV_FILE}"
+            exit 1
+          fi
+          
+          DATABASE_URL=$(grep "^DATABASE_URL=" "${ENV_FILE}" | cut -d'=' -f2-)
+          
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "ERROR: DATABASE_URL not found in .env"
+            exit 1
+          fi
+          
+          echo "=========================================="
+          echo "BACKFILL: Fixing payroll expense data"
+          echo "=========================================="
+          echo ""
+          
+          # FIX 1: Update expense.total_amount to use net_amount
+          echo "FIX 1: Updating expense amounts to net_salary..."
+          psql "${DATABASE_URL}" << 'SQLEOF'
+          BEGIN TRANSACTION;
+          
+          UPDATE "Expense" e
+          SET total_amount = p.net_amount,
+              updated_at = NOW()
+          FROM "Payroll" p
+          WHERE e.source = 'PAYROLL'
+            AND e.source_ref_id = p.id
+            AND e.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+            AND e.total_amount != p.net_amount;
+          
+          COMMIT;
+          SQLEOF
+          
+          echo ""
+          echo "FIX 2: Setting expense_id on PaymentOut records..."
+          psql "${DATABASE_URL}" << 'SQLEOF'
+          BEGIN TRANSACTION;
+          
+          UPDATE "PaymentOut" po
+          SET expense_id = e.id,
+              updated_at = NOW()
+          FROM "Payroll" p
+          INNER JOIN "Expense" e ON e.source = 'PAYROLL' AND e.source_ref_id = p.id
+          WHERE po.payroll_id = p.id
+            AND po.deleted_at IS NULL
+            AND e.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+            AND po.expense_id IS NULL
+            AND (SELECT COUNT(*) FROM "Expense" e2 
+                 WHERE e2.source = 'PAYROLL' AND e2.source_ref_id = p.id AND e2.deleted_at IS NULL) = 1;
+          
+          COMMIT;
+          SQLEOF
+          
+          echo ""
+          echo "FIX 3: Creating PaymentOutAllocation records..."
+          psql "${DATABASE_URL}" << 'SQLEOF'
+          BEGIN TRANSACTION;
+          
+          INSERT INTO "PaymentOutAllocation" (
+            payment_out_allocation_payment_out_id,
+            payment_out_allocation_expense_id,
+            payment_out_allocation_amount,
+            created_at,
+            updated_at
+          )
+          SELECT 
+            po.id,
+            e.id,
+            po.amount,
+            NOW(),
+            NOW()
+          FROM "PaymentOut" po
+          INNER JOIN "Payroll" p ON po.payroll_id = p.id
+          INNER JOIN "Expense" e ON e.source = 'PAYROLL' AND e.source_ref_id = p.id
+          WHERE po.deleted_at IS NULL
+            AND e.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM "PaymentOutAllocation" poa
+              WHERE poa.payment_out_allocation_payment_out_id = po.id
+                AND poa.payment_out_allocation_expense_id = e.id
+            )
+          ON CONFLICT DO NOTHING;
+          
+          COMMIT;
+          SQLEOF
+          
+          echo ""
+          echo "FIX 4: Recalculating expense payment status..."
+          psql "${DATABASE_URL}" << 'SQLEOF'
+          BEGIN TRANSACTION;
+          
+          UPDATE "Expense" e
+          SET paid_amount = COALESCE((
+            SELECT SUM(poa.payment_out_allocation_amount)
+            FROM "PaymentOutAllocation" poa
+            WHERE poa.payment_out_allocation_expense_id = e.id
+          ), 0),
+              updated_at = NOW()
+          WHERE e.source = 'PAYROLL'
+            AND e.deleted_at IS NULL;
+          
+          UPDATE "Expense" e
+          SET payment_status = CASE
+            WHEN e.paid_amount >= e.total_amount THEN 'paid'
+            WHEN e.paid_amount > 0 THEN 'partial'
+            ELSE 'unpaid'
+          END,
+              updated_at = NOW()
+          WHERE e.source = 'PAYROLL'
+            AND e.deleted_at IS NULL;
+          
+          COMMIT;
+          SQLEOF
+          
+          echo ""
+          echo "=========================================="
+          echo "VERIFICATION: Results after backfill"
+          echo "=========================================="
+          echo ""
+          
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            COUNT(*) as total_payroll_expenses,
+            COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_count,
+            COUNT(CASE WHEN payment_status = 'partial' THEN 1 END) as partial_count,
+            COUNT(CASE WHEN payment_status = 'unpaid' THEN 1 END) as unpaid_count,
+            SUM(total_amount) as total_expense_amount,
+            SUM(paid_amount) as total_paid_amount
+          FROM \"Expense\"
+          WHERE source = 'PAYROLL'
+            AND deleted_at IS NULL;
+          " || true
+          
+          echo ""
+          echo "Sample of fixed expenses:"
+          psql "${DATABASE_URL}" -c "
+          SELECT 
+            e.id,
+            e.source_ref_id as payroll_id,
+            e.total_amount,
+            e.paid_amount,
+            e.payment_status,
+            e.item
+          FROM \"Expense\" e
+          WHERE e.source = 'PAYROLL'
+            AND e.deleted_at IS NULL
+          ORDER BY e.id DESC
+          LIMIT 20;
+          " || true
+          
+          echo ""
+          echo "=========================================="
+          echo "BACKFILL completed successfully!"
+          echo "=========================================="
+          EOF
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts
