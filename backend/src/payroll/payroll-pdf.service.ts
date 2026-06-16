@@ -125,7 +125,37 @@ export class PayrollPdfService {
       const groupItems = items.filter((item: any) => item.item_type === group.type);
       if (groupItems.length === 0) return;
       pushSectionHeader(group.title);
-      groupItems.forEach((item: any) => itemRows.push(itemRow(item)));
+      
+      // Group items by name + unit_price
+      const groupedByNameAndPrice = groupItems.reduce((acc: any[], item: any) => {
+        const key = `${item.item_name}|${item.unit_price}`;
+        const existing = acc.find((g: any) => g.groupKey === key);
+        if (existing) {
+          existing.items.push(item);
+          existing.totalQuantity += this.toNumber(item.quantity);
+          existing.totalAmount += this.toNumber(item.amount);
+        } else {
+          acc.push({
+            groupKey: key,
+            items: [item],
+            totalQuantity: this.toNumber(item.quantity),
+            totalAmount: this.toNumber(item.amount),
+          });
+        }
+        return acc;
+      }, []);
+      
+      groupedByNameAndPrice.forEach((groupedItem: any) => {
+        const firstItem = groupedItem.items[0];
+        const isMpfPercent = firstItem.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry';
+        itemRows.push(`<tr>
+          <td>${this.escapeHtml(firstItem.item_name || '—')}</td>
+          <td class="money">${isMpfPercent ? `${(this.toNumber(firstItem.quantity) * 100).toFixed(0)}%` : this.formatMoney(firstItem.unit_price)}</td>
+          <td class="money">${isMpfPercent ? '—' : this.formatPlainNumber(groupedItem.totalQuantity)}</td>
+          <td class="money bold">${groupedItem.totalAmount < 0 ? '-' : ''}${this.formatMoney(Math.abs(groupedItem.totalAmount))}</td>
+          <td>${this.escapeHtml(firstItem.remarks || '—')}</td>
+        </tr>`);
+      });
     });
     pushSeparator();
     pushSubtotal('應收總額', grossAmount, 'subtotal gross');
