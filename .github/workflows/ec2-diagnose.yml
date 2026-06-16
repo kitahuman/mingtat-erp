@@ -1,0 +1,61 @@
+name: EC2 Diagnose and Force Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'diagnose'
+        type: choice
+        options:
+          - 'diagnose'
+          - 'force-deploy'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Diagnose or Force Deploy
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
+          set -e
+          WORK_DIR="/opt/mingtat-erp"
+          
+          echo "=== docker ps ==="
+          docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}"
+          
+          echo ""
+          echo "=== Backend image digest ==="
+          docker inspect mingtat-erp-backend-1 --format '{{.Image}}' 2>/dev/null || docker inspect mingtat-erp-backend --format '{{.Image}}' 2>/dev/null || echo "container not found"
+          
+          echo ""
+          echo "=== Current git commit on EC2 ==="
+          cd "\${WORK_DIR}"
+          git log --oneline -3
+          
+          if [ "\$ACTION" = "force-deploy" ]; then
+            echo ""
+            echo "=== Force deploy ==="
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose pull
+            docker compose up -d --force-recreate
+            echo ""
+            echo "=== After force deploy ==="
+            docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}"
+          fi
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa ~/.ssh/known_hosts
