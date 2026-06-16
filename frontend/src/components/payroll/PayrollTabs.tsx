@@ -2345,16 +2345,21 @@ function PayrollItemsGroupedTable({
   const mpfDeductionTotal = Math.abs(toNumber(summary.deduction_total));
   const mpfLabel = `強積金（${getMpfPlanShortLabel(mpfPlan)}）(-)`;
 
-  const renderItemRow = (item: PayrollItem, key: string | number | undefined, extraClass = "") => {
+  const renderItemRow = (item: PayrollItem, key: string | number | undefined, extraClass = "", groupedQuantity?: number, groupedAmount?: number, groupSize?: number) => {
     const isDeduction = toNumber(item.amount) < 0;
     const isManual = Boolean(item.payroll_item_is_manual_amount);
     const isEditing = editingItemId === item.id;
     const canEdit = !readOnly && !!payrollId && !!item.id;
+    const displayQuantity = groupedQuantity !== undefined ? groupedQuantity : toNumber(item.quantity);
+    const displayAmount = groupedAmount !== undefined ? groupedAmount : toNumber(item.amount);
     return (
       <tr key={String(key)} className={`border-b ${extraClass}`}>
-        <td className="px-3 py-2 font-medium text-gray-800">{item.item_name || "—"}</td>
+        <td className="px-3 py-2 font-medium text-gray-800">
+          {item.item_name || "—"}
+          {groupSize && groupSize > 1 && <span className="ml-2 text-xs text-gray-500">（{groupSize} 筆合併）</span>}
+        </td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : toNumber(item.unit_price) === 0 ? "—" : formatMoney(item.unit_price)}</td>
-        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(toNumber(item.quantity))}</td>
+        <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(displayQuantity)}</td>
         <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>
           <div className="flex items-center justify-end gap-1">
             {isEditing ? (
@@ -2375,7 +2380,7 @@ function PayrollItemsGroupedTable({
                 onDoubleClick={() => handleDoubleClickAmount(item)}
                 title={canEdit ? "雙擊編輯金額" : undefined}
               >
-                {isDeduction ? "-" : ""}{formatMoney(Math.abs(toNumber(item.amount)))}
+                {isDeduction ? "-" : ""}{formatMoney(Math.abs(displayAmount))}
               </span>
             )}
             {isManual && (
@@ -2422,7 +2427,30 @@ function PayrollItemsGroupedTable({
     const groupItems = items.filter((item) => item.item_type === group.type);
     if (groupItems.length === 0) return;
     rows.push(renderSectionHeader(group.title, `header-${group.type}`));
-    groupItems.forEach((item, index) => rows.push(renderItemRow(item, item.id || `${group.type}-${index}`)));
+    
+    // Group items by name + unit_price
+    const groupedByNameAndPrice = groupItems.reduce((acc: any[], item: PayrollItem) => {
+      const key = `${item.item_name}|${item.unit_price}`;
+      const existing = acc.find((g: any) => g.groupKey === key);
+      if (existing) {
+        existing.items.push(item);
+        existing.totalQuantity += toNumber(item.quantity);
+        existing.totalAmount += toNumber(item.amount);
+      } else {
+        acc.push({
+          groupKey: key,
+          items: [item],
+          totalQuantity: toNumber(item.quantity),
+          totalAmount: toNumber(item.amount),
+        });
+      }
+      return acc;
+    }, []);
+    
+    groupedByNameAndPrice.forEach((group: any, index: number) => {
+      const firstItem = group.items[0];
+      rows.push(renderItemRow(firstItem, group.groupKey, "", group.totalQuantity, group.totalAmount, group.items.length));
+    });
   });
   rows.push(renderSeparator("sep-gross"));
   rows.push(renderSubtotal("應收總額", summary.gross_amount, "subtotal-gross"));
