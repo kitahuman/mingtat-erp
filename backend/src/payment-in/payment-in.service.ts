@@ -67,6 +67,18 @@ export class PaymentInService {
       },
       orderBy: { id: 'asc' as const },
     },
+    deductions: {
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            invoice_no: true,
+            invoice_title: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' as const },
+    },
   } satisfies Prisma.PaymentInInclude;
 
   async findAll(query: FindAllQuery) {

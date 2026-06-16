@@ -2036,6 +2036,7 @@ model PaymentIn {
   contract     Contract?             @relation(fields: [contract_id], references: [id], onDelete: SetNull)
   bank_account BankAccount?          @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
   allocations  PaymentInAllocation[]
+  deductions   PaymentInDeduction[]
 
   @@map("payment_ins")
 }
@@ -2180,6 +2181,7 @@ model Invoice {
   items                     InvoiceItem[]
   statement_items           InvoiceStatementItem[]
   payment_in_allocations    PaymentInAllocation[]  @relation("InvoicePaymentInAllocations")
+  retention_deductions      PaymentInDeduction[]   @relation("InvoiceRetentionDeductions")
   advance_payment_contracts Contract[]             @relation("ContractAdvancePaymentInvoice")
   invoice_work_logs         InvoiceWorkLog[]
   work_log_drafts           InvoiceWorkLogDraft[]
@@ -3600,4 +3602,27 @@ model AiPayrollReconcileItem {
   @@index([reconcile_status])
   @@index([reconcile_session_id, reconcile_employee_id, reconcile_date])
   @@map("ai_payroll_reconcile_items")
+}
+
+// ══════════════════════════════════════════════════════════════
+// PaymentIn Deductions (收款扣減明細)
+// 記錄收款中的 Retention / Contra Charge / Other 扣減
+// ══════════════════════════════════════════════════════════════
+
+model PaymentInDeduction {
+  id                                    Int      @id @default(autoincrement())
+  payment_in_deduction_payment_in_id    Int
+  payment_in_deduction_invoice_id       Int?
+  payment_in_deduction_type             String   @db.VarChar(50)
+  payment_in_deduction_amount           Decimal  @db.Decimal(14, 2)
+  payment_in_deduction_remarks          String   @db.Text
+  created_at                            DateTime @default(now())
+  updated_at                            DateTime @default(now()) @updatedAt
+
+  payment_in PaymentIn @relation(fields: [payment_in_deduction_payment_in_id], references: [id], onDelete: Cascade)
+  invoice    Invoice?  @relation("InvoiceRetentionDeductions", fields: [payment_in_deduction_invoice_id], references: [id], onDelete: SetNull)
+
+  @@index([payment_in_deduction_payment_in_id])
+  @@index([payment_in_deduction_invoice_id])
+  @@map("payment_in_deductions")
 }

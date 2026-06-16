@@ -9,6 +9,7 @@ import {
   contractsApi,
 } from '@/lib/api';
 import AllocationsCard from './AllocationsCard';
+import DeductionsCard from './DeductionsCard';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { useAuth } from '@/lib/auth';
@@ -93,6 +94,7 @@ interface PaymentInRecord {
   contract?: ContractMini | null;
   bank_account?: BankAccount | null;
   allocations?: unknown[];
+  deductions?: unknown[];
 }
 
 function Field({
@@ -636,6 +638,19 @@ export default function PaymentInDetailPage() {
           (record.allocations || []) as unknown as Parameters<
             typeof AllocationsCard
           >[0]['initialAllocations']
+        }
+        onChange={loadRecord}
+        readOnly={isReadOnly()}
+      />
+
+      {/* Deductions (扣減明細) */}
+      <DeductionsCard
+        paymentInId={record.id}
+        paymentInAmount={Number(record.amount) || 0}
+        initialDeductions={
+          (record.deductions || []) as unknown as Parameters<
+            typeof DeductionsCard
+          >[0]['initialDeductions']
         }
         onChange={loadRecord}
         readOnly={isReadOnly()}

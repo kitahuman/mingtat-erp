@@ -301,17 +301,18 @@ export class PaymentInAllocationService {
   async recalculateInvoice(invoiceId: number): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
-      select: { id: true, total_amount: true, status: true },
+      select: { id: true, total_amount: true, retention_amount: true, status: true },
     });
     if (!invoice) return;
 
     const { paidAmount } = await this.computeInvoicePaidTotal(invoiceId);
     const totalAmount = Number(invoice.total_amount) || 0;
-    const outstanding = Math.round((totalAmount - paidAmount) * 100) / 100;
+    const retentionAmount = Number(invoice.retention_amount) || 0;
+    const outstanding = Math.round((totalAmount - paidAmount - retentionAmount) * 100) / 100;
 
     let status = invoice.status;
     if (status !== 'void' && status !== 'draft') {
-      if (paidAmount >= totalAmount && totalAmount > 0) {
+      if (paidAmount + retentionAmount >= totalAmount && totalAmount > 0) {
         status = 'paid';
       } else if (paidAmount > 0) {
         status = 'partially_paid';

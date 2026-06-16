@@ -45,6 +45,7 @@ import { BqItemsModule } from './bq-items/bq-items.module';
 import { VariationOrdersModule } from './variation-orders/variation-orders.module';
 import { PaymentApplicationsModule } from './payment-applications/payment-applications.module';
 import { PaymentInModule } from './payment-in/payment-in.module';
+import { PaymentInDeductionsModule } from './payment-in-deductions/payment-in-deductions.module';
 import { PaymentOutModule } from './payment-out/payment-out.module';
 import { RetentionModule } from './retention/retention.module';
 import { InvoicesModule } from './invoices/invoices.module';
@@ -151,6 +152,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     VariationOrdersModule,
     PaymentApplicationsModule,
     PaymentInModule,
+    PaymentInDeductionsModule,
     PaymentOutModule,
     RetentionModule,
     InvoicesModule,

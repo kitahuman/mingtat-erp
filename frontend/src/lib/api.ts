@@ -1290,6 +1290,31 @@ export const paymentTermTemplatesApi = {
   delete: (id: number) => api.delete(`/payment-term-templates/${id}`),
 };
 
+// ══════════════════════════════════════════════════════════════
+// PaymentIn Deductions (收款扣減明細)
+// ══════════════════════════════════════════════════════════════
+
+export const paymentInDeductionsApi = {
+  listByPaymentIn: (paymentInId: number) =>
+    api.get(`/payment-in-deductions`, { params: { payment_in_id: paymentInId } }),
+  listByInvoice: (invoiceId: number) =>
+    api.get(`/payment-in-deductions/by-invoice/${invoiceId}`),
+  create: (data: {
+    payment_in_deduction_payment_in_id: number;
+    payment_in_deduction_invoice_id?: number;
+    payment_in_deduction_type: string;
+    payment_in_deduction_amount: number;
+    payment_in_deduction_remarks: string;
+  }) => api.post('/payment-in-deductions', data),
+  update: (id: number, data: {
+    payment_in_deduction_invoice_id?: number | null;
+    payment_in_deduction_type?: string;
+    payment_in_deduction_amount?: number;
+    payment_in_deduction_remarks?: string;
+  }) => api.put(`/payment-in-deductions/${id}`, data),
+  delete: (id: number) => api.delete(`/payment-in-deductions/${id}`),
+};
+
 export const paymentInAllocationApi = {
   listByPaymentIn: (paymentInId: number) =>
     api.get(`/payment-in-allocations/by-payment-in/${paymentInId}`),

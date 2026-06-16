@@ -327,6 +327,22 @@ export default function PaymentInPage() {
       },
     },
     {
+      key: 'deductions_total',
+      label: '扣減',
+      editable: false,
+      render: (_: any, row: any) => {
+        const total = (row.deductions || []).reduce(
+          (s: number, d: any) => s + Number(d.payment_in_deduction_amount || 0),
+          0,
+        );
+        return total > 0 ? (
+          <span className="font-mono text-orange-600 text-xs">{fmt$(total)}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
+      },
+    },
+    {
       key: 'remarks',
       label: '備註',
       editType: 'text',
