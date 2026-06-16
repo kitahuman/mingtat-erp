@@ -229,12 +229,7 @@ async function main() {
       continue;
     }
 
-    if (!bankAccountId) {
-      console.log(`  WARN [${row.sheet} row ${row.rowNum}] no bank account for company_id=${companyId}, importing without bank_account_id`);
-      noBank++;
-    }
-
-    console.log(`  IMPORT [${row.sheet} row ${row.rowNum}] amount=${row.amount} date=${row.date?.toISOString().split('T')[0]} method=${row.paymentMethod} invoices=${row.invoiceNos.join(',') || '(none)'}`);
+    if (!bankAccountId) noBank++;
 
     if (!DRY_RUN) {
       await prisma.paymentIn.create({
@@ -272,6 +267,7 @@ async function main() {
       });
     }
     imported++;
+    if (imported % 50 === 0) console.log(`  Progress: ${imported} imported so far...`);
   }
 
   console.log('\n=== Summary ===');

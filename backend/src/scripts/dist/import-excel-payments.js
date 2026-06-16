@@ -115,7 +115,7 @@ function toStr(val) {
     return s === '' ? null : s;
 }
 async function main() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e;
     console.log(`Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
     const filePath = path.join(__dirname, 'data', 'payment-excel-v2.xlsx');
     const wb = new ExcelJS.Workbook();
@@ -244,11 +244,8 @@ async function main() {
             noInvoice++;
             continue;
         }
-        if (!bankAccountId) {
-            console.log(`  WARN [${row.sheet} row ${row.rowNum}] no bank account for company_id=${companyId}, importing without bank_account_id`);
+        if (!bankAccountId)
             noBank++;
-        }
-        console.log(`  IMPORT [${row.sheet} row ${row.rowNum}] amount=${row.amount} date=${(_b = row.date) === null || _b === void 0 ? void 0 : _b.toISOString().split('T')[0]} method=${row.paymentMethod} invoices=${row.invoiceNos.join(',') || '(none)'}`);
         if (!DRY_RUN) {
             await prisma.paymentIn.create({
                 data: {
@@ -270,13 +267,13 @@ async function main() {
                             ...(row.retentionAmount ? [{
                                     payment_in_deduction_type: 'retention',
                                     payment_in_deduction_amount: row.retentionAmount,
-                                    payment_in_deduction_invoice_id: (_d = (_c = matchedInvoices[0]) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : null,
+                                    payment_in_deduction_invoice_id: (_c = (_b = matchedInvoices[0]) === null || _b === void 0 ? void 0 : _b.id) !== null && _c !== void 0 ? _c : null,
                                     payment_in_deduction_remarks: '',
                                 }] : []),
                             ...(row.contraChargeAmount ? [{
                                     payment_in_deduction_type: 'contra_charge',
                                     payment_in_deduction_amount: row.contraChargeAmount,
-                                    payment_in_deduction_invoice_id: (_f = (_e = matchedInvoices[0]) === null || _e === void 0 ? void 0 : _e.id) !== null && _f !== void 0 ? _f : null,
+                                    payment_in_deduction_invoice_id: (_e = (_d = matchedInvoices[0]) === null || _d === void 0 ? void 0 : _d.id) !== null && _e !== void 0 ? _e : null,
                                     payment_in_deduction_remarks: '',
                                 }] : []),
                         ],
@@ -285,6 +282,8 @@ async function main() {
             });
         }
         imported++;
+        if (imported % 50 === 0)
+            console.log(`  Progress: ${imported} imported so far...`);
     }
     console.log('\n=== Summary ===');
     console.log(`Total rows parsed:  ${rows.length}`);
