@@ -15,6 +15,9 @@ async function main() {
       paid_amount: true,
       outstanding: true,
       status: true,
+      _count: {
+        select: { payment_in_allocations: true },
+      },
     },
   });
 
@@ -34,7 +37,7 @@ async function main() {
     },
   });
 
-  // Build a map: invoice_id -> total paid amount
+  // Build a map: invoice_id -> total paid amount (from paid allocations only)
   const paidMap = new Map<number, number>();
   for (const alloc of allocations) {
     if (alloc.payment_in_allocation_invoice_id == null) continue;
