@@ -208,6 +208,15 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     filterRender: (v: any) => fmt$(v),
   },
   {
+    key: 'retention_amount',
+    label: 'Retention',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} text-right text-orange-600`,
+    minWidth: 130,
+    render: (v: any) => (Number(v) > 0 ? fmt$(v) : '-'),
+    filterRender: (v: any) => (Number(v) > 0 ? fmt$(v) : '-'),
+  },
+  {
     key: 'outstanding',
     label: '未收',
     sortable: true,

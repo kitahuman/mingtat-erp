@@ -995,6 +995,13 @@ export default function InvoiceDetailPage() {
             </Field>
             <Field label="付款條件">{invoice.payment_terms}</Field>
             {invoice.remarks && <Field label="備註">{invoice.remarks}</Field>}
+            {Number(invoice.retention_amount) > 0 && (
+              <Field label="Retention">
+                <span className="font-mono font-semibold text-orange-600">
+                  {fmt$(invoice.retention_amount)}
+                </span>
+              </Field>
+            )}
           </div>
         )}
       </div>
