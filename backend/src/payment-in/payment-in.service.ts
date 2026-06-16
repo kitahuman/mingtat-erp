@@ -63,6 +63,7 @@ export class PaymentInService {
             status: true,
             date: true,
             client: { select: { id: true, name: true } },
+            company: { select: { id: true, name: true } },
           },
         },
       },

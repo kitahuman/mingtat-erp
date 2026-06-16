@@ -270,9 +270,11 @@ export default function PaymentInPage() {
       label: '公司',
       editable: false,
       render: (_: any, row: any) => {
-        const company = row.bank_account?.company;
-        return company ? (
-          <span className="text-xs">{company.name}</span>
+        const name =
+          row.bank_account?.company?.name ||
+          row.allocations?.[0]?.invoice?.company?.name;
+        return name ? (
+          <span className="text-xs">{name}</span>
         ) : (
           <span className="text-gray-400">-</span>
         );

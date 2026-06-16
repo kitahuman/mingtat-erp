@@ -622,7 +622,9 @@ export default function PaymentInDetailPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Field label="公司">
-              {record.bank_account?.company?.name ?? null}
+              {record.bank_account?.company?.name ||
+                (record.allocations as any)?.[0]?.invoice?.company?.name ||
+                null}
             </Field>
             <Field label="銀行帳戶">
               {record.bank_account ? (
