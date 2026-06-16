@@ -136,7 +136,6 @@ export class PaymentInService {
       if (vals.length) {
         // vals are display strings like "HSBC - 123456"
         const bankAccounts = await this.prisma.bankAccount.findMany({
-          where: { deleted_at: null },
           select: { id: true, bank_name: true, account_no: true },
         });
         const matchedIds = bankAccounts
@@ -346,7 +345,6 @@ export class PaymentInService {
     }
     if (column === 'bank_account_id') {
       const accounts = await this.prisma.bankAccount.findMany({
-        where: { deleted_at: null },
         select: { bank_name: true, account_no: true },
         orderBy: { bank_name: 'asc' },
       });

@@ -148,7 +148,6 @@ export class PaymentOutService {
       const vals = query.filter_bank_account_id.split(',').filter(Boolean);
       if (vals.length) {
         const bankAccounts = await this.prisma.bankAccount.findMany({
-          where: { deleted_at: null },
           select: { id: true, bank_name: true, account_no: true },
         });
         const matchedIds = bankAccounts
@@ -550,7 +549,6 @@ export class PaymentOutService {
     }
     if (column === 'bank_account_id') {
       const accounts = await this.prisma.bankAccount.findMany({
-        where: { deleted_at: null },
         select: { bank_name: true, account_no: true },
         orderBy: { bank_name: 'asc' },
       });
