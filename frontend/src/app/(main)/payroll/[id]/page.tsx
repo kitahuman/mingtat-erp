@@ -125,6 +125,25 @@ function PayrollItemsSummary({
     }
   };
 
+  // Group items by name + unit_price
+  const groupedItems = items.reduce((acc: any[], item: any) => {
+    const key = `${item.item_name}|${item.unit_price}`;
+    const existing = acc.find((g: any) => g.groupKey === key);
+    if (existing) {
+      existing.items.push(item);
+      existing.totalQuantity += Number(item.quantity) || 0;
+      existing.totalAmount += Number(item.amount) || 0;
+    } else {
+      acc.push({
+        groupKey: key,
+        items: [item],
+        totalQuantity: Number(item.quantity) || 0,
+        totalAmount: Number(item.amount) || 0,
+      });
+    }
+    return acc;
+  }, []);
+
   return (
     <div className={className}>
       <h3 className="font-bold text-gray-900 mb-2">糧單項目明細（底薪 / 津貼 / OT / 強積金）</h3>
@@ -141,8 +160,9 @@ function PayrollItemsSummary({
             </tr>
           </thead>
           <tbody>
-            {items.map((item: any) => {
-              const isDeduction = Number(item.amount) < 0;
+            {groupedItems.map((group: any) => {
+              const item = group.items[0];
+              const isDeduction = Number(group.totalAmount) < 0;
               const typeLabel = item.item_type === 'base_salary' ? '底薪' :
                 item.item_type === 'allowance' ? '津貼' :
                 item.item_type === 'ot' ? 'OT' :
@@ -151,7 +171,7 @@ function PayrollItemsSummary({
                 item.item_type === 'allowance' ? 'bg-green-100 text-green-700' :
                 item.item_type === 'ot' ? 'bg-purple-100 text-purple-700' :
                 item.item_type === 'mpf_deduction' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
-              const isExcluded = Boolean(item.payroll_item_excluded);
+              const isExcluded = group.items.some((i: any) => Boolean(i.payroll_item_excluded));
               const rowClass = isExcluded
                 ? 'bg-gray-50 text-gray-400'
                 : item.item_type === 'base_salary'
@@ -163,13 +183,15 @@ function PayrollItemsSummary({
                       : '';
               const excludedClass = isExcluded ? 'line-through opacity-60' : '';
               return (
-                <tr key={item.id} className={`border-b ${rowClass}`}>
+                <tr key={group.groupKey} className={`border-b ${rowClass}`}>
                   <td className="px-4 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={isExcluded}
-                      disabled={!canEditExcluded || savingItemId === item.id}
-                      onChange={(e) => handleToggleExcluded(item, e.target.checked)}
+                      disabled={!canEditExcluded || group.items.some((i: any) => savingItemId === i.id)}
+                      onChange={(e) => {
+                        group.items.forEach((i: any) => handleToggleExcluded(i, e.target.checked));
+                      }}
                       className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
                       title={canEditExcluded ? '勾選後此糧單項目不計入糧單金額' : readOnlyMode ? '目前帳號沒有此頁面的編輯權限' : '只有草稿或準備中糧單可編輯'}
                     />
@@ -177,6 +199,7 @@ function PayrollItemsSummary({
                   <td className={`px-4 py-2 ${excludedClass}`}>
                     <span className={`inline-block px-2 py-0.5 rounded text-xs mr-2 ${badgeColor}`}>{typeLabel}</span>
                     <span className="font-medium">{item.item_name}</span>
+                    {group.items.length > 1 && <span className="ml-2 text-xs text-gray-500">（{group.items.length} 筆合併）</span>}
                     {isExcluded && <span className="ml-2 text-[11px] text-gray-500 no-underline">已排除</span>}
                   </td>
                   <td className={`px-4 py-2 text-right font-mono ${excludedClass}`}>
@@ -184,11 +207,11 @@ function PayrollItemsSummary({
                       ? `${(Number(item.quantity) * 100).toFixed(0)}%`
                       : `$${Number(item.unit_price).toLocaleString()}`}
                   </td>
-                  <td className={`px-4 py-2 text-right font-mono ${excludedClass}`}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : Number(item.quantity)}</td>
+                  <td className={`px-4 py-2 text-right font-mono ${excludedClass}`}>{item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry' ? '' : group.totalQuantity}</td>
                   <td className={`px-4 py-2 text-right font-mono font-bold ${excludedClass} ${isExcluded ? 'text-gray-400' : isDeduction ? 'text-red-600' : 'text-primary-600'}`}>
-                    {isDeduction ? '-' : ''}${Math.abs(Number(item.amount)).toLocaleString()}
+                    {isDeduction ? '-' : ''}${Math.abs(Number(group.totalAmount)).toLocaleString()}
                   </td>
-                  <td className={`px-4 py-2 text-gray-500 text-xs ${excludedClass}`}>{item.remarks || '-'}</td>
+                  <td className={`px-4 py-2 text-gray-500 text-xs ${excludedClass}`}>{group.items[0].remarks || '-'}</td>
                 </tr>
               );
             })}
