@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { Prisma } from '@prisma/client';
@@ -160,15 +160,17 @@ export class BankReconciliationService {
    * Recalculate and sync all balances for a bank account based on chronological order.
    * This ensures that any change in amount or date is reflected in all subsequent balances.
    */
-  async syncBalances(bankAccountId: number) {
-    const bankAccount = await this.prisma.bankAccount.findUnique({
+  async syncBalances(bankAccountId: number, tx?: any) {
+    const prisma = tx || this.prisma;
+    
+    const bankAccount = await prisma.bankAccount.findUnique({
       where: { id: bankAccountId },
       select: { id: true, opening_balance: true },
     });
     if (!bankAccount) throw new NotFoundException('銀行帳戶不存在');
 
     // Get all transactions for this account, sorted chronologically
-    const txs = await this.prisma.bankTransaction.findMany({
+    const txs = await prisma.bankTransaction.findMany({
       where: { bank_account_id: bankAccountId },
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
     });
@@ -176,10 +178,10 @@ export class BankReconciliationService {
     let currentBalance = bankAccount.opening_balance ?? new Prisma.Decimal(0);
     const startBalance = currentBalance;
 
-    for (const tx of txs) {
-      currentBalance = currentBalance.add(tx.amount);
-      await this.prisma.bankTransaction.update({
-        where: { id: tx.id },
+    for (const tx_item of txs) {
+      currentBalance = currentBalance.add(tx_item.amount);
+      await prisma.bankTransaction.update({
+        where: { id: tx_item.id },
         data: { balance: currentBalance },
       });
     }
@@ -274,7 +276,8 @@ export class BankReconciliationService {
     source: string = 'csv',
     options: { opening_balance?: number | string | null; confirm_balance_mismatch?: boolean } = {},
   ) {
-    const batchId = `import_${Date.now()}`;
+    // Generate unique batch ID with random suffix to avoid collisions
+    const batchId = `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const results = { imported: 0, skipped: 0, balanceMismatch: false };
 
     if (!rows || rows.length === 0) {
@@ -315,64 +318,74 @@ export class BankReconciliationService {
       }
     }
 
-    for (const row of rows) {
-      const amount = new Prisma.Decimal(row.amount);
-      const date = new Date(row.date);
-      const description = row.description || '';
-      const reference_no = row.reference_no || null;
+    // Use Prisma transaction to ensure all-or-nothing import
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        for (const row of rows) {
+          const amount = new Prisma.Decimal(row.amount);
+          const date = new Date(row.date);
+          const description = row.description || '';
+          const reference_no = row.reference_no || null;
 
-      // Anti-duplicate check: same date, amount, description, and reference_no (if provided)
-      // If reference_no is provided (e.g., cheque number), use it as part of the unique identifier
-      // This ensures transactions with the same amount but different cheque numbers are not treated as duplicates
-      const where: any = {
-        bank_account_id: bankAccountId,
-        date,
-        amount,
-        description,
-      };
-      
-      // If reference_no is provided, include it in the duplicate check
-      // If not provided, check for duplicates without reference_no
-      if (reference_no) {
-        where.reference_no = reference_no;
-      } else {
-        where.reference_no = null;
-      }
-      
-      const existing = await this.prisma.bankTransaction.findFirst({
-        where,
-      });
+          // Anti-duplicate check: same date, amount, description, and reference_no (if provided)
+          // If reference_no is provided (e.g., cheque number), use it as part of the unique identifier
+          // This ensures transactions with the same amount but different cheque numbers are not treated as duplicates
+          const where: any = {
+            bank_account_id: bankAccountId,
+            date,
+            amount,
+            description,
+          };
+          
+          // If reference_no is provided, include it in the duplicate check
+          // If not provided, check for duplicates without reference_no
+          if (reference_no) {
+            where.reference_no = reference_no;
+          } else {
+            where.reference_no = null;
+          }
+          
+          const existing = await tx.bankTransaction.findFirst({
+            where,
+          });
 
-      if (existing) {
-        // Only skip if it's a true duplicate (same reference_no or both have no reference_no)
-        // If reference_no differs, it's a different transaction
-        if ((reference_no && existing.reference_no === reference_no) || (!reference_no && !existing.reference_no)) {
-          results.skipped++;
-          continue;
+          if (existing) {
+            // Only skip if it's a true duplicate (same reference_no or both have no reference_no)
+            // If reference_no differs, it's a different transaction
+            if ((reference_no && existing.reference_no === reference_no) || (!reference_no && !existing.reference_no)) {
+              results.skipped++;
+              continue;
+            }
+          }
+
+          await tx.bankTransaction.create({
+            data: {
+              bank_account_id: bankAccountId,
+              date,
+              description,
+              amount,
+              debit_credit: amount.greaterThanOrEqualTo(0) ? 'credit' : 'debit',
+              balance: row.balance != null ? new Prisma.Decimal(row.balance) : null,
+              reference_no,
+              import_batch: batchId,
+              match_status: 'unmatched',
+              bank_txn_source: source,
+            },
+          });
+          results.imported++;
         }
-      }
 
-      await this.prisma.bankTransaction.create({
-        data: {
-          bank_account_id: bankAccountId,
-          date,
-          description,
-          amount,
-          debit_credit: amount.greaterThanOrEqualTo(0) ? 'credit' : 'debit',
-          balance: row.balance != null ? new Prisma.Decimal(row.balance) : null,
-          reference_no,
-          import_batch: batchId,
-          match_status: 'unmatched',
-          bank_txn_source: source,
-        },
+        // Auto-match after import (within transaction)
+        if (results.imported > 0) {
+          await this.syncBalances(bankAccountId, tx);
+          await this.autoMatch(bankAccountId, batchId, tx);
+        }
       });
-      results.imported++;
-    }
-
-    // Auto-match after import
-    if (results.imported > 0) {
-      await this.syncBalances(bankAccountId);
-      await this.autoMatch(bankAccountId, batchId);
+    } catch (error) {
+      // Transaction will be automatically rolled back by Prisma
+      throw new InternalServerErrorException(
+        `匯入失敗：${error.message || '未知錯誤'}。請檢查數據格式並重試。`,
+      );
     }
 
     return results;
@@ -390,9 +403,11 @@ export class BankReconciliationService {
    * 3. Same bank account + amount + date range (no ref no, unique match only)
    * 4. Same company + amount + date range (no ref no, unique match only)
    */
-  async autoMatch(bankAccountId: number, batchId?: string) {
+  async autoMatch(bankAccountId: number, batchId?: string, tx?: any) {
+    const prisma = tx || this.prisma;
+    
     // Get the bank account to find its company_id
-    const bankAccount = await this.prisma.bankAccount.findUnique({
+    const bankAccount = await prisma.bankAccount.findUnique({
       where: { id: bankAccountId },
       select: { id: true, company_id: true },
     });
@@ -404,7 +419,7 @@ export class BankReconciliationService {
     };
     if (batchId) where.import_batch = batchId;
 
-    const unmatched = await this.prisma.bankTransaction.findMany({ where });
+    const unmatched = await prisma.bankTransaction.findMany({ where });
     let matchedCount = 0;
 
     for (const tx of unmatched) {
