@@ -57,6 +57,7 @@ jobs:
           echo ""
 
           # Check 1: Expenses with incorrect amount (grossIncome vs net_amount)
+          # Note: payrolls table has no deleted_at column
           echo "1. Expenses needing amount fix (total_amount != net_amount from payroll):"
           psql "${DATABASE_URL}" -c "
           SELECT
@@ -70,7 +71,6 @@ jobs:
           INNER JOIN payrolls p ON e.source_ref_id = p.id
           WHERE e.source = 'PAYROLL'
             AND e.deleted_at IS NULL
-            AND p.deleted_at IS NULL
             AND e.total_amount != p.net_amount
           ORDER BY e.id DESC
           LIMIT 30;
@@ -117,14 +117,16 @@ jobs:
           SELECT
             (SELECT COUNT(*) FROM expenses e
              INNER JOIN payrolls p ON e.source_ref_id = p.id
-             WHERE e.source = 'PAYROLL' AND e.deleted_at IS NULL AND p.deleted_at IS NULL
+             WHERE e.source = 'PAYROLL' AND e.deleted_at IS NULL
                AND e.total_amount != p.net_amount) AS expenses_to_fix,
             (SELECT COUNT(*) FROM payment_outs po
              WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL AND po.expense_id IS NULL) AS payment_outs_missing_expense_id,
-            (SELECT COUNT(*) FROM payment_outs po
-             LEFT JOIN payment_out_allocations poa ON poa.payment_out_allocation_payment_out_id = po.id
-             WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL
-             GROUP BY po.id HAVING COUNT(poa.id) = 0) AS payment_outs_missing_allocation;
+            (SELECT COUNT(*) FROM (
+               SELECT po.id FROM payment_outs po
+               LEFT JOIN payment_out_allocations poa ON poa.payment_out_allocation_payment_out_id = po.id
+               WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL
+               GROUP BY po.id HAVING COUNT(poa.id) = 0
+             ) sub) AS payment_outs_missing_allocation;
           " 2>&1
 
           echo ""
@@ -178,6 +180,7 @@ jobs:
           BEGIN;
 
           -- FIX 1: Update expense total_amount to use net_amount (淨薪金)
+          -- payrolls table has no deleted_at column
           UPDATE expenses e
           SET total_amount = p.net_amount,
               updated_at = NOW()
@@ -185,7 +188,6 @@ jobs:
           WHERE e.source = 'PAYROLL'
             AND e.source_ref_id = p.id
             AND e.deleted_at IS NULL
-            AND p.deleted_at IS NULL
             AND e.total_amount != p.net_amount;
 
           -- FIX 2: Set expense_id on PaymentOut records (single-expense payrolls only)
@@ -197,7 +199,6 @@ jobs:
           WHERE po.payroll_id = p.id
             AND po.deleted_at IS NULL
             AND e.deleted_at IS NULL
-            AND p.deleted_at IS NULL
             AND po.expense_id IS NULL
             AND (SELECT COUNT(*) FROM expenses e2
                  WHERE e2.source = 'PAYROLL' AND e2.source_ref_id = p.id AND e2.deleted_at IS NULL) = 1;
@@ -221,7 +222,6 @@ jobs:
           INNER JOIN expenses e ON e.source = 'PAYROLL' AND e.source_ref_id = p.id
           WHERE po.deleted_at IS NULL
             AND e.deleted_at IS NULL
-            AND p.deleted_at IS NULL
             AND NOT EXISTS (
               SELECT 1 FROM payment_out_allocations poa
               WHERE poa.payment_out_allocation_payment_out_id = po.id
