@@ -1,0 +1,33 @@
+name: Fix PaymentIn payment_method
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (true = preview only, false = apply changes)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  fix:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy fix script to container
+        run: |
+          docker cp backend/src/scripts/fix-payment-method.ts mingtat-erp-backend-1:/app/src/scripts/fix-payment-method.ts
+          docker cp backend/src/scripts/dist/fix-payment-method.js mingtat-erp-backend-1:/app/src/scripts/dist/fix-payment-method.js
+
+      - name: Run fix script
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          docker exec mingtat-erp-backend-1 node /app/src/scripts/dist/fix-payment-method.js $DRY_RUN_FLAG
