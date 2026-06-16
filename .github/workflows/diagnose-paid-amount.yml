@@ -1,0 +1,37 @@
+name: Diagnose Invoice Paid Amount
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Run diagnostic on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
+          set -e
+          WORK_DIR="/opt/mingtat-erp"
+          cd "\${WORK_DIR}"
+          git fetch origin main
+          git reset --hard origin/main
+          CONTAINER=\$(docker ps --filter "name=backend" --format "{{.Names}}" | head -1)
+          echo "Container: \${CONTAINER}"
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist
+          docker cp "\${WORK_DIR}/backend/src/scripts/dist/diagnose-paid-amount.js" "\${CONTAINER}:/app/src/scripts/dist/diagnose-paid-amount.js"
+          docker exec "\${CONTAINER}" node /app/src/scripts/dist/diagnose-paid-amount.js
+          ENDSSH
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts
