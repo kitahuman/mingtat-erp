@@ -29,33 +29,40 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Run import script on EC2
+      - name: Run import script inside backend container on EC2
         run: |
           DRY_RUN="${{ github.event.inputs.dry_run }}"
-          echo "Running import script on EC2 with DRY_RUN=${DRY_RUN}..."
+          echo "Running import script inside Docker container with DRY_RUN=${DRY_RUN}..."
 
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
           set -e
 
           WORK_DIR="/opt/mingtat-erp"
-          BACKEND_DIR="\${WORK_DIR}/backend"
-          ENV_FILE="\${BACKEND_DIR}/.env"
-
-          if [ ! -f "\${ENV_FILE}" ]; then
-            echo "ERROR: .env file not found at \${ENV_FILE}"
-            exit 1
-          fi
-
-          export \$(grep -v '^#' "\${ENV_FILE}" | xargs)
 
           echo "=== Pulling latest code ==="
           cd "\${WORK_DIR}"
           git fetch origin main
           git reset --hard origin/main
 
-          echo "=== Running import script ==="
-          cd "\${BACKEND_DIR}"
-          DRY_RUN="${DRY_RUN}" npx ts-node --transpile-only src/scripts/import-payments-csv.ts
+          echo "=== Finding backend container ==="
+          CONTAINER=\$(docker ps --filter "name=backend" --format "{{.Names}}" | head -1)
+          if [ -z "\$CONTAINER" ]; then
+            echo "ERROR: No running backend container found"
+            docker ps
+            exit 1
+          fi
+          echo "Using container: \$CONTAINER"
+
+          echo "=== Copying CSV data file into container ==="
+          docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/data/payment-in-import.csv" 2>/dev/null || \
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/data && \
+          docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/data/payment-in-import.csv"
+
+          echo "=== Copying latest script into container ==="
+          docker cp "\${WORK_DIR}/backend/src/scripts/import-payments-csv.ts" "\${CONTAINER}:/app/src/scripts/import-payments-csv.ts"
+
+          echo "=== Running import script inside container ==="
+          docker exec -e DRY_RUN="${DRY_RUN}" "\${CONTAINER}" npx ts-node --transpile-only /app/src/scripts/import-payments-csv.ts
           ENDSSH
 
       - name: Cleanup SSH key

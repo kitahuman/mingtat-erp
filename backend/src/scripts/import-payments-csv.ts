@@ -35,7 +35,7 @@ async function main() {
     where: { deleted_at: null },
     select: { id: true, invoice_no: true, status: true, total_amount: true, paid_amount: true, outstanding: true },
   });
-  const invoiceMap = new Map(allInvoices.map(inv => [inv.invoice_no, inv]));
+  const invoiceMap = new Map(allInvoices.map((inv: any) => [inv.invoice_no, inv]));
 
   // Cache companies
   const companies = await prisma.company.findMany({
@@ -43,7 +43,7 @@ async function main() {
     select: { id: true, internal_prefix: true },
   });
   const companyMap = new Map();
-  companies.forEach(c => {
+  companies.forEach((c: any) => {
     if (c.internal_prefix) companyMap.set(c.internal_prefix, c.id);
   });
 
@@ -110,9 +110,9 @@ async function main() {
 
   // --- Output List: Missing Invoice ---
   console.log('');
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   console.log(`LIST: Records with NO matching invoice in DB (${missingInvoiceRows.length} records)`);
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   if (missingInvoiceRows.length === 0) {
     console.log('(none)');
   } else {
@@ -125,9 +125,9 @@ async function main() {
 
   // --- Summary ---
   console.log('');
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   console.log('SUMMARY');
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   console.log(`Total CSV records:          ${records.length}`);
   console.log(`Negative amounts (skipped): ${negativeAmountRows.length}`);
   console.log(`Invoice not found in DB:    ${missingInvoiceRows.length}`);
@@ -151,7 +151,6 @@ async function main() {
     const amount = parseFloat(record['總額']?.trim());
     const paymentDateStr = record['付款日期']?.trim();
     const referenceNo = record['支票']?.trim() || '';
-    const companyPrefix = record['公司']?.trim() || '';
     const description = record['描述']?.trim() || '';
 
     // Determine Payment Method
@@ -162,13 +161,13 @@ async function main() {
       }
     }
 
-    const companyId = companyMap.get(companyPrefix) || null;
     const paymentDate = new Date(paymentDateStr);
 
     try {
-        await prisma.$transaction(async (tx) => {
-          // Create PaymentIn
-          const paymentInData: any = {
+      await prisma.$transaction(async (tx: any) => {
+        // Create PaymentIn
+        const paymentIn = await tx.paymentIn.create({
+          data: {
             date: paymentDate,
             amount: amount,
             source_type: 'invoice',
@@ -176,26 +175,20 @@ async function main() {
             payment_method: paymentMethod,
             payment_in_status: 'paid',
             remarks: description || null,
-          };
-          
-          const paymentIn = await tx.paymentIn.create({
-            data: paymentInData,
-          });
+          },
+        });
 
-          // Create Allocation
-          const allocationData: any = {
+        // Create Allocation
+        await tx.paymentInAllocation.create({
+          data: {
             payment_in_allocation_payment_in_id: paymentIn.id,
             payment_in_allocation_invoice_id: invoice.id,
             payment_in_allocation_amount: amount,
             payment_in_allocation_remarks: `Imported from legacy CSV: ${invoiceNo}`,
-          };
-          
-          await tx.paymentInAllocation.create({
-            data: allocationData,
-          });
+          },
+        });
 
         // Update Invoice paid_amount and outstanding
-        // Fetch current invoice state within transaction to be safe
         const currentInvoice = await tx.invoice.findUnique({
           where: { id: invoice.id },
           select: { total_amount: true, paid_amount: true, retention_amount: true, status: true }
@@ -204,21 +197,13 @@ async function main() {
         if (currentInvoice) {
           const newPaidAmount = Number(currentInvoice.paid_amount) + amount;
           const newOutstanding = Number(currentInvoice.total_amount) - newPaidAmount - Number(currentInvoice.retention_amount || 0);
-
           let newStatus = currentInvoice.status;
-          if (newOutstanding <= 0) {
-            newStatus = 'paid';
-          } else if (newPaidAmount > 0) {
-            newStatus = 'partially_paid';
-          }
+          if (newOutstanding <= 0) newStatus = 'paid';
+          else if (newPaidAmount > 0) newStatus = 'partially_paid';
 
           await tx.invoice.update({
             where: { id: invoice.id },
-            data: {
-              paid_amount: newPaidAmount,
-              outstanding: newOutstanding,
-              status: newStatus,
-            },
+            data: { paid_amount: newPaidAmount, outstanding: newOutstanding, status: newStatus },
           });
         }
       });
@@ -230,18 +215,13 @@ async function main() {
   }
 
   console.log('');
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   console.log('IMPORT COMPLETE');
-  console.log('='.repeat(60));
+  console.log('='.repeat(80));
   console.log(`Successfully imported: ${importedCount}`);
   console.log(`Errors:                ${errorCount}`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });
