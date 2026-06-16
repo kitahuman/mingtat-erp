@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PayrollService } from './payroll.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
@@ -11,6 +11,7 @@ import { StatutoryHolidaysModule } from '../statutory-holidays/statutory-holiday
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { FleetRateCardsModule } from '../fleet-rate-cards/fleet-rate-cards.module';
 import { PettyCashModule } from '../petty-cash/petty-cash.module';
+import { PaymentOutModule } from '../payment-out/payment-out.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PettyCashModule } from '../petty-cash/petty-cash.module';
     AuditLogsModule,
     FleetRateCardsModule,
     PettyCashModule,
+    forwardRef(() => PaymentOutModule),
   ],
   providers: [PayrollService, PayrollCalculationService, PayrollPdfService],
   controllers: [PayrollController],

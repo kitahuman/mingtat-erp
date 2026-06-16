@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +14,7 @@ import { StatutoryHolidaysService } from '../statutory-holidays/statutory-holida
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { FleetRateCardsService } from '../fleet-rate-cards/fleet-rate-cards.service';
 import { PettyCashService } from '../petty-cash/petty-cash.service';
+import { PaymentOutAllocationService } from '../payment-out/payment-out-allocation.service';
 import { PayrollQuery } from '../common/types';
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
@@ -38,6 +41,8 @@ export class PayrollService {
     private readonly calcService: PayrollCalculationService,
     private readonly fleetRateCardsService: FleetRateCardsService,
     private readonly pettyCashService: PettyCashService,
+    @Inject(forwardRef(() => PaymentOutAllocationService))
+    private readonly paymentOutAllocationService: PaymentOutAllocationService,
   ) {}
 
   // ── 列表 ──────────────────────────────────────────────────────
@@ -3215,6 +3220,11 @@ export class PayrollService {
 
     if (netAmount <= 0 && grossIncome <= 0) return 0;
 
+    // Use net_amount (淨薪金) as the expense amount.
+    // net_amount = grossIncome - mpf_deduction (employee MPF) + adjustment_total
+    // This matches the actual payment amount the company pays to the employee.
+    const expenseAmount = netAmount;
+
     // Find the salary expense category
     const salaryCategory = await this.findSalaryCategoryId();
 
@@ -3239,7 +3249,7 @@ export class PayrollService {
         employee_id: employee.id,
         category_id: salaryCategory,
         item: `${payroll.period} 薪資 - ${employee.name_zh || employee.name_en || ''}`,
-        total_amount: grossIncome,
+        total_amount: expenseAmount,
         source: 'PAYROLL',
         source_ref_id: payroll.id,
         project_id: null,
@@ -3254,7 +3264,7 @@ export class PayrollService {
         employee_id: employee.id,
         category_id: salaryCategory,
         item: `${payroll.period} 薪資 - ${employee.name_zh || employee.name_en || ''}`,
-        total_amount: grossIncome,
+        total_amount: expenseAmount,
         source: 'PAYROLL',
         source_ref_id: payroll.id,
         project_id: dist.project_id,
@@ -3271,8 +3281,8 @@ export class PayrollService {
         // Last item gets the remainder to avoid rounding issues
         const amount =
           i === projectDistribution.length - 1
-            ? Math.round((grossIncome - allocated) * 100) / 100
-            : Math.round(grossIncome * ratio * 100) / 100;
+            ? Math.round((expenseAmount - allocated) * 100) / 100
+            : Math.round(expenseAmount * ratio * 100) / 100;
         allocated += amount;
 
         expenses.push({
@@ -3596,6 +3606,16 @@ export class PayrollService {
       return `${y}年${parseInt(m, 10)}月`;
     };
 
+    // Find the payroll-generated expenses to link the payment
+    const payrollExpenses = await this.prisma.expense.findMany({
+      where: {
+        source: 'PAYROLL',
+        source_ref_id: payrollId,
+        deleted_at: null,
+      },
+      select: { id: true, total_amount: true },
+    });
+
     // Use a transaction to ensure both records are created atomically
     const saved = await this.prisma.$transaction(async (tx) => {
       // 1. Create the PaymentOut record so it appears in the payment-out list
@@ -3609,6 +3629,10 @@ export class PayrollService {
           : typeof rawBankAccount === 'string' && /^\d+$/.test(rawBankAccount.trim())
             ? Number(rawBankAccount.trim())
             : null;
+
+      // Also set expense_id on the PaymentOut for legacy compatibility
+      const primaryExpenseId = payrollExpenses.length === 1 ? payrollExpenses[0].id : null;
+
       const paymentOut = await tx.paymentOut.create({
         data: {
           date: new Date(body.payroll_payment_date),
@@ -3620,11 +3644,43 @@ export class PayrollService {
           payment_out_status: 'paid',
           remarks: body.payroll_payment_remarks || null,
           payroll_id: payrollId,
+          expense_id: primaryExpenseId,
           company_id: payroll.company_id || null,
         },
       });
 
-      // 2. Create the PayrollPayment record linked to the PaymentOut
+      // 3. Create PaymentOutAllocation records to link payment to expenses
+      if (payrollExpenses.length > 0) {
+        const totalExpenseAmount = payrollExpenses.reduce(
+          (sum, e) => sum + Number(e.total_amount),
+          0,
+        );
+        let allocatedAmount = 0;
+
+        for (let i = 0; i < payrollExpenses.length; i++) {
+          const expense = payrollExpenses[i];
+          // Proportionally allocate the payment amount across expenses
+          const allocationAmount =
+            i === payrollExpenses.length - 1
+              ? Math.round((body.payroll_payment_amount - allocatedAmount) * 100) / 100
+              : Math.round(
+                  (body.payroll_payment_amount * Number(expense.total_amount)) /
+                    totalExpenseAmount *
+                    100,
+                ) / 100;
+          allocatedAmount += allocationAmount;
+
+          await tx.paymentOutAllocation.create({
+            data: {
+              payment_out_allocation_payment_out_id: paymentOut.id,
+              payment_out_allocation_expense_id: expense.id,
+              payment_out_allocation_amount: allocationAmount,
+            },
+          });
+        }
+      }
+
+      // 4. Create the PayrollPayment record linked to the PaymentOut
       const payrollPayment = await tx.payrollPayment.create({
         data: {
           payroll_payment_payroll_id: payrollId,
@@ -3641,6 +3697,11 @@ export class PayrollService {
       return payrollPayment;
     });
 
+    // 5. After transaction: recalculate expense payment status
+    for (const expense of payrollExpenses) {
+      await this.paymentOutAllocationService.recalculateExpense(expense.id);
+    }
+
     return saved;
   }
 
@@ -3656,12 +3717,28 @@ export class PayrollService {
     });
     if (!payment) throw new NotFoundException('Payment record not found');
 
+    // Collect expense IDs linked via allocations before deleting
+    let linkedExpenseIds: number[] = [];
+    if (payment.payroll_payment_payment_out_id) {
+      const allocations = await this.prisma.paymentOutAllocation.findMany({
+        where: {
+          payment_out_allocation_payment_out_id: payment.payroll_payment_payment_out_id,
+          payment_out_allocation_expense_id: { not: null },
+        },
+        select: { payment_out_allocation_expense_id: true },
+      });
+      linkedExpenseIds = allocations
+        .map((a) => a.payment_out_allocation_expense_id)
+        .filter((id): id is number => id !== null);
+    }
+
     // Use a transaction to delete both records atomically
     await this.prisma.$transaction(async (tx) => {
       // 1. Delete the PayrollPayment first (it references PaymentOut)
       await tx.payrollPayment.delete({ where: { id: paymentId } });
 
       // 2. Delete the linked PaymentOut record if it exists
+      //    (PaymentOutAllocation records are cascade-deleted automatically)
       if (payment.payroll_payment_payment_out_id) {
         await tx.paymentOut.delete({
           where: { id: payment.payroll_payment_payment_out_id },
@@ -3670,6 +3747,11 @@ export class PayrollService {
         });
       }
     });
+
+    // After transaction: recalculate expense payment status
+    for (const expenseId of linkedExpenseIds) {
+      await this.paymentOutAllocationService.recalculateExpense(expenseId);
+    }
 
     return { success: true };
   }
