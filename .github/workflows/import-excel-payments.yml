@@ -51,7 +51,7 @@ jobs:
           echo "Using container: \$CONTAINER"
           
           echo "=== Copying files into container ==="
-          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist /app/src/scripts/data
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist/data
           docker cp "\${WORK_DIR}/backend/src/scripts/dist/import-excel-payments.js" "\${CONTAINER}:/app/src/scripts/dist/import-excel-payments.js"
           docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-excel-v2.xlsx" "\${CONTAINER}:/app/src/scripts/dist/data/payment-excel-v2.xlsx"
           
