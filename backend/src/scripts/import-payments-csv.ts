@@ -48,9 +48,9 @@ async function main() {
 
   // --- Collect analysis lists ---
   const missingInvoiceRows: any[] = [];
-  const missingDateRows: any[] = [];
   const negativeAmountRows: any[] = [];
   const toImport: any[] = [];
+  let missingDateCount = 0;
 
   for (const record of records) {
     const invoiceNo = record['發票']?.trim() || '';
@@ -84,10 +84,10 @@ async function main() {
       continue;
     }
 
-    // 3. Missing payment date
+    // 3. Missing payment date (skip silently as requested)
     if (!paymentDateStr) {
-      missingDateRows.push(rowSummary);
-      // Don't continue — still check invoice
+      missingDateCount++;
+      continue;
     }
 
     // 4. Check invoice exists in DB
@@ -98,24 +98,19 @@ async function main() {
     }
 
     // 5. Invalid date (not empty but unparseable)
-    if (paymentDateStr) {
-      const d = new Date(paymentDateStr);
-      if (isNaN(d.getTime())) {
-        missingDateRows.push({ ...rowSummary, reason: 'Invalid date format' });
-        continue;
-      }
-    } else {
-      // Already added to missingDateRows above, skip import
+    const d = new Date(paymentDateStr);
+    if (isNaN(d.getTime())) {
+      missingDateCount++;
       continue;
     }
 
     toImport.push({ record, invoice });
   }
 
-  // --- Output List 1: Missing Invoice ---
+  // --- Output List: Missing Invoice ---
   console.log('');
   console.log('='.repeat(60));
-  console.log(`LIST 1: Records with NO matching invoice in DB (${missingInvoiceRows.length} records)`);
+  console.log(`LIST: Records with NO matching invoice in DB (${missingInvoiceRows.length} records)`);
   console.log('='.repeat(60));
   if (missingInvoiceRows.length === 0) {
     console.log('(none)');
@@ -127,21 +122,6 @@ async function main() {
     }
   }
 
-  // --- Output List 2: Missing Payment Date ---
-  console.log('');
-  console.log('='.repeat(60));
-  console.log(`LIST 2: Records with MISSING or INVALID payment date (${missingDateRows.length} records)`);
-  console.log('='.repeat(60));
-  if (missingDateRows.length === 0) {
-    console.log('(none)');
-  } else {
-    console.log('InvoiceNo | Company | Client | Amount | Date | Reason');
-    console.log('-'.repeat(80));
-    for (const r of missingDateRows) {
-      console.log(`${r.invoiceNo} | ${r.company} | ${r.client} | ${r.amount} | ${r.paymentDate} | ${r.reason || 'Empty date'}`);
-    }
-  }
-
   // --- Summary ---
   console.log('');
   console.log('='.repeat(60));
@@ -150,7 +130,7 @@ async function main() {
   console.log(`Total CSV records:          ${records.length}`);
   console.log(`Negative amounts (skipped): ${negativeAmountRows.length}`);
   console.log(`Invoice not found in DB:    ${missingInvoiceRows.length}`);
-  console.log(`Missing/invalid date:       ${missingDateRows.length}`);
+  console.log(`Missing/invalid date:       ${missingDateCount}`);
   console.log(`Ready to import:            ${toImport.length}`);
   console.log('');
 
