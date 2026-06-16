@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parse } from 'csv-parse/lib/sync';
+import { parse } from 'csv-parse/sync';
 
 const prisma = new PrismaClient();
 
@@ -165,10 +165,9 @@ async function main() {
     const paymentDate = new Date(paymentDateStr);
 
     try {
-      await prisma.$transaction(async (tx) => {
-        // Create PaymentIn
-        const paymentIn = await tx.paymentIn.create({
-          data: {
+        await prisma.$transaction(async (tx) => {
+          // Create PaymentIn
+          const paymentInData: any = {
             date: paymentDate,
             amount: amount,
             source_type: 'invoice',
@@ -176,18 +175,23 @@ async function main() {
             payment_method: paymentMethod,
             payment_in_status: 'paid',
             remarks: description || null,
-          },
-        });
+          };
+          
+          const paymentIn = await tx.paymentIn.create({
+            data: paymentInData,
+          });
 
-        // Create Allocation
-        await tx.paymentInAllocation.create({
-          data: {
+          // Create Allocation
+          const allocationData: any = {
             payment_in_allocation_payment_in_id: paymentIn.id,
             payment_in_allocation_invoice_id: invoice.id,
             payment_in_allocation_amount: amount,
             payment_in_allocation_remarks: `Imported from legacy CSV: ${invoiceNo}`,
-          },
-        });
+          };
+          
+          await tx.paymentInAllocation.create({
+            data: allocationData,
+          });
 
         // Update Invoice paid_amount and outstanding
         // Fetch current invoice state within transaction to be safe
