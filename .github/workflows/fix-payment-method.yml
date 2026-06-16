@@ -14,20 +14,51 @@ on:
 
 jobs:
   fix:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy fix script to container
+      - name: Setup SSH key
         run: |
-          docker cp backend/src/scripts/fix-payment-method.ts mingtat-erp-backend-1:/app/src/scripts/fix-payment-method.ts
-          docker cp backend/src/scripts/dist/fix-payment-method.js mingtat-erp-backend-1:/app/src/scripts/dist/fix-payment-method.js
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Run fix script
+      - name: Run fix script on EC2
         run: |
           DRY_RUN_FLAG=""
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          docker exec mingtat-erp-backend-1 node /app/src/scripts/dist/fix-payment-method.js $DRY_RUN_FLAG
+          
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
+          set -e
+          WORK_DIR="/opt/mingtat-erp"
+          echo "=== Pulling latest code ==="
+          cd "\${WORK_DIR}"
+          git fetch origin main
+          git reset --hard origin/main
+          
+          echo "=== Finding backend container ==="
+          CONTAINER=\$(docker ps --filter "name=backend" --format "{{.Names}}" | head -1)
+          if [ -z "\$CONTAINER" ]; then
+            echo "ERROR: No running backend container found"
+            exit 1
+          fi
+          
+          echo "=== Copying script into container ==="
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist
+          docker cp "\${WORK_DIR}/backend/src/scripts/dist/fix-payment-method.js" "\${CONTAINER}:/app/src/scripts/dist/fix-payment-method.js"
+          
+          echo "=== Running fix script inside container ==="
+          docker exec "\${CONTAINER}" node /app/src/scripts/dist/fix-payment-method.js $DRY_RUN_FLAG
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts
