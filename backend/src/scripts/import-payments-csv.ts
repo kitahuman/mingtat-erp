@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parse } from 'csv-parse/sync';
+import { parse } from 'csv-parse/lib/sync';
 
 const prisma = new PrismaClient();
 
@@ -146,7 +146,7 @@ async function main() {
   let errorCount = 0;
 
   for (const { record, invoice } of toImport) {
-    const invoiceNo = record['発票']?.trim() || record['發票']?.trim();
+    const invoiceNo = record['發票']?.trim();
     const amount = parseFloat(record['總額']?.trim());
     const paymentDateStr = record['付款日期']?.trim();
     const referenceNo = record['支票']?.trim() || '';
@@ -190,24 +190,32 @@ async function main() {
         });
 
         // Update Invoice paid_amount and outstanding
-        const newPaidAmount = Number(invoice.paid_amount) + amount;
-        const newOutstanding = Number(invoice.total_amount) - newPaidAmount - Number((invoice as any).retention_amount || 0);
-
-        let newStatus = invoice.status;
-        if (newOutstanding <= 0) {
-          newStatus = 'paid';
-        } else if (newPaidAmount > 0) {
-          newStatus = 'partially_paid';
-        }
-
-        await tx.invoice.update({
+        // Fetch current invoice state within transaction to be safe
+        const currentInvoice = await tx.invoice.findUnique({
           where: { id: invoice.id },
-          data: {
-            paid_amount: newPaidAmount,
-            outstanding: newOutstanding,
-            status: newStatus,
-          },
+          select: { total_amount: true, paid_amount: true, retention_amount: true, status: true }
         });
+
+        if (currentInvoice) {
+          const newPaidAmount = Number(currentInvoice.paid_amount) + amount;
+          const newOutstanding = Number(currentInvoice.total_amount) - newPaidAmount - Number(currentInvoice.retention_amount || 0);
+
+          let newStatus = currentInvoice.status;
+          if (newOutstanding <= 0) {
+            newStatus = 'paid';
+          } else if (newPaidAmount > 0) {
+            newStatus = 'partially_paid';
+          }
+
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              paid_amount: newPaidAmount,
+              outstanding: newOutstanding,
+              status: newStatus,
+            },
+          });
+        }
       });
       importedCount++;
     } catch (err) {
