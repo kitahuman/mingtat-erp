@@ -72,6 +72,36 @@ function toStr(val: any): string | null {
   return s === '' ? null : s;
 }
 
+/**
+ * Normalize and split invoice number(s) from a raw cell value.
+ * Handles comma and slash separators, prefix typos, trailing amounts in parentheses.
+ */
+function parseInvoiceNos(raw: string | null): string[] {
+  if (!raw) return [];
+  // Split by comma or slash
+  const parts = raw.split(/[,\/]/).map(s => s.trim()).filter(s => s.length > 0);
+  const result: string[] = [];
+  for (let part of parts) {
+    // Remove trailing amount annotations like ($800,000) or (outstanding or (180,000)
+    part = part.replace(/\(.*$/, '').trim();
+    // Remove trailing dot
+    part = part.replace(/\.$/, '').trim();
+    if (!part) continue;
+    // Fix prefix typos
+    part = part.replace(/^DTCSWWH/, 'DTCSWH'); // extra W
+    part = part.replace(/^DTCWH/, 'DTCSWH');   // missing S
+    part = part.replace(/^DTSWH/, 'DTCSWH');   // missing C
+    part = part.replace(/^DTCSH([0-9])/, 'DTCSWH$1'); // missing W before digits
+    // Skip non-invoice values (contract numbers, Chinese text, JS artifacts)
+    if (/^\d{4,5}$/.test(part)) continue; // pure contract number
+    if (/^[\u4e00-\u9fff]/.test(part)) continue; // starts with Chinese
+    if (part === '[object' || part === 'Object]') continue;
+    if (/^全部|^扣款/.test(part)) continue;
+    result.push(part);
+  }
+  return result;
+}
+
 interface ImportRow {
   sheet: string;
   rowNum: number;
@@ -106,9 +136,7 @@ async function main() {
     const refRaw = toStr(r[8]);
     const pmRaw = toStr(r[7]);
     const settledRaw = toStr(r[9]);
-    const invoiceNos = settledRaw
-      ? settledRaw.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
-      : [];
+    const invoiceNos = parseInvoiceNos(settledRaw);
 
     rows.push({
       sheet: 'DTC',
@@ -136,7 +164,7 @@ async function main() {
     const refRaw = toStr(r[7]);
     const pmRaw = toStr(r[6]);
     const invoiceNo = toStr(r[3]);
-    const invoiceNos = invoiceNo ? [invoiceNo] : [];
+    const invoiceNos = parseInvoiceNos(invoiceNo);
 
     rows.push({
       sheet: 'DCL',
