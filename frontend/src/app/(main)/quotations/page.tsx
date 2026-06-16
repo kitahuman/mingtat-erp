@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
+import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -334,8 +335,14 @@ export default function QuotationsPage() {
     partnersApi.simple().then((res) => setPartners(res.data));
   });
 
-  const unitOptions =
-    form.quotation_type === 'rental' ? RENTAL_UNITS : PROJECT_UNITS;
+  // Load field options from API
+  const { optionsMap } = useMultiFieldOptions(['wage_unit']);
+  const wageUnitOptions = optionsMap['wage_unit'] || [];
+  
+  // Use wage_unit from field_options, fallback to hardcoded units if not available
+  const unitOptions = wageUnitOptions.length > 0 
+    ? wageUnitOptions.map((opt: any) => opt.label || opt.value)
+    : (form.quotation_type === 'rental' ? RENTAL_UNITS : PROJECT_UNITS);
 
   const addItem = () => {
     const defaultUnit = form.quotation_type === 'rental' ? '天' : 'JOB';
@@ -857,8 +864,8 @@ export default function QuotationsPage() {
                           className="input-field text-sm"
                         >
                           {unitOptions.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
+                            <option key={typeof u === 'string' ? u : u.value} value={typeof u === 'string' ? u : u.value}>
+                              {typeof u === 'string' ? u : u.label}
                             </option>
                           ))}
                         </select>
