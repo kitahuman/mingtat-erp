@@ -56,8 +56,9 @@ jobs:
           echo "=========================================="
           echo ""
 
-          # Check 1: Expenses with incorrect amount (grossIncome vs net_amount)
-          # Note: payrolls table has no deleted_at column
+          # Note: payrolls and payment_outs tables have NO deleted_at column
+          # Only expenses table has deleted_at
+
           echo "1. Expenses needing amount fix (total_amount != net_amount from payroll):"
           psql "${DATABASE_URL}" -c "
           SELECT
@@ -86,7 +87,6 @@ jobs:
             po.date
           FROM payment_outs po
           WHERE po.payroll_id IS NOT NULL
-            AND po.deleted_at IS NULL
             AND po.expense_id IS NULL
           ORDER BY po.id DESC
           LIMIT 30;
@@ -104,7 +104,6 @@ jobs:
           LEFT JOIN payment_out_allocations poa
             ON poa.payment_out_allocation_payment_out_id = po.id
           WHERE po.payroll_id IS NOT NULL
-            AND po.deleted_at IS NULL
           GROUP BY po.id, po.payroll_id, po.amount
           HAVING COUNT(poa.id) = 0
           ORDER BY po.id DESC
@@ -120,11 +119,11 @@ jobs:
              WHERE e.source = 'PAYROLL' AND e.deleted_at IS NULL
                AND e.total_amount != p.net_amount) AS expenses_to_fix,
             (SELECT COUNT(*) FROM payment_outs po
-             WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL AND po.expense_id IS NULL) AS payment_outs_missing_expense_id,
+             WHERE po.payroll_id IS NOT NULL AND po.expense_id IS NULL) AS payment_outs_missing_expense_id,
             (SELECT COUNT(*) FROM (
                SELECT po.id FROM payment_outs po
                LEFT JOIN payment_out_allocations poa ON poa.payment_out_allocation_payment_out_id = po.id
-               WHERE po.payroll_id IS NOT NULL AND po.deleted_at IS NULL
+               WHERE po.payroll_id IS NOT NULL
                GROUP BY po.id HAVING COUNT(poa.id) = 0
              ) sub) AS payment_outs_missing_allocation;
           " 2>&1
@@ -191,13 +190,13 @@ jobs:
             AND e.total_amount != p.net_amount;
 
           -- FIX 2: Set expense_id on PaymentOut records (single-expense payrolls only)
+          -- payment_outs has no deleted_at column
           UPDATE payment_outs po
           SET expense_id = e.id,
               updated_at = NOW()
           FROM payrolls p
           INNER JOIN expenses e ON e.source = 'PAYROLL' AND e.source_ref_id = p.id
           WHERE po.payroll_id = p.id
-            AND po.deleted_at IS NULL
             AND e.deleted_at IS NULL
             AND po.expense_id IS NULL
             AND (SELECT COUNT(*) FROM expenses e2
@@ -220,8 +219,7 @@ jobs:
           FROM payment_outs po
           INNER JOIN payrolls p ON po.payroll_id = p.id
           INNER JOIN expenses e ON e.source = 'PAYROLL' AND e.source_ref_id = p.id
-          WHERE po.deleted_at IS NULL
-            AND e.deleted_at IS NULL
+          WHERE e.deleted_at IS NULL
             AND NOT EXISTS (
               SELECT 1 FROM payment_out_allocations poa
               WHERE poa.payment_out_allocation_payment_out_id = po.id
