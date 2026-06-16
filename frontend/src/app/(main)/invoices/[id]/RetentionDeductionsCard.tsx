@@ -54,19 +54,8 @@ export default function RetentionDeductionsCard({ invoiceId }: Props) {
     [deductions],
   );
 
-  if (loading) {
-    return (
-      <div className="card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Retention 紀錄
-        </h2>
-        <p className="text-sm text-gray-400">載入中…</p>
-      </div>
-    );
-  }
-
-  if (deductions.length === 0) {
-    return null; // Don't show the card if no retention deductions
+  if (loading || deductions.length === 0) {
+    return null;
   }
 
   return (
