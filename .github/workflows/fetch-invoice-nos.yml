@@ -17,9 +17,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Fetch all invoice_no from database
+      - name: Fetch DATABASE_URL and invoice numbers
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+          echo "=== DB_URL_START ==="
+          cat /opt/mingtat-erp/backend/.env | grep DATABASE_URL
+          echo "=== DB_URL_END ==="
+
           CONTAINER=$(docker ps --filter "name=backend" --format "{{.Names}}" | head -1)
           echo "Container: $CONTAINER"
           echo "=== INVOICE_NOS_START ==="
