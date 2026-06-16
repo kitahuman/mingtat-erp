@@ -1,0 +1,55 @@
+name: Import Payments from CSV
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (read-only, no modifications)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      csv_content:
+        description: 'CSV Content (Paste the content of the CSV file here)'
+        required: true
+        type: string
+
+jobs:
+  import:
+    name: Import Payments from CSV
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: 'backend/pnpm-lock.yaml'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pnpm install --no-frozen-lockfile
+
+      - name: Save CSV content to file
+        run: |
+          echo "${{ github.event.inputs.csv_content }}" > /tmp/payments.csv
+
+      - name: Run import script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CSV_PATH: /tmp/payments.csv
+        run: |
+          cd backend
+          npx ts-node src/scripts/import-payments-csv.ts
