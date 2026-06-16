@@ -321,19 +321,35 @@ export class BankReconciliationService {
       const description = row.description || '';
       const reference_no = row.reference_no || null;
 
-      // Anti-duplicate check: same date, amount, description
+      // Anti-duplicate check: same date, amount, description, and reference_no (if provided)
+      // If reference_no is provided (e.g., cheque number), use it as part of the unique identifier
+      // This ensures transactions with the same amount but different cheque numbers are not treated as duplicates
+      const where: any = {
+        bank_account_id: bankAccountId,
+        date,
+        amount,
+        description,
+      };
+      
+      // If reference_no is provided, include it in the duplicate check
+      // If not provided, check for duplicates without reference_no
+      if (reference_no) {
+        where.reference_no = reference_no;
+      } else {
+        where.reference_no = null;
+      }
+      
       const existing = await this.prisma.bankTransaction.findFirst({
-        where: {
-          bank_account_id: bankAccountId,
-          date,
-          amount,
-          description,
-        },
+        where,
       });
 
       if (existing) {
-        results.skipped++;
-        continue;
+        // Only skip if it's a true duplicate (same reference_no or both have no reference_no)
+        // If reference_no differs, it's a different transaction
+        if ((reference_no && existing.reference_no === reference_no) || (!reference_no && !existing.reference_no)) {
+          results.skipped++;
+          continue;
+        }
       }
 
       await this.prisma.bankTransaction.create({
