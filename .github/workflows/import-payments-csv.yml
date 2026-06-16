@@ -53,16 +53,13 @@ jobs:
           fi
           echo "Using container: \$CONTAINER"
 
-          echo "=== Copying CSV data file into container ==="
-          docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/data/payment-in-import.csv" 2>/dev/null || \
-          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/data && \
+          echo "=== Copying files into container ==="
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/data /app/src/scripts/dist
           docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/data/payment-in-import.csv"
-
-          echo "=== Copying latest script into container ==="
-          docker cp "\${WORK_DIR}/backend/src/scripts/import-payments-csv.ts" "\${CONTAINER}:/app/src/scripts/import-payments-csv.ts"
+          docker cp "\${WORK_DIR}/backend/src/scripts/dist/import-payments-csv.js" "\${CONTAINER}:/app/src/scripts/dist/import-payments-csv.js"
 
           echo "=== Running import script inside container ==="
-          docker exec -e DRY_RUN="${DRY_RUN}" "\${CONTAINER}" npx ts-node --transpile-only /app/src/scripts/import-payments-csv.ts
+          docker exec -e DRY_RUN="${DRY_RUN}" "\${CONTAINER}" node /app/src/scripts/dist/import-payments-csv.js
           ENDSSH
 
       - name: Cleanup SSH key
