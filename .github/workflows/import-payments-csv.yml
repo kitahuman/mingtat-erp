@@ -11,10 +11,6 @@ on:
         options:
           - 'true'
           - 'false'
-      csv_content:
-        description: 'CSV Content (Paste the content of the CSV file here)'
-        required: true
-        type: string
 
 jobs:
   import:
@@ -26,30 +22,43 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: 'backend/pnpm-lock.yaml'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Install dependencies
+      - name: Setup SSH key
         run: |
-          cd backend
-          pnpm install --no-frozen-lockfile
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Save CSV content to file
+      - name: Run import script on EC2
         run: |
-          echo "${{ github.event.inputs.csv_content }}" > /tmp/payments.csv
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          echo "Running import script on EC2 with DRY_RUN=${DRY_RUN}..."
 
-      - name: Run import script
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
-          CSV_PATH: /tmp/payments.csv
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
+          set -e
+
+          WORK_DIR="/opt/mingtat-erp"
+          BACKEND_DIR="\${WORK_DIR}/backend"
+          ENV_FILE="\${BACKEND_DIR}/.env"
+
+          if [ ! -f "\${ENV_FILE}" ]; then
+            echo "ERROR: .env file not found at \${ENV_FILE}"
+            exit 1
+          fi
+
+          export \$(grep -v '^#' "\${ENV_FILE}" | xargs)
+
+          echo "=== Pulling latest code ==="
+          cd "\${WORK_DIR}"
+          git pull origin main
+
+          echo "=== Running import script ==="
+          cd "\${BACKEND_DIR}"
+          DRY_RUN="${DRY_RUN}" npx ts-node src/scripts/import-payments-csv.ts
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
         run: |
-          cd backend
-          npx ts-node src/scripts/import-payments-csv.ts
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts

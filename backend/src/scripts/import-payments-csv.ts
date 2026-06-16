@@ -1,18 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
+import * as path from 'path';
 import { parse } from 'csv-parse/sync';
 
 const prisma = new PrismaClient();
 
 async function main() {
   const dryRun = process.env.DRY_RUN !== 'false';
-  const csvPath = process.env.CSV_PATH || '/home/ubuntu/upload/交易記錄150.csv';
+  const csvPath = process.env.CSV_PATH || path.join(__dirname, 'data', 'payment-in-import.csv');
 
-  console.log(`Starting payment import. Dry run: ${dryRun}`);
+  console.log(`=== Payment Import Script ===`);
+  console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE (writing to DB)'}`);
   console.log(`CSV Path: ${csvPath}`);
+  console.log('');
 
   if (!fs.existsSync(csvPath)) {
-    console.error(`CSV file not found at ${csvPath}`);
+    console.error(`ERROR: CSV file not found at ${csvPath}`);
     process.exit(1);
   }
 
@@ -26,148 +29,219 @@ async function main() {
 
   console.log(`Total records in CSV: ${records.length}`);
 
-  let companyMap = new Map();
-  if (process.env.DATABASE_URL) {
-    // Cache companies
-    const companies = await prisma.company.findMany({
-      where: { deleted_at: null },
-    });
-    companies.forEach(c => {
-      if (c.internal_prefix) {
-        companyMap.set(c.internal_prefix, c.id);
-      }
-    });
-  }
+  // Cache all invoice_no from DB
+  const allInvoices = await prisma.invoice.findMany({
+    where: { deleted_at: null },
+    select: { id: true, invoice_no: true, status: true, total_amount: true, paid_amount: true, outstanding: true },
+  });
+  const invoiceMap = new Map(allInvoices.map(inv => [inv.invoice_no, inv]));
 
-  let importedCount = 0;
-  let skippedCount = 0;
-  let invoiceNotFoundCount = 0;
-  let negativeAmountCount = 0;
+  // Cache companies
+  const companies = await prisma.company.findMany({
+    where: { deleted_at: null },
+    select: { id: true, internal_prefix: true },
+  });
+  const companyMap = new Map();
+  companies.forEach(c => {
+    if (c.internal_prefix) companyMap.set(c.internal_prefix, c.id);
+  });
+
+  // --- Collect analysis lists ---
+  const missingInvoiceRows: any[] = [];
+  const missingDateRows: any[] = [];
+  const negativeAmountRows: any[] = [];
+  const toImport: any[] = [];
 
   for (const record of records) {
-    const invoiceNo = record['發票']?.trim();
-    const amountStr = record['總額']?.trim();
+    const invoiceNo = record['發票']?.trim() || '';
+    const amountStr = record['總額']?.trim() || '';
     const amount = parseFloat(amountStr);
-    const paymentDateStr = record['付款日期']?.trim();
-    const referenceNo = record['支票']?.trim();
-    const companyPrefix = record['公司']?.trim();
-    const description = record['描述']?.trim();
+    const paymentDateStr = record['付款日期']?.trim() || '';
+    const referenceNo = record['支票']?.trim() || '';
+    const companyPrefix = record['公司']?.trim() || '';
+    const clientName = record['客戶']?.trim() || '';
+    const description = record['描述']?.trim() || '';
 
-    // 1. Skip negative amounts
-    if (isNaN(amount) || amount < 0) {
-      negativeAmountCount++;
+    const rowSummary = {
+      invoiceNo,
+      company: companyPrefix,
+      client: clientName,
+      amount: amountStr,
+      paymentDate: paymentDateStr,
+      referenceNo,
+      description,
+    };
+
+    // 1. Negative amounts
+    if (!isNaN(amount) && amount < 0) {
+      negativeAmountRows.push(rowSummary);
       continue;
     }
 
-    // 2. Find Invoice
+    // 2. Missing invoice no
     if (!invoiceNo) {
-      skippedCount++;
+      missingInvoiceRows.push({ ...rowSummary, reason: 'Empty invoice no' });
       continue;
     }
 
-    let invoice: any = null;
-    if (process.env.DATABASE_URL) {
-      invoice = await prisma.invoice.findFirst({
-        where: { 
-          invoice_no: invoiceNo,
-          deleted_at: null 
-        },
-      });
+    // 3. Missing payment date
+    if (!paymentDateStr) {
+      missingDateRows.push(rowSummary);
+      // Don't continue — still check invoice
+    }
 
-      if (!invoice) {
-        invoiceNotFoundCount++;
-        console.log(`[Warning] Invoice not found: ${invoiceNo}`);
+    // 4. Check invoice exists in DB
+    const invoice = invoiceMap.get(invoiceNo);
+    if (!invoice) {
+      missingInvoiceRows.push({ ...rowSummary, reason: 'Not found in DB' });
+      continue;
+    }
+
+    // 5. Invalid date (not empty but unparseable)
+    if (paymentDateStr) {
+      const d = new Date(paymentDateStr);
+      if (isNaN(d.getTime())) {
+        missingDateRows.push({ ...rowSummary, reason: 'Invalid date format' });
         continue;
       }
+    } else {
+      // Already added to missingDateRows above, skip import
+      continue;
     }
 
-    // 3. Determine Payment Method
+    toImport.push({ record, invoice });
+  }
+
+  // --- Output List 1: Missing Invoice ---
+  console.log('');
+  console.log('='.repeat(60));
+  console.log(`LIST 1: Records with NO matching invoice in DB (${missingInvoiceRows.length} records)`);
+  console.log('='.repeat(60));
+  if (missingInvoiceRows.length === 0) {
+    console.log('(none)');
+  } else {
+    console.log('InvoiceNo | Company | Client | Amount | Date | Reason');
+    console.log('-'.repeat(80));
+    for (const r of missingInvoiceRows) {
+      console.log(`${r.invoiceNo} | ${r.company} | ${r.client} | ${r.amount} | ${r.paymentDate} | ${r.reason}`);
+    }
+  }
+
+  // --- Output List 2: Missing Payment Date ---
+  console.log('');
+  console.log('='.repeat(60));
+  console.log(`LIST 2: Records with MISSING or INVALID payment date (${missingDateRows.length} records)`);
+  console.log('='.repeat(60));
+  if (missingDateRows.length === 0) {
+    console.log('(none)');
+  } else {
+    console.log('InvoiceNo | Company | Client | Amount | Date | Reason');
+    console.log('-'.repeat(80));
+    for (const r of missingDateRows) {
+      console.log(`${r.invoiceNo} | ${r.company} | ${r.client} | ${r.amount} | ${r.paymentDate} | ${r.reason || 'Empty date'}`);
+    }
+  }
+
+  // --- Summary ---
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('SUMMARY');
+  console.log('='.repeat(60));
+  console.log(`Total CSV records:          ${records.length}`);
+  console.log(`Negative amounts (skipped): ${negativeAmountRows.length}`);
+  console.log(`Invoice not found in DB:    ${missingInvoiceRows.length}`);
+  console.log(`Missing/invalid date:       ${missingDateRows.length}`);
+  console.log(`Ready to import:            ${toImport.length}`);
+  console.log('');
+
+  if (dryRun) {
+    console.log('DRY RUN complete. No changes made.');
+    console.log('Re-run with DRY_RUN=false to perform actual import.');
+    return;
+  }
+
+  // --- LIVE IMPORT ---
+  console.log('Starting live import...');
+  let importedCount = 0;
+  let errorCount = 0;
+
+  for (const { record, invoice } of toImport) {
+    const invoiceNo = record['発票']?.trim() || record['發票']?.trim();
+    const amount = parseFloat(record['總額']?.trim());
+    const paymentDateStr = record['付款日期']?.trim();
+    const referenceNo = record['支票']?.trim() || '';
+    const companyPrefix = record['公司']?.trim() || '';
+    const description = record['描述']?.trim() || '';
+
+    // Determine Payment Method
     let paymentMethod = 'bank_transfer';
     if (referenceNo) {
       if (/^\d{6}$/.test(referenceNo) || /^[A-Za-z]+\d{6}$/.test(referenceNo)) {
         paymentMethod = 'cheque';
-      } else if (/^\d{7}$/.test(referenceNo)) {
-        paymentMethod = 'bank_transfer';
       }
     }
 
-    // 4. Get Company ID
     const companyId = companyMap.get(companyPrefix) || null;
-
     const paymentDate = new Date(paymentDateStr);
-    if (isNaN(paymentDate.getTime())) {
-      console.log(`[Warning] Invalid date for invoice ${invoiceNo}: ${paymentDateStr}`);
-      skippedCount++;
-      continue;
-    }
 
-    if (!dryRun) {
-      try {
-        await prisma.$transaction(async (tx) => {
-          // Create PaymentIn
-          const paymentIn = await tx.paymentIn.create({
-            data: {
-              date: paymentDate,
-              amount: amount,
-              source_type: 'invoice',
-              reference_no: referenceNo || null,
-              payment_method: paymentMethod,
-              payment_in_status: 'paid',
-              remarks: description || null,
-              // Note: company_id is not directly on PaymentIn in this schema, 
-              // it seems it's linked via Project or just not stored there.
-              // But we can store it in remarks if needed, or if the schema had it.
-              // Looking at schema, PaymentIn has project_id, contract_id, bank_account_id.
-            },
-          });
-
-          // Create Allocation
-          await tx.paymentInAllocation.create({
-            data: {
-              payment_in_allocation_payment_in_id: paymentIn.id,
-              payment_in_allocation_invoice_id: invoice.id,
-              payment_in_allocation_amount: amount,
-              payment_in_allocation_remarks: `Imported from legacy CSV: ${invoiceNo}`,
-            },
-          });
-
-          // Update Invoice paid_amount and outstanding
-          const newPaidAmount = Number(invoice.paid_amount) + amount;
-          const newOutstanding = Number(invoice.total_amount) - newPaidAmount - Number(invoice.retention_amount || 0);
-          
-          let newStatus = invoice.status;
-          if (newOutstanding <= 0) {
-            newStatus = 'paid';
-          } else if (newPaidAmount > 0) {
-            newStatus = 'partially_paid';
-          }
-
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              paid_amount: newPaidAmount,
-              outstanding: newOutstanding,
-              status: newStatus,
-            },
-          });
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Create PaymentIn
+        const paymentIn = await tx.paymentIn.create({
+          data: {
+            date: paymentDate,
+            amount: amount,
+            source_type: 'invoice',
+            reference_no: referenceNo || null,
+            payment_method: paymentMethod,
+            payment_in_status: 'paid',
+            remarks: description || null,
+          },
         });
-        importedCount++;
-      } catch (err) {
-        console.error(`[Error] Failed to import for invoice ${invoiceNo}:`, err);
-        skippedCount++;
-      }
-    } else {
+
+        // Create Allocation
+        await tx.paymentInAllocation.create({
+          data: {
+            payment_in_allocation_payment_in_id: paymentIn.id,
+            payment_in_allocation_invoice_id: invoice.id,
+            payment_in_allocation_amount: amount,
+            payment_in_allocation_remarks: `Imported from legacy CSV: ${invoiceNo}`,
+          },
+        });
+
+        // Update Invoice paid_amount and outstanding
+        const newPaidAmount = Number(invoice.paid_amount) + amount;
+        const newOutstanding = Number(invoice.total_amount) - newPaidAmount - Number((invoice as any).retention_amount || 0);
+
+        let newStatus = invoice.status;
+        if (newOutstanding <= 0) {
+          newStatus = 'paid';
+        } else if (newPaidAmount > 0) {
+          newStatus = 'partially_paid';
+        }
+
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            paid_amount: newPaidAmount,
+            outstanding: newOutstanding,
+            status: newStatus,
+          },
+        });
+      });
       importedCount++;
+    } catch (err) {
+      console.error(`[Error] Failed to import for invoice ${invoiceNo}:`, err);
+      errorCount++;
     }
   }
 
-  console.log('\n--- Import Summary ---');
-  console.log(`Total processed: ${records.length}`);
-  console.log(`Successfully ${dryRun ? 'validated' : 'imported'}: ${importedCount}`);
-  console.log(`Skipped (missing data/invalid date): ${skippedCount}`);
-  console.log(`Invoice not found: ${invoiceNotFoundCount}`);
-  console.log(`Negative amounts skipped: ${negativeAmountCount}`);
-  console.log('----------------------\n');
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('IMPORT COMPLETE');
+  console.log('='.repeat(60));
+  console.log(`Successfully imported: ${importedCount}`);
+  console.log(`Errors:                ${errorCount}`);
 }
 
 main()
