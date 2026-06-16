@@ -1001,6 +1001,7 @@ export class QuotationsService {
         quotation_parent_id: null,
         quotation_revision_number: 0,
         quotation_is_active: true,
+        created_by: userId ?? null,
         ...(pdf_font_sizes !== undefined
           ? { pdf_font_sizes: this.toNullableJson(pdf_font_sizes) }
           : {}),
