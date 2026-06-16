@@ -24,36 +24,34 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Diagnose or Force Deploy
+      - name: Diagnose
         run: |
-          ACTION="${{ github.event.inputs.action }}"
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
-          set -e
-          WORK_DIR="/opt/mingtat-erp"
-          
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
           echo "=== docker ps ==="
           docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}"
-          
-          echo ""
-          echo "=== Backend image digest ==="
-          docker inspect mingtat-erp-backend-1 --format '{{.Image}}' 2>/dev/null || docker inspect mingtat-erp-backend --format '{{.Image}}' 2>/dev/null || echo "container not found"
-          
           echo ""
           echo "=== Current git commit on EC2 ==="
-          cd "\${WORK_DIR}"
+          cd /opt/mingtat-erp
           git log --oneline -3
-          
-          if [ "\$ACTION" = "force-deploy" ]; then
-            echo ""
-            echo "=== Force deploy ==="
-            git fetch origin main
-            git reset --hard origin/main
-            docker compose pull
-            docker compose up -d --force-recreate
-            echo ""
-            echo "=== After force deploy ==="
-            docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}"
-          fi
+          ENDSSH
+
+      - name: Force Deploy
+        if: ${{ github.event.inputs.action == 'force-deploy' }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+          set -e
+          cd /opt/mingtat-erp
+          echo "=== Pulling latest git ==="
+          git fetch origin main
+          git reset --hard origin/main
+          echo "=== docker compose pull ==="
+          docker compose pull
+          echo "=== docker compose up ==="
+          docker compose up -d --force-recreate
+          echo "=== After force deploy ==="
+          docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}"
           ENDSSH
 
       - name: Cleanup SSH key
