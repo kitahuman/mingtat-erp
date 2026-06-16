@@ -54,8 +54,8 @@ jobs:
           echo "Using container: \$CONTAINER"
 
           echo "=== Copying files into container ==="
-          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/data /app/src/scripts/dist
-          docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/data/payment-in-import.csv"
+          docker exec "\${CONTAINER}" mkdir -p /app/src/scripts/dist/data
+          docker cp "\${WORK_DIR}/backend/src/scripts/data/payment-in-import.csv" "\${CONTAINER}:/app/src/scripts/dist/data/payment-in-import.csv"
           docker cp "\${WORK_DIR}/backend/src/scripts/dist/import-payments-csv.js" "\${CONTAINER}:/app/src/scripts/dist/import-payments-csv.js"
 
           echo "=== Running import script inside container ==="
