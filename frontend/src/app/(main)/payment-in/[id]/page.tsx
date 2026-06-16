@@ -7,6 +7,7 @@ import {
   bankAccountsApi,
   projectsApi,
   contractsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import AllocationsCard from './AllocationsCard';
 import DeductionsCard from './DeductionsCard';
@@ -72,6 +73,7 @@ interface PaymentInForm {
   contract_id: number | '';
   bank_account_id: number | '';
   reference_no: string;
+  payment_method: string;
   remarks: string;
   payment_in_status: string;
 }
@@ -86,13 +88,14 @@ interface PaymentInRecord {
   contract_id: number | null;
   bank_account_id: number | null;
   reference_no: string | null;
+  payment_method: string | null;
   remarks: string | null;
   payment_in_status: string;
   created_at: string;
   updated_at: string;
   project?: ProjectMini | null;
   contract?: ContractMini | null;
-  bank_account?: BankAccount | null;
+  bank_account?: (BankAccount & { company?: { id: number; name: string } | null }) | null;
   allocations?: unknown[];
   deductions?: unknown[];
 }
@@ -136,6 +139,7 @@ export default function PaymentInDetailPage() {
     contract_id: '',
     bank_account_id: '',
     reference_no: '',
+    payment_method: '',
     remarks: '',
     payment_in_status: 'paid',
   });
@@ -143,6 +147,7 @@ export default function PaymentInDetailPage() {
   const [projects, setProjects] = useState<ProjectMini[]>([]);
   const [contracts, setContracts] = useState<ContractMini[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
   const loadRecord = useCallback(() => {
     setLoading(true);
@@ -174,6 +179,10 @@ export default function PaymentInDetailPage() {
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
       .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods(r.data || []))
+      .catch(() => {});
   }, []);
 
   useRefetchOnFocus(() => {
@@ -188,6 +197,10 @@ export default function PaymentInDetailPage() {
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
+      .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods(r.data || []))
       .catch(() => {});
   });
 
@@ -221,6 +234,14 @@ export default function PaymentInDetailPage() {
     [bankAccounts],
   );
 
+  const paymentMethodOptions = useMemo(
+    () =>
+      paymentMethods
+        .filter((m: any) => m.is_active)
+        .map((m: any) => ({ value: m.label as string, label: m.label as string })),
+    [paymentMethods],
+  );
+
   function toForm(r: PaymentInRecord): PaymentInForm {
     return {
       date: r.date ? r.date.slice(0, 10) : '',
@@ -231,6 +252,7 @@ export default function PaymentInDetailPage() {
       contract_id: r.contract_id ?? '',
       bank_account_id: r.bank_account_id ?? '',
       reference_no: r.reference_no || '',
+      payment_method: r.payment_method || '',
       remarks: r.remarks || '',
       payment_in_status: r.payment_in_status || 'paid',
     };
@@ -254,6 +276,7 @@ export default function PaymentInDetailPage() {
           ? Number(form.bank_account_id)
           : null,
         reference_no: form.reference_no || null,
+        payment_method: form.payment_method || null,
         remarks: form.remarks || null,
         payment_in_status: form.payment_in_status || 'paid',
       };
@@ -569,6 +592,20 @@ export default function PaymentInDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                收款方式
+              </label>
+              <SearchableSelect
+                value={form.payment_method || null}
+                onChange={(v: string | number | null) =>
+                  setForm({ ...form, payment_method: v ? String(v) : '' })
+                }
+                options={paymentMethodOptions}
+                placeholder="選擇收款方式"
+                clearable
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 支票 / 交易號碼
               </label>
               <input
@@ -584,6 +621,9 @@ export default function PaymentInDetailPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Field label="公司">
+              {record.bank_account?.company?.name ?? null}
+            </Field>
             <Field label="銀行帳戶">
               {record.bank_account ? (
                 <span>
@@ -592,6 +632,9 @@ export default function PaymentInDetailPage() {
                   {record.bank_account.account_no})
                 </span>
               ) : null}
+            </Field>
+            <Field label="收款方式">
+              {record.payment_method ?? null}
             </Field>
             <Field label="支票 / 交易號碼">
               {record.reference_no ? (

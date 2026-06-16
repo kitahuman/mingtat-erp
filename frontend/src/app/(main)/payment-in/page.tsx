@@ -6,6 +6,7 @@ import {
   projectsApi,
   contractsApi,
   bankAccountsApi,
+  fieldOptionsApi,
 } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, {
@@ -70,10 +71,11 @@ export default function PaymentInPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
-  // Reference dataa
+  // Reference data
   const [projects, setProjects] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
   // Create form
   const defaultForm = {
@@ -85,6 +87,7 @@ export default function PaymentInPage() {
     contract_id: '',
     bank_account_id: '',
     reference_no: '',
+    payment_method: '',
     payment_in_status: 'unpaid',
     remarks: '',
   };
@@ -123,7 +126,7 @@ export default function PaymentInPage() {
     fetchData();
   }, [fetchData]);
 
-  useEffect(() => {
+  const loadReferenceData = useCallback(() => {
     projectsApi
       .list({ limit: 500 })
       .then((r) => setProjects(r.data?.data || []))
@@ -135,23 +138,18 @@ export default function PaymentInPage() {
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts(r.data || []))
+      .catch(() => {});
+    fieldOptionsApi
+      .getByCategory('payment_method')
+      .then((r) => setPaymentMethods(r.data || []))
       .catch(() => {});
   }, []);
 
-  useRefetchOnFocus(() => {
-    projectsApi
-      .list({ limit: 500 })
-      .then((r) => setProjects(r.data?.data || []))
-      .catch(() => {});
-    contractsApi
-      .list({ limit: 500 })
-      .then((r) => setContracts(r.data?.data || []))
-      .catch(() => {});
-    bankAccountsApi
-      .simple()
-      .then((r) => setBankAccounts(r.data || []))
-      .catch(() => {});
-  });
+  useEffect(() => {
+    loadReferenceData();
+  }, [loadReferenceData]);
+
+  useRefetchOnFocus(loadReferenceData);
 
   const projectOptions = useMemo(
     () =>
@@ -180,6 +178,14 @@ export default function PaymentInPage() {
     [bankAccounts],
   );
 
+  const paymentMethodOptions = useMemo(
+    () =>
+      paymentMethods
+        .filter((m: any) => m.is_active)
+        .map((m: any) => ({ value: m.label, label: m.label })),
+    [paymentMethods],
+  );
+
   const handleCreate = async () => {
     if (!form.date || !form.amount) return alert('請填寫日期和金額');
     setCreating(true);
@@ -193,6 +199,7 @@ export default function PaymentInPage() {
         bank_account_id: form.bank_account_id
           ? Number(form.bank_account_id)
           : null,
+        payment_method: form.payment_method || null,
       });
       setShowCreate(false);
       setForm(defaultForm);
@@ -259,6 +266,19 @@ export default function PaymentInPage() {
       ),
     },
     {
+      key: 'company',
+      label: '公司',
+      editable: false,
+      render: (_: any, row: any) => {
+        const company = row.bank_account?.company;
+        return company ? (
+          <span className="text-xs">{company.name}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
+      },
+    },
+    {
       key: 'contract',
       label: '合約',
       editable: false,
@@ -290,6 +310,21 @@ export default function PaymentInPage() {
           <span className="text-xs">
             {row.bank_account.bank_name} - {row.bank_account.account_no}
           </span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
+    },
+    {
+      key: 'payment_method',
+      label: '收款方式',
+      editType: 'select',
+      editOptions: [
+        { value: '', label: '（未指定）' },
+        ...paymentMethodOptions,
+      ],
+      render: (v: any) =>
+        v ? (
+          <span className="text-xs">{v}</span>
         ) : (
           <span className="text-gray-400">-</span>
         ),
@@ -471,9 +506,11 @@ export default function PaymentInPage() {
             管理所有收款記錄，包括 Payment Certificate、扣留金釋放及其他收入
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + 新增收款
-        </button>
+        {!isReadOnly() && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + 新增收款
+          </button>
+        )}
       </div>
 
       <InlineEditDataTable
@@ -483,21 +520,18 @@ export default function PaymentInPage() {
         page={page}
         limit={50}
         onPageChange={setPage}
-        onSearch={setSearch}
-        searchPlaceholder="搜尋收款記錄..."
-        filters={filters}
         loading={loading}
+        onRowClick={(row) => router.push(`/payment-in/${row.id}`)}
+        onSave={isReadOnly() ? undefined : handleSave}
+        onDelete={isReadOnly() ? undefined : handleDelete}
         sortBy={sortBy}
-        sortOrder={sortOrder}
-        onSort={(f, o) => {
-          setSortBy(f);
-          setSortOrder(o);
+        sortOrder={sortOrder as 'ASC' | 'DESC'}
+        onSort={(col, order) => {
+          setSortBy(col);
+          setSortOrder(order);
           setPage(1);
         }}
-        onSave={handleSave}
-        onDelete={handleDelete}
-        onRowClick={(row: any) => router.push(`/payment-in/${row.id}`)}
-        exportFilename="收款記錄"
+        filters={filters}
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleReset}
@@ -619,6 +653,22 @@ export default function PaymentInPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                收款方式
+              </label>
+              <SearchableSelect
+                value={form.payment_method || null}
+                onChange={(v: any) =>
+                  setForm({ ...form, payment_method: v || '' })
+                }
+                options={paymentMethodOptions}
+                placeholder="選擇收款方式"
+                clearable
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 支票/交易號碼
               </label>
               <input
@@ -631,8 +681,6 @@ export default function PaymentInPage() {
                 placeholder="選填"
               />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 狀態
@@ -650,18 +698,18 @@ export default function PaymentInPage() {
                 <option value="cancelled">取消</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                備註
-              </label>
-              <input
-                type="text"
-                value={form.remarks}
-                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-                className="input-field"
-                placeholder="選填"
-              />
-            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              備註
+            </label>
+            <input
+              type="text"
+              value={form.remarks}
+              onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+              className="input-field"
+              placeholder="選填"
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button

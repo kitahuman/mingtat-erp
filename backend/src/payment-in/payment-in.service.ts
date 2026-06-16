@@ -47,6 +47,7 @@ export class PaymentInService {
         account_name: true,
         bank_name: true,
         account_no: true,
+        company: { select: { id: true, name: true } },
       },
     },
     allocations: {
