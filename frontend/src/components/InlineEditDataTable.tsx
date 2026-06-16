@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DataTable from './DataTable';
 import { ColumnConfig } from './ColumnCustomizer';
@@ -253,7 +253,18 @@ export default function InlineEditDataTable({
     },
   };
 
-  const allColumns = [...displayColumns, actionColumn];
+  // Apply columnConfigs: filter visible columns and sort by order
+  const visibleDisplayColumns = useMemo(() => {
+    if (!columnConfigs || columnConfigs.length === 0) return displayColumns;
+    const sorted = [...columnConfigs]
+      .filter(c => c.visible)
+      .sort((a, b) => a.order - b.order);
+    return sorted
+      .map(cfg => displayColumns.find(c => c.key === cfg.key))
+      .filter((c): c is NonNullable<typeof c> => c != null);
+  }, [columnConfigs, displayColumns]);
+
+  const allColumns = [...visibleDisplayColumns, actionColumn];
 
   return (
     <DataTable
