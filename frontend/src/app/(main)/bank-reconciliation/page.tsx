@@ -494,7 +494,7 @@ export default function BankReconciliationPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 space-y-6 max-w-full">
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -860,20 +860,20 @@ export default function BankReconciliationPage() {
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelection(tx.id)} className="w-4 h-4 rounded border-gray-300" />
                         </div>
                       )}
-                      <div className="px-4 py-2.5 text-xs text-gray-600">
+                      <div className="px-4 py-2.5 text-sm text-gray-600">
                         <div>{format(new Date(tx.date), 'dd/MM/yy')}</div>
                         <div className="flex items-center gap-1 mt-0.5">{getSourceBadge(tx.bank_txn_source || 'csv')}</div>
                       </div>
-                      <div className="px-2 py-2.5 whitespace-normal break-words leading-relaxed text-xs" title={tx.description}>{tx.description || '—'}</div>
-                      <div className="px-2 py-2.5 text-center text-xs text-gray-500">{tx.reference_no || '—'}</div>
-                      <div className="px-2 py-2.5 text-right text-xs">
+                      <div className="px-2 py-2.5 whitespace-normal break-words leading-relaxed text-sm" title={tx.description}>{tx.description || '—'}</div>
+                      <div className="px-2 py-2.5 text-center text-sm text-gray-500">{tx.reference_no || '—'}</div>
+                      <div className="px-2 py-2.5 text-right text-sm">
                         {isWithdrawal ? <span className="text-red-600 font-medium">{fmtMoney(Math.abs(Number(tx.amount)))}</span> : '—'}
                       </div>
-                      <div className="px-2 py-2.5 text-right text-xs">
+                      <div className="px-2 py-2.5 text-right text-sm">
                         {!isWithdrawal ? <span className="text-green-600 font-medium">{fmtMoney(Number(tx.amount))}</span> : '—'}
                       </div>
                       {!selectionMode && (
-                        <div className="px-2 py-2.5 text-right text-xs text-gray-500">{tx.balance != null ? fmtMoney(Number(tx.balance)) : '—'}</div>
+                        <div className="px-2 py-2.5 text-right text-sm text-gray-500">{tx.balance != null ? fmtMoney(Number(tx.balance)) : '—'}</div>
                       )}
                       {/* Action buttons on statement side */}
                       <div className="px-1 py-2 flex items-center justify-center gap-0.5">
@@ -905,15 +905,15 @@ export default function BankReconciliationPage() {
                   <div className="flex-1 overflow-x-auto">
                     <div className={`min-w-[360px]`}>
                       <div className={`grid text-sm`} style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
-                        <div className="px-2 py-2.5 text-xs text-gray-600">
+                        <div className="px-2 py-2.5 text-sm text-gray-600">
                           {tx.match_status === 'matched' ? (
                             <span>{matchInfo.category}{matchInfo.isMulti ? ` (${matchInfo.records?.length}筆)` : ''}</span>
                           ) : tx.match_status === 'excluded' ? <span className="text-gray-400 italic">已排除</span> : ''}
                         </div>
-                        <div className="px-2 py-2.5 truncate text-xs" title={matchInfo.name}>
+                        <div className="px-2 py-2.5 truncate text-sm" title={matchInfo.name}>
                           {tx.match_status === 'matched' ? matchInfo.name : ''}
                         </div>
-                        <div className="px-2 py-2.5 text-xs">
+                        <div className="px-2 py-2.5 text-sm">
                           {tx.match_status === 'matched' && matchInfo.link ? (
                             <a href={matchInfo.link} className="text-blue-600 hover:underline" title="查看詳情">查看 →</a>
                           ) : ''}
