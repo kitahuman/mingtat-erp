@@ -345,6 +345,20 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
     setParsedRows(prev => prev.map((r, i) => i === idx ? { ...r, _selected: !r._selected } : r));
   };
 
+  const toggleDirection = (idx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setParsedRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      // Swap deposits and withdrawals
+      const oldDeposits = r.deposits || (r.amount > 0 ? r.amount : undefined);
+      const oldWithdrawals = r.withdrawals || (r.amount < 0 ? Math.abs(r.amount) : undefined);
+      const newDeposits = oldWithdrawals;
+      const newWithdrawals = oldDeposits;
+      const newAmount = newDeposits ? newDeposits : newWithdrawals ? -newWithdrawals : 0;
+      return { ...r, deposits: newDeposits, withdrawals: newWithdrawals, amount: newAmount };
+    }));
+  };
+
   const toggleAll = () => {
     const allSelected = parsedRows.every(r => r._selected);
     setParsedRows(prev => prev.map(r => ({ ...r, _selected: !allSelected })));
@@ -614,6 +628,7 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                     <th className="px-2 py-2 text-left text-gray-600 font-medium whitespace-nowrap">參考號</th>
                     <th className="px-2 py-2 text-right text-gray-600 font-medium whitespace-nowrap">提取</th>
                     <th className="px-2 py-2 text-right text-gray-600 font-medium whitespace-nowrap">存入</th>
+                    <th className="px-2 py-2 text-center text-gray-600 font-medium whitespace-nowrap w-8" title="切換存入/提取方向">↕</th>
                     <th className="px-2 py-2 text-right text-gray-600 font-medium whitespace-nowrap">結餘</th>
                   </tr>
                 </thead>
@@ -635,6 +650,15 @@ export default function ImportModal({ isOpen, onClose, bankAccountId, onSuccess,
                       </td>
                       <td className="px-2 py-1.5 text-right text-green-600">
                         {row.deposits !== undefined ? fmtMoney(row.deposits) : (row.amount >= 0 ? fmtMoney(row.amount) : '—')}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button
+                          onClick={(e) => toggleDirection(idx, e)}
+                          className="w-6 h-6 rounded hover:bg-gray-200 text-gray-400 hover:text-blue-600 transition-colors text-sm"
+                          title="切換存入/提取方向"
+                        >
+                          ↕
+                        </button>
                       </td>
                       <td
                         className="px-2 py-1.5 text-right text-gray-600"
