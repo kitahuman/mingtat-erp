@@ -25,6 +25,10 @@ interface FindAllQuery {
   filter_company?: string;
   filter_payment_method?: string;
   filter_bank_account_id?: string;
+  filter_reference_no?: string;
+  filter_remarks?: string;
+  filter_amount_min?: string;
+  filter_amount_max?: string;
 }
 
 interface CreatePaymentOutInput {
@@ -155,6 +159,20 @@ export class PaymentOutService {
           .map(a => a.id);
         if (matchedIds.length) where.bank_account_id = { in: matchedIds };
       }
+    }
+    if (query.filter_reference_no) {
+      const vals = query.filter_reference_no.split(',').filter(Boolean);
+      if (vals.length) where.reference_no = { in: vals };
+    }
+    if (query.filter_remarks) {
+      const vals = query.filter_remarks.split(',').filter(Boolean);
+      if (vals.length) where.remarks = { in: vals };
+    }
+    if (query.filter_amount_min || query.filter_amount_max) {
+      const amtFilter: Prisma.DecimalFilter = {};
+      if (query.filter_amount_min) amtFilter.gte = parseFloat(query.filter_amount_min);
+      if (query.filter_amount_max) amtFilter.lte = parseFloat(query.filter_amount_max);
+      where.amount = amtFilter;
     }
     if (query.date_from || query.date_to) {
       const dateFilter: Prisma.DateTimeFilter = {};
@@ -567,6 +585,24 @@ export class PaymentOutService {
         orderBy: { bank_name: 'asc' },
       });
       return accounts.map(a => `${a.bank_name} - ${a.account_no}`);
+    }
+    if (column === 'reference_no') {
+      const records = await this.prisma.paymentOut.findMany({
+        select: { reference_no: true },
+        distinct: ['reference_no'],
+        where: { reference_no: { not: null } },
+        orderBy: { reference_no: 'asc' },
+      });
+      return records.map(r => r.reference_no!).filter(Boolean).sort();
+    }
+    if (column === 'remarks') {
+      const records = await this.prisma.paymentOut.findMany({
+        select: { remarks: true },
+        distinct: ['remarks'],
+        where: { remarks: { not: null } },
+        orderBy: { remarks: 'asc' },
+      });
+      return records.map(r => r.remarks!).filter(Boolean).sort();
     }
     return [];
   }

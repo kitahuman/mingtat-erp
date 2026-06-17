@@ -13,6 +13,7 @@ export interface InlineColumn {
   render?: (value: any, row: any) => React.ReactNode;
   exportRender?: (value: any, row: any) => string;
   filterRender?: (value: any, row: any) => string;
+  filterable?: boolean;
   _width?: number;
   minWidth?: number; // explicit min-width override (passed through to DataTable)
   // Inline edit config

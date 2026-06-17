@@ -72,6 +72,8 @@ export default function PaymentInPage() {
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
   // Reference data
   const [projects, setProjects] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
@@ -108,6 +110,8 @@ export default function PaymentInPage() {
       Object.entries(columnFilters).forEach(([key, values]) => {
         if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
       });
+      if (amountMin) params.filter_amount_min = amountMin;
+      if (amountMax) params.filter_amount_max = amountMax;
       const res = await paymentInApi.list(params);
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
@@ -127,6 +131,8 @@ export default function PaymentInPage() {
     sortBy,
     sortOrder,
     columnFilters,
+    amountMin,
+    amountMax,
   ]);
 
   useEffect(() => {
@@ -257,6 +263,7 @@ export default function PaymentInPage() {
       label: '金額',
       sortable: true,
       editType: 'number',
+      filterable: false,
       render: (v: any) => <span className="font-mono">{fmt$(v)}</span>,
     },
     {
@@ -496,12 +503,34 @@ export default function PaymentInPage() {
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
+      <div className="flex items-center gap-1 text-sm">
+        <span className="text-gray-500 text-xs">金額</span>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="最小"
+          value={amountMin}
+          onChange={(e) => { setAmountMin(e.target.value); setPage(1); }}
+          className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+        />
+        <span className="text-gray-400">~</span>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="最大"
+          value={amountMax}
+          onChange={(e) => { setAmountMax(e.target.value); setPage(1); }}
+          className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+        />
+      </div>
       {(statusFilter ||
         sourceFilter ||
         projectFilter ||
         contractFilter ||
         dateFrom ||
-        dateTo) && (
+        dateTo ||
+        amountMin ||
+        amountMax) && (
         <button
           onClick={() => {
             setStatusFilter('');
@@ -510,6 +539,8 @@ export default function PaymentInPage() {
             setContractFilter('');
             setDateFrom('');
             setDateTo('');
+            setAmountMin('');
+            setAmountMax('');
             setPage(1);
           }}
           className="text-xs text-gray-500 hover:text-red-500"

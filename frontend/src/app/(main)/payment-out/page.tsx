@@ -48,6 +48,8 @@ export default function PaymentOutPage() {
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -80,6 +82,8 @@ export default function PaymentOutPage() {
       Object.entries(columnFilters).forEach(([key, values]) => {
         if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
       });
+      if (amountMin) params.filter_amount_min = amountMin;
+      if (amountMax) params.filter_amount_max = amountMax;
       const res = await paymentOutApi.list(params);
       setData(res.data?.data || []);
       setTotal(res.data?.total || 0);
@@ -88,7 +92,7 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters]);
+  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters, amountMin, amountMax]);
 
   useEffect(() => {
     fetchData();
@@ -230,6 +234,7 @@ export default function PaymentOutPage() {
       label: '金額',
       sortable: true,
       editType: 'number',
+      filterable: false,
       minWidth: 110,
       render: (v: any) => (
         <span className="font-mono whitespace-nowrap">
@@ -368,7 +373,7 @@ export default function PaymentOutPage() {
     handleColumnResize,
   } = useColumnConfig('payment-out', columns);
 
-  const hasFilters = !!(companyFilter || statusFilter || dateFrom || dateTo);
+  const hasFilters = !!(companyFilter || statusFilter || dateFrom || dateTo || amountMin || amountMax);
 
   const filters = (
     <div className="flex flex-wrap gap-2 items-center">
@@ -420,6 +425,26 @@ export default function PaymentOutPage() {
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
+      <div className="flex items-center gap-1 text-sm">
+        <span className="text-gray-500 text-xs">金額</span>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="最小"
+          value={amountMin}
+          onChange={(e) => { setAmountMin(e.target.value); setPage(1); }}
+          className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+        />
+        <span className="text-gray-400">~</span>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="最大"
+          value={amountMax}
+          onChange={(e) => { setAmountMax(e.target.value); setPage(1); }}
+          className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+        />
+      </div>
       {hasFilters && (
         <button
           onClick={() => {
@@ -427,6 +452,8 @@ export default function PaymentOutPage() {
             setStatusFilter('');
             setDateFrom('');
             setDateTo('');
+            setAmountMin('');
+            setAmountMax('');
             setPage(1);
           }}
           className="text-xs text-gray-500 hover:text-red-500"

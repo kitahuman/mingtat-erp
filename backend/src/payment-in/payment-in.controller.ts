@@ -47,6 +47,10 @@ export class PaymentInController {
     @Query('filter_company') filter_company?: string,
     @Query('filter_payment_method') filter_payment_method?: string,
     @Query('filter_bank_account_id') filter_bank_account_id?: string,
+    @Query('filter_reference_no') filter_reference_no?: string,
+    @Query('filter_remarks') filter_remarks?: string,
+    @Query('filter_amount_min') filter_amount_min?: string,
+    @Query('filter_amount_max') filter_amount_max?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : undefined,
@@ -65,6 +69,10 @@ export class PaymentInController {
       filter_company,
       filter_payment_method,
       filter_bank_account_id,
+      filter_reference_no,
+      filter_remarks,
+      filter_amount_min,
+      filter_amount_max,
     });
   }
 

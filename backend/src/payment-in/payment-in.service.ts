@@ -32,6 +32,10 @@ interface FindAllQuery {
   filter_company?: string;
   filter_payment_method?: string;
   filter_bank_account_id?: string;
+  filter_reference_no?: string;
+  filter_remarks?: string;
+  filter_amount_min?: string;
+  filter_amount_max?: string;
 }
 
 @Injectable()
@@ -144,6 +148,20 @@ export class PaymentInService {
         if (matchedIds.length) where.bank_account_id = { in: matchedIds };
       }
     }
+    if (query.filter_reference_no) {
+      const vals = query.filter_reference_no.split(',').filter(Boolean);
+      if (vals.length) where.reference_no = { in: vals };
+    }
+    if (query.filter_remarks) {
+      const vals = query.filter_remarks.split(',').filter(Boolean);
+      if (vals.length) where.remarks = { in: vals };
+    }
+    if (query.filter_amount_min || query.filter_amount_max) {
+      const amtFilter: Prisma.DecimalFilter = {};
+      if (query.filter_amount_min) amtFilter.gte = parseFloat(query.filter_amount_min);
+      if (query.filter_amount_max) amtFilter.lte = parseFloat(query.filter_amount_max);
+      where.amount = amtFilter;
+    }
     if (query.date_from || query.date_to) {
       const dateFilter: Prisma.DateTimeFilter = {};
       if (query.date_from) dateFilter.gte = new Date(query.date_from);
@@ -162,15 +180,24 @@ export class PaymentInService {
       this.prisma.paymentIn.count({ where }),
     ]);
 
-    // Enrich with reconciliation status from junction table
+    // Enrich with reconciliation status from both junction table (new) and legacy matched_id (old)
     const ids = data.map((d) => d.id);
-    const matchEntries = ids.length
-      ? await this.prisma.bankTransactionMatch.findMany({
-          where: { matched_type: 'payment_in', matched_id: { in: ids } },
-          select: { matched_id: true },
-        })
-      : [];
-    const reconciledIds = new Set(matchEntries.map((m) => m.matched_id));
+    const [matchEntries, legacyMatches] = ids.length
+      ? await Promise.all([
+          this.prisma.bankTransactionMatch.findMany({
+            where: { matched_type: 'payment_in', matched_id: { in: ids } },
+            select: { matched_id: true },
+          }),
+          this.prisma.bankTransaction.findMany({
+            where: { matched_type: 'payment_in', matched_id: { in: ids }, match_status: 'matched' },
+            select: { matched_id: true },
+          }),
+        ])
+      : [[], []];
+    const reconciledIds = new Set([
+      ...matchEntries.map((m) => m.matched_id),
+      ...legacyMatches.map((m) => m.matched_id!),
+    ]);
     const enriched = data.map((d) => ({
       ...d,
       is_reconciled: reconciledIds.has(d.id),
@@ -364,10 +391,28 @@ export class PaymentInService {
       });
       return accounts.map(a => `${a.bank_name} - ${a.account_no}`);
     }
+    if (column === 'reference_no') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { reference_no: true },
+        distinct: ['reference_no'],
+        where: { reference_no: { not: null } },
+        orderBy: { reference_no: 'asc' },
+      });
+      return records.map(r => r.reference_no!).filter(Boolean).sort();
+    }
+    if (column === 'remarks') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { remarks: true },
+        distinct: ['remarks'],
+        where: { remarks: { not: null } },
+        orderBy: { remarks: 'asc' },
+      });
+      return records.map(r => r.remarks!).filter(Boolean).sort();
+    }
     return [];
   }
 
-  // ══════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
   // Shared: recalculatePaymentStatus
   // ══════════════════════════════════════════════════════════════
 
