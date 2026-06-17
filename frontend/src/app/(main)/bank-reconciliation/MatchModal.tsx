@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { bankReconciliationApi } from '@/lib/api';
 import Modal from '@/components/Modal';
 import { format } from 'date-fns';
@@ -7,12 +7,15 @@ import { format } from 'date-fns';
 export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen && tx) {
       loadCandidates();
+      setSelectedIds(new Set());
     }
-    return () => { setCandidates([]); };
+    return () => { setCandidates([]); setSelectedIds(new Set()); };
   }, [isOpen, tx]);
 
   const loadCandidates = async () => {
@@ -27,6 +30,7 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
     }
   };
 
+  // Single match (legacy)
   const handleMatch = async (candidateId: number) => {
     const type = Number(tx.amount) >= 0 ? 'payment_in' : 'payment_out';
     await bankReconciliationApi.match(tx.id, type, candidateId);
@@ -34,10 +38,44 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
     onClose();
   };
 
+  // Multi-match
+  const handleMultiMatch = async () => {
+    if (selectedIds.size === 0) return;
+    setSubmitting(true);
+    try {
+      const type = Number(tx.amount) >= 0 ? 'payment_in' : 'payment_out';
+      const matches = Array.from(selectedIds).map((id) => ({ type, id }));
+      await bankReconciliationApi.multiMatch(tx.id, matches);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedTotal = useMemo(() => {
+    return candidates
+      .filter((c) => selectedIds.has(c.id))
+      .reduce((sum, c) => sum + Math.abs(Number(c.amount)), 0);
+  }, [selectedIds, candidates]);
+
   if (!tx) return null;
 
   const isCredit = Number(tx.amount) >= 0;
+  const txAmount = Math.abs(Number(tx.amount));
   const fmtMoney = (val: any) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sumMatches = selectedIds.size > 0 && Math.abs(selectedTotal - txAmount) < 0.01;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="手動配對交易" size="xl">
@@ -61,12 +99,41 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
             <div>
               <span className="text-gray-500 text-xs">金額</span>
               <div className={`text-lg font-bold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
-                ${fmtMoney(Math.abs(Number(tx.amount)))}
+                ${fmtMoney(txAmount)}
                 <span className="text-xs ml-1 font-normal">{isCredit ? '(存入)' : '(提取)'}</span>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Multi-match selection summary */}
+        {selectedIds.size > 0 && (
+          <div className={`p-3 rounded-lg border ${sumMatches ? 'bg-green-50 border-green-300' : 'bg-yellow-50 border-yellow-300'}`}>
+            <div className="flex items-center justify-between">
+              <div className="text-sm">
+                <span className="font-medium">已選擇 {selectedIds.size} 筆</span>
+                <span className="mx-2">|</span>
+                <span>合計: <strong className={sumMatches ? 'text-green-700' : 'text-yellow-700'}>${fmtMoney(selectedTotal)}</strong></span>
+                <span className="mx-2">|</span>
+                <span>差額: <strong className={sumMatches ? 'text-green-700' : 'text-red-600'}>${fmtMoney(Math.abs(selectedTotal - txAmount))}</strong></span>
+              </div>
+              <button
+                onClick={handleMultiMatch}
+                disabled={!sumMatches || submitting}
+                className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                  sumMatches
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {submitting ? '配對中...' : '確認多筆配對'}
+              </button>
+            </div>
+            {!sumMatches && (
+              <p className="text-xs text-yellow-600 mt-1">金額合計必須等於月結單金額才能配對</p>
+            )}
+          </div>
+        )}
 
         {/* Candidates */}
         <div>
@@ -74,6 +141,9 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
             建議配對選項
             <span className="text-xs font-normal text-gray-400">
               ({isCredit ? '收款記錄' : '付款記錄'}，±30日 / ±20%金額)
+            </span>
+            <span className="text-xs font-normal text-blue-500 ml-auto">
+              可勾選多筆進行多對一配對
             </span>
           </h3>
 
@@ -87,10 +157,20 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
               </div>
             ) : (
               candidates.map((c: any) => {
-                const amountMatch = Math.abs(Number(c.amount)) === Math.abs(Number(tx.amount));
+                const amountMatch = Math.abs(Number(c.amount)) === txAmount;
+                const isSelected = selectedIds.has(c.id);
                 return (
-                  <div key={c.id} className={`p-3 hover:bg-gray-50 transition-colors ${amountMatch ? 'bg-green-50/50' : ''}`}>
+                  <div key={c.id} className={`p-3 hover:bg-gray-50 transition-colors ${amountMatch ? 'bg-green-50/50' : ''} ${isSelected ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/50' : ''}`}>
                     <div className="flex justify-between items-start">
+                      {/* Checkbox for multi-select */}
+                      <div className="flex items-center mr-3 pt-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(c.id)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
                         {/* Line 1: Main info */}
                         <div className="flex items-center gap-2 mb-1">
@@ -128,7 +208,7 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
                           onClick={() => handleMatch(c.id)}
                           className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
                         >
-                          配對
+                          1:1配對
                         </button>
                       </div>
                     </div>

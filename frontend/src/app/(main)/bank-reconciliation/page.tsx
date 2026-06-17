@@ -459,20 +459,36 @@ export default function BankReconciliationPage() {
   };
 
   const getMatchedInfo = (tx: any) => {
+    // Multi-match: multiple records
+    if (tx.match_status === 'matched' && tx.matched_records && tx.matched_records.length > 1) {
+      const type = tx.matched_records[0]._matched_type;
+      return {
+        category: type === 'payment_in' ? '收款' : '支出',
+        name: `${tx.matched_records.length} 筆配對`,
+        link: '',
+        isMulti: true,
+        records: tx.matched_records,
+      };
+    }
+    // Single match
     if (tx.match_status !== 'matched' || !tx.matched_record)
-      return { category: '', name: '', link: '' };
+      return { category: '', name: '', link: '', isMulti: false, records: [] };
     const r = tx.matched_record;
-    if (tx.matched_type === 'payment_in') {
+    if ((tx.matched_type || r._matched_type) === 'payment_in') {
       return {
         category: '收款',
         name: r.project?.project_name || r.description || '未命名項目',
         link: `/payment-in/${r.id}`,
+        isMulti: false,
+        records: [r],
       };
     } else {
       return {
         category: '支出',
         name: r.expense?.item || r.description || '未命名支出',
         link: `/payment-out/${r.id}`,
+        isMulti: false,
+        records: [r],
       };
     }
   };
@@ -892,31 +908,54 @@ export default function BankReconciliationPage() {
                 transactions.map((tx: any) => {
                   const matchInfo = getMatchedInfo(tx);
                   return (
-                    <div key={tx.id} className={`grid min-w-[360px] text-sm hover:bg-gray-50 transition-colors ${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''}`} style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
-                      <div className="px-2 py-2.5 text-xs text-gray-600">
-                        {tx.match_status === 'matched' ? matchInfo.category : tx.match_status === 'excluded' ? <span className="text-gray-400 italic">已排除</span> : ''}
+                    <div key={tx.id} className={`${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''}`}>
+                      <div className={`grid min-w-[360px] text-sm hover:bg-gray-50 transition-colors`} style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
+                        <div className="px-2 py-2.5 text-xs text-gray-600">
+                          {tx.match_status === 'matched' ? (
+                            <span>{matchInfo.category}{matchInfo.isMulti ? ` (${matchInfo.records?.length}筆)` : ''}</span>
+                          ) : tx.match_status === 'excluded' ? <span className="text-gray-400 italic">已排除</span> : ''}
+                        </div>
+                        <div className="px-2 py-2.5 truncate text-xs" title={matchInfo.name}>
+                          {tx.match_status === 'matched' ? matchInfo.name : ''}
+                        </div>
+                        <div className="px-2 py-2.5 text-xs">
+                          {tx.match_status === 'matched' && matchInfo.link ? (
+                            <a href={matchInfo.link} className="text-blue-600 hover:underline" title="查看詳情">查看 →</a>
+                          ) : ''}
+                        </div>
+                        <div className="px-2 py-2 flex items-center justify-center gap-1">
+                          {tx.match_status === 'unmatched' ? (
+                            <div className="flex gap-1">
+                              <button onClick={() => { setSelectedTx(tx); setIsMatchModalOpen(true); }} className="px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors" title="手動配對">配對</button>
+                              <button onClick={async () => { await bankReconciliationApi.exclude(tx.id); loadData(); }} className="px-1.5 py-0.5 text-[10px] bg-gray-50 text-gray-500 rounded hover:bg-gray-100 transition-colors" title="排除此交易">排除</button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              {getMatchStatusIcon(tx.match_status)}
+                              <button onClick={async () => { await bankReconciliationApi.unmatch(tx.id); loadData(); }} className="px-1 py-0.5 text-[10px] text-gray-400 hover:text-red-500 transition-colors" title={tx.match_status === 'matched' ? '取消配對' : '恢復為未核對'}>↩</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="px-2 py-2.5 truncate text-xs" title={matchInfo.name}>
-                        {tx.match_status === 'matched' ? matchInfo.name : ''}
-                      </div>
-                      <div className="px-2 py-2.5 text-xs">
-                        {tx.match_status === 'matched' && matchInfo.link ? (
-                          <a href={matchInfo.link} className="text-blue-600 hover:underline" title="查看詳情">查看 →</a>
-                        ) : ''}
-                      </div>
-                      <div className="px-2 py-2 flex items-center justify-center gap-1">
-                        {tx.match_status === 'unmatched' ? (
-                          <div className="flex gap-1">
-                            <button onClick={() => { setSelectedTx(tx); setIsMatchModalOpen(true); }} className="px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors" title="手動配對">配對</button>
-                            <button onClick={async () => { await bankReconciliationApi.exclude(tx.id); loadData(); }} className="px-1.5 py-0.5 text-[10px] bg-gray-50 text-gray-500 rounded hover:bg-gray-100 transition-colors" title="排除此交易">排除</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            {getMatchStatusIcon(tx.match_status)}
-                            <button onClick={async () => { await bankReconciliationApi.unmatch(tx.id); loadData(); }} className="px-1 py-0.5 text-[10px] text-gray-400 hover:text-red-500 transition-colors" title={tx.match_status === 'matched' ? '取消配對' : '恢復為未核對'}>↩</button>
-                          </div>
-                        )}
-                      </div>
+                      {/* Multi-match expanded records */}
+                      {matchInfo.isMulti && matchInfo.records && matchInfo.records.length > 1 && (
+                        <div className="pl-4 pr-2 pb-2 space-y-1">
+                          {matchInfo.records.map((r: any, idx: number) => {
+                            const isPayIn = r._matched_type === 'payment_in';
+                            const rName = isPayIn
+                              ? (r.project?.project_name || '未命名項目')
+                              : (r.expense?.item || r.company?.name || '未命名支出');
+                            const rLink = isPayIn ? `/payment-in/${r.id}` : `/payment-out/${r.id}`;
+                            return (
+                              <div key={r.id || idx} className="flex items-center gap-2 text-[11px] text-gray-600 bg-gray-50 rounded px-2 py-1">
+                                <span className="font-medium truncate flex-1" title={rName}>{rName}</span>
+                                <span className="font-mono text-gray-700">${Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <a href={rLink} className="text-blue-500 hover:underline flex-shrink-0">查看</a>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })

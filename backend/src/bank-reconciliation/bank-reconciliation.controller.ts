@@ -209,6 +209,15 @@ export class BankReconciliationController {
     return this.service.applyMatch(+txId, type, matchedId);
   }
 
+  /** Multi-match: link multiple system records to a single bank transaction */
+  @Post('multi-match/:txId')
+  multiMatch(
+    @Param('txId') txId: string,
+    @Body('matches') matches: { type: 'payment_in' | 'payment_out'; id: number }[],
+  ) {
+    return this.service.applyMultiMatch(+txId, matches);
+  }
+
   @Post('unmatch/:txId')
   unmatch(@Param('txId') txId: string) {
     return this.service.unmatch(+txId);

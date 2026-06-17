@@ -2417,10 +2417,25 @@ model BankTransaction {
   updated_at      DateTime @default(now()) @updatedAt
 
   bank_account BankAccount @relation(fields: [bank_account_id], references: [id], onDelete: Restrict)
+  matches      BankTransactionMatch[]
 
   @@index([bank_account_id, date])
   @@index([match_status])
   @@map("bank_transactions")
+}
+
+model BankTransactionMatch {
+  id                  Int      @id @default(autoincrement())
+  bank_transaction_id Int
+  matched_type        String   @db.VarChar(30) // payment_in | payment_out
+  matched_id          Int      // PaymentIn.id or PaymentOut.id
+  created_at          DateTime @default(now())
+
+  bank_transaction BankTransaction @relation(fields: [bank_transaction_id], references: [id], onDelete: Cascade)
+
+  @@index([bank_transaction_id])
+  @@index([matched_type, matched_id])
+  @@map("bank_transaction_matches")
 }
 
 // ══════════════════════════════════════════════════════════════

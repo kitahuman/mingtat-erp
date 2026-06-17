@@ -162,7 +162,21 @@ export class PaymentInService {
       this.prisma.paymentIn.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    // Enrich with reconciliation status from junction table
+    const ids = data.map((d) => d.id);
+    const matchEntries = ids.length
+      ? await this.prisma.bankTransactionMatch.findMany({
+          where: { matched_type: 'payment_in', matched_id: { in: ids } },
+          select: { matched_id: true },
+        })
+      : [];
+    const reconciledIds = new Set(matchEntries.map((m) => m.matched_id));
+    const enriched = data.map((d) => ({
+      ...d,
+      is_reconciled: reconciledIds.has(d.id),
+    }));
+
+    return { data: enriched, total, page, limit };
   }
 
   async findOne(id: number) {

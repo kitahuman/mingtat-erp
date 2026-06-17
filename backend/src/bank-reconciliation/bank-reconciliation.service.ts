@@ -39,6 +39,7 @@ export class BankReconciliationService {
         orderBy: [{ date: sortOrder }, { id: sortOrder }],
         skip: (page - 1) * limit,
         take: limit,
+        include: { matches: true },
       }),
       this.prisma.bankTransaction.count({ where }),
     ]);
@@ -47,35 +48,81 @@ export class BankReconciliationService {
     const enriched = await Promise.all(
       items.map(async (tx) => {
         let matched_record: any = null;
-        if (tx.match_status === 'matched' && tx.matched_id) {
-          if (tx.matched_type === 'payment_in') {
-            matched_record = await this.prisma.paymentIn.findUnique({
-              where: { id: tx.matched_id },
-              include: {
-                project: { select: { id: true, project_name: true, project_no: true } },
-                contract: { select: { id: true, contract_no: true, contract_name: true } },
-                bank_account: { select: { id: true, bank_name: true, account_no: true } },
-              },
-            });
-          } else if (tx.matched_type === 'payment_out') {
-            matched_record = await this.prisma.paymentOut.findUnique({
-              where: { id: tx.matched_id },
-              include: {
-                expense: {
-                  select: {
-                    id: true,
-                    item: true,
-                    supplier_name: true,
-                    category: { select: { id: true, name: true } },
+        let matched_records: any[] = [];
+
+        if (tx.match_status === 'matched') {
+          // Use junction table (supports both single and multi-match)
+          if (tx.matches && tx.matches.length > 0) {
+            for (const m of tx.matches) {
+              let record: any = null;
+              if (m.matched_type === 'payment_in') {
+                record = await this.prisma.paymentIn.findUnique({
+                  where: { id: m.matched_id },
+                  include: {
+                    project: { select: { id: true, project_name: true, project_no: true } },
+                    contract: { select: { id: true, contract_no: true, contract_name: true } },
+                    bank_account: { select: { id: true, bank_name: true, account_no: true } },
                   },
+                });
+              } else if (m.matched_type === 'payment_out') {
+                record = await this.prisma.paymentOut.findUnique({
+                  where: { id: m.matched_id },
+                  include: {
+                    expense: {
+                      select: {
+                        id: true,
+                        item: true,
+                        supplier_name: true,
+                        category: { select: { id: true, name: true } },
+                      },
+                    },
+                    company: { select: { id: true, name: true } },
+                    bank_account: { select: { id: true, bank_name: true, account_no: true } },
+                  },
+                });
+              }
+              if (record) {
+                matched_records.push({ ...record, _matched_type: m.matched_type });
+              }
+            }
+            // For backward compat: set matched_record to first if single
+            if (matched_records.length === 1) {
+              matched_record = matched_records[0];
+            }
+          } else if (tx.matched_id) {
+            // Fallback: legacy single match without junction table entry
+            if (tx.matched_type === 'payment_in') {
+              matched_record = await this.prisma.paymentIn.findUnique({
+                where: { id: tx.matched_id },
+                include: {
+                  project: { select: { id: true, project_name: true, project_no: true } },
+                  contract: { select: { id: true, contract_no: true, contract_name: true } },
+                  bank_account: { select: { id: true, bank_name: true, account_no: true } },
                 },
-                company: { select: { id: true, name: true } },
-                bank_account: { select: { id: true, bank_name: true, account_no: true } },
-              },
-            });
+              });
+            } else if (tx.matched_type === 'payment_out') {
+              matched_record = await this.prisma.paymentOut.findUnique({
+                where: { id: tx.matched_id },
+                include: {
+                  expense: {
+                    select: {
+                      id: true,
+                      item: true,
+                      supplier_name: true,
+                      category: { select: { id: true, name: true } },
+                    },
+                  },
+                  company: { select: { id: true, name: true } },
+                  bank_account: { select: { id: true, bank_name: true, account_no: true } },
+                },
+              });
+            }
+            if (matched_record) {
+              matched_records = [{ ...matched_record, _matched_type: tx.matched_type }];
+            }
           }
         }
-        return { ...tx, matched_record };
+        return { ...tx, matched_record, matched_records };
       }),
     );
 
@@ -495,6 +542,32 @@ export class BankReconciliationService {
           if (candidates.length === 1) {
             await this.applyMatch(tx.id, 'payment_in', candidates[0].id);
             matchedCount++;
+            matched = true;
+          }
+        }
+
+        // === Multi-match: same ref_no + same date, sum of amounts = bank amount ===
+        if (!matched && tx.reference_no) {
+          const multiCandidates = await this.prisma.paymentIn.findMany({
+            where: {
+              bank_account_id: bankAccountId,
+              reference_no: tx.reference_no,
+              date: tx.date,
+            },
+          });
+          if (multiCandidates.length > 1) {
+            const sum = multiCandidates.reduce(
+              (s, c) => s.add(c.amount),
+              new Prisma.Decimal(0),
+            );
+            if (sum.equals(txAmount)) {
+              await this.applyMultiMatch(
+                tx.id,
+                multiCandidates.map((c) => ({ type: 'payment_in' as const, id: c.id })),
+              );
+              matchedCount++;
+              matched = true;
+            }
           }
         }
       } else {
@@ -557,6 +630,32 @@ export class BankReconciliationService {
           if (candidates.length === 1) {
             await this.applyMatch(tx.id, 'payment_out', candidates[0].id);
             matchedCount++;
+            matched = true;
+          }
+        }
+
+        // === Multi-match: same ref_no + same date, sum of amounts = bank amount ===
+        if (!matched && tx.reference_no) {
+          const multiCandidates = await this.prisma.paymentOut.findMany({
+            where: {
+              bank_account_id: bankAccountId,
+              reference_no: tx.reference_no,
+              date: tx.date,
+            },
+          });
+          if (multiCandidates.length > 1) {
+            const sum = multiCandidates.reduce(
+              (s, c) => s.add(c.amount),
+              new Prisma.Decimal(0),
+            );
+            if (sum.equals(txAmount)) {
+              await this.applyMultiMatch(
+                tx.id,
+                multiCandidates.map((c) => ({ type: 'payment_out' as const, id: c.id })),
+              );
+              matchedCount++;
+              matched = true;
+            }
           }
         }
       }
@@ -571,25 +670,92 @@ export class BankReconciliationService {
   }
 
   async applyMatch(txId: number, type: 'payment_in' | 'payment_out', matchedId: number) {
-    return this.prisma.bankTransaction.update({
+    // Write to both legacy fields AND the new junction table
+    await this.prisma.$transaction(async (prisma) => {
+      await prisma.bankTransaction.update({
+        where: { id: txId },
+        data: {
+          match_status: 'matched',
+          matched_type: type,
+          matched_id: matchedId,
+        },
+      });
+      // Upsert into junction table (avoid duplicates)
+      const existing = await prisma.bankTransactionMatch.findFirst({
+        where: { bank_transaction_id: txId, matched_type: type, matched_id: matchedId },
+      });
+      if (!existing) {
+        await prisma.bankTransactionMatch.create({
+          data: { bank_transaction_id: txId, matched_type: type, matched_id: matchedId },
+        });
+      }
+    });
+    return this.prisma.bankTransaction.findUnique({ where: { id: txId } });
+  }
+
+  /**
+   * Multi-match: link multiple PaymentIn/PaymentOut records to a single BankTransaction.
+   * Used when the bank shows one lump-sum but the system has multiple split records.
+   */
+  async applyMultiMatch(
+    txId: number,
+    matches: { type: 'payment_in' | 'payment_out'; id: number }[],
+  ) {
+    if (!matches || matches.length === 0) {
+      throw new BadRequestException('至少需要一筆配對記錄');
+    }
+
+    await this.prisma.$transaction(async (prisma) => {
+      // Clear any existing matches for this transaction
+      await prisma.bankTransactionMatch.deleteMany({
+        where: { bank_transaction_id: txId },
+      });
+
+      // Insert new matches
+      await prisma.bankTransactionMatch.createMany({
+        data: matches.map((m) => ({
+          bank_transaction_id: txId,
+          matched_type: m.type,
+          matched_id: m.id,
+        })),
+      });
+
+      // Update the BankTransaction status
+      // For multi-match, set matched_type/matched_id to null (use junction table)
+      const isSingle = matches.length === 1;
+      await prisma.bankTransaction.update({
+        where: { id: txId },
+        data: {
+          match_status: 'matched',
+          matched_type: isSingle ? matches[0].type : null,
+          matched_id: isSingle ? matches[0].id : null,
+        },
+      });
+    });
+
+    return this.prisma.bankTransaction.findUnique({
       where: { id: txId },
-      data: {
-        match_status: 'matched',
-        matched_type: type,
-        matched_id: matchedId,
-      },
+      include: { matches: true },
     });
   }
 
   async unmatch(txId: number) {
-    return this.prisma.bankTransaction.update({
-      where: { id: txId },
-      data: {
-        match_status: 'unmatched',
-        matched_type: null,
-        matched_id: null,
-      },
+    await this.prisma.$transaction(async (prisma) => {
+      // Clear junction table entries
+      await prisma.bankTransactionMatch.deleteMany({
+        where: { bank_transaction_id: txId },
+      });
+      // Clear legacy fields
+      await prisma.bankTransaction.update({
+        where: { id: txId },
+        data: {
+          match_status: 'unmatched',
+          matched_type: null,
+          matched_id: null,
+        },
+      });
     });
+    return this.prisma.bankTransaction.findUnique({ where: { id: txId } });
   }
 
   async exclude(txId: number, remarks?: string) {

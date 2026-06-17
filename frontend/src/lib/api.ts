@@ -1520,6 +1520,10 @@ export const bankReconciliationApi = {
     type: 'payment_in' | 'payment_out',
     matchedId: number,
   ) => api.post(`/bank-reconciliation/match/${txId}`, { type, matchedId }),
+  multiMatch: (
+    txId: number,
+    matches: { type: string; id: number }[],
+  ) => api.post(`/bank-reconciliation/multi-match/${txId}`, { matches }),
   unmatch: (txId: number) => api.post(`/bank-reconciliation/unmatch/${txId}`),
   exclude: (txId: number, remarks?: string) =>
     api.post(`/bank-reconciliation/exclude/${txId}`, { remarks }),
