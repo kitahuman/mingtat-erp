@@ -1,0 +1,40 @@
+name: Merge Duplicate PaymentIn Live DCL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Copy SQL script to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no \
+            scripts/merge-duplicate-payments-live.sql \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/merge_live.sql
+
+      - name: Run live merge SQL on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=30 \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+          cd /opt/mingtat-erp/backend
+          export $(cat .env | grep -v '^#' | grep DATABASE_URL | xargs)
+          PGPASSWORD=$(echo $DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') \
+          psql "$DATABASE_URL" -f /tmp/merge_live.sql
+          rm -f /tmp/merge_live.sql
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa ~/.ssh/known_hosts
