@@ -1,4 +1,4 @@
-name: Merge Duplicate PaymentIn - Dry Run (DCL)
+name: Merge Duplicate PaymentIn Dry Run DCL
 
 on:
   workflow_dispatch:
