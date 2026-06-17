@@ -471,6 +471,8 @@ export default function PaymentInPage() {
     handleReset,
     columnWidths,
     handleColumnResize,
+    handleSavePersonal,
+    handleSaveDefault,
   } = useColumnConfig('payment-in', columns);
 
   const filters = (
@@ -639,6 +641,8 @@ export default function PaymentInPage() {
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
         serverSideFilter={true}

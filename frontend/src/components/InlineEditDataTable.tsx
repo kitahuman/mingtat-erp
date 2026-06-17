@@ -46,6 +46,8 @@ interface InlineEditDataTableProps {
   columnConfigs?: ColumnConfig[];
   onColumnConfigChange?: (configs: ColumnConfig[]) => void;
   onColumnConfigReset?: () => void;
+  onColumnConfigSavePersonal?: (configs: ColumnConfig[]) => Promise<void>;
+  onColumnConfigSaveDefault?: (configs: ColumnConfig[]) => Promise<void>;
   columnWidths?: Record<string, number>;
   onColumnResize?: (key: string, width: number) => void;
   // Inline edit
@@ -74,6 +76,7 @@ export default function InlineEditDataTable({
   searchPlaceholder, searchInputClassName, onRowClick, filters, actions, loading,
   sortBy, sortOrder, onSort, exportFilename, onExportFetchAll,
   columnConfigs, onColumnConfigChange, onColumnConfigReset,
+  onColumnConfigSavePersonal, onColumnConfigSaveDefault,
   columnWidths, onColumnResize,
   onSave, onDelete, idField = 'id',
   serverSideFilter, columnFilters, onColumnFilterChange, onFetchFilterOptions,
@@ -290,6 +293,8 @@ export default function InlineEditDataTable({
       columnConfigs={columnConfigs}
       onColumnConfigChange={onColumnConfigChange}
       onColumnConfigReset={onColumnConfigReset}
+      onColumnConfigSavePersonal={onColumnConfigSavePersonal}
+      onColumnConfigSaveDefault={onColumnConfigSaveDefault}
       columnWidths={columnWidths}
       onColumnResize={onColumnResize}
       serverSideFilter={serverSideFilter}

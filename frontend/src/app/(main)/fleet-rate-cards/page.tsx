@@ -419,6 +419,8 @@ export default function FleetRateCardsPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('fleet-rate-cards', columns);
 
@@ -451,6 +453,8 @@ export default function FleetRateCardsPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

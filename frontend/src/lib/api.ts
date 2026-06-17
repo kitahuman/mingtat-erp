@@ -2162,3 +2162,12 @@ export const paymentInSourceTypesApi = {
     api.patch(`/settings/payment-in-source-types/${id}`, data),
   delete: (id: number) => api.delete(`/settings/payment-in-source-types/${id}`),
 };
+
+export const columnPreferencesApi = {
+  get: (pageKey: string) => api.get(`/column-preferences/${pageKey}`),
+  savePersonal: (pageKey: string, columnsConfig: { key: string; visible: boolean; order: number }[]) =>
+    api.put(`/column-preferences/${pageKey}`, { columns_config: columnsConfig }),
+  saveDefault: (pageKey: string, columnsConfig: { key: string; visible: boolean; order: number }[]) =>
+    api.put(`/column-preferences/${pageKey}/default`, { columns_config: columnsConfig }),
+  resetPersonal: (pageKey: string) => api.delete(`/column-preferences/${pageKey}`),
+};

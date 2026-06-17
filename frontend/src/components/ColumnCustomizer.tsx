@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '@/lib/auth';
 
 export interface ColumnConfig {
   key: string;
@@ -14,12 +15,19 @@ interface Props {
   columns: ColumnConfig[];
   onChange: (columns: ColumnConfig[]) => void;
   onReset: () => void;
+  onSavePersonal?: (columns: ColumnConfig[]) => Promise<void>;
+  onSaveDefault?: (columns: ColumnConfig[]) => Promise<void>;
 }
 
-export default function ColumnCustomizer({ columns, onChange, onReset }: Props) {
+export default function ColumnCustomizer({ columns, onChange, onReset, onSavePersonal, onSaveDefault }: Props) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [isOpen, setIsOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
+  const [saving, setSaving] = useState<'personal' | 'default' | 'reset' | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +86,47 @@ export default function ColumnCustomizer({ columns, onChange, onReset }: Props) 
     };
   }, [isOpen, updatePosition]);
 
+  const showSuccess = (msg: string) => {
+    setSavedMsg(msg);
+    setTimeout(() => setSavedMsg(null), 2000);
+  };
+
+  const handleSavePersonal = async () => {
+    if (!onSavePersonal) return;
+    setSaving('personal');
+    try {
+      await onSavePersonal(columns);
+      showSuccess('個人偏好已儲存');
+    } catch {
+      showSuccess('儲存失敗，請重試');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveDefault = async () => {
+    if (!onSaveDefault) return;
+    setSaving('default');
+    try {
+      await onSaveDefault(columns);
+      showSuccess('全域預設已設定');
+    } catch {
+      showSuccess('設定失敗，請重試');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleReset = async () => {
+    setSaving('reset');
+    try {
+      await onReset();
+      showSuccess('已重置為預設');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const toggleVisibility = (key: string) => {
     const updated = columns.map(c => c.key === key ? { ...c, visible: !c.visible } : c);
     // Ensure at least one column is visible
@@ -113,15 +162,45 @@ export default function ColumnCustomizer({ columns, onChange, onReset }: Props) 
     >
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="text-sm font-bold text-gray-900">自訂欄位</h3>
-        <div className="flex items-center gap-2">
-          <button onClick={onReset} className="text-xs text-blue-600 hover:text-blue-800">
-            重置預設
+        <div className="flex items-center gap-1">
+          {isAdmin && onSaveDefault && (
+            <button
+              onClick={handleSaveDefault}
+              disabled={saving !== null}
+              className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-50 transition-colors"
+              title="設定為所有用戶的預設欄位"
+            >
+              {saving === 'default' ? '設定中…' : '設定預設'}
+            </button>
+          )}
+          {onSavePersonal && (
+            <button
+              onClick={handleSavePersonal}
+              disabled={saving !== null}
+              className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 transition-colors"
+              title="儲存個人欄位偏好"
+            >
+              {saving === 'personal' ? '儲存中…' : '儲存偏好'}
+            </button>
+          )}
+          <button
+            onClick={handleReset}
+            disabled={saving !== null}
+            className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 transition-colors"
+            title="重置為預設欄位"
+          >
+            {saving === 'reset' ? '重置中…' : '重置'}
           </button>
-          <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">
+          <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none ml-1">
             ×
           </button>
         </div>
       </div>
+      {savedMsg && (
+        <div className="px-4 py-2 bg-green-50 border-b border-green-100">
+          <p className="text-xs text-green-700">{savedMsg}</p>
+        </div>
+      )}
       <div className="max-h-80 overflow-y-auto p-2">
         {columns.map((col, index) => (
           <div

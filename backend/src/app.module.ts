@@ -80,6 +80,7 @@ import { AiPayrollModule } from './ai-payroll/ai-payroll.module';
 import { AiPayrollSessionModule } from './ai-payroll-session/ai-payroll-session.module';
 import { AiActivityLogModule } from './ai-activity-log/ai-activity-log.module';
 import { SettingsModule } from './settings/settings.module';
+import { ColumnPreferencesModule } from './column-preferences/column-preferences.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
 @Module({
@@ -186,6 +187,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     AiPayrollModule,
     AiPayrollSessionModule,
     SettingsModule,
+    ColumnPreferencesModule,
   ],
   providers: [
     {

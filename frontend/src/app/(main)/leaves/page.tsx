@@ -81,6 +81,8 @@ export default function LeavesPage() {
     handleReset,
     columnWidths,
     handleColumnResize,
+    handleSavePersonal,
+    handleSaveDefault,
   } = useColumnConfig('leaves', DEFAULT_COLUMNS);
 
   useEffect(() => {
@@ -447,6 +449,8 @@ export default function LeavesPage() {
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
       />

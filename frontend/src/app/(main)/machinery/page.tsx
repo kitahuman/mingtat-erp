@@ -309,6 +309,8 @@ export default function MachineryPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('machinery', columns);
 
@@ -341,6 +343,8 @@ export default function MachineryPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

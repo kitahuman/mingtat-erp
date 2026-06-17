@@ -7,6 +7,7 @@ import DataTable from '@/components/DataTable';
 import type { ColumnConfig } from '@/components/ColumnCustomizer';
 import { fmtDate } from '@/lib/dateUtils';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 
 const STATUS_LABELS: Record<string, string> = {
   preparing: '準備中',
@@ -158,8 +159,14 @@ export default function PayrollRecordsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [totals, setTotals] = useState<PayrollTotals | null>(null);
-  const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(loadColumnConfigs);
   const [generatingMpfExpense, setGeneratingMpfExpense] = useState(false);
+  const {
+    columnConfigs,
+    handleColumnConfigChange,
+    handleReset: handleColumnConfigReset,
+    handleSavePersonal: handleColumnConfigSavePersonal,
+    handleSaveDefault: handleColumnConfigSaveDefault,
+  } = useColumnConfig('payroll-records', DEFAULT_COLUMN_CONFIGS);
 
   useEffect(() => {
     companiesApi.simple().then((res) => setCompanies(res.data));
@@ -174,21 +181,6 @@ export default function PayrollRecordsPage() {
       .list({ limit: 999 })
       .then((res) => setEmployees(res.data.data || []));
   });
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      PAYROLL_RECORDS_COLUMNS_STORAGE_KEY,
-      JSON.stringify(columnConfigs),
-    );
-  }, [columnConfigs]);
-
-  const handleColumnConfigChange = (configs: ColumnConfig[]) => {
-    setColumnConfigs(normalizeColumnConfigs(configs));
-  };
-
-  const handleColumnConfigReset = () => {
-    setColumnConfigs(DEFAULT_COLUMN_CONFIGS);
-  };
 
   const loadData = async () => {
     setLoading(true);
@@ -650,6 +642,8 @@ export default function PayrollRecordsPage() {
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleColumnConfigReset}
+        onColumnConfigSavePersonal={handleColumnConfigSavePersonal}
+        onColumnConfigSaveDefault={handleColumnConfigSaveDefault}
       />
     </div>
   );

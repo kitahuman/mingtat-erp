@@ -155,6 +155,8 @@ export default function InvoicePreparePage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
   } = useColumnConfig('invoice-prepare-work-logs', COLUMNS.map(c => ({ key: c.key, label: c.label })));
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -568,7 +570,7 @@ export default function InvoicePreparePage() {
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">共 {rows.length} 筆關聯工作紀錄；{draftFieldCount} 個草稿欄位</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
-          <ColumnCustomizer columns={columnConfigs} onChange={handleColumnConfigChange} onReset={handleReset} />
+          <ColumnCustomizer columns={columnConfigs} onChange={handleColumnConfigChange} onReset={handleReset} onSavePersonal={handleSavePersonal} onSaveDefault={handleSaveDefault} />
           <button
             onClick={handleSaveDrafts}
             disabled={saving}

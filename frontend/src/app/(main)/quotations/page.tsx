@@ -537,6 +537,8 @@ export default function QuotationsPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('quotations', columns);
 
@@ -564,6 +566,8 @@ export default function QuotationsPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

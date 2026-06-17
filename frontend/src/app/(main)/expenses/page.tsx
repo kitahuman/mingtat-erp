@@ -899,6 +899,8 @@ export default function ExpensesPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('expenses', columns);
 
@@ -923,6 +925,8 @@ export default function ExpensesPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

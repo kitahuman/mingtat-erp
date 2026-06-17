@@ -828,6 +828,8 @@ export default function WorkLogsPage() {
     columnWidths,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig(
     'work-logs',
@@ -2546,6 +2548,8 @@ export default function WorkLogsPage() {
             columns={columnConfigs}
             onChange={handleColumnConfigChange}
             onReset={handleReset}
+            onSavePersonal={handleSavePersonal}
+            onSaveDefault={handleSaveDefault}
           />
           <ExportButton
             columns={COLUMNS.map((col) => ({

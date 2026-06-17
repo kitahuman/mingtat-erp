@@ -133,6 +133,8 @@ export default function AttendancesPage() {
     handleReset,
     columnWidths,
     handleColumnResize,
+    handleSavePersonal,
+    handleSaveDefault,
   } = useColumnConfig('attendances', DEFAULT_COLUMNS);
 
   useEffect(() => {
@@ -748,6 +750,8 @@ export default function AttendancesPage() {
             columnConfigs={columnConfigs}
             onColumnConfigChange={handleColumnConfigChange}
             onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
             columnWidths={columnWidths}
             onColumnResize={handleColumnResize}
             serverSideFilter={true}

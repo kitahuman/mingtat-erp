@@ -1585,6 +1585,8 @@ export default function InvoicePricingPage() {
     visibleColumns: listVisibleColumns,
     handleColumnConfigChange: handleListColumnConfigChange,
     handleReset: handleListColumnReset,
+    handleSavePersonal: handleListSavePersonal,
+    handleSaveDefault: handleListSaveDefault,
   } = useColumnConfig('invoice-pricing-work-logs', COLUMNS);
 
   const loadReferenceData = useCallback(async () => {
@@ -3095,6 +3097,8 @@ export default function InvoicePricingPage() {
                         columns={listColumnConfigs}
                         onChange={handleListColumnConfigChange}
                         onReset={handleListColumnReset}
+                        onSavePersonal={handleListSavePersonal}
+                        onSaveDefault={handleListSaveDefault}
                       />
                       <button
                         onClick={handleAddListRow}

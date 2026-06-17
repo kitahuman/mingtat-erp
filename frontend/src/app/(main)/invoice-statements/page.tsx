@@ -167,6 +167,8 @@ export default function InvoiceStatementsPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('invoice-statements', STATEMENT_COLUMNS);
 
@@ -335,6 +337,8 @@ export default function InvoiceStatementsPage() {
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
         serverSideFilter

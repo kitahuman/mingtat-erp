@@ -388,6 +388,8 @@ export default function SalaryConfigPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig(`salary-config-${activeTab}`, columns);
 
@@ -433,6 +435,8 @@ export default function SalaryConfigPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

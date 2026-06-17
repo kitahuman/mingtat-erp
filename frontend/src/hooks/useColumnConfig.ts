@@ -1,6 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ColumnConfig } from '@/components/ColumnCustomizer';
+import { columnPreferencesApi } from '@/lib/api';
+
 interface Column {
   key: string;
   label: string;
@@ -23,6 +25,34 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
     }));
   }, [defaultColumns]);
 
+  const mergeWithDefaults = useCallback((saved: ColumnConfig[]): ColumnConfig[] => {
+    const savedKeys = new Set(saved.map(c => c.key));
+    const defaultKeys = new Set(defaultColumns.map(c => c.key));
+
+    // Keep saved configs for existing columns
+    const merged = saved.filter(c => defaultKeys.has(c.key));
+
+    // Add new columns that aren't in saved config
+    defaultColumns.forEach((col) => {
+      if (!savedKeys.has(col.key)) {
+        merged.push({
+          key: col.key,
+          label: col.label,
+          visible: true,
+          order: merged.length,
+        });
+      }
+    });
+
+    // Update labels from defaults (labels may change in code)
+    merged.forEach(c => {
+      const def = defaultColumns.find(d => d.key === c.key);
+      if (def) c.label = def.label;
+    });
+
+    return merged;
+  }, [defaultColumns]);
+
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>(() => {
     if (typeof window === 'undefined') return getDefaultConfig();
     try {
@@ -38,36 +68,43 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed: ColumnConfig[] = JSON.parse(saved);
-        // Merge with defaults: add new columns, remove deleted ones
-        const savedKeys = new Set(parsed.map(c => c.key));
-        const defaultKeys = new Set(defaultColumns.map(c => c.key));
-
-        // Keep saved configs for existing columns
-        const merged = parsed.filter(c => defaultKeys.has(c.key));
-
-        // Add new columns that aren't in saved config
-        defaultColumns.forEach((col) => {
-          if (!savedKeys.has(col.key)) {
-            merged.push({
-              key: col.key,
-              label: col.label,
-              visible: true,
-              order: merged.length,
-            });
-          }
-        });
-
-        // Update labels from defaults
-        merged.forEach(c => {
-          const def = defaultColumns.find(d => d.key === c.key);
-          if (def) c.label = def.label;
-        });
-
-        return merged;
+        return mergeWithDefaults(parsed);
       }
     } catch {}
     return getDefaultConfig();
   });
+
+  // Track whether we've loaded from API (to avoid overwriting with stale localStorage)
+  const apiLoadedRef = useRef(false);
+
+  // Load from API on mount
+  useEffect(() => {
+    if (apiLoadedRef.current) return;
+    apiLoadedRef.current = true;
+
+    columnPreferencesApi.get(pageKey).then(res => {
+      const { source, columns_config } = res.data;
+      if (source !== 'none' && Array.isArray(columns_config) && columns_config.length > 0) {
+        const merged = mergeWithDefaults(
+          columns_config.map((c: any) => ({
+            key: c.key,
+            label: c.label || defaultColumns.find(d => d.key === c.key)?.label || c.key,
+            visible: c.visible,
+            order: c.order,
+          }))
+        );
+        setColumnConfigs(merged);
+        // Also update localStorage to keep in sync
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(merged));
+          localStorage.setItem(versionKey, String(COLUMN_CONFIG_VERSION));
+        } catch {}
+      }
+    }).catch(() => {
+      // API failed (e.g. not logged in yet), keep localStorage value
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey]);
 
   // Save to localStorage whenever config changes
   useEffect(() => {
@@ -97,10 +134,40 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
     setColumnConfigs(configs);
   }, []);
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
+    // Delete personal preference from API
+    try {
+      await columnPreferencesApi.resetPersonal(pageKey);
+      // After reset, fetch the global default (or code default)
+      const res = await columnPreferencesApi.get(pageKey);
+      const { source, columns_config } = res.data;
+      if (source !== 'none' && Array.isArray(columns_config) && columns_config.length > 0) {
+        const merged = mergeWithDefaults(
+          columns_config.map((c: any) => ({
+            key: c.key,
+            label: c.label || defaultColumns.find(d => d.key === c.key)?.label || c.key,
+            visible: c.visible,
+            order: c.order,
+          }))
+        );
+        setColumnConfigs(merged);
+        return;
+      }
+    } catch {}
+    // Fall back to code default
     setColumnConfigs(getDefaultConfig());
     setColumnWidths({});
-  }, [getDefaultConfig]);
+  }, [pageKey, getDefaultConfig, mergeWithDefaults, defaultColumns]);
+
+  const handleSavePersonal = useCallback(async (configs: ColumnConfig[]) => {
+    const payload = configs.map(c => ({ key: c.key, visible: c.visible, order: c.order }));
+    await columnPreferencesApi.savePersonal(pageKey, payload);
+  }, [pageKey]);
+
+  const handleSaveDefault = useCallback(async (configs: ColumnConfig[]) => {
+    const payload = configs.map(c => ({ key: c.key, visible: c.visible, order: c.order }));
+    await columnPreferencesApi.saveDefault(pageKey, payload);
+  }, [pageKey]);
 
   const handleColumnResize = useCallback((key: string, width: number) => {
     setColumnWidths(prev => ({ ...prev, [key]: width }));
@@ -128,6 +195,8 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   };
 }

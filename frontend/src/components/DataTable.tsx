@@ -42,6 +42,8 @@ interface DataTableProps {
   columnConfigs?: ColumnConfig[];
   onColumnConfigChange?: (configs: ColumnConfig[]) => void;
   onColumnConfigReset?: () => void;
+  onColumnConfigSavePersonal?: (configs: ColumnConfig[]) => Promise<void>;
+  onColumnConfigSaveDefault?: (configs: ColumnConfig[]) => Promise<void>;
   columnWidths?: Record<string, number>;
   onColumnResize?: (key: string, width: number) => void;
   // Server-side column filter props
@@ -235,6 +237,8 @@ export default function DataTable({
   columnConfigs,
   onColumnConfigChange,
   onColumnConfigReset,
+  onColumnConfigSavePersonal,
+  onColumnConfigSaveDefault,
   columnWidths,
   onColumnResize,
   serverSideFilter,
@@ -426,6 +430,8 @@ export default function DataTable({
               columns={columnConfigs!}
               onChange={onColumnConfigChange!}
               onReset={onColumnConfigReset || (() => {})}
+              onSavePersonal={onColumnConfigSavePersonal}
+              onSaveDefault={onColumnConfigSaveDefault}
             />
           )}
         </div>

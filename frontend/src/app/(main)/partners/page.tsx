@@ -141,7 +141,9 @@ export default function PartnersPage() {
 
   const {
     columnConfigs, columnWidths, visibleColumns,
-    handleColumnConfigChange, handleReset, handleColumnResize,
+    handleColumnConfigChange, handleReset, handleSavePersonal,
+    handleSaveDefault,
+    handleColumnResize,
   } = useColumnConfig('partners', columns);
 
 
@@ -172,6 +174,8 @@ export default function PartnersPage() {
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
           columnWidths={columnWidths}
           onColumnResize={handleColumnResize}
           data={data}

@@ -872,6 +872,8 @@ export default function EmployeesPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig(`employees-${activeTab}`, defaultColumns);
 
@@ -1197,6 +1199,8 @@ export default function EmployeesPage() {
             columnConfigs={columnConfigs}
             onColumnConfigChange={handleColumnConfigChange}
             onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
             columnWidths={columnWidths}
             onColumnResize={handleColumnResize}
             data={data}

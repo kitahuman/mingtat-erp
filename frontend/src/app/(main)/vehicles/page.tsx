@@ -575,6 +575,8 @@ export default function VehiclesPage() {
     visibleColumns,
     handleColumnConfigChange,
     handleReset,
+    handleSavePersonal,
+    handleSaveDefault,
     handleColumnResize,
   } = useColumnConfig('vehicles', columns);
 
@@ -734,6 +736,8 @@ export default function VehiclesPage() {
             columnConfigs={columnConfigs}
             onColumnConfigChange={handleColumnConfigChange}
             onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
             columnWidths={columnWidths}
             onColumnResize={handleColumnResize}
             data={data}

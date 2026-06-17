@@ -381,6 +381,8 @@ export default function PaymentOutPage() {
     handleReset,
     columnWidths,
     handleColumnResize,
+    handleSavePersonal,
+    handleSaveDefault,
   } = useColumnConfig('payment-out', columns);
 
   const hasFilters = !!(companyFilter || statusFilter || dateFrom || dateTo || amountMin || amountMax);
@@ -512,6 +514,8 @@ export default function PaymentOutPage() {
         columnConfigs={columnConfigs}
         onColumnConfigChange={handleColumnConfigChange}
         onColumnConfigReset={handleReset}
+            onColumnConfigSavePersonal={handleSavePersonal}
+            onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
         onRowClick={(row: any) => router.push(`/payment-out/${row.id}`)}

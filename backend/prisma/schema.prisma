@@ -62,8 +62,24 @@ model User {
   web_push_subscriptions     WebPushSubscription[]
   document_folders_created   DocumentFolder[]           @relation("DocumentFolderCreatedBy")
   created_payrolls           Payroll[]                  @relation("PayrollCreatedBy")
+  column_preferences         UserColumnPreference[]
 
   @@map("users")
+}
+
+model UserColumnPreference {
+  ucp_id             Int      @id @default(autoincrement())
+  ucp_user_id        Int?
+  ucp_page_key       String   @db.VarChar(100)
+  ucp_columns_config Json     @default("[]")
+  ucp_created_at     DateTime @default(now())
+  ucp_updated_at     DateTime @default(now()) @updatedAt
+
+  user User? @relation(fields: [ucp_user_id], references: [id], onDelete: Cascade)
+
+  @@unique([ucp_user_id, ucp_page_key])
+  @@index([ucp_page_key])
+  @@map("user_column_preferences")
 }
 
 // ══════════════════════════════════════════════════════════════
