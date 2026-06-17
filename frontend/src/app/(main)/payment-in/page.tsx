@@ -399,7 +399,7 @@ export default function PaymentInPage() {
     {
       key: 'is_reconciled',
       label: '對帳',
-      width: 60,
+      _width: 60,
       render: (v: any) => v ? (
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600" title="已配對">✓</span>
       ) : (
