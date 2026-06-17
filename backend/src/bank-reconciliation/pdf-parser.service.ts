@@ -115,6 +115,7 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 - 如果只有部分交易顯示 balance，應使用相鄰可用 balance 點驗算該段區間的交易總和。若區間總和不符，必須檢查並修正該區間內可能判錯正負號或讀錯金額數字的交易。
 - running balance 驗算不只用來驗證存入/支出方向，也必須用來核對金額數字本身是否正確。當驗算不符時，AI 應重新檢查數字讀取，並優先以 running balance 的差值作為正確金額依據。
 - running balance 是銀行計算結果，必須視為最可靠依據；在有足夠 balance 資訊可驗算時，AI 應以 running balance 修正自己讀取的金額和方向。
+- 注意：部分銀行（如 HSBC）的月結單 Balance 欄只在每天最後一筆交易才顯示結餘，不是每筆都有。當某天有多筆交易但只有一個 balance 時，不能用 balance 差值反推個別交易的方向。此時必須以金額出現在 Deposit 欄還是 Withdrawal 欄為準。如果 PDF 表格有明確的 Deposit 和 Withdrawal 分欄，欄位位置永遠優先於 balance 反推。
 - 如果同一日期有多筆交易，每筆都要單獨列出。不要因為多筆交易金額相同就跳過，只要 reference_no 或 balance 不同，全部都是獨立交易，必須逐筆輸出。
 - 日期統一轉換為 YYYY-MM-DD 格式。
 ${identificationContext}
