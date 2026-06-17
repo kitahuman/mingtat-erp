@@ -6,10 +6,17 @@ export default function VersionBadge() {
   const [version, setVersion] = useState<{ commit: string; deployTime: string } | null>(null);
 
   useEffect(() => {
-    fetch('/version.json')
-      .then(res => res.json())
-      .catch(() => null)
-      .then(data => setVersion(data));
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api';
+    fetch(`${apiBase}/version`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setVersion({
+          commit: (data.commitSha ?? 'unknown').slice(0, 7),
+          deployTime: data.deployedAt ?? '',
+        });
+      })
+      .catch(() => null);
   }, []);
 
   if (!version) return null;
