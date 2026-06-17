@@ -6,30 +6,57 @@ on:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Run diagnostic SQL on EC2
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            docker exec mingtat-erp-postgres-1 psql -U postgres -d mingtat_erp -c "
-            SELECT '=== BankTransaction matched counts ===' as section;
-            SELECT COUNT(*) as total, COUNT(matched_id) as with_matched_id FROM bank_transactions;
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Run reconciled diagnostic
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+          cd /opt/mingtat-erp/backend
+          export $(cat .env | grep -v '^#' | grep DATABASE_URL | xargs)
 
-            SELECT '=== matched_type values ===' as section;
-            SELECT matched_type, COUNT(*) as cnt FROM bank_transactions WHERE matched_id IS NOT NULL GROUP BY matched_type;
+          echo "===== 1. BankTransaction matched counts ====="
+          psql "$DATABASE_URL" -c "
+          SELECT COUNT(*) as total, COUNT(matched_id) as with_matched_id FROM bank_transactions;
+          "
 
-            SELECT '=== Sample matched bank_transactions ===' as section;
-            SELECT id, matched_id, matched_type, match_status FROM bank_transactions WHERE matched_id IS NOT NULL LIMIT 5;
+          echo "===== 2. matched_type values ====="
+          psql "$DATABASE_URL" -c "
+          SELECT matched_type, COUNT(*) as cnt FROM bank_transactions WHERE matched_id IS NOT NULL GROUP BY matched_type;
+          "
 
-            SELECT '=== bank_transaction_matches count ===' as section;
-            SELECT COUNT(*) FROM bank_transaction_matches;
+          echo "===== 3. Sample matched bank_transactions ====="
+          psql "$DATABASE_URL" -c "
+          SELECT id, matched_id, matched_type, match_status FROM bank_transactions WHERE matched_id IS NOT NULL LIMIT 10;
+          "
 
-            SELECT '=== Sample junction table ===' as section;
-            SELECT * FROM bank_transaction_matches LIMIT 5;
+          echo "===== 4. bank_transaction_matches count ====="
+          psql "$DATABASE_URL" -c "
+          SELECT COUNT(*) as junction_count FROM bank_transaction_matches;
+          "
 
-            SELECT '=== PaymentIn IDs in BankTransaction.matched_id ===' as section;
-            SELECT bt.matched_id, bt.matched_type, pi.id as payment_in_id FROM bank_transactions bt JOIN payment_ins pi ON pi.id = bt.matched_id WHERE bt.matched_type = 'payment_in' LIMIT 5;
-            "
+          echo "===== 5. Sample junction table ====="
+          psql "$DATABASE_URL" -c "
+          SELECT * FROM bank_transaction_matches LIMIT 10;
+          "
+
+          echo "===== 6. PaymentIn IDs in BankTransaction.matched_id ====="
+          psql "$DATABASE_URL" -c "
+          SELECT bt.matched_id, bt.matched_type, pi.id as payment_in_id, pi.amount
+          FROM bank_transactions bt
+          JOIN payment_ins pi ON pi.id = bt.matched_id
+          WHERE bt.matched_type = 'payment_in'
+          LIMIT 10;
+          "
+
+          echo "===== 7. Check all distinct matched_type values (case sensitive) ====="
+          psql "$DATABASE_URL" -c "
+          SELECT DISTINCT matched_type FROM bank_transactions WHERE matched_id IS NOT NULL;
+          "
+          ENDSSH
