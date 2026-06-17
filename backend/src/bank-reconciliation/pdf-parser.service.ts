@@ -107,16 +107,30 @@ ${bankAccounts.map((a: any) => `- ID: ${a.id}, 銀行: ${a.bank_name}, 帳戶名
 - B/F BALANCE（承前結餘）不作為交易行，但必須提取其金額作為 opening_balance
 - 忽略頁眉、頁腳、廣告、注意事項等非交易內容
 - 存入（Deposit/存入）金額為正數，提取（Withdrawal/提取）金額為負數
-- **解析純文字時的特別注意**：文字提取後的格式可能因欄位對齊而包含大量空格，請根據欄位標題與數字的相對位置判斷金額屬於哪一欄。
-- 判斷每筆交易正負號時，必須依照金額出現在 Deposit/Deposits/存入 欄位或 Withdrawal/Withdrawals/提取 欄位的位置判斷正負；**欄位位置是最重要的主要依據**。
-- 如果金額位於 Deposit/Deposits/存入 欄位，該筆交易必須填入 deposits，amount 必須為正數；如果金額位於 Withdrawal/Withdrawals/提取 欄位，該筆交易必須填入 withdrawals，amount 必須為負數
-- 必須用 transaction description 交叉驗證欄位判斷：包含 "ATM WITHDRAWAL"、"WITHDRAWAL"、"CHEQUE"、"CHQ"、"CLEARING CHEQUE"、"CHARGES"、"FEE"、"AUTOPAY"、"PAYMENT"、"TRANSFER OUT" 等語意通常為支出；包含 "CHEQUE DEPOSIT"、"CASH DEPOSIT"、"CASH"、"DEPOSIT"、"TRANSFER IN"、"CREDIT" 等語意通常為存入。
-- 必須盡量使用月結單上的 running balance 驗算交易正負號：如果每筆交易都有 balance，逐筆驗算「前一筆 balance + deposits - withdrawals = 本筆 balance」。
-- 如果只有部分交易顯示 balance，應使用相鄰可用 balance 點驗算該段區間的交易總和。若區間總和不符，必須檢查並修正該區間內可能判錯正負號或讀錯金額數字的交易。
-- running balance 驗算不只用來驗證存入/支出方向，也必須用來核對金額數字本身是否正確。當驗算不符時，AI 應重新檢查數字讀取，並優先以 running balance 的差值作為正確金額依據。
-- running balance 是銀行計算結果，必須視為最可靠依據；在有足夠 balance 資訊可驗算時，AI 應以 running balance 修正自己讀取的金額和方向。
-- 如果同一日期有多筆交易，每筆都要單獨列出。不要因為多筆交易金額相同就跳過，只要 reference_no 或 balance 不同，全部都是獨立交易，必須逐筆輸出。
-- 日期統一轉換為 YYYY-MM-DD 格式。
+
+## 判斷存入/提取方向的優先順序（必須嚴格遵守）
+
+**第一優先：欄位位置（最可靠，必須最優先使用）**
+- 如果月結單表格有明確的 Deposit（存入）欄和 Withdrawal（提取）欄，金額出現在哪一欄就是哪個方向，這是絕對的判斷依據
+- 如果金額位於 Deposit/Deposits/存入 欄位 → 該筆交易 deposits 填入正數，amount 為正數
+- 如果金額位於 Withdrawal/Withdrawals/提取 欄位 → 該筆交易 withdrawals 填入正數，amount 為負數
+- **解析純文字時**：文字提取後因欄位對齊會有大量空格，必須根據欄位標題（Deposit/Withdrawal）與數字的水平位置（左右對齊）判斷金額屬於哪一欄，不能只看金額本身
+- **HSBC 月結單特別注意**：HSBC 格式為 Date | Details | Deposit | Withdrawal | Balance，Deposit 欄在左，Withdrawal 欄在右。純文字提取後，Deposit 欄的數字出現在行的中間偏左，Withdrawal 欄的數字出現在中間偏右。必須依據水平位置判斷，不能只看數字大小
+
+**第二優先：交易描述語意（輔助驗證）**
+- 包含 "ATM WITHDRAWAL"、"WITHDRAWAL"、"CHEQUE"、"CHQ"、"CLEARING CHEQUE"、"CHARGES"、"FEE"、"AUTOPAY"、"PAYMENT"、"TRANSFER OUT" 等語意通常為支出（Withdrawal）
+- 包含 "CHEQUE DEPOSIT"、"CASH DEPOSIT"、"CASH"、"DEPOSIT"、"TRANSFER IN"、"CREDIT" 等語意通常為存入（Deposit）
+- 如果描述語意與欄位位置一致，更加確認判斷正確；如果矛盾，**以欄位位置為準**
+
+**第三優先：Running Balance 驗算（次要驗證工具，有限制）**
+- Running balance 只能在「每筆交易都有 balance」的情況下逐筆驗算
+- HSBC 等銀行月結單的 balance 欄**不是每筆都顯示**，通常每天只顯示最後一筆的結餘。在這種情況下，不能用 balance 逐筆反推方向
+- 如果只有部分交易顯示 balance，只能用相鄰可用 balance 點驗算該段區間的**總和**是否合理，但不能用來推翻個別交易的欄位位置判斷
+- **重要限制**：running balance 驗算只能用來發現可能的讀數錯誤（如金額數字讀錯），不能用來覆蓋欄位位置的判斷結果。如果 balance 驗算結果與欄位位置判斷矛盾，應優先信任欄位位置，並檢查是否有金額數字讀取錯誤
+
+## 其他規則
+- 如果同一日期有多筆交易，每筆都要單獨列出。不要因為多筆交易金額相同就跳過，只要 reference_no 或 balance 不同，全部都是獨立交易，必須逐筆輸出
+- 日期統一轉換為 YYYY-MM-DD 格式
 ${identificationContext}
 
 請返回以下 JSON 格式（不要加 markdown 代碼塊標記）：
