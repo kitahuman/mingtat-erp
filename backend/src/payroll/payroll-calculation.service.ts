@@ -261,16 +261,42 @@ export class PayrollCalculationService {
     // ── (2) 計算明細項目 ──
 
     if (salaryType === 'monthly' && monthlySalaryAmount > 0) {
-      // 月薪員工：顯示「基本薪金」= 日薪 × 計糧天數
-      items.push({
-        item_type: 'base_salary',
-        item_name: '基本薪金',
-        unit_price: monthlyDailyRate,
-        quantity: monthlyPayableDays,
-        amount: monthlySalaryAmount,
-        remarks: `月薪 $${baseSalary} × 12 / ${(new Date(dateFrom).getFullYear() % 4 === 0 && new Date(dateFrom).getFullYear() % 100 !== 0) || new Date(dateFrom).getFullYear() % 400 === 0 ? 366 : 365} = 日薪 $${monthlyDailyRate}`,
-        sort_order: sortOrder++,
-      });
+      const remarksText = `月薪 $${baseSalary} × 12 / ${(new Date(dateFrom).getFullYear() % 4 === 0 && new Date(dateFrom).getFullYear() % 100 !== 0) || new Date(dateFrom).getFullYear() % 400 === 0 ? 366 : 365} = 日薪 $${monthlyDailyRate}`;
+      if (monthlySalaryAmount <= baseSalary) {
+        // 未超過月薪上限：顯示一個項目「基本薪金」= 日薪 × 計糧天數
+        items.push({
+          item_type: 'base_salary',
+          item_name: '基本薪金',
+          unit_price: monthlyDailyRate,
+          quantity: monthlyPayableDays,
+          amount: monthlySalaryAmount,
+          remarks: remarksText,
+          sort_order: sortOrder++,
+        });
+      } else {
+        // 超過月薪上限：拆分為兩個項目
+        const extraAmount = Math.round((monthlySalaryAmount - baseSalary) * 100) / 100;
+        // 項目一：「基本薪金」= 月薪（封頂）
+        items.push({
+          item_type: 'base_salary',
+          item_name: '基本薪金',
+          unit_price: baseSalary,
+          quantity: 1,
+          amount: baseSalary,
+          remarks: remarksText,
+          sort_order: sortOrder++,
+        });
+        // 項目二：「額外（休息日/假日加班）」= 差額
+        items.push({
+          item_type: 'base_salary_extra',
+          item_name: '額外（休息日/假日加班）',
+          unit_price: monthlyDailyRate,
+          quantity: Math.round((extraAmount / monthlyDailyRate) * 100) / 100,
+          amount: extraAmount,
+          remarks: `日薪 $${monthlyDailyRate} × ${Math.round((extraAmount / monthlyDailyRate) * 100) / 100} 天（超出月薪上限 $${baseSalary} 部分）`,
+          sort_order: sortOrder++,
+        });
+      }
     } else {
       // 日薪員工：原有邏輯
       // 工作收入
