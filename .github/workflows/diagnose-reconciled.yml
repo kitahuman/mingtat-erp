@@ -14,49 +14,40 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-      - name: Run reconciled diagnostic
+      - name: Check API is_reconciled
         run: |
           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
 
-          echo "=== 1. Check API keys in first PaymentIn item ==="
-          curl -s "http://localhost:3001/payment-in?page=1&limit=10" > /tmp/pi_response.json
-          python3 -c "
+          echo "=== 1. Call PaymentIn API page 1 and check is_reconciled ==="
+          curl -s "http://localhost:3001/payment-in?page=1&limit=50&sortBy=date&sortOrder=desc" > /tmp/api_p1.json
+          python3 << 'PYEOF'
 import json
-data = json.load(open('/tmp/pi_response.json'))
+data = json.load(open('/tmp/api_p1.json'))
 items = data.get('data', [])
-print(f'Total items in page: {len(items)}')
+print(f"Page 1: {len(items)} items, total={data.get('total')}")
 if items:
-    keys = list(items[0].keys())
-    print('Keys in first item:', keys)
-    print('is_reconciled present:', 'is_reconciled' in keys)
-    print('First item is_reconciled value:', items[0].get('is_reconciled', 'MISSING'))
-"
-
-          echo ""
-          echo "=== 2. Check PaymentIn IDs 1807 and 1042 (the matched ones) ==="
-          curl -s "http://localhost:3001/payment-in?page=1&limit=200" > /tmp/pi_response2.json
-          python3 -c "
-import json
-data = json.load(open('/tmp/pi_response2.json'))
-items = data.get('data', [])
-print(f'Total items: {len(items)}')
+    print("Keys in first item:", list(items[0].keys()))
+    print("is_reconciled present:", 'is_reconciled' in items[0])
+reconciled = [i for i in items if i.get('is_reconciled') == True]
+print(f"Items with is_reconciled=True on page 1: {len(reconciled)}")
 for item in items:
     if item['id'] in [1807, 1042]:
-        print(f\"ID={item['id']} is_reconciled={item.get('is_reconciled', 'MISSING')} amount={item.get('amount')}\")
-print('Done checking IDs 1807 and 1042')
-"
+        print(f"  Found target: ID={item['id']} is_reconciled={item.get('is_reconciled')} date={item.get('date')}")
+PYEOF
 
           echo ""
-          echo "=== 3. Check how many items have is_reconciled=true ==="
-          python3 -c "
+          echo "=== 2. Search all pages for IDs 1807 and 1042 ==="
+          for page in 1 2 3 4 5; do
+            curl -s "http://localhost:3001/payment-in?page=$page&limit=50&sortBy=date&sortOrder=desc" > /tmp/api_p${page}.json
+            python3 << PYEOF
 import json
-data = json.load(open('/tmp/pi_response2.json'))
+data = json.load(open('/tmp/api_p${page}.json'))
 items = data.get('data', [])
-reconciled = [i for i in items if i.get('is_reconciled') == True]
-print(f'Items with is_reconciled=True: {len(reconciled)}')
-for item in reconciled:
-    print(f\"  ID={item['id']} amount={item.get('amount')}\")
-"
+for item in items:
+    if item['id'] in [1807, 1042]:
+        print(f"Page ${page}: ID={item['id']} is_reconciled={item.get('is_reconciled')} date={item.get('date')}")
+PYEOF
+          done
 
           ENDSSH
