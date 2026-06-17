@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { companyProfilesApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
 import ExpiryBadge from '@/components/ExpiryBadge';
+import DateInput from '@/components/DateInput';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -51,6 +52,8 @@ export default function CompanyProfileDetailPage() {
       <label className="block text-sm font-medium text-gray-500 mb-1">{label}</label>
       {type === 'textarea' ? (
         <textarea value={form[field] || ''} onChange={e => setForm({...form, [field]: e.target.value})} className="input-field" rows={3} />
+      ) : type === 'date' ? (
+        <DateInput value={form[field] || ''} onChange={value => setForm({ ...form, [field]: value || '' })} className="input-field" />
       ) : (
         <input type={type} value={form[field] || ''} onChange={e => setForm({...form, [field]: e.target.value})} className="input-field" />
       )}
@@ -88,7 +91,7 @@ export default function CompanyProfileDetailPage() {
             <EditField label="代碼" field="code" />
             <EditField label="公司中文名" field="chinese_name" />
             <EditField label="公司英文名" field="english_name" />
-            <EditField label="註冊日期" field="registration_date" />
+            <EditField label="註冊日期" field="registration_date" type="date" />
             <EditField label="公司註冊證明編號" field="cr_number" />
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">狀態</label>
@@ -123,7 +126,7 @@ export default function CompanyProfileDetailPage() {
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <EditField label="商業登記證號碼" field="br_number" />
-            <EditField label="商業登記屆滿日" field="br_expiry_date" />
+            <EditField label="商業登記屆滿日" field="br_expiry_date" type="date" />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -139,8 +142,8 @@ export default function CompanyProfileDetailPage() {
         {editing ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <EditField label="分包商註冊編號" field="subcontractor_reg_no" />
-            <EditField label="分包商註冊日期" field="subcontractor_reg_date" />
-            <EditField label="分包商註冊到期日" field="subcontractor_reg_expiry" />
+            <EditField label="分包商註冊日期" field="subcontractor_reg_date" type="date" />
+            <EditField label="分包商註冊到期日" field="subcontractor_reg_expiry" type="date" />
             <EditField label="分包商工種" field="subcontractor_work_types" className="md:col-span-2 lg:col-span-3" />
             <EditField label="分包商專長項目" field="subcontractor_specialties" className="md:col-span-2 lg:col-span-3" />
           </div>

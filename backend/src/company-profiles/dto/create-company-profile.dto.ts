@@ -3,18 +3,27 @@ import { Type } from 'class-transformer';
 
 export class CreateCompanyProfileDto {
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
-  @IsOptional() @IsString() profile_name?: string;
-  @IsOptional() @IsString() company_name_zh?: string;
-  @IsOptional() @IsString() company_name_en?: string;
-  @IsOptional() @IsString() address_zh?: string;
-  @IsOptional() @IsString() address_en?: string;
-  @IsOptional() @IsString() phone?: string;
-  @IsOptional() @IsString() fax?: string;
-  @IsOptional() @IsString() email?: string;
-  @IsOptional() @IsString() logo_url?: string;
-  @IsOptional() @IsString() bank_info?: string;
-  @IsOptional() @IsString() payment_terms?: string;
-  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsString() chinese_name?: string;
+  @IsOptional() @IsString() english_name?: string;
+  @IsOptional() @IsString() registration_date?: string;
+  @IsOptional() @IsString() br_number?: string;
+  @IsOptional() @IsString() br_expiry_date?: string;
+  @IsOptional() @IsString() cr_number?: string;
+  @IsOptional() @IsString() registered_address?: string;
+  @IsOptional() @IsString() directors?: string;
+  @IsOptional() @IsString() shareholders?: string;
+  @IsOptional() @IsString() secretary?: string;
+  @IsOptional() @IsString() subcontractor_reg_no?: string;
+  @IsOptional() @IsString() subcontractor_reg_date?: string;
+  @IsOptional() @IsString() subcontractor_reg_expiry?: string;
+  @IsOptional() @IsString() subcontractor_work_types?: string;
+  @IsOptional() @IsString() subcontractor_specialties?: string;
+  @IsOptional() @IsString() office_phone?: string;
+  @IsOptional() @IsString() office_fax?: string;
+  @IsOptional() @IsString() office_email?: string;
+  @IsOptional() @IsString() office_address?: string;
+  @IsOptional() @IsString() status?: string;
 }
 
 export class UpdateCompanyProfileDto extends CreateCompanyProfileDto {}
