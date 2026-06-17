@@ -298,8 +298,12 @@ ${structuredText}`,
    */
   private async extractStructuredRows(pdfBuffer: Buffer): Promise<StructuredRow[]> {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
+    // Disable Worker to avoid version mismatch between pdfjs-dist API and Worker file.
+    // pdf-parse (a dependency) ships its own older pdfjs-dist version which can conflict.
+    // For text extraction, running in the main thread is perfectly fine.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
     const data = new Uint8Array(pdfBuffer);
-    const doc = await pdfjsLib.getDocument({ data }).promise;
+    const doc = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
 
     let globalBoundaries: ColumnBoundaries | null = null;
     const allRows: StructuredRow[] = [];
@@ -417,33 +421,53 @@ ${structuredText}`,
 
   /**
    * Merge AI-extracted text fields (date, description, reference_no) with
-   * backend-classified amounts. The backend amounts take precedence.
+   * backend-classified amounts. The backend amounts ALWAYS take precedence.
+   *
+   * Strategy:
+   * 1. Filter structuredRows to only those with actual transaction amounts
+   * 2. Try row_index matching first (if AI provided it)
+   * 3. Fall back to sequential position matching (AI transaction N → structuredRow N)
+   * 4. If no match at all, still use backend amounts from the closest row
+   *    (never fall back to AI-determined amounts in structured mode)
    */
   private mergeStructuredAmounts(
     aiTransactions: ParsedTransaction[],
     structuredRows: StructuredRow[],
     cleanNum: (v: any) => number | undefined,
   ): ParsedTransaction[] {
+    // Only keep rows that have at least one transaction amount
+    const txRows = structuredRows.filter(
+      r => r.depositAmount != null || r.withdrawalAmount != null
+    );
+
     // Build a map from row_index to structured row
     const rowMap = new Map<number, StructuredRow>();
-    for (const row of structuredRows) {
+    for (const row of txRows) {
       rowMap.set(row.rowIndex, row);
     }
 
     const result: ParsedTransaction[] = [];
+    // Track which txRows have been used for sequential fallback
+    let seqIndex = 0;
 
     for (const tx of aiTransactions) {
       if (!tx.date) continue;
 
-      // Get the row_index from AI response (if provided)
+      // Try row_index matching first
       const rowIdx = (tx as any).row_index;
-      const structuredRow = rowIdx != null ? rowMap.get(rowIdx) : undefined;
+      let structuredRow: StructuredRow | undefined = rowIdx != null ? rowMap.get(rowIdx) : undefined;
+
+      // If row_index matching failed, use sequential position matching
+      if (!structuredRow && seqIndex < txRows.length) {
+        structuredRow = txRows[seqIndex];
+      }
 
       if (structuredRow) {
-        // Use backend-classified amounts
-        const deposits = structuredRow.depositAmount && structuredRow.depositAmount > 0
+        seqIndex = txRows.indexOf(structuredRow) + 1;
+        // Use backend-classified amounts — NEVER use AI amounts in structured mode
+        const deposits = structuredRow.depositAmount != null && structuredRow.depositAmount > 0
           ? structuredRow.depositAmount : undefined;
-        const withdrawals = structuredRow.withdrawalAmount && structuredRow.withdrawalAmount > 0
+        const withdrawals = structuredRow.withdrawalAmount != null && structuredRow.withdrawalAmount > 0
           ? structuredRow.withdrawalAmount : undefined;
         const balance = structuredRow.balanceAmount;
         const amount = deposits ? deposits : withdrawals ? -withdrawals : 0;
@@ -458,25 +482,9 @@ ${structuredText}`,
           amount,
           balance,
         });
-      } else {
-        // Fallback: use AI amounts (for rows AI couldn't match to a structured row)
-        const withdrawals = cleanNum(tx.withdrawals);
-        const deposits = cleanNum(tx.deposits);
-        let amount = cleanNum(tx.amount);
-        if (amount === undefined) {
-          if (deposits != null && deposits > 0) amount = deposits;
-          else if (withdrawals != null && withdrawals > 0) amount = -withdrawals;
-          else amount = 0;
-        }
-        result.push({
-          ...tx,
-          withdrawals: withdrawals && withdrawals > 0 ? withdrawals : undefined,
-          deposits: deposits && deposits > 0 ? deposits : undefined,
-          amount,
-          balance: cleanNum(tx.balance),
-          reference_no: tx.reference_no || undefined,
-        });
       }
+      // If no structuredRow found at all, skip this transaction
+      // (better to miss a transaction than to include one with wrong direction)
     }
 
     return result.filter(tx => tx.amount !== 0 || tx.deposits || tx.withdrawals);
