@@ -48,6 +48,23 @@ export class DocumentsController {
     @Body('expiry_date') expiryDate: string,
     @Body('notes') notes: string,
   ) {
+    // Parse expiry_date: DateInput returns YYYY-MM-DD string; Prisma DateTime @db.Date needs a Date object.
+    // Also handle DD/MM/YYYY format for robustness.
+    let parsedExpiryDate: Date | undefined;
+    if (expiryDate) {
+      const ddmmyyyy = expiryDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (ddmmyyyy) {
+        parsedExpiryDate = new Date(
+          Number(ddmmyyyy[3]),
+          Number(ddmmyyyy[2]) - 1,
+          Number(ddmmyyyy[1]),
+        );
+      } else {
+        // YYYY-MM-DD or ISO string
+        const d = new Date(expiryDate);
+        if (!isNaN(d.getTime())) parsedExpiryDate = d;
+      }
+    }
     const doc = await this.service.create({
       entity_type: entityType,
       entity_id: Number(entityId),
@@ -56,7 +73,7 @@ export class DocumentsController {
       file_path: file.filename,
       file_size: file.size,
       mime_type: file.mimetype,
-      expiry_date: expiryDate || undefined,
+      expiry_date: parsedExpiryDate,
       notes: notes || undefined,
     });
     return doc;
