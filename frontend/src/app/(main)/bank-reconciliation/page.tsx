@@ -475,9 +475,18 @@ export default function BankReconciliationPage() {
       return { category: '', name: '', link: '', isMulti: false, records: [] };
     const r = tx.matched_record;
     if ((tx.matched_type || r._matched_type) === 'payment_in') {
+      const sourceLabels: Record<string, string> = {
+        payment_certificate: 'PC',
+        invoice: '發票',
+        retention_release: '扣留金',
+        other: '其他',
+      };
+      const sourceLabel = sourceLabels[r.source_type] || r.source_type || '';
+      const clientShort = r.project?.client?.code || r.project?.client?.name || '';
+      const nameParts = [sourceLabel, clientShort, r.reference_no, r.remarks].filter(Boolean);
       return {
         category: '收款',
-        name: r.project?.project_name || r.description || '未命名項目',
+        name: nameParts.join(' ') || r.project?.project_name || '未命名項目',
         link: `/payment-in/${r.id}`,
         isMulti: false,
         records: [r],
@@ -937,9 +946,14 @@ export default function BankReconciliationPage() {
                         <div className="pl-4 pr-2 pb-2 space-y-1">
                           {matchInfo.records.map((r: any, idx: number) => {
                             const isPayIn = r._matched_type === 'payment_in';
-                            const rName = isPayIn
-                              ? (r.project?.project_name || '未命名項目')
-                              : (r.expense?.item || r.company?.name || '未命名支出');
+                            let rName: string;
+                            if (isPayIn) {
+                              const srcLabels: Record<string, string> = { payment_certificate: 'PC', invoice: '發票', retention_release: '扣留金', other: '其他' };
+                              const parts = [srcLabels[r.source_type] || r.source_type || '', r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
+                              rName = parts.join(' ') || r.project?.project_name || '未命名項目';
+                            } else {
+                              rName = r.expense?.item || r.company?.name || '未命名支出';
+                            }
                             const rLink = isPayIn ? `/payment-in/${r.id}` : `/payment-out/${r.id}`;
                             return (
                               <div key={r.id || idx} className="flex items-center gap-2 text-[11px] text-gray-600 bg-gray-50 rounded px-2 py-1">

@@ -59,7 +59,7 @@ export class BankReconciliationService {
                 record = await this.prisma.paymentIn.findUnique({
                   where: { id: m.matched_id },
                   include: {
-                    project: { select: { id: true, project_name: true, project_no: true } },
+                    project: { select: { id: true, project_name: true, project_no: true, client: { select: { id: true, name: true, code: true } } } },
                     contract: { select: { id: true, contract_no: true, contract_name: true } },
                     bank_account: { select: { id: true, bank_name: true, account_no: true } },
                   },
@@ -95,7 +95,7 @@ export class BankReconciliationService {
               matched_record = await this.prisma.paymentIn.findUnique({
                 where: { id: tx.matched_id },
                 include: {
-                  project: { select: { id: true, project_name: true, project_no: true } },
+                  project: { select: { id: true, project_name: true, project_no: true, client: { select: { id: true, name: true, code: true } } } },
                   contract: { select: { id: true, contract_no: true, contract_name: true } },
                   bank_account: { select: { id: true, bank_name: true, account_no: true } },
                 },
