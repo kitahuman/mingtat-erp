@@ -26,12 +26,14 @@ const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   confirmed: '已確認',
   paid: '已付款',
+  partially_paid: '部分付款',
 };
 const STATUS_COLORS: Record<string, string> = {
   preparing: 'bg-amber-100 text-amber-800',
   draft: 'bg-gray-100 text-gray-800',
   confirmed: 'bg-blue-100 text-blue-800',
   paid: 'bg-green-100 text-green-800',
+  partially_paid: 'bg-orange-100 text-orange-800',
 };
 
 const TAB_KEYS = ['detail', 'daily', 'grouped', 'print', 'unmatched'] as const;

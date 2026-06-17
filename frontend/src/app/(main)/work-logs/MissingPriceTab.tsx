@@ -735,6 +735,15 @@ export default function MissingPriceTab() {
               筆工作記錄
             </p>
           </div>
+          {Object.keys(columnFilters).length > 0 && (
+            <button
+              type="button"
+              onClick={() => setColumnFilters({})}
+              className="px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
+            >
+              重設篩選
+            </button>
+          )}
           <button
             onClick={() => fetchData()}
             disabled={loading}

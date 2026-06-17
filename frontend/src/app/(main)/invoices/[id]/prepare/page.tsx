@@ -570,6 +570,15 @@ export default function InvoicePreparePage() {
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">共 {rows.length} 筆關聯工作紀錄；{draftFieldCount} 個草稿欄位</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+          {Object.keys(columnFilters).length > 0 && (
+            <button
+              type="button"
+              onClick={() => setColumnFilters({})}
+              className="px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
+            >
+              重設篩選
+            </button>
+          )}
           <ColumnCustomizer columns={columnConfigs} onChange={handleColumnConfigChange} onReset={handleReset} onSavePersonal={handleSavePersonal} onSaveDefault={handleSaveDefault} />
           <button
             onClick={handleSaveDrafts}

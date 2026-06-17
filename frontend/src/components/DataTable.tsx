@@ -419,6 +419,15 @@ export default function DataTable({
         )}
         {actions}
         <div className="flex gap-2 items-center shrink-0">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="px-3 py-1.5 text-xs text-gray-700 border border-gray-300 rounded hover:bg-gray-50 whitespace-nowrap"
+            >
+              重設篩選
+            </button>
+          )}
           <ExportButton
             columns={columns}
             data={filteredData}
