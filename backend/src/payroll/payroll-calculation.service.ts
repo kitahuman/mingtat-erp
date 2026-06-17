@@ -1111,6 +1111,7 @@ export class PayrollCalculationService {
       const quantity = Number(pwl.quantity) || 1;
       const productQuantity = this.getProductQuantity(pwl);
       const workDate = this.toDateKey(pwl.scheduled_date);
+      const baseLineAmount = (Number(pwl.line_amount) || 0) - (Number(pwl.ot_line_amount) || 0) - (Number(pwl.mid_shift_line_amount) || 0);
       if (groups.has(key)) {
         const g = groups.get(key)!;
         g.total_quantity += quantity;
@@ -1119,6 +1120,7 @@ export class PayrollCalculationService {
         g.ot_amount += Number(pwl.ot_line_amount) || 0;
         g.mid_shift_amount += Number(pwl.mid_shift_line_amount) || 0;
         g.mid_shift_count += pwl.is_mid_shift ? 1 : 0;
+        g.base_line_amount_sum += baseLineAmount;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(pwl.id);
@@ -1154,6 +1156,7 @@ export class PayrollCalculationService {
           ot_amount: Number(pwl.ot_line_amount) || 0,
           mid_shift_amount: Number(pwl.mid_shift_line_amount) || 0,
           mid_shift_count: pwl.is_mid_shift ? 1 : 0,
+          base_line_amount_sum: baseLineAmount,
           total_amount: 0,
           count: 1,
           price_match_status: pwl.price_match_status || 'unmatched',
@@ -1165,9 +1168,13 @@ export class PayrollCalculationService {
     return Array.from(groups.values()).map((g) => {
       const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
       const rate = Number(g.matched_rate) || 0;
-      const baseAmount = rate > 0 ? billingQuantity * rate : 0;
+      const theoreticalBase = rate > 0 ? billingQuantity * rate : 0;
+      const actualBase = g.base_line_amount_sum || 0;
       const otAmount = Number(g.ot_amount) || 0;
       const midShiftAmount = Number(g.mid_shift_amount) || 0;
+      const theoreticalAmount = Math.round((theoreticalBase + otAmount + midShiftAmount) * 100) / 100;
+      const actualAmount = Math.round((actualBase + otAmount + midShiftAmount) * 100) / 100;
+      const hasDifference = Math.abs(theoreticalAmount - actualAmount) >= 0.01;
       return {
         ...g,
         work_dates: Array.from(g.work_dates || []),
@@ -1175,7 +1182,10 @@ export class PayrollCalculationService {
         ot_amount: otAmount,
         mid_shift_amount: midShiftAmount,
         mid_shift_count: Number(g.mid_shift_count) || 0,
-        total_amount: baseAmount + otAmount + midShiftAmount,
+        grouped_amount_theoretical: theoreticalAmount,
+        grouped_amount_actual: actualAmount,
+        has_rounding_difference: hasDifference,
+        total_amount: hasDifference ? actualAmount : theoreticalAmount,
       };
     });
   }
@@ -1188,6 +1198,7 @@ export class PayrollCalculationService {
       const quantity = Number(wl.quantity) || 1;
       const productQuantity = this.getProductQuantity(wl);
       const workDate = this.toDateKey(wl.scheduled_date);
+      const baseLineAmount = (Number(wl._line_amount) || 0);
       if (groups.has(key)) {
         const g = groups.get(key)!;
         g.total_quantity += quantity;
@@ -1196,6 +1207,7 @@ export class PayrollCalculationService {
         g.ot_amount += Number(wl._ot_line_amount) || 0;
         g.mid_shift_amount += Number(wl._mid_shift_line_amount) || 0;
         g.mid_shift_count += wl.is_mid_shift ? 1 : 0;
+        g.base_line_amount_sum += baseLineAmount;
         if (workDate) g.work_dates.add(workDate);
         g.count += 1;
         g.work_log_ids.push(wl.id);
@@ -1226,6 +1238,7 @@ export class PayrollCalculationService {
           ot_amount: Number(wl._ot_line_amount) || 0,
           mid_shift_amount: Number(wl._mid_shift_line_amount) || 0,
           mid_shift_count: wl.is_mid_shift ? 1 : 0,
+          base_line_amount_sum: baseLineAmount,
           total_amount: 0,
           count: 1,
           price_match_status: wl._price_match_status || 'unmatched',
@@ -1236,9 +1249,13 @@ export class PayrollCalculationService {
     return Array.from(groups.values()).map((g) => {
       const billingQuantity = this.resolveBillingQuantity(g.billing_quantity_type, g);
       const rate = Number(g.matched_rate) || 0;
-      const baseAmount = rate > 0 ? billingQuantity * rate : 0;
+      const theoreticalBase = rate > 0 ? billingQuantity * rate : 0;
+      const actualBase = g.base_line_amount_sum || 0;
       const otAmount = Number(g.ot_amount) || 0;
       const midShiftAmount = Number(g.mid_shift_amount) || 0;
+      const theoreticalAmount = Math.round((theoreticalBase + otAmount + midShiftAmount) * 100) / 100;
+      const actualAmount = Math.round((actualBase + otAmount + midShiftAmount) * 100) / 100;
+      const hasDifference = Math.abs(theoreticalAmount - actualAmount) >= 0.01;
       return {
         ...g,
         work_dates: Array.from(g.work_dates || []),
@@ -1246,7 +1263,10 @@ export class PayrollCalculationService {
         ot_amount: otAmount,
         mid_shift_amount: midShiftAmount,
         mid_shift_count: Number(g.mid_shift_count) || 0,
-        total_amount: baseAmount + otAmount + midShiftAmount,
+        grouped_amount_theoretical: theoreticalAmount,
+        grouped_amount_actual: actualAmount,
+        has_rounding_difference: hasDifference,
+        total_amount: hasDifference ? actualAmount : theoreticalAmount,
       };
     });
   }

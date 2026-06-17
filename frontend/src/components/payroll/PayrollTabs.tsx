@@ -147,6 +147,10 @@ type GroupedSettlementRecord = {
   client_id?: number | string | null;
   company_id?: number | string | null;
   company_profile_id?: number | string | null;
+  grouped_amount_theoretical?: number | string | null;
+  grouped_amount_actual?: number | string | null;
+  has_rounding_difference?: boolean | null;
+  grouped_amount_selected?: 'theoretical' | 'actual' | null;
 };
 
 type PayrollItem = {
@@ -1023,6 +1027,12 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.setGroupMidShiftRate(payrollId, groupKey, midShiftRate), "更新歸組中直價失敗");
   }
 
+  async function updateGroupedAmountSelection(group: GroupedSettlementRecord, selected: 'theoretical' | 'actual') {
+    if (!payrollId) return;
+    const groupKey = normalizeGroupKey(group);
+    await mutateAndReload(() => payrollApi.updateGroupedAmountSelection(payrollId, groupKey, selected), "更新歸組金額選擇失敗");
+  }
+
   function openRateCardModal(source: RateCardSource) {
     setRateCardSource(source);
     setRateCardForm({
@@ -1170,7 +1180,7 @@ function PayrollTabs({
       </div>
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
-      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} />}
+      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} />}
@@ -1496,7 +1506,7 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
   );
 }
 
-function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void }) {
+function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard, onAmountSelectionChange }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void; onAmountSelectionChange: (group: GroupedSettlementRecord, selected: 'theoretical' | 'actual') => Promise<void> }) {
   if (groups.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無歸組結算資料。</div>;
 
   const getGroupMidShiftCount = (group: GroupedSettlementRecord): number => {
@@ -1571,7 +1581,18 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
                   <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_rate, "輸入單價", () => onSetGroupRate(group))}</td>
                   <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_ot_rate, "輸入OT價", () => onSetGroupOtRate(group))}</td>
                   <td className="px-3 py-2 text-right font-mono">{renderRateCell(group, group.matched_mid_shift_rate, "輸入中直價", () => onSetGroupMidShiftRate(group))}</td>
-                  <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{formatMoney(group.total_amount ?? group.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-primary-600">{group.has_rounding_difference ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <label className={`cursor-pointer text-xs flex items-center gap-1 ${(!group.grouped_amount_selected || group.grouped_amount_selected === 'actual') ? 'font-bold text-primary-700' : 'text-gray-500'}`}>
+                        <input type="radio" name={`amt-${normalizeGroupKey(group)}`} checked={!group.grouped_amount_selected || group.grouped_amount_selected === 'actual'} disabled={readOnly} onChange={() => onAmountSelectionChange(group, 'actual')} className="h-3 w-3" />
+                        {formatMoney(group.grouped_amount_actual)}
+                      </label>
+                      <label className={`cursor-pointer text-xs flex items-center gap-1 ${group.grouped_amount_selected === 'theoretical' ? 'font-bold text-primary-700' : 'text-gray-500'}`}>
+                        <input type="radio" name={`amt-${normalizeGroupKey(group)}`} checked={group.grouped_amount_selected === 'theoretical'} disabled={readOnly} onChange={() => onAmountSelectionChange(group, 'theoretical')} className="h-3 w-3" />
+                        {formatMoney(group.grouped_amount_theoretical)}
+                      </label>
+                    </div>
+                  ) : formatMoney(group.total_amount ?? group.amount)}</td>
                   <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
                   <td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td>
                 </tr>

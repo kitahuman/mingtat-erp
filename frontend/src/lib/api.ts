@@ -697,6 +697,8 @@ export const payrollApi = {
     api.post(`/payroll/${id}/set-group-ot-rate`, { group_key: groupKey, ot_rate: otRate }),
   setGroupMidShiftRate: (id: number, groupKey: string, midShiftRate: number) =>
     api.post(`/payroll/${id}/set-group-mid-shift-rate`, { group_key: groupKey, mid_shift_rate: midShiftRate }),
+  updateGroupedAmountSelection: (id: number, groupKey: string, selected: 'theoretical' | 'actual') =>
+    api.put(`/payroll/${id}/grouped-amount-selection`, { group_key: groupKey, selected }),
   addToRateCard: (
     id: number,
     formData: {

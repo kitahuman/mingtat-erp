@@ -347,7 +347,19 @@ export class PayrollService {
 
     // Build grouped settlement
     const activePwls = pwls.filter((p) => !p.is_excluded);
-    const grouped = this.calcService.buildGroupedSettlement(activePwls);
+    const groupedRaw = this.calcService.buildGroupedSettlement(activePwls);
+    // Apply user's grouped amount selections
+    const selections = (payroll as any).grouped_amount_selections as Record<string, string> | null;
+    const grouped = groupedRaw.map((g: any) => {
+      const sel = selections?.[g.group_key];
+      if (sel && g.has_rounding_difference) {
+        g.grouped_amount_selected = sel;
+        g.total_amount = sel === 'theoretical' ? g.grouped_amount_theoretical : g.grouped_amount_actual;
+      } else {
+        g.grouped_amount_selected = g.has_rounding_difference ? 'actual' : null;
+      }
+      return g;
+    });
 
     // Get salary setting for daily calculation
     const salarySetting = await this.prisma.employeeSalarySetting.findFirst({
@@ -3494,6 +3506,19 @@ export class PayrollService {
   }
 
   // ── 將手動設定的單價加入價目表 ──────────────────────────
+  // ── 更新歸組金額選擇（理論值 vs 實際值）──
+  async updateGroupedAmountSelection(payrollId: number, groupKey: string, selected: 'theoretical' | 'actual') {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    const currentSelections = (payroll as any).grouped_amount_selections as Record<string, string> || {};
+    const updatedSelections = { ...currentSelections, [groupKey]: selected };
+    await this.prisma.payroll.update({
+      where: { id: payrollId },
+      data: { grouped_amount_selections: updatedSelections },
+    });
+    return { success: true, grouped_amount_selections: updatedSelections };
+  }
+
   async addToRateCard(payrollId: number, formData: {
     client_id?: number;
     company_id?: number;

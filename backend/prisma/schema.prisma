@@ -1451,6 +1451,7 @@ model Payroll {
   payment_date          DateTime? @db.Date
   cheque_number         String?
   notes                 String?   @db.Text
+  grouped_amount_selections Json?
   created_at            DateTime  @default(now())
   updated_at            DateTime  @default(now()) @updatedAt
   payroll_ai_session_id Int?

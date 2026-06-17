@@ -210,6 +210,15 @@ export class PayrollController {
     return this.payrollService.addToRateCard(+id, body);
   }
 
+  // 更新歸組金額選擇（理論值 vs 實際值）
+  @Put(':id/grouped-amount-selection')
+  updateGroupedAmountSelection(
+    @Param('id') id: string,
+    @Body() body: { group_key: string; selected: 'theoretical' | 'actual' },
+  ) {
+    return this.payrollService.updateGroupedAmountSelection(+id, body.group_key, body.selected);
+  }
+
   // 確定糧單工作記錄並計算糧單（從 preparing 轉為 draft）
   @Post(':id/finalize-preparation')
   finalizePreparation(@Param('id') id: string, @Request() req: any) {
