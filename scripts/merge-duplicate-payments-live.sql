@@ -43,7 +43,6 @@ SET payment_in_allocation_payment_in_id = rtd.keep_id
 FROM records_to_delete rtd
 WHERE pia.payment_in_allocation_payment_in_id = rtd.delete_id;
 
-GET DIAGNOSTICS;
 \echo 'Allocations reassigned:'
 SELECT COUNT(*) AS allocations_reassigned
 FROM payment_in_allocations pia
