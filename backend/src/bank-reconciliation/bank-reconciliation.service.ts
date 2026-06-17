@@ -938,4 +938,56 @@ export class BankReconciliationService {
       });
     }
   }
+
+  // Find BankTransaction candidates for a given PaymentIn or PaymentOut
+  async findBankTransactionCandidates(
+    type: 'payment_in' | 'payment_out',
+    recordId: number,
+  ) {
+    let record: any;
+    if (type === 'payment_in') {
+      record = await this.prisma.paymentIn.findUnique({
+        where: { id: recordId },
+        include: { bank_account: { select: { id: true, company_id: true } } },
+      });
+    } else {
+      record = await this.prisma.paymentOut.findUnique({
+        where: { id: recordId },
+        include: { bank_account: { select: { id: true, company_id: true } } },
+      });
+    }
+    if (!record) throw new NotFoundException('Record not found');
+
+    const amount = record.amount;
+    const bankAccountId = record.bank_account_id;
+
+    // Date range: +/- 30 days
+    const dateFrom = new Date(record.date);
+    dateFrom.setDate(dateFrom.getDate() - 30);
+    const dateTo = new Date(record.date);
+    dateTo.setDate(dateTo.getDate() + 30);
+
+    const candidates = await this.prisma.bankTransaction.findMany({
+      where: {
+        date: { gte: dateFrom, lte: dateTo },
+        match_status: { in: ['unmatched', 'pending'] },
+        bank_account_id: bankAccountId ?? undefined,
+      },
+      include: {
+        bank_account: { select: { id: true, bank_name: true, account_no: true, company: { select: { id: true, internal_prefix: true } } } },
+      },
+      orderBy: [{ date: 'desc' }],
+      take: 50,
+    });
+
+    // Sort: exact amount match first, then by date proximity
+    return candidates.sort((a, b) => {
+      const aExact = a.amount.equals(amount) ? 2 : 0;
+      const bExact = b.amount.equals(amount) ? 2 : 0;
+      const aDateDiff = Math.abs(new Date(a.date).getTime() - new Date(record.date).getTime());
+      const bDateDiff = Math.abs(new Date(b.date).getTime() - new Date(record.date).getTime());
+      if (aExact !== bExact) return bExact - aExact;
+      return aDateDiff - bDateDiff;
+    });
+  }
 }

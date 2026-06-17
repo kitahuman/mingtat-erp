@@ -195,6 +195,14 @@ export class BankReconciliationController {
     return this.service.findMatchCandidates(+txId);
   }
 
+  @Get('bank-candidates/:type/:recordId')
+  findBankCandidates(
+    @Param('type') type: 'payment_in' | 'payment_out',
+    @Param('recordId') recordId: string,
+  ) {
+    return this.service.findBankTransactionCandidates(type, +recordId);
+  }
+
   @Post('auto-match/:bankAccountId')
   autoMatchAll(@Param('bankAccountId') bankAccountId: string) {
     return this.service.autoMatchAll(+bankAccountId);

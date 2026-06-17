@@ -18,6 +18,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import PaymentMatchModal from '@/components/PaymentMatchModal';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -50,6 +51,8 @@ export default function PaymentOutPage() {
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
+  // Match modal
+  const [matchModal, setMatchModal] = useState<{ id: number; amount: number; date: string } | null>(null);
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -356,11 +359,18 @@ export default function PaymentOutPage() {
     {
       key: 'is_reconciled',
       label: '對帳',
-      _width: 60,
-      render: (v: any) => v ? (
-        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600" title="已配對">✓</span>
+      _width: 80,
+      editable: false,
+      filterable: false,
+      render: (v: any, row: any) => v ? (
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs" title="已配對">✓</span>
       ) : (
-        <span className="text-gray-300">-</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); setMatchModal({ id: row.id, amount: Number(row.amount), date: row.date }); }}
+          className="text-xs text-blue-600 hover:text-blue-800 underline"
+        >
+          配對
+        </button>
       ),
     },
   ];
@@ -513,6 +523,19 @@ export default function PaymentOutPage() {
           return Array.isArray(res.data) ? res.data : [];
         }}
       />
+
+      {/* Payment Match Modal */}
+      {matchModal && (
+        <PaymentMatchModal
+          isOpen={!!matchModal}
+          onClose={() => setMatchModal(null)}
+          recordType="payment_out"
+          recordId={matchModal.id}
+          recordAmount={matchModal.amount}
+          recordDate={matchModal.date}
+          onSuccess={fetchData}
+        />
+      )}
 
       {/* Create Modal */}
       <Modal

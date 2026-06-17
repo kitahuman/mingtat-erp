@@ -1513,6 +1513,13 @@ export const bankReconciliationApi = {
   ) => api.get(`/bank-reconciliation/summary/${bankAccountId}`, { params }),
   findCandidates: (txId: number) =>
     api.get(`/bank-reconciliation/candidates/${txId}`),
+  findBankCandidates: (type: 'payment_in' | 'payment_out', recordId: number) =>
+    api.get(`/bank-reconciliation/bank-candidates/${type}/${recordId}`),
+  matchFromRecord: (
+    txId: number,
+    type: 'payment_in' | 'payment_out',
+    matchedId: number,
+  ) => api.post(`/bank-reconciliation/match/${txId}`, { type, matchedId }),
   autoMatchAll: (bankAccountId: number) =>
     api.post(`/bank-reconciliation/auto-match/${bankAccountId}`),
   match: (
