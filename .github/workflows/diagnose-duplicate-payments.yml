@@ -26,7 +26,7 @@ jobs:
           PGPASSWORD=$(echo $DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') \
           psql "$DATABASE_URL" -x -c "
           SELECT
-            pi.payment_date::date AS date,
+            pi.date AS date,
             pi.reference_no,
             pi.bank_account_id,
             ba.bank_name || ' - ' || ba.account_no AS bank_account,
@@ -35,13 +35,12 @@ jobs:
             SUM(pi.amount) AS total_amount
           FROM payment_ins pi
           LEFT JOIN bank_accounts ba ON ba.id = pi.bank_account_id
-          LEFT JOIN companies c ON c.id = pi.company_id
-          WHERE pi.deleted_at IS NULL
-            AND pi.reference_no IS NOT NULL
+          LEFT JOIN companies c ON c.id = ba.company_id
+          WHERE pi.reference_no IS NOT NULL
             AND pi.reference_no != ''
-          GROUP BY pi.payment_date::date, pi.reference_no, pi.bank_account_id, ba.bank_name, ba.account_no, c.internal_prefix
+          GROUP BY pi.date, pi.reference_no, pi.bank_account_id, ba.bank_name, ba.account_no, c.internal_prefix
           HAVING COUNT(pi.id) > 1
-          ORDER BY pi.payment_date::date DESC, pi.reference_no;
+          ORDER BY pi.date DESC, pi.reference_no;
           "
 
           echo ""
@@ -50,27 +49,26 @@ jobs:
           psql "$DATABASE_URL" -c "
           SELECT
             pi.id,
-            pi.payment_date::date AS date,
+            pi.date,
             pi.reference_no,
             pi.bank_account_id,
             c.internal_prefix AS company,
             pi.amount,
-            (SELECT COUNT(*) FROM payment_in_allocations pia WHERE pia.payment_in_id = pi.id) AS allocation_count
+            (SELECT COUNT(*) FROM payment_in_allocations pia WHERE pia.payment_in_allocation_payment_in_id = pi.id) AS allocation_count
           FROM payment_ins pi
-          LEFT JOIN companies c ON c.id = pi.company_id
-          WHERE pi.deleted_at IS NULL
-            AND pi.reference_no IS NOT NULL
+          LEFT JOIN bank_accounts ba ON ba.id = pi.bank_account_id
+          LEFT JOIN companies c ON c.id = ba.company_id
+          WHERE pi.reference_no IS NOT NULL
             AND pi.reference_no != ''
-            AND (pi.payment_date::date, pi.reference_no, pi.bank_account_id) IN (
-              SELECT payment_date::date, reference_no, bank_account_id
+            AND (pi.date, pi.reference_no, pi.bank_account_id) IN (
+              SELECT date, reference_no, bank_account_id
               FROM payment_ins
-              WHERE deleted_at IS NULL
-                AND reference_no IS NOT NULL
+              WHERE reference_no IS NOT NULL
                 AND reference_no != ''
-              GROUP BY payment_date::date, reference_no, bank_account_id
+              GROUP BY date, reference_no, bank_account_id
               HAVING COUNT(id) > 1
             )
-          ORDER BY pi.payment_date::date DESC, pi.reference_no, pi.id;
+          ORDER BY pi.date DESC, pi.reference_no, pi.id;
           "
           ENDSSH
 
