@@ -700,7 +700,7 @@ export class PayrollService {
 
     // 查出法定假日，傳給 calculatePayroll
     let previewHolidayDates: { date: Date; name: string }[] = [];
-    if (salarySetting && (salarySetting.salary_type || 'daily') === 'daily') {
+    if (salarySetting) {
       const previewHolidays =
         await this.statutoryHolidaysService.findByDateRange(
           date_from,
@@ -1006,9 +1006,9 @@ export class PayrollService {
       billing_quantity_type: pwl.billing_quantity_type,
     }));
 
-    // 查出法定假日，傳給 calculatePayroll 以生成假日津貼 item
+    // 查出法定假日，傳給 calculatePayroll（日薪用於假日津貼，月薪用於計糧天數）
     let holidayDatesForCalc: { date: Date; name: string }[] = [];
-    if ((salarySetting.salary_type || 'daily') === 'daily') {
+    {
       const holidays = await this.statutoryHolidaysService.findByDateRange(
         dateFrom,
         dateTo,
@@ -1204,9 +1204,9 @@ export class PayrollService {
       orderBy: { scheduled_date: 'asc' },
     });
 
-    // 查出法定假日，傳給 calculatePayroll 以生成假日津貼 item
+    // 查出法定假日，傳給 calculatePayroll（日薪用於假日津貼，月薪用於計糧天數）
     let holidayDatesForGenerate: { date: Date; name: string }[] = [];
-    if ((salarySetting.salary_type || 'daily') === 'daily') {
+    {
       const genHolidays = await this.statutoryHolidaysService.findByDateRange(
         date_from,
         date_to,
@@ -1893,7 +1893,7 @@ export class PayrollService {
     }));
 
     let holidayDatesForCalc: { date: Date; name: string }[] = [];
-    if ((salarySetting.salary_type || 'daily') === 'daily') {
+    {
       const holidays = await this.statutoryHolidaysService.findByDateRange(
         dateFrom,
         dateTo,
@@ -2276,9 +2276,9 @@ export class PayrollService {
         ? storedMpfRelevantIncome
         : undefined;
 
-    // 查出法定假日，傳給 calculatePayroll
+    // 查出法定假日，傳給 calculatePayroll（日薪用於假日津貼，月薪用於計糧天數）
     let recalcHolidayDates: { date: Date; name: string }[] = [];
-    if ((salarySetting.salary_type || 'daily') === 'daily') {
+    {
       const recalcHolidays =
         await this.statutoryHolidaysService.findByDateRange(dateFrom, dateTo);
       recalcHolidayDates = recalcHolidays.map((h: any) => ({

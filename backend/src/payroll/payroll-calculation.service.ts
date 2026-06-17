@@ -192,45 +192,123 @@ export class PayrollCalculationService {
       }
     }
 
-    const baseAmount = baseWorkIncome + topUpTotal;
+    let baseAmount = baseWorkIncome + topUpTotal;
+
+    // ── (1.5) 月薪按天比例計算 ──
+    let monthlySalaryAmount = 0;
+    let monthlyDailyRate = 0;
+    let monthlyPayableDays = 0;
+    if (salaryType === 'monthly' && baseSalary > 0) {
+      // 日薪 = 月薪 × 12 / 365（或 366，看該年是否閏年）
+      const year = Number(dateFrom.slice(0, 4));
+      const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      const daysInYear = isLeapYear ? 366 : 365;
+      monthlyDailyRate = Math.round((baseSalary * 12 / daysInYear) * 100) / 100;
+
+      // 計算計糧天數
+      const periodStart = new Date(dateFrom);
+      const periodEnd = new Date(dateTo);
+      const joinDate = emp.join_date ? new Date(toDateStr(emp.join_date)) : null;
+      const terminationDate = emp.termination_date ? new Date(toDateStr(emp.termination_date)) : null;
+
+      // 確定有效起止日（考慮月中入職/離職）
+      const effectiveStart = joinDate && joinDate > periodStart ? joinDate : periodStart;
+      const effectiveEnd = terminationDate && terminationDate < periodEnd ? terminationDate : periodEnd;
+
+      // 入職滿 3 個月才計法定假日
+      const threeMonthsAfterJoin = joinDate ? new Date(joinDate) : null;
+      if (threeMonthsAfterJoin) {
+        threeMonthsAfterJoin.setMonth(threeMonthsAfterJoin.getMonth() + 3);
+      }
+      const isEligibleForHoliday = !threeMonthsAfterJoin || new Date(dateTo) >= threeMonthsAfterJoin;
+
+      // (a) 有 workLog 的天數
+      const workLogDates = new Set<string>();
+      for (const day of dailyCalc) {
+        if (day.work_logs && day.work_logs.length > 0) {
+          workLogDates.add(toDateStr(day.date));
+        }
+      }
+      const workLogDayCount = workLogDates.size;
+
+      // (b) 有效期間內的星期日天數
+      let sundayCount = 0;
+      for (let d = new Date(effectiveStart); d <= effectiveEnd; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() === 0) sundayCount++;
+      }
+
+      // (c) 有效期間內的法定假日天數（入職滿 3 個月後才計）
+      let holidayDayCount = 0;
+      if (isEligibleForHoliday && holidayDates) {
+        for (const h of holidayDates) {
+          const hDate = new Date(toDateStr(h.date));
+          if (hDate >= effectiveStart && hDate <= effectiveEnd) {
+            holidayDayCount++;
+          }
+        }
+      }
+
+      // 計糧天數 = 工作天 + 星期日 + 法定假日（不扣除重複）
+      monthlyPayableDays = workLogDayCount + sundayCount + holidayDayCount;
+
+      // 基本薪金 = 日薪 × 計糧天數
+      monthlySalaryAmount = Math.round(monthlyDailyRate * monthlyPayableDays * 100) / 100;
+
+      // 覆蓋 baseAmount（月薪員工不用 workIncome + topUp，改用按天比例）
+      baseAmount = monthlySalaryAmount;
+    }
 
     // ── (2) 計算明細項目 ──
 
-    // 工作收入
-    if (baseWorkIncome > 0) {
+    if (salaryType === 'monthly' && monthlySalaryAmount > 0) {
+      // 月薪員工：顯示「基本薪金」= 日薪 × 計糧天數
       items.push({
         item_type: 'base_salary',
-        item_name: '工作收入',
-        unit_price: 0,
-        quantity: workDays + workNights,
-        amount: baseWorkIncome,
+        item_name: '基本薪金',
+        unit_price: monthlyDailyRate,
+        quantity: monthlyPayableDays,
+        amount: monthlySalaryAmount,
+        remarks: `月薪 $${baseSalary} × 12 / ${(new Date(dateFrom).getFullYear() % 4 === 0 && new Date(dateFrom).getFullYear() % 100 !== 0) || new Date(dateFrom).getFullYear() % 400 === 0 ? 366 : 365} = 日薪 $${monthlyDailyRate}`,
         sort_order: sortOrder++,
       });
-    }
+    } else {
+      // 日薪員工：原有邏輯
+      // 工作收入
+      if (baseWorkIncome > 0) {
+        items.push({
+          item_type: 'base_salary',
+          item_name: '工作收入',
+          unit_price: 0,
+          quantity: workDays + workNights,
+          amount: baseWorkIncome,
+          sort_order: sortOrder++,
+        });
+      }
 
-    // 補底薪
-    if (topUpTotal > 0) {
-      // 計算需補底薪的實際天數（按 quantity 比例）
-      const topUpDayCount = dailyCalc.reduce((sum: number, day: any) => {
-        if ((day.top_up_amount || 0) <= 0) return sum;
-        const dayQ = day.day_quantity != null ? Number(day.day_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night !== '夜').length > 0 ? 1 : 0;
-        const nightQ = day.night_quantity != null ? Number(day.night_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night === '夜').length > 0 ? 1 : 0;
-        return sum + Math.min(dayQ + nightQ, 1);
-      }, 0);
-      
-      // 判斷單價是否整除：如果 topUpTotal / topUpDayCount = baseSalary，顯示單價
-      const effectiveUnitPrice = topUpDayCount > 0 && Math.abs(topUpTotal / topUpDayCount - baseSalary) < 0.01
-        ? baseSalary
-        : 0;
-      
-      items.push({
-        item_type: 'base_salary',
-        item_name: '底薪',
-        unit_price: effectiveUnitPrice,
-        quantity: topUpDayCount,
-        amount: topUpTotal,
-        sort_order: sortOrder++,
-      });
+      // 補底薪
+      if (topUpTotal > 0) {
+        // 計算需補底薪的實際天數（按 quantity 比例）
+        const topUpDayCount = dailyCalc.reduce((sum: number, day: any) => {
+          if ((day.top_up_amount || 0) <= 0) return sum;
+          const dayQ = day.day_quantity != null ? Number(day.day_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night !== '夜').length > 0 ? 1 : 0;
+          const nightQ = day.night_quantity != null ? Number(day.night_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night === '夜').length > 0 ? 1 : 0;
+          return sum + Math.min(dayQ + nightQ, 1);
+        }, 0);
+        
+        // 判斷單價是否整除：如果 topUpTotal / topUpDayCount = baseSalary，顯示單價
+        const effectiveUnitPrice = topUpDayCount > 0 && Math.abs(topUpTotal / topUpDayCount - baseSalary) < 0.01
+          ? baseSalary
+          : 0;
+        
+        items.push({
+          item_type: 'base_salary',
+          item_name: '底薪',
+          unit_price: effectiveUnitPrice,
+          quantity: topUpDayCount,
+          amount: topUpTotal,
+          sort_order: sortOrder++,
+        });
+      }
     }
 
     // 法定假日津貼
