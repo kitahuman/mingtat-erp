@@ -452,8 +452,8 @@ export class BankReconciliationService {
    * 3. Same bank account + amount + date range (no ref no, unique match only)
    * 4. Same company + amount + date range (no ref no, unique match only)
    */
-  async autoMatch(bankAccountId: number, batchId?: string, tx?: any) {
-    const prisma = tx || this.prisma;
+  async autoMatch(bankAccountId: number, batchId?: string, prismaClient?: any) {
+    const prisma = prismaClient || this.prisma;
     
     // Get the bank account to find its company_id
     const bankAccount = await prisma.bankAccount.findUnique({
@@ -471,55 +471,56 @@ export class BankReconciliationService {
     const unmatched = await prisma.bankTransaction.findMany({ where });
     let matchedCount = 0;
 
-    for (const tx of unmatched) {
-      const txAmount = tx.amount.abs();
-      const isCredit = tx.amount.greaterThanOrEqualTo(0);
+    // NOTE: loop variable renamed to `bankTx` to avoid shadowing the outer `prismaClient` parameter
+    for (const bankTx of unmatched) {
+      const txAmount = bankTx.amount.abs();
+      const isCredit = bankTx.amount.greaterThanOrEqualTo(0);
 
       // Date range: +/- N days (configurable via system settings, default 3)
       const toleranceDays = await this.systemSettings.getNumber('bank_reconciliation_date_tolerance', 3);
-      const dateFrom = new Date(tx.date);
+      const dateFrom = new Date(bankTx.date);
       dateFrom.setDate(dateFrom.getDate() - toleranceDays);
-      const dateTo = new Date(tx.date);
+      const dateTo = new Date(bankTx.date);
       dateTo.setDate(dateTo.getDate() + toleranceDays);
 
       let matched = false;
 
       if (isCredit) {
         // === PaymentIn matching ===
-        if (!matched && tx.reference_no) {
-          const m = await this.prisma.paymentIn.findFirst({
+        if (!matched && bankTx.reference_no) {
+          const m = await prisma.paymentIn.findFirst({
             where: {
               bank_account_id: bankAccountId,
-              reference_no: tx.reference_no,
+              reference_no: bankTx.reference_no,
               amount: txAmount,
               date: { gte: dateFrom, lte: dateTo },
             },
           });
           if (m) {
-            await this.applyMatch(tx.id, 'payment_in', m.id);
+            await this.applyMatch(bankTx.id, 'payment_in', m.id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
-        if (!matched && tx.reference_no && companyId) {
-          const m = await this.prisma.paymentIn.findFirst({
+        if (!matched && bankTx.reference_no && companyId) {
+          const m = await prisma.paymentIn.findFirst({
             where: {
-              reference_no: tx.reference_no,
+              reference_no: bankTx.reference_no,
               amount: txAmount,
               date: { gte: dateFrom, lte: dateTo },
               project: { company_id: companyId },
             },
           });
           if (m) {
-            await this.applyMatch(tx.id, 'payment_in', m.id);
+            await this.applyMatch(bankTx.id, 'payment_in', m.id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         if (!matched) {
-          const candidates = await this.prisma.paymentIn.findMany({
+          const candidates = await prisma.paymentIn.findMany({
             where: {
               bank_account_id: bankAccountId,
               amount: txAmount,
@@ -527,14 +528,14 @@ export class BankReconciliationService {
             },
           });
           if (candidates.length === 1) {
-            await this.applyMatch(tx.id, 'payment_in', candidates[0].id);
+            await this.applyMatch(bankTx.id, 'payment_in', candidates[0].id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         if (!matched && companyId) {
-          const candidates = await this.prisma.paymentIn.findMany({
+          const candidates = await prisma.paymentIn.findMany({
             where: {
               amount: txAmount,
               date: { gte: dateFrom, lte: dateTo },
@@ -542,19 +543,19 @@ export class BankReconciliationService {
             },
           });
           if (candidates.length === 1) {
-            await this.applyMatch(tx.id, 'payment_in', candidates[0].id);
+            await this.applyMatch(bankTx.id, 'payment_in', candidates[0].id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         // === Multi-match: same ref_no + same date, sum of amounts = bank amount ===
-        if (!matched && tx.reference_no) {
-          const multiCandidates = await this.prisma.paymentIn.findMany({
+        if (!matched && bankTx.reference_no) {
+          const multiCandidates = await prisma.paymentIn.findMany({
             where: {
               bank_account_id: bankAccountId,
-              reference_no: tx.reference_no,
-              date: tx.date,
+              reference_no: bankTx.reference_no,
+              date: bankTx.date,
             },
           });
           if (multiCandidates.length > 1) {
@@ -564,8 +565,9 @@ export class BankReconciliationService {
             );
             if (sum.equals(txAmount)) {
               await this.applyMultiMatch(
-                tx.id,
+                bankTx.id,
                 multiCandidates.map((c) => ({ type: 'payment_in' as const, id: c.id })),
+                prisma,
               );
               matchedCount++;
               matched = true;
@@ -574,40 +576,40 @@ export class BankReconciliationService {
         }
       } else {
         // === PaymentOut matching ===
-        if (!matched && tx.reference_no) {
-          const m = await this.prisma.paymentOut.findFirst({
+        if (!matched && bankTx.reference_no) {
+          const m = await prisma.paymentOut.findFirst({
             where: {
               bank_account_id: bankAccountId,
-              reference_no: tx.reference_no,
+              reference_no: bankTx.reference_no,
               amount: txAmount,
               date: { gte: dateFrom, lte: dateTo },
             },
           });
           if (m) {
-            await this.applyMatch(tx.id, 'payment_out', m.id);
+            await this.applyMatch(bankTx.id, 'payment_out', m.id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
-        if (!matched && tx.reference_no && companyId) {
-          const m = await this.prisma.paymentOut.findFirst({
+        if (!matched && bankTx.reference_no && companyId) {
+          const m = await prisma.paymentOut.findFirst({
             where: {
               company_id: companyId,
-              reference_no: tx.reference_no,
+              reference_no: bankTx.reference_no,
               amount: txAmount,
               date: { gte: dateFrom, lte: dateTo },
             },
           });
           if (m) {
-            await this.applyMatch(tx.id, 'payment_out', m.id);
+            await this.applyMatch(bankTx.id, 'payment_out', m.id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         if (!matched) {
-          const candidates = await this.prisma.paymentOut.findMany({
+          const candidates = await prisma.paymentOut.findMany({
             where: {
               bank_account_id: bankAccountId,
               amount: txAmount,
@@ -615,14 +617,14 @@ export class BankReconciliationService {
             },
           });
           if (candidates.length === 1) {
-            await this.applyMatch(tx.id, 'payment_out', candidates[0].id);
+            await this.applyMatch(bankTx.id, 'payment_out', candidates[0].id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         if (!matched && companyId) {
-          const candidates = await this.prisma.paymentOut.findMany({
+          const candidates = await prisma.paymentOut.findMany({
             where: {
               company_id: companyId,
               amount: txAmount,
@@ -630,19 +632,19 @@ export class BankReconciliationService {
             },
           });
           if (candidates.length === 1) {
-            await this.applyMatch(tx.id, 'payment_out', candidates[0].id);
+            await this.applyMatch(bankTx.id, 'payment_out', candidates[0].id, prisma);
             matchedCount++;
             matched = true;
           }
         }
 
         // === Multi-match: same ref_no + same date, sum of amounts = bank amount ===
-        if (!matched && tx.reference_no) {
-          const multiCandidates = await this.prisma.paymentOut.findMany({
+        if (!matched && bankTx.reference_no) {
+          const multiCandidates = await prisma.paymentOut.findMany({
             where: {
               bank_account_id: bankAccountId,
-              reference_no: tx.reference_no,
-              date: tx.date,
+              reference_no: bankTx.reference_no,
+              date: bankTx.date,
             },
           });
           if (multiCandidates.length > 1) {
@@ -652,8 +654,9 @@ export class BankReconciliationService {
             );
             if (sum.equals(txAmount)) {
               await this.applyMultiMatch(
-                tx.id,
+                bankTx.id,
                 multiCandidates.map((c) => ({ type: 'payment_out' as const, id: c.id })),
+                prisma,
               );
               matchedCount++;
               matched = true;
@@ -671,9 +674,15 @@ export class BankReconciliationService {
     return this.autoMatch(bankAccountId);
   }
 
-  async applyMatch(txId: number, type: 'payment_in' | 'payment_out', matchedId: number) {
-    // Write to both legacy fields AND the new junction table
-    await this.prisma.$transaction(async (prisma) => {
+  async applyMatch(
+    txId: number,
+    type: 'payment_in' | 'payment_out',
+    matchedId: number,
+    prismaClient?: any,
+  ) {
+    // If a prismaClient (transaction) is passed, use it directly to stay within the same transaction.
+    // Otherwise, open a new transaction via this.prisma.$transaction.
+    const doWork = async (prisma: any) => {
       await prisma.bankTransaction.update({
         where: { id: txId },
         data: {
@@ -691,8 +700,13 @@ export class BankReconciliationService {
           data: { bank_transaction_id: txId, matched_type: type, matched_id: matchedId },
         });
       }
-    });
-    return this.prisma.bankTransaction.findUnique({ where: { id: txId } });
+    };
+    if (prismaClient) {
+      await doWork(prismaClient);
+    } else {
+      await this.prisma.$transaction(doWork);
+    }
+    return (prismaClient || this.prisma).bankTransaction.findUnique({ where: { id: txId } });
   }
 
   /**
@@ -702,12 +716,15 @@ export class BankReconciliationService {
   async applyMultiMatch(
     txId: number,
     matches: { type: 'payment_in' | 'payment_out'; id: number }[],
+    prismaClient?: any,
   ) {
     if (!matches || matches.length === 0) {
       throw new BadRequestException('至少需要一筆配對記錄');
     }
 
-    await this.prisma.$transaction(async (prisma) => {
+    // If a prismaClient (transaction) is passed, use it directly to stay within the same transaction.
+    // Otherwise, open a new transaction via this.prisma.$transaction.
+    const doWork = async (prisma: any) => {
       // Clear any existing matches for this transaction
       await prisma.bankTransactionMatch.deleteMany({
         where: { bank_transaction_id: txId },
@@ -733,9 +750,14 @@ export class BankReconciliationService {
           matched_id: isSingle ? matches[0].id : null,
         },
       });
-    });
+    };
+    if (prismaClient) {
+      await doWork(prismaClient);
+    } else {
+      await this.prisma.$transaction(doWork);
+    }
 
-    return this.prisma.bankTransaction.findUnique({
+    return (prismaClient || this.prisma).bankTransaction.findUnique({
       where: { id: txId },
       include: { matches: true },
     });
