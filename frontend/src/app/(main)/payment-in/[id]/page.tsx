@@ -752,6 +752,7 @@ export default function PaymentInDetailPage() {
       <AllocationsCard
         paymentInId={record.id}
         paymentInAmount={Number(record.amount) || 0}
+        sourceType={record.source_type}
         initialAllocations={
           (record.allocations || []) as unknown as Parameters<
             typeof AllocationsCard

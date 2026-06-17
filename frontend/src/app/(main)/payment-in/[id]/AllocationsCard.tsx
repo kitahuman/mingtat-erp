@@ -12,8 +12,6 @@ const fmt$ = (v: unknown) =>
     maximumFractionDigits: 2,
   })}`;
 
-type AllocationKind = 'invoice';
-
 interface AllocationRow {
   id: number;
   payment_in_allocation_amount: number | string;
@@ -26,6 +24,7 @@ interface AllocationRow {
     total_amount: number | string;
     paid_amount: number | string | null;
     outstanding: number | string | null;
+    retention_amount: number | string | null;
     status: string;
     date: string | null;
     client?: { id: number; name: string | null } | null;
@@ -35,6 +34,8 @@ interface AllocationRow {
 interface Props {
   paymentInId: number;
   paymentInAmount: number;
+  /** source_type of the parent PaymentIn — controls allocation mode */
+  sourceType?: string;
   /** Allocations included in the parent record (initial render). */
   initialAllocations: AllocationRow[];
   /** Notify parent that something changed so it can reload the record. */
@@ -42,22 +43,28 @@ interface Props {
   readOnly?: boolean;
 }
 
-function describeAllocation(a: AllocationRow): {
+function describeAllocation(a: AllocationRow, isRetentionRelease: boolean): {
   kindLabel: string;
   docNo: string;
   description: string;
-  totalAmount: number;
+  /** For invoice mode: invoice total. For retention_release: retention_amount. */
+  contextAmount: number;
+  contextLabel: string;
   href: string;
 } {
   if (a.payment_in_allocation_invoice_id && a.invoice) {
+    const retentionAmount = Number(a.invoice.retention_amount) || 0;
     return {
-      kindLabel: '發票',
+      kindLabel: isRetentionRelease ? '扣留金釋放' : '發票',
       docNo: a.invoice.invoice_no,
       description:
         [a.invoice.invoice_title, a.invoice.client?.name]
           .filter(Boolean)
           .join(' / ') || '—',
-      totalAmount: Number(a.invoice.total_amount) || 0,
+      contextAmount: isRetentionRelease
+        ? retentionAmount
+        : Number(a.invoice.total_amount) || 0,
+      contextLabel: isRetentionRelease ? '累計 Retention' : '發票金額',
       href: `/invoices/${a.invoice.id}`,
     };
   }
@@ -65,7 +72,8 @@ function describeAllocation(a: AllocationRow): {
     kindLabel: '—',
     docNo: '—',
     description: '—',
-    totalAmount: 0,
+    contextAmount: 0,
+    contextLabel: '—',
     href: '#',
   };
 }
@@ -73,26 +81,28 @@ function describeAllocation(a: AllocationRow): {
 export default function AllocationsCard({
   paymentInId,
   paymentInAmount,
+  sourceType,
   initialAllocations,
   onChange,
   readOnly,
 }: Props) {
+  const isRetentionRelease = sourceType === 'retention_release';
+
   const [allocations, setAllocations] = useState<AllocationRow[]>(
     initialAllocations || [],
   );
   const [loading, setLoading] = useState(false);
 
+  // Inline editing state: map of allocationId -> edited amount string
+  const [editingAmounts, setEditingAmounts] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+
   // Picker state
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerKind, setPickerKind] = useState<AllocationKind>('invoice');
   const [pickerQuery, setPickerQuery] = useState('');
   const [pickerLoading, setPickerLoading] = useState(false);
-  const [candidates, setCandidates] = useState<PaymentInAllocationCandidate[]>(
-    [],
-  );
-  const [selected, setSelected] = useState<PaymentInAllocationCandidate | null>(
-    null,
-  );
+  const [candidates, setCandidates] = useState<PaymentInAllocationCandidate[]>([]);
+  const [selected, setSelected] = useState<PaymentInAllocationCandidate | null>(null);
   const [allocAmount, setAllocAmount] = useState<string>('');
   const [allocRemarks, setAllocRemarks] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -121,22 +131,83 @@ export default function AllocationsCard({
   );
   const remaining = paymentInAmount - allocatedTotal;
 
+  // ── Inline amount editing ──────────────────────────────────────
+
+  const handleAmountEdit = (id: number, currentAmount: number | string) => {
+    setEditingAmounts((prev) => ({
+      ...prev,
+      [id]: Number(currentAmount).toFixed(2),
+    }));
+  };
+
+  const handleAmountChange = (id: number, value: string) => {
+    setEditingAmounts((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleAmountSave = async (id: number) => {
+    const raw = editingAmounts[id];
+    if (raw === undefined) return;
+    const amount = parseFloat(raw);
+    if (isNaN(amount) || amount <= 0) {
+      alert('請輸入有效的正數金額');
+      return;
+    }
+    setSavingId(id);
+    try {
+      await paymentInAllocationApi.update(id, {
+        payment_in_allocation_amount: amount,
+      });
+      setEditingAmounts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await reload();
+      onChange?.();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || '更新失敗';
+      alert(msg);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleAmountCancel = (id: number) => {
+    setEditingAmounts((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  // ── Picker ─────────────────────────────────────────────────────
+
   const runSearch = useCallback(async () => {
     setPickerLoading(true);
     try {
-      const res = await paymentInAllocationApi.search({
-        kind: pickerKind,
-        q: pickerQuery,
-        limit: 30,
-        unpaid_only: true,
-      });
+      let res;
+      if (isRetentionRelease) {
+        res = await paymentInAllocationApi.searchRetention({
+          q: pickerQuery,
+          limit: 30,
+        });
+      } else {
+        res = await paymentInAllocationApi.search({
+          kind: 'invoice',
+          q: pickerQuery,
+          limit: 30,
+          unpaid_only: true,
+        });
+      }
       setCandidates(res.data || []);
     } catch {
       setCandidates([]);
     } finally {
       setPickerLoading(false);
     }
-  }, [pickerKind, pickerQuery]);
+  }, [isRetentionRelease, pickerQuery]);
 
   useEffect(() => {
     if (pickerOpen) {
@@ -149,13 +220,14 @@ export default function AllocationsCard({
     setAllocAmount('');
     setAllocRemarks('');
     setPickerQuery('');
-    setPickerKind('invoice');
     setPickerOpen(true);
   };
 
   const handleSelectCandidate = (c: PaymentInAllocationCandidate) => {
     setSelected(c);
-    // Default amount = min(remaining, outstanding)
+    // Default amount:
+    // - retention_release: outstanding_amount = outstanding retention for this invoice
+    // - invoice: min(remaining, outstanding)
     const suggested = Math.max(
       0,
       Math.min(remaining, Number(c.outstanding_amount) || 0),
@@ -193,7 +265,10 @@ export default function AllocationsCard({
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('確定刪除此關聯？對應發票的收款狀態將自動重算。')) return;
+    const confirmMsg = isRetentionRelease
+      ? '確定刪除此扣留金釋放關聯？對應的 PaymentInDeduction 記錄也會一併刪除。'
+      : '確定刪除此關聯？對應發票的收款狀態將自動重算。';
+    if (!confirm(confirmMsg)) return;
     try {
       await paymentInAllocationApi.delete(id);
       await reload();
@@ -206,11 +281,19 @@ export default function AllocationsCard({
     }
   };
 
+  // Determine column header for the context amount column
+  const contextColumnHeader = isRetentionRelease ? '累計 Retention' : '發票金額';
+  const pickerTitle = isRetentionRelease ? '新增扣留金釋放關聯' : '新增關聯發票';
+  const pickerHint = isRetentionRelease
+    ? '只顯示有未釋放扣留金的發票'
+    : '只顯示尚未完全收清的發票（未收金額 > 0）';
+  const pickerOutstandingLabel = isRetentionRelease ? '未釋放 Retention' : '未收';
+
   return (
     <div className="card p-6 mb-6">
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         <h2 className="text-lg font-semibold text-gray-900">
-          關聯單據（多對多分配）
+          {isRetentionRelease ? '關聯發票（扣留金釋放）' : '關聯單據（多對多分配）'}
         </h2>
         <div className="flex items-center gap-3 text-sm">
           <div className="text-gray-600">
@@ -247,7 +330,7 @@ export default function AllocationsCard({
               title={
                 remaining <= 0.0001
                   ? '此收款已完全分配，無剩餘可分配金額'
-                  : '新增關聯單據'
+                  : pickerTitle
               }
             >
               + 新增關聯
@@ -275,7 +358,7 @@ export default function AllocationsCard({
                   描述
                 </th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
-                  發票金額
+                  {contextColumnHeader}
                 </th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
                   本次分配
@@ -292,7 +375,9 @@ export default function AllocationsCard({
             </thead>
             <tbody>
               {allocations.map((a) => {
-                const meta = describeAllocation(a);
+                const meta = describeAllocation(a, isRetentionRelease);
+                const isEditing = editingAmounts[a.id] !== undefined;
+                const isSaving = savingId === a.id;
                 return (
                   <tr
                     key={a.id}
@@ -313,10 +398,49 @@ export default function AllocationsCard({
                     </td>
                     <td className="py-2 px-3">{meta.description}</td>
                     <td className="py-2 px-3 text-right font-mono">
-                      {fmt$(meta.totalAmount)}
+                      {fmt$(meta.contextAmount)}
                     </td>
-                    <td className="py-2 px-3 text-right font-mono font-semibold text-indigo-700">
-                      {fmt$(a.payment_in_allocation_amount)}
+                    <td className="py-2 px-3 text-right">
+                      {!readOnly && isEditing ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={editingAmounts[a.id]}
+                            onChange={(e) => handleAmountChange(a.id, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleAmountSave(a.id);
+                              if (e.key === 'Escape') handleAmountCancel(a.id);
+                            }}
+                            className="w-28 text-right border border-indigo-300 rounded px-2 py-0.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleAmountSave(a.id)}
+                            disabled={isSaving}
+                            className="text-green-600 hover:text-green-700 text-xs px-1"
+                            title="儲存"
+                          >
+                            {isSaving ? '…' : '✓'}
+                          </button>
+                          <button
+                            onClick={() => handleAmountCancel(a.id)}
+                            className="text-gray-400 hover:text-gray-600 text-xs px-1"
+                            title="取消"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          className={`font-mono font-semibold text-indigo-700 ${!readOnly ? 'cursor-pointer hover:underline hover:text-indigo-900' : ''}`}
+                          onClick={() => !readOnly && handleAmountEdit(a.id, a.payment_in_allocation_amount)}
+                          title={!readOnly ? '點擊編輯金額' : undefined}
+                        >
+                          {fmt$(a.payment_in_allocation_amount)}
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 px-3 text-xs text-gray-500">
                       {a.payment_in_allocation_remarks || '—'}
@@ -344,7 +468,7 @@ export default function AllocationsCard({
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">新增關聯發票</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{pickerTitle}</h3>
               <button
                 onClick={() => setPickerOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -369,9 +493,7 @@ export default function AllocationsCard({
                   搜尋
                 </button>
               </div>
-              <p className="text-xs text-gray-500">
-                只顯示尚未完全收清的發票（未收金額 &gt; 0）
-              </p>
+              <p className="text-xs text-gray-500">{pickerHint}</p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
@@ -392,12 +514,28 @@ export default function AllocationsCard({
                       <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
                         發票金額
                       </th>
-                      <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
-                        已收
-                      </th>
-                      <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
-                        未收
-                      </th>
+                      {isRetentionRelease ? (
+                        <>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                            累計 Retention
+                          </th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                            已釋放
+                          </th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                            未釋放
+                          </th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                            已收
+                          </th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                            未收
+                          </th>
+                        </>
+                      )}
                       <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase" />
                     </tr>
                   </thead>
@@ -420,12 +558,28 @@ export default function AllocationsCard({
                         <td className="py-2 px-3 text-right font-mono">
                           {fmt$(c.total_amount)}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-gray-500">
-                          {fmt$(c.allocated_amount)}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-green-700">
-                          {fmt$(c.outstanding_amount)}
-                        </td>
+                        {isRetentionRelease ? (
+                          <>
+                            <td className="py-2 px-3 text-right font-mono text-amber-700">
+                              {fmt$(c.retention_amount ?? 0)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-gray-500">
+                              {fmt$(c.allocated_amount)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-green-700">
+                              {fmt$(c.outstanding_amount)}
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2 px-3 text-right font-mono text-gray-500">
+                              {fmt$(c.allocated_amount)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-green-700">
+                              {fmt$(c.outstanding_amount)}
+                            </td>
+                          </>
+                        )}
                         <td className="py-2 px-3 text-right">
                           <button
                             onClick={() => handleSelectCandidate(c)}
@@ -451,8 +605,9 @@ export default function AllocationsCard({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      分配金額 *（剩餘可分配 {fmt$(remaining)}，發票未收{' '}
-                      {fmt$(selected.outstanding_amount)}）
+                      {isRetentionRelease
+                        ? `分配金額 *（剩餘可分配 ${fmt$(remaining)}，未釋放 Retention ${fmt$(selected.outstanding_amount)}）`
+                        : `分配金額 *（剩餘可分配 ${fmt$(remaining)}，發票未收 ${fmt$(selected.outstanding_amount)}）`}
                     </label>
                     <input
                       type="number"
@@ -471,7 +626,7 @@ export default function AllocationsCard({
                       value={allocRemarks}
                       onChange={(e) => setAllocRemarks(e.target.value)}
                       className="input-field"
-                      placeholder="選填"
+                      placeholder={isRetentionRelease ? '扣留金釋放' : '選填'}
                     />
                   </div>
                 </div>

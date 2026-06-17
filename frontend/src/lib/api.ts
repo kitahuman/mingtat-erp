@@ -1272,6 +1272,7 @@ export interface PaymentInAllocationCandidate {
   total_amount: number;
   allocated_amount: number;
   outstanding_amount: number;
+  retention_amount?: number;
   date: string | null;
 }
 
@@ -1335,6 +1336,12 @@ export const paymentInAllocationApi = {
         unpaid_only: params.unpaid_only === false ? 'false' : 'true',
       },
     }),
+  searchRetention: (params: { q?: string; limit?: number }) =>
+    api.get<PaymentInAllocationCandidate[]>('/payment-in-allocations/search-retention', {
+      params: { q: params.q, limit: params.limit },
+    }),
+  getInvoiceRetentionSummary: (invoiceId: number) =>
+    api.get(`/payment-in-allocations/invoice-retention-summary/${invoiceId}`),
   create: (data: CreatePaymentInAllocationPayload) =>
     api.post('/payment-in-allocations', data),
   update: (

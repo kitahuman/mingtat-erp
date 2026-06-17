@@ -78,5 +78,6 @@ export interface PaymentInAllocationCandidate {
   total_amount: number;
   allocated_amount: number;
   outstanding_amount: number;
+  retention_amount?: number;
   date: string | null;
 }

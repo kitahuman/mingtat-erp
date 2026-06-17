@@ -28,6 +28,18 @@ export class PaymentInAllocationController {
     return this.service.searchCandidates(query);
   }
 
+  /** Search invoices with outstanding retention (for retention_release PaymentIn). */
+  @Get('search-retention')
+  searchRetention(@Query() query: PaymentInAllocationSearchQueryDto) {
+    return this.service.searchRetentionCandidates(query);
+  }
+
+  /** Get retention release summary for a specific invoice. */
+  @Get('invoice-retention-summary/:invoiceId')
+  getInvoiceRetentionSummary(@Param('invoiceId') invoiceId: string) {
+    return this.service.getInvoiceRetentionReleaseSummary(+invoiceId);
+  }
+
   /** List allocations attached to a specific PaymentIn. */
   @Get('by-payment-in/:paymentInId')
   listByPaymentIn(@Param('paymentInId') paymentInId: string) {

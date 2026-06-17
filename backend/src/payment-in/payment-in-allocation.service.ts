@@ -41,6 +41,7 @@ export class PaymentInAllocationService {
         total_amount: true,
         paid_amount: true,
         outstanding: true,
+        retention_amount: true,
         status: true,
         date: true,
         client: { select: { id: true, name: true } },
@@ -80,6 +81,44 @@ export class PaymentInAllocationService {
     return record;
   }
 
+  // ── Retention summary for an invoice ────────────────────────────
+
+  /**
+   * Returns the total retention_release amount already recorded for an invoice
+   * (sum of PaymentInDeduction where type='retention_release' for that invoice).
+   * Used by the frontend to show the default amount when allocating a retention_release PaymentIn.
+   */
+  async getInvoiceRetentionReleaseSummary(invoiceId: number): Promise<{
+    total_retention_release: number;
+    deductions: { id: number; amount: number; payment_in_id: number; remarks: string | null }[];
+  }> {
+    const deductions = await this.prisma.paymentInDeduction.findMany({
+      where: {
+        payment_in_deduction_invoice_id: invoiceId,
+        payment_in_deduction_type: 'retention_release',
+      },
+      select: {
+        id: true,
+        payment_in_deduction_amount: true,
+        payment_in_deduction_payment_in_id: true,
+        payment_in_deduction_remarks: true,
+      },
+    });
+    const total = deductions.reduce(
+      (s, d) => s + Math.abs(Number(d.payment_in_deduction_amount)),
+      0,
+    );
+    return {
+      total_retention_release: Math.round(total * 100) / 100,
+      deductions: deductions.map((d) => ({
+        id: d.id,
+        amount: Math.abs(Number(d.payment_in_deduction_amount)),
+        payment_in_id: d.payment_in_deduction_payment_in_id,
+        remarks: d.payment_in_deduction_remarks,
+      })),
+    };
+  }
+
   // ── Create ──────────────────────────────────────────────────────
 
   async create(dto: CreatePaymentInAllocationDto) {
@@ -87,7 +126,7 @@ export class PaymentInAllocationService {
 
     const paymentIn = await this.prisma.paymentIn.findUnique({
       where: { id: dto.payment_in_allocation_payment_in_id },
-      select: { id: true, amount: true },
+      select: { id: true, amount: true, source_type: true },
     });
     if (!paymentIn) throw new NotFoundException('收款記錄不存在');
 
@@ -125,9 +164,32 @@ export class PaymentInAllocationService {
       include: this.allocationInclude,
     });
 
-    await this.recalculateForTarget({
-      invoiceId: created.payment_in_allocation_invoice_id,
-    });
+    const isRetentionRelease = paymentIn.source_type === 'retention_release';
+    const invoiceId = created.payment_in_allocation_invoice_id;
+
+    if (isRetentionRelease && invoiceId) {
+      // Write a PaymentInDeduction record (negative amount = retention release)
+      await this.prisma.paymentInDeduction.create({
+        data: {
+          payment_in_deduction_payment_in_id:
+            dto.payment_in_allocation_payment_in_id,
+          payment_in_deduction_invoice_id: invoiceId,
+          payment_in_deduction_type: 'retention_release',
+          // Store as negative to indicate a release (reducing the retained amount)
+          payment_in_deduction_amount: -Math.abs(
+            Number(dto.payment_in_allocation_amount),
+          ),
+          payment_in_deduction_remarks:
+            dto.payment_in_allocation_remarks || '扣留金釋放',
+        },
+      });
+      // Do NOT recalculate invoice outstanding — retention_release doesn't affect paid_amount
+    } else {
+      // Standard invoice allocation: recalculate invoice paid_amount / outstanding / status
+      await this.recalculateForTarget({
+        invoiceId: created.payment_in_allocation_invoice_id,
+      });
+    }
 
     return created;
   }
@@ -146,13 +208,13 @@ export class PaymentInAllocationService {
     });
     if (!existing) throw new NotFoundException('收款分配記錄不存在');
 
-    if (dto.payment_in_allocation_amount !== undefined) {
-      const paymentIn = await this.prisma.paymentIn.findUnique({
-        where: { id: existing.payment_in_allocation_payment_in_id },
-        select: { amount: true },
-      });
-      if (!paymentIn) throw new NotFoundException('收款記錄不存在');
+    const paymentIn = await this.prisma.paymentIn.findUnique({
+      where: { id: existing.payment_in_allocation_payment_in_id },
+      select: { amount: true, source_type: true },
+    });
+    if (!paymentIn) throw new NotFoundException('收款記錄不存在');
 
+    if (dto.payment_in_allocation_amount !== undefined) {
       const others = await this.prisma.paymentInAllocation.aggregate({
         where: {
           payment_in_allocation_payment_in_id:
@@ -187,9 +249,39 @@ export class PaymentInAllocationService {
       include: this.allocationInclude,
     });
 
-    await this.recalculateForTarget({
-      invoiceId: updated.payment_in_allocation_invoice_id,
-    });
+    const isRetentionRelease = paymentIn.source_type === 'retention_release';
+    const invoiceId = updated.payment_in_allocation_invoice_id;
+
+    if (isRetentionRelease && invoiceId && dto.payment_in_allocation_amount !== undefined) {
+      // Update the linked PaymentInDeduction record
+      const deduction = await this.prisma.paymentInDeduction.findFirst({
+        where: {
+          payment_in_deduction_payment_in_id:
+            existing.payment_in_allocation_payment_in_id,
+          payment_in_deduction_invoice_id: invoiceId,
+          payment_in_deduction_type: 'retention_release',
+        },
+      });
+      if (deduction) {
+        await this.prisma.paymentInDeduction.update({
+          where: { id: deduction.id },
+          data: {
+            payment_in_deduction_amount: -Math.abs(
+              Number(dto.payment_in_allocation_amount),
+            ),
+            ...(dto.payment_in_allocation_remarks !== undefined && {
+              payment_in_deduction_remarks:
+                dto.payment_in_allocation_remarks || '扣留金釋放',
+            }),
+          },
+        });
+      }
+      // Do NOT recalculate invoice outstanding
+    } else if (!isRetentionRelease) {
+      await this.recalculateForTarget({
+        invoiceId: updated.payment_in_allocation_invoice_id,
+      });
+    }
 
     return updated;
   }
@@ -202,15 +294,37 @@ export class PaymentInAllocationService {
       select: {
         id: true,
         payment_in_allocation_invoice_id: true,
+        payment_in_allocation_payment_in_id: true,
+        payment_in_allocation_amount: true,
       },
     });
     if (!existing) throw new NotFoundException('收款分配記錄不存在');
 
+    const paymentIn = await this.prisma.paymentIn.findUnique({
+      where: { id: existing.payment_in_allocation_payment_in_id },
+      select: { source_type: true },
+    });
+
+    const isRetentionRelease = paymentIn?.source_type === 'retention_release';
+    const invoiceId = existing.payment_in_allocation_invoice_id;
+
+    if (isRetentionRelease && invoiceId) {
+      // Delete the linked PaymentInDeduction record
+      await this.prisma.paymentInDeduction.deleteMany({
+        where: {
+          payment_in_deduction_payment_in_id:
+            existing.payment_in_allocation_payment_in_id,
+          payment_in_deduction_invoice_id: invoiceId,
+          payment_in_deduction_type: 'retention_release',
+        },
+      });
+    }
+
     await this.prisma.paymentInAllocation.delete({ where: { id } });
 
-    await this.recalculateForTarget({
-      invoiceId: existing.payment_in_allocation_invoice_id,
-    });
+    if (!isRetentionRelease) {
+      await this.recalculateForTarget({ invoiceId });
+    }
 
     return { message: '已刪除' };
   }
@@ -231,7 +345,7 @@ export class PaymentInAllocationService {
   /**
    * Compute the total paid amount for an Invoice.
    * Counts:
-   *   - allocations whose PaymentIn is `paid`
+   *   - allocations whose PaymentIn is `paid` AND source_type is NOT retention_release
    *   - PLUS legacy direct PaymentIn where source_type='invoice'
    *     (case-insensitive) and source_ref_id=invoiceId, provided that
    *     PaymentIn has NO allocation row pointing back at the same
@@ -241,11 +355,14 @@ export class PaymentInAllocationService {
     paidAmount: number;
     latestPaidDate: Date | null;
   }> {
-    // 1) Sum allocations where parent PaymentIn is paid.
+    // 1) Sum allocations where parent PaymentIn is paid AND NOT retention_release.
     const allocs = await this.prisma.paymentInAllocation.findMany({
       where: {
         payment_in_allocation_invoice_id: invoiceId,
-        payment_in: { payment_in_status: 'paid' },
+        payment_in: {
+          payment_in_status: 'paid',
+          NOT: { source_type: 'retention_release' },
+        },
       },
       select: {
         payment_in_allocation_amount: true,
@@ -375,6 +492,7 @@ export class PaymentInAllocationService {
         invoice_no: true,
         invoice_title: true,
         total_amount: true,
+        retention_amount: true,
         date: true,
         client: { select: { name: true } },
       },
@@ -386,7 +504,8 @@ export class PaymentInAllocationService {
     for (const inv of invoices) {
       const { paidAmount } = await this.computeInvoicePaidTotal(inv.id);
       const total = Number(inv.total_amount) || 0;
-      const outstanding = total - paidAmount;
+      const retentionAmount = Number(inv.retention_amount) || 0;
+      const outstanding = total - paidAmount - retentionAmount;
       if (unpaidOnly && outstanding <= 0.0001) continue;
       result.push({
         kind: 'invoice',
@@ -398,6 +517,90 @@ export class PaymentInAllocationService {
         total_amount: total,
         allocated_amount: paidAmount,
         outstanding_amount: outstanding,
+        retention_amount: retentionAmount,
+        date: inv.date ? inv.date.toISOString().slice(0, 10) : null,
+      });
+      if (result.length >= limit) break;
+    }
+
+    return result;
+  }
+
+  /**
+   * Search candidates for retention_release mode:
+   * returns invoices that have retention_amount > 0
+   * (i.e. there is still retention to be released).
+   */
+  async searchRetentionCandidates(
+    query: PaymentInAllocationSearchQueryDto,
+  ): Promise<PaymentInAllocationCandidate[]> {
+    const limit =
+      query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 30;
+    const q = query.q?.trim() || '';
+
+    const whereClause: Prisma.InvoiceWhereInput = {
+      deleted_at: null,
+      status: { notIn: ['draft', 'void'] },
+      retention_amount: { gt: 0 },
+      ...(q
+        ? {
+            OR: [
+              { invoice_no: { contains: q, mode: 'insensitive' } },
+              { invoice_title: { contains: q, mode: 'insensitive' } },
+              { client_contract_no: { contains: q, mode: 'insensitive' } },
+              {
+                client: {
+                  name: { contains: q, mode: 'insensitive' },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const invoices = await this.prisma.invoice.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        invoice_no: true,
+        invoice_title: true,
+        total_amount: true,
+        retention_amount: true,
+        date: true,
+        client: { select: { name: true } },
+      },
+      orderBy: { date: 'desc' },
+      take: limit * 2,
+    });
+
+    const result: PaymentInAllocationCandidate[] = [];
+    for (const inv of invoices) {
+      const retentionAmount = Number(inv.retention_amount) || 0;
+      // Get already-released retention for this invoice
+      const releaseSum = await this.prisma.paymentInDeduction.aggregate({
+        where: {
+          payment_in_deduction_invoice_id: inv.id,
+          payment_in_deduction_type: 'retention_release',
+        },
+        _sum: { payment_in_deduction_amount: true },
+      });
+      // Deduction amounts are stored as negative, so negate to get released total
+      const alreadyReleased = Math.abs(
+        Number(releaseSum._sum.payment_in_deduction_amount ?? 0),
+      );
+      const outstandingRetention = Math.max(0, retentionAmount - alreadyReleased);
+      if (outstandingRetention <= 0.0001) continue;
+      result.push({
+        kind: 'invoice',
+        id: inv.id,
+        doc_no: inv.invoice_no,
+        description: [inv.invoice_title, inv.client?.name]
+          .filter(Boolean)
+          .join(' / ') || `發票 ${inv.invoice_no}`,
+        total_amount: Number(inv.total_amount) || 0,
+        allocated_amount: alreadyReleased,
+        outstanding_amount: outstandingRetention,
+        retention_amount: retentionAmount,
         date: inv.date ? inv.date.toISOString().slice(0, 10) : null,
       });
       if (result.length >= limit) break;
