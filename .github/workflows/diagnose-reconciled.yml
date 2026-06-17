@@ -18,54 +18,45 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
-          cd /opt/mingtat-erp/backend
-          export $(cat .env | grep -v '^#' | grep DATABASE_URL | xargs)
 
-          echo "===== 1. BankTransaction matched counts ====="
-          psql "$DATABASE_URL" -c "
-          SELECT COUNT(*) as total, COUNT(matched_id) as with_matched_id FROM bank_transactions;
-          "
-
-          echo "===== 2. matched_type values ====="
-          psql "$DATABASE_URL" -c "
-          SELECT matched_type, COUNT(*) as cnt FROM bank_transactions WHERE matched_id IS NOT NULL GROUP BY matched_type;
-          "
-
-          echo "===== 3. Sample matched bank_transactions ====="
-          psql "$DATABASE_URL" -c "
-          SELECT id, matched_id, matched_type, match_status FROM bank_transactions WHERE matched_id IS NOT NULL LIMIT 10;
-          "
-
-          echo "===== 4. bank_transaction_matches count ====="
-          psql "$DATABASE_URL" -c "
-          SELECT COUNT(*) as junction_count FROM bank_transaction_matches;
-          "
-
-          echo "===== 5. Test is_reconciled query for PaymentIn IDs 1807 and 1042 ====="
-          psql "$DATABASE_URL" -c "
-          SELECT bt.matched_id, bt.matched_type, bt.match_status
-          FROM bank_transactions bt
-          WHERE bt.matched_type = 'payment_in'
-            AND bt.matched_id IN (1807, 1042)
-            AND bt.match_status = 'matched';
-          "
-
-          echo "===== 6. Check API response for PaymentIn 1807 ====="
-          curl -s "http://localhost:3001/payment-in?page=1&limit=5" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
+          echo "=== 1. Check API keys in first PaymentIn item ==="
+          curl -s "http://localhost:3001/payment-in?page=1&limit=10" > /tmp/pi_response.json
+          python3 -c "
+import json
+data = json.load(open('/tmp/pi_response.json'))
 items = data.get('data', [])
-for item in items[:5]:
-    print(f\"ID={item['id']} is_reconciled={item.get('is_reconciled', 'MISSING')} amount={item.get('amount')}\")
-" 2>&1 || echo "API call failed"
+print(f'Total items in page: {len(items)}')
+if items:
+    keys = list(items[0].keys())
+    print('Keys in first item:', keys)
+    print('is_reconciled present:', 'is_reconciled' in keys)
+    print('First item is_reconciled value:', items[0].get('is_reconciled', 'MISSING'))
+"
 
-          echo "===== 7. Check if PaymentIn 1807 appears in API ====="
-          curl -s "http://localhost:3001/payment-in?page=1&limit=200" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
+          echo ""
+          echo "=== 2. Check PaymentIn IDs 1807 and 1042 (the matched ones) ==="
+          curl -s "http://localhost:3001/payment-in?page=1&limit=200" > /tmp/pi_response2.json
+          python3 -c "
+import json
+data = json.load(open('/tmp/pi_response2.json'))
 items = data.get('data', [])
+print(f'Total items: {len(items)}')
 for item in items:
     if item['id'] in [1807, 1042]:
         print(f\"ID={item['id']} is_reconciled={item.get('is_reconciled', 'MISSING')} amount={item.get('amount')}\")
-" 2>&1 || echo "API call failed"
+print('Done checking IDs 1807 and 1042')
+"
+
+          echo ""
+          echo "=== 3. Check how many items have is_reconciled=true ==="
+          python3 -c "
+import json
+data = json.load(open('/tmp/pi_response2.json'))
+items = data.get('data', [])
+reconciled = [i for i in items if i.get('is_reconciled') == True]
+print(f'Items with is_reconciled=True: {len(reconciled)}')
+for item in reconciled:
+    print(f\"  ID={item['id']} amount={item.get('amount')}\")
+"
+
           ENDSSH
