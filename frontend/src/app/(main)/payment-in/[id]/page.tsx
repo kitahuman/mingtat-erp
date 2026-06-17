@@ -8,6 +8,8 @@ import {
   projectsApi,
   contractsApi,
   fieldOptionsApi,
+  paymentInSourceTypesApi,
+  partnersApi,
 } from '@/lib/api';
 import AllocationsCard from './AllocationsCard';
 import DeductionsCard from './DeductionsCard';
@@ -76,6 +78,8 @@ interface PaymentInForm {
   payment_method: string;
   remarks: string;
   payment_in_status: string;
+  payer_partner_id: number | '';
+  payer_name: string;
 }
 
 interface PaymentInRecord {
@@ -91,9 +95,12 @@ interface PaymentInRecord {
   payment_method: string | null;
   remarks: string | null;
   payment_in_status: string;
+  payer_partner_id: number | null;
+  payer_name: string | null;
+  payer_partner?: { id: number; name: string; code: string } | null;
   created_at: string;
   updated_at: string;
-  project?: ProjectMini | null;
+  project?: (ProjectMini & { client?: { id: number; name: string; code: string } | null }) | null;
   contract?: ContractMini | null;
   bank_account?: (BankAccount & { company?: { id: number; name: string } | null }) | null;
   allocations?: unknown[];
@@ -142,12 +149,16 @@ export default function PaymentInDetailPage() {
     payment_method: '',
     remarks: '',
     payment_in_status: 'paid',
+    payer_partner_id: '',
+    payer_name: '',
   });
 
   const [projects, setProjects] = useState<ProjectMini[]>([]);
   const [contracts, setContracts] = useState<ContractMini[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
 
   const loadRecord = useCallback(() => {
     setLoading(true);
@@ -182,6 +193,14 @@ export default function PaymentInDetailPage() {
     fieldOptionsApi
       .getByCategory('payment_method')
       .then((r) => setPaymentMethods(r.data || []))
+      .catch(() => {});
+    paymentInSourceTypesApi
+      .list()
+      .then((r) => setSourceTypes(r.data || []))
+      .catch(() => {});
+    partnersApi
+      .simple()
+      .then((r) => setPartners(r.data || []))
       .catch(() => {});
   }, []);
 
@@ -242,6 +261,22 @@ export default function PaymentInDetailPage() {
     [paymentMethods],
   );
 
+  const sourceTypeOptions = useMemo(
+    () => sourceTypes.map((st: any) => ({ value: st.code, label: st.label })),
+    [sourceTypes],
+  );
+
+  const sourceTypeLabelMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    sourceTypes.forEach((st: any) => { m[st.code] = st.label; });
+    return m;
+  }, [sourceTypes]);
+
+  const partnerOptions: SelectOption[] = useMemo(
+    () => partners.map((p: any) => ({ value: p.id, label: `${p.code || ''} ${p.name}`.trim() })),
+    [partners],
+  );
+
   function toForm(r: PaymentInRecord): PaymentInForm {
     return {
       date: r.date ? r.date.slice(0, 10) : '',
@@ -255,6 +290,8 @@ export default function PaymentInDetailPage() {
       payment_method: r.payment_method || '',
       remarks: r.remarks || '',
       payment_in_status: r.payment_in_status || 'paid',
+      payer_partner_id: r.payer_partner_id ?? '',
+      payer_name: r.payer_name || '',
     };
   }
 
@@ -279,6 +316,8 @@ export default function PaymentInDetailPage() {
         payment_method: form.payment_method || null,
         remarks: form.remarks || null,
         payment_in_status: form.payment_in_status || 'paid',
+        payer_partner_id: form.payer_partner_id ? Number(form.payer_partner_id) : null,
+        payer_name: form.payer_name || null,
       };
       await paymentInApi.update(recordId, payload);
       setEditMode(false);
@@ -330,7 +369,10 @@ export default function PaymentInDetailPage() {
 
   const statusInfo = STATUS_MAP[record.payment_in_status] || STATUS_MAP.unpaid;
   const sourceLabel =
-    SOURCE_TYPE_LABELS[record.source_type] || record.source_type || '—';
+    sourceTypeLabelMap[record.source_type] || SOURCE_TYPE_LABELS[record.source_type] || record.source_type || '—';
+
+  // Payer display
+  const payerDisplay = record.payer_partner?.name || record.payer_name || record.project?.client?.name || null;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -461,12 +503,11 @@ export default function PaymentInDetailPage() {
                   }
                   className="input-field"
                 >
-                  <option value="payment_certificate">
-                    Payment Certificate
-                  </option>
-                  <option value="invoice">發票</option>
-                  <option value="retention_release">扣留金釋放</option>
-                  <option value="other">其他收入</option>
+                  {sourceTypeOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -520,6 +561,37 @@ export default function PaymentInDetailPage() {
                 />
               </div>
             </div>
+            {/* Payer fields */}
+            {form.source_type !== 'invoice' && form.source_type !== 'payment_certificate' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    付款方（合作單位）
+                  </label>
+                  <SearchableSelect
+                    value={form.payer_partner_id ? Number(form.payer_partner_id) : null}
+                    onChange={(v: string | number | null) =>
+                      setForm({ ...form, payer_partner_id: v == null ? '' : Number(v), payer_name: '' })
+                    }
+                    options={partnerOptions}
+                    placeholder="選擇合作單位"
+                    clearable
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    付款方（自由輸入）
+                  </label>
+                  <input
+                    type="text"
+                    value={form.payer_name}
+                    onChange={(e) => setForm({ ...form, payer_name: e.target.value, payer_partner_id: '' })}
+                    className="input-field"
+                    placeholder="或直接輸入付款方名稱"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -560,6 +632,7 @@ export default function PaymentInDetailPage() {
                 </Link>
               ) : null}
             </Field>
+            <Field label="付款方">{payerDisplay}</Field>
           </div>
         )}
       </div>

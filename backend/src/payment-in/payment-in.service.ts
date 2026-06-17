@@ -48,7 +48,8 @@ export class PaymentInService {
 
   // ── Shared include for list queries ──
   private readonly listInclude = {
-    project: { select: { id: true, project_no: true, project_name: true } },
+    project: { select: { id: true, project_no: true, project_name: true, client: { select: { id: true, name: true, code: true } } } },
+    payer_partner: { select: { id: true, name: true, code: true } },
     contract: {
       select: { id: true, contract_no: true, contract_name: true },
     },
@@ -118,7 +119,9 @@ export class PaymentInService {
       if (dbVals.length) where.payment_in_status = { in: dbVals };
     }
     if (query.filter_source_type) {
+      // Build reverse map dynamically: label → code
       const SOURCE_REVERSE: Record<string, string> = { 'Payment Certificate': 'payment_certificate', '發票': 'invoice', '扣留金釋放': 'retention_release', '其他收入': 'other' };
+      // Also try to match by code directly
       const vals = query.filter_source_type.split(',').filter(Boolean);
       const dbVals = vals.map(v => SOURCE_REVERSE[v] || v);
       if (dbVals.length) where.source_type = { in: dbVals };
@@ -219,6 +222,17 @@ export class PaymentInService {
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException('金額必須大於 0');
     }
+    // Auto-populate payer from source document if applicable
+    let payerPartnerId = dto.payer_partner_id || null;
+    let payerName = dto.payer_name || null;
+    if (
+      !payerPartnerId &&
+      (dto.source_type === 'invoice' || dto.source_type === 'payment_certificate') &&
+      dto.source_ref_id
+    ) {
+      payerPartnerId = await this.resolvePayerFromSource(dto.source_type, dto.source_ref_id);
+    }
+
     const record = await this.prisma.paymentIn.create({
       data: {
         date: new Date(dto.date),
@@ -232,6 +246,8 @@ export class PaymentInService {
         payment_method: dto.payment_method || null,
         remarks: dto.remarks || null,
         payment_in_status: dto.payment_in_status || 'paid',
+        payer_partner_id: payerPartnerId,
+        payer_name: payerName,
       },
       include: this.listInclude,
     });
@@ -273,6 +289,12 @@ export class PaymentInService {
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
     if (dto.payment_in_status !== undefined)
       data.payment_in_status = dto.payment_in_status;
+    if (dto.payer_partner_id !== undefined) {
+      data.payer_partner = dto.payer_partner_id
+        ? { connect: { id: dto.payer_partner_id } }
+        : { disconnect: true };
+    }
+    if (dto.payer_name !== undefined) data.payer_name = dto.payer_name || null;
 
     const record = await this.prisma.paymentIn.update({
       where: { id },
@@ -362,11 +384,18 @@ export class PaymentInService {
       return records.map(r => STATUS_LABELS[r.payment_in_status] || r.payment_in_status || '-');
     }
     if (column === 'source_type') {
+      // Fetch dynamic labels from source type table
+      const sourceTypes = await this.prisma.paymentInSourceType.findMany({
+        where: { is_active: true },
+        orderBy: { sort_order: 'asc' },
+      });
+      const labelMap: Record<string, string> = {};
+      sourceTypes.forEach(st => { labelMap[st.code] = st.label; });
       const records = await this.prisma.paymentIn.findMany({
         select: { source_type: true },
         distinct: ['source_type'],
       });
-      return records.map(r => SOURCE_TYPE_LABELS[r.source_type] || r.source_type || '-');
+      return records.map(r => labelMap[r.source_type] || SOURCE_TYPE_LABELS[r.source_type] || r.source_type || '-');
     }
     if (column === 'company') {
       const companies = await this.prisma.company.findMany({
@@ -535,5 +564,30 @@ export class PaymentInService {
         status,
       },
     });
+  }
+
+  /**
+   * Resolve payer_partner_id from source document (invoice or payment certificate).
+   * Returns the client partner ID if found, otherwise null.
+   */
+  private async resolvePayerFromSource(
+    sourceType: string,
+    sourceRefId: number,
+  ): Promise<number | null> {
+    if (sourceType === 'invoice' || sourceType === 'INVOICE') {
+      const invoice = await this.prisma.invoice.findUnique({
+        where: { id: sourceRefId },
+        select: { client_id: true },
+      });
+      return invoice?.client_id ?? null;
+    }
+    if (sourceType === 'payment_certificate' || sourceType === 'IPA') {
+      const pa = await this.prisma.paymentApplication.findUnique({
+        where: { id: sourceRefId },
+        select: { project: { select: { client_id: true } } },
+      });
+      return pa?.project?.client_id ?? null;
+    }
+    return null;
   }
 }

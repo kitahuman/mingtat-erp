@@ -2142,3 +2142,14 @@ export const aiPayrollApi = {
   confirmPage: (pageId: string | number, data?: any) =>
     api.post(`/ai-payroll/pages/${pageId}/confirm`, data || {}),
 };
+
+export const paymentInSourceTypesApi = {
+  list: (includeInactive = false) =>
+    api.get('/settings/payment-in-source-types', {
+      params: includeInactive ? { include_inactive: 'true' } : {},
+    }),
+  create: (data: any) => api.post('/settings/payment-in-source-types', data),
+  update: (id: number, data: any) =>
+    api.patch(`/settings/payment-in-source-types/${id}`, data),
+  delete: (id: number) => api.delete(`/settings/payment-in-source-types/${id}`),
+};

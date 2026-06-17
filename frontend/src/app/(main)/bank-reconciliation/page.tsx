@@ -482,8 +482,8 @@ export default function BankReconciliationPage() {
         other: '其他',
       };
       const sourceLabel = sourceLabels[r.source_type] || r.source_type || '';
-      const clientShort = r.project?.client?.code || r.project?.client?.name || '';
-      const nameParts = [sourceLabel, clientShort, r.reference_no, r.remarks].filter(Boolean);
+      const payerShort = r.payer_partner?.name || r.payer_name || r.project?.client?.code || r.project?.client?.name || '';
+      const nameParts = [sourceLabel, payerShort, r.reference_no, r.remarks].filter(Boolean);
       return {
         category: '收款',
         name: nameParts.join(' ') || r.project?.project_name || '未命名項目',
@@ -949,7 +949,7 @@ export default function BankReconciliationPage() {
                             let rName: string;
                             if (isPayIn) {
                               const srcLabels: Record<string, string> = { payment_certificate: 'PC', invoice: '發票', retention_release: '扣留金', other: '其他' };
-                              const parts = [srcLabels[r.source_type] || r.source_type || '', r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
+                              const parts = [srcLabels[r.source_type] || r.source_type || '', r.payer_partner?.name || r.payer_name || r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
                               rName = parts.join(' ') || r.project?.project_name || '未命名項目';
                             } else {
                               rName = r.expense?.item || r.company?.name || '未命名支出';

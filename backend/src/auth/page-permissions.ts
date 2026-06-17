@@ -82,6 +82,7 @@ export const ALL_PAGES: PageDef[] = [
   { key: 'settings-custom-fields', label: '自定義欄位', group: '系統設定', path: '/settings/custom-fields' },
   { key: 'settings-field-options', label: '選項管理', group: '系統設定', path: '/settings/field-options' },
   { key: 'settings-expense-categories', label: '支出類別管理', group: '系統設定', path: '/settings/expense-categories' },
+  { key: 'settings-payment-in-source-types', label: '收款來源類型', group: '系統設定', path: '/settings/payment-in-source-types' },
   { key: 'settings-bank-accounts', label: '銀行帳戶管理', group: '系統設定', path: '/settings/bank-accounts' },
   { key: 'settings-statutory-holidays', label: '法定假期', group: '系統設定', path: '/settings/statutory-holidays' },
   { key: 'audit-logs', label: '操作歷史', group: '系統設定', path: '/audit-logs' },

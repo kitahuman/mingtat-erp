@@ -140,6 +140,7 @@ const navEntries: NavEntry[] = [
       { href: '/settings/field-options', label: '選項管理', icon: '📋', pageKey: 'settings-field-options' },
       { href: '/options/payment-terms', label: '付款條款', icon: '🧾', pageKey: 'settings-field-options' },
       { href: '/settings/expense-categories', label: '支出類別管理', icon: '💸', pageKey: 'settings-expense-categories' },
+      { href: '/settings/payment-in-source-types', label: '收款來源類型', icon: '📥', pageKey: 'settings-payment-in-source-types' },
       { href: '/settings/bank-accounts', label: '銀行帳戶管理', icon: '🏐', pageKey: 'settings-bank-accounts' },
       { href: '/settings/statutory-holidays', label: '法定假期', icon: '🏆', pageKey: 'settings-statutory-holidays' },
       { href: '/settings/system', label: '系統參數', icon: '⚙️', pageKey: 'settings-system' },

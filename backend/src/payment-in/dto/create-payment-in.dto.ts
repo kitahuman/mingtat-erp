@@ -13,6 +13,8 @@ export class CreatePaymentInDto {
   @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() payment_in_status?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() payer_partner_id?: number;
+  @IsOptional() @IsString() payer_name?: string;
 }
 
 export class UpdatePaymentInDto {
@@ -27,6 +29,8 @@ export class UpdatePaymentInDto {
   @IsOptional() @IsString() payment_method?: string;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() payment_in_status?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() payer_partner_id?: number;
+  @IsOptional() @IsString() payer_name?: string;
 }
 
 export class UpdatePaymentInStatusDto {

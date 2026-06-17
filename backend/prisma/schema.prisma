@@ -635,6 +635,7 @@ model Partner {
   daily_reports_client         DailyReport[]              @relation("daily_report_client")
   subcon_payrolls              SubconPayroll[]            @relation("subcon_payroll_partner")
   payment_term_templates       PaymentTermTemplate[]
+  payment_ins_as_payer          PaymentIn[]                @relation("PaymentInPayer")
 
   @@map("partners")
 }
@@ -2032,12 +2033,17 @@ model PaymentIn {
   created_at        DateTime @default(now())
   updated_at        DateTime @default(now()) @updatedAt
 
-  project      Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
-  contract     Contract?             @relation(fields: [contract_id], references: [id], onDelete: SetNull)
-  bank_account BankAccount?          @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
-  allocations  PaymentInAllocation[]
-  deductions   PaymentInDeduction[]
+  payer_partner_id Int?
+  payer_name       String?  @db.VarChar(255)
 
+  project       Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  contract      Contract?             @relation(fields: [contract_id], references: [id], onDelete: SetNull)
+  bank_account  BankAccount?          @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)
+  payer_partner Partner?              @relation("PaymentInPayer", fields: [payer_partner_id], references: [id], onDelete: SetNull)
+  allocations   PaymentInAllocation[]
+  deductions    PaymentInDeduction[]
+
+  @@index([payer_partner_id])
   @@map("payment_ins")
 }
 
@@ -3640,4 +3646,21 @@ model PaymentInDeduction {
   @@index([payment_in_deduction_payment_in_id])
   @@index([payment_in_deduction_invoice_id])
   @@map("payment_in_deductions")
+}
+
+// ══════════════════════════════════════════════════════════════
+// PaymentIn Source Types (收款來源類型 - 動態管理)
+// ══════════════════════════════════════════════════════════════
+model PaymentInSourceType {
+  id                Int      @id @default(autoincrement())
+  code              String   @unique @db.VarChar(50)
+  label             String   @db.VarChar(100)
+  is_system         Boolean  @default(false)
+  has_recalculation Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  sort_order        Int      @default(0)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now()) @updatedAt
+
+  @@map("payment_in_source_types")
 }

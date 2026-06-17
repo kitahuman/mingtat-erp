@@ -7,6 +7,8 @@ import {
   contractsApi,
   bankAccountsApi,
   fieldOptionsApi,
+  paymentInSourceTypesApi,
+  partnersApi,
 } from '@/lib/api';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import InlineEditDataTable, {
@@ -31,26 +33,21 @@ const PAYMENT_IN_STATUS_MAP: Record<string, { label: string; color: string }> =
     cancelled: { label: '取消', color: 'bg-gray-100 text-gray-500' },
   };
 
-const SOURCE_TYPE_OPTIONS = [
-  { value: 'payment_certificate', label: 'Payment Certificate' },
-  { value: 'invoice', label: '發票' },
-  { value: 'retention_release', label: '扣留金釋放' },
-  { value: 'other', label: '其他收入' },
-];
-
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  payment_certificate: 'Payment Certificate',
-  invoice: '發票',
-  retention_release: '扣留金釋放',
-  other: '其他收入',
-};
-
+// Fallback labels/colors for source types (used when dynamic data not yet loaded)
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   payment_certificate: 'bg-green-100 text-green-700',
   invoice: 'bg-blue-100 text-blue-700',
   retention_release: 'bg-purple-100 text-purple-700',
   other: 'bg-gray-100 text-gray-700',
 };
+
+/** Helper: get payer display name from a PaymentIn record */
+function getPayerDisplay(row: any): string {
+  if (row.payer_partner) return row.payer_partner.name;
+  if (row.payer_name) return row.payer_name;
+  if (row.project?.client) return row.project.client.name;
+  return '';
+}
 
 export default function PaymentInPage() {
   const router = useRouter();
@@ -82,6 +79,8 @@ export default function PaymentInPage() {
   const [contracts, setContracts] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
 
   // Create form
   const defaultForm = {
@@ -96,6 +95,8 @@ export default function PaymentInPage() {
     payment_method: '',
     payment_in_status: 'unpaid',
     remarks: '',
+    payer_partner_id: '',
+    payer_name: '',
   };
   const [form, setForm] = useState(defaultForm);
 
@@ -159,6 +160,14 @@ export default function PaymentInPage() {
       .getByCategory('payment_method')
       .then((r) => setPaymentMethods(r.data || []))
       .catch(() => {});
+    paymentInSourceTypesApi
+      .list()
+      .then((r) => setSourceTypes(r.data || []))
+      .catch(() => {});
+    partnersApi
+      .simple()
+      .then((r) => setPartners(r.data || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -202,6 +211,22 @@ export default function PaymentInPage() {
     [paymentMethods],
   );
 
+  const sourceTypeOptions = useMemo(
+    () => sourceTypes.map((st: any) => ({ value: st.code, label: st.label })),
+    [sourceTypes],
+  );
+
+  const sourceTypeLabelMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    sourceTypes.forEach((st: any) => { m[st.code] = st.label; });
+    return m;
+  }, [sourceTypes]);
+
+  const partnerOptions = useMemo(
+    () => partners.map((p: any) => ({ value: p.id, label: `${p.code || ''} ${p.name}`.trim() })),
+    [partners],
+  );
+
   const handleCreate = async () => {
     if (!form.date || !form.amount) return alert('請填寫日期和金額');
     setCreating(true);
@@ -216,6 +241,8 @@ export default function PaymentInPage() {
           ? Number(form.bank_account_id)
           : null,
         payment_method: form.payment_method || null,
+        payer_partner_id: form.payer_partner_id ? Number(form.payer_partner_id) : null,
+        payer_name: form.payer_name || null,
       });
       setShowCreate(false);
       setForm(defaultForm);
@@ -273,14 +300,27 @@ export default function PaymentInPage() {
       key: 'source_type',
       label: '來源類型',
       editType: 'select',
-      editOptions: SOURCE_TYPE_OPTIONS,
+      editOptions: sourceTypeOptions.length > 0 ? sourceTypeOptions : [{ value: 'other', label: '其他收入' }],
       render: (v: any) => (
         <span
           className={`px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_TYPE_COLORS[v] || 'bg-gray-100 text-gray-700'}`}
         >
-          {SOURCE_TYPE_LABELS[v] || v}
+          {sourceTypeLabelMap[v] || v}
         </span>
       ),
+    },
+    {
+      key: 'payer',
+      label: '付款方',
+      editable: false,
+      render: (_: any, row: any) => {
+        const display = getPayerDisplay(row);
+        return display ? (
+          <span className="text-xs">{display}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
+      },
     },
     {
       key: 'company',
@@ -458,7 +498,7 @@ export default function PaymentInPage() {
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
       >
         <option value="">全部來源</option>
-        {SOURCE_TYPE_OPTIONS.map((o) => (
+        {sourceTypeOptions.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -668,7 +708,7 @@ export default function PaymentInPage() {
                 }
                 className="input-field"
               >
-                {SOURCE_TYPE_OPTIONS.map((o) => (
+                {sourceTypeOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -783,6 +823,35 @@ export default function PaymentInPage() {
               </select>
             </div>
           </div>
+          {/* Payer field - show when source_type is NOT invoice/payment_certificate */}
+          {form.source_type !== 'invoice' && form.source_type !== 'payment_certificate' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款方（合作單位）
+                </label>
+                <SearchableSelect
+                  value={form.payer_partner_id ? Number(form.payer_partner_id) : null}
+                  onChange={(v: any) => setForm({ ...form, payer_partner_id: v || '', payer_name: '' })}
+                  options={partnerOptions}
+                  placeholder="選擇合作單位"
+                  clearable
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款方（自由輸入）
+                </label>
+                <input
+                  type="text"
+                  value={form.payer_name}
+                  onChange={(e) => setForm({ ...form, payer_name: e.target.value, payer_partner_id: '' })}
+                  className="input-field"
+                  placeholder="或直接輸入付款方名稱"
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               備註
