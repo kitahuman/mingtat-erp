@@ -397,6 +397,8 @@ export class PayrollService {
         dateTo: toDateStr(payroll.date_to),
         holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
         leaves,
+        employeeJoinDate: payroll.employee?.join_date ? toDateStr(payroll.employee.join_date) : null,
+        employeeTerminationDate: payroll.employee?.termination_date ? toDateStr(payroll.employee.termination_date) : null,
       },
     );
 
@@ -683,6 +685,8 @@ export class PayrollService {
         dateTo: date_to,
         holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
         leaves,
+        employeeJoinDate: emp.join_date ? toDateStr(emp.join_date) : null,
+        employeeTerminationDate: emp.termination_date ? toDateStr(emp.termination_date) : null,
       },
     );
 
@@ -4130,6 +4134,8 @@ export class PayrollService {
         where: { payroll_id: payroll.id },
       });
 
+      // 取員工入職/離職日期給月薪計算用
+      const empForLeave = await this.prisma.employee.findUnique({ where: { id: employeeId }, select: { join_date: true, termination_date: true } });
       const dailyCalc = this.calcService.buildDailyCalculation(
         activePwls,
         salarySetting,
@@ -4139,6 +4145,8 @@ export class PayrollService {
           dateTo: toDateStr(payroll.date_to),
           holidayDates: holidayDates.map((h) => ({ date: h.date, name: h.name })),
           leaves,
+          employeeJoinDate: empForLeave?.join_date ? toDateStr(empForLeave.join_date) : null,
+          employeeTerminationDate: empForLeave?.termination_date ? toDateStr(empForLeave.termination_date) : null,
         },
       );
 

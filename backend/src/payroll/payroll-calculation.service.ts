@@ -898,6 +898,9 @@ export class PayrollCalculationService {
       dateTo?: string;
       holidayDates?: { date: Date; name: string }[];
       leaves?: any[];
+      employeeJoinDate?: string | null;
+      employeeTerminationDate?: string | null;
+      monthlySalary?: number;
     } = {},
   ): any[] {
     const salaryType = salarySetting?.salary_type || 'daily';
@@ -911,6 +914,23 @@ export class PayrollCalculationService {
         : 0;
     const baseSalaryNight =
       configuredBaseSalaryNight > 0 ? configuredBaseSalaryNight : baseSalary;
+
+    // 月薪員工：計算日薪
+    const monthlyBaseSalary = options.monthlySalary || (salaryType === 'monthly' ? (Number(salarySetting?.base_salary) || 0) : 0);
+    let monthlyDailyRate = 0;
+    let monthlyJoinDate: Date | null = null;
+    let monthlyThreeMonthDate: Date | null = null;
+    if (salaryType === 'monthly' && monthlyBaseSalary > 0 && options.dateFrom) {
+      const year = Number(options.dateFrom.slice(0, 4));
+      const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      const daysInYear = isLeapYear ? 366 : 365;
+      monthlyDailyRate = Math.round((monthlyBaseSalary * 12 / daysInYear) * 100) / 100;
+      if (options.employeeJoinDate) {
+        monthlyJoinDate = new Date(options.employeeJoinDate);
+        monthlyThreeMonthDate = new Date(monthlyJoinDate);
+        monthlyThreeMonthDate.setMonth(monthlyThreeMonthDate.getMonth() + 3);
+      }
+    }
     const salaryOtSlots = [
       'ot_1800_1900',
       'ot_1900_2000',
@@ -1045,7 +1065,55 @@ export class PayrollCalculationService {
         : autoDayTopUpAmount;
       const nightTopUpAmount = isTopUpOverridden ? 0 : autoNightTopUpAmount;
       const needsTopUp = !isHolidayDay && topUpAmount > 0;
-      const effectiveIncome = isHolidayDay ? 0 : workIncome + topUpAmount;
+
+      // 月薪員工：計算當日日薪金額
+      let monthlyDayIncome = 0;
+      if (salaryType === 'monthly' && monthlyDailyRate > 0) {
+        const currentDate = new Date(date);
+        const periodStart = options.dateFrom ? new Date(options.dateFrom) : null;
+        const periodEnd = options.dateTo ? new Date(options.dateTo) : null;
+        const effectiveStart = monthlyJoinDate && periodStart && monthlyJoinDate > periodStart ? monthlyJoinDate : periodStart;
+        const effectiveEnd = options.employeeTerminationDate
+          ? (new Date(options.employeeTerminationDate) < (periodEnd || currentDate) ? new Date(options.employeeTerminationDate) : periodEnd)
+          : periodEnd;
+
+        // 確認當日在有效期間內
+        const isInRange = (!effectiveStart || currentDate >= effectiveStart) && (!effectiveEnd || currentDate <= effectiveEnd);
+
+        if (isInRange) {
+          if (dayPwls.length > 0) {
+            // 有 workLog 的天：計一天日薪
+            monthlyDayIncome += monthlyDailyRate;
+            // 如果同時是星期日或法定假日，再加一天（不扣除重複）
+            if (isSunday) {
+              monthlyDayIncome += monthlyDailyRate;
+            }
+            if (holidayName) {
+              const isHolidayEligible = !monthlyThreeMonthDate || currentDate >= monthlyThreeMonthDate;
+              if (isHolidayEligible) {
+                monthlyDayIncome += monthlyDailyRate;
+              }
+            }
+          } else {
+            // 沒有 workLog 的天
+            if (isSunday) {
+              // 星期日（休息日）：計一天日薪
+              monthlyDayIncome += monthlyDailyRate;
+            }
+            if (holidayName) {
+              // 法定假日：入職滿 3 個月後才計
+              const isHolidayEligible = !monthlyThreeMonthDate || currentDate >= monthlyThreeMonthDate;
+              if (isHolidayEligible) {
+                monthlyDayIncome += monthlyDailyRate;
+              }
+            }
+          }
+        }
+      }
+
+      const effectiveIncome = salaryType === 'monthly'
+        ? monthlyDayIncome
+        : (isHolidayDay ? 0 : workIncome + topUpAmount);
       const displayDayAllowances = dayAllowances.filter(
         (da: any) => da.allowance_key !== 'base_top_up_override',
       );
@@ -1114,22 +1182,23 @@ export class PayrollCalculationService {
           salary_mid_shift_amount: getSalaryMidShiftAmount(pwl),
           price_match_status: pwl.price_match_status,
         })),
-        work_income: workIncome,
-        day_work_income: dayWorkIncome,
-        night_work_income: nightWorkIncome,
-        base_salary: baseSalary,
-        base_salary_night: baseSalaryNight,
-        needs_top_up: needsTopUp,
-        top_up_amount: topUpAmount,
-        base_top_up: topUpAmount,
-        auto_top_up_amount: autoTopUpAmount,
-        day_top_up_amount: dayTopUpAmount,
-        night_top_up_amount: nightTopUpAmount,
+        work_income: salaryType === 'monthly' ? monthlyDayIncome : workIncome,
+        day_work_income: salaryType === 'monthly' ? monthlyDayIncome : dayWorkIncome,
+        night_work_income: salaryType === 'monthly' ? 0 : nightWorkIncome,
+        base_salary: salaryType === 'monthly' ? monthlyDailyRate : baseSalary,
+        base_salary_night: salaryType === 'monthly' ? monthlyDailyRate : baseSalaryNight,
+        needs_top_up: salaryType === 'monthly' ? false : needsTopUp,
+        top_up_amount: salaryType === 'monthly' ? 0 : topUpAmount,
+        base_top_up: salaryType === 'monthly' ? 0 : topUpAmount,
+        auto_top_up_amount: salaryType === 'monthly' ? 0 : autoTopUpAmount,
+        day_top_up_amount: salaryType === 'monthly' ? 0 : dayTopUpAmount,
+        night_top_up_amount: salaryType === 'monthly' ? 0 : nightTopUpAmount,
         day_quantity: dayQuantity,
         night_quantity: nightQuantity,
-        is_top_up_overridden: isTopUpOverridden,
-        top_up_override_id: override?.id ?? null,
+        is_top_up_overridden: salaryType === 'monthly' ? false : isTopUpOverridden,
+        top_up_override_id: salaryType === 'monthly' ? null : (override?.id ?? null),
         effective_income: effectiveIncome,
+        monthly_daily_rate: salaryType === 'monthly' ? monthlyDailyRate : undefined,
         daily_allowances: displayDayAllowances.map((da: any) => ({
           id: da.id,
           allowance_key: da.allowance_key,
@@ -1155,6 +1224,9 @@ export class PayrollCalculationService {
       dateTo?: string;
       holidayDates?: { date: Date; name: string }[];
       leaves?: any[];
+      employeeJoinDate?: string | null;
+      employeeTerminationDate?: string | null;
+      monthlySalary?: number;
     } = {},
   ): any[] {
     return this.buildDailyCalculation(
