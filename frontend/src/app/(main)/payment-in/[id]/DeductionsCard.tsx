@@ -94,12 +94,12 @@ export default function DeductionsCard({
   const bookTotal = paymentInAmount + deductionTotal;
 
   // Load invoice candidates when modal opens
+  // Use searchRetention which finds invoices with outstanding retention_amount
+  // (searchCandidates filters out fully-paid invoices even if they still have retention)
   const loadInvoiceCandidates = useCallback(async () => {
     try {
-      const res = await paymentInAllocationApi.search({
-        kind: 'invoice',
+      const res = await paymentInAllocationApi.searchRetention({
         limit: 100,
-        unpaid_only: false,
       });
       setInvoiceCandidates(res.data || []);
     } catch {
