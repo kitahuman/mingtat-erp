@@ -799,41 +799,62 @@ export default function BankReconciliationPage() {
           </div>
         </div>
         {/* Two-panel layout with resizable splitter */}
-        <div className="flex" ref={containerRef} style={{ userSelect: 'none' }}>
-          {/* Left panel: From Statement */}
-          <div className="flex-none overflow-x-auto" style={{ width: `${splitPct}%` }}>
-            {/* Statement Header */}
-            <div className="bg-gray-50 border-b">
-              <div className="px-4 py-2 border-b border-gray-100">
-                <span className="text-xs font-semibold text-blue-700">From Statement（月結單）</span>
-              </div>
-              <div className="grid text-[11px] font-medium text-gray-500 min-w-[420px]" style={{ gridTemplateColumns: selectionMode ? '2.75rem 5rem 1fr 5rem 6rem 6rem 3.5rem' : '5rem 1fr 5rem 6rem 6rem 6rem 3.5rem' }}>
-                {selectionMode && (
-                  <div className="px-2 py-2 flex items-center justify-center">
-                    <input type="checkbox" checked={transactions.length > 0 && selectedIds.size === transactions.length} onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-300" />
-                  </div>
-                )}
-                <div className="px-4 py-2">Date</div>
-                <div className="px-2 py-2">Transaction</div>
-                <div className="px-2 py-2 text-center">Ref No</div>
-                <div className="px-2 py-2 text-right">Withdrawals</div>
-                <div className="px-2 py-2 text-right">Deposits</div>
-                {!selectionMode && <div className="px-2 py-2 text-right">Balance</div>}
-                <div className="px-2 py-2 text-center">操作</div>
-              </div>
+        <div ref={containerRef} style={{ userSelect: 'none' }}>
+        {/* Header row */}
+        <div className="flex bg-gray-50 border-b">
+          {/* Left header */}
+          <div className="flex-none overflow-hidden" style={{ width: `${splitPct}%` }}>
+            <div className="px-4 py-2 border-b border-gray-100">
+              <span className="text-xs font-semibold text-blue-700">From Statement（月結單）</span>
             </div>
-            {/* Statement Body */}
-            <div className="divide-y divide-gray-100">
-              {loading ? (
-                <div className="p-12 text-center text-gray-400">載入中...</div>
-              ) : transactions.length === 0 ? (
-                <div className="p-12 text-center text-gray-400">{selectedAccountId ? '沒有交易記錄' : '請先選擇銀行帳戶'}</div>
-              ) : (
-                transactions.map((tx: any) => {
-                  const isWithdrawal = Number(tx.amount) < 0;
-                  const isSelected = selectedIds.has(tx.id);
-                  return (
-                    <div key={tx.id} className={`group grid min-w-[420px] text-sm hover:bg-gray-50 transition-colors ${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''} ${isSelected ? 'bg-blue-50' : ''}`} style={{ gridTemplateColumns: selectionMode ? '2.75rem 5rem 1fr 5rem 6rem 6rem 3.5rem' : '5rem 1fr 5rem 6rem 6rem 6rem 3.5rem' }}>
+            <div className="grid text-[11px] font-medium text-gray-500 min-w-[420px]" style={{ gridTemplateColumns: selectionMode ? '2.75rem 5rem 1fr 5rem 6rem 6rem 3.5rem' : '5rem 1fr 5rem 6rem 6rem 6rem 3.5rem' }}>
+              {selectionMode && (
+                <div className="px-2 py-2 flex items-center justify-center">
+                  <input type="checkbox" checked={transactions.length > 0 && selectedIds.size === transactions.length} onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-300" />
+                </div>
+              )}
+              <div className="px-4 py-2">Date</div>
+              <div className="px-2 py-2">Transaction</div>
+              <div className="px-2 py-2 text-center">Ref No</div>
+              <div className="px-2 py-2 text-right">Withdrawals</div>
+              <div className="px-2 py-2 text-right">Deposits</div>
+              {!selectionMode && <div className="px-2 py-2 text-right">Balance</div>}
+              <div className="px-2 py-2 text-center">操作</div>
+            </div>
+          </div>
+          {/* Splitter placeholder in header */}
+          <div className="flex-none w-1.5" />
+          {/* Right header */}
+          <div className="flex-1 overflow-hidden">
+            <div className="px-4 py-2 border-b border-gray-100">
+              <span className="text-xs font-semibold text-purple-700">From System（系統記錄）</span>
+            </div>
+            <div className="grid text-[11px] font-medium text-gray-500 min-w-[360px]" style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
+              <div className="px-2 py-2">類別</div>
+              <div className="px-2 py-2">名稱</div>
+              <div className="px-2 py-2">關聯</div>
+              <div className="px-2 py-2 text-center">核對</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Body rows — left and right cells in the SAME row div for height sync */}
+        <div className="divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-12 text-center text-gray-400">載入中...</div>
+          ) : transactions.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">{selectedAccountId ? '沒有交易記錄' : '請先選擇銀行帳戶'}</div>
+          ) : (
+            transactions.map((tx: any) => {
+              const isWithdrawal = Number(tx.amount) < 0;
+              const isSelected = selectedIds.has(tx.id);
+              const matchInfo = getMatchedInfo(tx);
+              const rowBg = tx.match_status === 'unmatched' ? 'bg-red-50/30' : isSelected ? 'bg-blue-50' : '';
+              return (
+                <div key={tx.id} className={`flex items-stretch hover:bg-gray-50 transition-colors ${rowBg}`}>
+                  {/* Left cell: Statement */}
+                  <div className="flex-none overflow-hidden" style={{ width: `${splitPct}%` }}>
+                    <div className={`grid min-w-[420px] h-full text-sm`} style={{ gridTemplateColumns: selectionMode ? '2.75rem 5rem 1fr 5rem 6rem 6rem 3.5rem' : '5rem 1fr 5rem 6rem 6rem 6rem 3.5rem' }}>
                       {selectionMode && (
                         <div className="px-2 py-2.5 flex items-center justify-center">
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelection(tx.id)} className="w-4 h-4 rounded border-gray-300" />
@@ -871,45 +892,19 @@ export default function BankReconciliationPage() {
                         )}
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+                  </div>
 
-          {/* Splitter */}
-          <div
-            className="flex-none w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize transition-colors select-none"
-            onMouseDown={handleSplitterMouseDown}
-            title="拖動調整寬度"
-          />
+                  {/* Splitter column */}
+                  <div
+                    className="flex-none w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize transition-colors select-none"
+                    onMouseDown={handleSplitterMouseDown}
+                    title="拖動調整寬度"
+                  />
 
-          {/* Right panel: From System + Status */}
-          <div className="flex-1 overflow-x-auto">
-            {/* System Header */}
-            <div className="bg-gray-50 border-b">
-              <div className="px-4 py-2 border-b border-gray-100">
-                <span className="text-xs font-semibold text-purple-700">From System（系統記錄）</span>
-              </div>
-              <div className="grid text-[11px] font-medium text-gray-500 min-w-[360px]" style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
-                <div className="px-2 py-2">類別</div>
-                <div className="px-2 py-2">名稱</div>
-                <div className="px-2 py-2">關聯</div>
-                <div className="px-2 py-2 text-center">核對</div>
-              </div>
-            </div>
-            {/* System Body */}
-            <div className="divide-y divide-gray-100">
-              {loading ? (
-                <div className="p-12" />
-              ) : transactions.length === 0 ? (
-                <div className="p-12" />
-              ) : (
-                transactions.map((tx: any) => {
-                  const matchInfo = getMatchedInfo(tx);
-                  return (
-                    <div key={tx.id} className={`${tx.match_status === 'unmatched' ? 'bg-red-50/30' : ''}`}>
-                      <div className={`grid min-w-[360px] text-sm hover:bg-gray-50 transition-colors`} style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
+                  {/* Right cell: System */}
+                  <div className="flex-1 overflow-x-auto">
+                    <div className={`min-w-[360px]`}>
+                      <div className={`grid text-sm`} style={{ gridTemplateColumns: '1fr 2fr 5rem 5rem' }}>
                         <div className="px-2 py-2.5 text-xs text-gray-600">
                           {tx.match_status === 'matched' ? (
                             <span>{matchInfo.category}{matchInfo.isMulti ? ` (${matchInfo.records?.length}筆)` : ''}</span>
@@ -957,12 +952,13 @@ export default function BankReconciliationPage() {
                         </div>
                       )}
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
+        </div>{/* end containerRef wrapper */}
       </div>
 
       {/* ── Pagination ── */}
