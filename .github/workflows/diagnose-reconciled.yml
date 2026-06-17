@@ -41,22 +41,31 @@ jobs:
           SELECT COUNT(*) as junction_count FROM bank_transaction_matches;
           "
 
-          echo "===== 5. Sample junction table ====="
+          echo "===== 5. Test is_reconciled query for PaymentIn IDs 1807 and 1042 ====="
           psql "$DATABASE_URL" -c "
-          SELECT * FROM bank_transaction_matches LIMIT 10;
-          "
-
-          echo "===== 6. PaymentIn IDs in BankTransaction.matched_id ====="
-          psql "$DATABASE_URL" -c "
-          SELECT bt.matched_id, bt.matched_type, pi.id as payment_in_id, pi.amount
+          SELECT bt.matched_id, bt.matched_type, bt.match_status
           FROM bank_transactions bt
-          JOIN payment_ins pi ON pi.id = bt.matched_id
           WHERE bt.matched_type = 'payment_in'
-          LIMIT 10;
+            AND bt.matched_id IN (1807, 1042)
+            AND bt.match_status = 'matched';
           "
 
-          echo "===== 7. Check all distinct matched_type values (case sensitive) ====="
-          psql "$DATABASE_URL" -c "
-          SELECT DISTINCT matched_type FROM bank_transactions WHERE matched_id IS NOT NULL;
-          "
+          echo "===== 6. Check API response for PaymentIn 1807 ====="
+          curl -s "http://localhost:3001/payment-in?page=1&limit=5" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+items = data.get('data', [])
+for item in items[:5]:
+    print(f\"ID={item['id']} is_reconciled={item.get('is_reconciled', 'MISSING')} amount={item.get('amount')}\")
+" 2>&1 || echo "API call failed"
+
+          echo "===== 7. Check if PaymentIn 1807 appears in API ====="
+          curl -s "http://localhost:3001/payment-in?page=1&limit=200" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+items = data.get('data', [])
+for item in items:
+    if item['id'] in [1807, 1042]:
+        print(f\"ID={item['id']} is_reconciled={item.get('is_reconciled', 'MISSING')} amount={item.get('amount')}\")
+" 2>&1 || echo "API call failed"
           ENDSSH
