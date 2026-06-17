@@ -838,23 +838,19 @@ export class PayrollCalculationService {
       'ot_1900_2000',
     ];
 
-    // 追蹤累積的 OT 小時數，以便按順序應用時段金額
-    let accumulatedOtHours = 0;
-
+    // 每筆 workLog 獨立計算 OT 時段（每天 OT 從 slot 0 開始，與 buildSalaryItems 邏輯一致）
     const getSalaryOtAmount = (pwl: any): number => {
       const otQty = Number(pwl.ot_quantity) || 0;
       if (otQty <= 0) return 0;
 
       let totalAmount = 0;
       for (let i = 0; i < otQty; i++) {
-        const slotIndex = accumulatedOtHours + i;
-        const slotField = salaryOtSlots[slotIndex];
+        const slotField = salaryOtSlots[i];
         const rate = slotField
           ? Number(salarySetting?.[slotField]) || 0
           : Number(salarySetting?.ot_rate_standard) || 0;
         totalAmount += rate;
       }
-      accumulatedOtHours += otQty;
       return totalAmount;
     };
     const getSalaryMidShiftAmount = (pwl: any): number =>
