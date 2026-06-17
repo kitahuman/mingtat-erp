@@ -993,7 +993,7 @@ export class PayrollCalculationService {
         (sum, item) => sum + item.amount,
         0,
       );
-      const dayTotal = effectiveIncome + dailyAllowanceTotal + fixedAllowanceTotal;
+      const dayTotal = effectiveIncome + dailyOtAmount + dailyMidShiftAmount + dailyAllowanceTotal + fixedAllowanceTotal;
       return {
         date,
         is_holiday: isHolidayDay,
