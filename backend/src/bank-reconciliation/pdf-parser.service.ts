@@ -23,6 +23,7 @@ export interface PdfParseResult {
   statement_date?: string;
   statement_period?: string;  // e.g. "2026年2月1日 至 2026年2月28日"
   opening_balance?: number | null; // B/F BALANCE 承前結餘
+  closing_balance?: number | null; // C/F BALANCE 期末結餘
   transactions: ParsedTransaction[];
   raw_text?: string;
   // AI-identified company and account info
@@ -239,6 +240,26 @@ ${structuredText}`,
 
       // Step 3: Post-processing balance verification (catches any remaining issues)
       parsed.transactions = this.verifyAndFixBalances(parsed.transactions, parsed.opening_balance);
+
+      // Step 4: Fix closing_balance if structured data exists
+      // In structured mode, use the last transaction's balance as the authoritative closing_balance
+      // instead of relying on AI's extraction (which can be inaccurate)
+      if (hasStructuredData && parsed.transactions.length > 0) {
+        let lastBalanceIdx = -1;
+        for (let i = parsed.transactions.length - 1; i >= 0; i--) {
+          if (parsed.transactions[i].balance != null) {
+            lastBalanceIdx = i;
+            break;
+          }
+        }
+        if (lastBalanceIdx >= 0) {
+          const correctClosingBalance = parsed.transactions[lastBalanceIdx].balance!;
+          if (parsed.closing_balance !== correctClosingBalance) {
+            console.log(`[PdfParser] Correcting closing_balance from ${parsed.closing_balance?.toFixed(2) ?? 'null'} to ${correctClosingBalance.toFixed(2)} (from last transaction with balance).`);
+            parsed.closing_balance = correctClosingBalance;
+          }
+        }
+      }
 
       await this.aiActivityLogService.log({
         module: 'bank_reconciliation',
