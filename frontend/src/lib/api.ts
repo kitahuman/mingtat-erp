@@ -1283,6 +1283,12 @@ export interface CreatePaymentInAllocationPayload {
   payment_in_allocation_invoice_id?: number;
   payment_in_allocation_amount: number;
   payment_in_allocation_remarks?: string;
+  /** Retention deduction taken at allocation time; backend adds this to invoice.retention_amount. */
+  retention_deduction_amount?: number;
+  /** Other deduction amount (e.g., bank fees); creates PaymentInDeduction record with type='Other'. */
+  other_deduction_amount?: number;
+  /** Remarks for the other deduction. */
+  other_deduction_remarks?: string;
 }
 
 // Payment Term Templates

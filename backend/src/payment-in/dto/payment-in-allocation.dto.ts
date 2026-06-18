@@ -30,6 +30,37 @@ export class CreatePaymentInAllocationDto {
   @IsOptional()
   @IsString()
   payment_in_allocation_remarks?: string;
+
+  /**
+   * Optional retention deduction taken at allocation time.
+   * When > 0, the backend will add this amount to the linked invoice's
+   * retention_amount (no separate deduction record is created). The
+   * payment_in_allocation_amount passed in is the actual received amount
+   * (already net of this retention deduction).
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  retention_deduction_amount?: number;
+
+  /**
+   * Optional other deduction amount (e.g., bank fees, taxes, etc.).
+   * When > 0, a PaymentInDeduction record with type='Other' is created.
+   * Does NOT update invoice.retention_amount.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  other_deduction_amount?: number;
+
+  /**
+   * Remarks for the other deduction.
+   */
+  @IsOptional()
+  @IsString()
+  other_deduction_remarks?: string;
 }
 
 export class UpdatePaymentInAllocationDto {

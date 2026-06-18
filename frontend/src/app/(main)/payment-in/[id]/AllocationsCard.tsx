@@ -113,6 +113,18 @@ export default function AllocationsCard({
   const [allocRemarks, setAllocRemarks] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Retention deduction state (standard invoice allocation only)
+  const [retentionEnabled, setRetentionEnabled] = useState(false);
+  const [retentionPct, setRetentionPct] = useState<string>('5');
+  // Retention amount; auto-calculated but can be manually overridden.
+  const [retentionAmount, setRetentionAmount] = useState<string>('');
+  const [retentionAmountTouched, setRetentionAmountTouched] = useState(false);
+
+  // Other deduction state (standard invoice allocation only)
+  const [otherDeductionEnabled, setOtherDeductionEnabled] = useState(false);
+  const [otherDeductionAmount, setOtherDeductionAmount] = useState<string>('');
+  const [otherDeductionRemarks, setOtherDeductionRemarks] = useState<string>('');
+
   useEffect(() => {
     setAllocations(initialAllocations || []);
   }, [initialAllocations]);
@@ -221,11 +233,30 @@ export default function AllocationsCard({
     }
   }, [pickerOpen, runSearch]);
 
+  const resetRetention = () => {
+    setRetentionEnabled(false);
+    setRetentionPct('5');
+    setRetentionAmount('');
+    setRetentionAmountTouched(false);
+  };
+
+  const resetOtherDeduction = () => {
+    setOtherDeductionEnabled(false);
+    setOtherDeductionAmount('');
+    setOtherDeductionRemarks('');
+  };
+
+  const resetAllDeductions = () => {
+    resetRetention();
+    resetOtherDeduction();
+  };
+
   const openPicker = () => {
     setSelected(null);
     setAllocAmount('');
     setAllocRemarks('');
     setPickerQuery('');
+    resetAllDeductions();
     setPickerOpen(true);
   };
 
@@ -239,7 +270,33 @@ export default function AllocationsCard({
       Math.min(remaining, Number(c.outstanding_amount) || 0),
     );
     setAllocAmount(suggested > 0 ? suggested.toFixed(2) : '');
+    resetAllDeductions();
   };
+
+  // ── Calculation breakdown ────────────────────────────────────────
+  // Order: base → minus other deductions → minus retention % on remainder
+  // 本次分配金額 → 扣其他扣款 → 在剩餘金額上計算扣留金%
+  const allocAmountNum = parseFloat(allocAmount) || 0;
+  const otherDeductNum =
+    otherDeductionEnabled ? parseFloat(otherDeductionAmount) || 0 : 0;
+  const amountAfterOtherDeduct = Math.round(
+    (allocAmountNum - otherDeductNum) * 100,
+  ) / 100;
+  const retentionAmountNum =
+    retentionEnabled ? parseFloat(retentionAmount) || 0 : 0;
+  const netPaymentNum = Math.round(
+    (amountAfterOtherDeduct - retentionAmountNum) * 100,
+  ) / 100;
+
+  // Auto-calculate retention amount from percentage on the amount AFTER other deductions,
+  // unless the user has manually edited the retention amount field.
+  useEffect(() => {
+    if (!retentionEnabled || retentionAmountTouched) return;
+    const base = amountAfterOtherDeduct; // Use amount after other deductions
+    const pct = parseFloat(retentionPct) || 0;
+    const calc = Math.round(base * (pct / 100) * 100) / 100;
+    setRetentionAmount(calc > 0 ? calc.toFixed(2) : '');
+  }, [retentionEnabled, retentionPct, amountAfterOtherDeduct, retentionAmountTouched]);
 
   const handleCreate = async () => {
     if (!selected) return;
@@ -248,14 +305,60 @@ export default function AllocationsCard({
       alert('請輸入有效的分配金額');
       return;
     }
+
+    // Other deduction (standard invoice mode only).
+    const useOtherDeduction = !isRetentionRelease && otherDeductionEnabled;
+    const otherDeduct = useOtherDeduction ? parseFloat(otherDeductionAmount) || 0 : 0;
+    if (useOtherDeduction) {
+      if (otherDeduct < 0) {
+        alert('其他扣款不可為負數');
+        return;
+      }
+      if (otherDeduct >= amount) {
+        alert('其他扣款不可大於或等於本次分配金額');
+        return;
+      }
+    }
+
+    // Calculate: base - other deductions = amount after other deductions
+    const amountAfterOther = Math.round((amount - otherDeduct) * 100) / 100;
+
+    // Retention deduction (calculated on amount AFTER other deductions).
+    const useRetention = !isRetentionRelease && retentionEnabled;
+    const retention = useRetention ? parseFloat(retentionAmount) || 0 : 0;
+    if (useRetention) {
+      if (retention < 0) {
+        alert('扣留金不可為負數');
+        return;
+      }
+      if (retention >= amountAfterOther) {
+        alert('扣留金不可大於或等於扣款後金額');
+        return;
+      }
+    }
+
+    // Final payment = amount - other deductions - retention
+    const netAmount = Math.round((amountAfterOther - retention) * 100) / 100;
+    if (netAmount <= 0) {
+      alert('扣除所有扣款後的實際付款金額必須大於 0');
+      return;
+    }
+
+
     setSubmitting(true);
     try {
       await paymentInAllocationApi.create({
         payment_in_allocation_payment_in_id: paymentInId,
         payment_in_allocation_invoice_id:
           selected.kind === 'invoice' ? selected.id : undefined,
-        payment_in_allocation_amount: amount,
+        payment_in_allocation_amount: netAmount,
         payment_in_allocation_remarks: allocRemarks || undefined,
+        retention_deduction_amount:
+          useRetention && retention > 0 ? retention : undefined,
+        other_deduction_amount:
+          useOtherDeduction && otherDeduct > 0 ? otherDeduct : undefined,
+        other_deduction_remarks:
+          useOtherDeduction && otherDeduct > 0 ? otherDeductionRemarks || undefined : undefined,
       });
       setPickerOpen(false);
       await reload();
@@ -676,6 +779,149 @@ export default function AllocationsCard({
                     />
                   </div>
                 </div>
+
+                {/* Deductions section (standard invoice mode only) */}
+                {!isRetentionRelease && (
+                  <div className="space-y-3 border-t pt-3">
+                    {/* Other deduction */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={otherDeductionEnabled}
+                          onChange={(e) => {
+                            setOtherDeductionEnabled(e.target.checked);
+                            if (!e.target.checked) {
+                              setOtherDeductionAmount('');
+                              setOtherDeductionRemarks('');
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700">其他扣款</span>
+                      </label>
+                      {otherDeductionEnabled && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-6">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              金額
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={otherDeductionAmount}
+                              onChange={(e) => setOtherDeductionAmount(e.target.value)}
+                              className="input-field text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              備註
+                            </label>
+                            <input
+                              type="text"
+                              value={otherDeductionRemarks}
+                              onChange={(e) => setOtherDeductionRemarks(e.target.value)}
+                              className="input-field text-sm"
+                              placeholder="如：銀行手續費"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Retention deduction */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={retentionEnabled}
+                          onChange={(e) => {
+                            setRetentionEnabled(e.target.checked);
+                            if (!e.target.checked) {
+                              setRetentionAmount('');
+                              setRetentionAmountTouched(false);
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700">扣留金</span>
+                      </label>
+                      {retentionEnabled && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-6">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              百分比 (%)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={retentionPct}
+                              onChange={(e) => {
+                                setRetentionPct(e.target.value);
+                                setRetentionAmountTouched(false);
+                              }}
+                              className="input-field text-sm"
+                              placeholder="5"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              扣留金額
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={retentionAmount}
+                              onChange={(e) => {
+                                setRetentionAmount(e.target.value);
+                                setRetentionAmountTouched(true);
+                              }}
+                              className="input-field text-sm"
+                              placeholder="自動計算"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Calculation breakdown */}
+                    {(otherDeductionEnabled || retentionEnabled) && (
+                      <div className="bg-white p-3 rounded border border-gray-200 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">發票金額：</span>
+                          <span className="font-mono font-semibold">{fmt$(allocAmountNum)}</span>
+                        </div>
+                        {otherDeductionEnabled && otherDeductNum > 0 && (
+                          <>
+                            <div className="flex justify-between text-orange-700">
+                              <span>其他扣款：</span>
+                              <span className="font-mono">- {fmt$(otherDeductNum)}</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-1">
+                              <span className="text-gray-600">扣款後金額：</span>
+                              <span className="font-mono font-semibold">{fmt$(amountAfterOtherDeduct)}</span>
+                            </div>
+                          </>
+                        )}
+                        {retentionEnabled && retentionAmountNum > 0 && (
+                          <div className="flex justify-between text-amber-700">
+                            <span>扣留金 ({retentionPct}%)：</span>
+                            <span className="font-mono">- {fmt$(retentionAmountNum)}</span>
+                          </div>
+                        )}
+                        {(otherDeductionEnabled || retentionEnabled) && (
+                          <div className="flex justify-between border-t pt-1 bg-indigo-50 -mx-3 -mb-3 px-3 py-2 rounded-b">
+                            <span className="font-semibold text-indigo-900">實際分配金額：</span>
+                            <span className="font-mono font-semibold text-indigo-900">{fmt$(netPaymentNum)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setSelected(null)}
