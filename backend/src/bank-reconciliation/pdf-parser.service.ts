@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { createOpenAIClient } from '../common/openai-client';
 import { AiActivityLogService } from '../ai-activity-log/ai-activity-log.service';
 import { readFileSync, unlinkSync, existsSync, writeFileSync } from 'fs';
+import * as path from 'path';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
