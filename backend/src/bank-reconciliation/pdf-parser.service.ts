@@ -750,17 +750,31 @@ ${identificationContext}
   }
 
   /**
-   * Extract text content from PDF using pdf-parse.
+   * Extract text content from PDF using pdfjs-dist directly.
+   * Using pdfjs-dist here (instead of pdf-parse) ensures both extractTextFromPdf
+   * and extractStructuredRows share the SAME pdfjs-dist instance and Worker,
+   * eliminating the "API version does not match Worker version" error that occurs
+   * when pdf-parse (which bundles its own older pdfjs-dist) spawns a Worker first.
    */
   private async extractTextFromPdf(dataBuffer: Buffer): Promise<string> {
-    const { PDFParse } = require('pdf-parse');
-    const parser = new PDFParse({ data: dataBuffer });
-    try {
-      const data = await parser.getText();
-      return data.text || '';
-    } finally {
-      await parser.destroy();
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
+    const workerPath = path.resolve(
+      __dirname,
+      '../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
+    const data = new Uint8Array(dataBuffer);
+    const doc = await pdfjsLib.getDocument({ data }).promise;
+    let fullText = '';
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items as any[])
+        .map((item: any) => item.str || '')
+        .join(' ');
+      fullText += pageText + '\n';
     }
+    return fullText;
   }
 
   /**
