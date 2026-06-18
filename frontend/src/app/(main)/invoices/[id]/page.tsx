@@ -126,6 +126,9 @@ export default function InvoiceDetailPage() {
   const [linkedWorkLogs, setLinkedWorkLogs] = useState<any[]>([]);
   const [linkedWorkLogsLoading, setLinkedWorkLogsLoading] = useState(false);
 
+  // Tab navigation
+  const [activeTab, setActiveTab] = useState<'info' | 'worklogs' | 'payments'>('info');
+
   const loadRevisions = async (targetInvoiceId: number = invoiceId) => {
     setRevisionsLoading(true);
     try {
@@ -627,6 +630,31 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+        <nav className="flex gap-4 min-w-max">
+          {[
+            { key: 'info' as const, label: '發票資料' },
+            { key: 'worklogs' as const, label: `關聯工作紀錄 (${linkedWorkLogs.length})` },
+            { key: 'payments' as const, label: '收款狀況' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {activeTab === 'info' && (<>
       {/* Revision History */}
       <div className="card mb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
@@ -1311,6 +1339,9 @@ export default function InvoiceDetailPage() {
         )}
       </div>
 
+      </>)}
+
+      {activeTab === 'worklogs' && (<>
       {/* Linked Work Logs */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4 gap-3">
@@ -1438,6 +1469,9 @@ export default function InvoiceDetailPage() {
         )}
       </div>
 
+      </>)}
+
+      {activeTab === 'payments' && (<>
       {/* Payment Summary */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">收款狀況</h2>
@@ -1571,6 +1605,8 @@ export default function InvoiceDetailPage() {
       <div className="mb-6">
         <AttachmentUpload entityType="invoice" entityId={currentInvoiceId} title="發票文件" readOnly={isReadOnly('invoices')} />
       </div>
+
+      </>)}
 
       {/* Record Payment Modal */}
       {showPayment && (
