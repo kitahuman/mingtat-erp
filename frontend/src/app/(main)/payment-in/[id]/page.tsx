@@ -372,7 +372,7 @@ export default function PaymentInDetailPage() {
     sourceTypeLabelMap[record.source_type] || SOURCE_TYPE_LABELS[record.source_type] || record.source_type || '—';
 
   // Payer display
-  const payerDisplay = record.payer_partner?.name || record.payer_name || record.project?.client?.name || null;
+  const payerDisplay = record.payer_partner?.name || record.payer_name || record.project?.client?.name || (record.allocations as any)?.[0]?.invoice?.client?.name || null;
 
   return (
     <div className="max-w-5xl mx-auto">
