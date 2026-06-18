@@ -298,12 +298,17 @@ ${structuredText}`,
    */
   private async extractStructuredRows(pdfBuffer: Buffer): Promise<StructuredRow[]> {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
-    // Disable Worker to avoid version mismatch between pdfjs-dist API and Worker file.
-    // pdf-parse (a dependency) ships its own older pdfjs-dist version which can conflict.
-    // For text extraction, running in the main thread is perfectly fine.
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    // Point workerSrc to the actual pdf.worker.mjs file that ships with the SAME
+    // pdfjs-dist version as the API. Setting workerSrc to '' does NOT work with
+    // pdfjs-dist 5.4.x and causes "API version does not match Worker version".
+    // In the compiled Docker environment __dirname is /app/dist/bank-reconciliation/,
+    // so ../../node_modules/... resolves to /app/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = path.resolve(
+      __dirname,
+      '../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    );
     const data = new Uint8Array(pdfBuffer);
-    const doc = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+    const doc = await pdfjsLib.getDocument({ data }).promise;
 
     let globalBoundaries: ColumnBoundaries | null = null;
     const allRows: StructuredRow[] = [];
