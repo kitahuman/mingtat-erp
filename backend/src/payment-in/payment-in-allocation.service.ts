@@ -541,7 +541,6 @@ export class PaymentInAllocationService {
     const whereClause: Prisma.InvoiceWhereInput = {
       deleted_at: null,
       status: { notIn: ['draft', 'void'] },
-      retention_amount: { gt: 0 },
       ...(q
         ? {
             OR: [
@@ -556,6 +555,7 @@ export class PaymentInAllocationService {
             ],
           }
         : {}),
+      retention_amount: { gt: 0 },
     };
 
     const invoices = await this.prisma.invoice.findMany({
