@@ -611,8 +611,7 @@ export class PayrollCalculationService {
         sort_order: sortOrder++,
       });
     } else if (mpfPlan === 'industry') {
-      const mpfDateSet = new Set(workLogs.map((wl) => toDateStr(wl.scheduled_date)));
-      const mpfDays = mpfDateSet.size;
+      const mpfDays = dailyCalc.filter((d: any) => (d.work_logs || []).length > 0).length;
       const defaultIndustryDailyIncome = mpfDays > 0 ? defaultMpfBase / mpfDays : 0;
       const industryDailyIncome =
         mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
