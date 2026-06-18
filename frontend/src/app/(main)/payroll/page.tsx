@@ -14,6 +14,7 @@ import {
 import Modal from '@/components/Modal';
 import Combobox from '@/components/Combobox';
 import SearchableSelect from '@/components/SearchableSelect';
+import PayrollGuideSlides from '@/components/PayrollGuideSlides';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
@@ -1452,6 +1453,9 @@ export default function PayrollPage() {
           </div>
         </form>
       </Modal>
+
+      {/* 教學指南輪播 */}
+      <PayrollGuideSlides />
     </div>
   );
 }
