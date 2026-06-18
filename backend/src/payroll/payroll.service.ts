@@ -2150,6 +2150,10 @@ export class PayrollService {
     const manualRateConflicts: { pwl_id: number; group_key: string; old_rate: number; new_rate: number }[] = [];
 
     for (const pwl of pwls) {
+      // 跳過用戶主動取消匹配的記錄
+      if (pwl.price_match_status === 'manual_unmatched') {
+        continue;
+      }
       const priceInfo = await this.calcService.rematchPayrollWorkLogPrice(pwl);
       const systemMatched = priceInfo.price_match_status === 'matched';
       const hasManualRate = pwl.is_manual_rate === true;
@@ -3677,8 +3681,8 @@ export class PayrollService {
         matched_mid_shift_rate: null,
         matched_unit: null,
         is_manual_rate: false,
-        price_match_status: 'unmatched',
-        price_match_note: '已取消匹配',
+        price_match_status: 'manual_unmatched',
+        price_match_note: '用戶取消匹配',
         line_amount: 0,
         ot_line_amount: 0,
         mid_shift_line_amount: 0,

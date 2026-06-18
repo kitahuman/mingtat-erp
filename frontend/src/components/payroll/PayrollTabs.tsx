@@ -1623,7 +1623,7 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
                       </label>
                     </div>
                   ) : formatMoney(group.total_amount ?? group.amount)}</td>
-                  <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
+                  <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : group.price_match_status === "manual_unmatched" ? <span className="text-red-600">已取消匹配</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
                   <td className="px-3 py-2 text-center">
                     {group.price_match_status === "matched" ? (
                       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
