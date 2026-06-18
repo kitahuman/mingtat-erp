@@ -168,8 +168,8 @@ export class PaymentInAllocationService {
     const invoiceId = created.payment_in_allocation_invoice_id;
 
     // Retention deduction taken at allocation time (standard invoice mode only):
-    // increase the invoice's retention_amount by the deducted amount. No separate
-    // deduction record is created — the allocation amount is already net.
+    // increase the invoice's retention_amount by the deducted amount AND create
+    // a PaymentInDeduction record to track the deduction.
     const retentionDeduction = Number(dto.retention_deduction_amount ?? 0);
     if (!isRetentionRelease && invoiceId && retentionDeduction > 0) {
       const inv = await this.prisma.invoice.findUnique({
@@ -186,6 +186,18 @@ export class PaymentInAllocationService {
           data: { retention_amount: newRetention },
         });
       }
+      // Create a PaymentInDeduction record to track the retention deduction
+      await this.prisma.paymentInDeduction.create({
+        data: {
+          payment_in_deduction_payment_in_id:
+            dto.payment_in_allocation_payment_in_id,
+          payment_in_deduction_invoice_id: invoiceId,
+          payment_in_deduction_type: 'retention',
+          payment_in_deduction_amount: retentionDeduction,
+          payment_in_deduction_remarks:
+            dto.other_deduction_remarks || '扣留金',
+        },
+      });
     }
 
     // Other deduction: create a PaymentInDeduction record with type='Other'.
