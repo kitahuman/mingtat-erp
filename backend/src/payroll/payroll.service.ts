@@ -4050,6 +4050,16 @@ export class PayrollService {
           : dayLogs.length > 0;
         if (!shouldGenerate) continue;
 
+        // 計算當天實質天數（半天 = 0.5），中直津貼不按比例
+        let dailyAmount = definition.amount;
+        if (definition.field !== 'allowance_mid_shift') {
+          const dayQuantity = Math.min(
+            dayLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 1), 0),
+            1
+          );
+          dailyAmount = definition.amount * dayQuantity;
+        }
+
         const dailyKey = `${dateStr}:${definition.field}`;
         if (existingKeys.has(dailyKey)) continue;
         if (this.isDailyAllowanceExcluded(excludedRecords, definition.field, dateStr)) {
@@ -4062,7 +4072,7 @@ export class PayrollService {
             date: new Date(dateStr),
             allowance_key: definition.field,
             allowance_name: definition.label,
-            amount: definition.amount,
+            amount: dailyAmount,
             remarks: '自動生成',
             is_auto: true,
           },
