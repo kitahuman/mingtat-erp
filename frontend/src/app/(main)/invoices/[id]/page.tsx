@@ -634,6 +634,7 @@ export default function InvoiceDetailPage() {
             <h2 className="text-lg font-bold text-gray-900">版本歷史</h2>
             <p className="mt-0.5 text-xs text-gray-500">
               同一張發票可保留多個修訂版本，列表與主顯示只會使用標記為正式的版本。
+              直接編輯發票不會自動產生新版本，需透過「作廢」按鈕手動建立修訂版。
             </p>
           </div>
           {!isReadOnly && (
