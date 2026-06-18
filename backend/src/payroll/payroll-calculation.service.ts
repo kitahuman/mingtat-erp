@@ -611,7 +611,13 @@ export class PayrollCalculationService {
         sort_order: sortOrder++,
       });
     } else if (mpfPlan === 'industry') {
-      const mpfDays = dailyCalc.filter((d: any) => (d.work_logs || []).length > 0).length;
+      const mpfDays = dailyCalc.reduce((sum: number, day: any) => {
+        const logs = day.work_logs || [];
+        if (logs.length === 0) return sum;
+        const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+        const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
+        return sum + Math.min(dayQ + nightQ, 1);
+      }, 0);
       const defaultIndustryDailyIncome = mpfDays > 0 ? defaultMpfBase / mpfDays : 0;
       const industryDailyIncome =
         mpfRelevantIncome !== undefined && mpfRelevantIncome !== null
