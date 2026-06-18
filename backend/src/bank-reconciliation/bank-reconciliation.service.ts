@@ -889,11 +889,11 @@ export class BankReconciliationService {
     const bankAccountId = tx.bank_account_id;
     const companyId = (tx as any).bank_account?.company_id ?? null;
 
-    // Date range: +/- 30 days for manual matching
+    // Date range: +/- 90 days for manual matching
     const dateFrom = new Date(tx.date);
-    dateFrom.setDate(dateFrom.getDate() - 30);
+    dateFrom.setDate(dateFrom.getDate() - 90);
     const dateTo = new Date(tx.date);
-    dateTo.setDate(dateTo.getDate() + 30);
+    dateTo.setDate(dateTo.getDate() + 90);
 
     if (isCredit) {
       const orConditions: any[] = [{ bank_account_id: bankAccountId }];

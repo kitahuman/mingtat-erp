@@ -92,7 +92,7 @@ export default function PaymentMatchModal({
             <div className="text-center py-6 text-gray-400 text-sm">載入中...</div>
           ) : candidates.length === 0 ? (
             <div className="text-center py-6 text-gray-400 text-sm">
-              找不到符合條件的銀行記錄（±30 天、相同銀行帳戶）
+              找不到符合條件的銀行記錄（±90 天、相同銀行帳戶）
             </div>
           ) : (
             <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
