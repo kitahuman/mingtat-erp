@@ -641,54 +641,163 @@ ${identificationContext}
 
   /**
    * Post-processing: verify and fix transaction directions using running balance.
-   * This is a safety net for any remaining issues (e.g. vision mode or plain text mode).
+   *
+   * HSBC (and similar) statements only print a `balance` on the LAST transaction of
+   * each day, not on every transaction. A naive per-transaction check therefore skips
+   * any transaction with `balance == null`, which means a wrong-direction transaction
+   * in the middle of a day can never be detected/corrected.
+   *
+   * This implementation verifies balances on a PER-DAY basis:
+   *   1. Group transactions by `tx.date`.
+   *   2. For each day, accumulate an expected balance starting from the previous day's
+   *      closing balance (or the opening balance for the first day).
+   *   3. Compare the day's final expected balance against the day's last *statement*
+   *      balance (the last tx of the day that has a non-null `balance`).
+   *   4. If they don't match, try flipping the direction of transactions within that day
+   *      (single, then pairs, then triples) until the final expected balance equals the
+   *      statement balance.
+   *   5. Once correct, use the statement balance as the starting balance for the next day.
    */
   private verifyAndFixBalances(transactions: ParsedTransaction[], openingBalance: number | null | undefined): ParsedTransaction[] {
     if (!transactions.length || openingBalance == null) return transactions;
 
-    let runningBalance = openingBalance;
-    let fixCount = 0;
-    const MAX_FIXES = 10;
-
+    // Preserve original order; group indices by date while keeping chronological order.
+    const dateOrder: string[] = [];
+    const indicesByDate = new Map<string, number[]>();
     for (let i = 0; i < transactions.length; i++) {
-      const tx = transactions[i];
-      const deposit = tx.deposits || 0;
-      const withdrawal = tx.withdrawals || 0;
-
-      const expectedBalance = runningBalance + deposit - withdrawal;
-
-      if (tx.balance != null) {
-        const diff = Math.abs(expectedBalance - tx.balance);
-
-        if (diff > 0.01 && fixCount < MAX_FIXES) {
-          const flippedBalance = runningBalance - deposit + withdrawal;
-          const flippedDiff = Math.abs(flippedBalance - tx.balance);
-
-          if (flippedDiff < 0.01) {
-            console.log(`[PdfParser] Balance fix: flipping tx #${i + 1} "${tx.description}" - was deposit=${deposit}/withdrawal=${withdrawal}, now deposit=${withdrawal}/withdrawal=${deposit}`);
-            const newDeposit = withdrawal > 0 ? withdrawal : undefined;
-            const newWithdrawal = deposit > 0 ? deposit : undefined;
-            transactions[i] = {
-              ...tx,
-              deposits: newDeposit,
-              withdrawals: newWithdrawal,
-              amount: newDeposit ? newDeposit : newWithdrawal ? -newWithdrawal : 0,
-            };
-            runningBalance = flippedBalance;
-            fixCount++;
-          } else {
-            runningBalance = tx.balance;
-          }
-        } else {
-          runningBalance = expectedBalance;
-        }
-      } else {
-        runningBalance = expectedBalance;
+      const date = transactions[i].date;
+      if (!indicesByDate.has(date)) {
+        indicesByDate.set(date, []);
+        dateOrder.push(date);
       }
+      indicesByDate.get(date)!.push(i);
     }
 
-    if (fixCount > 0) {
-      console.log(`[PdfParser] Post-processing fixed ${fixCount} transaction direction(s).`);
+    let prevBalance = openingBalance; // closing balance of previous day (or opening balance)
+    let totalFixedTx = 0;
+    const MAX_COMBO = 3; // max number of transactions to flip together within a day
+
+    // Helper: signed amount of a transaction given a flip flag.
+    const signedAmount = (tx: ParsedTransaction, flipped: boolean): number => {
+      const deposit = tx.deposits || 0;
+      const withdrawal = tx.withdrawals || 0;
+      // Normal: +deposit - withdrawal ; Flipped: deposits and withdrawals are swapped.
+      return flipped ? (withdrawal - deposit) : (deposit - withdrawal);
+    };
+
+    // Helper: compute the day's final expected balance given a set of indices to flip.
+    const computeDayBalance = (dayIndices: number[], startBalance: number, flipSet: Set<number>): number => {
+      let bal = startBalance;
+      for (const idx of dayIndices) {
+        bal += signedAmount(transactions[idx], flipSet.has(idx));
+      }
+      return bal;
+    };
+
+    // Helper: generate combinations of size k from an array.
+    const combinations = (arr: number[], k: number): number[][] => {
+      const result: number[][] = [];
+      const combo: number[] = [];
+      const backtrack = (start: number) => {
+        if (combo.length === k) {
+          result.push([...combo]);
+          return;
+        }
+        for (let i = start; i < arr.length; i++) {
+          combo.push(arr[i]);
+          backtrack(i + 1);
+          combo.pop();
+        }
+      };
+      backtrack(0);
+      return result;
+    };
+
+    // Helper: apply a flip to a transaction in-place (swap deposits/withdrawals).
+    const applyFlip = (idx: number) => {
+      const tx = transactions[idx];
+      const deposit = tx.deposits || 0;
+      const withdrawal = tx.withdrawals || 0;
+      const newDeposit = withdrawal > 0 ? withdrawal : undefined;
+      const newWithdrawal = deposit > 0 ? deposit : undefined;
+      transactions[idx] = {
+        ...tx,
+        deposits: newDeposit,
+        withdrawals: newWithdrawal,
+        amount: newDeposit ? newDeposit : newWithdrawal ? -newWithdrawal : 0,
+      };
+    };
+
+    for (const date of dateOrder) {
+      const dayIndices = indicesByDate.get(date)!;
+
+      // Find the LAST transaction of the day that carries a statement balance.
+      let stmtBalanceIdx = -1;
+      for (let j = dayIndices.length - 1; j >= 0; j--) {
+        if (transactions[dayIndices[j]].balance != null) {
+          stmtBalanceIdx = dayIndices[j];
+          break;
+        }
+      }
+
+      // No statement balance available for this day -> can't verify; just accumulate.
+      if (stmtBalanceIdx === -1) {
+        prevBalance = computeDayBalance(dayIndices, prevBalance, new Set<number>());
+        continue;
+      }
+
+      const stmtBalance = transactions[stmtBalanceIdx].balance!;
+
+      // Only consider transactions up to and including the one bearing the statement
+      // balance for verification (transactions after it on the same day, if any, have
+      // no anchor and are accumulated afterwards).
+      const stmtPos = dayIndices.indexOf(stmtBalanceIdx);
+      const verifyIndices = dayIndices.slice(0, stmtPos + 1);
+      const tailIndices = dayIndices.slice(stmtPos + 1);
+
+      const noFlip = new Set<number>();
+      const baseExpected = computeDayBalance(verifyIndices, prevBalance, noFlip);
+
+      if (Math.abs(baseExpected - stmtBalance) < 0.01) {
+        // Day already balances. Anchor on statement balance, then accumulate any tail.
+        prevBalance = computeDayBalance(tailIndices, stmtBalance, noFlip);
+        continue;
+      }
+
+      // Day does not balance -> try flipping combinations of transactions within the day.
+      console.log(`[PdfParser] Balance mismatch on ${date}: expected=${baseExpected.toFixed(2)}, statement=${stmtBalance.toFixed(2)}, diff=${(baseExpected - stmtBalance).toFixed(2)}. Attempting direction flips...`);
+
+      let resolved = false;
+      for (let k = 1; k <= Math.min(MAX_COMBO, verifyIndices.length) && !resolved; k++) {
+        const combos = combinations(verifyIndices, k);
+        for (const combo of combos) {
+          const flipSet = new Set<number>(combo);
+          const candidate = computeDayBalance(verifyIndices, prevBalance, flipSet);
+          if (Math.abs(candidate - stmtBalance) < 0.01) {
+            // Found a working combination -> apply flips.
+            for (const idx of combo) {
+              const tx = transactions[idx];
+              console.log(`[PdfParser] Balance fix: flipping tx "${tx.description}" on ${date} (was deposit=${tx.deposits || 0}/withdrawal=${tx.withdrawals || 0})`);
+              applyFlip(idx);
+              totalFixedTx++;
+            }
+            console.log(`[PdfParser] Balance fixed on ${date} by flipping ${combo.length} transaction(s). Day now balances to ${stmtBalance.toFixed(2)}.`);
+            resolved = true;
+            break;
+          }
+        }
+      }
+
+      if (!resolved) {
+        console.log(`[PdfParser] Could not resolve balance mismatch on ${date} with up to ${MAX_COMBO} flips. Using statement balance ${stmtBalance.toFixed(2)} to continue.`);
+      }
+
+      // Anchor on the statement balance (authoritative) and accumulate any tail transactions.
+      prevBalance = computeDayBalance(tailIndices, stmtBalance, noFlip);
+    }
+
+    if (totalFixedTx > 0) {
+      console.log(`[PdfParser] Post-processing fixed ${totalFixedTx} transaction direction(s) across all days.`);
     }
 
     return transactions;
