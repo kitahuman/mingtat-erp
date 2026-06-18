@@ -211,7 +211,6 @@ ${structuredText}`,
 
       parsed.opening_balance = cleanNum(parsed.opening_balance) ?? null;
 
-      console.log(`[PdfParser] hasStructuredData=${hasStructuredData}, structuredRows.length=${structuredRows.length}`);
       if (hasStructuredData) {
         // In structured mode: override AI's amount fields with our pre-classified values
         // Match by row_index if provided, otherwise by position
@@ -473,14 +472,15 @@ ${structuredText}`,
     );
 
     console.log(`[PdfParser] mergeStructuredAmounts: txRows=${txRows.length}, aiTransactions=${aiTransactions.length}`);
+
     // Build a map from row_index to AI transaction for quick lookup
+    // (kept lightweight log above to monitor AI-vs-structured coverage in production)
     const aiByRowIndex = new Map<number, ParsedTransaction>();
     for (const tx of aiTransactions) {
       const rowIdx = (tx as any).row_index;
       if (rowIdx != null) {
         aiByRowIndex.set(rowIdx, tx);
       }
-    console.log(`[PdfParser] AI transactions with row_index: ${aiByRowIndex.size}`);
     }
 
     const result: ParsedTransaction[] = [];
@@ -708,20 +708,33 @@ ${identificationContext}
     let withdrawalX: number | null = null;
     let balanceX: number | null = null;
 
+    // IMPORTANT: Only match REAL column headers, which live in the amount-column
+    // region (x > 250). Summary rows at the bottom of a statement contain the
+    // plural words "Deposits"/"Withdrawals" anchored at the far-left Date column
+    // (x ~ 74). If we accepted those, the per-page boundary detection would be
+    // corrupted (e.g. depositX/withdrawalX collapsing to ~74), causing every
+    // amount on that page to be mis-classified as BALANCE and the transactions
+    // to be dropped. We therefore require x > 250 for all three headers.
     for (const item of items) {
       const str = item.str.trim().toLowerCase();
       const x = item.transform[4];
 
-      if (str === 'deposit' || str === 'deposits') {
+      if ((str === 'deposit' || str === 'deposits') && x > 250) {
         depositX = x;
-      } else if (str === 'withdrawal' || str === 'withdrawals') {
+      } else if ((str === 'withdrawal' || str === 'withdrawals') && x > 250) {
         withdrawalX = x;
       } else if ((str === 'balance' || str.startsWith('balance in')) && x > 250) {
         balanceX = x;
       }
     }
 
+    // Validate that the detected headers are in the expected left-to-right order
+    // with sane spacing (deposit < withdrawal < balance). If not, treat as a
+    // false positive so the caller keeps the previously-detected boundaries.
     if (depositX == null || withdrawalX == null || balanceX == null) {
+      return null;
+    }
+    if (!(depositX < withdrawalX && withdrawalX < balanceX)) {
       return null;
     }
 
