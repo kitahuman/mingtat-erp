@@ -46,6 +46,7 @@ function getPayerDisplay(row: any): string {
   if (row.payer_partner) return row.payer_partner.name;
   if (row.payer_name) return row.payer_name;
   if (row.project?.client) return row.project.client.name;
+  if (row.allocations?.[0]?.invoice?.client) return row.allocations[0].invoice.client.name;
   return '';
 }
 
