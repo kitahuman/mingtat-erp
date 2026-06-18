@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ColumnFilter from "@/components/ColumnFilter";
-import { payrollApi, systemSettingsApi } from "@/lib/api";
+import { payrollApi, systemSettingsApi, fleetRateCardsApi } from "@/lib/api";
 import { fmtDate } from "@/lib/dateUtils";
 
 type TabKey = "detail" | "daily" | "grouped" | "unmatched" | "calculation" | "print";
@@ -142,6 +142,7 @@ type GroupedSettlementRecord = {
   is_mid_shift?: number | string | boolean | null;
   price_match_status?: string | null;
   price_match_note?: string | null;
+  matched_rate_card_id?: number | string | null;
   work_log_ids?: Array<number | string>;
   ids?: Array<number | string>;
   client_id?: number | string | null;
@@ -809,6 +810,10 @@ function PayrollTabs({
   const [rateCardSource, setRateCardSource] = useState<RateCardSource | null>(null);
   const [rateCardSaving, setRateCardSaving] = useState(false);
   const [rateCardForm, setRateCardForm] = useState<AddRateCardForm>(() => emptyRateCardForm());
+  // 手動匹配彈窗：記錄目前要匹配的歸組
+  const [manualMatchGroup, setManualMatchGroup] = useState<GroupedSettlementRecord | null>(null);
+  // 查看彈窗：記錄要查看的 fleet_rate_card id
+  const [viewRateCardId, setViewRateCardId] = useState<number | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setRows(workLogs), [workLogs]);
@@ -1089,6 +1094,29 @@ function PayrollTabs({
     }
   }
 
+  // 手動匹配：選取一筆價目表套用到整個歸組
+  async function matchGroupRateCard(group: GroupedSettlementRecord, rateCardId: number) {
+    if (!payrollId) return;
+    const groupKey = normalizeGroupKey(group);
+    await mutateAndReload(
+      () => payrollApi.matchGroupRateCard(payrollId, groupKey, rateCardId),
+      "手動匹配價目表失敗",
+    );
+    setManualMatchGroup(null);
+  }
+
+  // 取消匹配：清除整個歸組的匹配資料
+  async function unmatchGroupRateCard(group: GroupedSettlementRecord) {
+    if (readOnly || !payrollId) return;
+    const ok = window.confirm("確定要取消此歸組的價目匹配嗎？取消後該組金額會重置為未匹配。");
+    if (!ok) return;
+    const groupKey = normalizeGroupKey(group);
+    await mutateAndReload(
+      () => payrollApi.unmatchGroupRateCard(payrollId, groupKey),
+      "取消匹配失敗",
+    );
+  }
+
   async function addDailyAllowance(date: string, option: AllowanceOption) {
     if (!payrollId) return;
     await mutateAndReload(() => payrollApi.addDailyAllowance(payrollId, {
@@ -1180,13 +1208,15 @@ function PayrollTabs({
       </div>
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
-      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} />}
+      {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} onOpenManualMatch={(group) => setManualMatchGroup(group)} onUnmatch={unmatchGroupRateCard} onViewRateCard={(id) => setViewRateCardId(id)} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} />}
       {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
+      {manualMatchGroup && <ManualMatchModal group={manualMatchGroup} saving={saving} onClose={() => setManualMatchGroup(null)} onSelect={(rateCardId) => matchGroupRateCard(manualMatchGroup, rateCardId)} />}
+      {viewRateCardId !== null && <ViewRateCardModal rateCardId={viewRateCardId} onClose={() => setViewRateCardId(null)} />}
     </div>
   );
 }
@@ -1506,7 +1536,7 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
   );
 }
 
-function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard, onAmountSelectionChange }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void; onAmountSelectionChange: (group: GroupedSettlementRecord, selected: 'theoretical' | 'actual') => Promise<void> }) {
+function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onSetGroupOtRate, onSetGroupMidShiftRate, onOpenRateCard, onAmountSelectionChange, onOpenManualMatch, onUnmatch, onViewRateCard }: { groups: GroupedSettlementRecord[]; readOnly: boolean; onBillingTypeChange: (group: GroupedSettlementRecord, billingType: BillingQuantityType) => Promise<void>; onSetGroupRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupOtRate: (group: GroupedSettlementRecord) => Promise<void>; onSetGroupMidShiftRate: (group: GroupedSettlementRecord) => Promise<void>; onOpenRateCard: (source: RateCardSource) => void; onAmountSelectionChange: (group: GroupedSettlementRecord, selected: 'theoretical' | 'actual') => Promise<void>; onOpenManualMatch: (group: GroupedSettlementRecord) => void; onUnmatch: (group: GroupedSettlementRecord) => Promise<void>; onViewRateCard: (rateCardId: number) => void }) {
   if (groups.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無歸組結算資料。</div>;
 
   const getGroupMidShiftCount = (group: GroupedSettlementRecord): number => {
@@ -1594,7 +1624,23 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
                     </div>
                   ) : formatMoney(group.total_amount ?? group.amount)}</td>
                   <td className="px-3 py-2 text-xs">{group.price_match_status === "manual" ? <span className="text-blue-700">手動設定</span> : isUnmatched(group) ? <span className="text-amber-700">{group.price_match_note || "未匹配"}</span> : <span className="text-green-700">已匹配</span>}</td>
-                  <td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td>
+                  <td className="px-3 py-2 text-center">
+                    {group.price_match_status === "matched" ? (
+                      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                        {asOptionalNumber(group.matched_rate_card_id) !== undefined ? (
+                          <button type="button" onClick={() => onViewRateCard(Number(group.matched_rate_card_id))} className="text-xs font-medium text-primary-600 hover:underline">查看</button>
+                        ) : (
+                          <span className="text-xs text-gray-400">查看</span>
+                        )}
+                        <button type="button" disabled={readOnly} onClick={() => onUnmatch(group)} className="text-xs font-medium text-red-600 hover:underline disabled:text-gray-300">取消匹配</button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                        <button type="button" disabled={readOnly} onClick={() => onOpenRateCard(source)} className="text-xs font-medium text-primary-600 hover:underline disabled:text-gray-300">加入價目表</button>
+                        <button type="button" disabled={readOnly} onClick={() => onOpenManualMatch(group)} className="text-xs font-medium text-primary-600 hover:underline disabled:text-gray-300">手動匹配</button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -2765,6 +2811,205 @@ function RateCardModal({ source, form, saving, onChange, onClose, onSubmit }: { 
 
 function RateField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return <label><span className="mb-1 block text-sm font-medium text-gray-700">{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="input w-full" /></label>;
+}
+
+// 手動匹配彈窗：搜尋現有 fleet_rate_cards 並選取一筆套用到整個歸組
+type RateCardOption = {
+  id: number;
+  client_id?: number | null;
+  client?: { name?: string | null } | null;
+  company?: { name?: string | null } | null;
+  client_contract_no?: string | null;
+  service_type?: string | null;
+  day_night?: string | null;
+  tonnage?: string | null;
+  machine_type?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  rate?: number | string | null;
+  day_rate?: number | string | null;
+  night_rate?: number | string | null;
+  mid_shift_rate?: number | string | null;
+  ot_rate?: number | string | null;
+  unit?: string | null;
+  effective_date?: string | null;
+  expiry_date?: string | null;
+  status?: string | null;
+};
+
+function ManualMatchModal({ group, saving, onClose, onSelect }: { group: GroupedSettlementRecord; saving: boolean; onClose: () => void; onSelect: (rateCardId: number) => void }) {
+  const [search, setSearch] = useState("");
+  const [onlyClient, setOnlyClient] = useState(true);
+  const [results, setResults] = useState<RateCardOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const clientId = asOptionalNumber(group.client_id);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    const params: Record<string, unknown> = { page: 1, limit: 50, status: "active", sortOrder: "DESC" };
+    if (search.trim()) params.search = search.trim();
+    if (onlyClient && clientId !== undefined) params.client_id = clientId;
+    fleetRateCardsApi
+      .list(params)
+      .then((res) => {
+        if (!active) return;
+        setResults((res.data?.data || []) as RateCardOption[]);
+      })
+      .catch(() => {
+        if (active) setResults([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [search, onlyClient, clientId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b p-5">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">手動匹配價目表</h3>
+            <p className="text-sm text-gray-500">{group.client_name || group.company_name || "-"} · {group.service_type || "-"} · {group.day_night || "-"} · {routeOf(group)}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-600">×</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4">
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋路線 / 合約 / 客戶 / 備註" className="input h-9 flex-1 min-w-[220px]" />
+          {clientId !== undefined && (
+            <label className="flex items-center gap-1 text-sm text-gray-600">
+              <input type="checkbox" checked={onlyClient} onChange={(e) => setOnlyClient(e.target.checked)} className="h-4 w-4" />
+              僅限該客戶
+            </label>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="sticky top-0 bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">客戶 / 合約</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">工種</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-600">日/夜</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">路線</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">單價</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">OT價</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-600">中直價</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-600">選擇</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">載入中...</td></tr>
+              ) : results.length === 0 ? (
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">找不到符合的價目表。</td></tr>
+              ) : (
+                results.map((card) => {
+                  const route = [card.origin, card.destination].filter(Boolean).join(" → ") || "-";
+                  const baseRate = Number(card.rate) || (card.day_night === "夜" ? Number(card.night_rate) : Number(card.day_rate)) || 0;
+                  const isSelected = selectedId === card.id;
+                  return (
+                    <tr key={card.id} onClick={() => setSelectedId(card.id)} className={`cursor-pointer border-b hover:bg-primary-50/40 ${isSelected ? "bg-primary-50" : ""}`}>
+                      <td className="px-3 py-2"><div className="font-medium">{card.client?.name || card.company?.name || "-"}</div><div className="text-xs text-gray-500">{card.client_contract_no || "-"}</div></td>
+                      <td className="px-3 py-2">{card.service_type || "-"}</td>
+                      <td className="px-3 py-2 text-center">{card.day_night || "-"}</td>
+                      <td className="px-3 py-2 text-gray-600">{route}</td>
+                      <td className="px-3 py-2 text-right font-mono">{formatMoney(baseRate)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{formatMoney(card.ot_rate)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{formatMoney(card.mid_shift_rate)}</td>
+                      <td className="px-3 py-2 text-center"><input type="radio" name="manual-match-card" checked={isSelected} onChange={() => setSelectedId(card.id)} className="h-4 w-4" /></td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end gap-2 border-t p-4">
+          <button type="button" onClick={onClose} className="btn-secondary">取消</button>
+          <button type="button" disabled={saving || selectedId === null} onClick={() => selectedId !== null && onSelect(selectedId)} className="btn-primary disabled:opacity-50">{saving ? "套用中..." : "確定匹配"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 查看彈窗：顯示已匹配的 fleet_rate_card 詳細資料
+function ViewRateCardModal({ rateCardId, onClose }: { rateCardId: number; onClose: () => void }) {
+  const [card, setCard] = useState<RateCardOption | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    fleetRateCardsApi
+      .get(rateCardId)
+      .then((res) => {
+        if (active) setCard(res.data as RateCardOption);
+      })
+      .catch(() => {
+        if (active) setError("載入價目詳細失敗");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [rateCardId]);
+
+  const baseRate = card ? (Number(card.rate) || (card.day_night === "夜" ? Number(card.night_rate) : Number(card.day_rate)) || 0) : 0;
+  const rows: Array<[string, ReactNode]> = card
+    ? [
+        ["客戶", card.client?.name || "-"],
+        ["公司", card.company?.name || "-"],
+        ["合約編號", card.client_contract_no || "-"],
+        ["工種", card.service_type || "-"],
+        ["日/夜", card.day_night || "-"],
+        ["噴數", card.tonnage || "-"],
+        ["機種", card.machine_type || "-"],
+        ["路線", [card.origin, card.destination].filter(Boolean).join(" → ") || "-"],
+        ["單價", `${formatMoney(baseRate)}${card.unit ? ` / ${card.unit}` : ""}`],
+        ["OT 價", formatMoney(card.ot_rate)],
+        ["中直價", formatMoney(card.mid_shift_rate)],
+        ["生效日期", card.effective_date ? fmtDate(card.effective_date) : "-"],
+        ["失效日期", card.expiry_date ? fmtDate(card.expiry_date) : "-"],
+        ["狀態", card.status || "-"],
+      ]
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-gray-900">價目表詳細 #{rateCardId}</h3>
+          <button type="button" onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-600">×</button>
+        </div>
+        {loading ? (
+          <div className="py-10 text-center text-gray-400">載入中...</div>
+        ) : error ? (
+          <div className="py-10 text-center text-red-500">{error}</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex flex-col">
+                <span className="text-xs text-gray-500">{label}</span>
+                <span className="text-sm font-medium text-gray-900">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-6 flex justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary">關閉</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default PayrollTabs;

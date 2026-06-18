@@ -8,7 +8,7 @@ import type { Response } from 'express';
 import { PayrollService } from './payroll.service';
 import { PayrollPdfService } from './payroll-pdf.service';
 import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
-import { CreatePayrollPaymentDto, AddToRateCardDto } from './dto/payroll-payment.dto';
+import { CreatePayrollPaymentDto, AddToRateCardDto, MatchGroupRateCardDto, UnmatchGroupRateCardDto } from './dto/payroll-payment.dto';
 import { AttachPayrollExpensesDto, GenerateMpfEmployerExpenseDto } from './dto/payroll-expense.dto';
 
 @Controller('payroll')
@@ -208,6 +208,28 @@ export class PayrollController {
     @Body() body: AddToRateCardDto,
   ) {
     return this.payrollService.addToRateCard(+id, body);
+  }
+
+  // 手動匹配：將指定價目表套用到該歸組所有工作記錄
+  @Post(':id/match-group-rate-card')
+  matchGroupRateCard(
+    @Param('id') id: string,
+    @Body() body: MatchGroupRateCardDto,
+  ) {
+    return this.payrollService.matchGroupRateCard(
+      +id,
+      body.group_key,
+      body.rate_card_id,
+    );
+  }
+
+  // 取消匹配：清除該歸組所有工作記錄的匹配資料
+  @Post(':id/unmatch-group-rate-card')
+  unmatchGroupRateCard(
+    @Param('id') id: string,
+    @Body() body: UnmatchGroupRateCardDto,
+  ) {
+    return this.payrollService.unmatchGroupRateCard(+id, body.group_key);
   }
 
   // 更新歸組金額選擇（理論值 vs 實際值）

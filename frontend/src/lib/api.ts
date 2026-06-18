@@ -699,6 +699,10 @@ export const payrollApi = {
     api.post(`/payroll/${id}/set-group-mid-shift-rate`, { group_key: groupKey, mid_shift_rate: midShiftRate }),
   updateGroupedAmountSelection: (id: number, groupKey: string, selected: 'theoretical' | 'actual') =>
     api.put(`/payroll/${id}/grouped-amount-selection`, { group_key: groupKey, selected }),
+  matchGroupRateCard: (id: number, groupKey: string, rateCardId: number) =>
+    api.post(`/payroll/${id}/match-group-rate-card`, { group_key: groupKey, rate_card_id: rateCardId }),
+  unmatchGroupRateCard: (id: number, groupKey: string) =>
+    api.post(`/payroll/${id}/unmatch-group-rate-card`, { group_key: groupKey }),
   addToRateCard: (
     id: number,
     formData: {

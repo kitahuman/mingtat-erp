@@ -3589,6 +3589,109 @@ export class PayrollService {
     return newCard;
   }
 
+  // ── 手動匹配：將指定的 fleet_rate_card 套用到該歸組所有工作記錄 ──────────
+  async matchGroupRateCard(
+    payrollId: number,
+    groupKey: string,
+    rateCardId: number,
+  ) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const card = await this.prisma.fleetRateCard.findUnique({
+      where: { id: rateCardId },
+    });
+    if (!card) throw new NotFoundException('找不到對應的價目表');
+
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: payrollId, is_excluded: false },
+    });
+    const matchingPwls = pwls.filter(
+      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+    );
+    if (matchingPwls.length === 0) {
+      throw new NotFoundException('找不到對應的工作記錄組');
+    }
+
+    const otRate = Number(card.ot_rate) || 0;
+    const midShiftRate = Number(card.mid_shift_rate) || 0;
+
+    for (const pwl of matchingPwls) {
+      // 依各筆記錄的日/夜取對應基本費率（向後兼容舊版 day_rate/night_rate）
+      const resolved = this.pricingService.resolveRate(card, pwl.day_night);
+      const otQty = Number(pwl.ot_quantity) || 0;
+      const isMidShift = pwl.is_mid_shift === true;
+      const updateData: any = {
+        matched_rate_card_id: card.id,
+        matched_rate: resolved.rate,
+        matched_ot_rate: otRate,
+        matched_mid_shift_rate: midShiftRate,
+        matched_unit: resolved.unit || card.unit || null,
+        is_manual_rate: false,
+        price_match_status: 'matched',
+        price_match_note: `手動匹配：${card.client_contract_no || `FleetRC#${card.id}`} (${card.day_night || '日'})`,
+        ot_line_amount: otRate * otQty,
+        mid_shift_line_amount: isMidShift ? midShiftRate * 1 : 0,
+      };
+      const finalPwl = { ...pwl, ...updateData };
+      updateData.line_amount = this.calcService.calculateLineAmount(finalPwl);
+      await this.prisma.payrollWorkLog.update({
+        where: { id: pwl.id },
+        data: updateData,
+      });
+    }
+
+    return { success: true, updated_count: matchingPwls.length };
+  }
+
+  // ── 取消匹配：清除該歸組所有工作記錄的匹配資料 ──────────────────────────
+  async unmatchGroupRateCard(payrollId: number, groupKey: string) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const pwls = await this.prisma.payrollWorkLog.findMany({
+      where: { payroll_id: payrollId, is_excluded: false },
+    });
+    const matchingPwls = pwls.filter(
+      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+    );
+    if (matchingPwls.length === 0) {
+      throw new NotFoundException('找不到對應的工作記錄組');
+    }
+
+    for (const pwl of matchingPwls) {
+      const updateData: any = {
+        matched_rate_card_id: null,
+        matched_rate: null,
+        matched_ot_rate: null,
+        matched_mid_shift_rate: null,
+        matched_unit: null,
+        is_manual_rate: false,
+        price_match_status: 'unmatched',
+        price_match_note: '已取消匹配',
+        line_amount: 0,
+        ot_line_amount: 0,
+        mid_shift_line_amount: 0,
+      };
+      await this.prisma.payrollWorkLog.update({
+        where: { id: pwl.id },
+        data: updateData,
+      });
+    }
+
+    return { success: true, updated_count: matchingPwls.length };
+  }
+
   // ── 取消付款（從 paid 回到 confirmed）──────────────────────────────────
   async cancelPayment(id: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });

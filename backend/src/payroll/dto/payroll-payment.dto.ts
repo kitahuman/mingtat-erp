@@ -131,3 +131,20 @@ export class AddToRateCardDto {
   @IsString()
   remarks?: string;
 }
+
+export class MatchGroupRateCardDto {
+  @IsNotEmpty()
+  @IsString()
+  group_key: string;
+
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsNumber()
+  rate_card_id: number;
+}
+
+export class UnmatchGroupRateCardDto {
+  @IsNotEmpty()
+  @IsString()
+  group_key: string;
+}
