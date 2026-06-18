@@ -18,10 +18,15 @@ interface Props {
   disabled?: boolean;
   clearable?: boolean;
   className?: string;
+  /** When provided, the component delegates filtering to the parent (server-side search). */
+  onSearchChange?: (term: string) => void;
+  /** Show a loading indicator inside the dropdown (used with onSearchChange). */
+  loading?: boolean;
 }
 
 export default function SearchableSelect({
   value, onChange, options, placeholder = 'select', disabled = false, clearable = true, className = '',
+  onSearchChange, loading = false,
 }: Props) {
   const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
@@ -32,9 +37,13 @@ export default function SearchableSelect({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selected = options.find(o => String(o.value) === String(value ?? ''));
-  const filtered = options.filter(o =>
-    String(o.label).toLowerCase().includes(search.toLowerCase())
-  );
+  // In server-side mode (onSearchChange provided) the parent already returns the
+  // filtered options, so we render them as-is instead of filtering locally.
+  const filtered = onSearchChange
+    ? options
+    : options.filter(o =>
+        String(o.label).toLowerCase().includes(search.toLowerCase()),
+      );
 
   // Calculate dropdown position based on trigger button rect
   const updateDropdownPosition = useCallback(() => {
@@ -53,6 +62,8 @@ export default function SearchableSelect({
     if (disabled) return;
     if (!open) {
       updateDropdownPosition();
+      // In server-side mode, fetch the initial (empty-query) batch on open.
+      if (onSearchChange) onSearchChange(search);
     }
     setOpen(o => !o);
   };
@@ -68,11 +79,12 @@ export default function SearchableSelect({
       ) {
         setOpen(false);
         setSearch('');
+        if (onSearchChange) onSearchChange('');
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, onSearchChange]);
 
   // Reposition on scroll/resize while open
   useEffect(() => {
@@ -97,13 +109,18 @@ export default function SearchableSelect({
           autoFocus
           type="text"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => {
+            setSearch(e.target.value);
+            if (onSearchChange) onSearchChange(e.target.value);
+          }}
           placeholder={t('search')}
           className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400"
         />
       </div>
       <div className="max-h-48 overflow-y-auto">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="px-3 py-2 text-xs text-gray-400">{t('loading')}</div>
+        ) : filtered.length === 0 ? (
           <div className="px-3 py-2 text-xs text-gray-400">{t('noResults')}</div>
         ) : (
           filtered.map(o => (
@@ -111,7 +128,7 @@ export default function SearchableSelect({
               key={String(o.value)}
               type="button"
               className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 ${String(o.value) === String(value ?? '') ? 'bg-blue-100 text-blue-700 font-medium' : ''}`}
-              onMouseDown={() => { onChange(o.value); setOpen(false); setSearch(''); }}
+              onMouseDown={() => { onChange(o.value); setOpen(false); setSearch(''); if (onSearchChange) onSearchChange(''); }}
             >
               {getDynamicTranslation(o.label, lang)}
             </button>

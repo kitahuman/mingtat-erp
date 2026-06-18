@@ -97,6 +97,12 @@ export default function AllocationsCard({
   const [editingAmounts, setEditingAmounts] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
 
+  // Edit modal state (edit both amount and remarks for an allocation)
+  const [editModalRow, setEditModalRow] = useState<AllocationRow | null>(null);
+  const [editAmount, setEditAmount] = useState<string>('');
+  const [editRemarks, setEditRemarks] = useState<string>('');
+  const [editSaving, setEditSaving] = useState(false);
+
   // Picker state
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
@@ -261,6 +267,40 @@ export default function AllocationsCard({
       alert(msg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ── Edit modal (amount + remarks) ──────────────────────────────
+
+  const openEditModal = (a: AllocationRow) => {
+    setEditModalRow(a);
+    setEditAmount(Number(a.payment_in_allocation_amount).toFixed(2));
+    setEditRemarks(a.payment_in_allocation_remarks || '');
+  };
+
+  const handleEditSave = async () => {
+    if (!editModalRow) return;
+    const amount = parseFloat(editAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('請輸入有效的正數金額');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await paymentInAllocationApi.update(editModalRow.id, {
+        payment_in_allocation_amount: amount,
+        payment_in_allocation_remarks: editRemarks.trim() || undefined,
+      });
+      setEditModalRow(null);
+      await reload();
+      onChange?.();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || '更新失敗';
+      alert(msg);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -446,7 +486,13 @@ export default function AllocationsCard({
                       {a.payment_in_allocation_remarks || '—'}
                     </td>
                     {!readOnly && (
-                      <td className="py-2 px-3 text-right">
+                      <td className="py-2 px-3 text-right space-x-2">
+                        <button
+                          onClick={() => openEditModal(a)}
+                          className="text-primary-600 hover:text-primary-700 text-xs"
+                        >
+                          編輯
+                        </button>
                         <button
                           onClick={() => handleDelete(a.id)}
                           className="text-red-600 hover:text-red-700 text-xs"
@@ -647,6 +693,77 @@ export default function AllocationsCard({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal (amount + remarks) */}
+      {editModalRow && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">編輯關聯單據</h3>
+              <button
+                onClick={() => setEditModalRow(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {editModalRow.invoice && (
+                <div className="text-sm text-gray-600">
+                  關聯發票：
+                  <span className="font-mono">
+                    {editModalRow.invoice.invoice_no}
+                  </span>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  本次分配金額 *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  className="input-field"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  備註
+                </label>
+                <input
+                  type="text"
+                  value={editRemarks}
+                  onChange={(e) => setEditRemarks(e.target.value)}
+                  className="input-field"
+                  placeholder="選填"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  onClick={() => setEditModalRow(null)}
+                  className="btn-secondary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editSaving}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {editSaving ? '儲存中…' : '儲存'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   paymentInDeductionsApi,
@@ -63,10 +63,16 @@ export default function DeductionsCard({
   const [formInvoiceId, setFormInvoiceId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Invoice candidates for retention
+  // Invoice candidates for retention (server-side searched)
   const [invoiceCandidates, setInvoiceCandidates] = useState<
     PaymentInAllocationCandidate[]
   >([]);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  // Keep the currently-selected invoice candidate so its label still shows
+  // even when it is not part of the latest search results.
+  const [selectedInvoice, setSelectedInvoice] =
+    useState<PaymentInAllocationCandidate | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setDeductions(initialDeductions || []);
@@ -93,19 +99,60 @@ export default function DeductionsCard({
 
   const bookTotal = paymentInAmount + deductionTotal;
 
-  // Load invoice candidates when modal opens
-  const loadInvoiceCandidates = useCallback(async () => {
+  // Server-side invoice search. Called on modal open (empty q) and as the user
+  // types in the SearchableSelect. This avoids the old client-side filter over
+  // a capped list of 100 invoices, which could miss the target invoice.
+  const fetchInvoiceCandidates = useCallback(async (q: string) => {
+    setInvoiceLoading(true);
     try {
       const res = await paymentInAllocationApi.search({
         kind: 'invoice',
-        limit: 100,
+        q: q || undefined,
+        limit: 30,
         unpaid_only: false,
       });
       setInvoiceCandidates(res.data || []);
     } catch {
       setInvoiceCandidates([]);
+    } finally {
+      setInvoiceLoading(false);
     }
   }, []);
+
+  // Debounced (~300ms) search handler passed to SearchableSelect.
+  const handleInvoiceSearch = useCallback(
+    (term: string) => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        fetchInvoiceCandidates(term);
+      }, 300);
+    },
+    [fetchInvoiceCandidates],
+  );
+
+  // Fetch a single invoice candidate by id so the selected value renders a
+  // proper label when editing an existing deduction.
+  const ensureSelectedInvoice = useCallback(
+    async (invoiceId: number | null) => {
+      if (!invoiceId) {
+        setSelectedInvoice(null);
+        return;
+      }
+      try {
+        const res = await paymentInAllocationApi.search({
+          kind: 'invoice',
+          q: undefined,
+          limit: 100,
+          unpaid_only: false,
+        });
+        const match = (res.data || []).find((c) => c.id === invoiceId) || null;
+        setSelectedInvoice(match);
+      } catch {
+        setSelectedInvoice(null);
+      }
+    },
+    [],
+  );
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -113,8 +160,9 @@ export default function DeductionsCard({
     setFormAmount('');
     setFormRemarks('');
     setFormInvoiceId(null);
+    setSelectedInvoice(null);
     setModalOpen(true);
-    loadInvoiceCandidates();
+    fetchInvoiceCandidates('');
   };
 
   const openEditModal = (d: DeductionRow) => {
@@ -124,7 +172,22 @@ export default function DeductionsCard({
     setFormRemarks(d.payment_in_deduction_remarks);
     setFormInvoiceId(d.payment_in_deduction_invoice_id);
     setModalOpen(true);
-    loadInvoiceCandidates();
+    fetchInvoiceCandidates('');
+    // Preserve the existing invoice association's label in the picker.
+    if (d.invoice) {
+      setSelectedInvoice({
+        kind: 'invoice',
+        id: d.invoice.id,
+        doc_no: d.invoice.invoice_no,
+        description: d.invoice.invoice_title || '',
+        total_amount: 0,
+        allocated_amount: 0,
+        outstanding_amount: 0,
+        date: null,
+      });
+    } else {
+      void ensureSelectedInvoice(d.payment_in_deduction_invoice_id);
+    }
   };
 
   const handleSubmit = async () => {
@@ -191,12 +254,24 @@ export default function DeductionsCard({
   };
 
   const invoiceOptions = useMemo(
-    () =>
-      invoiceCandidates.map((c) => ({
+    () => {
+      const list = [...invoiceCandidates];
+      // Ensure the currently-selected invoice is present so its label shows
+      // even if it is not part of the latest search results.
+      if (
+        selectedInvoice &&
+        !list.some((c) => c.id === selectedInvoice.id)
+      ) {
+        list.unshift(selectedInvoice);
+      }
+      return list.map((c) => ({
         value: c.id,
-        label: `${c.doc_no} - ${c.description} (${fmt$(c.total_amount)})`,
-      })),
-    [invoiceCandidates],
+        label: c.total_amount
+          ? `${c.doc_no} - ${c.description} (${fmt$(c.total_amount)})`
+          : `${c.doc_no} - ${c.description}`,
+      }));
+    },
+    [invoiceCandidates, selectedInvoice],
   );
 
   return (
@@ -390,10 +465,19 @@ export default function DeductionsCard({
                   </label>
                   <SearchableSelect
                     value={formInvoiceId}
-                    onChange={(v: string | number | null) =>
-                      setFormInvoiceId(v == null ? null : Number(v))
-                    }
+                    onChange={(v: string | number | null) => {
+                      const id = v == null ? null : Number(v);
+                      setFormInvoiceId(id);
+                      setSelectedInvoice(
+                        id == null
+                          ? null
+                          : invoiceCandidates.find((c) => c.id === id) ||
+                              selectedInvoice,
+                      );
+                    }}
                     options={invoiceOptions}
+                    onSearchChange={handleInvoiceSearch}
+                    loading={invoiceLoading}
                     placeholder="搜尋並選擇發票..."
                     clearable
                   />
