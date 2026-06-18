@@ -198,12 +198,16 @@ export class PayrollCalculationService {
     let monthlySalaryAmount = 0;
     let monthlyDailyRate = 0;
     let monthlyPayableDays = 0;
+    let workLogDayCount = 0;
+    let sundayCount = 0;
+    let holidayDayCount = 0;
+    
     if (salaryType === 'monthly' && baseSalary > 0) {
       // 日薪 = 月薪 × 12 / 365（或 366，看該年是否閏年）
       const year = Number(dateFrom.slice(0, 4));
       const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
       const daysInYear = isLeapYear ? 366 : 365;
-      monthlyDailyRate = Math.round((baseSalary * 12 / daysInYear) * 100) / 100;
+      monthlyDailyRate = Math.floor(baseSalary * 12 / daysInYear);
 
       // 計算計糧天數
       const periodStart = new Date(dateFrom);
@@ -229,16 +233,14 @@ export class PayrollCalculationService {
           workLogDates.add(toDateStr(day.date));
         }
       }
-      const workLogDayCount = workLogDates.size;
+      workLogDayCount = workLogDates.size;
 
       // (b) 有效期間內的星期日天數
-      let sundayCount = 0;
       for (let d = new Date(effectiveStart); d <= effectiveEnd; d.setDate(d.getDate() + 1)) {
         if (d.getDay() === 0) sundayCount++;
       }
 
       // (c) 有效期間內的法定假日天數（入職滿 3 個月後才計）
-      let holidayDayCount = 0;
       if (isEligibleForHoliday && holidayDates) {
         for (const h of holidayDates) {
           const hDate = new Date(toDateStr(h.date));
@@ -275,7 +277,13 @@ export class PayrollCalculationService {
         });
       } else {
         // 超過月薪上限：拆分為兩個項目
-        const extraAmount = Math.round((monthlySalaryAmount - baseSalary) * 100) / 100;
+        // 應工作天數 = 當月天數 - 星期日天數 - 法定假日天數
+        const daysInMonth = Math.floor((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const requiredWorkDays = daysInMonth - sundayCount - holidayDayCount;
+        // 額外天數 = 實際工作天數 - 應工作天數
+        const extraWorkDays = Math.max(0, workLogDayCount - requiredWorkDays);
+        const extraAmount = Math.round(extraWorkDays * monthlyDailyRate * 100) / 100;
+        
         // 項目一：「基本薪金」= 月薪（封頂）
         items.push({
           item_type: 'base_salary',
@@ -286,16 +294,18 @@ export class PayrollCalculationService {
           remarks: remarksText,
           sort_order: sortOrder++,
         });
-        // 項目二：「額外（休息日/假日加班）」= 差額
-        items.push({
-          item_type: 'base_salary_extra',
-          item_name: '額外（休息日/假日加班）',
-          unit_price: monthlyDailyRate,
-          quantity: Math.round((extraAmount / monthlyDailyRate) * 100) / 100,
-          amount: extraAmount,
-          remarks: `日薪 $${monthlyDailyRate} × ${Math.round((extraAmount / monthlyDailyRate) * 100) / 100} 天（超出月薪上限 $${baseSalary} 部分）`,
-          sort_order: sortOrder++,
-        });
+        // 項目二：「額外工作津貼」= (實際工作天數 - 應工作天數) × 日薪
+        if (extraAmount > 0) {
+          items.push({
+            item_type: 'allowance',
+            item_name: '額外工作津貼',
+            unit_price: monthlyDailyRate,
+            quantity: extraWorkDays,
+            amount: extraAmount,
+            remarks: `日薪 $${monthlyDailyRate} × ${extraWorkDays} 天（超出月薪上限 $${baseSalary} 部分）`,
+            sort_order: sortOrder++,
+          });
+        }
       }
     } else {
       // 日薪員工：原有邏輯
