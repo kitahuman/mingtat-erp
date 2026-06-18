@@ -45,6 +45,10 @@ type ExpenseListQuery = {
   payment_status?: string;
   source?: string;
   expense_payment_method?: string;
+  date_from?: string;
+  date_to?: string;
+  payment_date_from?: string;
+  payment_date_to?: string;
   sortBy?: string;
   sortOrder?: string;
   [key: string]: string | number | undefined;
@@ -438,6 +442,28 @@ export class ExpensesService {
     }
     if (query.expense_payment_method && query.expense_payment_method !== '') {
       where.expense_payment_method = query.expense_payment_method;
+    }
+    // 支出日期範圍
+    if (query.date_from || query.date_to) {
+      where.date = {};
+      if (query.date_from) where.date.gte = new Date(query.date_from);
+      if (query.date_to) where.date.lte = new Date(`${query.date_to}T23:59:59.999Z`);
+    }
+    // 付款日期範圍：expense.payment_date 或關聯 payment_outs 的付款日期
+    if (query.payment_date_from || query.payment_date_to) {
+      const gte = query.payment_date_from ? new Date(query.payment_date_from) : undefined;
+      const lte = query.payment_date_to ? new Date(`${query.payment_date_to}T23:59:59.999Z`) : undefined;
+      const dateRange: Prisma.DateTimeFilter = {};
+      if (gte) dateRange.gte = gte;
+      if (lte) dateRange.lte = lte;
+      const paymentDateOr: Prisma.ExpenseWhereInput[] = [
+        { payment_date: dateRange },
+        { payment_outs: { some: { date: dateRange } } },
+      ];
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { OR: paymentDateOr },
+      ];
     }
     if (query.search) {
       where.OR = [

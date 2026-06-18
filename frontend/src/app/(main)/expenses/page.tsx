@@ -23,6 +23,7 @@ import InlineEditDataTable, {
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
+import DateRangeFilter from '@/components/DateRangeFilter';
 import { useAuth } from '@/lib/auth';
 
 // ── Inline Combobox helper (free-text + searchable) ─────────────────────────
@@ -105,13 +106,11 @@ export default function ExpensesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [companyFilter, setCompanyFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [paidFilter, setPaidFilter] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
-  const [paymentMethodTypeFilter, setPaymentMethodTypeFilter] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
   const [contractFilter, setContractFilter] = useState(() => searchParams.get('contract_id') || '');
+  // Date range filter
+  const [dateType, setDateType] = useState('date');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [loading, setLoading] = useState(true);
@@ -174,32 +173,34 @@ export default function ExpensesPage() {
   );
 
   const buildListParams = useCallback(
-    (overrides: Record<string, any> = {}) => ({
-      page,
-      limit: 20,
-      search: search || undefined,
-      company_id: companyFilter || undefined,
-      category_id: categoryFilter || undefined,
-      payment_status: paidFilter !== '' ? paidFilter : undefined,
-      source: sourceFilter || undefined,
-      project_id: projectFilter || undefined,
-      contract_id: contractFilter || undefined,
-      expense_payment_method: paymentMethodTypeFilter || undefined,
-      sortBy,
-      sortOrder,
-      ...buildColumnFilterParams(),
-      ...overrides,
-    }),
+    (overrides: Record<string, any> = {}) => {
+      const dateParams: Record<string, any> = {};
+      if (dateType === 'payment_date') {
+        if (dateFrom) dateParams.payment_date_from = dateFrom;
+        if (dateTo) dateParams.payment_date_to = dateTo;
+      } else {
+        if (dateFrom) dateParams.date_from = dateFrom;
+        if (dateTo) dateParams.date_to = dateTo;
+      }
+      return {
+        page,
+        limit: 20,
+        search: search || undefined,
+        contract_id: contractFilter || undefined,
+        sortBy,
+        sortOrder,
+        ...dateParams,
+        ...buildColumnFilterParams(),
+        ...overrides,
+      };
+    },
     [
       page,
       search,
-      companyFilter,
-      categoryFilter,
-      paidFilter,
-      sourceFilter,
-      projectFilter,
       contractFilter,
-      paymentMethodTypeFilter,
+      dateType,
+      dateFrom,
+      dateTo,
       sortBy,
       sortOrder,
       buildColumnFilterParams,
@@ -955,115 +956,24 @@ export default function ExpensesPage() {
           onDelete={handleInlineDelete}
           onRowClick={(row) => router.push(`/expenses/${row.id}`)}
           filters={
-            <div className="flex flex-wrap gap-3 items-center">
-              <select
-                value={companyFilter}
-                onChange={(e) => {
-                  setCompanyFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部公司</option>
-                {companies.map((c: any) => (
-                  <option key={c.id} value={c.id}>
-                    {c.internal_prefix || c.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={categoryFilter}
-                onChange={(e) => {
-                  setCategoryFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部類別</option>
-                {categoryTree.map((parent: any) => (
-                  <optgroup key={parent.id} label={parent.name}>
-                    {(parent.children || []).map((child: any) => (
-                      <option key={child.id} value={child.id}>
-                        {child.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <select
-                value={paidFilter}
-                onChange={(e) => {
-                  setPaidFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部狀態</option>
-                <option value="unpaid">未付款</option>
-                <option value="partially_paid">部分付款</option>
-                <option value="paid">已付款</option>
-                <option value="cancelled">取消</option>
-              </select>
-              <select
-                value={sourceFilter}
-                onChange={(e) => {
-                  setSourceFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部來源</option>
-                <option value="MANUAL">手動輸入</option>
-                <option value="PURCHASE">採購</option>
-                <option value="PAYROLL">薪資</option>
-                <option value="SUBCON">分判</option>
-                <option value="CONTRA">對沖</option>
-                <option value="ERP">ERP</option>
-                <option value="employee_portal">員工報銷</option>
-              </select>
-              <select
-                value={contractFilter}
-                onChange={(e) => {
-                  setContractFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部合約</option>
-                {contracts.map((c: any) => (
-                  <option key={c.id} value={c.id}>
-                    {c.contract_no} {c.contract_name || ''}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={projectFilter}
-                onChange={(e) => {
-                  setProjectFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部工程</option>
-                {projects.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_no} {p.project_name || ''}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={paymentMethodTypeFilter}
-                onChange={(e) => {
-                  setPaymentMethodTypeFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field min-w-[9rem] w-auto"
-              >
-                <option value="">全部付款類型</option>
-                <option value="SELF_PAID">本人代付</option>
-                <option value="COMPANY_PAID">公司付款</option>
-              </select>
-            </div>
+            <DateRangeFilter
+              dateTypeOptions={[
+                { value: 'date', label: '支出日期' },
+                { value: 'payment_date', label: '付款日期' },
+              ]}
+              dateType={dateType}
+              onDateTypeChange={(v) => {
+                setDateType(v);
+                setPage(1);
+              }}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onRangeChange={(from, to) => {
+                setDateFrom(from);
+                setDateTo(to);
+                setPage(1);
+              }}
+            />
           }
         />
       </div>

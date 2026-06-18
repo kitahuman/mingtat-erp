@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import {
   paymentOutApi,
   expensesApi,
-  companiesApi,
   bankAccountsApi,
   fieldOptionsApi,
 } from '@/lib/api';
@@ -15,6 +14,7 @@ import InlineEditDataTable, {
 import Modal from '@/components/Modal';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
+import DateRangeFilter from '@/components/DateRangeFilter';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
@@ -42,8 +42,7 @@ export default function PaymentOutPage() {
   const [creating, setCreating] = useState(false);
 
   // Filters
-  const [companyFilter, setCompanyFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [dateType, setDateType] = useState('date');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -56,7 +55,6 @@ export default function PaymentOutPage() {
 
   // Reference data
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
@@ -78,10 +76,13 @@ export default function PaymentOutPage() {
     setLoading(true);
     try {
       const params: any = { page, limit: 50, sortBy, sortOrder };
-      if (companyFilter) params.company_id = companyFilter;
-      if (statusFilter) params.payment_out_status = statusFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
+      if (dateType === 'created_at') {
+        if (dateFrom) params.created_from = dateFrom;
+        if (dateTo) params.created_to = dateTo;
+      } else {
+        if (dateFrom) params.date_from = dateFrom;
+        if (dateTo) params.date_to = dateTo;
+      }
       Object.entries(columnFilters).forEach(([key, values]) => {
         if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
       });
@@ -95,7 +96,7 @@ export default function PaymentOutPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, companyFilter, statusFilter, dateFrom, dateTo, sortBy, sortOrder, columnFilters, amountMin, amountMax]);
+  }, [page, dateType, dateFrom, dateTo, sortBy, sortOrder, columnFilters, amountMin, amountMax]);
 
   useEffect(() => {
     fetchData();
@@ -105,10 +106,6 @@ export default function PaymentOutPage() {
     expensesApi
       .list({ limit: 500 })
       .then((r) => setExpenses(r.data?.data || []))
-      .catch(() => {});
-    companiesApi
-      .list({ limit: 200 })
-      .then((r) => setCompanies(r.data?.data || []))
       .catch(() => {});
     bankAccountsApi
       .simple()
@@ -124,10 +121,6 @@ export default function PaymentOutPage() {
     expensesApi
       .list({ limit: 500 })
       .then((r) => setExpenses(r.data?.data || []))
-      .catch(() => {});
-    companiesApi
-      .list({ limit: 200 })
-      .then((r) => setCompanies(r.data?.data || []))
       .catch(() => {});
     bankAccountsApi
       .simple()
@@ -385,58 +378,26 @@ export default function PaymentOutPage() {
     handleSaveDefault,
   } = useColumnConfig('payment-out', columns);
 
-  const hasFilters = !!(companyFilter || statusFilter || dateFrom || dateTo || amountMin || amountMax);
-
   const filters = (
-    <div className="flex flex-wrap gap-2 items-center">
-      <select
-        value={companyFilter}
-        onChange={(e) => {
-          setCompanyFilter(e.target.value);
+    <div className="flex flex-wrap gap-3 items-center">
+      <DateRangeFilter
+        dateTypeOptions={[
+          { value: 'date', label: '付款日期' },
+          { value: 'created_at', label: '建立日期' },
+        ]}
+        dateType={dateType}
+        onDateTypeChange={(v) => {
+          setDateType(v);
           setPage(1);
         }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部公司</option>
-        {companies.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-      <select
-        value={statusFilter}
-        onChange={(e) => {
-          setStatusFilter(e.target.value);
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onRangeChange={(from, to) => {
+          setDateFrom(from);
+          setDateTo(to);
           setPage(1);
         }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部狀態</option>
-        <option value="unpaid">未付款</option>
-        <option value="partially_paid">部分付款</option>
-        <option value="paid">已付款</option>
-        <option value="cancelled">取消</option>
-      </select>
-      <div className="flex items-center gap-1 text-sm">
-        <DateInput
-          value={dateFrom}
-          onChange={(val) => {
-            setDateFrom(val || '');
-            setPage(1);
-          }}
-          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-        />
-        <span className="text-gray-400">~</span>
-        <DateInput
-          value={dateTo}
-          onChange={(val) => {
-            setDateTo(val || '');
-            setPage(1);
-          }}
-          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-        />
-      </div>
+      />
       <div className="flex items-center gap-1 text-sm">
         <span className="text-gray-500 text-xs">金額</span>
         <input
@@ -457,22 +418,6 @@ export default function PaymentOutPage() {
           className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
-      {hasFilters && (
-        <button
-          onClick={() => {
-            setCompanyFilter('');
-            setStatusFilter('');
-            setDateFrom('');
-            setDateTo('');
-            setAmountMin('');
-            setAmountMax('');
-            setPage(1);
-          }}
-          className="text-xs text-gray-500 hover:text-red-500"
-        >
-          清除篩選
-        </button>
-      )}
     </div>
   );
 

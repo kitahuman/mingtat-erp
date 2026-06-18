@@ -18,6 +18,8 @@ interface FindAllQuery {
   payment_out_status?: string;
   date_from?: string;
   date_to?: string;
+  created_from?: string;
+  created_to?: string;
   sortBy?: string;
   sortOrder?: string;
   // column filters
@@ -177,8 +179,14 @@ export class PaymentOutService {
     if (query.date_from || query.date_to) {
       const dateFilter: Prisma.DateTimeFilter = {};
       if (query.date_from) dateFilter.gte = new Date(query.date_from);
-      if (query.date_to) dateFilter.lte = new Date(query.date_to);
+      if (query.date_to) dateFilter.lte = new Date(`${query.date_to}T23:59:59.999Z`);
       where.date = dateFilter;
+    }
+    if (query.created_from || query.created_to) {
+      const createdFilter: Prisma.DateTimeFilter = {};
+      if (query.created_from) createdFilter.gte = new Date(query.created_from);
+      if (query.created_to) createdFilter.lte = new Date(`${query.created_to}T23:59:59.999Z`);
+      where.created_at = createdFilter;
     }
 
     const [data, total] = await Promise.all([

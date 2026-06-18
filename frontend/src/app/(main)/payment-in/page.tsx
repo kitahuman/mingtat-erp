@@ -17,6 +17,7 @@ import InlineEditDataTable, {
 import Modal from '@/components/Modal';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
+import DateRangeFilter from '@/components/DateRangeFilter';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
@@ -62,10 +63,7 @@ export default function PaymentInPage() {
   const [creating, setCreating] = useState(false);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
-  const [contractFilter, setContractFilter] = useState('');
+  const [dateType, setDateType] = useState('date');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -105,12 +103,13 @@ export default function PaymentInPage() {
     setLoading(true);
     try {
       const params: any = { page, limit: 50, sortBy, sortOrder };
-      if (statusFilter) params.payment_in_status = statusFilter;
-      if (sourceFilter) params.source_type = sourceFilter;
-      if (projectFilter) params.project_id = projectFilter;
-      if (contractFilter) params.contract_id = contractFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
+      if (dateType === 'created_at') {
+        if (dateFrom) params.created_from = dateFrom;
+        if (dateTo) params.created_to = dateTo;
+      } else {
+        if (dateFrom) params.date_from = dateFrom;
+        if (dateTo) params.date_to = dateTo;
+      }
       // Apply column filters
       Object.entries(columnFilters).forEach(([key, values]) => {
         if (values.size > 0) params[`filter_${key}`] = Array.from(values).join(',');
@@ -127,10 +126,7 @@ export default function PaymentInPage() {
     }
   }, [
     page,
-    statusFilter,
-    sourceFilter,
-    projectFilter,
-    contractFilter,
+    dateType,
     dateFrom,
     dateTo,
     sortBy,
@@ -477,85 +473,25 @@ export default function PaymentInPage() {
   } = useColumnConfig('payment-in', columns);
 
   const filters = (
-    <div className="flex flex-wrap gap-2 items-center">
-      <select
-        value={statusFilter}
-        onChange={(e) => {
-          setStatusFilter(e.target.value);
+    <div className="flex flex-wrap gap-3 items-center">
+      <DateRangeFilter
+        dateTypeOptions={[
+          { value: 'date', label: '收款日期' },
+          { value: 'created_at', label: '建立日期' },
+        ]}
+        dateType={dateType}
+        onDateTypeChange={(v) => {
+          setDateType(v);
           setPage(1);
         }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部狀態</option>
-        <option value="unpaid">未收款</option>
-        <option value="partially_paid">部分收款</option>
-        <option value="paid">已收款</option>
-        <option value="cancelled">取消</option>
-      </select>
-      <select
-        value={sourceFilter}
-        onChange={(e) => {
-          setSourceFilter(e.target.value);
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onRangeChange={(from, to) => {
+          setDateFrom(from);
+          setDateTo(to);
           setPage(1);
         }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部來源</option>
-        {sourceTypeOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={contractFilter}
-        onChange={(e) => {
-          setContractFilter(e.target.value);
-          setPage(1);
-        }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部合約</option>
-        {contractOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={projectFilter}
-        onChange={(e) => {
-          setProjectFilter(e.target.value);
-          setPage(1);
-        }}
-        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
-      >
-        <option value="">全部項目</option>
-        {projectOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <div className="flex items-center gap-1 text-sm">
-        <DateInput
-          value={dateFrom}
-          onChange={(val) => {
-            setDateFrom(val || '');
-            setPage(1);
-          }}
-          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-        />
-        <span className="text-gray-400">~</span>
-        <DateInput
-          value={dateTo}
-          onChange={(val) => {
-            setDateTo(val || '');
-            setPage(1);
-          }}
-          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-        />
-      </div>
+      />
       <div className="flex items-center gap-1 text-sm">
         <span className="text-gray-500 text-xs">金額</span>
         <input
@@ -576,31 +512,6 @@ export default function PaymentInPage() {
           className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
         />
       </div>
-      {(statusFilter ||
-        sourceFilter ||
-        projectFilter ||
-        contractFilter ||
-        dateFrom ||
-        dateTo ||
-        amountMin ||
-        amountMax) && (
-        <button
-          onClick={() => {
-            setStatusFilter('');
-            setSourceFilter('');
-            setProjectFilter('');
-            setContractFilter('');
-            setDateFrom('');
-            setDateTo('');
-            setAmountMin('');
-            setAmountMax('');
-            setPage(1);
-          }}
-          className="text-xs text-gray-500 hover:text-red-500"
-        >
-          清除篩選
-        </button>
-      )}
     </div>
   );
 
