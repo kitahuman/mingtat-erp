@@ -40,6 +40,13 @@ interface ColumnBoundaries {
 }
 
 /**
+ * Recognized bank statement types. Each type has its own positional
+ * extraction method so that bank-specific quirks can be handled
+ * independently without affecting the others.
+ */
+type BankType = 'HSBC' | 'SCB' | 'OCBC' | 'GENERIC';
+
+/**
  * A structured row extracted from a PDF page using positional data.
  * Amounts are already classified by column — AI only needs to fill text fields.
  */
@@ -88,12 +95,29 @@ export class PdfParserService {
         useVision = true;
       }
 
-      // Step 2: If text mode, try positional extraction to get structured rows
+      // Step 2: If text mode, detect the bank type then run the matching
+      // positional extraction to get structured rows.
       if (!useVision) {
         try {
-          structuredRows = await this.extractStructuredRows(pdfBuffer);
+          const bankType = this.detectBankType(extractedText);
+          console.log(`[PdfParser] Detected bank type: ${bankType}`);
+          switch (bankType) {
+            case 'HSBC':
+              structuredRows = await this.extractStructuredRowsHSBC(pdfBuffer);
+              break;
+            case 'SCB':
+              structuredRows = await this.extractStructuredRowsSCB(pdfBuffer);
+              break;
+            case 'OCBC':
+              structuredRows = await this.extractStructuredRowsOCBC(pdfBuffer);
+              break;
+            default:
+              // Fallback to the existing generic positional extraction.
+              structuredRows = await this.extractStructuredRows(pdfBuffer);
+              break;
+          }
           if (structuredRows.length > 0) {
-            console.log(`[PdfParser] Positional extraction found ${structuredRows.length} rows.`);
+            console.log(`[PdfParser] Positional extraction (${bankType}) found ${structuredRows.length} rows.`);
           }
         } catch (err: any) {
           console.log('[PdfParser] Positional extraction failed, using plain text:', err.message);
@@ -314,11 +338,128 @@ ${structuredText}`,
   }
 
   /**
-   * Extract structured rows from PDF using pdfjs-dist positional data.
+   * Detect the bank type from the extracted PDF text. This runs BEFORE
+   * positional extraction so the correct bank-specific extractor can be used.
+   *
+   * - HSBC（匯豐）: text contains "HSBC" or "Hongkong and Shanghai Banking"
+   * - SCB（上海商業銀行）: text contains "Shanghai Commercial" / "葵涌分行" / "Kwai Chung"
+   * - OCBC（華僑銀行）: text contains "OCBC" / "華僑銀行". Some OCBC statements do not
+   *   print the brand name at all, so we also recognise OCBC-specific markers such
+   *   as "開源道分行" / "HOI YUEN ROAD BR", the hotline "3199 9188", and the
+   *   "INTEGRATED ACCOUNT 綜合理財" layout.
+   * - Otherwise: GENERIC fallback to the existing logic.
+   */
+  private detectBankType(extractedText: string): BankType {
+    const text = extractedText || '';
+    const lower = text.toLowerCase();
+
+    // HSBC（匯豐）
+    if (lower.includes('hsbc') || lower.includes('hongkong and shanghai banking')) {
+      return 'HSBC';
+    }
+
+    // SCB（上海商業銀行）
+    if (
+      lower.includes('shanghai commercial') ||
+      text.includes('葵涌分行') ||
+      lower.includes('kwai chung')
+    ) {
+      return 'SCB';
+    }
+
+    // OCBC（華僑銀行）
+    if (
+      lower.includes('ocbc') ||
+      text.includes('華僑銀行') ||
+      // OCBC statements in this account do not carry the brand name; recognise by
+      // branch / hotline / layout markers instead.
+      text.includes('開源道分行') ||
+      lower.includes('hoi yuen road br') ||
+      text.includes('綜合理財') ||
+      (lower.includes('integrated account') && lower.includes('3199 9188'))
+    ) {
+      return 'OCBC';
+    }
+
+    return 'GENERIC';
+  }
+
+  /**
+   * Generic positional extraction (original behaviour, unchanged).
+   * Used as a fallback when the bank type cannot be recognised.
    * Each row contains pre-classified amounts (deposit/withdrawal/balance) and raw text parts.
-   * This is the core improvement: amounts are classified by x-coordinate, not by AI.
    */
   private async extractStructuredRows(pdfBuffer: Buffer): Promise<StructuredRow[]> {
+    return this.runPositionalExtraction(pdfBuffer, {
+      detectBoundaries: (items) => this.detectColumnBoundaries(items),
+      ignoreZeroPlaceholders: false,
+    });
+  }
+
+  /**
+   * HSBC（匯豐）positional extraction. Identical to the original generic logic.
+   * Kept as a separate method so HSBC-specific tweaks can be made later without
+   * affecting the other banks.
+   */
+  private async extractStructuredRowsHSBC(pdfBuffer: Buffer): Promise<StructuredRow[]> {
+    return this.runPositionalExtraction(pdfBuffer, {
+      detectBoundaries: (items) => this.detectColumnBoundaries(items),
+      ignoreZeroPlaceholders: false,
+    });
+  }
+
+  /**
+   * SCB（上海商業銀行）positional extraction. Currently a copy of the HSBC logic
+   * (identical for now); kept separate so it can diverge in the future.
+   */
+  private async extractStructuredRowsSCB(pdfBuffer: Buffer): Promise<StructuredRow[]> {
+    return this.runPositionalExtraction(pdfBuffer, {
+      detectBoundaries: (items) => this.detectColumnBoundaries(items),
+      ignoreZeroPlaceholders: false,
+    });
+  }
+
+  /**
+   * OCBC（華僑銀行）positional extraction.
+   *
+   * OCBC statements differ from HSBC/SCB in two important ways:
+   *  1. Headers use UPPERCASE "WITHDRAWAL" / "DEPOSIT" (plus Chinese "支出" / "存入"
+   *     and "BALANCE" / "結餘"), and the header x-coordinates do not follow the
+   *     generic "x > 250" assumption — so OCBC uses detectColumnBoundariesOCBC.
+   *  2. EVERY transaction line prints BOTH a withdrawal and a deposit value, where
+   *     the unused column is a "0.00" placeholder. The generic logic would treat
+   *     that "0.00" as a real amount in the opposite column, mis-classifying e.g.
+   *     CHQ NO.001636-001639 (real withdrawals) as deposits. We therefore ignore
+   *     any amount whose value is exactly 0.00.
+   */
+  private async extractStructuredRowsOCBC(pdfBuffer: Buffer): Promise<StructuredRow[]> {
+    return this.runPositionalExtraction(pdfBuffer, {
+      detectBoundaries: (items) => this.detectColumnBoundariesOCBC(items),
+      ignoreZeroPlaceholders: true,
+      dropDualColumnRows: true,
+    });
+  }
+
+  /**
+   * Shared positional extraction engine used by all bank-specific extractors.
+   * Behaviour is customised via `options`:
+   *  - detectBoundaries: bank-specific column-header detection
+   *  - ignoreZeroPlaceholders: when true, amounts equal to 0.00 are skipped
+   *    (used by OCBC where unused columns print a "0.00" placeholder)
+   *  - dropDualColumnRows: when true, a line that has BOTH a non-zero withdrawal
+   *    AND a non-zero deposit is treated as a summary/total row (e.g. OCBC's
+   *    "TRANSACTION SUMMARY" AMOUNT line which prints both totals) and dropped.
+   *    A real transaction only ever carries a single non-zero amount column once
+   *    the 0.00 placeholders are ignored, so this never discards real activity.
+   */
+  private async runPositionalExtraction(
+    pdfBuffer: Buffer,
+    options: {
+      detectBoundaries: (items: any[]) => ColumnBoundaries | null;
+      ignoreZeroPlaceholders: boolean;
+      dropDualColumnRows?: boolean;
+    },
+  ): Promise<StructuredRow[]> {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
     // In Node.js/Docker, pdfjs-dist 5.x requires a file:// URL for workerSrc.
     // An absolute path or empty string does NOT work — only file:// URL succeeds.
@@ -341,8 +482,8 @@ ${structuredText}`,
       const textContent = await page.getTextContent();
       const items: any[] = textContent.items.filter((i: any) => i.str && i.str.trim());
 
-      // Detect column headers on this page
-      const boundaries = this.detectColumnBoundaries(items);
+      // Detect column headers on this page (bank-specific)
+      const boundaries = options.detectBoundaries(items);
       if (boundaries) {
         globalBoundaries = boundaries;
       }
@@ -388,8 +529,13 @@ ${structuredText}`,
           const x = item.transform[4];
 
           if (/^[\d,]+\.\d{2}$/.test(str)) {
-            hasAnyAmount = true;
             const value = parseFloat(str.replace(/,/g, ''));
+            // OCBC prints unused columns as a "0.00" placeholder; skip those so the
+            // opposite (real) column is not polluted and direction stays correct.
+            if (options.ignoreZeroPlaceholders && value === 0) {
+              continue;
+            }
+            hasAnyAmount = true;
             const col = this.classifyAmountColumn(x, globalBoundaries);
             if (col === 'DEPOSIT') {
               depositAmount = value;
@@ -401,6 +547,17 @@ ${structuredText}`,
           } else {
             textParts += (textParts ? ' ' : '') + str;
           }
+        }
+
+        // Drop summary/total rows that carry BOTH a non-zero withdrawal and a
+        // non-zero deposit (e.g. OCBC's TRANSACTION SUMMARY AMOUNT line). Real
+        // transactions only have a single non-zero amount column.
+        if (
+          options.dropDualColumnRows &&
+          withdrawalAmount != null && withdrawalAmount > 0 &&
+          depositAmount != null && depositAmount > 0
+        ) {
+          continue;
         }
 
         // Only include lines that have at least one amount (transaction lines)
@@ -735,6 +892,59 @@ ${identificationContext}
       return null;
     }
     if (!(depositX < withdrawalX && withdrawalX < balanceX)) {
+      return null;
+    }
+
+    return { depositX, withdrawalX, balanceX };
+  }
+
+  /**
+   * OCBC-specific column header detection.
+   *
+   * OCBC statements differ from HSBC/SCB:
+   *  - Headers are UPPERCASE "WITHDRAWAL" / "DEPOSIT" / "BALANCE" (and may carry the
+   *    Chinese labels "支出" / "存入" / "結餘").
+   *  - The header order is WITHDRAWAL < DEPOSIT < BALANCE (note: WITHDRAWAL comes
+   *    FIRST here, the opposite of HSBC's DEPOSIT < WITHDRAWAL < BALANCE order).
+   *  - The generic "x > 250" guard is relaxed to "x > 150" because OCBC's header
+   *    x-coordinates (WITHDRAWAL≈271, DEPOSIT≈371, BALANCE≈461) sit slightly left of
+   *    where HSBC's do, and OCBC has no far-left summary row that would clash.
+   *  - We still validate left-to-right ordering, so any stray match that breaks the
+   *    WITHDRAWAL < DEPOSIT < BALANCE order is rejected as a false positive.
+   *
+   * Returned ColumnBoundaries keeps the same field meaning as the generic detector
+   * (depositX/withdrawalX/balanceX), so classifyAmountColumn works unchanged.
+   */
+  private detectColumnBoundariesOCBC(items: any[]): ColumnBoundaries | null {
+    let depositX: number | null = null;
+    let withdrawalX: number | null = null;
+    let balanceX: number | null = null;
+
+    const MIN_HEADER_X = 150;
+
+    for (const item of items) {
+      const raw = item.str.trim();
+      const lower = raw.toLowerCase();
+      const x = item.transform[4];
+
+      if (x <= MIN_HEADER_X) continue;
+
+      // English UPPERCASE headers (matched case-insensitively) or Chinese labels.
+      if (lower === 'withdrawal' || lower === 'withdrawals' || raw === '支出') {
+        withdrawalX = x;
+      } else if (lower === 'deposit' || lower === 'deposits' || raw === '存入') {
+        depositX = x;
+      } else if (lower === 'balance' || lower.startsWith('balance in') || raw === '結餘') {
+        balanceX = x;
+      }
+    }
+
+    if (depositX == null || withdrawalX == null || balanceX == null) {
+      return null;
+    }
+
+    // OCBC order: WITHDRAWAL < DEPOSIT < BALANCE. Reject anything else as a false positive.
+    if (!(withdrawalX < depositX && depositX < balanceX)) {
       return null;
     }
 
