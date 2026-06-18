@@ -471,6 +471,7 @@ ${structuredText}`,
       r => r.depositAmount != null || r.withdrawalAmount != null
     );
 
+    console.log(`[PdfParser] mergeStructuredAmounts: txRows=${txRows.length}, aiTransactions=${aiTransactions.length}`);
     // Build a map from row_index to AI transaction for quick lookup
     const aiByRowIndex = new Map<number, ParsedTransaction>();
     for (const tx of aiTransactions) {
@@ -478,6 +479,7 @@ ${structuredText}`,
       if (rowIdx != null) {
         aiByRowIndex.set(rowIdx, tx);
       }
+    console.log(`[PdfParser] AI transactions with row_index: ${aiByRowIndex.size}`);
     }
 
     const result: ParsedTransaction[] = [];
