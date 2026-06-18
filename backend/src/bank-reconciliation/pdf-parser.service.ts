@@ -299,15 +299,15 @@ ${structuredText}`,
    */
   private async extractStructuredRows(pdfBuffer: Buffer): Promise<StructuredRow[]> {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
-    // Point workerSrc to the actual pdf.worker.mjs file that ships with the SAME
-    // pdfjs-dist version as the API. Setting workerSrc to '' does NOT work with
-    // pdfjs-dist 5.4.x and causes "API version does not match Worker version".
-    // In the compiled Docker environment __dirname is /app/dist/bank-reconciliation/,
+    // In Node.js/Docker, pdfjs-dist 5.x requires a file:// URL for workerSrc.
+    // An absolute path or empty string does NOT work — only file:// URL succeeds.
+    // __dirname in compiled Docker env = /app/dist/bank-reconciliation/,
     // so ../../node_modules/... resolves to /app/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs.
-    pdfjsLib.GlobalWorkerOptions.workerSrc = path.resolve(
+    const workerPath = path.resolve(
       __dirname,
       '../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
     );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
     const data = new Uint8Array(pdfBuffer);
     const doc = await pdfjsLib.getDocument({ data }).promise;
 
