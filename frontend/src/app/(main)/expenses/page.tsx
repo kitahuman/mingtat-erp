@@ -676,7 +676,7 @@ export default function ExpensesPage() {
           placeholder="選擇或輸入"
         />
       ),
-      render: (v: any) => v || '-',
+      render: (v: any, row: any) => v || row?.payment_outs?.[0]?.payment_method || '-',
     },
     {
       key: 'payment_date',
@@ -691,7 +691,7 @@ export default function ExpensesPage() {
           onClick={(e) => e.stopPropagation()}
         />
       ),
-      render: (v: any) => fmtDate(v),
+      render: (v: any, row: any) => fmtDate(v || row?.payment_outs?.[0]?.date),
     },
     {
       key: 'payment_ref',
@@ -700,7 +700,7 @@ export default function ExpensesPage() {
       editable: true,
       editType: 'text',
       minWidth: 180,
-      render: (v: any) => renderTruncatedText(v),
+      render: (v: any, row: any) => renderTruncatedText(v || row?.payment_outs?.[0]?.reference_no),
     },
     {
       key: 'remarks',
