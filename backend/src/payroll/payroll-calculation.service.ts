@@ -131,7 +131,7 @@ export class PayrollCalculationService {
     for (const day of dailyCalc) {
       // 工作收入 = 每天的 work_income - daily_ot_amount - daily_mid_shift_amount
       // work_income 已包含 OT 和中直，需要減去才是純工作收入
-      const dayWorkIncome = (day.work_income || 0) - (day.daily_ot_amount || 0) - (day.daily_mid_shift_amount || 0);
+      const dayWorkIncome = day.work_income || 0;
       baseWorkIncome += dayWorkIncome;
 
       // 補底薪
