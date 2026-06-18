@@ -4050,11 +4050,6 @@ export class PayrollService {
           : dayLogs.length > 0;
         if (!shouldGenerate) continue;
 
-        const dayQuantity = Math.min(
-          dayLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 1), 0),
-          1
-        );
-
         const dailyKey = `${dateStr}:${definition.field}`;
         if (existingKeys.has(dailyKey)) continue;
         if (this.isDailyAllowanceExcluded(excludedRecords, definition.field, dateStr)) {
@@ -4067,7 +4062,7 @@ export class PayrollService {
             date: new Date(dateStr),
             allowance_key: definition.field,
             allowance_name: definition.label,
-            amount: definition.amount * dayQuantity,
+            amount: definition.amount,
             remarks: '自動生成',
             is_auto: true,
           },
