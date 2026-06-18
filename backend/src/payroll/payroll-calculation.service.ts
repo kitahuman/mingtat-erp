@@ -567,7 +567,7 @@ export class PayrollCalculationService {
     const mpfPlan = emp.mpf_plan || 'industry';
     let mpfDeduction = 0;
     let mpfEmployer = 0;
-    const grossIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
+    const mpfBaseIncome = baseAmount + allowanceTotal + otTotal + commissionTotal;
     const isMpfAgeExempt = isAgeAtLeastOn(emp?.date_of_birth, dateTo, 65);
     const isMpfExempt = isMpfAgeExempt || mpfPlan === 'exempt_age65';
 
@@ -583,7 +583,7 @@ export class PayrollCalculationService {
       { min: 950, max: Infinity, employer: 50, employee: 50 },
     ];
 
-    const defaultMpfBase = grossIncome + (Number(adjustmentTotalForMpf) || 0);
+    const defaultMpfBase = mpfBaseIncome + (Number(adjustmentTotalForMpf) || 0);
     let resolvedMpfRelevantIncome = defaultMpfBase;
 
     if (isMpfExempt) {
@@ -654,7 +654,17 @@ export class PayrollCalculationService {
       });
     }
 
-    const netAmount = grossIncome - mpfDeduction;
+    // 用 items 加總計算，確保跟糧單項目一致
+    const grossIncome = items
+      .filter((item: any) => !item.payroll_item_excluded)
+      .reduce((sum: number, item: any) => {
+        const amt = Number(item.amount);
+        return sum + (amt > 0 ? amt : 0);
+      }, 0);
+    const netAmount = items
+      .filter((item: any) => !item.payroll_item_excluded)
+      .reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+
     return {
       salary_type: salaryType,
       base_rate: baseSalary,
