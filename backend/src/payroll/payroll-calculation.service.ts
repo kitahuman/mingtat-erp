@@ -433,15 +433,18 @@ export class PayrollCalculationService {
     }
 
     // 每日津貼（用戶手動加的）
-    for (const [, daData] of dailyAllowancesByKey) {
+    for (const [key, daData] of dailyAllowancesByKey) {
       if (daData.amount > 0) {
-        const rate = daData.count > 0 ? daData.amount / daData.count : 0;
+        // 嘗試從 salarySetting 取得原始單價
+        const settingRate = salarySetting ? Number((salarySetting as any)[key]) || 0 : 0;
+        const unitPrice = settingRate > 0 ? settingRate : (daData.count > 0 ? daData.amount / daData.count : 0);
+        const quantity = settingRate > 0 ? daData.amount / settingRate : daData.count;
         allowanceTotal += daData.amount;
         items.push({
           item_type: 'allowance',
           item_name: daData.name,
-          unit_price: rate,
-          quantity: daData.count,
+          unit_price: unitPrice,
+          quantity: quantity,
           amount: daData.amount,
           sort_order: sortOrder++,
         });
