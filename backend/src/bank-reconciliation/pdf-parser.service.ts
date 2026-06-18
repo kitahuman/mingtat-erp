@@ -211,6 +211,7 @@ ${structuredText}`,
 
       parsed.opening_balance = cleanNum(parsed.opening_balance) ?? null;
 
+      console.log(`[PdfParser] hasStructuredData=${hasStructuredData}, structuredRows.length=${structuredRows.length}`);
       if (hasStructuredData) {
         // In structured mode: override AI's amount fields with our pre-classified values
         // Match by row_index if provided, otherwise by position
