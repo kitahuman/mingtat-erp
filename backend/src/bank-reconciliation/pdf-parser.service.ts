@@ -182,7 +182,7 @@ ${structuredText}`,
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4.1',
         messages: messages,
-        max_tokens: 16000,
+        max_tokens: 32000,
         temperature: 0,
       });
 
@@ -450,12 +450,16 @@ ${structuredText}`,
    * Merge AI-extracted text fields (date, description, reference_no) with
    * backend-classified amounts. The backend amounts ALWAYS take precedence.
    *
-   * Strategy:
-   * 1. Filter structuredRows to only those with actual transaction amounts
-   * 2. Try row_index matching first (if AI provided it)
-   * 3. Fall back to sequential position matching (AI transaction N → structuredRow N)
-   * 4. If no match at all, still use backend amounts from the closest row
-   *    (never fall back to AI-determined amounts in structured mode)
+   * NEW STRATEGY (structured-rows-first):
+   * 1. Filter structuredRows to only those with actual transaction amounts (txRows)
+   * 2. Build a map from AI transactions by row_index for quick lookup
+   * 3. LOOP OVER txRows (not aiTransactions) to ensure no transaction is missed:
+   *    a. Try to find matching AI transaction by row_index
+   *    b. If found, use AI's date/description/reference_no
+   *    c. If NOT found, auto-extract date and description from row.textParts
+   * 4. Always use backend-classified amounts from structuredRow
+   *
+   * This ensures that if AI misses a transaction, we still preserve its amount and balance.
    */
   private mergeStructuredAmounts(
     aiTransactions: ParsedTransaction[],
@@ -467,54 +471,133 @@ ${structuredText}`,
       r => r.depositAmount != null || r.withdrawalAmount != null
     );
 
-    // Build a map from row_index to structured row
-    const rowMap = new Map<number, StructuredRow>();
-    for (const row of txRows) {
-      rowMap.set(row.rowIndex, row);
+    // Build a map from row_index to AI transaction for quick lookup
+    const aiByRowIndex = new Map<number, ParsedTransaction>();
+    for (const tx of aiTransactions) {
+      const rowIdx = (tx as any).row_index;
+      if (rowIdx != null) {
+        aiByRowIndex.set(rowIdx, tx);
+      }
     }
 
     const result: ParsedTransaction[] = [];
-    // Track which txRows have been used for sequential fallback
-    let seqIndex = 0;
+    let lastDate: string | undefined;
 
-    for (const tx of aiTransactions) {
-      if (!tx.date) continue;
+    for (const row of txRows) {
+      // Try to find matching AI transaction by row_index
+      const aiTx = aiByRowIndex.get(row.rowIndex);
 
-      // Try row_index matching first
-      const rowIdx = (tx as any).row_index;
-      let structuredRow: StructuredRow | undefined = rowIdx != null ? rowMap.get(rowIdx) : undefined;
+      let date = aiTx?.date;
+      let rawDate = aiTx?.raw_date;
+      let description = aiTx?.description || '';
+      let referenceNo = aiTx?.reference_no;
 
-      // If row_index matching failed, use sequential position matching
-      if (!structuredRow && seqIndex < txRows.length) {
-        structuredRow = txRows[seqIndex];
+      // If AI didn't provide date, try to extract from textParts
+      if (!date && row.textParts) {
+        const extracted = this.extractDateAndDescription(row.textParts, lastDate);
+        date = extracted.date;
+        rawDate = extracted.rawDate;
+        description = extracted.description;
       }
 
-      if (structuredRow) {
-        seqIndex = txRows.indexOf(structuredRow) + 1;
-        // Use backend-classified amounts — NEVER use AI amounts in structured mode
-        const deposits = structuredRow.depositAmount != null && structuredRow.depositAmount > 0
-          ? structuredRow.depositAmount : undefined;
-        const withdrawals = structuredRow.withdrawalAmount != null && structuredRow.withdrawalAmount > 0
-          ? structuredRow.withdrawalAmount : undefined;
-        const balance = structuredRow.balanceAmount;
-        const amount = deposits ? deposits : withdrawals ? -withdrawals : 0;
-
-        result.push({
-          date: tx.date,
-          raw_date: tx.raw_date,
-          description: tx.description,
-          reference_no: tx.reference_no || undefined,
-          deposits,
-          withdrawals,
-          amount,
-          balance,
-        });
+      // Use lastDate as fallback if still no date found
+      if (!date && lastDate) {
+        date = lastDate;
       }
-      // If no structuredRow found at all, skip this transaction
-      // (better to miss a transaction than to include one with wrong direction)
+
+      // Skip if we still have no date
+      if (!date) continue;
+
+      lastDate = date;
+
+      // Use backend-classified amounts — NEVER use AI amounts in structured mode
+      const deposits = row.depositAmount != null && row.depositAmount > 0
+        ? row.depositAmount : undefined;
+      const withdrawals = row.withdrawalAmount != null && row.withdrawalAmount > 0
+        ? row.withdrawalAmount : undefined;
+      const balance = row.balanceAmount;
+      const amount = deposits ? deposits : withdrawals ? -withdrawals : 0;
+
+      result.push({
+        date,
+        raw_date: rawDate,
+        description,
+        reference_no: referenceNo || undefined,
+        deposits,
+        withdrawals,
+        amount,
+        balance,
+      });
     }
 
     return result.filter(tx => tx.amount !== 0 || tx.deposits || tx.withdrawals);
+  }
+
+  /**
+   * Extract date and description from textParts when AI didn't provide them.
+   * Tries common date formats: "29-May", "29MAY26", "2026-05-29", etc.
+   */
+  private extractDateAndDescription(
+    textParts: string,
+    lastDate: string | undefined,
+  ): { date: string | undefined; rawDate: string | undefined; description: string } {
+    if (!textParts) return { date: undefined, rawDate: undefined, description: '' };
+
+    const text = textParts.trim();
+    let date: string | undefined;
+    let rawDate: string | undefined;
+    let description = text;
+
+    // Try to match common date formats
+    // Format 1: "29-May", "4-May", "29-Jun", etc.
+    const match1 = text.match(/^(\d{1,2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b/i);
+    if (match1) {
+      rawDate = match1[0];
+      const day = match1[1].padStart(2, '0');
+      const monthStr = match1[2].toLowerCase();
+      const monthMap: { [key: string]: string } = {
+        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+        jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12'
+      };
+      const month = monthMap[monthStr];
+      if (month) {
+        // Assume current year from context (use 2026 as default for now)
+        date = `2026-${month}-${day}`;
+        description = text.substring(match1[0].length).trim();
+      }
+    }
+
+    // Format 2: "29MAY26", "04MAY26", etc.
+    if (!date) {
+      const match2 = text.match(/^(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2})\b/i);
+      if (match2) {
+        rawDate = match2[0];
+        const day = match2[1].padStart(2, '0');
+        const monthStr = match2[2].toLowerCase();
+        const year = '20' + match2[3];
+        const monthMap: { [key: string]: string } = {
+          jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+          jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12'
+        };
+        const month = monthMap[monthStr];
+        if (month) {
+          date = `${year}-${month}-${day}`;
+          description = text.substring(match2[0].length).trim();
+        }
+      }
+    }
+
+    // Format 3: "2026-05-29", "2026/05/29", etc.
+    if (!date) {
+      const match3 = text.match(/^(\d{4})[-/](\d{2})[-/](\d{2})\b/);
+      if (match3) {
+        rawDate = match3[0];
+        date = `${match3[1]}-${match3[2]}-${match3[3]}`;
+        description = text.substring(match3[0].length).trim();
+      }
+    }
+
+    return { date, rawDate, description };
   }
 
   /**
