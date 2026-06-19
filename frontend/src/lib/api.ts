@@ -798,6 +798,7 @@ export const payrollApi = {
       payroll_payment_bank_account?: string;
       payroll_payment_remarks?: string;
       payroll_payment_payment_out_id?: number;
+      company_id?: number;
     },
   ) => api.post(`/payroll/${payrollId}/payments`, data),
   removePayrollPayment: (payrollId: number, paymentId: number) =>

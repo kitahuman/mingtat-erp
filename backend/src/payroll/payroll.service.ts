@@ -3723,6 +3723,7 @@ export class PayrollService {
       payroll_payment_bank_account?: string | number | null;
       payroll_payment_remarks?: string;
       payroll_payment_payment_out_id?: number;
+      company_id?: number;
     },
   ) {
     const payroll = await this.prisma.payroll.findUnique({
@@ -3781,7 +3782,7 @@ export class PayrollService {
           remarks: body.payroll_payment_remarks || null,
           payroll_id: payrollId,
           expense_id: primaryExpenseId,
-          company_id: payroll.company_id || null,
+          company_id: body.company_id || payroll.company_id || null,
         },
       });
 

@@ -1,7 +1,7 @@
 'use client';
 import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { payrollApi, fieldOptionsApi, pettyCashApi } from '@/lib/api';
+import { payrollApi, fieldOptionsApi, pettyCashApi, bankAccountsApi, companiesApi, attachmentsApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
@@ -959,7 +959,21 @@ export default function PayrollDetailPage() {
     } catch { /* ignore */ }
   };
 
-  useEffect(() => { loadData(); loadFieldOptions(); }, [params.id]);
+  const loadBankAccounts = async () => {
+    try {
+      const res = await bankAccountsApi.simple();
+      setBankAccounts(res.data || []);
+    } catch { /* ignore */ }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      const res = await companiesApi.simple();
+      setCompanies(res.data || []);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { loadData(); loadFieldOptions(); loadBankAccounts(); loadCompanies(); }, [params.id]);
 
   const handleConfirm = async () => {
     if (!confirm('確定要確認此糧單？確認後將自動產生薪資支出記錄。')) return;
@@ -1122,20 +1136,44 @@ export default function PayrollDetailPage() {
   const [newPaymentMethod, setNewPaymentMethod] = useState('');
   const [newPaymentBank, setNewPaymentBank] = useState('');
   const [newPaymentRemarks, setNewPaymentRemarks] = useState('');
+  const [newPaymentCompanyId, setNewPaymentCompanyId] = useState<number | null>(payroll?.company_id || null);
+  const [paymentFiles, setPaymentFiles] = useState<File[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentFileUploading, setPaymentFileUploading] = useState(false);
 
   const handleAddPayrollPayment = async () => {
     if (!newPaymentDate || !newPaymentAmount) return;
     setPaymentSaving(true);
     try {
-      await payrollApi.addPayrollPayment(payroll.id, {
+      const res = await payrollApi.addPayrollPayment(payroll.id, {
         payroll_payment_date: newPaymentDate,
         payroll_payment_amount: Number(newPaymentAmount),
         payroll_payment_reference_no: newPaymentRef || undefined,
         payroll_payment_method: newPaymentMethod || undefined,
         payroll_payment_bank_account: newPaymentBank || undefined,
         payroll_payment_remarks: newPaymentRemarks || undefined,
+        company_id: newPaymentCompanyId || undefined,
       });
+
+      // Handle file uploads if any files are selected
+      if (paymentFiles.length > 0 && res.data?.id) {
+        setPaymentFileUploading(true);
+        try {
+          for (const file of paymentFiles) {
+            const formData = new FormData();
+            formData.append('file', file);
+            await attachmentsApi.upload('payment_out', res.data.id, formData);
+          }
+        } catch (uploadErr: any) {
+          console.error('File upload error:', uploadErr);
+          alert('部分文件上傳失敗，但付款記錄已建立');
+        } finally {
+          setPaymentFileUploading(false);
+        }
+      }
+
       setShowAddPayment(false);
       setNewPaymentDate('');
       setNewPaymentAmount('');
@@ -1143,6 +1181,8 @@ export default function PayrollDetailPage() {
       setNewPaymentMethod('');
       setNewPaymentBank('');
       setNewPaymentRemarks('');
+      setNewPaymentCompanyId(payroll?.company_id || null);
+      setPaymentFiles([]);
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || '新增付款記錄失敗');
@@ -1874,7 +1914,7 @@ export default function PayrollDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款日期 *</label>
- <DateInput value={newPaymentDate} onChange={val => setNewPaymentDate(val || '')} className="input-field" />
+              <DateInput value={newPaymentDate} onChange={val => setNewPaymentDate(val || '')} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">付款金額 *</label>
@@ -1896,22 +1936,69 @@ export default function PayrollDetailPage() {
               </select>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
-            <input value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field" placeholder="例：滙豐" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
+              <select value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field">
+                <option value="">請選擇銀行賬戶</option>
+                {bankAccounts.map((ba) => (
+                  <option key={ba.id} value={ba.id}>
+                    {ba.bank_name} - {ba.account_name} ({ba.account_no})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">公司</label>
+              <select value={newPaymentCompanyId || ''} onChange={e => setNewPaymentCompanyId(e.target.value ? Number(e.target.value) : null)} className="input-field">
+                <option value="">請選擇公司</option>
+                {companies.map((co) => (
+                  <option key={co.id} value={co.id}>{co.company_name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
             <input value={newPaymentRemarks} onChange={e => setNewPaymentRemarks(e.target.value)} className="input-field" placeholder="可選" />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">上傳文件（可選）</label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-gray-400 transition">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => setPaymentFiles(Array.from(e.target.files || []))}
+                className="hidden"
+                id="payment-file-input"
+              />
+              <label htmlFor="payment-file-input" className="cursor-pointer block">
+                <div className="text-gray-600 text-sm">
+                  {paymentFiles.length > 0 ? (
+                    <div>
+                      <div className="font-medium text-gray-700 mb-2">已選擇 {paymentFiles.length} 個文件</div>
+                      <ul className="text-xs text-gray-500 space-y-1">
+                        {paymentFiles.map((f, i) => (
+                          <li key={i}>{f.name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div>點擊或拖放文件到此處上傳</div>
+                  )}
+                </div>
+              </label>
+            </div>
+          </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button onClick={() => setShowAddPayment(false)} className="btn-secondary">取消</button>
-            <button onClick={handleAddPayrollPayment} disabled={!newPaymentDate || !newPaymentAmount || paymentSaving} className="btn-primary">
-              {paymentSaving ? '儲存中...' : '確認新增'}
+            <button onClick={handleAddPayrollPayment} disabled={!newPaymentDate || !newPaymentAmount || paymentSaving || paymentFileUploading} className="btn-primary">
+              {paymentSaving || paymentFileUploading ? '儲存中...' : '確認新增'}
             </button>
           </div>
         </div>
       </Modal>
+
 
       {/* ── Add Adjustment Modal ── */}
       <Modal isOpen={showAdjForm} onClose={() => setShowAdjForm(false)} title="新增自定義項目">

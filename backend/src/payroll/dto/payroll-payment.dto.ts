@@ -31,6 +31,11 @@ export class CreatePayrollPaymentDto {
   @Type(() => Number)
   @IsNumber()
   payroll_payment_payment_out_id?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  company_id?: number;
 }
 
 export class UpdatePayrollPaymentDto {
