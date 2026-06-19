@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Image from 'next/image';
 
 const slides = [
@@ -82,12 +82,41 @@ const slides = [
 
 export default function PayrollGuideSlides() {
   const [current, setCurrent] = useState(0);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
 
   const next = () => setCurrent((current + 1) % slides.length);
   const prev = () => setCurrent((current - 1 + slides.length) % slides.length);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.changedTouches[0].screenX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    touchEndX.current = e.changedTouches[0].screenX;
+    handleSwipe();
+  };
+
+  const handleSwipe = () => {
+    const swipeThreshold = 50; // 最小滑動距離（像素）
+    const diff = touchStartX.current - touchEndX.current;
+
+    // 向左滑動（下一張）
+    if (diff > swipeThreshold) {
+      next();
+    }
+    // 向右滑動（上一張）
+    else if (diff < -swipeThreshold) {
+      prev();
+    }
+  };
+
   return (
-    <div className="mt-12 mb-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div
+      className="mt-12 mb-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-800">糧單管理教學指南</h2>
         <span className="text-sm text-gray-500 font-medium">
@@ -96,8 +125,23 @@ export default function PayrollGuideSlides() {
       </div>
       
       <div className="p-8 flex flex-col justify-center">
-        {/* Image Section */}
-        <div className="mb-8 flex justify-center">
+        {/* Text Section - 文字放上面 */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-primary-700 mb-6">
+            {slides[current].title}
+          </h3>
+          <ul className="space-y-4">
+            {slides[current].content.map((item, idx) => (
+              <li key={idx} className="text-gray-700 leading-relaxed flex gap-3">
+                <span className="flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-primary-400" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Image Section - 圖片放下面 */}
+        <div className="flex justify-center">
           <div className="w-full max-w-4xl">
             <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden">
               <Image
@@ -110,21 +154,6 @@ export default function PayrollGuideSlides() {
               />
             </div>
           </div>
-        </div>
-
-        {/* Text Section */}
-        <div>
-          <h3 className="text-xl font-bold text-primary-700 mb-6">
-            {slides[current].title}
-          </h3>
-          <ul className="space-y-4">
-            {slides[current].content.map((item, idx) => (
-              <li key={idx} className="text-gray-700 leading-relaxed flex gap-3">
-                <span className="flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-primary-400" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
 
