@@ -84,6 +84,7 @@ export default function PayrollGuideSlides() {
   const [current, setCurrent] = useState(0);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
+  const wheelCooldown = useRef(false);
 
   const next = () => setCurrent((current + 1) % slides.length);
   const prev = () => setCurrent((current - 1 + slides.length) % slides.length);
@@ -111,12 +112,38 @@ export default function PayrollGuideSlides() {
     }
   };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    // 只處理水平滑動為主的情況
+    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+    if (wheelCooldown.current) return;
+
+    // 向左滑動（下一張）
+    if (e.deltaX > 30) {
+      e.preventDefault();
+      next();
+      wheelCooldown.current = true;
+      setTimeout(() => {
+        wheelCooldown.current = false;
+      }, 300);
+    }
+    // 向右滑動（上一張）
+    else if (e.deltaX < -30) {
+      e.preventDefault();
+      prev();
+      wheelCooldown.current = true;
+      setTimeout(() => {
+        wheelCooldown.current = false;
+      }, 300);
+    }
+  };
+
   return (
     <div
       className="mt-12 mb-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
       style={{ touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      onWheel={handleWheel}
     >
       <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-800">糧單管理教學指南</h2>
