@@ -114,6 +114,7 @@ export default function PayrollGuideSlides() {
   return (
     <div
       className="mt-12 mb-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+      style={{ touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -150,6 +151,7 @@ export default function PayrollGuideSlides() {
                 width={1200}
                 height={675}
                 className="w-full h-auto"
+                draggable={false}
                 priority
               />
             </div>
