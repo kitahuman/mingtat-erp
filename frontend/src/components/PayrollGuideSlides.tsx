@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 
 const slides = [
   {
-    title: "Slide 1: 如何建立新糧單",
+    title: "Slide 1: 建立糧單",
+    image: "/tutorial/slide_01_建立糧單.png",
     content: [
       "1. 在管理頁面選擇「公司」（可選）及「員工」。",
       "2. 選擇計糧的「開始日期」與「結束日期」。",
@@ -13,7 +15,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 2: 逐項分頁",
+    title: "Slide 2: 逐筆明細",
+    image: "/tutorial/slide_02_逐筆明細.png",
     content: [
       "• 顯示該時段內「每一筆」原始工作記錄副本。",
       "• 您可以查看每筆記錄是否成功匹配到「價目表 (Rate Card)」。",
@@ -21,7 +24,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 3: 歸組分頁",
+    title: "Slide 3: 歸組結算",
+    image: "/tutorial/slide_03_歸組結算.png",
     content: [
       "• 將相同客戶、合約、路線及服務類型的記錄「自動歸組」。",
       "• 您可以切換「計費數量類型」（按天數、按數量或商品數量）。",
@@ -29,7 +33,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 4: 逐日分頁",
+    title: "Slide 4: 逐日計算",
+    image: "/tutorial/slide_04_逐日計算.png",
     content: [
       "• 這是計算的「單一事實來源 (Single Source of Truth)」。",
       "• 顯示每日的工作收入、OT/中直、補底薪差額及津貼。",
@@ -37,7 +42,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 5: 計算明細分頁",
+    title: "Slide 5: 糧單項目",
+    image: "/tutorial/slide_05_糧單項目.png",
     content: [
       "• 底薪邏輯：日薪員工 = 工作收入 + 補底薪；月薪員工 = 按有效天數比例計算（日薪 = 月薪 × 12 / 365）。",
       "• 津貼邏輯：固定津貼（如租車、夜班）按當天實質天數比例計算；「中直津貼」則不斬半，全額發放。",
@@ -45,7 +51,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 6: 合計如何計算",
+    title: "Slide 6: 自定義津貼扣款",
+    image: "/tutorial/slide_06_自定義津貼扣款.png",
     content: [
       "• 應收總額 (Gross Income) = 底薪 + 所有津貼 + OT + 司機分傭。",
       "• 扣除項目 = 強積金 (MPF) 僱員扣款（顯示為負數）。",
@@ -53,7 +60,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 7: MPF 強積金",
+    title: "Slide 7: 合計與MPF",
+    image: "/tutorial/slide_07_合計與MPF.png",
     content: [
       "• 行業計劃：日薪基數 = (應收總額 + 調整項) / 工作天數，再按政府分級表計算。",
       "• 一般計劃：(應收總額 + 調整項) × 5%，上限 $1,500。",
@@ -61,7 +69,8 @@ const slides = [
     ]
   },
   {
-    title: "Slide 8: 如何付款",
+    title: "Slide 8: 付款",
+    image: "/tutorial/slide_08_付款.png",
     content: [
       "1. 在糧單詳情頁下方找到「付款記錄」區塊。",
       "2. 點擊「新增付款記錄」，輸入日期、金額及付款方式。",
@@ -86,18 +95,37 @@ export default function PayrollGuideSlides() {
         </span>
       </div>
       
-      <div className="p-8 min-h-[280px] flex flex-col justify-center">
-        <h3 className="text-xl font-bold text-primary-700 mb-6">
-          {slides[current].title}
-        </h3>
-        <ul className="space-y-4">
-          {slides[current].content.map((item, idx) => (
-            <li key={idx} className="text-gray-700 leading-relaxed flex gap-3">
-              <span className="flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-primary-400" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="p-8 flex flex-col justify-center">
+        {/* Image Section */}
+        <div className="mb-8 flex justify-center">
+          <div className="w-full max-w-4xl">
+            <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden">
+              <Image
+                src={slides[current].image}
+                alt={slides[current].title}
+                width={1200}
+                height={675}
+                className="w-full h-auto"
+                priority
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Text Section */}
+        <div>
+          <h3 className="text-xl font-bold text-primary-700 mb-6">
+            {slides[current].title}
+          </h3>
+          <ul className="space-y-4">
+            {slides[current].content.map((item, idx) => (
+              <li key={idx} className="text-gray-700 leading-relaxed flex gap-3">
+                <span className="flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-primary-400" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
