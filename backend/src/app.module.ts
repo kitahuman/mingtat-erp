@@ -81,6 +81,7 @@ import { AiPayrollSessionModule } from './ai-payroll-session/ai-payroll-session.
 import { AiActivityLogModule } from './ai-activity-log/ai-activity-log.module';
 import { SettingsModule } from './settings/settings.module';
 import { ColumnPreferencesModule } from './column-preferences/column-preferences.module';
+import { PivotPresetsModule } from './pivot-presets/pivot-presets.module';
 import { VersionModule } from './version/version.module';
 import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
 
@@ -189,6 +190,7 @@ import { DirectorReadOnlyGuard } from './auth/director-readonly.guard';
     AiPayrollSessionModule,
     SettingsModule,
     ColumnPreferencesModule,
+    PivotPresetsModule,
     VersionModule,
   ],
   providers: [

@@ -2173,6 +2173,17 @@ export const paymentInSourceTypesApi = {
   delete: (id: number) => api.delete(`/settings/payment-in-source-types/${id}`),
 };
 
+export const pivotPresetsApi = {
+  list: () => api.get('/pivot-presets'),
+  create: (data: { name: string; config: any }) =>
+    api.post('/pivot-presets', data),
+  update: (id: number, data: { name?: string; config?: any }) =>
+    api.put(`/pivot-presets/${id}`, data),
+  delete: (id: number) => api.delete(`/pivot-presets/${id}`),
+  saveLastUsed: (config: any) =>
+    api.put('/pivot-presets/last-used', { config }),
+};
+
 export const columnPreferencesApi = {
   get: (pageKey: string) => api.get(`/column-preferences/${pageKey}`),
   savePersonal: (pageKey: string, columnsConfig: { key: string; visible: boolean; order: number }[]) =>

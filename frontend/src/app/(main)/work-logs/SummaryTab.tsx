@@ -12,8 +12,10 @@ import {
   machineryApi,
   contractsApi,
   quotationsApi,
+  pivotPresetsApi,
 } from '@/lib/api';
 import DateInput from '@/components/DateInput';
+import Cookies from 'js-cookie';
 
 interface Option {
   value: string;
@@ -862,6 +864,17 @@ export default function SummaryTab() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [axisOpen, setAxisOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // ── 儲存/載入視圖（Pivot View Presets）──
+  const [presets, setPresets] = useState<
+    Array<{ id: number; name: string; config: any; is_last: boolean }>
+  >([]);
+  const [loadMenuOpen, setLoadMenuOpen] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetError, setPresetError] = useState('');
+  const loadMenuRef = useRef<HTMLDivElement | null>(null);
+  const lastUsedLoadedRef = useRef(false);
   const [pivot, setPivot] = useState<WorkLogPivotResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1218,6 +1231,272 @@ export default function SummaryTab() {
     fetchPivot();
   }, [fetchPivot]);
 
+  // ──────────────────────────────────────────────
+  // 儲存/載入視圖（Pivot View Presets）
+  // ──────────────────────────────────────────────
+
+  // 將當前 state 序列化為 config JSON（對應 pvp_config 結構）
+  const buildConfig = useCallback(
+    () => ({
+      rowFields,
+      colFields,
+      valueTypes,
+      dateFrom,
+      dateTo,
+      companyIds,
+      clientIds,
+      employeeIds,
+      equipmentNumbers,
+      selectedMachineTypes,
+      startLocations,
+      endLocations,
+      selectedContracts,
+      selectedQuotations,
+      selectedDayNights,
+      selectedServiceTypes,
+      selectedStatuses,
+    }),
+    [
+      rowFields,
+      colFields,
+      valueTypes,
+      dateFrom,
+      dateTo,
+      companyIds,
+      clientIds,
+      employeeIds,
+      equipmentNumbers,
+      selectedMachineTypes,
+      startLocations,
+      endLocations,
+      selectedContracts,
+      selectedQuotations,
+      selectedDayNights,
+      selectedServiceTypes,
+      selectedStatuses,
+    ],
+  );
+  // 用 ref 持有最新 config，供 unload/cleanup 時讀取，避免 effect 依賴反覆綁定
+  const configRef = useRef(buildConfig());
+  useEffect(() => {
+    configRef.current = buildConfig();
+  }, [buildConfig]);
+
+  // 將 config JSON 套回各個 state（載入視圖 / 載入上次設定）
+  const applyConfig = useCallback((config: any) => {
+    if (!config || typeof config !== 'object') return;
+    const asStringArray = (value: unknown): string[] =>
+      Array.isArray(value) ? value.map((item) => String(item)) : [];
+
+    if (Array.isArray(config.rowFields)) {
+      setRowFields(
+        config.rowFields.filter((field: string) =>
+          DIMENSION_OPTIONS.some(
+            (option) => option.value === field && option.value !== 'none',
+          ),
+        ) as PivotDimension[],
+      );
+    }
+    if (Array.isArray(config.colFields)) {
+      setColFields(
+        config.colFields.filter((field: string) =>
+          DIMENSION_OPTIONS.some(
+            (option) => option.value === field && option.value !== 'none',
+          ),
+        ) as PivotDimension[],
+      );
+    }
+    if (Array.isArray(config.valueTypes)) {
+      const valid = config.valueTypes.filter((value: string) =>
+        VALUE_OPTIONS.some((option) => option.value === value),
+      ) as PivotValueType[];
+      setValueTypes(valid.length > 0 ? valid : ['quantity_sum']);
+    }
+    if (typeof config.dateFrom === 'string') setDateFrom(config.dateFrom);
+    if (typeof config.dateTo === 'string') setDateTo(config.dateTo);
+
+    // 各篩選器：套用選取值並標記為已初始化，
+    // 避免後續 filter-options 同步把載入的選取當未初始化而重置。
+    const applyFilter = (
+      key: string,
+      value: unknown,
+      setValues: Dispatch<SetStateAction<string[]>>,
+    ) => {
+      if (value === undefined) return;
+      filterSelectionInitializedRef.current[key] = true;
+      setValues(asStringArray(value));
+    };
+    applyFilter('companies', config.companyIds, setCompanyIds);
+    applyFilter('clients', config.clientIds, setClientIds);
+    applyFilter('employees', config.employeeIds, setEmployeeIds);
+    applyFilter(
+      'equipment_numbers',
+      config.equipmentNumbers,
+      setEquipmentNumbers,
+    );
+    applyFilter(
+      'machine_types',
+      config.selectedMachineTypes,
+      setSelectedMachineTypes,
+    );
+    applyFilter('start_locations', config.startLocations, setStartLocations);
+    applyFilter('end_locations', config.endLocations, setEndLocations);
+    applyFilter('contracts', config.selectedContracts, setSelectedContracts);
+    applyFilter(
+      'quotations',
+      config.selectedQuotations,
+      setSelectedQuotations,
+    );
+    applyFilter('day_nights', config.selectedDayNights, setSelectedDayNights);
+    applyFilter(
+      'service_types',
+      config.selectedServiceTypes,
+      setSelectedServiceTypes,
+    );
+    applyFilter('statuses', config.selectedStatuses, setSelectedStatuses);
+  }, []);
+
+  // 取得視圖清單（過濾掉保留的「上次設定」紀錄）
+  const namedPresets = useMemo(
+    () => presets.filter((preset) => !preset.is_last),
+    [presets],
+  );
+
+  const refreshPresets = useCallback(async () => {
+    try {
+      const res = await pivotPresetsApi.list();
+      const list = Array.isArray(res.data) ? res.data : [];
+      setPresets(list);
+      return list as Array<{
+        id: number;
+        name: string;
+        config: any;
+        is_last: boolean;
+      }>;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // 進入 tab 時：載入清單，並自動套用「上次設定」
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await refreshPresets();
+      if (cancelled || lastUsedLoadedRef.current) return;
+      const lastUsed = list.find((preset) => preset.is_last);
+      if (lastUsed && lastUsed.config) {
+        applyConfig(lastUsed.config);
+      }
+      lastUsedLoadedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshPresets, applyConfig]);
+
+  // 自動保存「上次設定」：離開頁面（beforeunload/pagehide）時用 keepalive 送出
+  const saveLastUsedKeepalive = useCallback(() => {
+    if (!lastUsedLoadedRef.current) return;
+    try {
+      const token = Cookies.get('token');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || '/api'}/pivot-presets/last-used`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ config: configRef.current }),
+          keepalive: true,
+        },
+      ).catch(() => undefined);
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', saveLastUsedKeepalive);
+    window.addEventListener('pagehide', saveLastUsedKeepalive);
+    // 元件卸載（切換 tab 時 SummaryTab 會卸載）也保存一次
+    return () => {
+      window.removeEventListener('beforeunload', saveLastUsedKeepalive);
+      window.removeEventListener('pagehide', saveLastUsedKeepalive);
+      if (lastUsedLoadedRef.current) {
+        pivotPresetsApi.saveLastUsed(configRef.current).catch(() => undefined);
+      }
+    };
+  }, [saveLastUsedKeepalive]);
+
+  // 點擊外部關閉「載入視圖」下拉選單
+  useEffect(() => {
+    if (!loadMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        loadMenuRef.current &&
+        !loadMenuRef.current.contains(event.target as Node)
+      ) {
+        setLoadMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [loadMenuOpen]);
+
+  const handleLoadPreset = useCallback(
+    (preset: { config: any }) => {
+      applyConfig(preset.config);
+      setLoadMenuOpen(false);
+    },
+    [applyConfig],
+  );
+
+  const handleSavePreset = useCallback(async () => {
+    const name = saveName.trim();
+    if (!name) {
+      setPresetError('請輸入視圖名稱');
+      return;
+    }
+    setSavingPreset(true);
+    setPresetError('');
+    try {
+      const existing = namedPresets.find((preset) => preset.name === name);
+      if (existing) {
+        // 同名則更新
+        await pivotPresetsApi.update(existing.id, {
+          name,
+          config: buildConfig(),
+        });
+      } else {
+        await pivotPresetsApi.create({ name, config: buildConfig() });
+      }
+      await refreshPresets();
+      setSaveModalOpen(false);
+      setSaveName('');
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message || err?.message || '儲存失敗';
+      setPresetError(
+        Array.isArray(message) ? message.join('、') : String(message),
+      );
+    } finally {
+      setSavingPreset(false);
+    }
+  }, [saveName, namedPresets, buildConfig, refreshPresets]);
+
+  const handleDeletePreset = useCallback(
+    async (id: number) => {
+      try {
+        await pivotPresetsApi.delete(id);
+        await refreshPresets();
+      } catch {
+        /* noop */
+      }
+    },
+    [refreshPresets],
+  );
+
   const rowTree = useMemo(() => buildAxisTree(pivot?.rows || []), [pivot]);
   const colTree = useMemo(() => buildAxisTree(pivot?.cols || []), [pivot]);
   const visibleRows = useMemo(
@@ -1506,6 +1785,74 @@ export default function SummaryTab() {
 
   return (
     <div className="bg-gray-50">
+      {saveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  儲存視圖
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  將當前篩選條件與軸設定儲存為命名視圖。
+                </p>
+              </div>
+              <button
+                onClick={() => setSaveModalOpen(false)}
+                className="text-2xl leading-none text-gray-400 hover:text-gray-600"
+                aria-label="關閉"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  視圖名稱
+                </label>
+                <input
+                  type="text"
+                  value={saveName}
+                  onChange={(event) => setSaveName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !savingPreset) {
+                      handleSavePreset();
+                    }
+                  }}
+                  maxLength={100}
+                  autoFocus
+                  placeholder="例如：本月員工×日期"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                {namedPresets.some((preset) => preset.name === saveName.trim()) &&
+                  saveName.trim() !== '' && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      已存在同名視圖，儲存將覆蓋其設定。
+                    </p>
+                  )}
+                {presetError && (
+                  <p className="mt-1 text-xs text-red-600">{presetError}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-3">
+              <button
+                onClick={() => setSaveModalOpen(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSavePreset}
+                disabled={savingPreset}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {savingPreset ? '儲存中…' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="border-b border-gray-200 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1515,6 +1862,59 @@ export default function SummaryTab() {
             </p>
           </div>
           <div className="flex gap-2">
+            <div className="relative" ref={loadMenuRef}>
+              <button
+                onClick={() => setLoadMenuOpen((open) => !open)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                載入視圖
+              </button>
+              {loadMenuOpen && (
+                <div className="absolute right-0 z-30 mt-1 max-h-72 w-64 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  {namedPresets.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-400">
+                      尚無已保存的視圖
+                    </div>
+                  ) : (
+                    namedPresets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm hover:bg-gray-50"
+                      >
+                        <button
+                          onClick={() => handleLoadPreset(preset)}
+                          className="min-w-0 flex-1 truncate text-left text-gray-700"
+                          title={preset.name}
+                        >
+                          {preset.name}
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeletePreset(preset.id);
+                          }}
+                          className="shrink-0 rounded px-1.5 text-base leading-none text-gray-400 hover:text-red-500"
+                          aria-label={`刪除視圖 ${preset.name}`}
+                          title="刪除此視圖"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setSaveName('');
+                setPresetError('');
+                setSaveModalOpen(true);
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              儲存視圖
+            </button>
             <CsvButton onClick={exportCsv} />
             <button
               onClick={() => setControlsOpen((open) => !open)}

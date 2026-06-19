@@ -63,6 +63,7 @@ model User {
   document_folders_created   DocumentFolder[]           @relation("DocumentFolderCreatedBy")
   created_payrolls           Payroll[]                  @relation("PayrollCreatedBy")
   column_preferences         UserColumnPreference[]
+  pivot_view_presets         PivotViewPreset[]
 
   @@map("users")
 }
@@ -80,6 +81,22 @@ model UserColumnPreference {
   @@unique([ucp_user_id, ucp_page_key])
   @@index([ucp_page_key])
   @@map("user_column_preferences")
+}
+
+model PivotViewPreset {
+  pvp_id         Int      @id @default(autoincrement())
+  pvp_user_id    Int
+  pvp_name       String   @db.VarChar(100)
+  pvp_config     Json // 存篩選條件 + 軸設定的 JSON
+  pvp_is_last    Boolean  @default(false) // 標記「上次設定」
+  pvp_created_at DateTime @default(now())
+  pvp_updated_at DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [pvp_user_id], references: [id], onDelete: Cascade)
+
+  @@unique([pvp_user_id, pvp_name])
+  @@index([pvp_user_id])
+  @@map("pivot_view_presets")
 }
 
 // ══════════════════════════════════════════════════════════════
