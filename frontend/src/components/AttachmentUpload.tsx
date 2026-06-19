@@ -52,7 +52,8 @@ export default function AttachmentUpload({
   const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
   const [savingRemarks, setSavingRemarks] = useState<Record<number, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
-  const dragRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const dragCounterRef = useRef(0);
 
   const loadAttachments = async () => {
     if (!entityId) return;
@@ -103,23 +104,42 @@ export default function AttachmentUpload({
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
+
+    if (e.type === 'dragenter') {
+      dragCounterRef.current += 1;
       setDragActive(true);
     } else if (e.type === 'dragleave') {
-      setDragActive(false);
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current === 0) {
+        setDragActive(false);
+      }
+    } else if (e.type === 'dragover') {
+      setDragActive(true);
     }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
+    dragCounterRef.current = 0;
 
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      if (fileRef.current) {
-        fileRef.current.files = files;
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+
+    // Auto-upload files directly from drag-and-drop
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        await attachmentsApi.upload(entityType, entityId, formData);
       }
+      await loadAttachments();
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, '上傳失敗'));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -176,7 +196,26 @@ export default function AttachmentUpload({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+    <div
+      ref={cardRef}
+      onDragEnter={handleDrag}
+      onDragLeave={handleDrag}
+      onDragOver={handleDrag}
+      onDrop={handleDrop}
+      className={`bg-white rounded-xl border-2 shadow-sm p-5 space-y-4 transition-all relative ${
+        dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+      }`}
+    >
+      {/* Drag & Drop Overlay */}
+      {dragActive && (
+        <div className="absolute inset-0 bg-blue-500 bg-opacity-10 rounded-xl flex items-center justify-center pointer-events-none z-10">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600 mb-2">放開以上傳文件</div>
+            <div className="text-sm text-blue-500">將文件拖放到此區域</div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
@@ -198,18 +237,7 @@ export default function AttachmentUpload({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">選擇文件 *</label>
-              <div
-                ref={dragRef}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-lg p-4 text-center transition cursor-pointer ${
-                  dragActive
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-                }`}
-              >
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-gray-400 transition bg-gray-50">
                 <input
                   ref={fileRef}
                   type="file"
@@ -222,14 +250,8 @@ export default function AttachmentUpload({
                 />
                 <label htmlFor="file-input" className="cursor-pointer block">
                   <div className="text-gray-600 text-sm">
-                    {dragActive ? (
-                      <div className="font-medium text-blue-600">放開以上傳文件</div>
-                    ) : (
-                      <div>
-                        <div className="font-medium">點擊或拖放文件到此處</div>
-                        <div className="text-xs text-gray-500 mt-1">單個文件最大 100MB</div>
-                      </div>
-                    )}
+                    <div className="font-medium">點擊選擇文件或拖放到此處</div>
+                    <div className="text-xs text-gray-500 mt-1">單個文件最大 100MB</div>
                   </div>
                 </label>
               </div>
