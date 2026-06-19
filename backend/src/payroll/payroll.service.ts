@@ -1714,6 +1714,7 @@ export class PayrollService {
         item: title,
         total_amount: totalAmount,
         source: 'PAYROLL',
+        expense_payment_method: 'COMPANY_PAID',
         remarks: `由 ${payrolls.length} 張糧單批量生成`,
       },
     });
@@ -3273,6 +3274,7 @@ export class PayrollService {
         source: 'PAYROLL',
         source_ref_id: payroll.id,
         project_id: null,
+        expense_payment_method: 'COMPANY_PAID',
         remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}`,
       });
     } else if (projectDistribution.length === 1) {
@@ -3288,6 +3290,7 @@ export class PayrollService {
         source: 'PAYROLL',
         source_ref_id: payroll.id,
         project_id: dist.project_id,
+        expense_payment_method: 'COMPANY_PAID',
         remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}，出勤 ${dist.days} 天`,
       });
     } else {
@@ -3315,6 +3318,7 @@ export class PayrollService {
           source: 'PAYROLL',
           source_ref_id: payroll.id,
           project_id: dist.project_id,
+          expense_payment_method: 'COMPANY_PAID',
           remarks: `自動產生：糧單 #${payroll.id}，期間 ${payroll.period}，出勤 ${dist.days}/${totalDays} 天 (${(ratio * 100).toFixed(1)}%)`,
         });
       }
