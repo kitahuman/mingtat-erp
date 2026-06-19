@@ -18,6 +18,7 @@ interface AttachmentRecord {
   attachment_file_size?: number | null;
   attachment_mime_type?: string | null;
   attachment_description?: string | null;
+  attachment_remarks?: string | null;
   attachment_created_at?: string | null;
 }
 
@@ -47,7 +48,11 @@ export default function AttachmentUpload({
   const [uploading, setUploading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
+  const [savingRemarks, setSavingRemarks] = useState<Record<number, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragRef = useRef<HTMLDivElement>(null);
 
   const loadAttachments = async () => {
     if (!entityId) return;
@@ -55,6 +60,12 @@ export default function AttachmentUpload({
     try {
       const res = await attachmentsApi.list(entityType, entityId);
       setAttachments(res.data || []);
+      // Initialize editingRemarks with current remarks
+      const remarks: Record<number, string> = {};
+      (res.data || []).forEach((att: AttachmentRecord) => {
+        remarks[att.id] = att.attachment_remarks || '';
+      });
+      setEditingRemarks(remarks);
     } catch {
       setAttachments([]);
     } finally {
@@ -89,6 +100,29 @@ export default function AttachmentUpload({
     return mimeType.split('/').pop()?.toUpperCase() || '文件';
   };
 
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      if (fileRef.current) {
+        fileRef.current.files = files;
+      }
+    }
+  };
+
   const handleUpload = async () => {
     const files = Array.from(fileRef.current?.files || []);
     if (files.length === 0) {
@@ -114,6 +148,19 @@ export default function AttachmentUpload({
       alert(getErrorMessage(err, '上傳失敗'));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleSaveRemarks = async (attachmentId: number) => {
+    const remarks = editingRemarks[attachmentId] || '';
+    setSavingRemarks((prev) => ({ ...prev, [attachmentId]: true }));
+    try {
+      await attachmentsApi.update(attachmentId, { attachment_remarks: remarks });
+      await loadAttachments();
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, '保存備註失敗'));
+    } finally {
+      setSavingRemarks((prev) => ({ ...prev, [attachmentId]: false }));
     }
   };
 
@@ -151,8 +198,41 @@ export default function AttachmentUpload({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">選擇文件 *</label>
-              <input ref={fileRef} type="file" multiple className="input-field text-sm" />
-              <p className="text-xs text-gray-500 mt-1">可一次選擇多個文件，單個文件最大 100MB。</p>
+              <div
+                ref={dragRef}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-4 text-center transition cursor-pointer ${
+                  dragActive
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+                }`}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => {
+                    // File input changed, no need to do anything special
+                  }}
+                  className="hidden"
+                  id="file-input"
+                />
+                <label htmlFor="file-input" className="cursor-pointer block">
+                  <div className="text-gray-600 text-sm">
+                    {dragActive ? (
+                      <div className="font-medium text-blue-600">放開以上傳文件</div>
+                    ) : (
+                      <div>
+                        <div className="font-medium">點擊或拖放文件到此處</div>
+                        <div className="text-xs text-gray-500 mt-1">單個文件最大 100MB</div>
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">備註（可選）</label>
@@ -201,8 +281,37 @@ export default function AttachmentUpload({
                   </td>
                   <td className="px-4 py-2"><span className="badge-blue">{getFileTypeLabel(attachment.attachment_mime_type)}</span></td>
                   <td className="px-4 py-2 text-gray-500">{formatFileSize(attachment.attachment_file_size)}</td>
-                  <td className="px-4 py-2 text-gray-500 max-w-[240px] truncate" title={attachment.attachment_description || ''}>
-                    {attachment.attachment_description || '-'}
+                  <td className="px-4 py-2">
+                    {readOnly ? (
+                      <span className="text-gray-500 max-w-[240px] truncate inline-block" title={attachment.attachment_remarks || ''}>
+                        {attachment.attachment_remarks || '-'}
+                      </span>
+                    ) : (
+                      <div className="flex gap-2 items-center max-w-[240px]">
+                        <input
+                          type="text"
+                          value={editingRemarks[attachment.id] || ''}
+                          onChange={(e) =>
+                            setEditingRemarks((prev) => ({
+                              ...prev,
+                              [attachment.id]: e.target.value,
+                            }))
+                          }
+                          className="input-field text-xs flex-1 py-1"
+                          placeholder="添加備註..."
+                        />
+                        {editingRemarks[attachment.id] !== (attachment.attachment_remarks || '') && (
+                          <button
+                            type="button"
+                            onClick={() => handleSaveRemarks(attachment.id)}
+                            disabled={savingRemarks[attachment.id]}
+                            className="text-blue-600 hover:underline text-xs whitespace-nowrap"
+                          >
+                            {savingRemarks[attachment.id] ? '保存中...' : '保存'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-gray-500">{attachment.attachment_created_at ? fmtDate(attachment.attachment_created_at) : '-'}</td>
                   <td className="px-4 py-2">

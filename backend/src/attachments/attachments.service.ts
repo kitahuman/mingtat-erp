@@ -44,6 +44,7 @@ export class AttachmentsService {
         attachment_mime_type: file.mimetype,
         attachment_uploaded_by: userId || null,
         attachment_description: dto.attachment_description || null,
+        attachment_remarks: dto.attachment_remarks || null,
       },
     });
   }
@@ -60,6 +61,7 @@ export class AttachmentsService {
       where: { id },
       data: {
         attachment_description: dto.attachment_description ?? null,
+        attachment_remarks: dto.attachment_remarks ?? null,
       },
     });
   }

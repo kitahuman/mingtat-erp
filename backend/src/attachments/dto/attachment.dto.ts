@@ -41,6 +41,11 @@ export class CreateAttachmentDto {
   @IsString()
   @MaxLength(2000)
   attachment_description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  attachment_remarks?: string;
 }
 
 export class UpdateAttachmentDto {
@@ -48,4 +53,9 @@ export class UpdateAttachmentDto {
   @IsString()
   @MaxLength(2000)
   attachment_description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  attachment_remarks?: string;
 }

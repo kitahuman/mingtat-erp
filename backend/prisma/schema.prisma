@@ -1267,6 +1267,7 @@ model Attachment {
   attachment_mime_type       String?
   attachment_uploaded_by     Int?
   attachment_description     String?  @db.Text
+  attachment_remarks         String?  @db.Text
   attachment_created_at      DateTime @default(now())
   attachment_updated_at      DateTime @default(now()) @updatedAt
 
