@@ -35,6 +35,7 @@ export default function SearchableSelect({
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find(o => String(o.value) === String(value ?? ''));
   // In server-side mode (onSearchChange provided) the parent already returns the
@@ -98,6 +99,15 @@ export default function SearchableSelect({
     };
   }, [open, updateDropdownPosition]);
 
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    }
+  }, [open]);
+
   const dropdown = open ? (
     <div
       ref={dropdownRef}
@@ -106,7 +116,7 @@ export default function SearchableSelect({
     >
       <div className="p-1.5 border-b border-gray-100">
         <input
-          autoFocus
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={e => {

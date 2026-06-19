@@ -32,6 +32,7 @@ export default function MultiSearchableSelect({
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOptions = options.filter(o =>
     value.map(String).includes(String(o.value))
@@ -102,6 +103,15 @@ export default function MultiSearchableSelect({
     };
   }, [open, updateDropdownPosition]);
 
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    }
+  }, [open]);
+
   // Render selected tags inline
   const renderTriggerContent = () => {
     if (selectedOptions.length === 0) {
@@ -139,7 +149,7 @@ export default function MultiSearchableSelect({
       {/* Search input */}
       <div className="p-1.5 border-b border-gray-100">
         <input
-          autoFocus
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}

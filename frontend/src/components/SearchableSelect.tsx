@@ -24,6 +24,7 @@ export default function SearchableSelect({
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const [mounted, setMounted] = useState(false);
 
@@ -33,6 +34,14 @@ export default function SearchableSelect({
   );
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    }
+  }, [open]);
 
   const updateDropdownPosition = useCallback(() => {
     if (!ref.current || !open) return;
@@ -86,7 +95,7 @@ export default function SearchableSelect({
     >
       <div className="p-1.5 border-b border-gray-100">
         <input
-          autoFocus
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
