@@ -1209,6 +1209,15 @@ export const paymentOutApi = {
   get: (id: number) => api.get(`/payment-out/${id}`),
   filterOptions: (column: string) => api.get(`/payment-out/filter-options`, { params: { column } }),
   create: (data: any) => api.post('/payment-out', data),
+  bulkPay: (data: {
+    date: string;
+    bank_account_id?: number;
+    payment_method?: string;
+    reference_no?: string;
+    remarks?: string;
+    company_id?: number;
+    allocations: { expense_id: number; amount: number }[];
+  }) => api.post('/payment-out/bulk-pay', data),
   update: (id: number, data: any) => api.put(`/payment-out/${id}`, data),
   updateStatus: (id: number, status: string) =>
     api.patch(`/payment-out/${id}/status`, { payment_out_status: status }),

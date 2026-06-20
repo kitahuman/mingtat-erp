@@ -10,6 +10,8 @@ export interface InlineColumn {
   label: string;
   sortable?: boolean;
   className?: string;
+  headerRender?: () => React.ReactNode;
+  onCellClick?: (event: React.MouseEvent<HTMLTableCellElement>, row: any) => void;
   render?: (value: any, row: any) => React.ReactNode;
   exportRender?: (value: any, row: any) => string;
   filterRender?: (value: any, row: any) => string;

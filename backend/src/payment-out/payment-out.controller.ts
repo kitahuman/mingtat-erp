@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentOutService } from './payment-out.service';
-import { CreatePaymentOutDto, UpdatePaymentOutDto, UpdatePaymentOutStatusDto } from './dto/create-payment-out.dto';
+import { CreatePaymentOutDto, UpdatePaymentOutDto, UpdatePaymentOutStatusDto, BulkPayDto } from './dto/create-payment-out.dto';
 
 @Controller('payment-out')
 @UseGuards(AuthGuard('jwt'))
@@ -79,6 +79,11 @@ export class PaymentOutController {
   @Post()
   create(@Body() body: CreatePaymentOutDto) {
     return this.service.create(body);
+  }
+
+  @Post('bulk-pay')
+  bulkPay(@Body() body: BulkPayDto) {
+    return this.service.bulkPay(body);
   }
 
   @Put(':id')

@@ -556,6 +556,91 @@ export class PaymentOutService {
     await this.allocationService.recalculateSubconPayroll(subconPayrollId);
   }
 
+  // ── Bulk Pay (批量付款) ──────────────────────────────────────────
+  // Creates ONE PaymentOut (status='paid') and multiple PaymentOutAllocation
+  // rows, one per expense. Each expense's payment status is recalculated.
+  async bulkPay(dto: {
+    date: string;
+    bank_account_id?: number;
+    payment_method?: string;
+    reference_no?: string;
+    remarks?: string;
+    company_id?: number;
+    allocations: { expense_id: number; amount: number }[];
+  }) {
+    if (!dto.allocations || dto.allocations.length === 0) {
+      throw new BadRequestException('至少需要選擇一筆支出');
+    }
+
+    // Validate each allocation amount and that expenses exist
+    const expenseIds = dto.allocations.map((a) => a.expense_id);
+    const expenses = await this.prisma.expense.findMany({
+      where: { id: { in: expenseIds }, deleted_at: null },
+      select: { id: true, company_id: true, total_amount: true },
+    });
+    const expenseMap = new Map(expenses.map((e) => [e.id, e]));
+
+    for (const alloc of dto.allocations) {
+      if (!expenseMap.has(alloc.expense_id)) {
+        throw new BadRequestException(`支出 #${alloc.expense_id} 不存在`);
+      }
+      if (!alloc.amount || alloc.amount <= 0) {
+        throw new BadRequestException(
+          `支出 #${alloc.expense_id} 的付款金額必須大於 0`,
+        );
+      }
+    }
+
+    const totalAmount = dto.allocations.reduce(
+      (sum, a) => sum + Number(a.amount),
+      0,
+    );
+    if (totalAmount <= 0) {
+      throw new BadRequestException('總付款金額必須大於 0');
+    }
+
+    // Derive company_id: explicit > first expense's company
+    let companyId = dto.company_id || null;
+    if (!companyId) {
+      const firstExpense = expenseMap.get(dto.allocations[0].expense_id);
+      companyId = firstExpense?.company_id || null;
+    }
+
+    // Create the PaymentOut + allocations in a transaction, then recalc.
+    const created = await this.prisma.$transaction(async (tx) => {
+      const paymentOut = await tx.paymentOut.create({
+        data: {
+          date: new Date(dto.date),
+          amount: totalAmount,
+          company_id: companyId,
+          payment_out_description: `批量付款 (${dto.allocations.length} 筆支出)`,
+          payment_out_status: 'paid',
+          bank_account_id: dto.bank_account_id || null,
+          reference_no: dto.reference_no || null,
+          payment_method: dto.payment_method || null,
+          remarks: dto.remarks || null,
+        },
+      });
+
+      await tx.paymentOutAllocation.createMany({
+        data: dto.allocations.map((a) => ({
+          payment_out_allocation_payment_out_id: paymentOut.id,
+          payment_out_allocation_expense_id: a.expense_id,
+          payment_out_allocation_amount: a.amount,
+        })),
+      });
+
+      return paymentOut;
+    });
+
+    // Recalculate each expense's payment status (outside transaction)
+    for (const alloc of dto.allocations) {
+      await this.allocationService.recalculateExpense(alloc.expense_id);
+    }
+
+    return this.findOne(created.id);
+  }
+
   // ── Filter Options ─────────────────────────────────────────────────────────
   async getFilterOptions(column: string): Promise<string[]> {
     const STATUS_LABELS: Record<string, string> = {

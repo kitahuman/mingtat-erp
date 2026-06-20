@@ -14,7 +14,9 @@ import {
   quotationsApi,
   contractsApi,
   fieldOptionsApi,
+  bankAccountsApi,
 } from '@/lib/api';
+import BatchPaymentModal from './BatchPaymentModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import InlineEditDataTable, {
@@ -128,6 +130,10 @@ export default function ExpensesPage() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  // Batch selection + batch payment
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBatchPayment, setShowBatchPayment] = useState(false);
 
   // Supplier combobox state
   const [supplierInput, setSupplierInput] = useState('');
@@ -264,6 +270,10 @@ export default function ExpensesPage() {
     fieldOptionsApi
       .getByCategory('payment_method')
       .then((r) => setPaymentMethods(r.data || []));
+    bankAccountsApi
+      .simple()
+      .then((r) => setBankAccounts(r.data || []))
+      .catch(() => setBankAccounts([]));
   }, []);
 
   useEffect(() => {
@@ -348,6 +358,78 @@ export default function ExpensesPage() {
         .map((m: any) => ({ value: m.label, label: m.label })),
     [paymentMethods],
   );
+
+  const bankAccountOptions = useMemo(
+    () =>
+      bankAccounts.map((a: any) => ({
+        value: a.id,
+        label: `${a.bank_name || ''} - ${a.account_name || ''} (${a.account_no || ''})`,
+      })),
+    [bankAccounts],
+  );
+
+  // ── Batch selection helpers ──────────────────────────────────────────────
+  // Only unpaid / partially_paid expenses are selectable for batch payment.
+  const isSelectable = useCallback((row: any) => {
+    const status = row?.payment_status || 'unpaid';
+    return status === 'unpaid' || status === 'partially_paid';
+  }, []);
+
+  const selectableRows = useMemo(
+    () => data.filter((row) => isSelectable(row)),
+    [data, isSelectable],
+  );
+
+  const allSelectableSelected = useMemo(
+    () =>
+      selectableRows.length > 0 &&
+      selectableRows.every((row) => selectedIds.has(row.id)),
+    [selectableRows, selectedIds],
+  );
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected =
+        selectableRows.length > 0 &&
+        selectableRows.every((row) => next.has(row.id));
+      if (allSelected) {
+        selectableRows.forEach((row) => next.delete(row.id));
+      } else {
+        selectableRows.forEach((row) => next.add(row.id));
+      }
+      return next;
+    });
+  }, [selectableRows]);
+
+  // Selected expense rows (from currently loaded data) for the batch modal
+  const selectedExpenses = useMemo(
+    () => data.filter((row) => selectedIds.has(row.id)),
+    [data, selectedIds],
+  );
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`確定要刪除選取的 ${selectedIds.size} 筆支出嗎？`)) return;
+    try {
+      for (const id of Array.from(selectedIds)) {
+        await expensesApi.delete(id);
+      }
+      setSelectedIds(new Set());
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '批量刪除失敗');
+    }
+  }, [selectedIds, load]);
 
   // Filtered partners for supplier combobox
   const filteredPartners = useMemo(() => {
@@ -905,6 +987,43 @@ export default function ExpensesPage() {
     handleColumnResize,
   } = useColumnConfig('expenses', columns);
 
+  // Checkbox selection column — kept OUTSIDE columnConfig so it is always first,
+  // never hidden, and never shown in the column customizer panel.
+  const selectColumn: InlineColumn = {
+    key: '_select',
+    label: '',
+    sortable: false,
+    editable: false,
+    filterable: false,
+    className: 'w-10 text-center',
+    headerRender: () => (
+      <input
+        type="checkbox"
+        className="cursor-pointer"
+        checked={allSelectableSelected}
+        onChange={toggleSelectAll}
+        onClick={(e) => e.stopPropagation()}
+        title="全選/取消全選（僅未付款/部分付款）"
+      />
+    ),
+    onCellClick: (e) => e.stopPropagation(),
+    render: (_v: any, row: any) => {
+      if (!isSelectable(row)) return null;
+      return (
+        <input
+          type="checkbox"
+          className="cursor-pointer"
+          checked={selectedIds.has(row.id)}
+          onChange={() => toggleSelect(row.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      );
+    },
+  };
+  const tableColumns = isReadOnly()
+    ? (visibleColumns as any)
+    : [selectColumn, ...(visibleColumns as any)];
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -922,7 +1041,37 @@ export default function ExpensesPage() {
       <div className="card">
         <InlineEditDataTable
           exportFilename="支出管理列表"
-          columns={visibleColumns as any}
+          columns={tableColumns}
+          actions={
+            !isReadOnly() && selectedIds.size > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">
+                  已選 {selectedIds.size} 筆
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchPayment(true)}
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
+                >
+                  批量付款
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchDelete}
+                  className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"
+                >
+                  批量刪除
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  取消選取
+                </button>
+              </div>
+            ) : undefined
+          }
           columnConfigs={columnConfigs}
           onColumnConfigChange={handleColumnConfigChange}
           onColumnConfigReset={handleReset}
@@ -1393,6 +1542,20 @@ export default function ExpensesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Batch Payment Modal */}
+      <BatchPaymentModal
+        isOpen={showBatchPayment}
+        onClose={() => setShowBatchPayment(false)}
+        expenses={selectedExpenses as any}
+        bankAccountOptions={bankAccountOptions}
+        companyOptions={companyOptions}
+        paymentMethodOptions={paymentMethodOptions}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          load();
+        }}
+      />
     </div>
   );
 }
