@@ -262,13 +262,17 @@ export default function InlineEditDataTable({
   // Apply columnConfigs: filter visible columns and sort by order
   const visibleDisplayColumns = useMemo(() => {
     if (!columnConfigs || columnConfigs.length === 0) return displayColumns;
+    // Special columns (key starts with _) are always shown and not managed by columnConfig
+    const specialColumns = displayColumns.filter(c => c.key.startsWith('_'));
     const sorted = [...columnConfigs]
       .filter(c => c.visible)
       .sort((a, b) => a.order - b.order);
-    return sorted
+    const configuredColumns = sorted
       .map(cfg => displayColumns.find(c => c.key === cfg.key))
       .filter((c): c is NonNullable<typeof c> => c != null);
+    return [...specialColumns, ...configuredColumns];
   }, [columnConfigs, displayColumns]);
+
 
   const allColumns = [...visibleDisplayColumns, actionColumn];
 
