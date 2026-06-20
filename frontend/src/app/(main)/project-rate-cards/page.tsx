@@ -331,7 +331,7 @@ export default function ProjectRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋工程項目、客戶、項目名稱..."
-          onRowClick={(row) => router.push(`/project-rate-cards/${row.id}`)}
+          onRowClick={(row) => window.open(`/project-rate-cards/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

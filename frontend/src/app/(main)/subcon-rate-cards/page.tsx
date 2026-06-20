@@ -534,7 +534,7 @@ export default function SubconRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋供應商、車牌、客戶、起終點..."
-          onRowClick={(row) => router.push(`/subcon-rate-cards/${row.id}`)}
+          onRowClick={(row) => window.open(`/subcon-rate-cards/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

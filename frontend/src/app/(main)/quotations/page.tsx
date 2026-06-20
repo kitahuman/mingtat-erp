@@ -580,7 +580,7 @@ export default function QuotationsPage() {
             setPage(1);
           }}
           searchPlaceholder="搜尋報價單號、工程名稱、客戶..."
-          onRowClick={(row) => router.push(`/quotations/${row.id}`)}
+          onRowClick={(row) => window.open(`/quotations/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

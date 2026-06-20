@@ -250,7 +250,7 @@ export default function ProjectsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋工程編號、工程名稱、客戶..."
-          onRowClick={(row) => router.push(`/projects/${row.id}`)}
+          onRowClick={(row) => window.open(`/projects/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

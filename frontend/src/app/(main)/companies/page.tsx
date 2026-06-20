@@ -89,7 +89,7 @@ export default function CompaniesPage() {
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
           searchPlaceholder="搜尋公司名稱或代號..."
-          onRowClick={(row) => router.push(`/companies/${row.id}`)}
+          onRowClick={(row) => window.open(`/companies/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

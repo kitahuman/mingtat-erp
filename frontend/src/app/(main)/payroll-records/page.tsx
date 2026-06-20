@@ -1,4 +1,5 @@
 'use client';
+import { usePageState } from '@/hooks/usePageState';
 
 import { useState, useEffect, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -629,10 +630,10 @@ export default function PayrollRecordsPage() {
         searchPlaceholder="搜尋員工姓名/編號..."
         onRowClick={(row) => {
           if (row.record_type === 'ai_session' && row.ai_session_id) {
-            router.push(`/payroll/ai-reconcile/${row.ai_session_id}`);
+            window.open(`/payroll/ai-reconcile/${row.ai_session_id}`, '_blank');
             return;
           }
-          router.push(`/payroll/${row.id}`);
+          window.open(`/payroll/${row.id}`, '_blank');
         }}
         loading={loading}
         sortBy={sortBy}

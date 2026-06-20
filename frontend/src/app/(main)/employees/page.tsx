@@ -1213,7 +1213,7 @@ export default function EmployeesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋姓名、編號、電話或身份證..."
-            onRowClick={(row) => router.push(`/employees/${row.id}`)}
+            onRowClick={(row) => window.open(`/employees/${row.id}`, '_blank')}
             loading={loading}
             sortBy={sortBy}
             sortOrder={sortOrder}

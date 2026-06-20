@@ -464,7 +464,7 @@ export default function FleetRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋客戶、合約、起終點..."
-          onRowClick={(row) => router.push(`/fleet-rate-cards/${row.id}`)}
+          onRowClick={(row) => window.open(`/fleet-rate-cards/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

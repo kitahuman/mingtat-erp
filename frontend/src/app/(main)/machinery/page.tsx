@@ -357,7 +357,7 @@ export default function MachineryPage() {
             setPage(1);
           }}
           searchPlaceholder="搜尋編號、品牌、型號或序號..."
-          onRowClick={(row) => router.push(`/machinery/${row.id}`)}
+          onRowClick={(row) => window.open(`/machinery/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

@@ -750,7 +750,7 @@ export default function VehiclesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋車牌、品牌、型號或底盤號碼..."
-            onRowClick={(row) => router.push(`/vehicles/${row.id}`)}
+            onRowClick={(row) => window.open(`/vehicles/${row.id}`, '_blank')}
             loading={loading}
             sortBy={sortBy}
             sortOrder={sortOrder}
@@ -923,7 +923,7 @@ export default function VehiclesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋車牌..."
-            onRowClick={(row) => router.push(`/vehicles/plates/${row.id}`)}
+            onRowClick={(row) => window.open(`/vehicles/plates/${row.id}`, '_blank')}
             loading={loading}
             sortBy={plateSortBy}
             sortOrder={plateSortOrder}

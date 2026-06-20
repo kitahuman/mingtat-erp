@@ -70,7 +70,7 @@ export default function CompanyProfilesPage() {
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
           searchPlaceholder="搜尋代碼、公司名稱..."
-          onRowClick={(row) => router.push(`/company-profiles/${row.id}`)}
+          onRowClick={(row) => window.open(`/company-profiles/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

@@ -1108,7 +1108,7 @@ export default function InvoicesPage() {
           page={page}
           limit={50}
           onPageChange={setPage}
-          onRowClick={(row) => router.push(`/invoices/${row.id}`)}
+          onRowClick={(row) => window.open(`/invoices/${row.id}`, '_blank')}
           loading={loading}
           serverSideFilter
           columnFilters={activeColumnFilters}

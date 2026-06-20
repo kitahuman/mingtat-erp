@@ -321,7 +321,7 @@ export default function InvoiceStatementsPage() {
           setPage(1);
         }}
         searchPlaceholder="搜尋清單編號、標題、客戶..."
-        onRowClick={(row) => router.push(`/invoice-statements/${row.id}`)}
+        onRowClick={(row) => window.open(`/invoice-statements/${row.id}`, '_blank')}
         loading={loading}
         sortBy={sortBy}
         sortOrder={sortOrder}

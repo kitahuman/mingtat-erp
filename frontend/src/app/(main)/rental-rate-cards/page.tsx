@@ -439,7 +439,7 @@ export default function RentalRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋客戶、名稱、起終點..."
-          onRowClick={(row) => router.push(`/rental-rate-cards/${row.id}`)}
+          onRowClick={(row) => window.open(`/rental-rate-cards/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
