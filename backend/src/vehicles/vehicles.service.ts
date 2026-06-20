@@ -9,7 +9,7 @@ export class VehiclesService {
 
   async simple() {
     const vehicles = await this.prisma.vehicle.findMany({
-      where: { status: { in: ['active', 'maintenance'] }, deleted_at: null },
+      where: { status: { not: 'scrapped' }, deleted_at: null },
       select: { id: true, plate_number: true, machine_type: true, tonnage: true },
       orderBy: { plate_number: 'asc' },
     });
