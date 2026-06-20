@@ -539,7 +539,7 @@ export default function PaymentInPage() {
         limit={50}
         onPageChange={setPage}
         loading={loading}
-        onRowClick={(row) => router.push(`/payment-in/${row.id}`)}
+        onRowClick={(row) => window.open(`/payment-in/${row.id}`, '_blank')}
         onSave={isReadOnly() ? undefined : handleSave}
         onDelete={isReadOnly() ? undefined : handleDelete}
         sortBy={sortBy}

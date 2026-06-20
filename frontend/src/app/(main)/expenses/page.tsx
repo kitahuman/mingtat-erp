@@ -1103,7 +1103,7 @@ export default function ExpensesPage() {
           }}
           onSave={handleInlineSave}
           onDelete={handleInlineDelete}
-          onRowClick={(row) => router.push(`/expenses/${row.id}`)}
+          onRowClick={(row) => window.open(`/expenses/${row.id}`, '_blank')}
           filters={
             <DateRangeFilter
               dateTypeOptions={[

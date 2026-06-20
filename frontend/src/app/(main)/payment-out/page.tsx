@@ -463,7 +463,7 @@ export default function PaymentOutPage() {
             onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
-        onRowClick={(row: any) => router.push(`/payment-out/${row.id}`)}
+        onRowClick={(row: any) => window.open(`/payment-out/${row.id}`, '_blank')}
         serverSideFilter={true}
         columnFilters={columnFilters}
         onColumnFilterChange={(f) => { setColumnFilters(f); setPage(1); }}
