@@ -124,8 +124,18 @@ export class PaymentOutService {
     const orderBy: any = { [sortBy]: sortOrder };
 
     const where: Prisma.PaymentOutWhereInput = {};
-    if (query.expense_id) where.expense_id = query.expense_id;
-    if (query.subcon_payroll_id) where.subcon_payroll_id = query.subcon_payroll_id;
+    if (query.expense_id) {
+      where.OR = [
+        { expense_id: query.expense_id },
+        { allocations: { some: { payment_out_allocation_expense_id: query.expense_id } } },
+      ];
+    }
+    if (query.subcon_payroll_id) {
+      where.OR = [
+        { subcon_payroll_id: query.subcon_payroll_id },
+        { allocations: { some: { payment_out_allocation_subcon_payroll_id: query.subcon_payroll_id } } },
+      ];
+    }
     if (query.company_id) where.company_id = query.company_id;
     if (query.payment_out_status) where.payment_out_status = query.payment_out_status;
     // Column filters
