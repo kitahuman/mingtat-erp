@@ -1310,7 +1310,9 @@ export class PayrollCalculationService {
   buildGroupedSettlement(pwls: any[]): any[] {
     const groups = new Map<string, any>();
     for (const pwl of pwls) {
-      const key = this.buildGroupKeyFromPwl(pwl);
+      const baseKey = this.buildGroupKeyFromPwl(pwl);
+      const matchStatus = pwl.price_match_status || 'unmatched';
+      const key = `${baseKey}|${matchStatus}`;
       const billingType = this.normalizeBillingQuantityType(pwl.billing_quantity_type);
       const quantity = Number(pwl.quantity) || 1;
       const productQuantity = this.getProductQuantity(pwl);
@@ -1398,7 +1400,9 @@ export class PayrollCalculationService {
   buildGroupedSettlementFromWorkLogs(workLogs: any[]): any[] {
     const groups = new Map<string, any>();
     for (const wl of workLogs) {
-      const key = this.buildGroupKeyFromWorkLog(wl);
+      const baseKey = this.buildGroupKeyFromWorkLog(wl);
+      const matchStatus = wl._price_match_status || wl.price_match_status || 'unmatched';
+      const key = `${baseKey}|${matchStatus}`;
       const billingType = this.normalizeBillingQuantityType(wl.billing_quantity_type);
       const quantity = Number(wl.quantity) || 1;
       const productQuantity = this.getProductQuantity(wl);

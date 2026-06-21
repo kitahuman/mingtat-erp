@@ -3409,7 +3409,11 @@ export class PayrollService {
     });
 
     const matchingPwls = pwls.filter(
-      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+      (pwl) => {
+        const baseKey = this.calcService.buildGroupKeyFromPwl(pwl);
+        const fullKey = `${baseKey}|${pwl.price_match_status || 'unmatched'}`;
+        return fullKey === groupKey || baseKey === groupKey;
+      },
     );
 
     if (matchingPwls.length === 0) {
@@ -3450,7 +3454,11 @@ export class PayrollService {
     });
 
     const matchingPwls = pwls.filter(
-      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+      (pwl) => {
+        const baseKey = this.calcService.buildGroupKeyFromPwl(pwl);
+        const fullKey = `${baseKey}|${pwl.price_match_status || 'unmatched'}`;
+        return fullKey === groupKey || baseKey === groupKey;
+      },
     );
 
     if (matchingPwls.length === 0) {
@@ -3491,7 +3499,11 @@ export class PayrollService {
     });
 
     const matchingPwls = pwls.filter(
-      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+      (pwl) => {
+        const baseKey = this.calcService.buildGroupKeyFromPwl(pwl);
+        const fullKey = `${baseKey}|${pwl.price_match_status || 'unmatched'}`;
+        return fullKey === groupKey || baseKey === groupKey;
+      },
     );
 
     if (matchingPwls.length === 0) {
@@ -3620,7 +3632,11 @@ export class PayrollService {
       where: { payroll_id: payrollId, is_excluded: false },
     });
     const matchingPwls = pwls.filter(
-      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+      (pwl) => {
+        const baseKey = this.calcService.buildGroupKeyFromPwl(pwl);
+        const fullKey = `${baseKey}|${pwl.price_match_status || 'unmatched'}`;
+        return fullKey === groupKey || baseKey === groupKey;
+      },
     );
     if (matchingPwls.length === 0) {
       throw new NotFoundException('找不到對應的工作記錄組');
@@ -3671,7 +3687,11 @@ export class PayrollService {
       where: { payroll_id: payrollId, is_excluded: false },
     });
     const matchingPwls = pwls.filter(
-      (pwl) => this.calcService.buildGroupKeyFromPwl(pwl) === groupKey,
+      (pwl) => {
+        const baseKey = this.calcService.buildGroupKeyFromPwl(pwl);
+        const fullKey = `${baseKey}|${pwl.price_match_status || 'unmatched'}`;
+        return fullKey === groupKey || baseKey === groupKey;
+      },
     );
     if (matchingPwls.length === 0) {
       throw new NotFoundException('找不到對應的工作記錄組');

@@ -44,7 +44,6 @@ export class PricingService {
     console.log(`[DEBUG matchFleetRateCardInMemory] clientCards 數量: ${clientCards.length}`);
 
     clientCards.forEach((rc, i) => {
-      const failCompany = companyId && rc.company_id && rc.company_id !== companyId;
       const failContract = clientContractNo && rc.client_contract_no && rc.client_contract_no !== clientContractNo;
       const failService = serviceType && rc.service_type && rc.service_type !== serviceType;
       const failDayNight = dayNight && rc.day_night && rc.day_night !== dayNight;
@@ -53,12 +52,11 @@ export class PricingService {
       const failOrigin = origin && rc.origin && rc.origin !== origin;
       const failDest = destination && rc.destination && rc.destination !== destination;
 
-      const pass = !failCompany && !failContract && !failService && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
-      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} client_contract_no=${JSON.stringify(rc.client_contract_no)} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failCompany && 'company', failContract && 'client_contract_no', failService && 'service_type', failDayNight && 'day_night', failTonnage && 'tonnage', failMachineType && 'machine_type', failOrigin && 'origin', failDest && 'destination'].filter(Boolean).join(',') || '無'})`);
+      const pass = !failContract && !failService && !failDayNight && !failTonnage && !failMachineType && !failOrigin && !failDest;
+      console.log(`[DEBUG matchFleetRateCardInMemory] card[${i}] id=${rc.id} company_id=${rc.company_id} client_contract_no=${JSON.stringify(rc.client_contract_no)} service_type=${JSON.stringify(rc.service_type)} day_night=${JSON.stringify(rc.day_night)} tonnage=${JSON.stringify(rc.tonnage)} machine_type=${JSON.stringify(rc.machine_type)} origin=${JSON.stringify(rc.origin)} destination=${JSON.stringify(rc.destination)} => 通過:${pass} (失敗原因: ${[failContract && 'client_contract_no', failService && 'service_type', failDayNight && 'day_night', failTonnage && 'tonnage', failMachineType && 'machine_type', failOrigin && 'origin', failDest && 'destination'].filter(Boolean).join(',') || '無'})`);
     });
 
     const matched = clientCards.filter(rc => {
-      if (companyId && rc.company_id && rc.company_id !== companyId) return false;
       if (clientContractNo && rc.client_contract_no && rc.client_contract_no !== clientContractNo) return false;
       if (serviceType && rc.service_type && rc.service_type !== serviceType) return false;
       if (dayNight && rc.day_night && rc.day_night !== dayNight) return false;
@@ -96,7 +94,6 @@ export class PricingService {
     destination: string | null,
   ): Promise<MatchResult> {
     const where: any = { status: 'active', client_id: clientId };
-    if (companyId) where.company_id = companyId;
     if (clientContractNo) where.client_contract_no = clientContractNo;
     if (serviceType) where.service_type = serviceType;
     if (dayNight) where.day_night = dayNight;
