@@ -72,6 +72,12 @@ export default function DocumentUpload({ entityType, entityId, docTypes }: Docum
     return `${base}/documents/${id}/download?token=${token}`;
   };
 
+  const getPreviewUrl = (id: number) => {
+    const base = process.env.NEXT_PUBLIC_API_URL || '/api';
+    const token = Cookies.get('token');
+    return `${base}/documents/${id}/preview?token=${token}`;
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -159,7 +165,8 @@ export default function DocumentUpload({ entityType, entityId, docTypes }: Docum
                   <td className="px-4 py-2 text-gray-500">{fmtDate(doc.created_at)}</td>
                   <td className="px-4 py-2">
                     <div className="flex gap-2">
-                      <a href={getDownloadUrl(doc.id)} target="_blank" className="text-blue-600 hover:underline text-xs">下載</a>
+                      <a href={getPreviewUrl(doc.id)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs">預覽</a>
+                      <a href={getDownloadUrl(doc.id)} target="_blank" className="text-green-600 hover:underline text-xs">下載</a>
                       <button onClick={() => handleDelete(doc.id)} className="text-red-600 hover:underline text-xs">刪除</button>
                     </div>
                   </td>

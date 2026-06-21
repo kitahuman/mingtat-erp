@@ -309,6 +309,7 @@ export const documentsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   download: (id: number) => `${API_BASE_URL}/documents/${id}/download`,
+  preview: (id: number) => `${API_BASE_URL}/documents/${id}/preview`,
   update: (id: number, data: any) => api.put(`/documents/${id}`, data),
   remove: (id: number) => api.delete(`/documents/${id}`),
 };

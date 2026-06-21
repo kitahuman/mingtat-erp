@@ -92,6 +92,19 @@ export class DocumentsController {
     stream.pipe(res);
   }
 
+  @Get(':id/preview')
+  async preview(@Param('id') id: number, @Res() res: Response) {
+    const doc = await this.service.findOne(Number(id));
+    const filePath = path.join(getUploadDir(), doc.file_path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: '文件不存在' });
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.file_name)}"`);
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  }
+
   @Put(':id')
   update(@Param('id') id: number, @Body() dto: UpdateDocumentDto) {
     return this.service.update(Number(id), dto);
