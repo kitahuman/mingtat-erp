@@ -75,12 +75,20 @@ export class InvoicePdfService {
       const companyName = this.escapeHtml(
         this.invoiceCompanyNameEn(invoice.company) || invoice.company?.name || 'Invoice',
       );
+      const invoiceNo = invoice.invoice_no || '';
       const pdf = await page.pdf({
         format: 'A4',
         preferCSSPageSize: true,
         printBackground: true,
-        displayHeaderFooter: false,
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
+        displayHeaderFooter: true,
+        headerTemplate: '<span></span>',
+        footerTemplate: `
+          <div style="width: 100%; font-size: 9px; color: #666; padding: 0 10mm; display: flex; justify-content: space-between; align-items: center;">
+            <span>${invoiceNo}</span>
+            <span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span>
+          </div>
+        `,
+        margin: { top: '0', right: '0', bottom: '14mm', left: '0' },
       });
       return { pdf: Buffer.from(pdf), invoice };
     } finally {
