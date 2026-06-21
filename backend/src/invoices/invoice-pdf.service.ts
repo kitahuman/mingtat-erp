@@ -437,7 +437,7 @@ export class InvoicePdfService {
     .signature-stamp-space { height: 100px; margin-bottom: 0px; display: flex; align-items: flex-end; justify-content: center; }
     .signature-stamp-space.empty { height: 100px; }
     .signature-line { border-top: 1.2px solid #243b53; width: 100%; height: 0; }
-    .stamp-img { width: auto; max-width: 120px; max-height: 120px; object-fit: contain; display: block; margin-bottom: -5px; }
+    .stamp-img { width: auto; max-width: 120px; max-height: 100px; object-fit: contain; display: block; margin-bottom: 0; }
     .signature-company-name { margin-top: 6px; text-align: center; font-size: 11px; font-weight: 800; color: #243b53; writing-mode: horizontal-tb; text-orientation: mixed; }
   </style>
 </head>
