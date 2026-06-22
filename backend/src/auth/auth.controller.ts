@@ -33,4 +33,11 @@ export class AuthController {
   getPageDefinitions() {
     return this.authService.getAllPages();
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh JWT token using current token' })
+  async refresh(@Request() req: any) {
+    return this.authService.refresh(req.user.sub);
+  }
 }

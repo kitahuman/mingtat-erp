@@ -79,6 +79,38 @@ export class AuthService {
   }
 
   /**
+   * Refresh JWT token using the current user's ID from the token payload
+   */
+  async refresh(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('帳號已被停用或不存在');
+    }
+
+    const allowedPages = computeEffectivePages(
+      user.role,
+      user.page_permissions as any,
+    );
+
+    const payload = { sub: user.id, username: user.username, role: user.role };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        phone: user.phone,
+        department: user.department,
+        isActive: user.isActive,
+        allowedPages,
+        ...(user.role === 'director' ? { directorWritablePages: DIRECTOR_WRITABLE_PAGES } : {}),
+      },
+    };
+  }
+
+  /**
    * Get all page definitions (for admin UI)
    */
   getAllPages() {

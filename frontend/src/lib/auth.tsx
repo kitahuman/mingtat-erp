@@ -57,6 +57,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Decode JWT payload without external library
+   * Extracts exp (expiration time in seconds) from token
+   */
+  const decodeJwtPayload = (token: string): { exp?: number } => {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return {};
+      const payload = parts[1];
+      // Browser-compatible base64 decode
+      const binaryString = atob(payload);
+      const decoded = JSON.parse(binaryString);
+      return decoded;
+    } catch {
+      return {};
+    }
+  };
+
+  /**
+   * Check if token is expiring soon (less than 2 days remaining)
+   */
+  const isTokenExpiringSoon = (token: string): boolean => {
+    const payload = decodeJwtPayload(token);
+    if (!payload.exp) return false;
+    const now = Math.floor(Date.now() / 1000);
+    const timeRemaining = payload.exp - now;
+    const TWO_DAYS_IN_SECONDS = 172800;
+    return timeRemaining < TWO_DAYS_IN_SECONDS;
+  };
+
+  /**
+   * Attempt to refresh the token silently
+   */
+  const attemptSilentRefresh = async () => {
+    try {
+      const token = Cookies.get('token');
+      if (!token || !isTokenExpiringSoon(token)) {
+        return;
+      }
+      const res = await authApi.refresh();
+      Cookies.set('token', res.data.access_token, { expires: 7 });
+      Cookies.set('user', JSON.stringify(res.data.user), { expires: 7 });
+      setUser(res.data.user);
+    } catch {
+      // Silently fail - let the token expire naturally and trigger 401 redirect
+    }
+  };
+
   useEffect(() => {
     const savedUser = Cookies.get('user');
     const token = Cookies.get('token');
@@ -64,8 +112,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setUser(JSON.parse(savedUser));
       } catch {}
+      // Check and refresh token on page load if expiring soon
+      attemptSilentRefresh();
     }
     setLoading(false);
+  }, []);
+
+  // Set up 4-hour interval to check and refresh token
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      attemptSilentRefresh();
+    }, 4 * 60 * 60 * 1000); // 4 hours in milliseconds
+    return () => clearInterval(intervalId);
   }, []);
 
   const login = async (username: string, password: string) => {

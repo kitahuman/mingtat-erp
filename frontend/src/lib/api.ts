@@ -85,6 +85,7 @@ const withAuthToken = (url: string) => {
 export const authApi = {
   login: (data: { username: string; password: string }) =>
     api.post('/auth/login', data),
+  refresh: () => api.post('/auth/refresh'),
   profile: () => api.get('/auth/profile'),
   getPageDefinitions: () => api.get('/auth/page-definitions'),
 };
