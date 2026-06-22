@@ -163,7 +163,7 @@ export default function InvoiceStatementDetailPage() {
       const res = await invoiceStatementsApi.get(statementId);
       applyStatement(res.data);
     } catch {
-      router.push('/invoice-statements');
+      router.push('/invoices?tab=statements');
     } finally {
       setLoading(false);
     }
@@ -235,7 +235,7 @@ export default function InvoiceStatementDetailPage() {
     if (!confirm('確定要刪除此發票清單？')) return;
     try {
       await invoiceStatementsApi.delete(statementId);
-      router.push('/invoice-statements');
+      router.push('/invoices?tab=statements');
     } catch (error: any) {
       alert(error.response?.data?.message || '刪除失敗');
     }
@@ -374,7 +374,7 @@ export default function InvoiceStatementDetailPage() {
     <div className="p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/invoice-statements" className="mb-2 inline-block text-sm text-primary-600 hover:text-primary-700">← 返回客戶發票清單</Link>
+          <Link href="/invoices?tab=statements" className="mb-2 inline-block text-sm text-primary-600 hover:text-primary-700">← 返回客戶發票清單</Link>
           <h1 className="text-2xl font-bold text-gray-900">{statement.statement_no}</h1>
           <p className="mt-1 text-sm text-gray-500">{statement.statement_title || '未命名發票清單'}</p>
         </div>

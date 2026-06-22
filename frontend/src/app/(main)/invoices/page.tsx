@@ -884,7 +884,10 @@ export default function InvoicesPage() {
       const res = await invoiceStatementsApi.create(payload);
       setShowStatementCreate(false);
       setSelectedInvoiceRows({});
-      router.push(`/invoice-statements/${res.data.id}`);
+      // 建立後重新加載發票清單 tab
+      setStatementListPage(1);
+      // 可選：也可以打開詳情頁
+      // window.open(`/invoice-statements/${res.data.id}`, '_blank');
     } catch (err: any) {
       alert(err.response?.data?.message || '建立發票清單失敗');
     } finally {
@@ -1189,13 +1192,7 @@ export default function InvoicesPage() {
                 顯示由新版清單功能產生的 InvoiceStatement 記錄，共 {statementRecordsTotal} 份。
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => router.push('/invoice-statements')}
-              className="btn-secondary"
-            >
-              管理發票清單
-            </button>
+
           </div>
 
           <DataTable
