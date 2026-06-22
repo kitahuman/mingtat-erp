@@ -121,23 +121,7 @@ export class InvoicePdfService {
     if (!invoice || invoice.deleted_at)
       throw new NotFoundException('發票不存在');
 
-    const language = this.normalizeLanguage(
-      options.language ||
-        (invoice.invoice_language as InvoicePdfLanguage) ||
-        'zh',
-    );
-    const showBank = options.showBank ?? invoice.invoice_show_bank;
-    const showClientAddress =
-      options.showClientAddress ?? invoice.invoice_show_client_address;
-    const showClientPhone =
-      options.showClientPhone ?? invoice.invoice_show_client_phone;
-    const showClientContact = options.showClientContact ?? true;
-    const showClientInfo = options.showClientInfo ?? true;
-    const legacyShowSignature = options.showSignature ?? true;
-    const showClientSignature = options.showClientSignature ?? legacyShowSignature;
-    const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
-    const showCompanyStamp = options.showCompanyStamp ?? false;
-
+    // Read system settings for both font sizes and print defaults
     const systemSettings = await this.prisma.systemSetting.findMany({
       where: {
         key: {
@@ -146,6 +130,14 @@ export class InvoicePdfService {
             'invoice_pdf_item_name_font_size',
             'invoice_pdf_item_desc_font_size',
             'invoice_pdf_payment_terms_font_size',
+            'print_invoice_language',
+            'print_invoice_show_bank',
+            'print_invoice_show_client_address',
+            'print_invoice_show_client_phone',
+            'print_invoice_show_client_contact',
+            'print_invoice_show_client_signature',
+            'print_invoice_show_company_signature',
+            'print_invoice_show_company_stamp',
           ],
         },
       },
@@ -153,6 +145,31 @@ export class InvoicePdfService {
     const defaults = Object.fromEntries(
       systemSettings.map((setting) => [setting.key, setting.value]),
     );
+
+    // Helper function to convert string boolean to actual boolean
+    const toBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return defaultValue;
+    };
+
+    const language = this.normalizeLanguage(
+      options.language ||
+        (invoice.invoice_language as InvoicePdfLanguage) ||
+        (defaults['print_invoice_language'] as InvoicePdfLanguage) ||
+        'zh',
+    );
+    const showBank = options.showBank ?? invoice.invoice_show_bank ?? toBoolean(defaults['print_invoice_show_bank'], true);
+    const showClientAddress =
+      options.showClientAddress ?? invoice.invoice_show_client_address ?? toBoolean(defaults['print_invoice_show_client_address'], true);
+    const showClientPhone =
+      options.showClientPhone ?? invoice.invoice_show_client_phone ?? toBoolean(defaults['print_invoice_show_client_phone'], true);
+    const showClientContact = options.showClientContact ?? toBoolean(defaults['print_invoice_show_client_contact'], true);
+    const showClientInfo = options.showClientInfo ?? true;
+    const legacyShowSignature = options.showSignature ?? true;
+    const showClientSignature = options.showClientSignature ?? toBoolean(defaults['print_invoice_show_client_signature'], legacyShowSignature);
+    const showCompanySignature = options.showCompanySignature ?? toBoolean(defaults['print_invoice_show_company_signature'], legacyShowSignature);
+    const showCompanyStamp = options.showCompanyStamp ?? toBoolean(defaults['print_invoice_show_company_stamp'], false);
     const docFontSizes = (invoice.pdf_font_sizes as any) || {};
     const finalFontSizes = {
       title: this.resolveFontSize(

@@ -970,6 +970,33 @@ export class QuotationsService {
       quotationDate,
     );
 
+    // Read system settings for print defaults
+    const systemSettings = await this.prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'print_quotation_language',
+            'print_quotation_show_client_address',
+            'print_quotation_show_client_phone',
+            'print_quotation_show_client_contact',
+            'print_quotation_show_client_signature',
+            'print_quotation_show_company_signature',
+            'print_quotation_show_company_stamp',
+          ],
+        },
+      },
+    });
+    const systemDefaults = Object.fromEntries(
+      systemSettings.map((setting) => [setting.key, setting.value]),
+    );
+
+    // Helper function to convert string boolean to actual boolean
+    const toBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return defaultValue;
+    };
+
     // Calculate total
     let total_amount = 0;
     const processedItems: (QuotationItemDto & {

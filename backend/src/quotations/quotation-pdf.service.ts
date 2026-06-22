@@ -92,17 +92,7 @@ export class QuotationPdfService {
     if (!quotation || quotation.deleted_at)
       throw new NotFoundException('報價單不存在');
 
-    const language = this.normalizeLanguage(options.language || 'zh');
-    const legacyShowSignature = options.showSignature ?? true;
-    const showClientSignature = options.showClientSignature ?? legacyShowSignature;
-    const showCompanySignature = options.showCompanySignature ?? legacyShowSignature;
-    const showCompanyStamp = options.showCompanyStamp ?? false;
-    const showClientAddress = options.showClientAddress ?? true;
-    const showClientPhone = options.showClientPhone ?? true;
-    const showClientContact = options.showClientContact ?? true;
-    const showClientInfo = options.showClientInfo ?? true;
-
-    // Get system defaults
+    // Get system defaults for both font sizes and print settings
     const systemSettings = await this.prisma.systemSetting.findMany({
       where: {
         key: {
@@ -111,11 +101,35 @@ export class QuotationPdfService {
             'quotation_pdf_item_name_font_size',
             'quotation_pdf_item_desc_font_size',
             'quotation_pdf_payment_terms_font_size',
+            'print_quotation_language',
+            'print_quotation_show_client_address',
+            'print_quotation_show_client_phone',
+            'print_quotation_show_client_contact',
+            'print_quotation_show_client_signature',
+            'print_quotation_show_company_signature',
+            'print_quotation_show_company_stamp',
           ],
         },
       },
     });
     const defaults = Object.fromEntries(systemSettings.map((s) => [s.key, s.value]));
+
+    // Helper function to convert string boolean to actual boolean
+    const toBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return defaultValue;
+    };
+
+    const language = this.normalizeLanguage(options.language || (defaults['print_quotation_language'] as any) || 'zh');
+    const legacyShowSignature = options.showSignature ?? true;
+    const showClientSignature = options.showClientSignature ?? toBoolean(defaults['print_quotation_show_client_signature'], legacyShowSignature);
+    const showCompanySignature = options.showCompanySignature ?? toBoolean(defaults['print_quotation_show_company_signature'], legacyShowSignature);
+    const showCompanyStamp = options.showCompanyStamp ?? toBoolean(defaults['print_quotation_show_company_stamp'], false);
+    const showClientAddress = options.showClientAddress ?? toBoolean(defaults['print_quotation_show_client_address'], true);
+    const showClientPhone = options.showClientPhone ?? toBoolean(defaults['print_quotation_show_client_phone'], true);
+    const showClientContact = options.showClientContact ?? toBoolean(defaults['print_quotation_show_client_contact'], true);
+    const showClientInfo = options.showClientInfo ?? true;
 
     // Merge font sizes: options > document override > system default
     const docFontSizes = (quotation.pdf_font_sizes as any) || {};

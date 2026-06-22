@@ -975,6 +975,27 @@ export class InvoicesService {
       otherCharges,
     );
 
+    // Read system settings for print defaults
+    const systemSettings = await this.prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'print_invoice_language',
+            'print_invoice_show_bank',
+            'print_invoice_show_client_address',
+            'print_invoice_show_client_phone',
+            'print_invoice_show_client_contact',
+            'print_invoice_show_client_signature',
+            'print_invoice_show_company_signature',
+            'print_invoice_show_company_stamp',
+          ],
+        },
+      },
+    });
+    const systemDefaults = Object.fromEntries(
+      systemSettings.map((setting) => [setting.key, setting.value]),
+    );
+
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
@@ -1000,10 +1021,10 @@ export class InvoicesService {
         outstanding: total_amount,
         payment_terms: dto.payment_terms || null,
         invoice_custom_payment_terms: dto.invoice_custom_payment_terms || null,
-        invoice_language: dto.invoice_language || 'zh',
-        invoice_show_bank: dto.invoice_show_bank ?? true,
-        invoice_show_client_address: dto.invoice_show_client_address ?? true,
-        invoice_show_client_phone: dto.invoice_show_client_phone ?? true,
+        invoice_language: dto.invoice_language || systemDefaults.print_invoice_language || 'zh',
+        invoice_show_bank: dto.invoice_show_bank ?? (systemDefaults.print_invoice_show_bank === 'true' ? true : systemDefaults.print_invoice_show_bank === 'false' ? false : true),
+        invoice_show_client_address: dto.invoice_show_client_address ?? (systemDefaults.print_invoice_show_client_address === 'true' ? true : systemDefaults.print_invoice_show_client_address === 'false' ? false : true),
+        invoice_show_client_phone: dto.invoice_show_client_phone ?? (systemDefaults.print_invoice_show_client_phone === 'true' ? true : systemDefaults.print_invoice_show_client_phone === 'false' ? false : true),
         remarks: dto.remarks || null,
         invoice_revision_number: 0,
         invoice_is_active: true,
