@@ -2275,6 +2275,7 @@ model InvoiceStatement {
   statement_show_paid_columns Boolean @default(false)
   statement_show_bank_info    Boolean @default(false)
   statement_show_signature    Boolean @default(false)
+  statement_date          DateTime? @db.Timestamp
   created_by              Int?
   created_at              DateTime  @default(now()) @db.Timestamptz
   updated_at              DateTime  @default(now()) @updatedAt @db.Timestamptz

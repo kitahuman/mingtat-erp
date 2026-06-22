@@ -728,6 +728,7 @@ export class InvoiceStatementsService {
         statement_invoice_count: totals.statement_invoice_count,
         statement_remarks: dto.remarks?.trim() || null,
         statement_status: 'draft',
+        statement_date: dto.statement_date ? this.parseDate(dto.statement_date, '清單日期') : null,
         created_by: userId || null,
         items: {
           create: invoices.map((invoice, index) => ({
@@ -813,6 +814,9 @@ export class InvoiceStatementsService {
     }
     if (dto.period_end) {
       data.statement_period_end = this.parseDate(dto.period_end, '結束日期');
+    }
+    if (dto.statement_date !== undefined) {
+      data.statement_date = dto.statement_date ? this.parseDate(dto.statement_date, '清單日期') : null;
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {

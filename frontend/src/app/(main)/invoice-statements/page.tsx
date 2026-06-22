@@ -126,6 +126,15 @@ const STATEMENT_COLUMNS = [
     filterRender: (v: any) => STATUS_LABELS[v] || v || '-',
   },
   {
+    key: 'statement_date',
+    label: '清單日期',
+    sortable: true,
+    className: 'px-4 text-gray-600',
+    minWidth: 130,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
+  {
     key: 'created_at',
     label: '建立日期',
     sortable: true,

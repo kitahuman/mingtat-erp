@@ -51,6 +51,10 @@ export class CreateInvoiceStatementDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsOptional()
+  @IsString()
+  statement_date?: string;
 }
 
 export class UpdateInvoiceStatementDto {
@@ -96,6 +100,10 @@ export class UpdateInvoiceStatementDto {
   @IsOptional()
   @IsBoolean()
   statement_show_signature?: boolean;
+
+  @IsOptional()
+  @IsString()
+  statement_date?: string;
 }
 
 export class MatchInvoiceStatementInvoicesDto {

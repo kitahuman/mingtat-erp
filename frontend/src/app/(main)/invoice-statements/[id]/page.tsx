@@ -146,6 +146,7 @@ export default function InvoiceStatementDetailPage() {
       statement_status: data.statement_status || 'draft',
       period_start: toInputDate(data.statement_period_start),
       period_end: toInputDate(data.statement_period_end),
+      statement_date: toInputDate(data.statement_date),
       remarks: data.statement_remarks || '',
       statement_show_paid_columns: !!data.statement_show_paid_columns,
       statement_show_bank_info: !!data.statement_show_bank_info,
@@ -181,6 +182,7 @@ export default function InvoiceStatementDetailPage() {
         statement_status: form.statement_status,
         period_start: form.period_start,
         period_end: form.period_end,
+        statement_date: form.statement_date || undefined,
         remarks: form.remarks || undefined,
         statement_show_paid_columns: !!form.statement_show_paid_columns,
         statement_show_bank_info: !!form.statement_show_bank_info,
@@ -400,6 +402,7 @@ export default function InvoiceStatementDetailPage() {
                 <Field label="客戶">{statement.client?.code ? `${statement.client.code} - ${statement.client.name}` : statement.client?.name}</Field>
                 <Field label="期間開始">{fmtDate(statement.statement_period_start)}</Field>
                 <Field label="期間結束">{fmtDate(statement.statement_period_end)}</Field>
+                <Field label="清單日期">{fmtDate(statement.statement_date)}</Field>
                 <Field label="發票數量">{statement.statement_invoice_count}</Field>
                 <Field label="備註">{statement.statement_remarks}</Field>
               </dl>
@@ -424,6 +427,10 @@ export default function InvoiceStatementDetailPage() {
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">期間結束</label>
                     <DateInput value={form.period_end} onChange={(value) => setForm((prev: any) => ({ ...prev, period_end: value }))} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">清單日期</label>
+                    <DateInput value={form.statement_date} onChange={(value) => setForm((prev: any) => ({ ...prev, statement_date: value }))} />
                   </div>
                 </div>
                 <div>
