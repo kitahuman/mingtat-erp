@@ -422,15 +422,15 @@ export default function InvoiceStatementDetailPage() {
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">期間開始</label>
-                    <DateInput value={form.period_start} onChange={(value) => setForm((prev: any) => ({ ...prev, period_start: value }))} />
+                    <DateInput value={form.period_start} onChange={(value) => setForm((prev: any) => ({ ...prev, period_start: value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">期間結束</label>
-                    <DateInput value={form.period_end} onChange={(value) => setForm((prev: any) => ({ ...prev, period_end: value }))} />
+                    <DateInput value={form.period_end} onChange={(value) => setForm((prev: any) => ({ ...prev, period_end: value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">清單日期</label>
-                    <DateInput value={form.statement_date} onChange={(value) => setForm((prev: any) => ({ ...prev, statement_date: value }))} />
+                    <DateInput value={form.statement_date} onChange={(value) => setForm((prev: any) => ({ ...prev, statement_date: value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
                   </div>
                 </div>
                 <div>
