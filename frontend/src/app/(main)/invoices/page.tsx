@@ -49,6 +49,17 @@ const STATUS_COLORS: Record<string, string> = {
   void: 'bg-red-100 text-red-700',
 };
 
+// Statement status labels and colors
+const STATEMENT_STATUS_LABELS: Record<string, string> = {
+  draft: '草稿',
+  issued: '已發出',
+};
+
+const STATEMENT_STATUS_COLORS: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-700',
+  issued: 'bg-blue-100 text-blue-700',
+};
+
 const buildDefaultInvoiceTitle = (date?: string, contractNo?: string) => {
   if (!date || !contractNo) return '';
   const d = new Date(date);
@@ -271,6 +282,116 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
   },
 ];
 
+// Statement columns for the embedded list
+type StatementListColumn = {
+  key: string;
+  label: string;
+  sortable?: boolean;
+  className?: string;
+  minWidth?: number;
+  render?: (value: any, statement: any) => any;
+  filterRender?: (value: any, statement: any) => string;
+};
+
+const STATEMENT_COLUMNS: StatementListColumn[] = [
+  {
+    key: 'statement_no',
+    label: '清單編號',
+    sortable: true,
+    className: 'px-4 font-mono font-medium text-primary-600',
+    minWidth: 170,
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
+  },
+  {
+    key: 'statement_title',
+    label: '標題',
+    sortable: true,
+    className: 'px-4',
+    minWidth: 190,
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
+  },
+  {
+    key: 'client',
+    label: '客戶',
+    sortable: true,
+    className: 'px-4 text-gray-900',
+    minWidth: 170,
+    render: (_: any, row: any) =>
+      row.client?.code ? `${row.client.code} - ${row.client.name}` : row.client?.name || '-',
+    filterRender: (_: any, row: any) =>
+      row.client?.code ? `${row.client.code} - ${row.client.name}` : row.client?.name || '-',
+  },
+  {
+    key: 'statement_period_start',
+    label: '開始日期',
+    sortable: true,
+    className: 'px-4 text-gray-600',
+    minWidth: 120,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
+  {
+    key: 'statement_period_end',
+    label: '結束日期',
+    sortable: true,
+    className: 'px-4 text-gray-600',
+    minWidth: 120,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
+  {
+    key: 'statement_invoice_count',
+    label: '發票數量',
+    sortable: true,
+    className: 'px-4 text-right',
+    minWidth: 110,
+    render: (v: any) => Number(v || 0),
+    filterRender: (v: any) => String(Number(v || 0)),
+  },
+  {
+    key: 'statement_subtotal',
+    label: '發票小計',
+    sortable: true,
+    className: 'px-4 text-right',
+    minWidth: 130,
+    render: (v: any) => fmt$(v),
+    filterRender: (v: any) => fmt$(v),
+  },
+  {
+    key: 'statement_total_amount',
+    label: '總金額',
+    sortable: true,
+    className: 'px-4 text-right font-semibold',
+    minWidth: 130,
+    render: (v: any) => fmt$(v),
+    filterRender: (v: any) => fmt$(v),
+  },
+  {
+    key: 'statement_status',
+    label: '狀態',
+    sortable: true,
+    className: 'px-4',
+    minWidth: 110,
+    render: (v: any) => (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATEMENT_STATUS_COLORS[v] || 'bg-gray-100 text-gray-700'}`}>
+        {STATEMENT_STATUS_LABELS[v] || v || '-'}
+      </span>
+    ),
+    filterRender: (v: any) => STATEMENT_STATUS_LABELS[v] || v || '-',
+  },
+  {
+    key: 'created_at',
+    label: '建立日期',
+    sortable: true,
+    className: 'px-4 text-gray-600',
+    minWidth: 130,
+    render: (v: any) => fmtDate(v),
+    filterRender: (v: any) => fmtDate(v),
+  },
+];
+
 export default function InvoicesPage() {
   const router = useRouter();
   const { isReadOnly } = useAuth();
@@ -286,6 +407,17 @@ export default function InvoicesPage() {
     paidAmount: 0,
     outstanding: 0,
   });
+
+  // Statement list state (independent from invoice list)
+  const [statementListPage, setStatementListPage] = useState(1);
+  const [statementListSearch, setStatementListSearch] = useState('');
+  const [statementListStatusFilter, setStatementListStatusFilter] = useState('');
+  const [statementListClientFilter, setStatementListClientFilter] = useState('');
+  const [statementListPeriodFrom, setStatementListPeriodFrom] = useState('');
+  const [statementListPeriodTo, setStatementListPeriodTo] = useState('');
+  const [statementListSortBy, setStatementListSortBy] = useState('created_at');
+  const [statementListSortOrder, setStatementListSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [statementListColumnFilters, setStatementListColumnFilters] = useState<Record<string, Set<string>>>({});
 
   const { pageState, saveState, clearState } = usePageState({
     page: 1,
@@ -399,6 +531,29 @@ export default function InvoicesPage() {
     ],
   );
 
+  const buildStatementListParams = useCallback(
+    () => {
+      const filtersForApi: Record<string, string[]> = {};
+      Object.entries(statementListColumnFilters).forEach(([key, set]) => {
+        const values = Array.from(set || []);
+        if (values.length) filtersForApi[key] = values;
+      });
+      return {
+        page: statementListPage,
+        limit: 50,
+        status: statementListStatusFilter || undefined,
+        client_id: statementListClientFilter || undefined,
+        period_from: statementListPeriodFrom || undefined,
+        period_to: statementListPeriodTo || undefined,
+        search: statementListSearch || undefined,
+        sortBy: statementListSortBy,
+        sortOrder: statementListSortOrder,
+        filters: Object.keys(filtersForApi).length ? JSON.stringify(filtersForApi) : undefined,
+      };
+    },
+    [statementListPage, statementListStatusFilter, statementListClientFilter, statementListPeriodFrom, statementListPeriodTo, statementListSearch, statementListSortBy, statementListSortOrder, statementListColumnFilters],
+  );
+
   const buildStatementRecordParams = useCallback(
     () => ({
       page,
@@ -420,7 +575,7 @@ export default function InvoicesPage() {
       const [invoiceRes, statementRes] = await Promise.all([
         invoicesApi.list(buildListParams()),
         invoiceTab === 'statements'
-          ? invoiceStatementsApi.list(buildStatementRecordParams())
+          ? invoiceStatementsApi.list(buildStatementListParams())
           : Promise.resolve(null),
       ]);
       setData(invoiceRes.data?.data || []);
@@ -443,12 +598,20 @@ export default function InvoicesPage() {
       setLoading(false);
       setStatementRecordsLoading(false);
     }
-  }, [buildListParams, buildStatementRecordParams, invoiceTab]);
+  }, [buildListParams, buildStatementListParams, invoiceTab]);
 
   const handleColumnFilterChange = useCallback(
     (filters: Record<string, Set<string>>) => {
       setColumnFiltersFromSets(filters);
       setPage(1);
+    },
+    [],
+  );
+
+  const handleStatementListColumnFilterChange = useCallback(
+    (filters: Record<string, Set<string>>) => {
+      setStatementListColumnFilters(filters);
+      setStatementListPage(1);
     },
     [],
   );
@@ -462,6 +625,17 @@ export default function InvoicesPage() {
       return response.data || [];
     },
     [buildListParams],
+  );
+
+  const handleFetchStatementFilterOptions = useCallback(
+    async (columnKey: string) => {
+      const response = await invoiceStatementsApi.filterOptions(
+        columnKey,
+        buildStatementListParams(),
+      );
+      return response.data || [];
+    },
+    [buildStatementListParams],
   );
 
   const applyDateShortcut = (monthOffset: number) => {
@@ -898,26 +1072,35 @@ export default function InvoicesPage() {
     handleColumnResize,
   } = useColumnConfig('invoices', invoiceColumnsWithSelection);
 
+  // Statement list column config
+  const {
+    columnConfigs: statementColumnConfigs,
+    columnWidths: statementColumnWidths,
+    visibleColumns: statementVisibleColumns,
+    handleColumnConfigChange: handleStatementColumnConfigChange,
+    handleReset: handleStatementReset,
+    handleSavePersonal: handleStatementSavePersonal,
+    handleSaveDefault: handleStatementSaveDefault,
+    handleColumnResize: handleStatementColumnResize,
+  } = useColumnConfig('invoice-statement-list', STATEMENT_COLUMNS);
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">發票管理</h1>
-          <p className="text-gray-500 mt-1">
-            {invoiceTab === 'statements'
-              ? `共 ${total} 張已移入清單發票，另有 ${statementRecordsTotal} 份發票清單`
-              : `共 ${total} 張發票`}
+          <h1 className="text-3xl font-bold text-gray-900">發票管理</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            管理公司發票、發票清單及相關記錄
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {selectedInvoices.length > 0 && !pageReadOnly && (
+        <div className="flex items-center gap-2">
+          {invoiceTab === 'invoices' && selectedInvoices.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-600">已選 {selectedInvoices.length} 張</span>
+              <button onClick={handleBatchMoveToStatement} className="btn-secondary">
+                移入清單
+              </button>
               <button onClick={handleBatchVoid} className="btn-secondary">
                 批量作廢
-              </button>
-              <button onClick={handleBatchMoveToStatement} className="btn-secondary">
-                移入發票清單
               </button>
               <button onClick={openStatementCreate} className="btn-secondary">
                 新增發票清單
@@ -986,6 +1169,80 @@ export default function InvoicesPage() {
           </button>
         </nav>
       </div>
+
+      {/* Statement List (moved above filters) */}
+      {invoiceTab === 'statements' && (
+        <div className="card mb-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">已產生發票清單</h2>
+              <p className="text-sm text-gray-500">
+                顯示由新版清單功能產生的 InvoiceStatement 記錄，共 {statementRecordsTotal} 份。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/invoice-statements')}
+              className="btn-secondary"
+            >
+              管理發票清單
+            </button>
+          </div>
+
+          <DataTable
+            exportFilename="invoice-statements"
+            columns={statementVisibleColumns as any}
+            columnConfigs={statementColumnConfigs}
+            onColumnConfigChange={handleStatementColumnConfigChange}
+            onColumnConfigReset={handleStatementReset}
+            onColumnConfigSavePersonal={handleStatementSavePersonal}
+            onColumnConfigSaveDefault={handleStatementSaveDefault}
+            columnWidths={statementColumnWidths}
+            onColumnResize={handleStatementColumnResize}
+            data={statementRecords}
+            total={statementRecordsTotal}
+            page={statementListPage}
+            limit={50}
+            onPageChange={setStatementListPage}
+            onSearch={(term) => {
+              setStatementListSearch(term);
+              setStatementListPage(1);
+            }}
+            searchPlaceholder="搜尋清單編號、標題、客戶..."
+            onRowClick={(row) => window.open(`/invoice-statements/${row.id}`, '_blank')}
+            loading={statementRecordsLoading}
+            sortBy={statementListSortBy}
+            sortOrder={statementListSortOrder}
+            onSort={(field, order) => {
+              setStatementListSortBy(field);
+              setStatementListSortOrder(order as 'ASC' | 'DESC');
+              setStatementListPage(1);
+            }}
+            serverSideFilter
+            columnFilters={statementListColumnFilters}
+            onColumnFilterChange={handleStatementListColumnFilterChange}
+            onFetchFilterOptions={handleFetchStatementFilterOptions}
+            filters={
+              <div className="flex flex-wrap gap-3">
+                <select value={statementListStatusFilter} onChange={(e) => { setStatementListStatusFilter(e.target.value); setStatementListPage(1); }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                  <option value="">全部狀態</option>
+                  <option value="draft">草稿</option>
+                  <option value="issued">已發出</option>
+                </select>
+                <SearchableSelect
+                  value={statementListClientFilter}
+                  onChange={(value) => { setStatementListClientFilter(String(value)); setStatementListPage(1); }}
+                  options={[{ value: '', label: '全部客戶' }, ...clientPartners.map((p) => ({ value: String(p.id), label: p.code ? `${p.code} - ${p.name}` : p.name }))]}
+                  placeholder="全部客戶"
+                  className="min-w-[220px]"
+                />
+                <DateInput value={statementListPeriodFrom} onChange={(value) => { setStatementListPeriodFrom(value); setStatementListPage(1); }} placeholder="開始日期" className="w-36" />
+                <DateInput value={statementListPeriodTo} onChange={(value) => { setStatementListPeriodTo(value); setStatementListPage(1); }} placeholder="結束日期" className="w-36" />
+              </div>
+            }
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card mb-4">
@@ -1124,78 +1381,7 @@ export default function InvoicesPage() {
         />
       </div>
 
-      {invoiceTab === 'statements' && (
-        <div className="card mt-4">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">已產生發票清單</h2>
-              <p className="text-sm text-gray-500">
-                顯示由新版清單功能產生的 InvoiceStatement 記錄，共 {statementRecordsTotal} 份。
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push('/invoice-statements')}
-              className="btn-secondary"
-            >
-              管理發票清單
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">清單編號</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">標題</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">客戶</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">期間</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">發票數量</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">總金額</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">狀態</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {statementRecordsLoading ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">載入中...</td>
-                  </tr>
-                ) : statementRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">沒有已產生的發票清單</td>
-                  </tr>
-                ) : (
-                  statementRecords.map((statement: any) => (
-                    <tr
-                      key={statement.id}
-                      onClick={() => router.push(`/invoice-statements/${statement.id}`)}
-                      className="cursor-pointer hover:bg-gray-50"
-                    >
-                      <td className="px-4 py-3 font-mono font-medium text-primary-600">{statement.statement_no || '-'}</td>
-                      <td className="px-4 py-3 text-gray-900">{statement.statement_title || '-'}</td>
-                      <td className="px-4 py-3 text-gray-900">
-                        {statement.client?.code ? `${statement.client.code} - ${statement.client.name}` : statement.client?.name || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {fmtDate(statement.statement_period_start)} 至 {fmtDate(statement.statement_period_end)}
-                      </td>
-                      <td className="px-4 py-3 text-right">{Number(statement.statement_invoice_count || 0)}</td>
-                      <td className="px-4 py-3 text-right font-semibold">{fmt$(statement.statement_total_amount)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${statement.statement_status === 'issued' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                          {statement.statement_status === 'issued' ? '已發出' : statement.statement_status === 'draft' ? '草稿' : statement.statement_status || '-'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Create Invoice Statement Modal */}
+      {/* Create Statement Modal */}
       {showStatementCreate && (
         <Modal
           isOpen={showStatementCreate}
@@ -1400,7 +1586,7 @@ export default function InvoicesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  到期日
+                  到期日期
                 </label>
                 <DateInput
                   value={form.due_date}
@@ -1414,7 +1600,7 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  工程項目
+                  項目
                 </label>
                 <select
                   value={form.project_id}
@@ -1423,32 +1609,32 @@ export default function InvoicesPage() {
                   }
                   className="input-field"
                 >
-                  <option value="">— 無 —</option>
+                  <option value="">—</option>
                   {projects.map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      {p.project_no} - {p.project_name}
+                      {p.project_name}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  關聯報價單
+                  報價單
                 </label>
-                <SearchableSelect
-                  value={form.quotation_id || ''}
-                  onChange={(val) =>
-                    setForm({ ...form, quotation_id: val ? String(val) : '' })
+                <select
+                  value={form.quotation_id}
+                  onChange={(e) =>
+                    setForm({ ...form, quotation_id: e.target.value })
                   }
-                  options={quotations.map((q: any) => {
-                    const projectName = q.project_name || q.project?.project_name || q.contract_name;
-                    return {
-                      value: String(q.id),
-                      label: `${q.quotation_no}${projectName ? ` - ${projectName}` : ''}`,
-                    };
-                  })}
-                  placeholder="搜尋報價單..."
-                />
+                  className="input-field"
+                >
+                  <option value="">—</option>
+                  {quotations.map((q: any) => (
+                    <option key={q.id} value={q.id}>
+                      {q.quotation_no}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1456,7 +1642,7 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  保留金 (%)
+                  保留金率 (%)
                 </label>
                 <input
                   type="number"
@@ -1464,16 +1650,15 @@ export default function InvoicesPage() {
                   onChange={(e) =>
                     setForm({ ...form, retention_rate: e.target.value })
                   }
-                  className="input-field"
+                  className="input-field text-right"
                   min="0"
                   max="100"
                   step="0.01"
-                  placeholder="0"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  付款條件
+                  付款條款
                 </label>
                 <input
                   type="text"
@@ -1482,7 +1667,7 @@ export default function InvoicesPage() {
                     setForm({ ...form, payment_terms: e.target.value })
                   }
                   className="input-field"
-                  placeholder="例如：30天內付款"
+                  placeholder="例如：30天淨額"
                 />
               </div>
             </div>
@@ -1494,13 +1679,16 @@ export default function InvoicesPage() {
               </label>
               <textarea
                 value={form.remarks}
-                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, remarks: e.target.value })
+                }
                 className="input-field"
-                rows={2}
+                rows={3}
+                placeholder="備註（選填）"
               />
             </div>
 
-            {/* Invoice Items */}
+            {/* Items */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700">
@@ -1516,37 +1704,31 @@ export default function InvoicesPage() {
               </div>
               <div className="space-y-3">
                 {form.items.map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="border border-gray-200 rounded-lg p-3 space-y-2"
-                  >
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        {idx === 0 && (
-                          <label className="block text-xs text-gray-500 mb-1">
-                            項目標題
-                          </label>
-                        )}
-                        <input
-                          type="text"
-                          value={item.item_name}
-                          onChange={(e) =>
-                            updateItem(idx, 'item_name', e.target.value)
-                          }
-                          className="input-field text-sm"
-                          placeholder="項目標題（選填）"
-                        />
-                      </div>
-                      <div className="w-8 flex items-end pb-1">
+                  <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium text-gray-700">
+                        項目 {idx + 1}
+                      </h4>
+                      {form.items.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeItem(idx)}
                           className="text-red-400 hover:text-red-600 text-sm"
-                          title="刪除"
                         >
-                          ✕
+                          ✕ 移除
                         </button>
-                      </div>
+                      )}
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        onChange={(e) =>
+                          updateItem(idx, 'item_name', e.target.value)
+                        }
+                        className="input-field text-sm"
+                        placeholder="項目名稱"
+                      />
                     </div>
                     <div>
                       <input
