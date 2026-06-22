@@ -50,7 +50,7 @@ export class VehiclesService {
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total] = await Promise.all([
+    const [data, total, customFields, customFieldValues] = await Promise.all([
       this.prisma.vehicle.findMany({
         where,
         include: { owner_company: true, current_plate: true },
@@ -59,9 +59,53 @@ export class VehiclesService {
         take: limit,
       }),
       this.prisma.vehicle.count({ where }),
+      // 取得所有 active 的 vehicle 自定義欄位定義
+      this.prisma.customField.findMany({
+        where: { module: 'vehicle', is_active: true },
+        orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+      }),
+      // 批量取得所有返回車輛的自定義欄位值
+      (async () => {
+        // 先查詢所有車輛 ID，然後一次性取得所有自定義欄位值
+        const vehicleIds = data.map(v => v.id);
+        if (vehicleIds.length === 0) return [];
+        return this.prisma.customFieldValue.findMany({
+          where: {
+            module: 'vehicle',
+            entity_id: { in: vehicleIds },
+          },
+        });
+      })(),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    // 將自定義欄位值按 entity_id 分組
+    const customFieldValuesByEntityId: Record<number, any[]> = {};
+    customFieldValues.forEach(cfv => {
+      if (!customFieldValuesByEntityId[cfv.entity_id]) {
+        customFieldValuesByEntityId[cfv.entity_id] = [];
+      }
+      customFieldValuesByEntityId[cfv.entity_id].push(cfv);
+    });
+
+    // 為每個車輛附加自定義欄位值
+    const dataWithCustomFields = data.map(vehicle => ({
+      ...vehicle,
+      custom_field_values: customFieldValuesByEntityId[vehicle.id] || [],
+    }));
+
+    return {
+      data: dataWithCustomFields,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      custom_fields: customFields.map(cf => ({
+        id: cf.id,
+        field_name: cf.field_name,
+        field_type: cf.field_type,
+        sort_order: cf.sort_order,
+      })),
+    };
   }
 
   async findOne(id: number) {

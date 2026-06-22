@@ -97,6 +97,7 @@ export default function VehiclesPage() {
     inspection_date: '',
     license_expiry: '',
   });
+  const [customFields, setCustomFields] = useState<any[]>([]);
 
   const loadReferenceData = useCallback(async () => {
     const [companiesRes, idleRes, vehiclesRes] = await Promise.all([
@@ -107,6 +108,13 @@ export default function VehiclesPage() {
     setCompanies(companiesRes.data || []);
     setIdlePlates(idleRes.data || []);
     setActiveVehicles(vehiclesRes.data || []);
+  }, []);
+
+  // 從 API 回傳中提取自定義欄位定義
+  const extractCustomFields = useCallback((apiResponse: any) => {
+    if (apiResponse?.custom_fields && Array.isArray(apiResponse.custom_fields)) {
+      setCustomFields(apiResponse.custom_fields);
+    }
   }, []);
 
   const loadVehicleTypeOptions = useCallback((syncDefault = false) => {
@@ -238,6 +246,8 @@ export default function VehiclesPage() {
         });
         setData(res.data.data || []);
         setTotal(res.data.total || 0);
+        // 提取自定義欄位定義
+        extractCustomFields(res.data);
       }
     } catch {}
     setLoading(false);
@@ -251,6 +261,7 @@ export default function VehiclesPage() {
     sortBy,
     sortOrder,
     buildPlateListParams,
+    extractCustomFields,
   ]);
 
   useEffect(() => {
@@ -566,7 +577,39 @@ export default function VehiclesPage() {
       ),
       filterRender: (v: string) =>
         v === 'active' ? '使用中' : v === 'maintenance' ? '維修中' : '停用',
+        },
+  ];
+
+  // 動態生成自定義欄位的 columns
+  const customFieldColumns = customFields.map((field) => ({
+    key: `cf_${field.id}`,
+    label: field.field_name,
+    sortable: false,
+    editable: false,
+    render: (v: any, row: any) => {
+      const customValue = row.custom_field_values?.find(
+        (cfv: any) => cfv.custom_field_id === field.id
+      );
+      return customValue?.value || '-';
     },
+    filterRender: (v: any, row: any) => {
+      const customValue = row.custom_field_values?.find(
+        (cfv: any) => cfv.custom_field_id === field.id
+      );
+      return customValue?.value || '-';
+    },
+    exportRender: (v: any, row: any) => {
+      const customValue = row.custom_field_values?.find(
+        (cfv: any) => cfv.custom_field_id === field.id
+      );
+      return customValue?.value || '';
+    },
+  }));
+
+  // 將自定義欄位插入到所有固定欄位之後
+  const allColumns = [
+    ...columns,
+    ...customFieldColumns,
   ];
 
   const {
@@ -578,7 +621,7 @@ export default function VehiclesPage() {
     handleSavePersonal,
     handleSaveDefault,
     handleColumnResize,
-  } = useColumnConfig('vehicles', columns);
+  } = useColumnConfig('vehicles', allColumns);
 
   const renderCompany = (company: any) =>
     company?.internal_prefix
