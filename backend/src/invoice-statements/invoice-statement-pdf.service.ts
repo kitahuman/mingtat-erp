@@ -202,6 +202,12 @@ export class InvoiceStatementPdfService {
     .company-name { font-size: 22px; font-weight: 800; color: ${theme}; letter-spacing: 0.03em; }
     .company-name-en { font-size: 13px; margin-top: 4px; color: #4b5563; }
     .company-meta { font-size: 10px; line-height: 1.6; margin-top: 8px; color: #4b5563; }
+    .client-info { margin-top: 10px; display: flex; gap: 4px; font-size: 12px; }
+    .client-label { color: #6b7280; font-weight: 600; white-space: nowrap; }
+    .client-name { font-size: 12px; font-weight: 700; color: #111827; margin-bottom: 0; }
+    .title-info { margin-top: 4px; display: flex; gap: 4px; font-size: 12px; }
+    .title-label { color: #6b7280; font-weight: 600; white-space: nowrap; }
+    .title-value { font-weight: 700; color: #111827; }
     .doc-title { text-align: right; }
     .doc-title h1 { margin: 0 0 10px; color: ${theme}; font-size: 28px; letter-spacing: 0.08em; }
     .doc-title .subtitle { color: #6b7280; font-size: 13px; letter-spacing: 0.12em; }
@@ -238,6 +244,11 @@ export class InvoiceStatementPdfService {
         <div class="company-name">${this.escapeHtml(company.name || '')}</div>
         ${companyNameEn ? `<div class="company-name-en">${this.escapeHtml(companyNameEn)}</div>` : ''}
         ${companyMetaLines ? `<div class="company-meta">${companyMetaLines}</div>` : ''}
+        <div class="client-info">
+          <div class="client-label">客戶：</div>
+          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+        </div>
+        ${statement.statement_title ? `<div class="title-info"><div class="title-label">標題：</div><div class="title-value">${this.escapeHtml(statement.statement_title)}</div></div>` : ''}
       </div>
       <div class="header-right">
         ${logoDataUri ? `<img class="logo" src="${logoDataUri}" />` : ''}
@@ -252,18 +263,6 @@ export class InvoiceStatementPdfService {
         </div>
       </div>
     </header>
-
-    <section class="section">
-      <div class="section-label">Bill To / 客戶資料</div>
-      <div class="client-box">
-        <div class="client-name">${this.escapeHtml(client.name || '')}</div>
-        ${client.address ? `<div><strong>地址：</strong>${this.escapeHtml(client.address)}</div>` : ''}
-        ${client.contact_person ? `<div><strong>聯絡人：</strong>${this.escapeHtml(client.contact_person)}</div>` : ''}
-        ${client.phone ? `<div><strong>電話：</strong>${this.escapeHtml(client.phone)}</div>` : ''}
-      </div>
-    </section>
-
-    ${statement.statement_title ? `<section class="section"><div class="section-label">Title / 標題</div><div class="client-box">${this.escapeHtml(statement.statement_title)}</div></section>` : ''}
 
     <section class="section">
       <div class="section-label">Invoices / 發票明細</div>
