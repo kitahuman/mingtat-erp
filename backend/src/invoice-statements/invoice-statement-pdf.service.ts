@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import puppeteer from 'puppeteer';
 import { existsSync, readFileSync } from 'fs';
-import { extname, normalize } from 'path';
+import { extname, join, normalize } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface BankInfo {
@@ -363,27 +363,22 @@ export class InvoiceStatementPdfService {
     if (/^data:/i.test(pathOrUrl)) return pathOrUrl;
     if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
 
-    const normalized = normalize(String(pathOrUrl));
-    const candidates = [
-      normalized,
-      normalized.startsWith('/') ? normalized : `/${normalized}`,
-      normalized.startsWith('/app/') ? normalized.replace(/^\/app/, '') : '',
-    ].filter(Boolean);
-
-    for (const candidate of candidates) {
-      if (!existsSync(candidate)) continue;
-      const ext = extname(candidate).toLowerCase();
-      const mime =
-        ext === '.png'
-          ? 'image/png'
+    const relative = String(pathOrUrl).replace(/^\/+uploads\//, '');
+    const filePath = normalize(join(process.cwd(), 'uploads', relative));
+    const uploadsRoot = normalize(join(process.cwd(), 'uploads'));
+    if (!filePath.startsWith(uploadsRoot) || !existsSync(filePath)) return '';
+    const ext = extname(filePath).toLowerCase();
+    const mime =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.webp'
+          ? 'image/webp'
           : ext === '.jpg' || ext === '.jpeg'
             ? 'image/jpeg'
             : ext === '.svg'
               ? 'image/svg+xml'
               : 'image/png';
-      return `data:${mime};base64,${readFileSync(candidate).toString('base64')}`;
-    }
-    return '';
+    return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`;
   }
 
   private parseBankInfo(value: unknown): BankInfo {
