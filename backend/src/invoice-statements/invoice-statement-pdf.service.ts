@@ -195,9 +195,10 @@ export class InvoiceStatementPdfService {
     * { box-sizing: border-box; }
     body { margin: 0; color: #1f2937; font-family: Arial, 'Noto Sans HK', 'Microsoft JhengHei', sans-serif; background: #fff; }
     .page { width: 210mm; min-height: 297mm; padding: 15mm 14mm; position: relative; }
-    .header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 3px solid ${theme}; padding-bottom: 18px; }
-    .brand { display: flex; gap: 14px; align-items: flex-start; }
-    .logo { width: 72px; height: 72px; object-fit: contain; }
+    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid ${theme}; padding-bottom: 18px; }
+    .brand { flex: 1; min-width: 0; }
+    .header-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+    .logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 8px; }
     .company-name { font-size: 22px; font-weight: 800; color: ${theme}; letter-spacing: 0.03em; }
     .company-name-en { font-size: 13px; margin-top: 4px; color: #4b5563; }
     .company-meta { font-size: 10px; line-height: 1.6; margin-top: 8px; color: #4b5563; }
@@ -234,21 +235,21 @@ export class InvoiceStatementPdfService {
   <div class="page">
     <header class="header">
       <div class="brand">
-        ${logoDataUri ? `<img class="logo" src="${logoDataUri}" />` : ''}
-        <div>
-          <div class="company-name">${this.escapeHtml(company.name || '')}</div>
-          ${companyNameEn ? `<div class="company-name-en">${this.escapeHtml(companyNameEn)}</div>` : ''}
-          ${companyMetaLines ? `<div class="company-meta">${companyMetaLines}</div>` : ''}
-        </div>
+        <div class="company-name">${this.escapeHtml(company.name || '')}</div>
+        ${companyNameEn ? `<div class="company-name-en">${this.escapeHtml(companyNameEn)}</div>` : ''}
+        ${companyMetaLines ? `<div class="company-meta">${companyMetaLines}</div>` : ''}
       </div>
-      <div class="doc-title">
-        <h1>客戶發票清單</h1>
-        <div class="subtitle">INVOICE STATEMENT</div>
-        <table class="meta-table">
-          <tr><th>清單編號</th><td>${this.escapeHtml(statement.statement_no || '')}</td></tr>
-          <tr><th>清單日期</th><td>${this.formatDate(statement.created_at)}</td></tr>
-          <tr><th>期間</th><td>${this.formatDate(statement.statement_period_start)} - ${this.formatDate(statement.statement_period_end)}</td></tr>
-        </table>
+      <div class="header-right">
+        ${logoDataUri ? `<img class="logo" src="${logoDataUri}" />` : ''}
+        <div class="doc-title">
+          <h1>客戶發票清單</h1>
+          <div class="subtitle">INVOICE STATEMENT</div>
+          <table class="meta-table">
+            <tr><th>清單編號</th><td>${this.escapeHtml(statement.statement_no || '')}</td></tr>
+            <tr><th>清單日期</th><td>${this.formatDate(statement.statement_date || statement.created_at)}</td></tr>
+            <tr><th>期間</th><td>${this.formatDate(statement.statement_period_start)} - ${this.formatDate(statement.statement_period_end)}</td></tr>
+          </table>
+        </div>
       </div>
     </header>
 
