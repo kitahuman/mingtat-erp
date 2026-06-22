@@ -19,8 +19,11 @@ import { InvoiceStatementPdfService } from './invoice-statement-pdf.service';
 import { InvoiceStatementsService } from './invoice-statements.service';
 import {
   CreateInvoiceStatementDto,
+  CreateStatementItemDto,
   MatchInvoiceStatementInvoicesDto,
+  ReorderStatementItemsDto,
   UpdateInvoiceStatementDto,
+  UpdateStatementItemDto,
 } from './dto/create-invoice-statement.dto';
 
 type AuthenticatedInvoiceStatementRequest = ExpressRequest & {
@@ -152,6 +155,52 @@ export class InvoiceStatementsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: number, @Body('status') status: string) {
     return this.service.updateStatus(Number(id), status);
+  }
+
+  @Patch(':id/items/reorder')
+  reorderItems(
+    @Param('id') id: number,
+    @Body() dto: ReorderStatementItemsDto,
+    @Request() req: AuthenticatedInvoiceStatementRequest,
+  ) {
+    return this.service.reorderItems(Number(id), dto, this.getUserId(req));
+  }
+
+  @Post(':id/items')
+  addItem(
+    @Param('id') id: number,
+    @Body() dto: CreateStatementItemDto,
+    @Request() req: AuthenticatedInvoiceStatementRequest,
+  ) {
+    return this.service.addItem(Number(id), dto, this.getUserId(req));
+  }
+
+  @Patch(':id/items/:itemId')
+  updateItem(
+    @Param('id') id: number,
+    @Param('itemId') itemId: number,
+    @Body() dto: UpdateStatementItemDto,
+    @Request() req: AuthenticatedInvoiceStatementRequest,
+  ) {
+    return this.service.updateItem(
+      Number(id),
+      Number(itemId),
+      dto,
+      this.getUserId(req),
+    );
+  }
+
+  @Delete(':id/items/:itemId')
+  deleteItem(
+    @Param('id') id: number,
+    @Param('itemId') itemId: number,
+    @Request() req: AuthenticatedInvoiceStatementRequest,
+  ) {
+    return this.service.deleteItem(
+      Number(id),
+      Number(itemId),
+      this.getUserId(req),
+    );
   }
 
   @Delete(':id')

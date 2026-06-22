@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DateInput from '@/components/DateInput';
-import { invoiceStatementsApi } from '@/lib/api';
+import { invoiceStatementsApi, invoicesApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
@@ -33,38 +33,134 @@ function Field({ label, children }: { label: string; children?: React.ReactNode 
   );
 }
 
+// 單格 inline-edit 元件
+function InlineCell({
+  value,
+  type = 'text',
+  align = 'left',
+  disabled,
+  onCommit,
+}: {
+  value: any;
+  type?: 'text' | 'number' | 'date';
+  align?: 'left' | 'right' | 'center';
+  disabled?: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const startEdit = () => {
+    if (disabled) return;
+    if (type === 'date') {
+      setDraft(toInputDate(value) || '');
+    } else {
+      setDraft(value === null || value === undefined ? '' : String(value));
+    }
+    setEditing(true);
+  };
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      // 避免 Portal/focus 觸發捲動跳動
+      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 10);
+    }
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    onCommit(draft);
+  };
+
+  const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+  if (editing) {
+    return (
+      <td className={`px-3 py-1.5 ${alignClass}`}>
+        <input
+          ref={inputRef}
+          type={type === 'date' ? 'date' : type === 'number' ? 'number' : 'text'}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          className={`w-full rounded border border-primary-400 px-2 py-1 text-sm ${alignClass}`}
+        />
+      </td>
+    );
+  }
+
+  let display: React.ReactNode;
+  if (type === 'date') display = value ? fmtDate(value) : <span className="text-gray-400">—</span>;
+  else if (type === 'number') display = fmt$(value);
+  else display = value || <span className="text-gray-400">—</span>;
+
+  return (
+    <td
+      className={`px-3 py-2 ${alignClass} ${disabled ? '' : 'cursor-pointer hover:bg-primary-50'}`}
+      onClick={startEdit}
+      title={disabled ? '' : '點擊編輯'}
+    >
+      {display}
+    </td>
+  );
+}
+
 export default function InvoiceStatementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const statementId = Number(id);
   const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly();
+
   const [statement, setStatement] = useState<any>(null);
+  const [items, setItems] = useState<any[]>([]);
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const parseOtherCharges = (value: any) => {
-    if (Array.isArray(value)) return value;
-    return [];
+  // 拖拉狀態
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // 新增發票彈窗
+  const [showAddInvoice, setShowAddInvoice] = useState(false);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const parseOtherCharges = (value: any) => (Array.isArray(value) ? value : []);
+
+  const applyStatement = (data: any) => {
+    setStatement(data);
+    setItems((data.items || []).slice().sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)));
+    const otherCharges = parseOtherCharges(data.statement_other_charges);
+    setForm({
+      statement_title: data.statement_title || '',
+      statement_status: data.statement_status || 'draft',
+      period_start: toInputDate(data.statement_period_start),
+      period_end: toInputDate(data.statement_period_end),
+      remarks: data.statement_remarks || '',
+      statement_show_paid_columns: !!data.statement_show_paid_columns,
+      statement_show_bank_info: !!data.statement_show_bank_info,
+      statement_show_signature: !!data.statement_show_signature,
+      other_charges: otherCharges.length
+        ? otherCharges.map((c: any) => ({ name: c.name || '', amount: String(c.amount || '') }))
+        : [],
+    });
   };
 
   const loadStatement = async () => {
     setLoading(true);
     try {
       const res = await invoiceStatementsApi.get(statementId);
-      const data = res.data;
-      const otherCharges = parseOtherCharges(data.statement_other_charges);
-      setStatement(data);
-      setForm({
-        statement_title: data.statement_title || '',
-        statement_status: data.statement_status || 'draft',
-        period_start: toInputDate(data.statement_period_start),
-        period_end: toInputDate(data.statement_period_end),
-        remarks: data.statement_remarks || '',
-        other_charges: otherCharges.length ? otherCharges.map((c: any) => ({ name: c.name || '', amount: String(c.amount || '') })) : [],
-      });
+      applyStatement(res.data);
     } catch {
       router.push('/invoice-statements');
     } finally {
@@ -74,27 +170,43 @@ export default function InvoiceStatementDetailPage() {
 
   useEffect(() => {
     loadStatement();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statementId]);
 
   const save = async () => {
     setSaving(true);
     try {
-      await invoiceStatementsApi.update(statementId, {
+      const res = await invoiceStatementsApi.update(statementId, {
         statement_title: form.statement_title || undefined,
         statement_status: form.statement_status,
         period_start: form.period_start,
         period_end: form.period_end,
         remarks: form.remarks || undefined,
+        statement_show_paid_columns: !!form.statement_show_paid_columns,
+        statement_show_bank_info: !!form.statement_show_bank_info,
+        statement_show_signature: !!form.statement_show_signature,
         other_charges: (form.other_charges || [])
           .map((charge: any) => ({ name: String(charge.name || '').trim(), amount: Number(charge.amount || 0) }))
           .filter((charge: any) => charge.name || charge.amount !== 0),
       });
+      applyStatement(res.data);
       setEditing(false);
-      await loadStatement();
     } catch (error: any) {
       alert(error.response?.data?.message || '儲存失敗');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 即時切換 checkbox（非編輯模式也可即時儲存）
+  const toggleFlag = async (field: string, value: boolean) => {
+    setForm((prev: any) => ({ ...prev, [field]: value }));
+    try {
+      const res = await invoiceStatementsApi.update(statementId, { [field]: value });
+      applyStatement(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新失敗');
+      loadStatement();
     }
   };
 
@@ -127,6 +239,7 @@ export default function InvoiceStatementDetailPage() {
     }
   };
 
+  // ── 其他收費 ──
   const updateCharge = (index: number, patch: Record<string, any>) => {
     setForm((prev: any) => {
       const next = [...(prev.other_charges || [])];
@@ -134,18 +247,126 @@ export default function InvoiceStatementDetailPage() {
       return { ...prev, other_charges: next };
     });
   };
-
   const addCharge = () => setForm((prev: any) => ({ ...prev, other_charges: [...(prev.other_charges || []), { name: '', amount: '' }] }));
-  const removeCharge = (index: number) => setForm((prev: any) => ({ ...prev, other_charges: (prev.other_charges || []).filter((_: any, i: number) => i !== index) }));
+  const removeCharge = (index: number) =>
+    setForm((prev: any) => ({ ...prev, other_charges: (prev.other_charges || []).filter((_: any, i: number) => i !== index) }));
 
-  if (loading) {
-    return <div className="p-6 text-gray-500">載入中...</div>;
-  }
+  // ── 項目 inline edit ──
+  const commitItem = async (item: any, field: string, rawValue: string) => {
+    const numericFields = ['item_amount', 'item_paid_amount', 'item_outstanding'];
+    let payloadValue: any = rawValue;
+    if (numericFields.includes(field)) payloadValue = rawValue === '' ? 0 : Number(rawValue);
 
+    // 樂觀更新
+    setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, [field]: payloadValue } : it)));
+    try {
+      const res = await invoiceStatementsApi.updateItem(statementId, item.id, { [field]: payloadValue });
+      applyStatement(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新項目失敗');
+      loadStatement();
+    }
+  };
+
+  const deleteItem = async (item: any) => {
+    if (!confirm('確定要移除此項目？')) return;
+    try {
+      const res = await invoiceStatementsApi.deleteItem(statementId, item.id);
+      applyStatement(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '刪除項目失敗');
+    }
+  };
+
+  const addCustomItem = async () => {
+    try {
+      const res = await invoiceStatementsApi.addItem(statementId, {
+        item_type: 'custom',
+        item_title: '',
+        item_amount: 0,
+      });
+      applyStatement(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '新增項目失敗');
+    }
+  };
+
+  // ── 拖拉排序 ──
+  const handleDragStart = (index: number) => {
+    dragIndexRef.current = index;
+  };
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndex = dragIndexRef.current;
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+    if (dragIndex === null || dragIndex === dropIndex) return;
+
+    const reordered = items.slice();
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    const withOrder = reordered.map((it, idx) => ({ ...it, sort_order: idx + 1 }));
+    setItems(withOrder); // 樂觀更新
+
+    try {
+      const res = await invoiceStatementsApi.reorderItems(
+        statementId,
+        withOrder.map((it) => ({ id: it.id, sort_order: it.sort_order })),
+      );
+      applyStatement(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '排序更新失敗');
+      loadStatement();
+    }
+  };
+
+  // ── 新增發票搜尋 ──
+  const searchInvoices = async () => {
+    if (!statement) return;
+    setSearching(true);
+    try {
+      const res = await invoicesApi.list({
+        page: 1,
+        limit: 50,
+        company_id: statement.company_id,
+        client_id: statement.client_id,
+        search: invoiceSearch || undefined,
+      });
+      const existingIds = new Set(items.map((it) => it.invoice_id).filter(Boolean));
+      const list = (res.data?.data || res.data || []).filter((inv: any) => !existingIds.has(inv.id));
+      setSearchResults(list);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '搜尋發票失敗');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addInvoiceItem = async (invoice: any) => {
+    try {
+      const res = await invoiceStatementsApi.addItem(statementId, {
+        invoice_id: invoice.id,
+        item_type: 'invoice',
+      });
+      applyStatement(res.data);
+      setSearchResults((prev) => prev.filter((inv) => inv.id !== invoice.id));
+    } catch (error: any) {
+      alert(error.response?.data?.message || '加入發票失敗');
+    }
+  };
+
+  if (loading) return <div className="p-6 text-gray-500">載入中...</div>;
   if (!statement) return null;
 
-  const items = statement.items || [];
   const otherCharges = parseOtherCharges(statement.statement_other_charges);
+  const showPaid = !!statement.statement_show_paid_columns;
+  // 表格欄位數量（含拖拉把手、編號、操作）
+  const baseCols = 6; // 把手 # 發票編號 日期 標題 狀態 金額 = 7 actually; compute below
+  void baseCols;
 
   return (
     <div className="p-6">
@@ -158,8 +379,8 @@ export default function InvoiceStatementDetailPage() {
         <div className="flex flex-wrap gap-2">
           <Link href={`/invoice-statements/${statementId}/pdf-preview`} target="_blank" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">PDF 預覽</Link>
           <button onClick={downloadPdf} disabled={pdfLoading} className="rounded-lg border border-primary-600 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50">{pdfLoading ? '下載中...' : '下載 PDF'}</button>
-          {!isReadOnly && !editing && <button onClick={() => setEditing(true)} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">編輯</button>}
-          {!isReadOnly && <button onClick={remove} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">刪除</button>}
+          {!readOnly && !editing && <button onClick={() => setEditing(true)} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">編輯</button>}
+          {!readOnly && <button onClick={remove} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">刪除</button>}
         </div>
       </div>
 
@@ -211,35 +432,140 @@ export default function InvoiceStatementDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* PDF 顯示選項 checkbox */}
+            <div className="mt-6 border-t border-gray-100 pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-gray-700">PDF 輸出選項</h3>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={!!form.statement_show_paid_columns}
+                    onChange={(e) => toggleFlag('statement_show_paid_columns', e.target.checked)}
+                  />
+                  顯示已收/未收
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={!!form.statement_show_bank_info}
+                    onChange={(e) => toggleFlag('statement_show_bank_info', e.target.checked)}
+                  />
+                  顯示公司銀行資料
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={!!form.statement_show_signature}
+                    onChange={(e) => toggleFlag('statement_show_signature', e.target.checked)}
+                  />
+                  顯示簽名欄
+                </label>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">包含發票</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">包含發票</h2>
+              {!readOnly && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowAddInvoice(true); setSearchResults([]); setInvoiceSearch(''); }}
+                    className="rounded-lg border border-primary-600 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-50"
+                  >
+                    新增發票
+                  </button>
+                  <button
+                    onClick={addCustomItem}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    新增其他項目
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="mb-2 text-xs text-gray-400">提示：拖曳左側把手可調整順序；點擊欄位可直接編輯。狀態欄不會輸出至 PDF。</p>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    {!readOnly && <th className="w-8 px-2 py-2" />}
+                    <th className="w-10 px-2 py-2 text-center">#</th>
                     <th className="px-3 py-2 text-left">發票編號</th>
                     <th className="px-3 py-2 text-left">日期</th>
                     <th className="px-3 py-2 text-left">標題</th>
                     <th className="px-3 py-2 text-left">狀態</th>
                     <th className="px-3 py-2 text-right">金額</th>
+                    <th className="px-3 py-2 text-right">已收</th>
+                    <th className="px-3 py-2 text-right">未收</th>
+                    {!readOnly && <th className="w-12 px-2 py-2" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {items.map((item: any) => (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2"><Link href={`/invoices/${item.invoice?.id}`} className="font-mono text-primary-600 hover:text-primary-700">{item.invoice?.invoice_no}</Link></td>
-                      <td className="px-3 py-2">{fmtDate(item.invoice?.date)}</td>
-                      <td className="px-3 py-2">{item.invoice?.invoice_title || '-'}</td>
-                      <td className="px-3 py-2">{INVOICE_STATUS_LABELS[item.invoice?.status] || item.invoice?.status || '-'}</td>
-                      <td className="px-3 py-2 text-right">{fmt$(item.invoice?.total_amount)}</td>
-                    </tr>
-                  ))}
-                  {items.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-gray-500">沒有發票</td></tr>}
+                  {items.map((item: any, index: number) => {
+                    const isCustom = item.item_type === 'custom';
+                    const statusVal = item.item_status || '';
+                    return (
+                      <tr
+                        key={item.id}
+                        draggable={!readOnly}
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={() => { dragIndexRef.current = null; setDragOverIndex(null); }}
+                        className={dragOverIndex === index ? 'bg-primary-50' : ''}
+                      >
+                        {!readOnly && (
+                          <td className="cursor-move px-2 py-2 text-center text-gray-400" title="拖曳排序">⋮⋮</td>
+                        )}
+                        <td className="px-2 py-2 text-center text-gray-500">{index + 1}</td>
+                        {/* 發票編號 */}
+                        {readOnly ? (
+                          <td className="px-3 py-2">
+                            {item.invoice_id ? (
+                              <Link href={`/invoices/${item.invoice_id}`} className="font-mono text-primary-600 hover:text-primary-700">{item.item_invoice_no}</Link>
+                            ) : (item.item_invoice_no || '-')}
+                          </td>
+                        ) : (
+                          <InlineCell value={item.item_invoice_no} onCommit={(v) => commitItem(item, 'item_invoice_no', v)} />
+                        )}
+                        {/* 日期 */}
+                        <InlineCell value={item.item_date} type="date" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_date', v)} />
+                        {/* 標題 */}
+                        <InlineCell value={item.item_title} disabled={readOnly} onCommit={(v) => commitItem(item, 'item_title', v)} />
+                        {/* 狀態 */}
+                        <InlineCell
+                          value={INVOICE_STATUS_LABELS[statusVal] || statusVal}
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_status', v)}
+                        />
+                        {/* 金額 */}
+                        <InlineCell value={item.item_amount} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_amount', v)} />
+                        {/* 已收 */}
+                        <InlineCell value={item.item_paid_amount} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_paid_amount', v)} />
+                        {/* 未收 */}
+                        <InlineCell value={item.item_outstanding} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_outstanding', v)} />
+                        {!readOnly && (
+                          <td className="px-2 py-2 text-center">
+                            <button onClick={() => deleteItem(item)} className="text-red-600 hover:text-red-800" title="移除">✕</button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {items.length === 0 && (
+                    <tr><td colSpan={readOnly ? 9 : 11} className="px-3 py-8 text-center text-gray-500">沒有項目</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            {!showPaid && (
+              <p className="mt-2 text-xs text-gray-400">「已收/未收」目前不會輸出至 PDF（可於上方 PDF 輸出選項開啟）。</p>
+            )}
           </div>
         </div>
 
@@ -282,6 +608,59 @@ export default function InvoiceStatementDetailPage() {
           )}
         </div>
       </div>
+
+      {/* 新增發票彈窗 */}
+      {showAddInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowAddInvoice(false)}>
+          <div className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">新增發票</h3>
+              <button onClick={() => setShowAddInvoice(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="space-y-4 p-6">
+              <div className="flex gap-2">
+                <input
+                  value={invoiceSearch}
+                  onChange={(e) => setInvoiceSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') searchInvoices(); }}
+                  placeholder="搜尋發票編號、標題..."
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button onClick={searchInvoices} disabled={searching} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">{searching ? '搜尋中...' : '搜尋'}</button>
+              </div>
+              <div className="max-h-80 overflow-auto rounded-lg border border-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">發票編號</th>
+                      <th className="px-3 py-2 text-left">日期</th>
+                      <th className="px-3 py-2 text-left">標題</th>
+                      <th className="px-3 py-2 text-right">金額</th>
+                      <th className="w-16 px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {searchResults.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td className="px-3 py-2 font-mono text-primary-600">{invoice.invoice_no}</td>
+                        <td className="px-3 py-2">{fmtDate(invoice.date)}</td>
+                        <td className="px-3 py-2">{invoice.invoice_title || '-'}</td>
+                        <td className="px-3 py-2 text-right">{fmt$(invoice.total_amount)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button onClick={() => addInvoiceItem(invoice)} className="rounded border border-primary-600 px-2 py-1 text-xs text-primary-700 hover:bg-primary-50">加入</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!searching && searchResults.length === 0 && (
+                      <tr><td colSpan={5} className="px-3 py-8 text-center text-gray-500">沒有可加入的發票</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

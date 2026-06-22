@@ -2272,6 +2272,9 @@ model InvoiceStatement {
   statement_invoice_count Int       @default(0)
   statement_remarks       String?   @db.Text
   statement_status        String    @default("draft") @db.VarChar(20)
+  statement_show_paid_columns Boolean @default(false)
+  statement_show_bank_info    Boolean @default(false)
+  statement_show_signature    Boolean @default(false)
   created_by              Int?
   created_at              DateTime  @default(now()) @db.Timestamptz
   updated_at              DateTime  @default(now()) @updatedAt @db.Timestamptz
@@ -2291,15 +2294,26 @@ model InvoiceStatement {
 }
 
 model InvoiceStatementItem {
-  id           Int @id @default(autoincrement())
+  id           Int  @id @default(autoincrement())
   statement_id Int
-  invoice_id   Int
-  sort_order   Int @default(1)
+  invoice_id   Int?
+  sort_order   Int  @default(1)
+
+  // Snapshot fields — keep statement item data independent from the source invoice
+  item_invoice_no   String?  // 發票編號 snapshot
+  item_date         DateTime? // 日期 snapshot
+  item_title        String?  // 標題 snapshot
+  item_status       String?  // 狀態 snapshot
+  item_amount       Decimal? @db.Decimal(14, 2) // 金額 snapshot
+  item_paid_amount  Decimal? @db.Decimal(14, 2) // 已收金額 snapshot
+  item_outstanding  Decimal? @db.Decimal(14, 2) // 未收金額 snapshot
+  item_type         String   @default("invoice") // 'invoice' 或 'custom'
+  item_remarks      String?  // 項目備註
 
   statement InvoiceStatement @relation(fields: [statement_id], references: [id], onDelete: Cascade)
-  invoice   Invoice          @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  invoice   Invoice?         @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
 
-  @@unique([statement_id, invoice_id])
+  @@index([statement_id])
   @@index([invoice_id])
   @@map("invoice_statement_items")
 }

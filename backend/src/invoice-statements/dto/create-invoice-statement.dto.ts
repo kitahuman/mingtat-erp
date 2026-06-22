@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -83,6 +84,18 @@ export class UpdateInvoiceStatementDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  statement_show_paid_columns?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  statement_show_bank_info?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  statement_show_signature?: boolean;
 }
 
 export class MatchInvoiceStatementInvoicesDto {
@@ -97,4 +110,103 @@ export class MatchInvoiceStatementInvoicesDto {
 
   @IsString()
   period_end: string;
+}
+
+export class ReorderStatementItemDto {
+  @IsNumber()
+  id: number;
+
+  @IsNumber()
+  sort_order: number;
+}
+
+export class ReorderStatementItemsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReorderStatementItemDto)
+  items: ReorderStatementItemDto[];
+}
+
+export class CreateStatementItemDto {
+  @IsOptional()
+  @IsNumber()
+  invoice_id?: number;
+
+  @IsOptional()
+  @IsString()
+  item_type?: string;
+
+  @IsOptional()
+  @IsString()
+  item_invoice_no?: string;
+
+  @IsOptional()
+  @IsString()
+  item_date?: string;
+
+  @IsOptional()
+  @IsString()
+  item_title?: string;
+
+  @IsOptional()
+  @IsString()
+  item_status?: string;
+
+  @IsOptional()
+  @IsNumber()
+  item_amount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  item_paid_amount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  item_outstanding?: number;
+
+  @IsOptional()
+  @IsString()
+  item_remarks?: string;
+
+  @IsOptional()
+  @IsNumber()
+  sort_order?: number;
+}
+
+export class UpdateStatementItemDto {
+  @IsOptional()
+  @IsString()
+  item_invoice_no?: string;
+
+  @IsOptional()
+  @IsString()
+  item_date?: string;
+
+  @IsOptional()
+  @IsString()
+  item_title?: string;
+
+  @IsOptional()
+  @IsString()
+  item_status?: string;
+
+  @IsOptional()
+  @IsNumber()
+  item_amount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  item_paid_amount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  item_outstanding?: number;
+
+  @IsOptional()
+  @IsString()
+  item_remarks?: string;
+
+  @IsOptional()
+  @IsString()
+  item_type?: string;
 }

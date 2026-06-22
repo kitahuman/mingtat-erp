@@ -8,9 +8,12 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateInvoiceStatementDto,
+  CreateStatementItemDto,
   InvoiceStatementOtherChargeDto,
   MatchInvoiceStatementInvoicesDto,
+  ReorderStatementItemsDto,
   UpdateInvoiceStatementDto,
+  UpdateStatementItemDto,
 } from './dto/create-invoice-statement.dto';
 
 type InvoiceStatementListQuery = {
@@ -110,6 +113,21 @@ export class InvoiceStatementsService {
       },
     },
   };
+
+  // Build snapshot fields from a source invoice record
+  private buildItemSnapshot(invoice: any) {
+    return {
+      item_type: 'invoice',
+      item_invoice_no: invoice?.invoice_no ?? null,
+      item_date: invoice?.date ?? null,
+      item_title: invoice?.invoice_title ?? null,
+      item_status: invoice?.status ?? null,
+      item_amount: invoice?.total_amount ?? null,
+      item_paid_amount: invoice?.paid_amount ?? null,
+      item_outstanding: invoice?.outstanding ?? null,
+      item_remarks: null as string | null,
+    };
+  }
 
   private parseDate(value: string | undefined, fieldName: string): Date {
     if (!value) throw new BadRequestException(`${fieldName} 必須填寫`);
@@ -715,6 +733,7 @@ export class InvoiceStatementsService {
           create: invoices.map((invoice, index) => ({
             invoice_id: invoice.id,
             sort_order: index + 1,
+            ...this.buildItemSnapshot(invoice),
           })),
         },
       },
@@ -775,6 +794,18 @@ export class InvoiceStatementsService {
       statement_invoice_count: totals.statement_invoice_count,
       statement_remarks:
         dto.remarks === undefined ? undefined : dto.remarks?.trim() || null,
+      statement_show_paid_columns:
+        dto.statement_show_paid_columns === undefined
+          ? undefined
+          : Boolean(dto.statement_show_paid_columns),
+      statement_show_bank_info:
+        dto.statement_show_bank_info === undefined
+          ? undefined
+          : Boolean(dto.statement_show_bank_info),
+      statement_show_signature:
+        dto.statement_show_signature === undefined
+          ? undefined
+          : Boolean(dto.statement_show_signature),
     };
 
     if (dto.period_start) {
@@ -798,6 +829,7 @@ export class InvoiceStatementsService {
                   create: invoices.map((invoice, index) => ({
                     invoice_id: invoice.id,
                     sort_order: index + 1,
+                    ...this.buildItemSnapshot(invoice),
                   })),
                 },
               }
@@ -857,5 +889,254 @@ export class InvoiceStatementsService {
     }
 
     return { success: true };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Statement item operations (snapshot-based)
+  // ─────────────────────────────────────────────────────────────
+
+  // Recalculate statement totals based on item snapshots (item_amount)
+  private async recalcStatementTotals(tx: Prisma.TransactionClient, statementId: number) {
+    const items = await tx.invoiceStatementItem.findMany({
+      where: { statement_id: statementId },
+    });
+    const statement = await tx.invoiceStatement.findUnique({
+      where: { id: statementId },
+      select: { statement_other_charges: true },
+    });
+    const otherCharges = Array.isArray(statement?.statement_other_charges)
+      ? (statement!.statement_other_charges as any[])
+      : [];
+
+    const subtotal = items.reduce(
+      (sum, item) => sum + this.amount(item.item_amount),
+      0,
+    );
+    const otherTotal = otherCharges.reduce(
+      (sum, charge) => sum + this.amount((charge as any)?.amount),
+      0,
+    );
+    const invoiceCount = items.filter(
+      (item) => item.item_type !== 'custom',
+    ).length;
+
+    await tx.invoiceStatement.update({
+      where: { id: statementId },
+      data: {
+        statement_subtotal: Math.round(subtotal * 100) / 100,
+        statement_total_amount: Math.round((subtotal + otherTotal) * 100) / 100,
+        statement_invoice_count: invoiceCount,
+      },
+    });
+  }
+
+  async reorderItems(
+    statementId: number,
+    dto: ReorderStatementItemsDto,
+    userId?: number,
+  ) {
+    await this.findOne(statementId);
+    const orders = Array.isArray(dto.items) ? dto.items : [];
+    if (orders.length === 0) {
+      return this.findOne(statementId);
+    }
+
+    const itemIds = orders.map((o) => Number(o.id));
+    const existingItems = await this.prisma.invoiceStatementItem.findMany({
+      where: { id: { in: itemIds }, statement_id: statementId },
+      select: { id: true },
+    });
+    const validIds = new Set(existingItems.map((item) => item.id));
+
+    await this.prisma.$transaction(
+      orders
+        .filter((o) => validIds.has(Number(o.id)))
+        .map((o) =>
+          this.prisma.invoiceStatementItem.update({
+            where: { id: Number(o.id) },
+            data: { sort_order: Number(o.sort_order) },
+          }),
+        ),
+    );
+
+    if (userId) {
+      await this.auditLogsService.log({
+        userId,
+        action: 'update',
+        targetTable: 'invoice_statement_items',
+        targetId: statementId,
+        remarks: '調整發票清單項目排序',
+      });
+    }
+
+    return this.findOne(statementId);
+  }
+
+  async addItem(
+    statementId: number,
+    dto: CreateStatementItemDto,
+    userId?: number,
+  ) {
+    await this.findOne(statementId);
+
+    const maxItem = await this.prisma.invoiceStatementItem.findFirst({
+      where: { statement_id: statementId },
+      orderBy: { sort_order: 'desc' },
+      select: { sort_order: true },
+    });
+    const nextSort =
+      dto.sort_order !== undefined && dto.sort_order !== null
+        ? Number(dto.sort_order)
+        : (maxItem?.sort_order || 0) + 1;
+
+    const itemType = dto.item_type === 'custom' ? 'custom' : 'invoice';
+    let createData: Prisma.InvoiceStatementItemUncheckedCreateInput;
+
+    if (itemType === 'invoice' && dto.invoice_id) {
+      const invoice = await this.prisma.invoice.findFirst({
+        where: {
+          id: Number(dto.invoice_id),
+          deleted_at: null,
+          invoice_is_active: true,
+          status: { not: 'void' },
+        },
+      });
+      if (!invoice) {
+        throw new BadRequestException('發票不存在或不可加入清單');
+      }
+      createData = {
+        statement_id: statementId,
+        invoice_id: invoice.id,
+        sort_order: nextSort,
+        ...this.buildItemSnapshot(invoice),
+      };
+    } else {
+      // custom item (or invoice item without source)
+      createData = {
+        statement_id: statementId,
+        invoice_id: null,
+        sort_order: nextSort,
+        item_type: 'custom',
+        item_invoice_no: dto.item_invoice_no ?? null,
+        item_date: dto.item_date ? new Date(dto.item_date) : null,
+        item_title: dto.item_title ?? null,
+        item_status: dto.item_status ?? null,
+        item_amount:
+          dto.item_amount === undefined ? null : Number(dto.item_amount),
+        item_paid_amount:
+          dto.item_paid_amount === undefined
+            ? null
+            : Number(dto.item_paid_amount),
+        item_outstanding:
+          dto.item_outstanding === undefined
+            ? null
+            : Number(dto.item_outstanding),
+        item_remarks: dto.item_remarks ?? null,
+      };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoiceStatementItem.create({ data: createData });
+      await this.recalcStatementTotals(tx, statementId);
+    });
+
+    if (userId) {
+      await this.auditLogsService.log({
+        userId,
+        action: 'create',
+        targetTable: 'invoice_statement_items',
+        targetId: statementId,
+        remarks: '新增發票清單項目',
+      });
+    }
+
+    return this.findOne(statementId);
+  }
+
+  async updateItem(
+    statementId: number,
+    itemId: number,
+    dto: UpdateStatementItemDto,
+    userId?: number,
+  ) {
+    await this.findOne(statementId);
+    const item = await this.prisma.invoiceStatementItem.findFirst({
+      where: { id: itemId, statement_id: statementId },
+    });
+    if (!item) {
+      throw new NotFoundException('清單項目不存在');
+    }
+
+    const data: Prisma.InvoiceStatementItemUncheckedUpdateInput = {
+      item_invoice_no:
+        dto.item_invoice_no === undefined ? undefined : dto.item_invoice_no || null,
+      item_date:
+        dto.item_date === undefined
+          ? undefined
+          : dto.item_date
+            ? new Date(dto.item_date)
+            : null,
+      item_title:
+        dto.item_title === undefined ? undefined : dto.item_title || null,
+      item_status:
+        dto.item_status === undefined ? undefined : dto.item_status || null,
+      item_amount:
+        dto.item_amount === undefined ? undefined : Number(dto.item_amount),
+      item_paid_amount:
+        dto.item_paid_amount === undefined
+          ? undefined
+          : Number(dto.item_paid_amount),
+      item_outstanding:
+        dto.item_outstanding === undefined
+          ? undefined
+          : Number(dto.item_outstanding),
+      item_remarks:
+        dto.item_remarks === undefined ? undefined : dto.item_remarks || null,
+      item_type: dto.item_type === undefined ? undefined : dto.item_type,
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoiceStatementItem.update({ where: { id: itemId }, data });
+      await this.recalcStatementTotals(tx, statementId);
+    });
+
+    if (userId) {
+      await this.auditLogsService.log({
+        userId,
+        action: 'update',
+        targetTable: 'invoice_statement_items',
+        targetId: itemId,
+        remarks: '更新發票清單項目',
+      });
+    }
+
+    return this.findOne(statementId);
+  }
+
+  async deleteItem(statementId: number, itemId: number, userId?: number) {
+    await this.findOne(statementId);
+    const item = await this.prisma.invoiceStatementItem.findFirst({
+      where: { id: itemId, statement_id: statementId },
+    });
+    if (!item) {
+      throw new NotFoundException('清單項目不存在');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoiceStatementItem.delete({ where: { id: itemId } });
+      await this.recalcStatementTotals(tx, statementId);
+    });
+
+    if (userId) {
+      await this.auditLogsService.log({
+        userId,
+        action: 'delete',
+        targetTable: 'invoice_statement_items',
+        targetId: itemId,
+        remarks: '刪除發票清單項目',
+      });
+    }
+
+    return this.findOne(statementId);
   }
 }

@@ -1458,6 +1458,14 @@ export const invoiceStatementsApi = {
     api.put(`/invoice-statements/${id}`, data),
   updateStatus: (id: number, status: string) =>
     api.patch(`/invoice-statements/${id}/status`, { status }),
+  reorderItems: (id: number, items: { id: number; sort_order: number }[]) =>
+    api.patch(`/invoice-statements/${id}/items/reorder`, { items }),
+  addItem: (id: number, data: any) =>
+    api.post(`/invoice-statements/${id}/items`, data),
+  updateItem: (id: number, itemId: number, data: any) =>
+    api.patch(`/invoice-statements/${id}/items/${itemId}`, data),
+  deleteItem: (id: number, itemId: number) =>
+    api.delete(`/invoice-statements/${id}/items/${itemId}`),
   exportPdf: (id: number) =>
     api.get(`/invoice-statements/${id}/pdf`, { responseType: 'blob' }),
   getPdfHtml: (id: number) =>
