@@ -43,6 +43,11 @@ export class BankReconciliationController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sort_order') sort_order?: string,
+    @Query('search_description') search_description?: string,
+    @Query('search_ref_no') search_ref_no?: string,
+    @Query('search_amount') search_amount?: string,
+    @Query('search_name') search_name?: string,
+    @Query('search_relation') search_relation?: string,
   ) {
     return this.service.findTransactions({
       bank_account_id: +bank_account_id,
@@ -52,6 +57,11 @@ export class BankReconciliationController {
       page: page ? +page : undefined,
       limit: limit ? +limit : undefined,
       sort_order,
+      search_description,
+      search_ref_no,
+      search_amount,
+      search_name,
+      search_relation,
     });
   }
 

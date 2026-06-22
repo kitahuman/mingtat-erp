@@ -18,8 +18,25 @@ export class BankReconciliationService {
     page?: number;
     limit?: number;
     sort_order?: string;
+    search_description?: string;
+    search_ref_no?: string;
+    search_amount?: string;
+    search_name?: string;
+    search_relation?: string;
   }) {
-    const { bank_account_id, date_from, date_to, match_status, page = 1, limit = 50 } = params;
+    const {
+      bank_account_id,
+      date_from,
+      date_to,
+      match_status,
+      page = 1,
+      limit = 50,
+      search_description,
+      search_ref_no,
+      search_amount,
+      search_name,
+      search_relation,
+    } = params;
     const sortOrder: Prisma.SortOrder = params.sort_order === 'asc' ? 'asc' : 'desc';
     const where: Prisma.BankTransactionWhereInput = { bank_account_id };
 
@@ -33,19 +50,71 @@ export class BankReconciliationService {
       where.match_status = match_status;
     }
 
-    const [items, total] = await Promise.all([
-      this.prisma.bankTransaction.findMany({
+    // ── DB-level text filters on the bank transaction itself ──
+    const trim = (v?: string) => (v && v.trim() !== '' ? v.trim() : undefined);
+    const sDescription = trim(search_description);
+    const sRefNo = trim(search_ref_no);
+    const sAmount = trim(search_amount);
+    const sName = trim(search_name);
+    const sRelation = trim(search_relation);
+
+    if (sDescription) {
+      where.description = { contains: sDescription, mode: 'insensitive' };
+    }
+    if (sRefNo) {
+      where.reference_no = { contains: sRefNo, mode: 'insensitive' };
+    }
+    if (sAmount) {
+      // Search both withdrawals and deposits: amount is signed, so match on
+      // the absolute numeric value (exact/partial via string) and also the
+      // raw signed value. We match transactions whose amount string contains
+      // the query (ignoring sign), e.g. "100" matches -100.00 and 100.00.
+      const numeric = Number(sAmount.replace(/,/g, ''));
+      if (!Number.isNaN(numeric)) {
+        where.OR = [
+          { amount: numeric },
+          { amount: -numeric },
+        ];
+      } else {
+        // Non-numeric amount query yields no DB rows.
+        where.id = -1;
+      }
+    }
+
+    // Whether name/relation filtering (which operates on enriched related
+    // records) is active. When active we must filter before pagination so the
+    // total count and page slicing stay correct across the whole dataset.
+    const needsRelatedFilter = Boolean(sName || sRelation);
+
+    let items: any[];
+    let total: number;
+
+    if (needsRelatedFilter) {
+      // Fetch all matching transactions (DB-level filters applied), then
+      // enrich + filter on related fields, then paginate in memory.
+      items = await this.prisma.bankTransaction.findMany({
         where,
         orderBy: [{ date: sortOrder }, { id: sortOrder }],
-        skip: (page - 1) * limit,
-        take: limit,
         include: { matches: true },
-      }),
-      this.prisma.bankTransaction.count({ where }),
-    ]);
+      });
+      total = items.length; // adjusted after related filtering below
+    } else {
+      const [pageItems, count] = await Promise.all([
+        this.prisma.bankTransaction.findMany({
+          where,
+          orderBy: [{ date: sortOrder }, { id: sortOrder }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: { matches: true },
+        }),
+        this.prisma.bankTransaction.count({ where }),
+      ]);
+      items = pageItems;
+      total = count;
+    }
 
     // Enrich matched transactions with their linked payment details
-    const enriched = await Promise.all(
+    const enrichedAll = await Promise.all(
       items.map(async (tx) => {
         let matched_record: any = null;
         let matched_records: any[] = [];
@@ -128,7 +197,85 @@ export class BankReconciliationService {
       }),
     );
 
-    return { items: enriched, total, page, limit };
+    // ── Post-enrichment filtering on related (name / relation) fields ──
+    // These fields are derived from matched PaymentIn / PaymentOut records,
+    // so they cannot be filtered at the DB level on the transaction table.
+    const matchesText = (haystack: (string | null | undefined)[], needle: string) => {
+      const q = needle.toLowerCase();
+      return haystack.some(
+        (h) => typeof h === 'string' && h.toLowerCase().includes(q),
+      );
+    };
+
+    // Collect the searchable "name" strings from a matched record.
+    const collectNameStrings = (r: any): (string | null | undefined)[] => {
+      if (!r) return [];
+      if (r._matched_type === 'payment_in') {
+        return [
+          r.payer_partner?.name,
+          r.payer_name,
+          r.project?.client?.name,
+          r.project?.client?.code,
+          r.project?.project_name,
+        ];
+      }
+      // payment_out
+      return [
+        r.expense?.item,
+        r.expense?.supplier_name,
+        r.company?.name,
+        r.payment_out_description,
+        r.description,
+      ];
+    };
+
+    // Collect the searchable "relation" strings from a matched record
+    // (linked record references: ref no, project/contract numbers).
+    const collectRelationStrings = (r: any): (string | null | undefined)[] => {
+      if (!r) return [];
+      if (r._matched_type === 'payment_in') {
+        return [
+          r.reference_no,
+          r.project?.project_no,
+          r.project?.project_name,
+          r.contract?.contract_no,
+          r.contract?.contract_name,
+        ];
+      }
+      // payment_out
+      return [r.reference_no, r.expense?.category?.name, r.payment_out_description];
+    };
+
+    let filtered = enrichedAll;
+    if (needsRelatedFilter) {
+      filtered = enrichedAll.filter((tx) => {
+        const records: any[] =
+          tx.matched_records && tx.matched_records.length > 0
+            ? tx.matched_records
+            : tx.matched_record
+              ? [tx.matched_record]
+              : [];
+        let ok = true;
+        if (sName) {
+          const names = records.flatMap((r) => collectNameStrings(r));
+          ok = ok && matchesText(names, sName);
+        }
+        if (sRelation) {
+          const relations = records.flatMap((r) => collectRelationStrings(r));
+          ok = ok && matchesText(relations, sRelation);
+        }
+        return ok;
+      });
+    }
+
+    if (needsRelatedFilter) {
+      total = filtered.length;
+      const start = (page - 1) * limit;
+      const enriched = filtered.slice(start, start + limit);
+      return { items: enriched, total, page, limit };
+    }
+
+    return { items: filtered, total, page, limit };
   }
 
   // ── Single Transaction CRUD ──

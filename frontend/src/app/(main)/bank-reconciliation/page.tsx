@@ -29,6 +29,13 @@ export default function BankReconciliationPage() {
   const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  // ── Transaction list filter panel state ──
+  const [showTxFilters, setShowTxFilters] = useState(false);
+  const [searchDescription, setSearchDescription] = useState('');
+  const [searchRefNo, setSearchRefNo] = useState('');
+  const [searchAmount, setSearchAmount] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [searchRelation, setSearchRelation] = useState('');
 
   // ── Data state ──
   const [summary, setSummary] = useState<any>(null);
@@ -187,6 +194,13 @@ export default function BankReconciliationPage() {
         summaryParams.date_to = dateTo;
       }
       if (statusFilter) txParams.match_status = statusFilter;
+      if (searchDescription.trim())
+        txParams.search_description = searchDescription.trim();
+      if (searchRefNo.trim()) txParams.search_ref_no = searchRefNo.trim();
+      if (searchAmount.trim()) txParams.search_amount = searchAmount.trim();
+      if (searchName.trim()) txParams.search_name = searchName.trim();
+      if (searchRelation.trim())
+        txParams.search_relation = searchRelation.trim();
 
       const [txRes, summaryRes] = await Promise.all([
         bankReconciliationApi.findTransactions(txParams),
@@ -204,11 +218,46 @@ export default function BankReconciliationPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAccountId, page, dateFrom, dateTo, statusFilter, sortOrder]);
+  }, [
+    selectedAccountId,
+    page,
+    dateFrom,
+    dateTo,
+    statusFilter,
+    sortOrder,
+    searchDescription,
+    searchRefNo,
+    searchAmount,
+    searchName,
+    searchRelation,
+  ]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ── Reset to first page whenever a transaction-list text filter changes ──
+  // (debounced so we don't hammer the API on every keystroke)
+  const isFirstFilterRun = useRef(true);
+  useEffect(() => {
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false;
+      return;
+    }
+    const t = setTimeout(() => setPage(1), 300);
+    return () => clearTimeout(t);
+  }, [searchDescription, searchRefNo, searchAmount, searchName, searchRelation]);
+
+  // ── Clear all transaction-list filters ──
+  const resetTxFilters = () => {
+    setStatusFilter('');
+    setSearchDescription('');
+    setSearchRefNo('');
+    setSearchAmount('');
+    setSearchName('');
+    setSearchRelation('');
+    setPage(1);
+  };
 
   // ── Auto match all ──
   const handleAutoMatch = async () => {
@@ -784,29 +833,122 @@ export default function BankReconciliationPage() {
                 : '順序（日期由舊到新）'}
             </p>
           </div>
-          <div className="inline-flex rounded-lg border bg-gray-50 p-1 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Filter toggle */}
             <button
               type="button"
-              onClick={() => {
-                setSortOrder('asc');
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'asc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+              onClick={() => setShowTxFilters((v) => !v)}
+              className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${showTxFilters || statusFilter || searchDescription || searchRefNo || searchAmount || searchName || searchRelation ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-800'}`}
+              title="篩選交易"
             >
-              順序
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L14 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+              篩選
+              <svg className={`w-3 h-3 transition-transform ${showTxFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSortOrder('desc');
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'desc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
-            >
-              倒序
-            </button>
+            <div className="inline-flex rounded-lg border bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSortOrder('asc');
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'asc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                順序
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSortOrder('desc');
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sortOrder === 'desc' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                倒序
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* ═══ Collapsible filter panel ═══ */}
+        {showTxFilters && (
+          <div className="px-4 py-3 border-b bg-gray-50">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">核對狀態</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-7 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">全部</option>
+                  <option value="matched">已核對</option>
+                  <option value="unmatched">未核對</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">Transaction</label>
+                <input
+                  type="text"
+                  value={searchDescription}
+                  onChange={(e) => setSearchDescription(e.target.value)}
+                  placeholder="搜尋交易描述"
+                  className="h-7 w-36 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">Ref No</label>
+                <input
+                  type="text"
+                  value={searchRefNo}
+                  onChange={(e) => setSearchRefNo(e.target.value)}
+                  placeholder="搜尋編號"
+                  className="h-7 w-28 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">金額</label>
+                <input
+                  type="text"
+                  value={searchAmount}
+                  onChange={(e) => setSearchAmount(e.target.value)}
+                  placeholder="例如 1000"
+                  className="h-7 w-24 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">名稱</label>
+                <input
+                  type="text"
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  placeholder="搜尋名稱"
+                  className="h-7 w-32 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[11px] font-medium text-gray-500">關聯</label>
+                <input
+                  type="text"
+                  value={searchRelation}
+                  onChange={(e) => setSearchRelation(e.target.value)}
+                  placeholder="搜尋關聯"
+                  className="h-7 w-32 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={resetTxFilters}
+                className="h-7 px-3 text-xs font-medium text-gray-600 border border-gray-300 rounded bg-white hover:bg-gray-100 transition-colors"
+              >
+                重設
+              </button>
+            </div>
+          </div>
+        )}
         {/* Two-panel layout with resizable splitter */}
         <div ref={containerRef} style={{ userSelect: 'none' }}>
         {/* Header row */}
