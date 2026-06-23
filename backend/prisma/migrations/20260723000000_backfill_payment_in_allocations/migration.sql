@@ -17,7 +17,7 @@ SELECT
   pi."remarks",
   pi."created_at",
   NOW()
-FROM "payment_in" pi
+FROM "payment_ins" pi
 WHERE LOWER(pi."source_type") = 'invoice'
   AND pi."source_ref_id" IS NOT NULL
   AND NOT EXISTS (
@@ -27,6 +27,6 @@ WHERE LOWER(pi."source_type") = 'invoice'
   );
 
 -- Also normalize source_type to lowercase for all existing records
-UPDATE "payment_in"
+UPDATE "payment_ins"
 SET "source_type" = LOWER("source_type")
 WHERE "source_type" IS NOT NULL AND "source_type" != LOWER("source_type");
