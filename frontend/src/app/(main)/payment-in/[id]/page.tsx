@@ -562,7 +562,7 @@ export default function PaymentInDetailPage() {
               </div>
             </div>
             {/* Payer fields */}
-            {form.source_type !== 'invoice' && form.source_type !== 'payment_certificate' && (
+            {form.source_type !== 'payment_certificate' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
